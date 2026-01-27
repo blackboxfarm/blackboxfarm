@@ -59,6 +59,7 @@ const HoldersResourceDashboard = lazy(() => import("@/components/admin/HoldersRe
 const HistoricalTokenDataDashboard = lazy(() => import("@/components/admin/HistoricalTokenDataDashboard").then(m => ({ default: m.HistoricalTokenDataDashboard })));
 const TokenSearchAnalytics = lazy(() => import("@/components/admin/TokenSearchAnalytics").then(m => ({ default: m.TokenSearchAnalytics })));
 const TokenHistoryViewer = lazy(() => import("@/components/admin/TokenHistoryViewer").then(m => ({ default: m.TokenHistoryViewer })));
+const DailiesDashboard = lazy(() => import("@/components/admin/DailiesDashboard").then(m => ({ default: m.DailiesDashboard })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -166,6 +167,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="token-history" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20">💎 Token History</TabsTrigger>
             <TabsTrigger value="search-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">🔍 Search Analytics</TabsTrigger>
             <TabsTrigger value="token-viewer" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">📈 Token Viewer</TabsTrigger>
+            <TabsTrigger value="dailies" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-rose-500/20">📅 Dailies</TabsTrigger>
           </TabsList>
 
           <TabsContent value="fuckoff">
@@ -472,6 +474,12 @@ export default function SuperAdmin() {
           <TabsContent value="token-viewer">
             <ActiveTabOnly activeTab={activeTab} tabValue="token-viewer">
               <TokenHistoryViewer />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="dailies">
+            <ActiveTabOnly activeTab={activeTab} tabValue="dailies">
+              <DailiesDashboard />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>

@@ -1888,6 +1888,42 @@ export type Database = {
           },
         ]
       }
+      dailies_manual_comments: {
+        Row: {
+          comment_date: string
+          community_comment: boolean | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          raw_feed_comment: boolean | null
+          reply_to_post: boolean | null
+          token_mint: string
+          updated_at: string | null
+        }
+        Insert: {
+          comment_date: string
+          community_comment?: boolean | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          raw_feed_comment?: boolean | null
+          reply_to_post?: boolean | null
+          token_mint: string
+          updated_at?: string | null
+        }
+        Update: {
+          comment_date?: string
+          community_comment?: boolean | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          raw_feed_comment?: boolean | null
+          reply_to_post?: boolean | null
+          token_mint?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       dev_teams: {
         Row: {
           admin_usernames: string[] | null
