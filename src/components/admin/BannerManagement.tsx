@@ -101,8 +101,14 @@ export function BannerManagement() {
       clickCounts[click.banner_id] = (clickCounts[click.banner_id] || 0) + 1;
     });
 
-    // Calculate CTR per banner
-    Object.keys(impressionCounts).forEach(bannerId => {
+    // Get all unique banner IDs from both impressions and clicks
+    const allBannerIds = new Set([
+      ...Object.keys(impressionCounts),
+      ...Object.keys(clickCounts)
+    ]);
+
+    // Calculate CTR per banner (including banners with only clicks but no impressions)
+    allBannerIds.forEach(bannerId => {
       const impressions = impressionCounts[bannerId] || 0;
       const clicks = clickCounts[bannerId] || 0;
       const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;

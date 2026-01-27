@@ -1921,43 +1921,50 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 );
               })()}
 
-              {/* Padre Trading Promo */}
+              {/* Padre Trading Promo - Entire card is clickable */}
               <div className="mb-4 md:mb-6">
-                <Card className="bg-gradient-to-br from-background to-muted/30 border-orange-500/20">
+                <Card 
+                  className="bg-gradient-to-br from-background to-muted/30 border-orange-500/20 cursor-pointer hover:border-orange-500/40 transition-colors"
+                  onClick={() => {
+                    // Open link immediately (avoid popup blockers)
+                    window.open('https://trade.padre.gg/rk/blackbox', '_blank', 'noopener,noreferrer');
+                    
+                    // Fire-and-forget tracking (never block navigation)
+                    (async () => {
+                      try {
+                        const { data: bannerData } = await supabase
+                          .from('banner_ads')
+                          .select('id')
+                          .eq('position', 3)
+                          .eq('is_active', true)
+                          .maybeSingle();
+                        
+                        if (bannerData?.id) {
+                          await supabase.from('banner_clicks').insert({
+                            banner_id: bannerData.id,
+                            session_id: sessionStorage.getItem('session_id') || crypto.randomUUID()
+                          });
+                        }
+                      } catch (error) {
+                        console.warn('Failed to track Padre click:', error);
+                      }
+                    })();
+                  }}
+                >
                   <CardContent className="flex flex-col items-center justify-center py-6 md:py-8 space-y-4 md:space-y-6">
                     <img 
                       src={padreMemeCoins}
                       alt="Trade your favorite meme coins"
-                      className="max-w-xs md:max-w-md w-full h-auto"
+                      className="max-w-xs md:max-w-md w-full h-auto pointer-events-none"
                     />
-                    <h5 className="text-xl md:text-2xl text-center text-foreground font-bold tracking-tight uppercase">
+                    <h5 className="text-xl md:text-2xl text-center text-foreground font-bold tracking-tight uppercase pointer-events-none">
                       TRADE YOUR FAVOURITE MEME COINS
                     </h5>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const { data: bannerData } = await supabase
-                            .from('banner_ads')
-                            .select('id')
-                            .eq('position', 3)
-                            .eq('is_active', true)
-                            .single();
-                          
-                          if (bannerData?.id) {
-                            await supabase.from('banner_clicks').insert({
-                              banner_id: bannerData.id,
-                              session_id: sessionStorage.getItem('session_id') || crypto.randomUUID()
-                            });
-                          }
-                        } catch (error) {
-                          console.error('Failed to track Padre click:', error);
-                        }
-                        window.open('https://trade.padre.gg/rk/blackbox', '_blank');
-                      }}
-                      className="inline-flex items-center justify-center px-6 md:px-8 py-2.5 md:py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-base md:text-lg shadow-lg hover:shadow-orange-500/25 cursor-pointer"
+                    <span
+                      className="inline-flex items-center justify-center px-6 md:px-8 py-2.5 md:py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-base md:text-lg shadow-lg hover:shadow-orange-500/25 pointer-events-none"
                     >
                       Trade Now with Padre
-                    </button>
+                    </span>
                   </CardContent>
                 </Card>
               </div>
