@@ -114,6 +114,7 @@ function determineLifecycleStage(metrics: {
 // ============================================================================
 
 type CommentaryMode = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
+type ToneType = "balanced" | "constructive" | "cautionary";
 
 interface ModeResult {
   mode: CommentaryMode;
@@ -184,7 +185,7 @@ function detectRiskFlags(metrics: {
 // AI PROMPT BUILDER
 // ============================================================================
 
-function buildSystemPrompt(mode: ModeResult): string {
+function buildSystemPrompt(mode: ModeResult, tone: ToneType = "balanced"): string {
   const modeInstructions: Record<CommentaryMode, string> = {
     "A": "Provide a balanced snapshot overview of the token's current holder structure.",
     "B": "Focus deeply on the structural concentration and what it implies for price sensitivity.",
@@ -194,6 +195,18 @@ function buildSystemPrompt(mode: ModeResult): string {
     "F": "Analyze selling pressure indicators and liquidity dynamics.",
     "G": "Compare behavior across tier groups and what the divergence reveals.",
     "H": "Assess holder retention patterns and diamond-hand indicators."
+  };
+
+  const toneInstructions: Record<ToneType, string> = {
+    "balanced": "Present findings neutrally, giving equal weight to strengths and weaknesses. Use measured, objective language.",
+    "constructive": "Emphasize structural strengths, positive indicators, and upside potential while still acknowledging risks factually. Frame observations through a lens of opportunity and resilience.",
+    "cautionary": "Prioritize risk signals, potential vulnerabilities, and structural weaknesses. Highlight what could go wrong and areas requiring attention. Use protective, risk-aware framing."
+  };
+
+  const toneLabels: Record<ToneType, string> = {
+    "balanced": "Balanced (Neutral)",
+    "constructive": "Constructive (Optimistic)",
+    "cautionary": "Cautionary (Risk-Focused)"
   };
 
   return `You are a TOKEN STRUCTURE INTERPRETER for Holders Intel, an analytical platform for Solana tokens.
@@ -216,6 +229,9 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 COMMENTARY MODE: ${mode.label} (${mode.mode})
 ${modeInstructions[mode.mode]}
+
+TONE: ${toneLabels[tone]}
+${toneInstructions[tone]}
 
 Generate your response using the structured output schema provided.`;
 }
@@ -301,7 +317,7 @@ serve(async (req) => {
   }
 
   try {
-    const { reportData, tokenMint, forceRefresh = false, forceMode } = await req.json();
+    const { reportData, tokenMint, forceRefresh = false, forceMode, tone = "balanced" } = await req.json();
 
     if (!reportData || !tokenMint) {
       return new Response(
@@ -454,7 +470,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: buildSystemPrompt(mode) },
+          { role: "system", content: buildSystemPrompt(mode, tone as ToneType) },
           { 
             role: "user", 
             content: `Analyze this token's holder structure and generate an interpretation:\n\n${JSON.stringify(metricsContext, null, 2)}`
