@@ -1,5 +1,6 @@
 // Creator/Dev wallet API utilities
 import type { LaunchpadInfo } from "./lp-detection.ts";
+import { createApiLogger } from "./api-logger.ts";
 
 export interface CreatorInfo {
   wallet?: string;
@@ -16,10 +17,21 @@ export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: 
   try {
     if (launchpadInfo.name.toLowerCase().includes('pump')) {
       console.log('[PumpFun] Fetching creator info...');
+      
+      const logger = createApiLogger({
+        serviceName: 'pumpfun',
+        endpoint: `/coins/${tokenMint}`,
+        tokenMint,
+        functionName: 'fetchCreatorInfo',
+        requestType: 'creator_lookup',
+      });
+      
       const pumpResp = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(5000)
       });
+      
+      await logger.complete(pumpResp.status);
       
       if (pumpResp.ok) {
         const pumpData = await pumpResp.json();
@@ -35,10 +47,20 @@ export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: 
     } else if (launchpadInfo.name.toLowerCase().includes('bonk')) {
       console.log('[BonkFun] Fetching creator info...');
       try {
+        const logger = createApiLogger({
+          serviceName: 'bonkfun',
+          endpoint: `/token/${tokenMint}`,
+          tokenMint,
+          functionName: 'fetchCreatorInfo',
+          requestType: 'creator_lookup',
+        });
+        
         const bonkResp = await fetch(`https://api.bonk.fun/token/${tokenMint}`, {
           headers: { 'Accept': 'application/json' },
           signal: AbortSignal.timeout(5000)
         });
+        
+        await logger.complete(bonkResp.status);
         
         if (bonkResp.ok) {
           const bonkData = await bonkResp.json();
@@ -54,10 +76,20 @@ export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: 
     } else if (launchpadInfo.name.toLowerCase().includes('bags')) {
       console.log('[BagsFM] Fetching creator info...');
       try {
+        const logger = createApiLogger({
+          serviceName: 'bagsfm',
+          endpoint: `/api/v1/analytics/token-creators/${tokenMint}`,
+          tokenMint,
+          functionName: 'fetchCreatorInfo',
+          requestType: 'creator_lookup',
+        });
+        
         const bagsResp = await fetch(`https://public-api-v2.bags.fm/api/v1/analytics/token-creators/${tokenMint}`, {
           headers: { 'Accept': 'application/json' },
           signal: AbortSignal.timeout(5000)
         });
+        
+        await logger.complete(bagsResp.status);
         
         if (bagsResp.ok) {
           const bagsData = await bagsResp.json();

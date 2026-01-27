@@ -369,6 +369,66 @@ export type Database = {
         }
         Relationships: []
       }
+      api_usage_log: {
+        Row: {
+          credits_used: number | null
+          endpoint: string
+          error_message: string | null
+          function_name: string | null
+          id: string
+          is_cached: boolean | null
+          metadata: Json | null
+          method: string | null
+          request_type: string | null
+          response_status: number | null
+          response_time_ms: number | null
+          service_name: string
+          session_id: string | null
+          success: boolean | null
+          timestamp: string
+          token_mint: string | null
+          user_id: string | null
+        }
+        Insert: {
+          credits_used?: number | null
+          endpoint: string
+          error_message?: string | null
+          function_name?: string | null
+          id?: string
+          is_cached?: boolean | null
+          metadata?: Json | null
+          method?: string | null
+          request_type?: string | null
+          response_status?: number | null
+          response_time_ms?: number | null
+          service_name: string
+          session_id?: string | null
+          success?: boolean | null
+          timestamp?: string
+          token_mint?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          credits_used?: number | null
+          endpoint?: string
+          error_message?: string | null
+          function_name?: string | null
+          id?: string
+          is_cached?: boolean | null
+          metadata?: Json | null
+          method?: string | null
+          request_type?: string | null
+          response_status?: number | null
+          response_time_ms?: number | null
+          service_name?: string
+          session_id?: string | null
+          success?: boolean | null
+          timestamp?: string
+          token_mint?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       arb_balances: {
         Row: {
           base_token_base: number
@@ -9331,6 +9391,63 @@ export type Database = {
         }
         Relationships: []
       }
+      token_analysis_costs: {
+        Row: {
+          analysis_date: string | null
+          coingecko_calls: number | null
+          created_at: string | null
+          dexscreener_calls: number | null
+          helius_credits: number | null
+          holder_count: number | null
+          id: string
+          jupiter_calls: number | null
+          pumpfun_calls: number | null
+          rugcheck_calls: number | null
+          session_id: string | null
+          solscan_credits: number | null
+          token_mint: string
+          total_api_calls: number | null
+          total_response_time_ms: number | null
+          user_id: string | null
+        }
+        Insert: {
+          analysis_date?: string | null
+          coingecko_calls?: number | null
+          created_at?: string | null
+          dexscreener_calls?: number | null
+          helius_credits?: number | null
+          holder_count?: number | null
+          id?: string
+          jupiter_calls?: number | null
+          pumpfun_calls?: number | null
+          rugcheck_calls?: number | null
+          session_id?: string | null
+          solscan_credits?: number | null
+          token_mint: string
+          total_api_calls?: number | null
+          total_response_time_ms?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          analysis_date?: string | null
+          coingecko_calls?: number | null
+          created_at?: string | null
+          dexscreener_calls?: number | null
+          helius_credits?: number | null
+          holder_count?: number | null
+          id?: string
+          jupiter_calls?: number | null
+          pumpfun_calls?: number | null
+          rugcheck_calls?: number | null
+          session_id?: string | null
+          solscan_credits?: number | null
+          token_mint?: string
+          total_api_calls?: number | null
+          total_response_time_ms?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       token_early_trades: {
         Row: {
           created_at: string
@@ -11526,6 +11643,24 @@ export type Database = {
           id: string
           label: string
           pubkey: string
+        }[]
+      }
+      get_api_usage_stats: {
+        Args: {
+          p_end_date?: string
+          p_service_name?: string
+          p_start_date?: string
+        }
+        Returns: {
+          avg_response_time_ms: number
+          calls_by_day: Json
+          calls_by_service: Json
+          credits_by_service: Json
+          failed_calls: number
+          successful_calls: number
+          top_tokens: Json
+          total_calls: number
+          total_credits: number
         }[]
       }
       get_blackbox_user_decrypted: {

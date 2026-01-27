@@ -55,6 +55,8 @@ const SolPriceAnalytics = lazy(() => import("@/components/admin/SolPriceAnalytic
 const SniffDashboard = lazy(() => import("@/components/admin/SniffDashboard").then(m => ({ default: m.SniffDashboard })));
 const HoldersVisitorsDashboard = lazy(() => import("@/components/admin/HoldersVisitorsDashboard").then(m => ({ default: m.HoldersVisitorsDashboard })));
 const HeliusUsageDashboard = lazy(() => import("./HeliusUsage"));
+const HoldersResourceDashboard = lazy(() => import("@/components/admin/HoldersResourceDashboard").then(m => ({ default: m.HoldersResourceDashboard })));
+const HistoricalTokenDataDashboard = lazy(() => import("@/components/admin/HistoricalTokenDataDashboard").then(m => ({ default: m.HistoricalTokenDataDashboard })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -158,6 +160,8 @@ export default function SuperAdmin() {
             <TabsTrigger value="sniff" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">🐕 SNIFF</TabsTrigger>
             <TabsTrigger value="holders-visitors" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-blue-500/20">👁️ Visitors</TabsTrigger>
             <TabsTrigger value="helius-api" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">⚡ Helius API</TabsTrigger>
+            <TabsTrigger value="api-resources" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-teal-500/20">📊 API Resources</TabsTrigger>
+            <TabsTrigger value="token-history" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20">💎 Token History</TabsTrigger>
           </TabsList>
 
           <TabsContent value="fuckoff">
@@ -440,6 +444,18 @@ export default function SuperAdmin() {
           <TabsContent value="helius-api">
             <ActiveTabOnly activeTab={activeTab} tabValue="helius-api">
               <HeliusUsageDashboard />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="api-resources">
+            <ActiveTabOnly activeTab={activeTab} tabValue="api-resources">
+              <HoldersResourceDashboard />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="token-history">
+            <ActiveTabOnly activeTab={activeTab} tabValue="token-history">
+              <HistoricalTokenDataDashboard />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>
