@@ -11,6 +11,7 @@ import { LiquiditySupplyCard } from './LiquiditySupplyCard';
 import { WhaleWarningSystem } from '@/components/premium/WhaleWarningSystem';
 import { HolderMovementFeed } from '@/components/premium/HolderMovementFeed';
 import { RetentionAnalysis } from '@/components/premium/RetentionAnalysis';
+import { FeatureThumbnailGallery } from './FeatureThumbnailGallery';
 
 interface TokenHolder {
   owner: string;
@@ -118,6 +119,10 @@ export function ExtendedAnalysisSection({
                 <span>Whale Alerts</span>
               </div>
             </div>
+            
+            {/* Feature Preview Thumbnails */}
+            <FeatureThumbnailGallery />
+            
             
             <Button 
               onClick={() => setShowAuthModal(true)}
