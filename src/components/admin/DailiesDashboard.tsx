@@ -467,7 +467,7 @@ export function DailiesDashboard() {
       ) : (
         <TooltipProvider delayDuration={300}>
         <div className="border rounded-lg overflow-hidden">
-          <Table>
+          <Table className="table-fixed w-full">
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead compact className="w-[160px]">Token</TableHead>
@@ -569,7 +569,7 @@ export function DailiesDashboard() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => setExpandedToken(prev => prev === token.token_mint ? null : token.token_mint)}
                     >
-                      <TableCell compact className="font-mono">
+                      <TableCell compact className="font-mono w-[160px]">
                         <div className="flex items-center gap-1.5">
                           <ChevronDown className={cn(
                             "h-3 w-3 transition-transform shrink-0",
@@ -580,7 +580,7 @@ export function DailiesDashboard() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell compact className="text-center">
+                      <TableCell compact className="text-center w-[90px]">
                         {token.wasSearched ? (
                           <div className="flex items-center justify-center gap-1">
                             <Search className="h-3.5 w-3.5 text-blue-400" />
@@ -588,10 +588,10 @@ export function DailiesDashboard() {
                           </div>
                         ) : <span className="text-muted-foreground/40">—</span>}
                       </TableCell>
-                      <TableCell compact className="text-center">
+                      <TableCell compact className="text-center w-[70px]">
                         {token.wasSurge ? (
                           <Tooltip>
-                            <TooltipTrigger>{getSurgeIcon(token.surgeType)}</TooltipTrigger>
+                            <TooltipTrigger className="flex items-center justify-center w-full">{getSurgeIcon(token.surgeType)}</TooltipTrigger>
                             <TooltipContent>
                               {token.surgeType === 'surge_10min' && 'Search Surge (10min)'}
                               {token.surgeType === 'spike_1hr' && 'Interest Spike (1hr)'}
@@ -600,35 +600,41 @@ export function DailiesDashboard() {
                           </Tooltip>
                         ) : <span className="text-muted-foreground/40">—</span>}
                       </TableCell>
-                      <TableCell compact className="text-center">
+                      <TableCell compact className="text-center w-[80px]">
                         <TweetLink tweetId={token.top50TweetId} label="Top50" />
                       </TableCell>
-                      <TableCell compact className="text-center">
+                      <TableCell compact className="text-center w-[80px]">
                         <TweetLink tweetId={token.dexTweetId} label="Dex" />
                       </TableCell>
-                      <TableCell compact className="text-center">
+                      <TableCell compact className="text-center w-[90px]">
                         <TweetLink tweetId={token.surgeTweetId} label="Surge" />
                       </TableCell>
-                      <TableCell compact className="text-center border-l border-border/30" onClick={e => e.stopPropagation()}>
-                        <Checkbox 
-                          checked={token.rawFeedComment}
-                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)}
-                          className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
-                        />
+                      <TableCell compact className="text-center w-[70px] border-l border-border/30" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-center">
+                          <Checkbox 
+                            checked={token.rawFeedComment}
+                            onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)}
+                            className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
+                          />
+                        </div>
                       </TableCell>
-                      <TableCell compact className="text-center" onClick={e => e.stopPropagation()}>
-                        <Checkbox 
-                          checked={token.replyToPost}
-                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)}
-                          className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
-                        />
+                      <TableCell compact className="text-center w-[70px]" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-center">
+                          <Checkbox 
+                            checked={token.replyToPost}
+                            onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)}
+                            className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
+                          />
+                        </div>
                       </TableCell>
-                      <TableCell compact className="text-center" onClick={e => e.stopPropagation()}>
-                        <Checkbox 
-                          checked={token.communityComment}
-                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)}
-                          className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
-                        />
+                      <TableCell compact className="text-center w-[90px]" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-center">
+                          <Checkbox 
+                            checked={token.communityComment}
+                            onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)}
+                            className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   </CollapsibleTrigger>
