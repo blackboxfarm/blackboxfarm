@@ -2,6 +2,7 @@
  * RugCheck Insiders/Graph API - Wallet cluster analysis and bundling detection
  * Uses RugCheck's pre-computed wallet genealogy data
  */
+import { createApiLogger } from "./api-logger.ts";
 
 export interface InsiderWallet {
   wallet: string;
@@ -48,6 +49,14 @@ export async function fetchRugCheckInsiders(tokenMint: string): Promise<Insiders
   try {
     console.log(`[RugCheck Insiders] Fetching insiders graph for ${tokenMint}`);
     
+    const logger = createApiLogger({
+      serviceName: 'rugcheck',
+      endpoint: `/v1/tokens/${tokenMint}/insiders/graph`,
+      tokenMint,
+      functionName: 'fetchRugCheckInsiders',
+      requestType: 'insider_check',
+    });
+    
     // Fetch insiders graph from RugCheck
     const response = await fetch(
       `https://api.rugcheck.xyz/v1/tokens/${tokenMint}/insiders/graph`,
@@ -56,6 +65,8 @@ export async function fetchRugCheckInsiders(tokenMint: string): Promise<Insiders
         signal: AbortSignal.timeout(RUGCHECK_TIMEOUT_MS),
       }
     );
+    
+    await logger.complete(response.status);
 
     if (!response.ok) {
       if (response.status === 404) {

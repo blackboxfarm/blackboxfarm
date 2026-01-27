@@ -1,5 +1,6 @@
 // DexScreener API utilities
 import { detectLaunchpad, type LaunchpadInfo } from "./lp-detection.ts";
+import { createApiLogger, type ServiceName } from "./api-logger.ts";
 
 export interface DexStatus {
   hasDexPaid: boolean;
@@ -36,6 +37,23 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
   try {
     console.log('[DexScreener] Fetching token pairs and orders in parallel...');
     
+    // Create loggers for both calls
+    const pairsLogger = createApiLogger({
+      serviceName: 'dexscreener',
+      endpoint: `/latest/dex/tokens/${tokenMint}`,
+      tokenMint,
+      functionName: 'fetchDexScreenerData',
+      requestType: 'market_data',
+    });
+    
+    const ordersLogger = createApiLogger({
+      serviceName: 'dexscreener',
+      endpoint: `/orders/v1/solana/${tokenMint}`,
+      tokenMint,
+      functionName: 'fetchDexScreenerData',
+      requestType: 'market_data',
+    });
+    
     const [pairsResp, ordersResp] = await Promise.all([
       fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`),
       fetch(`https://api.dexscreener.com/orders/v1/solana/${tokenMint}`)
@@ -43,6 +61,7 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
     
     // Process pairs data
     if (pairsResp.ok) {
+      await pairsLogger.complete(pairsResp.status);
       const dexData = await pairsResp.json();
       result.pairs = dexData.pairs || [];
       
@@ -93,10 +112,13 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
         }
         console.log(`[DexScreener] Socials found:`, result.socials);
       }
+    } else {
+      await pairsLogger.complete(pairsResp.status, 'Non-OK response');
     }
     
     // Process orders data for paid status, CTO, ads
     if (ordersResp.ok) {
+      await ordersLogger.complete(ordersResp.status);
       const ordersData = await ordersResp.json();
       const orders = ordersData?.orders || (Array.isArray(ordersData) ? ordersData : []);
       
@@ -119,6 +141,8 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
       }
       
       console.log(`[DexScreener] Status - Paid: ${result.dexStatus.hasDexPaid}, CTO: ${result.dexStatus.hasCTO}, Boosts: ${result.dexStatus.activeBoosts}, Ads: ${result.dexStatus.hasAds}`);
+    } else {
+      await ordersLogger.complete(ordersResp.status, 'Non-OK response');
     }
   } catch (error) {
     console.error('[DexScreener] API error:', error);

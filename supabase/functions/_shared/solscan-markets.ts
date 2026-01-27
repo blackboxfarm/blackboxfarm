@@ -1,5 +1,6 @@
 // Solscan Markets API utilities
 import { KNOWN_DEX_PROGRAMS, BONDING_CURVE_PROGRAMS } from "./lp-detection.ts";
+import { createApiLogger } from "./api-logger.ts";
 
 export interface SolscanMarketResult {
   poolAddresses: Set<string>;
@@ -22,9 +23,21 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
 
   try {
     console.log('[Solscan] Fetching ALL token markets...');
+    
+    const marketsLogger = createApiLogger({
+      serviceName: 'solscan',
+      endpoint: `/v2.0/token/markets`,
+      tokenMint,
+      functionName: 'fetchSolscanMarkets',
+      requestType: 'lp_detection',
+      credits: 1,
+    });
+    
     const marketsResp = await fetch(`https://pro-api.solscan.io/v2.0/token/markets?address=${tokenMint}`, {
       headers: { 'token': solscanApiKey }
     });
+    
+    await marketsLogger.complete(marketsResp.status);
     
     if (marketsResp.ok) {
       const marketsData = await marketsResp.json();
@@ -51,9 +64,20 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
         if (poolAddress) {
           console.log(`[Solscan] Top market pool: ${poolAddress}`);
           
+          const holdersLogger = createApiLogger({
+            serviceName: 'solscan',
+            endpoint: `/v2.0/token/holders`,
+            tokenMint,
+            functionName: 'fetchSolscanMarkets',
+            requestType: 'lp_detection',
+            credits: 1,
+          });
+          
           const holdersResp = await fetch(`https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`, {
             headers: { 'token': solscanApiKey }
           });
+          
+          await holdersLogger.complete(holdersResp.status);
           
           if (holdersResp.ok) {
             const holdersData = await holdersResp.json();
