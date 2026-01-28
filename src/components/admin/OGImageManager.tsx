@@ -240,7 +240,7 @@ export function OGImageManager() {
 
                 {/* Version/Name */}
                 <div className="flex-1 min-w-0">
-                  {editingVersion === img.version ? (
+                  {!img.isDefault && editingVersion === img.version ? (
                     <div className="flex items-center gap-1">
                       <Input
                         value={newNickname}
@@ -262,7 +262,7 @@ export function OGImageManager() {
                   ) : (
                     <div className="flex items-center gap-2">
                       {img.isDefault ? (
-                        <span className="text-sm text-muted-foreground">Default</span>
+                        <span className="text-sm text-muted-foreground">Default (fallback)</span>
                       ) : (
                         <code className="text-sm font-mono bg-muted px-1.5 py-0.5 rounded">?v={img.version}</code>
                       )}
