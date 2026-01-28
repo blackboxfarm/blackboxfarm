@@ -29,20 +29,10 @@ export function StepIcon({ step, size = 'md', className = '' }: StepIconProps) {
   const icon = stepIcons[step];
   
   return (
-    <div 
-      className={`relative rounded-full overflow-hidden flex-shrink-0 bg-background/50 ${sizeClasses[size]} ${className}`}
-    >
-      {/* Scale and position to center on the cyan circle numeral */}
-      <img 
-        src={icon} 
-        alt={`Step ${step}`} 
-        className="absolute w-[200%] h-[200%] object-cover"
-        style={{
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-52%, -42%)',
-        }}
-      />
-    </div>
+    <img 
+      src={icon} 
+      alt={`Step ${step}`} 
+      className={`flex-shrink-0 rounded-md object-contain ${sizeClasses[size]} ${className}`}
+    />
   );
 }
