@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import featureStabilityScore from '@/assets/feature-stability-score.png';
 import featureTop25Analysis from '@/assets/feature-top25-analysis.png';
 import featureWhaleMovements from '@/assets/feature-whale-movements.png';
+import aiInterpretationPreview from '@/assets/ai-interpretation-preview.png';
 
 interface FeatureImage {
   src: string;
@@ -25,6 +26,11 @@ const featureImages: FeatureImage[] = [
     src: featureWhaleMovements,
     alt: 'Real-Time Whale Movements',
     title: 'Whale Tracking',
+  },
+  {
+    src: aiInterpretationPreview,
+    alt: 'AI Interpretation - Structural insights, lifecycle detection, and key drivers',
+    title: 'AI Analysis',
   },
 ];
 

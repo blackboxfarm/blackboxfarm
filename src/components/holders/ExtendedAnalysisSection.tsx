@@ -129,7 +129,7 @@ export function ExtendedAnalysisSection({
               className="bg-primary hover:bg-primary/90"
             >
               <Sparkles className="mr-2 h-4 w-4" />
-              Sign In to Unlock
+              Sign up for free
             </Button>
           </CardContent>
         </Card>
