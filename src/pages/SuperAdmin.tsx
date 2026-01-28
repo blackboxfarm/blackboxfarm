@@ -121,21 +121,12 @@ export default function SuperAdmin() {
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
             <TabsTrigger value="fuckoff" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-red-500/20">FUCKOFF</TabsTrigger>
             <TabsTrigger value="blackbox" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-zinc-700/30 data-[state=active]:to-zinc-800/20">📦 BlackBox</TabsTrigger>
-            <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
-            <TabsTrigger value="utilities" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">🔧 Utilities</TabsTrigger>
+            <TabsTrigger value="holders-intel" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-violet-500/20">🔮 Holders Intel</TabsTrigger>
             <TabsTrigger value="whales-mints" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-teal-500/20">🐋 Whales & MINTS</TabsTrigger>
-            <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
-            <TabsTrigger value="advertisers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">📢 Advertisers</TabsTrigger>
-            
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter Accounts</TabsTrigger>
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun Monitor</TabsTrigger>
-            <TabsTrigger value="holders-visitors" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-blue-500/20">👁️ Visitors</TabsTrigger>
-            <TabsTrigger value="token-history" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20">💎 Token History</TabsTrigger>
-            <TabsTrigger value="search-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">🔍 Search Analytics</TabsTrigger>
-            <TabsTrigger value="token-viewer" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">📈 Token Viewer</TabsTrigger>
-            <TabsTrigger value="dailies" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-rose-500/20">📅 Dailies</TabsTrigger>
           </TabsList>
 
           <TabsContent value="fuckoff">
@@ -180,9 +171,28 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
 
-          <TabsContent value="holders">
-            <ActiveTabOnly activeTab={activeTab} tabValue="holders">
-              <BaglessHoldersReport />
+          <TabsContent value="holders-intel">
+            <ActiveTabOnly activeTab={activeTab} tabValue="holders-intel">
+              <Tabs defaultValue="token-holders" className="space-y-4">
+                <TabsList className="flex flex-wrap gap-1">
+                  <TabsTrigger value="token-holders">📊 Token Holders</TabsTrigger>
+                  <TabsTrigger value="banners">🎨 Banners</TabsTrigger>
+                  <TabsTrigger value="advertisers">📢 Advertisers</TabsTrigger>
+                  <TabsTrigger value="visitors">👁️ Visitors</TabsTrigger>
+                  <TabsTrigger value="token-history">💎 Token History</TabsTrigger>
+                  <TabsTrigger value="search-analytics">🔍 Search Analytics</TabsTrigger>
+                  <TabsTrigger value="token-viewer">📈 Token Viewer</TabsTrigger>
+                  <TabsTrigger value="dailies">📅 Dailies</TabsTrigger>
+                </TabsList>
+                <TabsContent value="token-holders"><BaglessHoldersReport /></TabsContent>
+                <TabsContent value="banners"><BannerManagement /></TabsContent>
+                <TabsContent value="advertisers"><AdvertiserManagement /></TabsContent>
+                <TabsContent value="visitors"><HoldersVisitorsDashboard /></TabsContent>
+                <TabsContent value="token-history"><HistoricalTokenDataDashboard /></TabsContent>
+                <TabsContent value="search-analytics"><TokenSearchAnalytics /></TabsContent>
+                <TabsContent value="token-viewer"><TokenHistoryViewer /></TabsContent>
+                <TabsContent value="dailies"><DailiesDashboard /></TabsContent>
+              </Tabs>
             </ActiveTabOnly>
           </TabsContent>
 
@@ -242,18 +252,6 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
 
-          <TabsContent value="banners">
-            <ActiveTabOnly activeTab={activeTab} tabValue="banners">
-              <BannerManagement />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="advertisers">
-            <ActiveTabOnly activeTab={activeTab} tabValue="advertisers">
-              <AdvertiserManagement />
-            </ActiveTabOnly>
-          </TabsContent>
-
           <TabsContent value="flipit">
             <ActiveTabOnly activeTab={activeTab} tabValue="flipit">
               <FlipItDashboard />
@@ -282,40 +280,6 @@ export default function SuperAdmin() {
                 <TabsContent value="candidates"><TokenCandidatesDashboard /></TabsContent>
                 <TabsContent value="retrace"><PumpfunTokenRetrace /></TabsContent>
               </Tabs>
-            </ActiveTabOnly>
-          </TabsContent>
-
-
-
-          <TabsContent value="holders-visitors">
-            <ActiveTabOnly activeTab={activeTab} tabValue="holders-visitors">
-              <HoldersVisitorsDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-
-
-
-          <TabsContent value="token-history">
-            <ActiveTabOnly activeTab={activeTab} tabValue="token-history">
-              <HistoricalTokenDataDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="search-analytics">
-            <ActiveTabOnly activeTab={activeTab} tabValue="search-analytics">
-              <TokenSearchAnalytics />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="token-viewer">
-            <ActiveTabOnly activeTab={activeTab} tabValue="token-viewer">
-              <TokenHistoryViewer />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="dailies">
-            <ActiveTabOnly activeTab={activeTab} tabValue="dailies">
-              <DailiesDashboard />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>
