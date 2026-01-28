@@ -1,204 +1,149 @@
 
-# Plan: Fix Rate Limiting for Account Management Dashboard
+
+# Plan: Consolidate Token Input Triggers & Remove Refresh Icon
 
 ## Problem Summary
 
-The **Accounts tab** in the SuperAdmin dashboard shows zero records because:
+Currently the `/holders` page has **3 different trigger mechanisms** with inconsistent behavior:
 
-1. The `profiles` table RLS policy calls `validate_profile_access()` for SELECT operations
-2. This function restricts users to viewing **only their own profile** (super admins have no override)
-3. The function also calls `check_rate_limit()` which attempts an INSERT operation
-4. In the Lovable Preview's read-only mode, this INSERT fails, causing the entire query to fail
+| Trigger | Normalize | Metadata | Full Report | Share Card | KOL Match |
+|---------|:---------:|:--------:|:-----------:|:----------:|:---------:|
+| **URL Pre-load** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Paste Address** | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ |
+| **Generate Button** | ❌ | ❌ | ✅ | ✅ | ✅ |
+| **Refresh Icon** | ❌ | ❌ | ⚠️ (price only) | ❌ | ❌ |
+
+**Issues identified:**
+1. **Refresh Icon** - Calls the full `bagless-holders-report` edge function (2-8s) but only uses the price, wasting resources
+2. **Paste Trigger Bug** - The useEffect at line 321-329 only auto-generates if `!report`, so pasting a new token over an existing report does nothing
+3. **Generate Button** - Doesn't re-normalize or refresh metadata, relying on existing state
+
+---
 
 ## Solution Overview
 
-We need to make two key changes:
-
-1. **Update the `validate_profile_access` function** to allow super admins to view all profiles
-2. **Make rate limiting graceful** - if the INSERT fails (read-only mode), don't block the query
+1. **Remove the Refresh Icon** entirely (it's redundant and wasteful)
+2. **Fix the paste trigger** to detect when a NEW token is pasted and auto-regenerate
+3. **Consolidate behavior** so all paths follow the URL preload pattern
 
 ---
 
 ## Technical Implementation
 
-### Step 1: Update `validate_profile_access` Function
+### Step 1: Remove the Refresh Icon (lines 1015-1024)
 
-Create a new database migration that:
-- Allows super admins to bypass the "own profile only" restriction
-- Wraps the rate limiting INSERT in an exception handler so failures don't block reads
-
-```sql
-CREATE OR REPLACE FUNCTION public.validate_profile_access(target_user_id uuid)
-RETURNS boolean
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-    current_user_id uuid;
-    rate_limit_result jsonb;
-    is_admin boolean := false;
-BEGIN
-    -- Get current user
-    current_user_id := auth.uid();
-    
-    -- Block if no authenticated user
-    IF current_user_id IS NULL THEN
-        RETURN false;
-    END IF;
-    
-    -- Check if user is super admin (they can access all profiles)
-    SELECT public.is_super_admin(current_user_id) INTO is_admin;
-    
-    IF is_admin THEN
-        RETURN true;  -- Super admins can access all profiles
-    END IF;
-    
-    -- Regular users can only access their own profile
-    IF current_user_id != target_user_id THEN
-        RETURN false;
-    END IF;
-    
-    -- Check rate limiting (with graceful failure handling)
-    BEGIN
-        SELECT public.check_rate_limit(
-            current_user_id::text,
-            'profile_access',
-            20,
-            1   
-        ) INTO rate_limit_result;
-        
-        IF (rate_limit_result ->> 'is_blocked')::boolean THEN
-            RETURN false;
-        END IF;
-    EXCEPTION WHEN OTHERS THEN
-        -- If rate limit check fails (e.g., read-only mode), allow access
-        -- This ensures reads work even when writes are blocked
-        NULL;
-    END;
-    
-    RETURN true;
-END;
-$function$;
+Delete this block from the UI:
+```tsx
+{useAutoPricing && (
+  <Button 
+    variant="outline"
+    onClick={fetchTokenPrice}
+    disabled={!tokenMint.trim() || isFetchingPrice}
+    size="icon"
+  >
+    <RefreshCw className={`h-4 w-4 ${isFetchingPrice ? 'animate-spin' : ''}`} />
+  </Button>
+)}
 ```
 
-### Step 2: Update `check_rate_limit` Function (Alternative Approach)
+### Step 2: Fix the Auto-Trigger to Detect New Tokens
 
-Optionally, we can also make `check_rate_limit` itself more resilient by handling the read-only case gracefully:
+Replace the current useEffect (lines 320-329):
 
-```sql
-CREATE OR REPLACE FUNCTION public.check_rate_limit(
-  check_identifier text,
-  check_action_type text,
-  max_attempts integer DEFAULT 5,
-  window_minutes integer DEFAULT 15
-)
-RETURNS jsonb 
-LANGUAGE plpgsql 
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  current_record public.rate_limits;
-  is_blocked boolean := false;
-  attempts_remaining integer;
-  reset_time timestamp with time zone;
-BEGIN
-  BEGIN
-    -- Get or create rate limit record
-    SELECT * INTO current_record
-    FROM public.rate_limits
-    WHERE identifier = check_identifier 
-      AND action_type = check_action_type;
+**Before:**
+```tsx
+// Auto-generate report when token metadata is successfully fetched
+useEffect(() => {
+  if (tokenData && !report && !isLoading && tokenMint.trim()) {
+    // Small delay to ensure metadata is fully processed
+    const timer = setTimeout(() => {
+      generateReport();
+    }, 500);
+    return () => clearTimeout(timer);
+  }
+}, [tokenData]);
+```
+
+**After:**
+```tsx
+// Auto-generate report when token metadata is successfully fetched
+// Triggers on: initial load, URL preload, or when a NEW token is pasted
+useEffect(() => {
+  if (tokenData && !isLoading && tokenMint.trim()) {
+    // Check if this is a new token (different from current report)
+    const currentReportToken = report?.tokenMint;
+    const normalizedMint = tokenMint.trim();
     
-    IF current_record IS NULL THEN
-      -- Create new record
-      INSERT INTO public.rate_limits (identifier, action_type)
-      VALUES (check_identifier, check_action_type)
-      RETURNING * INTO current_record;
-    ELSE
-      -- Check if we should reset the counter
-      IF current_record.first_attempt < (now() - (window_minutes || ' minutes')::interval) THEN
-        UPDATE public.rate_limits
-        SET attempt_count = 1,
-            first_attempt = now(),
-            last_attempt = now(),
-            is_blocked = false,
-            blocked_until = NULL
-        WHERE id = current_record.id
-        RETURNING * INTO current_record;
-      ELSE
-        UPDATE public.rate_limits
-        SET attempt_count = attempt_count + 1,
-            last_attempt = now(),
-            is_blocked = (attempt_count + 1) >= max_attempts,
-            blocked_until = CASE 
-              WHEN (attempt_count + 1) >= max_attempts 
-              THEN (now() + (window_minutes || ' minutes')::interval)
-              ELSE NULL
-            END
-        WHERE id = current_record.id
-        RETURNING * INTO current_record;
-      END IF;
-    END IF;
-  EXCEPTION WHEN OTHERS THEN
-    -- In read-only mode or other failures, return unblocked status
-    RETURN jsonb_build_object(
-      'is_blocked', false,
-      'attempts_used', 0,
-      'attempts_remaining', max_attempts,
-      'reset_time', now() + (window_minutes || ' minutes')::interval,
-      'window_minutes', window_minutes,
-      'error', 'Rate limit check skipped: ' || SQLERRM
-    );
-  END;
-  
-  -- Calculate response data
-  attempts_remaining := GREATEST(0, max_attempts - COALESCE(current_record.attempt_count, 0));
-  reset_time := COALESCE(
-    current_record.blocked_until, 
-    current_record.first_attempt + (window_minutes || ' minutes')::interval,
-    now() + (window_minutes || ' minutes')::interval
-  );
-  
-  RETURN jsonb_build_object(
-    'is_blocked', COALESCE(current_record.is_blocked, false),
-    'attempts_used', COALESCE(current_record.attempt_count, 0),
-    'attempts_remaining', attempts_remaining,
-    'reset_time', reset_time,
-    'window_minutes', window_minutes
-  );
-END;
-$$;
+    // Generate if: no report exists OR the token changed
+    if (!currentReportToken || currentReportToken !== normalizedMint) {
+      const timer = setTimeout(() => {
+        generateReport();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }
+}, [tokenData, tokenMint]);
+```
+
+### Step 3: Add Clear Report on Token Change
+
+Add a new useEffect to clear the old report when token changes, ensuring a clean state:
+
+```tsx
+// Clear report when token changes to a different value
+const previousTokenRef = useRef<string>('');
+useEffect(() => {
+  const normalized = tokenMint.trim();
+  if (previousTokenRef.current && previousTokenRef.current !== normalized && normalized) {
+    // Token changed - clear old report to allow new generation
+    setReport(null);
+    setShareCardImageUrl(null);
+    setShareCardPageUrl(null);
+    setKolMatches([]);
+  }
+  previousTokenRef.current = normalized;
+}, [tokenMint]);
 ```
 
 ---
 
 ## Changes Summary
 
-| Component | Change | Purpose |
-|-----------|--------|---------|
-| `validate_profile_access()` | Add super admin check | Allow admins to view all profiles |
-| `validate_profile_access()` | Wrap rate limit in exception handler | Prevent read failures in read-only mode |
-| `check_rate_limit()` | Add exception handler for INSERT/UPDATE | Gracefully handle read-only database mode |
+| File | Change | Purpose |
+|------|--------|---------|
+| `src/components/BaglessHoldersReport.tsx` | Remove RefreshCw button (lines 1015-1024) | Eliminate redundant/wasteful UI element |
+| `src/components/BaglessHoldersReport.tsx` | Update auto-trigger useEffect (lines 320-329) | Detect new tokens and regenerate |
+| `src/components/BaglessHoldersReport.tsx` | Add token change detection useEffect | Clear old state when token changes |
+| `src/components/BaglessHoldersReport.tsx` | Add `useRef` import | Track previous token value |
+| `src/components/BaglessHoldersReport.tsx` | Remove `fetchTokenPrice` function (lines 454-502) | No longer needed since refresh icon is removed |
+| `src/components/BaglessHoldersReport.tsx` | Clean up unused state: `isFetchingPrice`, `discoveredPrice`, `priceSource` | Code cleanup |
 
-## Files to Modify
+---
 
-1. **New migration file**: `supabase/migrations/XXXXXXXX_fix_profile_access_rate_limit.sql`
-   - Updated `validate_profile_access` function
-   - Updated `check_rate_limit` function
+## Final Behavior
 
-## Testing Steps
+After these changes, all three remaining triggers will behave identically:
 
-After deployment:
-1. Navigate to `/super-admin` → Holders Intel → Accounts tab
-2. Verify all 13 user accounts are displayed
-3. Verify the dashboard shows correct stats (total accounts, advertisers, admins, verified, 2FA)
-4. Test in both preview and production environments
+| Trigger | Flow |
+|---------|------|
+| **URL Pre-load** | Normalize → Metadata → Report → Share Card → KOL Match |
+| **Paste Address** | Normalize → Clear old report → Metadata → Report → Share Card → KOL Match |
+| **Generate Button** | Uses current state → Report → Share Card → KOL Match |
 
-## Security Considerations
+**User Experience:**
+- Paste a token address → Report auto-generates (even if previous report exists)
+- Click Generate → Regenerates current token
+- No confusing refresh icon
 
-- Super admin access is validated using the existing `is_super_admin()` function which checks the `user_roles` table
-- Regular users still cannot see other users' profiles
-- Rate limiting still applies to regular users (just fails gracefully in read-only mode)
-- No sensitive data exposure - the edge function `get-all-users` already handles auth.users data securely
+---
+
+## Testing Checklist
+
+After implementation:
+1. Visit `/holders` with no token - verify input is empty
+2. Paste a token address - verify report auto-generates
+3. Paste a DIFFERENT token over existing report - verify NEW report generates
+4. Click Generate button - verify it regenerates current token
+5. Visit `/holders?token=ABC...` - verify URL preload still works
+6. Verify refresh icon is completely removed from UI
+
