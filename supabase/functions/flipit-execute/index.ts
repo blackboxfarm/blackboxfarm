@@ -1351,7 +1351,10 @@ serve(async (req) => {
       execLog.logPhaseStart('SWAP_EXECUTION');
       try {
         const hasRecordedQuantity = position.quantity_tokens && Number(position.quantity_tokens) > 0;
-        const hasRawQuantity = position.quantity_tokens_raw && position.quantity_tokens_raw !== "0";
+        const hasRawQuantity =
+          typeof position.quantity_tokens_raw === "string" &&
+          /^\d+$/.test(position.quantity_tokens_raw) &&
+          position.quantity_tokens_raw !== "0";
         
         execLog.log('SELL_QUANTITY', { 
           hasRecordedQuantity,
@@ -1360,7 +1363,8 @@ serve(async (req) => {
           quantityTokens: position.quantity_tokens == null ? null : String(position.quantity_tokens).slice(0, 12),
           quantityTokensRaw: position.quantity_tokens_raw?.slice(0, 15),
           tokenDecimals: position.token_decimals,
-          willSellAll: !hasRecordedQuantity
+          // IMPORTANT: swaps require integer base-units; if we don't have raw, fall back to sellAll.
+          willSellAll: !hasRawQuantity
         });
 
         // Execute sell via raydium-swap using wallet ID for direct lookup
@@ -1369,12 +1373,9 @@ serve(async (req) => {
           body: {
             side: "sell",
             tokenMint: position.token_mint,
-            // FIX: Use 'amount' (not 'sellAmount') - raydium-swap expects 'amount' parameter
-            // Use specific quantity if available, otherwise fall back to sellAll
-            ...(hasRecordedQuantity 
-              ? { amount: Number(position.quantity_tokens) }
-              : { sellAll: true }
-            ),
+            // CRITICAL: Use integer *raw* token amount (base units). UI amounts (quantity_tokens)
+            // cause Raydium REQ_AMOUNT_ERROR and break bags.fm/Meteora quoting.
+            ...(hasRawQuantity ? { amount: position.quantity_tokens_raw } : { sellAll: true }),
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
