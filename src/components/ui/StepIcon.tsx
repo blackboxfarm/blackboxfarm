@@ -18,11 +18,11 @@ interface StepIconProps {
 }
 
 const sizeClasses = {
-  xs: 'w-5 h-5',      // 20px - tiny inline
-  sm: 'w-7 h-7 md:w-9 md:h-9',   // 28-36px - steps wizard
-  md: 'w-8 h-8 md:w-10 md:h-10', // 32-40px - section headers
-  lg: 'w-10 h-10 md:w-12 md:h-12', // 40-48px - prominent headers
-  xl: 'w-16 h-16 md:w-20 md:h-20', // 64-80px - large display
+  xs: 'w-4 h-4',      // 16px - tiny inline
+  sm: 'w-5 h-5 md:w-6 md:h-6',   // 20-24px - steps wizard (reduced)
+  md: 'w-6 h-6 md:w-7 md:h-7', // 24-28px - section headers
+  lg: 'w-8 h-8 md:w-10 md:h-10', // 32-40px - prominent headers
+  xl: 'w-12 h-12 md:w-16 md:h-16', // 48-64px - large display
 };
 
 export function StepIcon({ step, size = 'md', className = '' }: StepIconProps) {
