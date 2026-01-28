@@ -23,7 +23,9 @@ const IGNORE_TICKERS = new Set(['SOL', 'ETH', 'BTC', 'USD', 'USDC', 'USDT', 'THE
 // Configuration thresholds
 const MIN_FOLLOWERS = 500;
 const MIN_QUALITY_SCORE = 50;
-const MAX_AGE_HOURS = 2;
+const MAX_AGE_HOURS = 12;
+const MAX_TOKENS_PER_RUN = 10;
+const API_DELAY_MS = 10000; // 10 seconds between API calls
 const VERIFIED_BONUS = 500;
 const INFLUENCER_THRESHOLD = 10000;
 const MAJOR_INFLUENCER_THRESHOLD = 50000;
@@ -219,10 +221,25 @@ Deno.serve(async (req) => {
       tokens_from_dex: 0,
     };
 
-    // STEP 1: Gather tokens from our data sources
-    const tokensToSearch: Array<{ mint: string; symbol: string; source: string }> = [];
+    // STEP 1: Gather tokens from our data sources (prioritize DEX boosted first)
+    const tokensToSearch: Array<{ mint: string; symbol: string; source: string; priority: number }> = [];
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    // Source 1: Recent queue items (last 48h)
+    // Source 1 (HIGH PRIORITY): Recent DEX trending/boosted data (last 24h)
+    const { data: dexTokens } = await supabase
+      .from('dex_trending_tokens')
+      .select('token_address, symbol')
+      .gte('fetched_at', yesterday)
+      .limit(20);
+    
+    for (const token of dexTokens || []) {
+      if (token.token_address && !tokensToSearch.find(t => t.mint === token.token_address)) {
+        tokensToSearch.push({ mint: token.token_address, symbol: token.symbol || 'UNKNOWN', source: 'dex', priority: 1 });
+        stats.tokens_from_dex++;
+      }
+    }
+
+    // Source 2 (MEDIUM PRIORITY): Recent queue items (last 48h)
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
     const { data: queueTokens } = await supabase
       .from('holders_intel_post_queue')
@@ -232,13 +249,12 @@ Deno.serve(async (req) => {
     
     for (const token of queueTokens || []) {
       if (token.token_mint && !tokensToSearch.find(t => t.mint === token.token_mint)) {
-        tokensToSearch.push({ mint: token.token_mint, symbol: token.symbol || 'UNKNOWN', source: 'queue' });
+        tokensToSearch.push({ mint: token.token_mint, symbol: token.symbol || 'UNKNOWN', source: 'queue', priority: 2 });
         stats.tokens_from_queue++;
       }
     }
 
-    // Source 2: Recent seen tokens (last 24h)
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Source 3 (LOW PRIORITY): Recent seen tokens (last 24h)
     const { data: seenTokens } = await supabase
       .from('holders_intel_seen_tokens')
       .select('token_mint, symbol')
@@ -247,26 +263,16 @@ Deno.serve(async (req) => {
     
     for (const token of seenTokens || []) {
       if (token.token_mint && !tokensToSearch.find(t => t.mint === token.token_mint)) {
-        tokensToSearch.push({ mint: token.token_mint, symbol: token.symbol || 'UNKNOWN', source: 'seen' });
+        tokensToSearch.push({ mint: token.token_mint, symbol: token.symbol || 'UNKNOWN', source: 'seen', priority: 3 });
         stats.tokens_from_seen++;
       }
     }
 
-    // Source 3: Recent DEX trending data (dex_trending_tokens last 24h)
-    const { data: dexTokens } = await supabase
-      .from('dex_trending_tokens')
-      .select('token_address, symbol')
-      .gte('fetched_at', yesterday)
-      .limit(20);
-    
-    for (const token of dexTokens || []) {
-      if (token.token_address && !tokensToSearch.find(t => t.mint === token.token_address)) {
-        tokensToSearch.push({ mint: token.token_address, symbol: token.symbol || 'UNKNOWN', source: 'dex' });
-        stats.tokens_from_dex++;
-      }
-    }
+    // Sort by priority and limit to MAX_TOKENS_PER_RUN
+    tokensToSearch.sort((a, b) => a.priority - b.priority);
+    const limitedTokens = tokensToSearch.slice(0, MAX_TOKENS_PER_RUN);
 
-    console.log(`Found ${tokensToSearch.length} tokens to search Twitter for (queue: ${stats.tokens_from_queue}, seen: ${stats.tokens_from_seen}, dex: ${stats.tokens_from_dex})`);
+    console.log(`Found ${tokensToSearch.length} tokens total, processing ${limitedTokens.length} (dex: ${stats.tokens_from_dex}, queue: ${stats.tokens_from_queue}, seen: ${stats.tokens_from_seen})`);
 
     // Get existing tweet IDs to avoid duplicates
     const { data: existingMentions } = await supabase
@@ -288,8 +294,9 @@ Deno.serve(async (req) => {
     // Collect all saved mentions for deduplication pass
     const savedMentions: SavedMention[] = [];
 
-    // PASS 1: Search Twitter for each token from our data sources
-    for (const tokenInfo of tokensToSearch) {
+    // PASS 1: Search Twitter for each token from our prioritized list
+    for (let i = 0; i < limitedTokens.length; i++) {
+      const tokenInfo = limitedTokens[i];
       try {
         // Build search query for this specific token
         // Search by contract address OR ticker symbol
@@ -411,8 +418,11 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Small delay between token searches to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Rate limit delay between token searches (10 seconds)
+        if (i < limitedTokens.length - 1) {
+          console.log(`Waiting ${API_DELAY_MS / 1000}s before next search...`);
+          await new Promise(resolve => setTimeout(resolve, API_DELAY_MS));
+        }
         
       } catch (queryError: any) {
         console.error(`Error searching for ${tokenInfo.symbol}:`, queryError.message);
