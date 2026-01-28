@@ -36,7 +36,7 @@ export function TwitterScrapesView() {
   const [mentions, setMentions] = useState<TwitterMention[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'best' | 'queued' | 'verified'>('all');
+  const [filter, setFilter] = useState<'all' | 'best' | 'queued' | 'verified' | 'reply_targets'>('all');
   const [stats, setStats] = useState({
     total: 0,
     bestSources: 0,
@@ -60,6 +60,14 @@ export function TwitterScrapesView() {
         query = query.eq('queued_for_analysis', true);
       } else if (filter === 'verified') {
         query = query.eq('is_verified', true);
+      } else if (filter === 'reply_targets') {
+        // Reply targets: high engagement, not duplicates, sorted by likes+retweets+impressions
+        query = query
+          .is('duplicate_of', null)
+          .gte('author_followers', 500)
+          .order('likes_count', { ascending: false })
+          .order('retweets_count', { ascending: false })
+          .order('impression_count', { ascending: false });
       }
 
       const { data, error } = await query;
@@ -186,15 +194,17 @@ export function TwitterScrapesView() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex gap-2">
-        {(['all', 'best', 'queued', 'verified'] as const).map((f) => (
+      <div className="flex gap-2 flex-wrap">
+        {(['all', 'reply_targets', 'best', 'queued', 'verified'] as const).map((f) => (
           <Button
             key={f}
             variant={filter === f ? 'default' : 'outline'}
             size="sm"
             onClick={() => setFilter(f)}
+            className={f === 'reply_targets' ? 'bg-sky-500/20 border-sky-500/50 hover:bg-sky-500/30' : ''}
           >
             {f === 'all' && 'All'}
+            {f === 'reply_targets' && '🎯 Reply Targets'}
             {f === 'best' && '🏆 Best Sources'}
             {f === 'queued' && '✅ Queued'}
             {f === 'verified' && '✓ Verified Only'}
