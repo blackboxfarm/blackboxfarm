@@ -20,9 +20,6 @@ const TICKER_PATTERNS = [
 const IGNORE_TICKERS = new Set(['SOL', 'ETH', 'BTC', 'USD', 'USDC', 'USDT', 'THE', 'FOR', 'AND', 'NOT', 'ARE', 'BUT', 'NFT', 'APE', 'DCA']);
 
 // Configuration thresholds
-const MIN_FOLLOWERS = 500;
-const MIN_QUALITY_SCORE = 50;
-const MAX_AGE_HOURS = 12;
 const VERIFIED_BONUS = 500;
 const INFLUENCER_THRESHOLD = 10000;
 const MAJOR_INFLUENCER_THRESHOLD = 50000;
@@ -128,7 +125,7 @@ function calculateQualityScore(
 async function searchTwitter(
   bearerToken: string,
   query: string,
-  maxResults: number = 25
+  maxResults: number = 100 // Twitter API max per request
 ): Promise<TwitterSearchResponse | null> {
   const params = new URLSearchParams({
     query,
@@ -218,8 +215,6 @@ Deno.serve(async (req) => {
       best_sources_selected: 0,
       duplicates_marked: 0,
       state_populated: 0,
-      skipped_low_followers: 0,
-      skipped_old: 0,
       skipped_duplicate: 0,
       verified_accounts: 0,
     };
@@ -343,11 +338,12 @@ Deno.serve(async (req) => {
     
     console.log(`🎯 Selected token: $${nextToken.symbol} (score: ${nextToken.virality_score}, source: ${nextToken.source})`);
 
-    // STEP 3: Search Twitter for this ONE token
+    // STEP 3: Search Twitter for this ONE token - get EVERYTHING (posts, replies, retweets)
     const shortMint = nextToken.token_mint.slice(0, 8);
-    const query = `(${shortMint} OR $${nextToken.symbol}) -is:retweet -is:reply lang:en`;
+    // No filters - get ALL tweets mentioning this token
+    const query = `(${shortMint} OR ${nextToken.token_mint} OR $${nextToken.symbol})`;
     
-    const result = await searchTwitter(bearerToken, query, 25);
+    const result = await searchTwitter(bearerToken, query, 100); // Max 100 per API call
     
     // Mark token as scanned (even if no results or rate limited)
     await supabase
@@ -399,21 +395,15 @@ Deno.serve(async (req) => {
     
     const existingTweetIds = new Set(existingMentions?.map(m => m.tweet_id) || []);
 
-    const cutoffTime = new Date(Date.now() - MAX_AGE_HOURS * 60 * 60 * 1000);
     const savedMentions: Array<{ tweet_id: string; quality_score: number }> = [];
 
-    // STEP 4: Process and save tweets
+    // STEP 4: Process and save ALL tweets - no filtering, save everything
     for (const tweet of result.data) {
       stats.tweets_scanned++;
       
+      // Only skip exact duplicates we already have
       if (existingTweetIds.has(tweet.id)) {
         stats.skipped_duplicate++;
-        continue;
-      }
-
-      const tweetTime = new Date(tweet.created_at);
-      if (tweetTime < cutoffTime) {
-        stats.skipped_old++;
         continue;
       }
 
@@ -421,11 +411,6 @@ Deno.serve(async (req) => {
       const followers = author?.public_metrics?.followers_count || 0;
       const verifiedType = author?.verified_type || null;
       const isVerified = !!verifiedType;
-      
-      if (followers < MIN_FOLLOWERS) {
-        stats.skipped_low_followers++;
-        continue;
-      }
 
       const additionalContracts = extractContracts(tweet.text);
       const contracts = [nextToken.token_mint, ...additionalContracts.filter(c => c !== nextToken.token_mint)];
