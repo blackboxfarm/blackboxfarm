@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +28,10 @@ function isBot(userAgent: string | null): boolean {
   return BOT_USER_AGENTS.some(bot => ua.includes(bot));
 }
 
+const SUPABASE_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
+const STORAGE_BASE = `${SUPABASE_URL}/storage/v1/object/public/OG`;
+const DEFAULT_OG_IMAGE = `${STORAGE_BASE}/holders_og.png`;
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -34,8 +39,14 @@ serve(async (req) => {
   }
 
   try {
+    const url = new URL(req.url);
+    const versionParam = url.searchParams.get("v");
     const userAgent = req.headers.get("user-agent");
-    const canonical = "https://blackbox.farm/holders";
+    
+    // Build canonical URL with version if present
+    const canonical = versionParam 
+      ? `https://blackbox.farm/holders?v=${versionParam}`
+      : "https://blackbox.farm/holders";
     
     // If not a bot, redirect to the actual SPA
     if (!isBot(userAgent)) {
@@ -48,15 +59,35 @@ serve(async (req) => {
       });
     }
 
+    // Determine which OG image to use based on version param
+    // Format: v=20260128 maps to holders_og_20260128.png
+    let ogImage = DEFAULT_OG_IMAGE;
+    
+    if (versionParam && /^\d{8}$/.test(versionParam)) {
+      // Check if versioned image exists in storage
+      const versionedImageName = `holders_og_${versionParam}.png`;
+      const versionedImageUrl = `${STORAGE_BASE}/${versionedImageName}`;
+      
+      // Quick HEAD request to check if file exists
+      try {
+        const checkResponse = await fetch(versionedImageUrl, { method: 'HEAD' });
+        if (checkResponse.ok) {
+          ogImage = versionedImageUrl;
+          console.log(`Using versioned OG image: ${versionedImageName}`);
+        } else {
+          console.log(`Versioned image not found (${versionedImageName}), using default`);
+        }
+      } catch {
+        console.log(`Failed to check versioned image, using default`);
+      }
+    }
+
     // OG metadata for /holders page
     const title = "You Don't Grow on Dust.";
     const description = `Markets are fields.
 Some roots hold.
 Some inflate the count.
 BlackBox.farm shows what actually grows — and what gets culled.`;
-    
-    // OG image for /holders page
-    const ogImage = "https://apxauapuusmgwbbzjgfl.supabase.co/storage/v1/object/public/OG/holders_og.png";
 
     const html = `<!doctype html>
 <html lang="en">
