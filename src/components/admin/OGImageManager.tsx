@@ -170,25 +170,25 @@ export function OGImageManager() {
             />
           </div>
           <div className="flex gap-2">
-            <input
-              type="file"
-              id="og-upload"
-              accept="image/png"
-              onChange={handleUpload}
-              className="hidden"
-            />
-            <Button
-              variant="default"
-              disabled={uploading || selectedDate.length !== 8}
-              onClick={() => document.getElementById('og-upload')?.click()}
+            <label 
+              htmlFor="og-file-upload"
+              className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 cursor-pointer ${uploading || selectedDate.length !== 8 ? 'opacity-50 pointer-events-none' : ''}`}
             >
               {uploading ? (
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
-                <Upload className="w-4 h-4 mr-2" />
+                <Upload className="w-4 h-4" />
               )}
               Upload as holders_og_{selectedDate}.png
-            </Button>
+              <input
+                type="file"
+                id="og-file-upload"
+                accept="image/png"
+                onChange={handleUpload}
+                className="sr-only"
+                disabled={uploading || selectedDate.length !== 8}
+              />
+            </label>
           </div>
         </div>
 
