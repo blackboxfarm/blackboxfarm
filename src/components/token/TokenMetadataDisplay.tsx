@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { SocialIcon, DexScreenerIcon } from "./SocialIcon";
 import { detectSocialPlatform } from "@/utils/socialPlatformDetector";
 import { ShareToXButton } from "@/components/ShareToXButton";
-import step1Icon from '@/assets/step-1.png';
+import { StepIcon } from '@/components/ui/StepIcon';
 interface LaunchpadInfo {
   name: string;
   detected: boolean;
@@ -256,7 +256,7 @@ export function TokenMetadataDisplay({
         <div className="space-y-3 md:space-y-4">
           {/* Quick Snapshot Title */}
           <h3 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
-            <img src={step1Icon} alt="1" className="w-6 h-6 md:w-7 md:h-7" />
+            <StepIcon step={1} size="md" />
             Quick Snapshot
           </h3>
           
