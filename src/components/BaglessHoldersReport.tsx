@@ -1474,8 +1474,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               {/* === DISTRIBUTION INTEGRITY === */}
               {report.distributionStats && (
                 <div className="mb-4 p-3 rounded-lg border bg-muted/20">
-                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-white">
-                    <StepIcon step={4} size="sm" />
+                  <h3 className="text-sm font-semibold mb-3 text-white">
                     Distribution Integrity
                   </h3>
                   <div className="grid grid-cols-3 gap-2 mb-3">
@@ -1505,7 +1504,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-base font-semibold flex items-center gap-2 text-white">
-                    <StepIcon step={3} size="sm" />
+                    <StepIcon step={3} size="md" />
                     Functional Holders
                   </h3>
                   <div className="flex items-center gap-1 text-xs">
