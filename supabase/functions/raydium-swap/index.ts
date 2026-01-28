@@ -614,6 +614,108 @@ async function tryMeteoraSwap(params: {
   }
 }
 
+// Try bags.fm Trade API (for Meteora Dynamic Curve tokens)
+// This is the official API for graduated bags.fm tokens that are now on Meteora AMM
+async function tryBagsFmSwap(params: {
+  inputMint: string;
+  outputMint: string;
+  amount: number | string;
+  slippageBps: number;
+  userPublicKey: string;
+}): Promise<{ tx: string; source: string; outAmount?: string } | { error: string }> {
+  try {
+    const { inputMint, outputMint, amount, slippageBps, userPublicKey } = params;
+    
+    const bagsApiKey = Deno.env.get("BAGS_API_KEY");
+    if (!bagsApiKey) {
+      return { error: "BAGS_API_KEY not configured" };
+    }
+    
+    const amt = Math.floor(Number(amount));
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return { error: `Invalid swap amount for bags.fm: ${String(amount)}` };
+    }
+    
+    console.log(`bags.fm swap: ${inputMint.slice(0, 8)} → ${outputMint.slice(0, 8)}, amount=${amt}, slippage=${slippageBps}bps`);
+    
+    // Step 1: Get quote from bags.fm Trade API
+    const quoteUrl = new URL("https://public-api-v2.bags.fm/api/v1/trade/quote");
+    quoteUrl.searchParams.set("inputMint", inputMint);
+    quoteUrl.searchParams.set("outputMint", outputMint);
+    quoteUrl.searchParams.set("amount", amt.toString());
+    quoteUrl.searchParams.set("slippageMode", "manual");
+    quoteUrl.searchParams.set("slippageBps", slippageBps.toString());
+    
+    console.log(`bags.fm quote URL: ${quoteUrl.toString().slice(0, 120)}...`);
+    
+    const quoteRes = await fetch(quoteUrl.toString(), {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "x-api-key": bagsApiKey,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    if (!quoteRes.ok) {
+      const errText = await quoteRes.text();
+      console.log(`bags.fm quote failed: ${quoteRes.status} ${errText.slice(0, 200)}`);
+      return { error: `bags.fm quote failed: ${quoteRes.status}` };
+    }
+    
+    const quoteJson = await quoteRes.json();
+    
+    if (!quoteJson.success || !quoteJson.response) {
+      console.log(`bags.fm quote unsuccessful:`, JSON.stringify(quoteJson).slice(0, 300));
+      return { error: "bags.fm quote returned no response" };
+    }
+    
+    const quoteResponse = quoteJson.response;
+    console.log(`bags.fm quote: in=${quoteResponse.inAmount}, out=${quoteResponse.outAmount}, slippage=${quoteResponse.slippageBps}bps`);
+    
+    // Step 2: Create swap transaction
+    const swapRes = await fetch("https://public-api-v2.bags.fm/api/v1/trade/swap", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "x-api-key": bagsApiKey,
+      },
+      body: JSON.stringify({
+        quoteResponse,
+        userPublicKey,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    
+    if (!swapRes.ok) {
+      const errText = await swapRes.text();
+      console.log(`bags.fm swap build failed: ${swapRes.status} ${errText.slice(0, 200)}`);
+      return { error: `bags.fm swap failed: ${swapRes.status}` };
+    }
+    
+    const swapJson = await swapRes.json();
+    
+    if (!swapJson.success || !swapJson.response?.swapTransaction) {
+      console.log(`bags.fm swap unsuccessful:`, JSON.stringify(swapJson).slice(0, 300));
+      return { error: "bags.fm swap returned no transaction" };
+    }
+    
+    const tx = swapJson.response.swapTransaction;
+    console.log(`bags.fm swap transaction built successfully, CU limit: ${swapJson.response.computeUnitLimit}`);
+    
+    return { 
+      tx, 
+      source: "bags.fm", 
+      outAmount: quoteResponse.outAmount 
+    };
+  } catch (e) {
+    const errMsg = (e as Error).message;
+    console.log(`bags.fm swap error: ${errMsg}`);
+    return { error: `bags.fm error: ${errMsg}` };
+  }
+}
+
 // Try Orca Whirlpool API
 async function tryOrcaSwap(params: {
   inputMint: string;
@@ -1186,12 +1288,18 @@ serve(async (req) => {
     };
     
     // Determine routing priority based on detected DEXes
-    // Priority: PumpPortal (bonding) → Best DEX by liquidity → Jupiter (aggregator) → Raydium → Meteora
+    // Priority: PumpPortal (bonding) → bags.fm (for Meteora) → Best DEX by liquidity → Jupiter (aggregator) → Raydium → Meteora
     const getRoutingPriority = (): string[] => {
       const routes: string[] = [];
       
       if (isBondingCurveToken) {
         routes.push('pumpportal');
+      }
+      
+      // For Meteora tokens (bags.fm graduated), add bags.fm API before Jupiter
+      // bags.fm API can route graduated tokens even when Jupiter hasn't indexed them
+      if (isMeteoraToken || venueHint?.bestDex?.includes('meteora')) {
+        if (!routes.includes('bagsfm')) routes.push('bagsfm');
       }
       
       // Add best DEX first if it has significant liquidity
@@ -1209,6 +1317,9 @@ serve(async (req) => {
       
       // Meteora direct fallback
       if (!routes.includes('meteora')) routes.push('meteora');
+      
+      // bags.fm as final fallback for any token that might be on Meteora
+      if (!routes.includes('bagsfm')) routes.push('bagsfm');
       
       return routes;
     };
@@ -1683,7 +1794,52 @@ serve(async (req) => {
           console.log(`Meteora API failed: ${meteoraResult.error}`);
         }
         
-        // Meteora also failed - try PumpPortal as LAST RESORT for ANY token
+        // Meteora also failed - try bags.fm Trade API (works for graduated bags.fm tokens on Meteora AMM)
+        console.log(`Meteora failed, trying bags.fm Trade API...`);
+        
+        const bagsFmResult = await tryBagsFmSwap({
+          inputMint: String(inputMint),
+          outputMint: String(outputMint),
+          amount: amount as any,
+          slippageBps: Number(slippageBps),
+          userPublicKey: owner.publicKey.toBase58(),
+        });
+        
+        if ("tx" in bagsFmResult) {
+          try {
+            const u8 = b64ToU8(bagsFmResult.tx);
+            const vtx = VersionedTransaction.deserialize(u8);
+            
+            const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
+            const txRpc = HELIUS_API_KEY 
+              ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+              : connection;
+            
+            const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+            (vtx as any).message.recentBlockhash = blockhash;
+            vtx.sign([owner]);
+            
+            const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+            const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+            
+            if (confirmResult.confirmed) {
+              console.log(`bags.fm ${side} successful:`, sig);
+              const solInputLamports =
+                side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+                  ? Number(amount)
+                  : null;
+              return ok({ signatures: [sig], source: "bags.fm", outAmount: bagsFmResult.outAmount || null, solInputLamports });
+            } else {
+              console.log(`bags.fm tx failed: ${confirmResult.error}`);
+            }
+          } catch (bagsSendErr) {
+            console.log(`bags.fm send error: ${(bagsSendErr as Error).message}`);
+          }
+        } else {
+          console.log(`bags.fm API failed: ${bagsFmResult.error}`);
+        }
+        
+        // bags.fm also failed - try PumpPortal as LAST RESORT for ANY token
         // PumpPortal will quickly fail if the token is not on pump.fun bonding curve
         console.log(`All DEX APIs failed, trying PumpPortal as last resort for any bonding curve token (${side})...`);
         
@@ -1734,7 +1890,7 @@ serve(async (req) => {
                 console.error("PumpPortal fallback tx failed:", confirmResult.error);
                 return softError(
                   "SWAP_FAILED",
-                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'tx failed'}; PumpPortal: ${confirmResult.error}`
+                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'tx failed'}; bags.fm: ${bagsFmResult.error || 'tx failed'}; PumpPortal: ${confirmResult.error}`
                 );
               }
               
@@ -1748,7 +1904,7 @@ serve(async (req) => {
               console.error("PumpPortal transaction send failed:", (sendError as Error).message);
               return softError(
                 "SWAP_FAILED",
-                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; PumpPortal send: ${(sendError as Error).message}`
+                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal send: ${(sendError as Error).message}`
               );
             }
           } else {
@@ -1756,14 +1912,14 @@ serve(async (req) => {
             console.log("PumpPortal also failed:", pumpResult.error);
             return softError(
               "SWAP_FAILED",
-              `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; PumpPortal: ${pumpResult.error}`
+              `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal: ${pumpResult.error}`
             );
           }
         } catch (pumpError) {
           console.error("PumpPortal attempt failed:", (pumpError as Error).message);
           return softError(
             "SWAP_FAILED",
-            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; PumpPortal error: ${(pumpError as Error).message}`
+            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal error: ${(pumpError as Error).message}`
           );
         }
       }
