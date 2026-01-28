@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
 import { 
   Users, 
   Zap, 
@@ -16,6 +17,22 @@ import {
 export function OverviewTab() {
   return (
     <div className="space-y-8">
+      {/* Holders Intel Promo Banner */}
+      <Link to="/holders" className="block group">
+        <div className="relative overflow-hidden rounded-xl border-2 border-primary/30 hover:border-primary/60 transition-all duration-300 shadow-lg hover:shadow-primary/20">
+          <img 
+            src="https://blackbox.farm/assets/holders-hero-Bpba6t8s.png" 
+            alt="Holders Intel - You don't grow on Dust" 
+            className="w-full h-auto object-cover group-hover:scale-[1.02] transition-transform duration-300"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-4">
+            <Badge className="bg-primary text-primary-foreground">
+              Explore Holders Intel →
+            </Badge>
+          </div>
+        </div>
+      </Link>
+
       {/* Hero Section */}
       <div className="text-center space-y-4">
         <Badge variant="secondary" className="px-4 py-2 text-sm">

@@ -100,7 +100,7 @@ export default function BlackBox() {
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="holders">Holders</TabsTrigger>
+            <TabsTrigger value="holders" onClick={(e) => { e.preventDefault(); window.location.href = '/holders'; }}>Holders</TabsTrigger>
             {isAdminView && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
             {isAdminView && <TabsTrigger value="wallets">Wallets</TabsTrigger>}
             {isAdminView && <TabsTrigger value="discovery" className="flex items-center gap-1">
