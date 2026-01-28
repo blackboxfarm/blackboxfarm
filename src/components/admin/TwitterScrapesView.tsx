@@ -37,6 +37,7 @@ export function TwitterScrapesView() {
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [filter, setFilter] = useState<'all' | 'best' | 'queued' | 'verified' | 'reply_targets'>('all');
+  const [tokenSources, setTokenSources] = useState<{ mint: string; symbol: string; source: string }[]>([]);
   const [stats, setStats] = useState({
     total: 0,
     bestSources: 0,
@@ -61,7 +62,6 @@ export function TwitterScrapesView() {
       } else if (filter === 'verified') {
         query = query.eq('is_verified', true);
       } else if (filter === 'reply_targets') {
-        // Reply targets: high engagement, not duplicates, sorted by likes+retweets+impressions
         query = query
           .is('duplicate_of', null)
           .gte('author_followers', 500)
@@ -89,6 +89,40 @@ export function TwitterScrapesView() {
           verified: allData.filter(m => m.is_verified).length,
         });
       }
+
+      // Fetch token sources (what the scanner will search for)
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const sources: { mint: string; symbol: string; source: string }[] = [];
+
+      // Queue tokens (last 48h)
+      const { data: queueTokens } = await supabase
+        .from('holders_intel_post_queue')
+        .select('token_mint, symbol')
+        .gte('created_at', twoDaysAgo)
+        .limit(20);
+
+      for (const t of queueTokens || []) {
+        if (t.token_mint && !sources.find(s => s.mint === t.token_mint)) {
+          sources.push({ mint: t.token_mint, symbol: t.symbol || 'UNKNOWN', source: 'queue' });
+        }
+      }
+
+      // Seen tokens (last 24h)
+      const { data: seenTokens } = await supabase
+        .from('holders_intel_seen_tokens')
+        .select('token_mint, symbol')
+        .gte('first_seen_at', yesterday)
+        .limit(30);
+
+      for (const t of seenTokens || []) {
+        if (t.token_mint && !sources.find(s => s.mint === t.token_mint)) {
+          sources.push({ mint: t.token_mint, symbol: t.symbol || 'UNKNOWN', source: 'seen' });
+        }
+      }
+
+      setTokenSources(sources.slice(0, 10)); // Show first 10 (what scanner processes)
+
     } catch (error) {
       console.error('Error fetching mentions:', error);
       toast.error('Failed to load Twitter mentions');
@@ -152,6 +186,44 @@ export function TwitterScrapesView() {
           </Button>
         </div>
       </div>
+
+      {/* Token Sources - What scanner searches for */}
+      {tokenSources.length > 0 && (
+        <Card className="bg-card/50 border-orange-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              🔍 Tokens Being Searched ({tokenSources.length})
+              <span className="text-xs text-muted-foreground font-normal">
+                (scanner will search Twitter for these)
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-2">
+              {tokenSources.map((t, i) => (
+                <Badge key={i} variant="outline" className="text-xs">
+                  ${t.symbol}
+                  <span className="ml-1 text-muted-foreground">({t.source})</span>
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Rate Limit Warning */}
+      <Card className="bg-red-500/10 border-red-500/30">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-red-400">
+            <XCircle className="h-5 w-5" />
+            <span className="font-medium">Twitter API Free Tier Limit</span>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Free tier only allows <strong>1 search request per 15 minutes</strong>. 
+            The scanner is being rate-limited (429 errors). Consider upgrading to Basic tier ($100/mo) for 10,000 tweets/month.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-5 gap-4">
