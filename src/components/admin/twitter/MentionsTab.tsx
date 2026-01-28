@@ -78,24 +78,28 @@ export function MentionsTab() {
 
   const toggleScanner = async () => {
     setIsTogglingCron(true);
+    const action = cronStatus?.active ? 'stop' : 'start';
     try {
-      if (cronStatus?.active) {
-        const { error } = await supabase.functions.invoke('twitter-scanner-control', {
-          body: { action: 'stop' }
-        });
-        if (error) throw error;
-        toast.success('Twitter Scanner stopped');
+      const { data, error } = await supabase.functions.invoke('twitter-scanner-control', {
+        body: { action }
+      });
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast.success(action === 'stop' ? 'Twitter Scanner stopped' : 'Twitter Scanner started');
+        // Immediately update local state for responsive UI
+        setCronStatus(prev => prev ? { ...prev, active: action === 'start' } : null);
       } else {
-        const { error } = await supabase.functions.invoke('twitter-scanner-control', {
-          body: { action: 'start' }
-        });
-        if (error) throw error;
-        toast.success('Twitter Scanner started');
+        throw new Error(data?.error || 'Unknown error');
       }
+      
+      // Also refresh from server to confirm
       await fetchCronStatus();
     } catch (error: any) {
       console.error('Toggle scanner error:', error);
       toast.error(error.message || 'Failed to toggle scanner');
+      // Refresh to get actual state
+      await fetchCronStatus();
     } finally {
       setIsTogglingCron(false);
     }
