@@ -149,6 +149,7 @@ interface HoldersReport {
   nonLpHolders: number;
   nonLpBalance: number;
   realHolders: number;
+  realWalletCount?: number;  // $50-$199 tier count
   bossWallets: number;
   kingpinWallets: number;
   superBossWallets: number;
@@ -1568,8 +1569,8 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                       <div className="text-xs text-muted-foreground">Boss ($200-$500)</div>
                     </div>
                     <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <div className="text-lg md:text-2xl font-bold text-green-500">{report.realHolders}</div>
-                      <div className="text-xs text-muted-foreground">Real ($50-$199)</div>
+                      <div className="text-lg md:text-2xl font-bold text-green-500">{report.realWalletCount || 0}</div>
+                      <div className="text-xs text-muted-foreground">Retail ($50-$199)</div>
                     </div>
                     <div className="text-center p-2 rounded-lg bg-muted/30">
                       <div className="text-lg md:text-2xl font-bold text-emerald-500">{report.largeWallets}</div>

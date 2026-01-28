@@ -467,7 +467,8 @@ serve(async (req) => {
       insidersGraph: insidersResult.hasInsiders ? insidersResult : undefined,
 
       // Back-compat fields for UI widgets
-      realHolders: realWalletCount,
+      // Real Holders = Total Wallets - Dust Wallets (not a specific tier)
+      realHolders: rankedHolders.length - dustWallets,
       dustPercentage: simpleTiers.dust.percentage,
       tierBreakdown: {
         dust: simpleTiers.dust.count,
