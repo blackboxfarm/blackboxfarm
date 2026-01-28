@@ -128,16 +128,11 @@ export default function SuperAdmin() {
             <TabsTrigger value="accounts" className="flex-shrink-0">Account Directory</TabsTrigger>
             <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
             <TabsTrigger value="utilities" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">🔧 Utilities</TabsTrigger>
+            <TabsTrigger value="whales-mints" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-teal-500/20">🐋 Whales & MINTS</TabsTrigger>
             <TabsTrigger value="tokens" className="flex-shrink-0">All Tokens</TabsTrigger>
             <TabsTrigger value="developers" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Developer Intel</TabsTrigger>
             <TabsTrigger value="analysis" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Analysis Jobs</TabsTrigger>
             <TabsTrigger value="watchdog" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Token Watchdog</TabsTrigger>
-            <TabsTrigger value="alerts" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Dev Alerts</TabsTrigger>
-            <TabsTrigger value="testing" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">System Tests</TabsTrigger>
-            <TabsTrigger value="genealogy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/30 data-[state=active]:to-primary/20">Token Genealogy</TabsTrigger>
-            <TabsTrigger value="dex-compiles" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-emerald-500/20">Dex Compiles</TabsTrigger>
-            <TabsTrigger value="html-scrapes" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-blue-500/20">HTML Scrapes</TabsTrigger>
-            <TabsTrigger value="token-sets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-purple-500/20">Token Sets</TabsTrigger>
             <TabsTrigger value="arbitrage" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-orange-500/20">Arbitrage Bot</TabsTrigger>
             <TabsTrigger value="playground" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-cyan-500/20">Playground</TabsTrigger>
             <TabsTrigger value="airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-pink-500/20">Airdrops</TabsTrigger>
@@ -145,8 +140,6 @@ export default function SuperAdmin() {
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="advertisers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">📢 Advertisers</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
-            <TabsTrigger value="whale-frenzy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 Whale Frenzy</TabsTrigger>
-            <TabsTrigger value="mega-whale" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 MEGA WHALE</TabsTrigger>
             
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
@@ -261,39 +254,28 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
 
-          <TabsContent value="alerts">
-            <ActiveTabOnly activeTab={activeTab} tabValue="alerts">
-              <DeveloperAlerts />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="testing">
-            <ActiveTabOnly activeTab={activeTab} tabValue="testing">
-              <SystemTesting />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="genealogy">
-            <ActiveTabOnly activeTab={activeTab} tabValue="genealogy">
-              <TokenGenealogyDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="dex-compiles">
-            <ActiveTabOnly activeTab={activeTab} tabValue="dex-compiles">
-              <DexCompilesView />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="html-scrapes">
-            <ActiveTabOnly activeTab={activeTab} tabValue="html-scrapes">
-              <HtmlScrapes />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="token-sets">
-            <ActiveTabOnly activeTab={activeTab} tabValue="token-sets">
-              <TokenSets />
+          <TabsContent value="whales-mints">
+            <ActiveTabOnly activeTab={activeTab} tabValue="whales-mints">
+              <Tabs defaultValue="mega-whale" className="space-y-4">
+                <TabsList className="flex flex-wrap gap-1">
+                  <TabsTrigger value="mega-whale">👑 MEGA WHALE</TabsTrigger>
+                  <TabsTrigger value="whale-frenzy">🔥 Whale Frenzy</TabsTrigger>
+                  <TabsTrigger value="genealogy">🧬 Token Genealogy</TabsTrigger>
+                  <TabsTrigger value="dex-compiles">📊 Dex Compiles</TabsTrigger>
+                  <TabsTrigger value="html-scrapes">🌐 HTML Scrapes</TabsTrigger>
+                  <TabsTrigger value="token-sets">🎯 Token Sets</TabsTrigger>
+                  <TabsTrigger value="alerts">🚨 Dev Alerts</TabsTrigger>
+                  <TabsTrigger value="testing">🧪 System Tests</TabsTrigger>
+                </TabsList>
+                <TabsContent value="mega-whale"><MegaWhaleDashboard /></TabsContent>
+                <TabsContent value="whale-frenzy"><WhaleFrenzyDashboard /></TabsContent>
+                <TabsContent value="genealogy"><TokenGenealogyDashboard /></TabsContent>
+                <TabsContent value="dex-compiles"><DexCompilesView /></TabsContent>
+                <TabsContent value="html-scrapes"><HtmlScrapes /></TabsContent>
+                <TabsContent value="token-sets"><TokenSets /></TabsContent>
+                <TabsContent value="alerts"><DeveloperAlerts /></TabsContent>
+                <TabsContent value="testing"><SystemTesting /></TabsContent>
+              </Tabs>
             </ActiveTabOnly>
           </TabsContent>
 
@@ -338,19 +320,6 @@ export default function SuperAdmin() {
               <SurveyManagement />
             </ActiveTabOnly>
           </TabsContent>
-
-          <TabsContent value="whale-frenzy">
-            <ActiveTabOnly activeTab={activeTab} tabValue="whale-frenzy">
-              <WhaleFrenzyDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="mega-whale">
-            <ActiveTabOnly activeTab={activeTab} tabValue="mega-whale">
-              <MegaWhaleDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-
 
           <TabsContent value="flipit">
             <ActiveTabOnly activeTab={activeTab} tabValue="flipit">
