@@ -127,7 +127,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="security" className="flex-shrink-0">Security Dashboard</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0">Account Directory</TabsTrigger>
             <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
-            <TabsTrigger value="liquidity" className="flex-shrink-0">Liquidity Checker</TabsTrigger>
+            <TabsTrigger value="utilities" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">🔧 Utilities</TabsTrigger>
             <TabsTrigger value="tokens" className="flex-shrink-0">All Tokens</TabsTrigger>
             <TabsTrigger value="developers" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Developer Intel</TabsTrigger>
             <TabsTrigger value="analysis" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Analysis Jobs</TabsTrigger>
@@ -147,7 +147,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
             <TabsTrigger value="whale-frenzy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 Whale Frenzy</TabsTrigger>
             <TabsTrigger value="mega-whale" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 MEGA WHALE</TabsTrigger>
-            <TabsTrigger value="api-providers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-orange-500/20">⚡ API Providers</TabsTrigger>
+            
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter Accounts</TabsTrigger>
@@ -158,12 +158,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="pumpfun-whitelist" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600/30 data-[state=active]:to-emerald-500/20">✅ Whitelist Mesh</TabsTrigger>
             <TabsTrigger value="kol-tracker" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 KOL Tracker</TabsTrigger>
             <TabsTrigger value="dev-teams" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600/30 data-[state=active]:to-violet-500/20">👥 Dev Teams</TabsTrigger>
-            <TabsTrigger value="spider" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-gray-500/30 data-[state=active]:to-slate-500/20">🕷️ Spider</TabsTrigger>
-            <TabsTrigger value="sol-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-green-500/20">📊 SOL Price</TabsTrigger>
-            <TabsTrigger value="sniff" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">🐕 SNIFF</TabsTrigger>
             <TabsTrigger value="holders-visitors" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-blue-500/20">👁️ Visitors</TabsTrigger>
-            <TabsTrigger value="helius-api" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">⚡ Helius API</TabsTrigger>
-            <TabsTrigger value="api-resources" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-teal-500/20">📊 API Resources</TabsTrigger>
             <TabsTrigger value="token-history" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20">💎 Token History</TabsTrigger>
             <TabsTrigger value="search-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">🔍 Search Analytics</TabsTrigger>
             <TabsTrigger value="token-viewer" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">📈 Token Viewer</TabsTrigger>
@@ -219,9 +214,26 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
           
-          <TabsContent value="liquidity">
-            <ActiveTabOnly activeTab={activeTab} tabValue="liquidity">
-              <LiquidityLockChecker />
+          <TabsContent value="utilities">
+            <ActiveTabOnly activeTab={activeTab} tabValue="utilities">
+              <Tabs defaultValue="spider" className="space-y-4">
+                <TabsList className="flex flex-wrap gap-1">
+                  <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
+                  <TabsTrigger value="api-resources">📊 API Resources</TabsTrigger>
+                  <TabsTrigger value="sol-analytics">📊 SOL Price</TabsTrigger>
+                  <TabsTrigger value="sniff">🐕 SNIFF</TabsTrigger>
+                  <TabsTrigger value="helius-api">⚡ Helius API</TabsTrigger>
+                  <TabsTrigger value="api-providers">⚡ API Providers</TabsTrigger>
+                  <TabsTrigger value="liquidity">🔒 Liquidity Checker</TabsTrigger>
+                </TabsList>
+                <TabsContent value="spider"><SpiderRouteMap /></TabsContent>
+                <TabsContent value="api-resources"><HoldersResourceDashboard /></TabsContent>
+                <TabsContent value="sol-analytics"><SolPriceAnalytics /></TabsContent>
+                <TabsContent value="sniff"><SniffDashboard /></TabsContent>
+                <TabsContent value="helius-api"><HeliusUsageDashboard /></TabsContent>
+                <TabsContent value="api-providers"><ApiProviderManager /></TabsContent>
+                <TabsContent value="liquidity"><LiquidityLockChecker /></TabsContent>
+              </Tabs>
             </ActiveTabOnly>
           </TabsContent>
           
@@ -339,11 +351,6 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
 
-          <TabsContent value="api-providers">
-            <ActiveTabOnly activeTab={activeTab} tabValue="api-providers">
-              <ApiProviderManager />
-            </ActiveTabOnly>
-          </TabsContent>
 
           <TabsContent value="flipit">
             <ActiveTabOnly activeTab={activeTab} tabValue="flipit">
@@ -423,23 +430,8 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
 
-          <TabsContent value="spider">
-            <ActiveTabOnly activeTab={activeTab} tabValue="spider">
-              <SpiderRouteMap />
-            </ActiveTabOnly>
-          </TabsContent>
 
-          <TabsContent value="sol-analytics">
-            <ActiveTabOnly activeTab={activeTab} tabValue="sol-analytics">
-              <SolPriceAnalytics />
-            </ActiveTabOnly>
-          </TabsContent>
 
-          <TabsContent value="sniff">
-            <ActiveTabOnly activeTab={activeTab} tabValue="sniff">
-              <SniffDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
 
           <TabsContent value="holders-visitors">
             <ActiveTabOnly activeTab={activeTab} tabValue="holders-visitors">
@@ -447,17 +439,7 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
 
-          <TabsContent value="helius-api">
-            <ActiveTabOnly activeTab={activeTab} tabValue="helius-api">
-              <HeliusUsageDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
 
-          <TabsContent value="api-resources">
-            <ActiveTabOnly activeTab={activeTab} tabValue="api-resources">
-              <HoldersResourceDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
 
           <TabsContent value="token-history">
             <ActiveTabOnly activeTab={activeTab} tabValue="token-history">
