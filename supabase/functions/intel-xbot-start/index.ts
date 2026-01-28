@@ -31,8 +31,8 @@ const CRON_JOBS = [
     function: 'holders-intel-scheduler'
   },
   {
-    name: 'holdersintel-poster-2min',
-    schedule: '*/2 * * * *',
+    name: 'holdersintel-poster-3min',
+    schedule: '*/3 * * * *',
     function: 'holders-intel-poster'
   },
   {
@@ -69,10 +69,10 @@ Deno.serve(async (req) => {
     const requeuedCount = requeuedItems?.length || 0;
     console.log(`📥 Re-queued ${requeuedCount} skipped items back to pending`);
     
-    // Also unschedule old 3-min job if it exists
+    // Also unschedule old 2-min job if it exists (from catchup mode)
     try {
-      await supabase.rpc('unschedule_cron_job', { job_name: 'holdersintel-poster-3min' });
-      console.log('Removed old 3-min poster job');
+      await supabase.rpc('unschedule_cron_job', { job_name: 'holdersintel-poster-2min' });
+      console.log('Removed old 2-min poster job');
     } catch {
       // Ignore
     }
