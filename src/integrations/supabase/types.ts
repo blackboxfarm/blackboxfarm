@@ -10885,10 +10885,15 @@ export type Database = {
           created_at: string | null
           detected_contracts: string[] | null
           detected_tickers: string[] | null
+          duplicate_of: string | null
           engagement_score: number | null
           id: string
+          impression_count: number | null
+          is_best_source: boolean | null
+          is_verified: boolean | null
           likes_count: number | null
           posted_at: string | null
+          quality_score: number | null
           queue_id: string | null
           queued_for_analysis: boolean | null
           replies_count: number | null
@@ -10897,6 +10902,7 @@ export type Database = {
           tweet_id: string
           tweet_text: string
           tweet_url: string | null
+          verified_type: string | null
         }
         Insert: {
           author_followers?: number | null
@@ -10905,10 +10911,15 @@ export type Database = {
           created_at?: string | null
           detected_contracts?: string[] | null
           detected_tickers?: string[] | null
+          duplicate_of?: string | null
           engagement_score?: number | null
           id?: string
+          impression_count?: number | null
+          is_best_source?: boolean | null
+          is_verified?: boolean | null
           likes_count?: number | null
           posted_at?: string | null
+          quality_score?: number | null
           queue_id?: string | null
           queued_for_analysis?: boolean | null
           replies_count?: number | null
@@ -10917,6 +10928,7 @@ export type Database = {
           tweet_id: string
           tweet_text: string
           tweet_url?: string | null
+          verified_type?: string | null
         }
         Update: {
           author_followers?: number | null
@@ -10925,10 +10937,15 @@ export type Database = {
           created_at?: string | null
           detected_contracts?: string[] | null
           detected_tickers?: string[] | null
+          duplicate_of?: string | null
           engagement_score?: number | null
           id?: string
+          impression_count?: number | null
+          is_best_source?: boolean | null
+          is_verified?: boolean | null
           likes_count?: number | null
           posted_at?: string | null
+          quality_score?: number | null
           queue_id?: string | null
           queued_for_analysis?: boolean | null
           replies_count?: number | null
@@ -10937,6 +10954,7 @@ export type Database = {
           tweet_id?: string
           tweet_text?: string
           tweet_url?: string | null
+          verified_type?: string | null
         }
         Relationships: [
           {
