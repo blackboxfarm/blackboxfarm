@@ -20,7 +20,7 @@ interface StepIconProps {
 const sizeClasses = {
   xs: 'w-4 h-4',      // 16px - tiny inline
   sm: 'w-5 h-5 md:w-6 md:h-6',   // 20-24px - steps wizard (reduced)
-  md: 'w-6 h-6 md:w-7 md:h-7', // 24-28px - section headers
+  md: 'w-6 h-6 md:w-24 md:h-24', // 24px mobile, 96px on md screens - section headers
   lg: 'w-8 h-8 md:w-10 md:h-10', // 32-40px - prominent headers
   xl: 'w-12 h-12 md:w-16 md:h-16', // 48-64px - large display
 };
