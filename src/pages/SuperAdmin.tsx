@@ -1,11 +1,11 @@
-import React, { useState, useEffect, lazy } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActiveTabOnly } from "@/components/ui/ActiveTabOnly";
-
+import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBadge";
 // Lazy load ALL admin components - they won't load until their tab is clicked
 const MasterWalletsDashboard = lazy(() => import("@/components/admin/MasterWalletsDashboard").then(m => ({ default: m.MasterWalletsDashboard })));
 const SuperAdminWallets = lazy(() => import("@/components/SuperAdminWallets").then(m => ({ default: m.SuperAdminWallets })));
@@ -114,11 +114,14 @@ export default function SuperAdmin() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Super Admin</h1>
-          <p className="text-muted-foreground">
-            Manage platform wallets and administrative functions
-          </p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">Super Admin</h1>
+            <p className="text-muted-foreground">
+              Manage platform wallets and administrative functions
+            </p>
+          </div>
+          <AdminNotificationsBadge />
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">

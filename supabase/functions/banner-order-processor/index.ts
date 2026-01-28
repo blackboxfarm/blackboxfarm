@@ -180,6 +180,34 @@ serve(async (req) => {
 
     console.log('Created banner order:', order.id);
 
+    // Send admin notifications (email + telegram + database badge)
+    try {
+      await supabase.functions.invoke('admin-notify', {
+        body: {
+          type: 'banner_purchase',
+          title: 'New Banner Purchase',
+          message: `New banner order received!\n\n💰 Price: $${priceUsd} (${priceSol.toFixed(4)} SOL)\n⏱️ Duration: ${durationHours} hours\n📧 Email: ${email}\n🐦 Twitter: ${twitter || 'N/A'}\n🔗 Link: ${linkUrl}`,
+          metadata: {
+            order_id: order.id,
+            title,
+            price_usd: priceUsd,
+            price_sol: priceSol.toFixed(4),
+            duration_hours: durationHours,
+            email,
+            twitter: twitter || null,
+            link_url: linkUrl,
+            start_time: startTime,
+            activation_key: activationKey,
+          },
+          channels: ['email', 'telegram', 'database'],
+        },
+      });
+      console.log('Admin notification sent for order:', order.id);
+    } catch (notifyError) {
+      // Don't fail the order if notification fails
+      console.error('Failed to send admin notification:', notifyError);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
