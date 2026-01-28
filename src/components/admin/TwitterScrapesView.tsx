@@ -2,11 +2,11 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Twitter, CheckCircle, XCircle, Star, Users, Eye, Heart, Repeat, MessageCircle, ExternalLink, Trophy, Copy } from "lucide-react";
+import { RefreshCw, Twitter, CheckCircle, XCircle, Star, Users, Eye, Heart, Repeat, MessageCircle, ExternalLink, Trophy, Copy, Clock, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 interface TwitterMention {
   id: string;
@@ -32,12 +32,23 @@ interface TwitterMention {
   created_at: string;
 }
 
+interface ScannerState {
+  token_mint: string;
+  symbol: string;
+  virality_score: number;
+  source: string;
+  last_scanned_at: string | null;
+  scan_count: number;
+}
+
 export function TwitterScrapesView() {
   const [mentions, setMentions] = useState<TwitterMention[]>([]);
+  const [scannerQueue, setScannerQueue] = useState<ScannerState[]>([]);
+  const [lastScanned, setLastScanned] = useState<ScannerState | null>(null);
+  const [nextUp, setNextUp] = useState<ScannerState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [filter, setFilter] = useState<'all' | 'best' | 'queued' | 'verified' | 'reply_targets'>('all');
-  const [tokenSources, setTokenSources] = useState<{ mint: string; symbol: string; source: string }[]>([]);
   const [stats, setStats] = useState({
     total: 0,
     bestSources: 0,
@@ -90,38 +101,40 @@ export function TwitterScrapesView() {
         });
       }
 
-      // Fetch token sources (what the scanner will search for)
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-      const sources: { mint: string; symbol: string; source: string }[] = [];
-
-      // Queue tokens (last 48h)
-      const { data: queueTokens } = await supabase
-        .from('holders_intel_post_queue')
-        .select('token_mint, symbol')
-        .gte('created_at', twoDaysAgo)
-        .limit(20);
-
-      for (const t of queueTokens || []) {
-        if (t.token_mint && !sources.find(s => s.mint === t.token_mint)) {
-          sources.push({ mint: t.token_mint, symbol: t.symbol || 'UNKNOWN', source: 'queue' });
-        }
-      }
-
-      // Seen tokens (last 24h)
-      const { data: seenTokens } = await supabase
-        .from('holders_intel_seen_tokens')
-        .select('token_mint, symbol')
-        .gte('first_seen_at', yesterday)
-        .limit(30);
-
-      for (const t of seenTokens || []) {
-        if (t.token_mint && !sources.find(s => s.mint === t.token_mint)) {
-          sources.push({ mint: t.token_mint, symbol: t.symbol || 'UNKNOWN', source: 'seen' });
-        }
-      }
-
-      setTokenSources(sources.slice(0, 10)); // Show first 10 (what scanner processes)
+      // Fetch scanner state
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      
+      // Get next token to scan (highest virality, not scanned recently)
+      const { data: nextToken } = await supabase
+        .from('twitter_scanner_state')
+        .select('*')
+        .or(`last_scanned_at.is.null,last_scanned_at.lt.${twoHoursAgo}`)
+        .order('virality_score', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      setNextUp(nextToken);
+      
+      // Get last scanned token
+      const { data: lastToken } = await supabase
+        .from('twitter_scanner_state')
+        .select('*')
+        .not('last_scanned_at', 'is', null)
+        .order('last_scanned_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      setLastScanned(lastToken);
+      
+      // Get queue (tokens waiting to be scanned)
+      const { data: queueData } = await supabase
+        .from('twitter_scanner_state')
+        .select('*')
+        .or(`last_scanned_at.is.null,last_scanned_at.lt.${twoHoursAgo}`)
+        .order('virality_score', { ascending: false })
+        .limit(10);
+      
+      setScannerQueue(queueData || []);
 
     } catch (error) {
       console.error('Error fetching mentions:', error);
@@ -136,7 +149,8 @@ export function TwitterScrapesView() {
     try {
       const { data, error } = await supabase.functions.invoke('twitter-token-mention-scanner');
       if (error) throw error;
-      toast.success(`Scan complete: ${data.stats?.mentions_saved || 0} mentions saved, ${data.stats?.best_sources_selected || 0} best sources`);
+      const symbol = data.stats?.symbol_searched || 'token';
+      toast.success(`Scanned $${symbol}: ${data.stats?.mentions_saved || 0} mentions saved`);
       fetchMentions();
     } catch (error: any) {
       console.error('Scanner error:', error);
@@ -157,6 +171,13 @@ export function TwitterScrapesView() {
     return 'text-muted-foreground';
   };
 
+  const getSourceColor = (source: string) => {
+    if (source === 'dex_boost_100') return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
+    if (source === 'dex_paid') return 'bg-orange-500/20 text-orange-400 border-orange-500/50';
+    if (source === 'queue') return 'bg-green-500/20 text-green-400 border-green-500/50';
+    return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
+  };
+
   const copyContract = (contract: string) => {
     navigator.clipboard.writeText(contract);
     toast.success('Contract copied!');
@@ -172,7 +193,7 @@ export function TwitterScrapesView() {
             Twitter Token Scrapes
           </h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Quality-filtered token mentions with deduplication
+            Single-token scanning every 16 minutes
           </p>
         </div>
         <div className="flex gap-2">
@@ -182,48 +203,105 @@ export function TwitterScrapesView() {
           </Button>
           <Button onClick={runScanner} disabled={isScanning}>
             <Twitter className={cn("h-4 w-4 mr-2", isScanning && "animate-pulse")} />
-            {isScanning ? 'Scanning...' : 'Run Scanner'}
+            {isScanning ? 'Scanning...' : 'Scan Now'}
           </Button>
         </div>
       </div>
 
-      {/* Token Sources - What scanner searches for */}
-      {tokenSources.length > 0 && (
+      {/* Scanner State Cards */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Next Up */}
+        <Card className="bg-card/50 border-sky-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Zap className="h-4 w-4 text-sky-400" />
+              Next Token to Scan
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {nextUp ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xl font-bold">${nextUp.symbol}</span>
+                  <Badge variant="outline" className={cn("ml-2 text-xs", getSourceColor(nextUp.source))}>
+                    {nextUp.source}
+                  </Badge>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-semibold text-sky-400">{nextUp.virality_score}</div>
+                  <div className="text-xs text-muted-foreground">virality score</div>
+                </div>
+              </div>
+            ) : (
+              <span className="text-muted-foreground">No tokens in queue</span>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Last Scanned */}
+        <Card className="bg-card/50 border-green-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Clock className="h-4 w-4 text-green-400" />
+              Last Scanned
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {lastScanned ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xl font-bold">${lastScanned.symbol}</span>
+                  <Badge variant="outline" className={cn("ml-2 text-xs", getSourceColor(lastScanned.source))}>
+                    {lastScanned.source}
+                  </Badge>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-green-400">
+                    {lastScanned.last_scanned_at && formatDistanceToNow(new Date(lastScanned.last_scanned_at), { addSuffix: true })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {lastScanned.scan_count} scans total
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <span className="text-muted-foreground">No scans yet</span>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Token Queue */}
+      {scannerQueue.length > 0 && (
         <Card className="bg-card/50 border-orange-500/30">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              🔍 Tokens Being Searched ({tokenSources.length})
-              <span className="text-xs text-muted-foreground font-normal">
-                (scanner will search Twitter for these)
+              📋 Scanner Queue ({scannerQueue.length} tokens)
+              <span className="text-xs text-muted-foreground font-normal ml-2">
+                sorted by virality score
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-wrap gap-2">
-              {tokenSources.map((t, i) => (
-                <Badge key={i} variant="outline" className="text-xs">
+              {scannerQueue.map((t, i) => (
+                <Badge 
+                  key={t.token_mint} 
+                  variant="outline" 
+                  className={cn(
+                    "text-xs",
+                    i === 0 && "ring-2 ring-sky-500/50",
+                    getSourceColor(t.source)
+                  )}
+                >
                   ${t.symbol}
-                  <span className="ml-1 text-muted-foreground">({t.source})</span>
+                  <span className="ml-1 opacity-70">({t.virality_score})</span>
                 </Badge>
               ))}
             </div>
           </CardContent>
         </Card>
       )}
-
-      {/* Rate Limit Warning */}
-      <Card className="bg-red-500/10 border-red-500/30">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-red-400">
-            <XCircle className="h-5 w-5" />
-            <span className="font-medium">Twitter API Free Tier Limit</span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Free tier only allows <strong>1 search request per 15 minutes</strong>. 
-            The scanner is being rate-limited (429 errors). Consider upgrading to Basic tier ($100/mo) for 10,000 tweets/month.
-          </p>
-        </CardContent>
-      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-5 gap-4">

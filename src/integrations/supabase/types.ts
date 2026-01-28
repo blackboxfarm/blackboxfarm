@@ -10877,6 +10877,42 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_scanner_state: {
+        Row: {
+          created_at: string
+          id: string
+          last_scanned_at: string | null
+          scan_count: number
+          source: string
+          symbol: string
+          token_mint: string
+          updated_at: string
+          virality_score: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_scanned_at?: string | null
+          scan_count?: number
+          source?: string
+          symbol: string
+          token_mint: string
+          updated_at?: string
+          virality_score?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_scanned_at?: string | null
+          scan_count?: number
+          source?: string
+          symbol?: string
+          token_mint?: string
+          updated_at?: string
+          virality_score?: number
+        }
+        Relationships: []
+      }
       twitter_token_mentions: {
         Row: {
           author_followers: number | null
