@@ -87,26 +87,63 @@ serve(async (req) => {
       }
     }
 
-    const rpcUrl = Deno.env.get("SOLANA_RPC_URL") || "https://mainnet.helius-rpc.com/?api-key=4237f40d-5c4c-4c30-9f85-7fc0026e1094";
+    // Build RPC URL from env, preferring SOLANA_RPC_URL, then HELIUS_API_KEY, then public fallback
+    const heliusKey = Deno.env.get("HELIUS_API_KEY");
+    const rpcUrl = Deno.env.get("SOLANA_RPC_URL") 
+      || (heliusKey ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}` : null)
+      || "https://api.mainnet-beta.solana.com";
     const headerSecret = req.headers.get("x-owner-secret");
     const envSecret = Deno.env.get("TRADER_PRIVATE_KEY");
+    const walletId = body?.walletId;
     
-    if (!headerSecret && !envSecret) {
-      slog("Missing both x-owner-secret and TRADER_PRIVATE_KEY");
-      return ok({ error: "Missing secret: TRADER_PRIVATE_KEY or x-owner-secret", ...(debug ? { debugLogs: logs } : {}) }, 500);
+    // Support walletId lookup from database (same as raydium-swap)
+    let walletSecretFromDb: string | null = null;
+    if (walletId && !headerSecret) {
+      slog(`Looking up wallet by ID: ${walletId}`);
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && supabaseServiceKey) {
+          const sbClient = createClient(supabaseUrl, supabaseServiceKey);
+          
+          // Try flip_wallets first, then blackbox_wallets, then airdrop_wallets
+          const tables = ["flip_wallets", "blackbox_wallets", "airdrop_wallets"];
+          for (const table of tables) {
+            const { data, error } = await sbClient
+              .from(table)
+              .select("secret_key_encrypted")
+              .eq("id", walletId)
+              .maybeSingle();
+            
+            if (data?.secret_key_encrypted) {
+              walletSecretFromDb = data.secret_key_encrypted;
+              slog(`Found wallet in ${table}`);
+              break;
+            }
+          }
+        }
+      } catch (lookupErr) {
+        slog(`Wallet lookup error: ${(lookupErr as Error)?.message}`);
+      }
+    }
+    
+    if (!headerSecret && !envSecret && !walletSecretFromDb) {
+      slog("Missing wallet secret (no x-owner-secret, TRADER_PRIVATE_KEY, or walletId lookup)");
+      return ok({ error: "Missing secret: TRADER_PRIVATE_KEY, x-owner-secret header, or walletId", ...(debug ? { debugLogs: logs } : {}) }, 500);
     }
 
-    // Decrypt if it's from header (encrypted from database)
-    let secretToUse = envSecret!;
-    if (headerSecret) {
+    // Decrypt the secret - priority: walletSecretFromDb > headerSecret > envSecret
+    let secretToUse = envSecret || "";
+    const secretSource = walletSecretFromDb || headerSecret;
+    if (secretSource) {
       try {
-        slog("Decrypting owner secret via encrypt-data function");
+        slog(`Decrypting secret (source: ${walletSecretFromDb ? 'walletId lookup' : 'header'})`);
         const supabaseClient = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
           Deno.env.get("SUPABASE_ANON_KEY") ?? ""
         );
         const { data, error } = await supabaseClient.functions.invoke('encrypt-data', {
-          body: { data: headerSecret, action: 'decrypt' }
+          body: { data: secretSource, action: 'decrypt' }
         });
         if (error) throw error;
         const decrypted = (data as any)?.decryptedData ?? '';
@@ -117,14 +154,14 @@ serve(async (req) => {
         slog("⚠️ encrypt-data decrypt failed: " + (invokeErr as Error)?.message);
         try {
           // Handle AES: prefix produced by encrypt-data directly with local AES helper
-          if (headerSecret.startsWith('AES:')) {
-            const payload = headerSecret.substring(4);
+          if (secretSource.startsWith('AES:')) {
+            const payload = secretSource.substring(4);
             secretToUse = await SecureStorage.decrypt(payload);
             slog("✅ Local AES decryption successful (length: " + secretToUse.length + ")");
           } else {
             // Legacy base64 or plaintext formats
             slog("🔄 Trying base64 decode for legacy format");
-            const decoded = atob(headerSecret);
+            const decoded = atob(secretSource);
             // decoded may be either base58 string or JSON array string
             try { parseKeypair(decoded); secretToUse = decoded; }
             catch {
@@ -143,8 +180,8 @@ serve(async (req) => {
           slog("❌ All decryption paths failed: " + (fallbackErr as Error)?.message);
           // As a last resort, attempt raw parse (will throw if invalid)
           try {
-            parseKeypair(headerSecret);
-            secretToUse = headerSecret;
+            parseKeypair(secretSource);
+            secretToUse = secretSource;
           } catch (parseError) {
             return ok({ error: `Invalid wallet secret format. Please check wallet configuration.` , ...(debug ? { debugLogs: logs } : {}) }, 400);
           }
