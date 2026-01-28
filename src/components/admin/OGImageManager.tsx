@@ -205,22 +205,22 @@ export function OGImageManager() {
             <input type="file" accept="image/png" onChange={handleFileSelect} className="sr-only" />
           </label>
         ) : (
-          <div className="border rounded-lg p-3 space-y-3 bg-muted/20">
-            <div className="aspect-[1200/630] bg-muted rounded overflow-hidden max-h-40">
+          <div className="flex items-center gap-3 p-2 border rounded-lg bg-muted/20">
+            <div className="w-20 h-10 rounded overflow-hidden bg-muted flex-shrink-0">
               <img src={pendingPreview!} alt="Preview" className="w-full h-full object-cover" />
             </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nickname (e.g. dust, january, promo1)"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                className="font-mono text-sm"
-              />
-              <Button size="sm" onClick={handleUpload} disabled={uploading || !nickname.trim()}>
-                {uploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Save'}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={cancelUpload}>Cancel</Button>
-            </div>
+            <Input
+              placeholder="Nickname"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              className="font-mono text-sm h-8 flex-1"
+            />
+            <Button size="sm" className="h-8" onClick={handleUpload} disabled={uploading || !nickname.trim()}>
+              {uploading ? <RefreshCw className="w-3 h-3 animate-spin" /> : 'Save'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={cancelUpload}>
+              <X className="w-3 h-3" />
+            </Button>
           </div>
         )}
 
