@@ -18,7 +18,7 @@ export function OverviewTab() {
   return (
     <div className="space-y-8">
       {/* Holders Intel Promo Banner */}
-      <Link to="/holders" className="block group">
+      <Link to="/holders" className="block group max-w-sm mx-auto">
         <div className="relative overflow-hidden rounded-xl border-2 border-primary/30 hover:border-primary/60 transition-all duration-300 shadow-lg hover:shadow-primary/20">
           <img 
             src="https://blackbox.farm/assets/holders-hero-Bpba6t8s.png" 
