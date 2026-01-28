@@ -25,6 +25,10 @@ import { TokenHealthDashboard } from '@/components/premium/TokenHealthDashboard'
 import { useAuth } from '@/hooks/useAuth';
 import { useTokenDataCollection } from '@/hooks/useTokenDataCollection';
 import padreMemeCoins from '@/assets/padre-meme-coins.png';
+import step1Icon from '@/assets/step-1.png';
+import step2Icon from '@/assets/step-2.png';
+import step3Icon from '@/assets/step-3.png';
+import step4Icon from '@/assets/step-4.png';
 import { ExtendedAnalysisSection } from '@/components/holders/ExtendedAnalysisSection';
 import { AIInterpretationPanel } from '@/components/holders/AIInterpretationPanel';
 import { AIInterpretationLocked } from '@/components/holders/AIInterpretationLocked';
@@ -923,16 +927,28 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
           <CardTitle className="text-base md:text-xl">Token Holders Report</CardTitle>
           {/* Wizard-style flow indicator */}
-          <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px] md:text-xs text-muted-foreground">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 md:gap-2 text-[10px] md:text-xs text-muted-foreground">
             <span className="font-semibold text-primary">Paste & Click</span>
             <span className="text-muted-foreground/60">→</span>
-            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">1. Quick Snapshot</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+              <img src={step1Icon} alt="1" className="w-4 h-4 md:w-5 md:h-5" />
+              Quick Snapshot
+            </span>
             <span className="text-muted-foreground/60">→</span>
-            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">2. Report Summary</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+              <img src={step2Icon} alt="2" className="w-4 h-4 md:w-5 md:h-5" />
+              Report Summary
+            </span>
             <span className="text-muted-foreground/60">→</span>
-            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">3. Functional Holders</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+              <img src={step3Icon} alt="3" className="w-4 h-4 md:w-5 md:h-5" />
+              Functional Holders
+            </span>
             <span className="text-muted-foreground/60">→</span>
-            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">4. Distribution Integrity</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+              <img src={step4Icon} alt="4" className="w-4 h-4 md:w-5 md:h-5" />
+              Distribution Integrity
+            </span>
             <span className="text-muted-foreground/60">→</span>
             <span className="font-semibold text-primary">Share!</span>
           </div>
@@ -1190,7 +1206,10 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
           <Card>
             <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
               <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="text-base md:text-xl text-white font-bold">Report Summary</span>
+                <span className="text-base md:text-xl text-white font-bold flex items-center gap-2">
+                  <img src={step2Icon} alt="2" className="w-6 h-6 md:w-8 md:h-8" />
+                  Report Summary
+                </span>
                 <Button 
                   onClick={exportToCSV}
                   variant="outline"
@@ -1458,7 +1477,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               {report.distributionStats && (
                 <div className="mb-4 p-3 rounded-lg border bg-muted/20">
                   <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-white">
-                    <BarChart3 className="h-4 w-4" />
+                    <img src={step4Icon} alt="4" className="w-5 h-5" />
                     Distribution Integrity
                   </h3>
                   <div className="grid grid-cols-3 gap-2 mb-3">
@@ -1488,7 +1507,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-base font-semibold flex items-center gap-2 text-white">
-                    <Users className="h-4 w-4" />
+                    <img src={step3Icon} alt="3" className="w-5 h-5" />
                     Functional Holders
                   </h3>
                   <div className="flex items-center gap-1 text-xs">
@@ -2001,7 +2020,10 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               {/* Sediment Layer Chart */}
               <div className="mb-4 md:mb-6">
                 <div className="flex items-center justify-between mb-3 md:mb-4">
-                  <h3 className="text-base md:text-lg font-semibold text-white">Distribution Integrity (Sediment Layers)</h3>
+                  <h3 className="text-base md:text-lg font-semibold text-white flex items-center gap-2">
+                    <img src={step4Icon} alt="4" className="w-6 h-6 md:w-7 md:h-7" />
+                    Distribution Integrity (Sediment Layers)
+                  </h3>
                   <div className="flex items-center gap-1 text-xs">
                     <Button 
                       variant={sedimentViewMode === 'simple' ? 'default' : 'outline'} 
