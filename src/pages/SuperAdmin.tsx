@@ -123,7 +123,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="master-wallets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">👑 Master Wallets</TabsTrigger>
             <TabsTrigger value="wallets" className="flex-shrink-0">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery" className="flex-shrink-0">Wallet Recovery</TabsTrigger>
-            <TabsTrigger value="monitor" className="flex-shrink-0">Wallet Monitor</TabsTrigger>
+            
             <TabsTrigger value="security" className="flex-shrink-0">Security Dashboard</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0">Account Directory</TabsTrigger>
             <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
@@ -183,11 +183,6 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
           
-          <TabsContent value="monitor">
-            <ActiveTabOnly activeTab={activeTab} tabValue="monitor">
-              <WalletMonitor />
-            </ActiveTabOnly>
-          </TabsContent>
           
           <TabsContent value="security">
             <ActiveTabOnly activeTab={activeTab} tabValue="security">
@@ -260,6 +255,7 @@ export default function SuperAdmin() {
                 <TabsList className="flex flex-wrap gap-1">
                   <TabsTrigger value="mega-whale">👑 MEGA WHALE</TabsTrigger>
                   <TabsTrigger value="whale-frenzy">🔥 Whale Frenzy</TabsTrigger>
+                  <TabsTrigger value="wallet-monitor">👁️ Wallet Monitor</TabsTrigger>
                   <TabsTrigger value="genealogy">🧬 Token Genealogy</TabsTrigger>
                   <TabsTrigger value="dex-compiles">📊 Dex Compiles</TabsTrigger>
                   <TabsTrigger value="html-scrapes">🌐 HTML Scrapes</TabsTrigger>
@@ -269,6 +265,7 @@ export default function SuperAdmin() {
                 </TabsList>
                 <TabsContent value="mega-whale"><MegaWhaleDashboard /></TabsContent>
                 <TabsContent value="whale-frenzy"><WhaleFrenzyDashboard /></TabsContent>
+                <TabsContent value="wallet-monitor"><WalletMonitor /></TabsContent>
                 <TabsContent value="genealogy"><TokenGenealogyDashboard /></TabsContent>
                 <TabsContent value="dex-compiles"><DexCompilesView /></TabsContent>
                 <TabsContent value="html-scrapes"><HtmlScrapes /></TabsContent>
