@@ -25,12 +25,21 @@ const SEARCH_QUERIES = [
   '(solana OR $SOL) (gem OR alpha OR moon OR 100x) -is:retweet -is:reply lang:en',
 ];
 
+// Configuration thresholds
+const MIN_FOLLOWERS = 500;
+const MIN_QUALITY_SCORE = 50;
+const MAX_AGE_HOURS = 2;
+const VERIFIED_BONUS = 500;
+const INFLUENCER_THRESHOLD = 10000;
+const MAJOR_INFLUENCER_THRESHOLD = 50000;
+
 interface TwitterUser {
   id: string;
   username: string;
   public_metrics?: {
     followers_count: number;
   };
+  verified_type?: string;
 }
 
 interface TwitterTweet {
@@ -42,6 +51,7 @@ interface TwitterTweet {
     like_count: number;
     retweet_count: number;
     reply_count: number;
+    impression_count?: number;
   };
 }
 
@@ -54,6 +64,12 @@ interface TwitterSearchResponse {
     result_count: number;
     newest_id?: string;
   };
+}
+
+interface SavedMention {
+  tweet_id: string;
+  detected_contracts: string[];
+  quality_score: number;
 }
 
 function extractContracts(text: string): string[] {
@@ -97,16 +113,45 @@ function extractTickers(text: string): string[] {
   return Array.from(tickers);
 }
 
+function calculateQualityScore(
+  likes: number,
+  retweets: number,
+  replies: number,
+  impressions: number,
+  followers: number,
+  isVerified: boolean
+): number {
+  // Base engagement score with weighted metrics
+  let score = (likes * 3) + (retweets * 5) + (replies * 2);
+  
+  // Views contribute less (1 point per 1000 views)
+  score += Math.floor(impressions / 1000);
+  
+  // Verified account bonus
+  if (isVerified) {
+    score += VERIFIED_BONUS;
+  }
+  
+  // Influencer bonuses
+  if (followers > MAJOR_INFLUENCER_THRESHOLD) {
+    score += 500; // Major influencer
+  } else if (followers > INFLUENCER_THRESHOLD) {
+    score += 200; // Regular influencer
+  }
+  
+  return score;
+}
+
 async function searchTwitter(
   bearerToken: string,
   query: string,
-  maxResults: number = 20
+  maxResults: number = 25
 ): Promise<TwitterSearchResponse | null> {
   const params = new URLSearchParams({
     query,
     max_results: maxResults.toString(),
     'tweet.fields': 'created_at,public_metrics,author_id',
-    'user.fields': 'username,public_metrics',
+    'user.fields': 'username,public_metrics,verified_type',
     expansions: 'author_id',
   });
 
@@ -162,11 +207,6 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Configuration
-    const MIN_FOLLOWERS = 500; // Minimum follower count to consider
-    const MIN_ENGAGEMENT = 10; // Minimum likes + RTs to consider high-value
-    const MAX_AGE_HOURS = 2; // Only consider tweets from last 2 hours
-    
     const stats = {
       tweets_scanned: 0,
       contracts_found: 0,
@@ -176,6 +216,9 @@ Deno.serve(async (req) => {
       skipped_old: 0,
       skipped_duplicate: 0,
       skipped_no_contract: 0,
+      verified_accounts: 0,
+      best_sources_selected: 0,
+      duplicates_marked: 0,
     };
 
     // Get existing tweet IDs to avoid duplicates
@@ -196,7 +239,10 @@ Deno.serve(async (req) => {
     
     const recentlyQueuedMints = new Set(recentQueueItems?.map(q => q.token_mint) || []);
 
-    // Run searches
+    // Collect all saved mentions for deduplication pass
+    const savedMentions: SavedMention[] = [];
+
+    // PASS 1: Collect all tweets and save with quality scores
     for (const query of SEARCH_QUERIES) {
       try {
         const result = await searchTwitter(bearerToken, query, 25);
@@ -233,6 +279,8 @@ Deno.serve(async (req) => {
           // Get author info
           const author = userMap.get(tweet.author_id);
           const followers = author?.public_metrics?.followers_count || 0;
+          const verifiedType = author?.verified_type || null;
+          const isVerified = !!verifiedType;
           
           // Skip low-follower accounts
           if (followers < MIN_FOLLOWERS) {
@@ -250,14 +298,25 @@ Deno.serve(async (req) => {
           }
 
           stats.contracts_found += contracts.length;
+          if (isVerified) stats.verified_accounts++;
 
-          // Calculate engagement score
+          // Get engagement metrics
           const likes = tweet.public_metrics?.like_count || 0;
           const retweets = tweet.public_metrics?.retweet_count || 0;
           const replies = tweet.public_metrics?.reply_count || 0;
-          const engagementScore = likes + retweets + replies;
+          const impressions = tweet.public_metrics?.impression_count || 0;
 
-          // Save the mention
+          // Calculate quality score
+          const qualityScore = calculateQualityScore(
+            likes,
+            retweets,
+            replies,
+            impressions,
+            followers,
+            isVerified
+          );
+
+          // Save the mention with quality data
           const mentionData = {
             tweet_id: tweet.id,
             tweet_text: tweet.text,
@@ -267,13 +326,19 @@ Deno.serve(async (req) => {
             author_followers: followers,
             detected_contracts: contracts,
             detected_tickers: tickers,
-            engagement_score: engagementScore,
+            engagement_score: likes + retweets + replies,
             likes_count: likes,
             retweets_count: retweets,
             replies_count: replies,
+            impression_count: impressions,
+            is_verified: isVerified,
+            verified_type: verifiedType,
+            quality_score: qualityScore,
             posted_at: tweet.created_at,
             scanned_at: new Date().toISOString(),
             queued_for_analysis: false,
+            is_best_source: null,
+            duplicate_of: null,
           };
 
           const { error: insertError } = await supabase
@@ -287,60 +352,13 @@ Deno.serve(async (req) => {
 
           stats.mentions_saved++;
           existingTweetIds.add(tweet.id);
-
-          // Queue high-engagement tokens for analysis
-          if (engagementScore >= MIN_ENGAGEMENT) {
-            for (const contract of contracts) {
-              // Skip if already queued recently
-              if (recentlyQueuedMints.has(contract)) {
-                continue;
-              }
-
-              // Check if this contract is already in seen tokens
-              const { data: seenToken } = await supabase
-                .from('holders_intel_seen_tokens')
-                .select('token_mint, was_posted')
-                .eq('token_mint', contract)
-                .maybeSingle();
-
-              // Skip if already posted
-              if (seenToken?.was_posted) {
-                continue;
-              }
-
-              // Queue for analysis with special trigger source
-              const queueItem = {
-                token_mint: contract,
-                symbol: tickers[0] || 'UNKNOWN',
-                name: `Twitter Mention`,
-                status: 'pending',
-                scheduled_at: new Date().toISOString(),
-                snapshot_slot: 'twitter_mention',
-                trigger_source: 'twitter_mention',
-                trigger_comment: '🐦 Twitter Buzz!',
-              };
-
-              const { data: queueResult, error: queueError } = await supabase
-                .from('holders_intel_post_queue')
-                .insert(queueItem)
-                .select('id')
-                .single();
-
-              if (!queueError && queueResult) {
-                stats.tokens_queued++;
-                recentlyQueuedMints.add(contract);
-
-                // Update mention with queue reference
-                await supabase
-                  .from('twitter_token_mentions')
-                  .update({ 
-                    queued_for_analysis: true, 
-                    queue_id: queueResult.id 
-                  })
-                  .eq('tweet_id', tweet.id);
-              }
-            }
-          }
+          
+          // Track for deduplication pass
+          savedMentions.push({
+            tweet_id: tweet.id,
+            detected_contracts: contracts,
+            quality_score: qualityScore,
+          });
         }
 
         // Small delay between queries to be nice to the API
@@ -351,12 +369,120 @@ Deno.serve(async (req) => {
       }
     }
 
+    // PASS 2: Deduplicate by contract - pick best source for each token
+    const contractToTweets = new Map<string, Array<{ tweet_id: string; quality_score: number }>>();
+
+    for (const mention of savedMentions) {
+      for (const contract of mention.detected_contracts) {
+        if (!contractToTweets.has(contract)) {
+          contractToTweets.set(contract, []);
+        }
+        contractToTweets.get(contract)!.push({
+          tweet_id: mention.tweet_id,
+          quality_score: mention.quality_score,
+        });
+      }
+    }
+
+    // For each contract, pick the best tweet and queue it
+    for (const [contract, tweets] of contractToTweets) {
+      // Sort by quality score descending
+      tweets.sort((a, b) => b.quality_score - a.quality_score);
+      const bestTweet = tweets[0];
+      
+      // Mark the best tweet as best source
+      await supabase
+        .from('twitter_token_mentions')
+        .update({ is_best_source: true })
+        .eq('tweet_id', bestTweet.tweet_id);
+      
+      stats.best_sources_selected++;
+      
+      // Mark others as duplicates
+      for (let i = 1; i < tweets.length; i++) {
+        await supabase
+          .from('twitter_token_mentions')
+          .update({ 
+            is_best_source: false,
+            duplicate_of: bestTweet.tweet_id 
+          })
+          .eq('tweet_id', tweets[i].tweet_id);
+        
+        stats.duplicates_marked++;
+      }
+      
+      // Only queue if meets minimum quality threshold
+      if (bestTweet.quality_score < MIN_QUALITY_SCORE) {
+        console.log(`Skipping ${contract} - quality score ${bestTweet.quality_score} below threshold ${MIN_QUALITY_SCORE}`);
+        continue;
+      }
+
+      // Skip if already queued recently
+      if (recentlyQueuedMints.has(contract)) {
+        continue;
+      }
+
+      // Check if this contract is already in seen tokens
+      const { data: seenToken } = await supabase
+        .from('holders_intel_seen_tokens')
+        .select('token_mint, was_posted')
+        .eq('token_mint', contract)
+        .maybeSingle();
+
+      // Skip if already posted
+      if (seenToken?.was_posted) {
+        continue;
+      }
+
+      // Get the best tweet's ticker for the queue
+      const bestMention = savedMentions.find(m => m.tweet_id === bestTweet.tweet_id);
+      const { data: mentionDetails } = await supabase
+        .from('twitter_token_mentions')
+        .select('detected_tickers')
+        .eq('tweet_id', bestTweet.tweet_id)
+        .maybeSingle();
+
+      const ticker = mentionDetails?.detected_tickers?.[0] || 'UNKNOWN';
+
+      // Queue for analysis with special trigger source
+      const queueItem = {
+        token_mint: contract,
+        symbol: ticker,
+        name: `Twitter Mention`,
+        status: 'pending',
+        scheduled_at: new Date().toISOString(),
+        snapshot_slot: 'twitter_mention',
+        trigger_source: 'twitter_mention',
+        trigger_comment: `🐦 Twitter Buzz! (Score: ${bestTweet.quality_score})`,
+      };
+
+      const { data: queueResult, error: queueError } = await supabase
+        .from('holders_intel_post_queue')
+        .insert(queueItem)
+        .select('id')
+        .single();
+
+      if (!queueError && queueResult) {
+        stats.tokens_queued++;
+        recentlyQueuedMints.add(contract);
+
+        // Update mention with queue reference
+        await supabase
+          .from('twitter_token_mentions')
+          .update({ 
+            queued_for_analysis: true, 
+            queue_id: queueResult.id 
+          })
+          .eq('tweet_id', bestTweet.tweet_id);
+      }
+    }
+
     console.log('Twitter Token Scanner completed:', stats);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Twitter token mention scan complete',
+        message: 'Twitter token mention scan complete with quality filtering',
         stats,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
