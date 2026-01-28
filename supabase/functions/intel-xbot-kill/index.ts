@@ -23,7 +23,9 @@ Deno.serve(async (req) => {
       'holdersintel-scheduler-8am',
       'holdersintel-scheduler-2pm',
       'holdersintel-scheduler-6pm',
-      'holdersintel-dex-scanner-5min'
+      'holdersintel-dex-scanner-5min',
+      'holdersintel-surge-scanner-5min',
+      'holdersintel-twitter-scanner-10min'
     ];
     
     const results: string[] = [];
