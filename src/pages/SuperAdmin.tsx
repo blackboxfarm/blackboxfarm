@@ -124,9 +124,6 @@ export default function SuperAdmin() {
             <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
             <TabsTrigger value="utilities" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">🔧 Utilities</TabsTrigger>
             <TabsTrigger value="whales-mints" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-teal-500/20">🐋 Whales & MINTS</TabsTrigger>
-            <TabsTrigger value="developers" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Developer Intel</TabsTrigger>
-            <TabsTrigger value="analysis" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Analysis Jobs</TabsTrigger>
-            <TabsTrigger value="watchdog" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Token Watchdog</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="advertisers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">📢 Advertisers</TabsTrigger>
             
@@ -134,12 +131,6 @@ export default function SuperAdmin() {
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter Accounts</TabsTrigger>
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun Monitor</TabsTrigger>
-            <TabsTrigger value="rug-investigator" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-rose-500/20">🔍 Rug Investigator</TabsTrigger>
-            <TabsTrigger value="rent-reclaimer" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-amber-500/20">🔥 Rent Reclaimer</TabsTrigger>
-            <TabsTrigger value="pumpfun-blacklist" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600/30 data-[state=active]:to-red-500/20">🚫 Blacklist Mesh</TabsTrigger>
-            <TabsTrigger value="pumpfun-whitelist" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600/30 data-[state=active]:to-emerald-500/20">✅ Whitelist Mesh</TabsTrigger>
-            <TabsTrigger value="kol-tracker" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 KOL Tracker</TabsTrigger>
-            <TabsTrigger value="dev-teams" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600/30 data-[state=active]:to-violet-500/20">👥 Dev Teams</TabsTrigger>
             <TabsTrigger value="holders-visitors" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-blue-500/20">👁️ Visitors</TabsTrigger>
             <TabsTrigger value="token-history" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20">💎 Token History</TabsTrigger>
             <TabsTrigger value="search-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">🔍 Search Analytics</TabsTrigger>
@@ -166,6 +157,7 @@ export default function SuperAdmin() {
                   <TabsTrigger value="airdrops">🎁 Airdrops</TabsTrigger>
                   <TabsTrigger value="fuct-airdrops">💜 $FUCT Airdrops</TabsTrigger>
                   <TabsTrigger value="surveys">📋 Surveys</TabsTrigger>
+                  <TabsTrigger value="rent-reclaimer">🔥 Rent Reclaimer</TabsTrigger>
                 </TabsList>
                 <TabsContent value="master-wallets"><MasterWalletsDashboard /></TabsContent>
                 <TabsContent value="wallets">
@@ -183,6 +175,7 @@ export default function SuperAdmin() {
                 <TabsContent value="airdrops"><AirdropManager /></TabsContent>
                 <TabsContent value="fuct-airdrops"><FuctAirdropGift /></TabsContent>
                 <TabsContent value="surveys"><SurveyManagement /></TabsContent>
+                <TabsContent value="rent-reclaimer"><TokenAccountCleaner /></TabsContent>
               </Tabs>
             </ActiveTabOnly>
           </TabsContent>
@@ -190,24 +183,6 @@ export default function SuperAdmin() {
           <TabsContent value="holders">
             <ActiveTabOnly activeTab={activeTab} tabValue="holders">
               <BaglessHoldersReport />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="developers">
-            <ActiveTabOnly activeTab={activeTab} tabValue="developers">
-              <DeveloperProfiles />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="analysis">
-            <ActiveTabOnly activeTab={activeTab} tabValue="analysis">
-              <AnalysisJobs />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="watchdog">
-            <ActiveTabOnly activeTab={activeTab} tabValue="watchdog">
-              <TokenWatchdog />
             </ActiveTabOnly>
           </TabsContent>
 
@@ -224,6 +199,14 @@ export default function SuperAdmin() {
                   <TabsTrigger value="token-sets">🎯 Token Sets</TabsTrigger>
                   <TabsTrigger value="alerts">🚨 Dev Alerts</TabsTrigger>
                   <TabsTrigger value="testing">🧪 System Tests</TabsTrigger>
+                  <TabsTrigger value="developers">🧠 Developer Intel</TabsTrigger>
+                  <TabsTrigger value="analysis">📈 Analysis Jobs</TabsTrigger>
+                  <TabsTrigger value="watchdog">🐕 Token Watchdog</TabsTrigger>
+                  <TabsTrigger value="rug-investigator">🔍 Rug Investigator</TabsTrigger>
+                  <TabsTrigger value="blacklist">🚫 Blacklist Mesh</TabsTrigger>
+                  <TabsTrigger value="whitelist">✅ Whitelist Mesh</TabsTrigger>
+                  <TabsTrigger value="kol-tracker">👑 KOL Tracker</TabsTrigger>
+                  <TabsTrigger value="dev-teams">👥 Dev Teams</TabsTrigger>
                 </TabsList>
                 <TabsContent value="mega-whale"><MegaWhaleDashboard /></TabsContent>
                 <TabsContent value="whale-frenzy"><WhaleFrenzyDashboard /></TabsContent>
@@ -234,6 +217,27 @@ export default function SuperAdmin() {
                 <TabsContent value="token-sets"><TokenSets /></TabsContent>
                 <TabsContent value="alerts"><DeveloperAlerts /></TabsContent>
                 <TabsContent value="testing"><SystemTesting /></TabsContent>
+                <TabsContent value="developers"><DeveloperProfiles /></TabsContent>
+                <TabsContent value="analysis"><AnalysisJobs /></TabsContent>
+                <TabsContent value="watchdog"><TokenWatchdog /></TabsContent>
+                <TabsContent value="rug-investigator"><RugInvestigator /></TabsContent>
+                <TabsContent value="blacklist"><PumpfunBlacklist /></TabsContent>
+                <TabsContent value="whitelist"><PumpfunWhitelist /></TabsContent>
+                <TabsContent value="kol-tracker">
+                  <Tabs defaultValue="registry" className="space-y-4">
+                    <TabsList>
+                      <TabsTrigger value="registry">👑 KOL Registry</TabsTrigger>
+                      <TabsTrigger value="activity">📊 Activity</TabsTrigger>
+                      <TabsTrigger value="twitter">🐦 Twitter</TabsTrigger>
+                      <TabsTrigger value="cabals">🕸️ Cabals</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="registry"><PumpfunKOLRegistry /></TabsContent>
+                    <TabsContent value="activity"><PumpfunKOLActivity /></TabsContent>
+                    <TabsContent value="twitter"><PumpfunKOLTwitter /></TabsContent>
+                    <TabsContent value="cabals"><PumpfunKOLCabals /></TabsContent>
+                  </Tabs>
+                </TabsContent>
+                <TabsContent value="dev-teams"><DevTeamsView /></TabsContent>
               </Tabs>
             </ActiveTabOnly>
           </TabsContent>
@@ -280,54 +284,6 @@ export default function SuperAdmin() {
               </Tabs>
             </ActiveTabOnly>
           </TabsContent>
-
-          <TabsContent value="rug-investigator">
-            <ActiveTabOnly activeTab={activeTab} tabValue="rug-investigator">
-              <RugInvestigator />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="rent-reclaimer">
-            <ActiveTabOnly activeTab={activeTab} tabValue="rent-reclaimer">
-              <TokenAccountCleaner />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="pumpfun-blacklist">
-            <ActiveTabOnly activeTab={activeTab} tabValue="pumpfun-blacklist">
-              <PumpfunBlacklist />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="pumpfun-whitelist">
-            <ActiveTabOnly activeTab={activeTab} tabValue="pumpfun-whitelist">
-              <PumpfunWhitelist />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="kol-tracker">
-            <ActiveTabOnly activeTab={activeTab} tabValue="kol-tracker">
-              <Tabs defaultValue="registry" className="space-y-4">
-                <TabsList>
-                  <TabsTrigger value="registry">👑 KOL Registry</TabsTrigger>
-                  <TabsTrigger value="activity">📊 Activity</TabsTrigger>
-                  <TabsTrigger value="twitter">🐦 Twitter</TabsTrigger>
-                  <TabsTrigger value="cabals">🕸️ Cabals</TabsTrigger>
-                </TabsList>
-                <TabsContent value="registry"><PumpfunKOLRegistry /></TabsContent>
-                <TabsContent value="activity"><PumpfunKOLActivity /></TabsContent>
-                <TabsContent value="twitter"><PumpfunKOLTwitter /></TabsContent>
-                <TabsContent value="cabals"><PumpfunKOLCabals /></TabsContent>
-              </Tabs>
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="dev-teams">
-            <ActiveTabOnly activeTab={activeTab} tabValue="dev-teams">
-              <DevTeamsView />
-            </ActiveTabOnly>
-          </TabsContent>
-
 
 
 
