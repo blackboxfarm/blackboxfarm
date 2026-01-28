@@ -44,6 +44,11 @@ const CRON_JOBS = [
     name: 'holdersintel-surge-scanner-5min',
     schedule: '*/5 * * * *',
     function: 'search-surge-scanner'
+  },
+  {
+    name: 'holdersintel-twitter-scanner-10min',
+    schedule: '*/10 * * * *',
+    function: 'twitter-token-mention-scanner'
   }
 ];
 

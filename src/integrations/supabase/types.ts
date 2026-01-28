@@ -10877,6 +10877,77 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_token_mentions: {
+        Row: {
+          author_followers: number | null
+          author_id: string | null
+          author_username: string | null
+          created_at: string | null
+          detected_contracts: string[] | null
+          detected_tickers: string[] | null
+          engagement_score: number | null
+          id: string
+          likes_count: number | null
+          posted_at: string | null
+          queue_id: string | null
+          queued_for_analysis: boolean | null
+          replies_count: number | null
+          retweets_count: number | null
+          scanned_at: string | null
+          tweet_id: string
+          tweet_text: string
+          tweet_url: string | null
+        }
+        Insert: {
+          author_followers?: number | null
+          author_id?: string | null
+          author_username?: string | null
+          created_at?: string | null
+          detected_contracts?: string[] | null
+          detected_tickers?: string[] | null
+          engagement_score?: number | null
+          id?: string
+          likes_count?: number | null
+          posted_at?: string | null
+          queue_id?: string | null
+          queued_for_analysis?: boolean | null
+          replies_count?: number | null
+          retweets_count?: number | null
+          scanned_at?: string | null
+          tweet_id: string
+          tweet_text: string
+          tweet_url?: string | null
+        }
+        Update: {
+          author_followers?: number | null
+          author_id?: string | null
+          author_username?: string | null
+          created_at?: string | null
+          detected_contracts?: string[] | null
+          detected_tickers?: string[] | null
+          engagement_score?: number | null
+          id?: string
+          likes_count?: number | null
+          posted_at?: string | null
+          queue_id?: string | null
+          queued_for_analysis?: boolean | null
+          replies_count?: number | null
+          retweets_count?: number | null
+          scanned_at?: string | null
+          tweet_id?: string
+          tweet_text?: string
+          tweet_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "twitter_token_mentions_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "holders_intel_post_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences: {
         Row: {
           alert_types: Json | null

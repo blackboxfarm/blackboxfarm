@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RefreshCw, ExternalLink, CheckCircle, XCircle, Clock, SkipForward, AlertCircle } from 'lucide-react';
+import { RefreshCw, ExternalLink, CheckCircle, XCircle, Clock, SkipForward, AlertCircle, Twitter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -20,6 +20,7 @@ interface QueueItem {
   error_message: string | null;
   snapshot_slot: string;
   created_at: string;
+  trigger_source?: string;
 }
 
 interface SeenToken {
@@ -34,10 +35,24 @@ interface SeenToken {
   last_seen_at: string;
 }
 
+interface TwitterMention {
+  id: string;
+  tweet_id: string;
+  tweet_text: string;
+  tweet_url: string;
+  author_username: string;
+  author_followers: number;
+  detected_contracts: string[];
+  engagement_score: number;
+  queued_for_analysis: boolean;
+  posted_at: string;
+}
+
 export function IntelXBotActivityLog() {
-  const [activeTab, setActiveTab] = useState<'queue' | 'seen' | 'stats'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'seen' | 'twitter' | 'stats'>('queue');
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [seenTokens, setSeenTokens] = useState<SeenToken[]>([]);
+  const [twitterMentions, setTwitterMentions] = useState<TwitterMention[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
@@ -48,6 +63,8 @@ export function IntelXBotActivityLog() {
     totalPending: 0,
     totalSeen: 0,
     uniquePosted: 0,
+    twitterMentions: 0,
+    twitterQueued: 0,
   });
 
   const fetchData = useCallback(async () => {
@@ -66,6 +83,13 @@ export function IntelXBotActivityLog() {
         .select('*')
         .order('last_seen_at', { ascending: false })
         .limit(100);
+
+      // Fetch Twitter mentions
+      const { data: twitterData } = await supabase
+        .from('twitter_token_mentions')
+        .select('*')
+        .order('posted_at', { ascending: false })
+        .limit(50);
 
       // Get counts for stats
       const { count: postedCount } = await supabase
@@ -92,14 +116,27 @@ export function IntelXBotActivityLog() {
         .select('token_mint', { count: 'exact', head: true })
         .eq('was_posted', true);
 
-      setQueueItems(queueData || []);
+      // Twitter mentions stats
+      const { count: twitterMentionsCount } = await supabase
+        .from('twitter_token_mentions')
+        .select('id', { count: 'exact', head: true });
+
+      const { count: twitterQueuedCount } = await supabase
+        .from('twitter_token_mentions')
+        .select('id', { count: 'exact', head: true })
+        .eq('queued_for_analysis', true);
+
+      setQueueItems((queueData || []) as QueueItem[]);
       setSeenTokens(seenData || []);
+      setTwitterMentions((twitterData || []) as TwitterMention[]);
       setStats({
         totalPosted: postedCount || 0,
         totalSkipped: skippedCount || 0,
         totalPending: pendingCount || 0,
         totalSeen: seenCount || 0,
         uniquePosted: wasPostedCount || 0,
+        twitterMentions: twitterMentionsCount || 0,
+        twitterQueued: twitterQueuedCount || 0,
       });
       setLastRefresh(new Date());
     } catch (err) {
@@ -195,7 +232,7 @@ export function IntelXBotActivityLog() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Summary Stats */}
-        <div className="grid grid-cols-5 gap-2 p-3 bg-muted/30 rounded-lg">
+        <div className="grid grid-cols-7 gap-2 p-3 bg-muted/30 rounded-lg">
           <div className="text-center">
             <p className="text-xl font-bold text-green-500">{stats.totalPosted}</p>
             <p className="text-[10px] text-muted-foreground">Posted</p>
@@ -210,19 +247,28 @@ export function IntelXBotActivityLog() {
           </div>
           <div className="text-center">
             <p className="text-xl font-bold">{stats.totalSeen}</p>
-            <p className="text-[10px] text-muted-foreground">Seen Tokens</p>
+            <p className="text-[10px] text-muted-foreground">Seen</p>
           </div>
           <div className="text-center">
             <p className="text-xl font-bold text-emerald-500">{stats.uniquePosted}</p>
-            <p className="text-[10px] text-muted-foreground">Unique Posted</p>
+            <p className="text-[10px] text-muted-foreground">Unique</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xl font-bold text-sky-500">{stats.twitterMentions}</p>
+            <p className="text-[10px] text-muted-foreground">🐦 Scanned</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xl font-bold text-purple-500">{stats.twitterQueued}</p>
+            <p className="text-[10px] text-muted-foreground">🐦 Queued</p>
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="queue">Queue History</TabsTrigger>
-            <TabsTrigger value="seen">Seen Tokens</TabsTrigger>
-            <TabsTrigger value="stats">Decision Log</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="queue">Queue</TabsTrigger>
+            <TabsTrigger value="seen">Seen</TabsTrigger>
+            <TabsTrigger value="twitter">🐦 Twitter</TabsTrigger>
+            <TabsTrigger value="stats">Stats</TabsTrigger>
           </TabsList>
 
           <TabsContent value="queue">
@@ -318,6 +364,62 @@ export function IntelXBotActivityLog() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="twitter">
+            <ScrollArea className="h-[400px] rounded-md border">
+              <div className="p-4 space-y-2">
+                {twitterMentions.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No Twitter mentions scanned yet</p>
+                ) : (
+                  twitterMentions.map((mention) => (
+                    <div
+                      key={mention.id}
+                      className="flex items-center gap-3 p-3 bg-muted/20 rounded-lg hover:bg-muted/40 transition-colors"
+                    >
+                      <Twitter className={`h-4 w-4 ${mention.queued_for_analysis ? 'text-sky-500' : 'text-muted-foreground'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-medium">@{mention.author_username}</span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {mention.author_followers?.toLocaleString()} followers
+                          </Badge>
+                          <Badge className={`text-[10px] ${mention.queued_for_analysis ? 'bg-purple-600' : 'bg-muted'}`}>
+                            {mention.queued_for_analysis ? 'Queued' : 'Scanned'}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            ❤️ {mention.engagement_score}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {mention.tweet_text}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {mention.detected_contracts?.slice(0, 2).map((contract, i) => (
+                            <span key={i} className="font-mono text-[10px] text-muted-foreground">
+                              {shortenMint(contract)}
+                            </span>
+                          ))}
+                          {mention.detected_contracts?.length > 2 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              +{mention.detected_contracts.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <a
+                        href={mention.tweet_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sky-500 hover:text-sky-400"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </a>
