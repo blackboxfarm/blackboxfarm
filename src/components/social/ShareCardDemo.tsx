@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { IntelXBotActivityLog } from './IntelXBotActivityLog';
 import { SurgeAlertsPanel } from '@/components/admin/SurgeAlertsPanel';
+import { OGImageManager } from '@/components/admin/OGImageManager';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -483,6 +484,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
       {/* Surge Alerts */}
       <SurgeAlertsPanel />
+
+      {/* OG Image Manager */}
+      <OGImageManager />
 
       {/* Tweet Templates Card */}
       <Card className="bg-card/50 border-border">
