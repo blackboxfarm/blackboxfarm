@@ -16,16 +16,18 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, serviceKey);
     
-    // Kill all cron jobs
+    // Kill all cron jobs (both old and new names)
     const jobs = [
-      'holdersintel-poster-3min',
+      'holdersintel-poster-2min',
+      'holdersintel-poster-3min', // legacy
       'holdersintel-scheduler-2am',
       'holdersintel-scheduler-8am',
       'holdersintel-scheduler-2pm',
       'holdersintel-scheduler-6pm',
       'holdersintel-dex-scanner-5min',
       'holdersintel-surge-scanner-5min',
-      'holdersintel-twitter-scanner-10min'
+      'holdersintel-twitter-scanner-10min', // legacy
+      'twitter-scanner-16min' // Twitter mentions scanner
     ];
     
     const results: string[] = [];

@@ -31,8 +31,8 @@ const CRON_JOBS = [
     function: 'holders-intel-scheduler'
   },
   {
-    name: 'holdersintel-poster-3min',
-    schedule: '*/3 * * * *',
+    name: 'holdersintel-poster-2min',
+    schedule: '*/2 * * * *',
     function: 'holders-intel-poster'
   },
   {
@@ -44,12 +44,8 @@ const CRON_JOBS = [
     name: 'holdersintel-surge-scanner-5min',
     schedule: '*/5 * * * *',
     function: 'search-surge-scanner'
-  },
-  {
-    name: 'holdersintel-twitter-scanner-10min',
-    schedule: '*/10 * * * *',
-    function: 'twitter-token-mention-scanner'
   }
+  // Twitter scanner disabled - X API credits exhausted
 ];
 
 Deno.serve(async (req) => {
@@ -62,6 +58,24 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
     const supabase = createClient(supabaseUrl, serviceKey);
+    
+    // First, re-queue any skipped items back to pending
+    const { data: requeuedItems, error: requeueError } = await supabase
+      .from('holders_intel_post_queue')
+      .update({ status: 'pending', error_message: null })
+      .eq('status', 'skipped')
+      .select('id');
+    
+    const requeuedCount = requeuedItems?.length || 0;
+    console.log(`📥 Re-queued ${requeuedCount} skipped items back to pending`);
+    
+    // Also unschedule old 3-min job if it exists
+    try {
+      await supabase.rpc('unschedule_cron_job', { job_name: 'holdersintel-poster-3min' });
+      console.log('Removed old 3-min poster job');
+    } catch {
+      // Ignore
+    }
     
     const results: { job: string; status: string; error?: string }[] = [];
     
@@ -102,7 +116,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: successCount > 0, 
-        message: `Intel XBot STARTED - ${successCount}/${CRON_JOBS.length} cron jobs scheduled`,
+        message: `Intel XBot STARTED - ${successCount}/${CRON_JOBS.length} cron jobs scheduled, ${requeuedCount} items re-queued`,
+        requeued: requeuedCount,
         results 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
