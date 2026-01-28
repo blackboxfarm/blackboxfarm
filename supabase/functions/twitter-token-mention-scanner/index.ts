@@ -341,7 +341,8 @@ Deno.serve(async (req) => {
     // STEP 3: Search Twitter for this ONE token - get EVERYTHING (posts, replies, retweets)
     const shortMint = nextToken.token_mint.slice(0, 8);
     // No filters - get ALL tweets mentioning this token
-    const query = `(${shortMint} OR ${nextToken.token_mint} OR $${nextToken.symbol})`;
+    // NOTE: $cashtag operator is NOT available on Twitter Free tier - use plain text symbol instead
+    const query = `(${shortMint} OR ${nextToken.token_mint} OR ${nextToken.symbol})`;
     
     const result = await searchTwitter(bearerToken, query, 100); // Max 100 per API call
     
