@@ -43,6 +43,32 @@ function getPostComment(timesPosted: number, triggerComment?: string | null): st
   return ' : Steady & Strong!';
 }
 
+/**
+ * Sanitize token names that look like URLs to prevent Twitter from
+ * detecting them as links and hijacking the OG preview.
+ * e.g. "click.fun" -> "click .fun" to break URL detection
+ */
+function sanitizeUrlLikeName(name: string): string {
+  if (!name) return name;
+  
+  // Common TLDs that Twitter might detect as URLs
+  const urlTlds = /\.(fun|com|io|xyz|net|org|co|ai|app|dev|gg|me|tv|live|lol|meme|wtf|sol|pump|token|coin|finance|fi|exchange|swap|trade|market|money|cash|pay|crypto|nft|dao|defi|web3|eth|btc|dex)$/i;
+  
+  // Check if the name ends with a URL-like TLD
+  if (urlTlds.test(name)) {
+    // Insert space before the dot to break URL detection
+    return name.replace(/\.([a-z]+)$/i, ' .$1');
+  }
+  
+  // Also catch names that contain dots mid-string with TLD patterns
+  const midUrlPattern = /\.(?:fun|com|io|xyz|net|org|co|ai|app|dev|gg|me|tv|live|lol|meme|wtf|sol|pump|token|coin|finance|fi|exchange|swap|trade|market|money|cash|pay|crypto|nft|dao|defi|web3|eth|btc|dex)(?:\s|$)/gi;
+  if (midUrlPattern.test(name)) {
+    return name.replace(/\.([a-z]+)/gi, ' .$1');
+  }
+  
+  return name;
+}
+
 function formatTimestamp(): string {
   const now = new Date();
   // Format: "Jan 27, 2:17 PM EST"
@@ -103,7 +129,9 @@ async function fetchAISummary(
 
 function processTemplate(template: string, data: any): string {
   const tickerUpper = (data.symbol || 'TOKEN').toUpperCase();
-  const tokenName = data.name || data.tokenName || 'Unknown';
+  const rawName = data.name || data.tokenName || 'Unknown';
+  // Sanitize URL-like names to prevent Twitter hijacking the OG preview
+  const tokenName = sanitizeUrlLikeName(rawName);
   // Pass trigger_comment to allow DEX scanner overrides
   const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment);
   const timestamp = formatTimestamp();
