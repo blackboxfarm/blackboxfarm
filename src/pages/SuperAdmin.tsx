@@ -120,26 +120,15 @@ export default function SuperAdmin() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
             <TabsTrigger value="fuckoff" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-red-500/20">FUCKOFF</TabsTrigger>
-            <TabsTrigger value="master-wallets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">👑 Master Wallets</TabsTrigger>
-            <TabsTrigger value="wallets" className="flex-shrink-0">Wallet Management</TabsTrigger>
-            <TabsTrigger value="recovery" className="flex-shrink-0">Wallet Recovery</TabsTrigger>
-            
-            <TabsTrigger value="security" className="flex-shrink-0">Security Dashboard</TabsTrigger>
-            <TabsTrigger value="accounts" className="flex-shrink-0">Account Directory</TabsTrigger>
+            <TabsTrigger value="blackbox" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-zinc-700/30 data-[state=active]:to-zinc-800/20">📦 BlackBox</TabsTrigger>
             <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
             <TabsTrigger value="utilities" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">🔧 Utilities</TabsTrigger>
             <TabsTrigger value="whales-mints" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-teal-500/20">🐋 Whales & MINTS</TabsTrigger>
-            <TabsTrigger value="tokens" className="flex-shrink-0">All Tokens</TabsTrigger>
             <TabsTrigger value="developers" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Developer Intel</TabsTrigger>
             <TabsTrigger value="analysis" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Analysis Jobs</TabsTrigger>
             <TabsTrigger value="watchdog" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Token Watchdog</TabsTrigger>
-            <TabsTrigger value="arbitrage" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-orange-500/20">Arbitrage Bot</TabsTrigger>
-            <TabsTrigger value="playground" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-cyan-500/20">Playground</TabsTrigger>
-            <TabsTrigger value="airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-pink-500/20">Airdrops</TabsTrigger>
-            <TabsTrigger value="fuct-airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500/30 data-[state=active]:to-purple-500/20">🎁 $FUCT Airdrops</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="advertisers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">📢 Advertisers</TabsTrigger>
-            <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
             
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
@@ -162,72 +151,45 @@ export default function SuperAdmin() {
             {/* Empty tab */}
           </TabsContent>
 
-          <TabsContent value="master-wallets">
-            <ActiveTabOnly activeTab={activeTab} tabValue="master-wallets">
-              <MasterWalletsDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="wallets">
-            <ActiveTabOnly activeTab={activeTab} tabValue="wallets">
-              <div className="space-y-6">
-                <WalletBalanceMonitor />
-                <SuperAdminWallets />
-              </div>
-            </ActiveTabOnly>
-          </TabsContent>
-          
-          <TabsContent value="recovery">
-            <ActiveTabOnly activeTab={activeTab} tabValue="recovery">
-              <AdminWalletRecovery />
-            </ActiveTabOnly>
-          </TabsContent>
-          
-          
-          <TabsContent value="security">
-            <ActiveTabOnly activeTab={activeTab} tabValue="security">
-              <SecurityDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-          
-          <TabsContent value="accounts">
-            <ActiveTabOnly activeTab={activeTab} tabValue="accounts">
-              <AccountViewer />
-            </ActiveTabOnly>
-          </TabsContent>
-          
-          <TabsContent value="holders">
-            <ActiveTabOnly activeTab={activeTab} tabValue="holders">
-              <BaglessHoldersReport />
-            </ActiveTabOnly>
-          </TabsContent>
-          
-          <TabsContent value="utilities">
-            <ActiveTabOnly activeTab={activeTab} tabValue="utilities">
-              <Tabs defaultValue="spider" className="space-y-4">
+          <TabsContent value="blackbox">
+            <ActiveTabOnly activeTab={activeTab} tabValue="blackbox">
+              <Tabs defaultValue="master-wallets" className="space-y-4">
                 <TabsList className="flex flex-wrap gap-1">
-                  <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
-                  <TabsTrigger value="api-resources">📊 API Resources</TabsTrigger>
-                  <TabsTrigger value="sol-analytics">📊 SOL Price</TabsTrigger>
-                  <TabsTrigger value="sniff">🐕 SNIFF</TabsTrigger>
-                  <TabsTrigger value="helius-api">⚡ Helius API</TabsTrigger>
-                  <TabsTrigger value="api-providers">⚡ API Providers</TabsTrigger>
-                  <TabsTrigger value="liquidity">🔒 Liquidity Checker</TabsTrigger>
+                  <TabsTrigger value="master-wallets">👑 Master Wallets</TabsTrigger>
+                  <TabsTrigger value="wallets">💼 Wallet Management</TabsTrigger>
+                  <TabsTrigger value="recovery">🔧 Wallet Recovery</TabsTrigger>
+                  <TabsTrigger value="security">🛡️ Security Dashboard</TabsTrigger>
+                  <TabsTrigger value="accounts">📁 Account Directory</TabsTrigger>
+                  <TabsTrigger value="tokens">🪙 All Tokens</TabsTrigger>
+                  <TabsTrigger value="arbitrage">📊 Arbitrage Bot</TabsTrigger>
+                  <TabsTrigger value="playground">🎮 Playground</TabsTrigger>
+                  <TabsTrigger value="airdrops">🎁 Airdrops</TabsTrigger>
+                  <TabsTrigger value="fuct-airdrops">💜 $FUCT Airdrops</TabsTrigger>
+                  <TabsTrigger value="surveys">📋 Surveys</TabsTrigger>
                 </TabsList>
-                <TabsContent value="spider"><SpiderRouteMap /></TabsContent>
-                <TabsContent value="api-resources"><HoldersResourceDashboard /></TabsContent>
-                <TabsContent value="sol-analytics"><SolPriceAnalytics /></TabsContent>
-                <TabsContent value="sniff"><SniffDashboard /></TabsContent>
-                <TabsContent value="helius-api"><HeliusUsageDashboard /></TabsContent>
-                <TabsContent value="api-providers"><ApiProviderManager /></TabsContent>
-                <TabsContent value="liquidity"><LiquidityLockChecker /></TabsContent>
+                <TabsContent value="master-wallets"><MasterWalletsDashboard /></TabsContent>
+                <TabsContent value="wallets">
+                  <div className="space-y-6">
+                    <WalletBalanceMonitor />
+                    <SuperAdminWallets />
+                  </div>
+                </TabsContent>
+                <TabsContent value="recovery"><AdminWalletRecovery /></TabsContent>
+                <TabsContent value="security"><SecurityDashboard /></TabsContent>
+                <TabsContent value="accounts"><AccountViewer /></TabsContent>
+                <TabsContent value="tokens"><AllWalletsTokenView /></TabsContent>
+                <TabsContent value="arbitrage"><ArbitrageBotDashboard /></TabsContent>
+                <TabsContent value="playground"><Playground /></TabsContent>
+                <TabsContent value="airdrops"><AirdropManager /></TabsContent>
+                <TabsContent value="fuct-airdrops"><FuctAirdropGift /></TabsContent>
+                <TabsContent value="surveys"><SurveyManagement /></TabsContent>
               </Tabs>
             </ActiveTabOnly>
           </TabsContent>
-          
-          <TabsContent value="tokens">
-            <ActiveTabOnly activeTab={activeTab} tabValue="tokens">
-              <AllWalletsTokenView />
+
+          <TabsContent value="holders">
+            <ActiveTabOnly activeTab={activeTab} tabValue="holders">
+              <BaglessHoldersReport />
             </ActiveTabOnly>
           </TabsContent>
 
@@ -276,30 +238,6 @@ export default function SuperAdmin() {
             </ActiveTabOnly>
           </TabsContent>
 
-          <TabsContent value="arbitrage">
-            <ActiveTabOnly activeTab={activeTab} tabValue="arbitrage">
-              <ArbitrageBotDashboard />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="playground">
-            <ActiveTabOnly activeTab={activeTab} tabValue="playground">
-              <Playground />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="airdrops">
-            <ActiveTabOnly activeTab={activeTab} tabValue="airdrops">
-              <AirdropManager />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="fuct-airdrops">
-            <ActiveTabOnly activeTab={activeTab} tabValue="fuct-airdrops">
-              <FuctAirdropGift />
-            </ActiveTabOnly>
-          </TabsContent>
-
           <TabsContent value="banners">
             <ActiveTabOnly activeTab={activeTab} tabValue="banners">
               <BannerManagement />
@@ -309,12 +247,6 @@ export default function SuperAdmin() {
           <TabsContent value="advertisers">
             <ActiveTabOnly activeTab={activeTab} tabValue="advertisers">
               <AdvertiserManagement />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="surveys">
-            <ActiveTabOnly activeTab={activeTab} tabValue="surveys">
-              <SurveyManagement />
             </ActiveTabOnly>
           </TabsContent>
 
