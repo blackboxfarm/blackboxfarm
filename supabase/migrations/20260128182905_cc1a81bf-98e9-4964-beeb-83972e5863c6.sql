@@ -1,0 +1,1 @@
+DELETE FROM twitter_token_mentions WHERE id IN ('7c01e165-1224-4a4a-b885-bb6bfbb951e2', '5fa07599-f0ce-4617-8e6f-532efcc3d090');
