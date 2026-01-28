@@ -9,6 +9,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { fetchTemplate, processTemplate, HOLDERS_SHARE_URL, DEFAULT_TEMPLATES, type TokenShareData } from "@/lib/share-template";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ShareToXButtonProps {
   ticker: string;
@@ -48,6 +50,7 @@ export function ShareToXButton({
   variant = "full",
 }: ShareToXButtonProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [template, setTemplate] = useState(DEFAULT_TEMPLATES.shares);
   
   // Fetch the shares template from database on mount
@@ -56,6 +59,20 @@ export function ShareToXButton({
   }, []);
   
   const dustPct = totalWallets > 0 ? Math.round((dustWallets / totalWallets) * 100) : 0;
+
+  // Track share click to analytics
+  const trackShareClick = async (platform: 'x' | 'discord' | 'telegram') => {
+    try {
+      await supabase.from('feature_usage_analytics').insert({
+        user_id: user?.id || null,
+        feature_name: `share_${platform}`,
+        token_mint: tokenMint,
+        session_id: sessionStorage.getItem('session_id') || crypto.randomUUID(),
+      });
+    } catch (err) {
+      console.error('Failed to track share click:', err);
+    }
+  };
 
   // Build token data for template processing
   const tokenData: TokenShareData = {
@@ -81,6 +98,7 @@ export function ShareToXButton({
   };
 
   const handleShareToX = () => {
+    trackShareClick('x');
     const tweetText = getShareText();
     window.open(
       `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
@@ -89,6 +107,7 @@ export function ShareToXButton({
   };
 
   const handleCopyForDiscord = () => {
+    trackShareClick('discord');
     const shareText = getShareText();
     navigator.clipboard.writeText(shareText);
     toast({
@@ -98,6 +117,7 @@ export function ShareToXButton({
   };
 
   const handleShareToTelegram = () => {
+    trackShareClick('telegram');
     const shareText = getShareText();
     window.open(
       `https://t.me/share/url?url=${encodeURIComponent(HOLDERS_SHARE_URL)}&text=${encodeURIComponent(shareText)}`,
