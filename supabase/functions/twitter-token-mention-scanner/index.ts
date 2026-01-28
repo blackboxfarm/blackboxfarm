@@ -19,12 +19,7 @@ const TICKER_PATTERNS = [
 // Common false positive tickers to ignore
 const IGNORE_TICKERS = new Set(['SOL', 'ETH', 'BTC', 'USD', 'USDC', 'USDT', 'THE', 'FOR', 'AND', 'NOT', 'ARE', 'BUT', 'NFT', 'APE', 'DCA']);
 
-// Search queries to find token mentions
-const SEARCH_QUERIES = [
-  'pump.fun -is:retweet -is:reply lang:en',
-  '(solana OR $SOL) (gem OR alpha OR moon OR 100x) -is:retweet -is:reply lang:en',
-];
-
+// We now search for specific tokens from our data sources instead of generic queries
 // Configuration thresholds
 const MIN_FOLLOWERS = 500;
 const MIN_QUALITY_SCORE = 50;
@@ -219,7 +214,59 @@ Deno.serve(async (req) => {
       verified_accounts: 0,
       best_sources_selected: 0,
       duplicates_marked: 0,
+      tokens_from_queue: 0,
+      tokens_from_seen: 0,
+      tokens_from_dex: 0,
     };
+
+    // STEP 1: Gather tokens from our data sources
+    const tokensToSearch: Array<{ mint: string; symbol: string; source: string }> = [];
+
+    // Source 1: Recent queue items (last 48h)
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const { data: queueTokens } = await supabase
+      .from('holders_intel_post_queue')
+      .select('token_mint, symbol')
+      .gte('created_at', twoDaysAgo)
+      .limit(20);
+    
+    for (const token of queueTokens || []) {
+      if (token.token_mint && !tokensToSearch.find(t => t.mint === token.token_mint)) {
+        tokensToSearch.push({ mint: token.token_mint, symbol: token.symbol || 'UNKNOWN', source: 'queue' });
+        stats.tokens_from_queue++;
+      }
+    }
+
+    // Source 2: Recent seen tokens (last 24h)
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: seenTokens } = await supabase
+      .from('holders_intel_seen_tokens')
+      .select('token_mint, symbol')
+      .gte('first_seen_at', yesterday)
+      .limit(30);
+    
+    for (const token of seenTokens || []) {
+      if (token.token_mint && !tokensToSearch.find(t => t.mint === token.token_mint)) {
+        tokensToSearch.push({ mint: token.token_mint, symbol: token.symbol || 'UNKNOWN', source: 'seen' });
+        stats.tokens_from_seen++;
+      }
+    }
+
+    // Source 3: Recent DEX trending data (dex_trending_tokens last 24h)
+    const { data: dexTokens } = await supabase
+      .from('dex_trending_tokens')
+      .select('token_address, symbol')
+      .gte('fetched_at', yesterday)
+      .limit(20);
+    
+    for (const token of dexTokens || []) {
+      if (token.token_address && !tokensToSearch.find(t => t.mint === token.token_address)) {
+        tokensToSearch.push({ mint: token.token_address, symbol: token.symbol || 'UNKNOWN', source: 'dex' });
+        stats.tokens_from_dex++;
+      }
+    }
+
+    console.log(`Found ${tokensToSearch.length} tokens to search Twitter for (queue: ${stats.tokens_from_queue}, seen: ${stats.tokens_from_seen}, dex: ${stats.tokens_from_dex})`);
 
     // Get existing tweet IDs to avoid duplicates
     const { data: existingMentions } = await supabase
@@ -230,8 +277,7 @@ Deno.serve(async (req) => {
     
     const existingTweetIds = new Set(existingMentions?.map(m => m.tweet_id) || []);
 
-    // Get tokens already in queue or recently posted (last 24h)
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Get tokens already queued recently (last 24h) to avoid re-queueing
     const { data: recentQueueItems } = await supabase
       .from('holders_intel_post_queue')
       .select('token_mint')
@@ -242,13 +288,20 @@ Deno.serve(async (req) => {
     // Collect all saved mentions for deduplication pass
     const savedMentions: SavedMention[] = [];
 
-    // PASS 1: Collect all tweets and save with quality scores
-    for (const query of SEARCH_QUERIES) {
+    // PASS 1: Search Twitter for each token from our data sources
+    for (const tokenInfo of tokensToSearch) {
       try {
-        const result = await searchTwitter(bearerToken, query, 25);
+        // Build search query for this specific token
+        // Search by contract address OR ticker symbol
+        const shortMint = tokenInfo.mint.slice(0, 8);
+        const query = `(${shortMint} OR $${tokenInfo.symbol}) -is:retweet -is:reply lang:en`;
+        
+        console.log(`Searching Twitter for ${tokenInfo.symbol} (${tokenInfo.source}): ${shortMint}...`);
+        
+        const result = await searchTwitter(bearerToken, query, 15);
         
         if (!result?.data) {
-          console.log(`No results for query: ${query}`);
+          console.log(`No results for ${tokenInfo.symbol}`);
           continue;
         }
 
@@ -288,16 +341,13 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Extract contracts and tickers
-          const contracts = extractContracts(tweet.text);
+          // For targeted searches, we already know the contract - use the token we searched for
+          // Also extract any additional contracts mentioned
+          const additionalContracts = extractContracts(tweet.text);
+          const contracts = [tokenInfo.mint, ...additionalContracts.filter(c => c !== tokenInfo.mint)];
           const tickers = extractTickers(tweet.text);
 
-          if (contracts.length === 0) {
-            stats.skipped_no_contract++;
-            continue;
-          }
-
-          stats.contracts_found += contracts.length;
+          stats.contracts_found++;
           if (isVerified) stats.verified_accounts++;
 
           // Get engagement metrics
@@ -325,7 +375,7 @@ Deno.serve(async (req) => {
             author_id: tweet.author_id,
             author_followers: followers,
             detected_contracts: contracts,
-            detected_tickers: tickers,
+            detected_tickers: tickers.length > 0 ? tickers : [tokenInfo.symbol],
             engagement_score: likes + retweets + replies,
             likes_count: likes,
             retweets_count: retweets,
@@ -361,11 +411,11 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Small delay between queries to be nice to the API
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Small delay between token searches to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, 500));
         
       } catch (queryError: any) {
-        console.error(`Error with query "${query}":`, queryError.message);
+        console.error(`Error searching for ${tokenInfo.symbol}:`, queryError.message);
       }
     }
 
