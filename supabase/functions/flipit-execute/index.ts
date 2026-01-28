@@ -1351,19 +1351,55 @@ serve(async (req) => {
       execLog.logPhaseStart('SWAP_EXECUTION');
       try {
         const hasRecordedQuantity = position.quantity_tokens && Number(position.quantity_tokens) > 0;
-        const hasRawQuantity =
+        let hasRawQuantity =
           typeof position.quantity_tokens_raw === "string" &&
           /^\d+$/.test(position.quantity_tokens_raw) &&
           position.quantity_tokens_raw !== "0";
         
+        // FIX: For legacy positions without quantity_tokens_raw, fetch actual balance from chain
+        let effectiveRawAmount = position.quantity_tokens_raw;
+        if (!hasRawQuantity && position.wallet_id && position.token_mint) {
+          execLog.log('LEGACY_POSITION_DETECTED', { 
+            reason: 'quantity_tokens_raw missing, fetching from chain' 
+          });
+          
+          try {
+            // Get wallet info including token balance for this specific mint
+            const { data: walletData, error: walletErr } = await supabase.functions.invoke("trader-wallet", {
+              body: { 
+                tokenMint: position.token_mint,
+                walletId: position.wallet_id 
+              }
+            });
+            
+            if (!walletErr && walletData?.tokenBalanceRaw && walletData.tokenBalanceRaw !== "0") {
+              effectiveRawAmount = walletData.tokenBalanceRaw;
+              hasRawQuantity = true;
+              execLog.log('CHAIN_BALANCE_FETCHED', {
+                tokenBalanceRaw: String(walletData.tokenBalanceRaw).slice(0, 15),
+                tokenDecimals: walletData.tokenDecimals,
+                tokenUiAmount: walletData.tokenUiAmount
+              });
+            } else {
+              execLog.log('CHAIN_BALANCE_ZERO_OR_ERROR', { 
+                error: walletErr?.message,
+                tokenBalanceRaw: walletData?.tokenBalanceRaw 
+              });
+            }
+          } catch (chainErr) {
+            execLog.log('CHAIN_BALANCE_FETCH_FAILED', { 
+              error: String((chainErr as Error)?.message || chainErr) 
+            });
+          }
+        }
+        
         execLog.log('SELL_QUANTITY', { 
           hasRecordedQuantity,
           hasRawQuantity,
-          // quantity_tokens is numeric in DB; stringify before slicing for log preview
           quantityTokens: position.quantity_tokens == null ? null : String(position.quantity_tokens).slice(0, 12),
           quantityTokensRaw: position.quantity_tokens_raw?.slice(0, 15),
+          effectiveRawAmount: effectiveRawAmount?.slice(0, 15),
           tokenDecimals: position.token_decimals,
-          // IMPORTANT: swaps require integer base-units; if we don't have raw, fall back to sellAll.
           willSellAll: !hasRawQuantity
         });
 
@@ -1373,9 +1409,8 @@ serve(async (req) => {
           body: {
             side: "sell",
             tokenMint: position.token_mint,
-            // CRITICAL: Use integer *raw* token amount (base units). UI amounts (quantity_tokens)
-            // cause Raydium REQ_AMOUNT_ERROR and break bags.fm/Meteora quoting.
-            ...(hasRawQuantity ? { amount: position.quantity_tokens_raw } : { sellAll: true }),
+            // Use effective raw amount (from DB or fetched from chain), fall back to sellAll
+            ...(hasRawQuantity ? { amount: effectiveRawAmount } : { sellAll: true }),
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
