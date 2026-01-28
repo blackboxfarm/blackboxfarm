@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, Sparkles } from 'lucide-react';
+import { Loader2, Download, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, Sparkles } from 'lucide-react';
 import { ShareToXButton } from '@/components/ShareToXButton';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
@@ -219,9 +219,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   const [tokenMint, setTokenMint] = useState(initialToken || '');
   const [tokenPrice, setTokenPrice] = useState('');
   const [useAutoPricing, setUseAutoPricing] = useState(true);
-  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
-  const [discoveredPrice, setDiscoveredPrice] = useState<number | null>(null);
-  const [priceSource, setPriceSource] = useState<string>('');
+  const previousTokenRef = useRef<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [report, setReport] = useState<HoldersReport | null>(null);
   const [walletTwitterHandles, setWalletTwitterHandles] = useState<Map<string, string>>(new Map());
@@ -317,16 +315,36 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     fetchTokenMetadata(normalized);
   }, [tokenMint, fetchTokenMetadata]);
 
-  // Auto-generate report when token metadata is successfully fetched
+  // Clear report when token changes to a different value
   useEffect(() => {
-    if (tokenData && !report && !isLoading && tokenMint.trim()) {
-      // Small delay to ensure metadata is fully processed
-      const timer = setTimeout(() => {
-        generateReport();
-      }, 500);
-      return () => clearTimeout(timer);
+    const normalized = tokenMint.trim();
+    if (previousTokenRef.current && previousTokenRef.current !== normalized && normalized) {
+      // Token changed - clear old report to allow new generation
+      setReport(null);
+      setShareCardImageUrl(null);
+      setShareCardPageUrl(null);
+      setKolMatches([]);
     }
-  }, [tokenData]);
+    previousTokenRef.current = normalized;
+  }, [tokenMint]);
+
+  // Auto-generate report when token metadata is successfully fetched
+  // Triggers on: initial load, URL preload, or when a NEW token is pasted
+  useEffect(() => {
+    if (tokenData && !isLoading && tokenMint.trim()) {
+      // Check if this is a new token (different from current report)
+      const currentReportToken = report?.tokenMint;
+      const normalizedMint = tokenMint.trim();
+      
+      // Generate if: no report exists OR the token changed
+      if (!currentReportToken || currentReportToken !== normalizedMint) {
+        const timer = setTimeout(() => {
+          generateReport();
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [tokenData, tokenMint]);
 
 
   useEffect(() => {
@@ -451,55 +469,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     }
   };
 
-  const fetchTokenPrice = async () => {
-    if (!tokenMint.trim()) return;
-    
-    const startTime = performance.now();
-    console.log('⏱️ [PERF] Starting price discovery...');
-    setIsFetchingPrice(true);
-    setDiscoveredPrice(null);
-    setPriceSource('');
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
-        body: {
-          tokenMint: tokenMint.trim(),
-          manualPrice: 0 // Force price discovery
-        }
-      });
-      const fetchTime = performance.now() - startTime;
-      console.log(`⏱️ [PERF] Price discovery completed in ${fetchTime.toFixed(0)}ms`);
-
-      if (error) {
-        const ctx = (error as any)?.context?.body;
-        let message = (error as any)?.message || 'Price discovery failed';
-        if (ctx) {
-          try {
-            const parsed = JSON.parse(ctx);
-            message = parsed?.details || parsed?.error || message;
-          } catch {}
-        }
-        throw new Error(message);
-      }
-      
-      if (data.tokenPriceUSD > 0) {
-        setDiscoveredPrice(data.tokenPriceUSD);
-        setPriceSource(data.priceSource || 'API');
-        const totalTime = performance.now() - startTime;
-        console.log(`✅ [PERF] Price discovery SUCCESS: ${totalTime.toFixed(0)}ms | Price: $${data.tokenPriceUSD}`);
-        // Toast removed - UI feedback is sufficient
-      } else {
-        throw new Error('Price discovery failed');
-      }
-    } catch (error) {
-      const totalTime = performance.now() - startTime;
-      console.error(`❌ [PERF] Price discovery FAILED after ${totalTime.toFixed(0)}ms:`, error);
-      const msg = error instanceof Error ? error.message : 'Could not fetch token price automatically. Please enter manually.';
-      // Toast removed - UI feedback is sufficient
-    } finally {
-      setIsFetchingPrice(false);
-    }
-  };
 
   const generateReport = async () => {
     if (!tokenMint) {
@@ -519,10 +488,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     try {
       console.log('⏱️ [PERF] Generating holders report...');
       const priceToUse = useAutoPricing ? 0 : parseFloat(tokenPrice) || 0;
-      
-      if (useAutoPricing) {
-        setIsFetchingPrice(true);
-      }
       
       const edgeFunctionStart = performance.now();
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
@@ -563,12 +528,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         console.log(`Token age: ${ageInHours.toFixed(1)} hours`);
       }
       
-      // Update discovered price info if auto pricing was used
-      if (useAutoPricing) {
-        setDiscoveredPrice(data.tokenPriceUSD);
-        setPriceSource(data.priceSource || 'Multiple APIs');
-      }
-      
       const reportProcessTime = performance.now() - reportStartTime;
       console.log(`✅ [PERF] Report processing complete: ${reportProcessTime.toFixed(0)}ms`);
       
@@ -605,7 +564,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       });
     } finally {
       setIsLoading(false);
-      setIsFetchingPrice(false);
     }
   };
 
@@ -995,14 +953,14 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
           <div className="flex gap-2">
             <Button 
               onClick={generateReport} 
-              disabled={isLoading || isFetchingPrice}
+              disabled={isLoading}
               className="flex-1 text-sm h-10"
             >
-              {isLoading || isFetchingPrice ? (
+              {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  <span className="hidden sm:inline">{isFetchingPrice ? 'Fetching Price...' : 'Generating Report...'}</span>
-                  <span className="sm:hidden">{isFetchingPrice ? 'Fetching...' : 'Generating...'}</span>
+                  <span className="hidden sm:inline">Generating Report...</span>
+                  <span className="sm:hidden">Generating...</span>
                 </>
               ) : (
                 <>
@@ -1012,16 +970,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               )}
             </Button>
             
-            {useAutoPricing && (
-              <Button 
-                variant="outline"
-                onClick={fetchTokenPrice}
-                disabled={!tokenMint.trim() || isFetchingPrice}
-                size="icon"
-              >
-                <RefreshCw className={`h-4 w-4 ${isFetchingPrice ? 'animate-spin' : ''}`} />
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>
