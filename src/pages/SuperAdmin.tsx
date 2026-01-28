@@ -62,6 +62,7 @@ const TokenHistoryViewer = lazy(() => import("@/components/admin/TokenHistoryVie
 const DailiesDashboard = lazy(() => import("@/components/admin/DailiesDashboard").then(m => ({ default: m.DailiesDashboard })));
 const ShareCardDemo = lazy(() => import("@/components/social/ShareCardDemo").then(m => ({ default: m.ShareCardDemo })));
 const AIAnalyzer = lazy(() => import("@/pages/AIAnalysis"));
+const AccountManagementDashboard = lazy(() => import("@/components/admin/AccountManagementDashboard").then(m => ({ default: m.AccountManagementDashboard })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -178,6 +179,7 @@ export default function SuperAdmin() {
               <Tabs defaultValue="token-holders" className="space-y-4">
                 <TabsList className="flex flex-wrap gap-1">
                   <TabsTrigger value="token-holders">📊 Token Holders</TabsTrigger>
+                  <TabsTrigger value="accounts">👥 Accounts</TabsTrigger>
                   <TabsTrigger value="intel-xbot">🤖 Intel XBot</TabsTrigger>
                   <TabsTrigger value="ai-analyzer">🧠 AI Analyzer</TabsTrigger>
                   <TabsTrigger value="banners">🎨 Banners</TabsTrigger>
@@ -189,6 +191,7 @@ export default function SuperAdmin() {
                   <TabsTrigger value="dailies">📅 Dailies</TabsTrigger>
                 </TabsList>
                 <TabsContent value="token-holders"><BaglessHoldersReport /></TabsContent>
+                <TabsContent value="accounts"><AccountManagementDashboard /></TabsContent>
                 <TabsContent value="intel-xbot"><ShareCardDemo /></TabsContent>
                 <TabsContent value="ai-analyzer"><AIAnalyzer /></TabsContent>
                 <TabsContent value="banners"><BannerManagement /></TabsContent>
