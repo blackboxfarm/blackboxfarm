@@ -18,8 +18,8 @@ Deno.serve(async (req) => {
     
     // Kill all cron jobs (both old and new names)
     const jobs = [
-      'holdersintel-poster-2min',
-      'holdersintel-poster-3min', // legacy
+      'holdersintel-poster-3min',
+      'holdersintel-poster-2min', // legacy catchup mode
       'holdersintel-scheduler-2am',
       'holdersintel-scheduler-8am',
       'holdersintel-scheduler-2pm',
