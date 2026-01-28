@@ -219,14 +219,43 @@ export function saveTemplate(template: string): void {
   localStorage.setItem(TEMPLATE_STORAGE_KEY, template);
 }
 
+/**
+ * Sanitize token names that look like URLs to prevent Twitter from
+ * detecting them as links and hijacking the OG preview.
+ * e.g. "click.fun" -> "click .fun" to break URL detection
+ */
+function sanitizeUrlLikeName(name: string): string {
+  if (!name) return name;
+  
+  // Common TLDs that Twitter might detect as URLs
+  const urlTlds = /\.(fun|com|io|xyz|net|org|co|ai|app|dev|gg|me|tv|live|lol|meme|wtf|sol|pump|token|coin|finance|fi|exchange|swap|trade|market|money|cash|pay|crypto|nft|dao|defi|web3|eth|btc|dex)$/i;
+  
+  // Check if the name ends with a URL-like TLD
+  if (urlTlds.test(name)) {
+    // Insert space before the dot to break URL detection
+    return name.replace(/\.([a-z]+)$/i, ' .$1');
+  }
+  
+  // Also catch names that contain dots mid-string with TLD patterns
+  const midUrlPattern = /\.(?:fun|com|io|xyz|net|org|co|ai|app|dev|gg|me|tv|live|lol|meme|wtf|sol|pump|token|coin|finance|fi|exchange|swap|trade|market|money|cash|pay|crypto|nft|dao|defi|web3|eth|btc|dex)(?:\s|$)/gi;
+  if (midUrlPattern.test(name)) {
+    return name.replace(/\.([a-z]+)/gi, ' .$1');
+  }
+  
+  return name;
+}
+
 // Process template with actual token data
 export function processTemplate(template: string, data: TokenShareData): string {
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   
+  // Sanitize URL-like names to prevent Twitter hijacking the OG preview
+  const safeName = sanitizeUrlLikeName(data.name);
+  
   return template
     .replace(/\{ticker\}/g, data.ticker)
-    .replace(/\{name\}/g, data.name)
+    .replace(/\{name\}/g, safeName)
     .replace(/\{ca\}/g, data.tokenAddress)
     .replace(/\{totalWallets\}/g, data.totalWallets.toLocaleString())
     .replace(/\{realHolders\}/g, data.realHolders.toLocaleString())
