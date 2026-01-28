@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Twitter, CheckCircle, XCircle, Star, Users, Eye, Heart, Repeat, MessageCircle, ExternalLink, Trophy, Copy, Clock, Zap } from "lucide-react";
+import { RefreshCw, Twitter, CheckCircle, Star, Users, Eye, Heart, Repeat, ExternalLink, Trophy, Copy, Clock, Zap, Play, Square, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -41,13 +41,20 @@ interface ScannerState {
   scan_count: number;
 }
 
+interface CronJobStatus {
+  jobname: string;
+  schedule: string;
+  active: boolean;
+}
+
 export function TwitterScrapesView() {
   const [mentions, setMentions] = useState<TwitterMention[]>([]);
   const [scannerQueue, setScannerQueue] = useState<ScannerState[]>([]);
   const [lastScanned, setLastScanned] = useState<ScannerState | null>(null);
   const [nextUp, setNextUp] = useState<ScannerState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isScanning, setIsScanning] = useState(false);
+  const [cronStatus, setCronStatus] = useState<CronJobStatus | null>(null);
+  const [isTogglingCron, setIsTogglingCron] = useState(false);
   const [filter, setFilter] = useState<'all' | 'best' | 'queued' | 'verified' | 'reply_targets'>('all');
   const [stats, setStats] = useState({
     total: 0,
@@ -56,6 +63,45 @@ export function TwitterScrapesView() {
     queued: 0,
     verified: 0,
   });
+
+  const fetchCronStatus = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_cron_job_status');
+      if (error) throw error;
+      
+      const twitterJob = (data as CronJobStatus[])?.find(job => job.jobname === 'twitter-scanner-16min');
+      setCronStatus(twitterJob || null);
+    } catch (error) {
+      console.error('Error fetching cron status:', error);
+    }
+  };
+
+  const toggleScanner = async () => {
+    setIsTogglingCron(true);
+    try {
+      if (cronStatus?.active) {
+        // Stop the scanner
+        const { error } = await supabase.functions.invoke('twitter-scanner-control', {
+          body: { action: 'stop' }
+        });
+        if (error) throw error;
+        toast.success('Twitter Scanner stopped');
+      } else {
+        // Start the scanner
+        const { error } = await supabase.functions.invoke('twitter-scanner-control', {
+          body: { action: 'start' }
+        });
+        if (error) throw error;
+        toast.success('Twitter Scanner started');
+      }
+      await fetchCronStatus();
+    } catch (error: any) {
+      console.error('Toggle scanner error:', error);
+      toast.error(error.message || 'Failed to toggle scanner');
+    } finally {
+      setIsTogglingCron(false);
+    }
+  };
 
   const fetchMentions = async () => {
     setIsLoading(true);
@@ -144,24 +190,9 @@ export function TwitterScrapesView() {
     }
   };
 
-  const runScanner = async () => {
-    setIsScanning(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('twitter-token-mention-scanner');
-      if (error) throw error;
-      const symbol = data.stats?.symbol_searched || 'token';
-      toast.success(`Scanned $${symbol}: ${data.stats?.mentions_saved || 0} mentions saved`);
-      fetchMentions();
-    } catch (error: any) {
-      console.error('Scanner error:', error);
-      toast.error(error.message || 'Scanner failed');
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
   useEffect(() => {
     fetchMentions();
+    fetchCronStatus();
   }, [filter]);
 
   const getQualityColor = (score: number) => {
@@ -183,6 +214,8 @@ export function TwitterScrapesView() {
     toast.success('Contract copied!');
   };
 
+  const isScannerActive = cronStatus?.active ?? false;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -197,16 +230,57 @@ export function TwitterScrapesView() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchMentions} disabled={isLoading}>
+          <Button variant="outline" size="sm" onClick={() => { fetchMentions(); fetchCronStatus(); }} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
             Refresh
           </Button>
-          <Button onClick={runScanner} disabled={isScanning}>
-            <Twitter className={cn("h-4 w-4 mr-2", isScanning && "animate-pulse")} />
-            {isScanning ? 'Scanning...' : 'Scan Now'}
+          <Button
+            onClick={toggleScanner}
+            disabled={isTogglingCron}
+            variant={isScannerActive ? "destructive" : "default"}
+            className={cn(
+              !isScannerActive && "bg-green-600 hover:bg-green-700"
+            )}
+          >
+            {isTogglingCron ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : isScannerActive ? (
+              <Square className="h-4 w-4 mr-2" />
+            ) : (
+              <Play className="h-4 w-4 mr-2" />
+            )}
+            {isTogglingCron ? 'Processing...' : isScannerActive ? 'Stop Scanner' : 'Start Scanner'}
           </Button>
         </div>
       </div>
+
+      {/* Scanner Status */}
+      <Card className={cn(
+        "bg-card/50",
+        isScannerActive ? "border-green-500/50" : "border-muted"
+      )}>
+        <CardContent className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "h-3 w-3 rounded-full",
+              isScannerActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground"
+            )} />
+            <span className="font-medium">
+              Scanner Status: {isScannerActive ? 'Running' : 'Stopped'}
+            </span>
+            {cronStatus && (
+              <Badge variant="outline" className="text-xs">
+                {cronStatus.schedule}
+              </Badge>
+            )}
+          </div>
+          {isScannerActive && (
+            <span className="text-xs text-muted-foreground">
+              Runs every 16 minutes automatically
+            </span>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Scanner State Cards */}
       <div className="grid grid-cols-2 gap-4">
@@ -374,7 +448,7 @@ export function TwitterScrapesView() {
             </div>
           ) : mentions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No mentions found. Run the scanner to discover tokens.
+              No mentions found. Start the scanner to discover tokens.
             </div>
           ) : (
             <div className="space-y-3">
