@@ -35,13 +35,6 @@ Deno.serve(async (req) => {
         // Ignore if doesn't exist
       }
       
-      // Also unschedule the old 10-min job if it exists
-      try {
-        await supabase.rpc('unschedule_cron_job', { job_name: 'holdersintel-twitter-scanner-10min' });
-      } catch {
-        // Ignore if doesn't exist
-      }
-      
       // Schedule the 16-minute cron job
       const { error } = await supabase.rpc('schedule_cron_job', {
         job_name: TWITTER_SCANNER_JOB.name,
@@ -71,21 +64,31 @@ Deno.serve(async (req) => {
       );
       
     } else if (action === 'stop') {
-      // Unschedule the Twitter scanner cron job
-      try {
-        await supabase.rpc('unschedule_cron_job', { job_name: TWITTER_SCANNER_JOB.name });
-      } catch {
-        // Ignore if doesn't exist
-      }
+      // Use direct SQL to unschedule via cron.unschedule function
+      const { error: unscheduleError } = await supabase.rpc('unschedule_cron_job', { 
+        job_name: TWITTER_SCANNER_JOB.name 
+      });
       
-      // Also stop the old 10-min job if running
-      try {
-        await supabase.rpc('unschedule_cron_job', { job_name: 'holdersintel-twitter-scanner-10min' });
-      } catch {
-        // Ignore if doesn't exist
+      if (unscheduleError) {
+        console.error('Unschedule RPC error:', unscheduleError);
+        // Try alternative: check if job exists and log
+        const { data: jobs } = await supabase.rpc('get_cron_job_status');
+        console.log('Current cron jobs:', jobs);
+        throw new Error(`Failed to unschedule: ${unscheduleError.message}`);
       }
       
       console.log('⏹️ Twitter scanner cron job stopped');
+      
+      // Verify it's actually stopped
+      const { data: verifyJobs } = await supabase.rpc('get_cron_job_status');
+      const stillExists = (verifyJobs as Array<{ jobname: string; active: boolean }>)?.find(
+        job => job.jobname === TWITTER_SCANNER_JOB.name
+      );
+      
+      if (stillExists?.active) {
+        console.error('Job still active after unschedule attempt!');
+        throw new Error('Job still active after unschedule - RPC may not be working');
+      }
       
       return new Response(
         JSON.stringify({ success: true, message: 'Twitter Scanner STOPPED' }),
@@ -101,7 +104,7 @@ Deno.serve(async (req) => {
       }
       
       const twitterJob = (data as Array<{ jobname: string; schedule: string; active: boolean }>)?.find(
-        job => job.jobname === TWITTER_SCANNER_JOB.name || job.jobname === 'holdersintel-twitter-scanner-10min'
+        job => job.jobname === TWITTER_SCANNER_JOB.name
       );
       
       return new Response(
