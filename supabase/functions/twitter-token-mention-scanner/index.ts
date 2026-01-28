@@ -312,7 +312,7 @@ Deno.serve(async (req) => {
     // STEP 2: Pick the SINGLE strongest token that hasn't been scanned recently
     const { data: nextToken } = await supabase
       .from('twitter_scanner_state')
-      .select('token_mint, symbol, virality_score, source')
+      .select('token_mint, symbol, virality_score, source, scan_count')
       .or(`last_scanned_at.is.null,last_scanned_at.lt.${twoHoursAgo}`)
       .order('virality_score', { ascending: false })
       .order('last_scanned_at', { ascending: true, nullsFirst: true })
@@ -347,25 +347,12 @@ Deno.serve(async (req) => {
     const result = await searchTwitter(bearerToken, query, 100); // Max 100 per API call
     
     // Mark token as scanned (even if no results or rate limited)
+    // NOTE: We increment scan_count locally because this cron runs single-threaded.
     await supabase
       .from('twitter_scanner_state')
-      .update({ 
+      .update({
         last_scanned_at: new Date().toISOString(),
-        scan_count: supabase.rpc ? undefined : 1, // Will increment via update
-      })
-      .eq('token_mint', nextToken.token_mint);
-    
-    // Also increment scan_count
-    await supabase.rpc('', {}).catch(() => {}); // Placeholder - we'll use raw SQL
-    await supabase
-      .from('twitter_scanner_state')
-      .update({ 
-        scan_count: (await supabase
-          .from('twitter_scanner_state')
-          .select('scan_count')
-          .eq('token_mint', nextToken.token_mint)
-          .single()
-          .then(r => (r.data?.scan_count || 0) + 1))
+        scan_count: (nextToken.scan_count || 0) + 1,
       })
       .eq('token_mint', nextToken.token_mint);
     
