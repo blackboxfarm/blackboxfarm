@@ -63,6 +63,7 @@ const DailiesDashboard = lazy(() => import("@/components/admin/DailiesDashboard"
 const ShareCardDemo = lazy(() => import("@/components/social/ShareCardDemo").then(m => ({ default: m.ShareCardDemo })));
 const AIAnalyzer = lazy(() => import("@/pages/AIAnalysis"));
 const AccountManagementDashboard = lazy(() => import("@/components/admin/AccountManagementDashboard").then(m => ({ default: m.AccountManagementDashboard })));
+const TwitterScrapesView = lazy(() => import("@/components/admin/TwitterScrapesView").then(m => ({ default: m.TwitterScrapesView })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -184,6 +185,7 @@ export default function SuperAdmin() {
                   <TabsTrigger value="token-holders">📊 Token Holders</TabsTrigger>
                   <TabsTrigger value="accounts">👥 Accounts</TabsTrigger>
                   <TabsTrigger value="intel-xbot">🤖 Intel XBot</TabsTrigger>
+                  <TabsTrigger value="twitter-scrapes">🐦 Twitter Scrapes</TabsTrigger>
                   <TabsTrigger value="ai-analyzer">🧠 AI Analyzer</TabsTrigger>
                   <TabsTrigger value="banners">🎨 Banners</TabsTrigger>
                   <TabsTrigger value="advertisers">📢 Advertisers</TabsTrigger>
@@ -196,6 +198,7 @@ export default function SuperAdmin() {
                 <TabsContent value="token-holders"><BaglessHoldersReport /></TabsContent>
                 <TabsContent value="accounts"><AccountManagementDashboard /></TabsContent>
                 <TabsContent value="intel-xbot"><ShareCardDemo /></TabsContent>
+                <TabsContent value="twitter-scrapes"><TwitterScrapesView /></TabsContent>
                 <TabsContent value="ai-analyzer"><AIAnalyzer /></TabsContent>
                 <TabsContent value="banners"><BannerManagement /></TabsContent>
                 <TabsContent value="advertisers"><AdvertiserManagement /></TabsContent>
