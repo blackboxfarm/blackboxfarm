@@ -1099,6 +1099,29 @@ serve(async (req) => {
           }
         }
         
+        // FINAL SAFETY: If we still have no decimals info and the value looks like raw base units,
+        // apply default decimals based on token type. Pump.fun tokens are ALWAYS 6 decimals.
+        if (tokenDecimals === null && quantityTokens !== null) {
+          const rawValue = Number(quantityTokens);
+          
+          // Pump.fun tokens are ALWAYS 6 decimals
+          const isPumpToken = tokenMint.endsWith('pump');
+          const defaultDecimals = isPumpToken ? 6 : 9;
+          
+          // Heuristic: if quantityTokens is extremely large (>1e12), it's likely raw base units
+          // Normal human-readable amounts are rarely > 1 trillion tokens
+          if (rawValue > 1e12) {
+            tokenDecimals = defaultDecimals;
+            quantityTokensRaw = String(quantityTokens);
+            const humanAmount = rawValue / Math.pow(10, tokenDecimals);
+            quantityTokens = String(humanAmount);
+            console.log(`DECIMALS_APPLIED: Raw ${rawValue} / 10^${tokenDecimals} = ${humanAmount} tokens (isPumpToken=${isPumpToken})`);
+          } else if (isPumpToken) {
+            // For pump.fun tokens, always set decimals even if value looks reasonable
+            tokenDecimals = 6;
+          }
+        }
+        
         execLog.log('QUANTITY_RESOLVED', { 
           quantityTokens: quantityTokens == null ? null : String(quantityTokens).slice(0, 15),
           quantityTokensRaw: quantityTokensRaw?.slice(0, 15),
