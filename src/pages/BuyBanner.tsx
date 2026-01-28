@@ -40,7 +40,7 @@ export default function BuyBanner() {
   const [linkUrl, setLinkUrl] = useState('');
   const [title, setTitle] = useState('');
   const [twitter, setTwitter] = useState('');
-  const [duration, setDuration] = useState<keyof typeof PRICING>(0);
+  const [duration, setDuration] = useState<keyof typeof PRICING>(24);
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const [fetchingSolPrice, setFetchingSolPrice] = useState(true);
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
@@ -448,36 +448,62 @@ export default function BuyBanner() {
                   className="space-y-3"
                 >
                   {Object.entries(PRICING).map(([hours, pricing]) => {
-                    const { label, price, perDay, isTelegram } = pricing as any;
+                    const { label, price, perDay, isTelegram, isFree } = pricing as any;
                     const solEquiv = getSolEquivalent(price);
+                    
+                    // Hide FREE test option from public view
+                    if (isFree) return null;
+                    
+                    // Telegram option is visible but disabled (future feature)
+                    const isDisabled = isTelegram;
+                    
                     return (
                       <div
                         key={hours}
                         className={cn(
-                          "flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-colors",
-                          duration.toString() === hours ? "border-primary bg-primary/5" : "border-border hover:border-primary/50",
-                          isTelegram && "bg-blue-500/5 border-blue-500/30"
+                          "flex items-center justify-between p-4 rounded-lg border transition-colors",
+                          isDisabled 
+                            ? "opacity-50 cursor-not-allowed border-border bg-muted/30" 
+                            : "cursor-pointer",
+                          !isDisabled && duration.toString() === hours && "border-primary bg-primary/5",
+                          !isDisabled && duration.toString() !== hours && "border-border hover:border-primary/50",
+                          isTelegram && !isDisabled && "bg-blue-500/5 border-blue-500/30"
                         )}
-                        onClick={() => setDuration(parseInt(hours) as keyof typeof PRICING)}
+                        onClick={() => !isDisabled && setDuration(parseInt(hours) as keyof typeof PRICING)}
                       >
                         <div className="flex items-center gap-3">
-                          <RadioGroupItem value={hours} id={`duration-${hours}`} />
+                          <RadioGroupItem 
+                            value={hours} 
+                            id={`duration-${hours}`} 
+                            disabled={isDisabled}
+                          />
                           <div>
-                            <Label htmlFor={`duration-${hours}`} className="cursor-pointer font-medium">
+                            <Label 
+                              htmlFor={`duration-${hours}`} 
+                              className={cn(
+                                "font-medium",
+                                isDisabled ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"
+                              )}
+                            >
                               {label}
                             </Label>
                             {isTelegram && (
-                              <p className="text-xs text-blue-400 mt-1">
-                                Broadcast to all TG Users & Groups using Holder Bot
-                              </p>
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Broadcast to all TG Users & Groups using Holder Bot
+                                </p>
+                                <p className="text-xs text-yellow-500 font-medium">
+                                  ⚠️ Not yet implemented
+                                </p>
+                              </div>
                             )}
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-lg">
+                          <p className={cn("font-bold text-lg", isDisabled && "text-muted-foreground")}>
                             {price === 0 ? 'FREE' : `$${price}`}
                             {solEquiv && price > 0 && (
-                              <span className="text-primary text-sm font-normal ml-1">
+                              <span className={cn("text-sm font-normal ml-1", isDisabled ? "text-muted-foreground" : "text-primary")}>
                                 ({solEquiv} SOL)
                               </span>
                             )}
