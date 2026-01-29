@@ -64,11 +64,27 @@ export function TokenAccountCleaner() {
       });
 
       if (error) throw error;
+      if (!data) throw new Error("No response from edge function");
       
-      setScanResults(data as ScanResponse);
+      // Normalize response - handle both camelCase and snake_case
+      const normalized: ScanResponse = {
+        action: data.action || 'scan',
+        walletsScanned: data.walletsScanned ?? data.wallets_scanned ?? 0,
+        walletsWithEmptyAccounts: data.walletsWithEmptyAccounts ?? data.wallets_with_empty_accounts ?? 0,
+        totalEmptyAccounts: data.totalEmptyAccounts ?? data.total_empty_accounts ?? 0,
+        totalRecoverableSol: data.totalRecoverableSol ?? data.total_recoverable_sol ?? 0,
+        results: (data.results || []).map((r: any) => ({
+          wallet_pubkey: r.wallet_pubkey || r.walletPubkey || 'Unknown',
+          source: r.source || 'Unknown',
+          empty_accounts: r.empty_accounts || r.emptyAccounts || r.accounts || [],
+          total_recoverable_sol: r.total_recoverable_sol ?? r.totalRecoverableSol ?? r.estimatedRecoverySol ?? 0,
+        })),
+      };
       
-      if (data.totalEmptyAccounts > 0) {
-        toast.success(`Found ${data.totalEmptyAccounts} empty accounts worth ~${data.totalRecoverableSol.toFixed(4)} SOL`);
+      setScanResults(normalized);
+      
+      if (normalized.totalEmptyAccounts > 0) {
+        toast.success(`Found ${normalized.totalEmptyAccounts} empty accounts worth ~${normalized.totalRecoverableSol.toFixed(4)} SOL`);
       } else {
         toast.info("No empty token accounts found");
       }
@@ -95,12 +111,36 @@ export function TokenAccountCleaner() {
       });
 
       if (error) throw error;
+      if (!data) throw new Error("No response from edge function");
       
-      setCleanResults(data as CleanResponse);
+      // Normalize response - handle both camelCase and snake_case
+      const normalized: CleanResponse = {
+        action: data.action || 'clean_all',
+        wallets_processed: data.wallets_processed ?? data.walletsProcessed ?? 0,
+        total_accounts_closed: data.total_accounts_closed ?? data.totalAccountsClosed ?? 0,
+        total_sol_recovered: data.total_sol_recovered ?? data.totalSolRecovered ?? 0,
+        consolidation: data.consolidation ? {
+          target_wallet: data.consolidation.target_wallet || data.consolidation.targetWallet || '',
+          wallets_consolidated: data.consolidation.wallets_consolidated ?? data.consolidation.walletsConsolidated ?? 0,
+          total_consolidated: data.consolidation.total_consolidated ?? data.consolidation.totalConsolidated ?? 0,
+          signatures: data.consolidation.signatures || [],
+          errors: data.consolidation.errors || [],
+        } : null,
+        results: (data.results || []).map((r: any) => ({
+          wallet_pubkey: r.wallet_pubkey || r.walletPubkey || 'Unknown',
+          source: r.source || 'Unknown',
+          accounts_closed: r.accounts_closed ?? r.accountsClosed ?? 0,
+          sol_recovered: r.sol_recovered ?? r.solRecovered ?? 0,
+          signatures: r.signatures || [],
+          errors: r.errors || [],
+        })),
+      };
+      
+      setCleanResults(normalized);
       setScanResults(null); // Clear scan results after cleaning
       
-      if (data.totalAccountsClosed > 0) {
-        toast.success(`Reclaimed ${data.totalSolRecovered.toFixed(4)} SOL from ${data.totalAccountsClosed} accounts!`);
+      if (normalized.total_accounts_closed > 0) {
+        toast.success(`Reclaimed ${normalized.total_sol_recovered.toFixed(4)} SOL from ${normalized.total_accounts_closed} accounts!`);
       } else {
         toast.info("No accounts were closed");
       }
