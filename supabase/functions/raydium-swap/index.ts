@@ -782,6 +782,8 @@ serve(async (req) => {
       preCreateWSOL,
       // Wallet ID for direct database lookup
       walletId,
+      // Optional: specify which table the wallet is in
+      walletSource,
     } = body;
 
     // Build list of RPC endpoints to try (with fallback)
@@ -842,14 +844,19 @@ serve(async (req) => {
           auth: { persistSession: false, autoRefreshToken: false },
         });
 
-        // Try super_admin_wallets first (for FlipIt), then blackbox_wallets, then airdrop_wallets
-        const tables = ["super_admin_wallets", "blackbox_wallets", "airdrop_wallets"] as const;
+        // If walletSource is specified, try that first; otherwise try the default tables
+        const defaultTables = ["super_admin_wallets", "blackbox_wallets", "airdrop_wallets", "wallet_pools"] as const;
+        const tables = walletSource 
+          ? [walletSource, ...defaultTables.filter(t => t !== walletSource)]
+          : defaultTables;
         let walletSecret: string | null = null;
 
         for (const table of tables) {
+          // wallet_pools uses 'secret_key' not 'secret_key_encrypted'
+          const secretCol = table === 'wallet_pools' ? 'secret_key' : 'secret_key_encrypted';
           const { data, error } = await supabaseAdmin
             .from(table)
-            .select("secret_key_encrypted")
+            .select(secretCol)
             .eq("id", walletId)
             .maybeSingle();
 
@@ -858,9 +865,18 @@ serve(async (req) => {
             continue;
           }
 
-          if (data?.secret_key_encrypted) {
+          const rawSecret = data?.[secretCol];
+          if (rawSecret) {
             console.log(`Found wallet in ${table}`);
-            walletSecret = data.secret_key_encrypted;
+            walletSecret = rawSecret;
+            // wallet_pools stores plain base58, others are encrypted
+            if (table === 'wallet_pools') {
+              secretToUse = rawSecret; // Already plaintext
+              console.log(`Using plaintext secret from wallet_pools`);
+            } else {
+              secretToUse = await SecureStorage.decryptWalletSecret(rawSecret);
+              console.log(`Decrypted wallet secret for ${walletId}`);
+            }
             break;
           }
         }
@@ -868,10 +884,6 @@ serve(async (req) => {
         if (!walletSecret) {
           return softError("WALLET_NOT_FOUND", `Wallet ${walletId} not found in any wallet table`);
         }
-
-        // Decrypt the wallet secret
-        secretToUse = await SecureStorage.decryptWalletSecret(walletSecret);
-        console.log(`Decrypted wallet secret for ${walletId}`);
       } catch (error) {
         return softError(
           "WALLET_LOOKUP_FAILED",

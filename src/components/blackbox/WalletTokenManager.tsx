@@ -34,6 +34,8 @@ interface WalletTokenManagerProps {
   slippageBps?: number;
   /** Priority fee mode for direct swap */
   priorityFeeMode?: 'low' | 'medium' | 'high' | 'turbo' | 'ultra';
+  /** Source table for wallet lookup (e.g., 'blackbox_wallets', 'wallet_pools') */
+  walletSource?: string;
 }
 
 export function WalletTokenManager({ 
@@ -44,7 +46,8 @@ export function WalletTokenManager({
   initialTokens = [],
   useDirectSwap = false,
   slippageBps = 500,
-  priorityFeeMode = 'medium'
+  priorityFeeMode = 'medium',
+  walletSource = 'blackbox_wallets'
 }: WalletTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenBalance[]>(initialTokens);
   const [isLoading, setIsLoading] = useState(false);
@@ -532,6 +535,7 @@ export function WalletTokenManager({
           slippageBps: 100,
           unwrapSol: true,
           walletId: walletId,
+          walletSource: walletSource,
         }
       });
 
@@ -632,7 +636,7 @@ export function WalletTokenManager({
       const { data, error } = await supabase.functions.invoke('burn-token', {
         body: {
           wallet_id: walletId,
-          wallet_source: 'blackbox_wallets', // This will be determined dynamically if needed
+          wallet_source: walletSource,
           token_mint: token.mint,
           close_account: true
         }
