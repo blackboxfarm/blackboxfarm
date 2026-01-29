@@ -28,16 +28,33 @@ async function fetchDexscreenerBanner(): Promise<{ banner: any } | null> {
     // Random selection
     const randomToken = tokensWithBanners[Math.floor(Math.random() * tokensWithBanners.length)];
     
+    // Fetch the real token symbol from DexScreener token endpoint
+    let tokenSymbol = 'TOKEN';
+    try {
+      const tokenResponse = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${randomToken.tokenAddress}`);
+      if (tokenResponse.ok) {
+        const tokenData = await tokenResponse.json();
+        // API returns array of pairs, get symbol from first pair
+        if (Array.isArray(tokenData) && tokenData.length > 0 && tokenData[0].baseToken?.symbol) {
+          tokenSymbol = tokenData[0].baseToken.symbol;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch token symbol, using fallback:', e);
+    }
+    
     return {
       banner: {
         id: `dex-${randomToken.tokenAddress}`,
-        title: randomToken.description || 'Trending on Dexscreener',
+        title: tokenSymbol, // Use actual ticker as title
+        description: randomToken.description || '',
         image_url: randomToken.header,
         link_url: randomToken.url,
         position: 1,
         is_active: true,
         is_dexscreener: true,
         token_address: randomToken.tokenAddress,
+        token_symbol: tokenSymbol, // Add explicit symbol field
       }
     };
   } catch (error) {

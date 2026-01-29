@@ -208,9 +208,9 @@ export function AdBanner({ size, position }: AdBannerProps) {
   const containerClass = "mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-full max-w-4xl mx-auto";
   const mediaClass = "w-full h-auto max-h-[400px] object-contain";
   
-  // For Dexscreener banners, extract ticker from title (usually "TOKEN - description" format)
+  // For Dexscreener banners, use the real token symbol
   const isDexBanner = banner?.is_dexscreener === true;
-  const tickerDisplay = isDexBanner ? `$${(banner.title || 'TOKEN').split(' ')[0].replace(/[^A-Za-z0-9]/g, '').toUpperCase()}` : null;
+  const tickerDisplay = isDexBanner && banner?.token_symbol ? `$${banner.token_symbol.toUpperCase()}` : null;
 
   return (
       <Card className={containerClass} onClick={handleClick}>
