@@ -32,6 +32,12 @@ const SUPABASE_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
 const STORAGE_BASE = `${SUPABASE_URL}/storage/v1/object/public/OG`;
 const DEFAULT_OG_IMAGE = `${STORAGE_BASE}/holders_og.png`;
 
+function slugifyVersion(v: string): string {
+  // Allow a-z0-9_- for friendly nicknames like "holders3" or "winter_promo".
+  // Anything else is stripped to avoid path tricks.
+  return v.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48);
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -41,12 +47,14 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const versionParam = url.searchParams.get("v");
+    const tokenParam = url.searchParams.get("token");
     const userAgent = req.headers.get("user-agent");
-    
-    // Build canonical URL with version if present
-    const canonical = versionParam 
-      ? `https://blackbox.farm/holders?v=${versionParam}`
-      : "https://blackbox.farm/holders";
+
+    // Build canonical URL (preserve token + v)
+    const canonicalUrl = new URL("https://blackbox.farm/holders");
+    if (versionParam) canonicalUrl.searchParams.set('v', versionParam);
+    if (tokenParam) canonicalUrl.searchParams.set('token', tokenParam);
+    const canonical = canonicalUrl.toString();
     
     // If not a bot, redirect to the actual SPA
     if (!isBot(userAgent)) {
@@ -59,26 +67,29 @@ serve(async (req) => {
       });
     }
 
-    // Determine which OG image to use based on version param
-    // Format: v=20260128 maps to holders_og_20260128.png
+    // Determine which OG image to use based on version param.
+    // Supports:
+    // - v=20260128 -> holders_og_20260128.png
+    // - v=holders3 -> holders_og_holders3.png
+    // If not found, falls back to holders_og.png.
     let ogImage = DEFAULT_OG_IMAGE;
-    
-    if (versionParam && /^\d{8}$/.test(versionParam)) {
-      // Check if versioned image exists in storage
-      const versionedImageName = `holders_og_${versionParam}.png`;
-      const versionedImageUrl = `${STORAGE_BASE}/${versionedImageName}`;
-      
-      // Quick HEAD request to check if file exists
-      try {
-        const checkResponse = await fetch(versionedImageUrl, { method: 'HEAD' });
-        if (checkResponse.ok) {
-          ogImage = versionedImageUrl;
-          console.log(`Using versioned OG image: ${versionedImageName}`);
-        } else {
-          console.log(`Versioned image not found (${versionedImageName}), using default`);
+
+    if (versionParam) {
+      const safeV = slugifyVersion(versionParam);
+      if (safeV) {
+        const versionedImageName = `holders_og_${safeV}.png`;
+        const versionedImageUrl = `${STORAGE_BASE}/${versionedImageName}`;
+        try {
+          const checkResponse = await fetch(versionedImageUrl, { method: 'HEAD' });
+          if (checkResponse.ok) {
+            ogImage = versionedImageUrl;
+            console.log(`Using versioned OG image: ${versionedImageName}`);
+          } else {
+            console.log(`Versioned image not found (${versionedImageName}), using default`);
+          }
+        } catch {
+          console.log(`Failed to check versioned image, using default`);
         }
-      } catch {
-        console.log(`Failed to check versioned image, using default`);
       }
     }
 
