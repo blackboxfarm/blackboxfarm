@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Coins, DollarSign, Trash2, RefreshCw, ArrowLeftRight, Percent, Hash } from "lucide-react";
+import { Coins, DollarSign, Trash2, RefreshCw, ArrowLeftRight, Percent, Hash, Flame } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
@@ -49,6 +49,7 @@ export function WalletTokenManager({
   const [tokens, setTokens] = useState<TokenBalance[]>(initialTokens);
   const [isLoading, setIsLoading] = useState(false);
   const [sellLoading, setSellLoading] = useState<Set<string>>(new Set());
+  const [burnLoading, setBurnLoading] = useState<Set<string>>(new Set());
   const [convertLoading, setConvertLoading] = useState(false);
   const [sellAmounts, setSellAmounts] = useState<Record<string, string>>({});
   const [sellTypes, setSellTypes] = useState<Record<string, 'all' | 'percentage' | 'amount' | 'tokens'>>({});
@@ -609,6 +610,64 @@ export function WalletTokenManager({
     }
   };
 
+  // Burn a token (destroy it and reclaim rent from the token account)
+  const burnToken = async (token: TokenBalance) => {
+    if (token.mint === 'So11111111111111111111111111111111111111112') {
+      toast({
+        title: "Cannot burn SOL",
+        description: "SOL is the native token and cannot be burned.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setBurnLoading(prev => new Set(prev).add(token.mint));
+    
+    try {
+      toast({
+        title: "Burning token...",
+        description: `Burning ${token.uiAmount.toFixed(4)} ${token.symbol} and reclaiming rent...`,
+      });
+
+      const { data, error } = await supabase.functions.invoke('burn-token', {
+        body: {
+          wallet_id: walletId,
+          wallet_source: 'blackbox_wallets', // This will be determined dynamically if needed
+          token_mint: token.mint,
+          close_account: true
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "Token burned! 🔥",
+        description: `Burned ${token.symbol} and reclaimed ~0.002 SOL rent. TX: ${data?.signature?.slice(0, 8)}...`,
+      });
+
+      // Refresh token list
+      setTimeout(() => {
+        loadTokenBalances();
+        onTokensSold?.();
+      }, 2000);
+
+    } catch (error: any) {
+      console.error("Burn failed:", error);
+      toast({
+        title: "Burn failed",
+        description: error.message || "Failed to burn token",
+        variant: "destructive"
+      });
+    } finally {
+      setBurnLoading(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(token.mint);
+        return newSet;
+      });
+    }
+  };
+
   return (
     <Card className="mt-4">
       <CardHeader>
@@ -803,6 +862,48 @@ export function WalletTokenManager({
                           {sellTypes[token.mint] === 'all' ? 'Sell All' : 'Sell'}
                           {sellTypes[token.mint] === 'all' && ` (${formatUsdValue(token.usdValue || 0)})`}
                         </Button>
+                        
+                        {/* Burn button - especially useful for worthless/illiquid tokens */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={burnLoading.has(token.mint)}
+                              className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20"
+                              title="Burn token and reclaim rent (~0.002 SOL)"
+                            >
+                              {burnLoading.has(token.mint) ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Flame className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>🔥 Burn {token.symbol}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will <strong>permanently destroy</strong> {token.uiAmount.toFixed(4)} {token.symbol} and close the token account.
+                                <br /><br />
+                                <strong>You'll reclaim ~0.002 SOL</strong> from the closed account rent.
+                                <br /><br />
+                                Use this for worthless/dead tokens that can't be sold (no liquidity).
+                                <br /><br />
+                                <span className="text-destructive font-medium">This action cannot be undone!</span>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => burnToken(token)} 
+                                className="bg-orange-600 text-white hover:bg-orange-700"
+                              >
+                                🔥 Burn Token
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                   )}
