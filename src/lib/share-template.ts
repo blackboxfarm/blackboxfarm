@@ -80,6 +80,7 @@ export const TEMPLATE_VARIABLES = [
   { var: '{healthGrade}', desc: 'Grade (A+, B+, etc)' },
   { var: '{healthScore}', desc: 'Score (0-100)' },
   { var: '{timestamp}', desc: 'Current UTC timestamp' },
+  { var: '{comment1}', desc: 'Milestone comment (Intel posts)' },
   { var: '{ai_summary}', desc: 'AI-generated 1-2 sentence interpretation (when enabled)' },
   { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
 ];
@@ -99,6 +100,11 @@ export interface TokenShareData {
   retail: number;      // $1-$199 (legacy)
   healthGrade: string;
   healthScore: number;
+
+  // Optional Intel/AI enhancements (used by Intel XBot + manual admin posting)
+  comment1?: string;
+  aiSummary?: string;
+  lifecycle?: string;
 }
 
 export interface TemplateRecord {
@@ -252,6 +258,10 @@ export function processTemplate(template: string, data: TokenShareData): string 
   
   // Sanitize URL-like names to prevent Twitter hijacking the OG preview
   const safeName = sanitizeUrlLikeName(data.name);
+
+  const comment1 = data.comment1 ?? '';
+  const aiSummary = data.aiSummary ?? '';
+  const lifecycle = data.lifecycle ?? '';
   
   return template
     .replace(/\{ticker\}/g, data.ticker)
@@ -268,7 +278,14 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{dust\}/g, data.dustCount.toLocaleString())
     .replace(/\{healthGrade\}/g, data.healthGrade)
     .replace(/\{healthScore\}/g, data.healthScore.toString())
-    .replace(/\{timestamp\}/g, utcTimestamp);
+    .replace(/\{timestamp\}/g, utcTimestamp)
+    // Intel/AI variables
+    .replace(/\{comment1\}/g, comment1)
+    .replace(/\{COMMENT1\}/g, comment1)
+    .replace(/\{ai_summary\}/g, aiSummary)
+    .replace(/\{AI_SUMMARY\}/g, aiSummary)
+    .replace(/\{lifecycle\}/g, lifecycle)
+    .replace(/\{LIFECYCLE\}/g, lifecycle);
 }
 
 // Get share URL with token address

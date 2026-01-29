@@ -84,6 +84,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [isPosting, setIsPosting] = useState(false);
   const [fetchedStats, setFetchedStats] = useState<TokenStats | null>(null);
   const [granularTiers, setGranularTiers] = useState<GranularTierCounts | null>(null);
+  const [aiMeta, setAiMeta] = useState<{ aiSummary: string; lifecycle: string } | null>(null);
 
   // Intel XBot status
   const [cronStatus, setCronStatus] = useState<CronStatus>({
@@ -264,6 +265,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     retail: tokenStats.activeCount,
     healthGrade: tokenStats.healthGrade,
     healthScore: tokenStats.healthScore,
+    // Prevent raw {comment1} from leaking into manual/admin posts.
+    comment1: ' : Manual post',
+    aiSummary: aiMeta?.aiSummary ?? '',
+    lifecycle: aiMeta?.lifecycle ?? '',
   };
 
   const handleFetch = async () => {
@@ -273,6 +278,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     }
 
     setIsFetching(true);
+    setAiMeta(null);
     try {
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
         body: { tokenMint: tokenMint.trim() }
@@ -323,6 +329,36 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
       setFetchedStats(stats);
       setGranularTiers(granular);
+
+      // If the active Intel template uses AI vars, fetch the AI abbreviated summary + lifecycle.
+      const activeIntelText = templates[activeIntelTemplate] || '';
+      const wantsAI =
+        activeIntelText.includes('{ai_summary}') ||
+        activeIntelText.includes('{AI_SUMMARY}') ||
+        activeIntelText.includes('{lifecycle}') ||
+        activeIntelText.includes('{LIFECYCLE}');
+
+      if (wantsAI) {
+        try {
+          const { data: aiData, error: aiError } = await supabase.functions.invoke('token-ai-interpreter', {
+            body: { reportData: data, tokenMint: tokenMint.trim() },
+          });
+          if (aiError) throw aiError;
+
+          const summary = aiData?.interpretation?.abbreviated_summary;
+          const lifecycle = aiData?.interpretation?.lifecycle?.stage;
+
+          setAiMeta({
+            aiSummary: typeof summary === 'string' ? summary : '',
+            lifecycle: typeof lifecycle === 'string' ? lifecycle : '',
+          });
+        } catch (aiErr: any) {
+          console.error('AI fetch error:', aiErr);
+          // Don't fail the whole fetch; just omit AI fields.
+          setAiMeta({ aiSummary: '', lifecycle: '' });
+        }
+      }
+
       toast.success(`Fetched data for $${stats.symbol}`);
     } catch (err: any) {
       console.error('Fetch error:', err);
