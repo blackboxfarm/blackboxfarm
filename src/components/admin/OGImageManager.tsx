@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Image, Trash2, ExternalLink, Copy, RefreshCw, Plus, Pencil, Check, X } from 'lucide-react';
+import { Image, Trash2, ExternalLink, Copy, RefreshCw, Plus, Pencil, Check, X, Star } from 'lucide-react';
 
 interface OGImageFile {
   name: string;
@@ -17,6 +17,7 @@ export function OGImageManager() {
   const [images, setImages] = useState<OGImageFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [settingDefault, setSettingDefault] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const [nickname, setNickname] = useState('');
@@ -155,6 +156,37 @@ export function OGImageManager() {
     }
   };
 
+  const handleSetAsDefault = async (fileName: string, version: string) => {
+    if (!confirm(`Set "${version}" as the default OG image?\n\nThis will replace the current default image that Twitter/Discord/etc. show when sharing.`)) {
+      return;
+    }
+
+    setSettingDefault(version);
+    try {
+      // Download the versioned image
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('OG')
+        .download(fileName);
+
+      if (downloadError) throw downloadError;
+
+      // Upload as the default image (holders_og.png)
+      const { error: uploadError } = await supabase.storage
+        .from('OG')
+        .upload('holders_og.png', fileData, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      toast.success(`"${version}" is now the default OG image`);
+      fetchImages();
+    } catch (error: any) {
+      console.error('Set as default failed:', error);
+      toast.error(error.message || 'Failed to set as default');
+    } finally {
+      setSettingDefault(null);
+    }
+  };
+
   const handleDelete = async (fileName: string) => {
     if (fileName === 'holders_og.png') {
       toast.error('Cannot delete default');
@@ -262,7 +294,10 @@ export function OGImageManager() {
                   ) : (
                     <div className="flex items-center gap-2">
                       {img.isDefault ? (
-                        <span className="text-sm text-muted-foreground">Default (fallback)</span>
+                        <span className="inline-flex items-center gap-1.5 text-sm text-amber-500">
+                          <Star className="w-3 h-3 fill-amber-500" />
+                          Default
+                        </span>
                       ) : (
                         <code className="text-sm font-mono bg-muted px-1.5 py-0.5 rounded">?v={img.version}</code>
                       )}
@@ -280,6 +315,20 @@ export function OGImageManager() {
                   </Button>
                   {!img.isDefault && (
                     <>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-7 w-7 text-amber-500 hover:text-amber-400" 
+                        onClick={() => handleSetAsDefault(img.name, img.version!)}
+                        disabled={settingDefault === img.version}
+                        title="Set as Default"
+                      >
+                        {settingDefault === img.version ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Star className="w-3 h-3" />
+                        )}
+                      </Button>
                       <Button 
                         size="icon" 
                         variant="ghost" 
