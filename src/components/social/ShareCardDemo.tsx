@@ -266,7 +266,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     healthGrade: tokenStats.healthGrade,
     healthScore: tokenStats.healthScore,
     // Prevent raw {comment1} from leaking into manual/admin posts.
-    comment1: ' : Manual post',
+    comment1: '-On the Radar-',
     aiSummary: aiMeta?.aiSummary ?? '',
     lifecycle: aiMeta?.lifecycle ?? '',
   };
