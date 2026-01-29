@@ -1,11 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Flame, Search, Trash2, Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { Flame, Search, Trash2, Loader2, ExternalLink, ChevronDown, Copy, Wallet } from "lucide-react";
+import { RentReclaimerWalletManager } from "./RentReclaimerWalletManager";
 
 interface ScanResult {
   wallet_pubkey: string;
@@ -47,11 +50,60 @@ interface CleanResponse {
   results: CleanResult[];
 }
 
+interface SystemWallet {
+  pubkey: string;
+  source: string;
+  nickname?: string;
+}
+
 export function TokenAccountCleaner() {
+  const [activeTab, setActiveTab] = useState("scan");
   const [isScanning, setIsScanning] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [scanResults, setScanResults] = useState<ScanResponse | null>(null);
   const [cleanResults, setCleanResults] = useState<CleanResponse | null>(null);
+  const [systemWallets, setSystemWallets] = useState<SystemWallet[]>([]);
+  const [walletsExpanded, setWalletsExpanded] = useState(false);
+
+  // Load system wallets for the wallet manager
+  const loadSystemWallets = async () => {
+    try {
+      const sources = [
+        { table: 'super_admin_wallets', label: 'Super Admin' },
+        { table: 'blackbox_wallets', label: 'Blackbox' },
+        { table: 'wallet_pools', label: 'Wallet Pool' },
+        { table: 'airdrop_wallets', label: 'Airdrop' },
+        { table: 'mega_whale_auto_buy_wallets', label: 'Mega Whale' },
+      ];
+
+      const wallets: SystemWallet[] = [];
+      
+      for (const src of sources) {
+        const { data } = await supabase
+          .from(src.table as any)
+          .select('pubkey, nickname')
+          .eq('is_active', true);
+        
+        if (data) {
+          for (const w of data) {
+            wallets.push({
+              pubkey: (w as any).pubkey,
+              source: src.label,
+              nickname: (w as any).nickname,
+            });
+          }
+        }
+      }
+      
+      setSystemWallets(wallets);
+    } catch (err) {
+      console.error("Failed to load system wallets:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadSystemWallets();
+  }, []);
 
   const handleScan = async () => {
     setIsScanning(true);
@@ -66,7 +118,7 @@ export function TokenAccountCleaner() {
       if (error) throw error;
       if (!data) throw new Error("No response from edge function");
       
-      // Normalize response - handle both camelCase and snake_case
+      // Normalize response
       const normalized: ScanResponse = {
         action: data.action || 'scan',
         walletsScanned: data.walletsScanned ?? data.wallets_scanned ?? 0,
@@ -113,7 +165,7 @@ export function TokenAccountCleaner() {
       if (error) throw error;
       if (!data) throw new Error("No response from edge function");
       
-      // Normalize response - handle both camelCase and snake_case
+      // Normalize response
       const normalized: CleanResponse = {
         action: data.action || 'clean_all',
         wallets_processed: data.wallets_processed ?? data.walletsProcessed ?? 0,
@@ -137,7 +189,7 @@ export function TokenAccountCleaner() {
       };
       
       setCleanResults(normalized);
-      setScanResults(null); // Clear scan results after cleaning
+      setScanResults(null);
       
       if (normalized.total_accounts_closed > 0) {
         toast.success(`Reclaimed ${normalized.total_sol_recovered.toFixed(4)} SOL from ${normalized.total_accounts_closed} accounts!`);
@@ -152,7 +204,10 @@ export function TokenAccountCleaner() {
     }
   };
 
-  const shortenAddress = (addr?: string) => addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : 'Unknown';
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
 
   return (
     <Card>
@@ -197,162 +252,254 @@ export function TokenAccountCleaner() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Summary Stats */}
-        {scanResults && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold">{scanResults.walletsScanned}</div>
-              <div className="text-xs text-muted-foreground">Wallets Scanned</div>
-            </div>
-            <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold">{scanResults.walletsWithEmptyAccounts}</div>
-              <div className="text-xs text-muted-foreground">With Empty Accounts</div>
-            </div>
-            <div className="bg-orange-500/10 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-orange-500">{scanResults.totalEmptyAccounts}</div>
-              <div className="text-xs text-muted-foreground">Total Empty Accounts</div>
-            </div>
-            <div className="bg-green-500/10 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-green-500">
-                {scanResults.totalRecoverableSol.toFixed(4)} SOL
-              </div>
-              <div className="text-xs text-muted-foreground">Recoverable</div>
-            </div>
-          </div>
-        )}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="scan">
+              <Search className="h-4 w-4 mr-2" />
+              Scan & Clean
+            </TabsTrigger>
+            <TabsTrigger value="wallets">
+              <Wallet className="h-4 w-4 mr-2" />
+              Manage Wallets
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Clean Results */}
-        {cleanResults && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-muted/50 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold">{cleanResults.wallets_processed}</div>
-                <div className="text-xs text-muted-foreground">Wallets Processed</div>
-              </div>
-              <div className="bg-orange-500/10 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-orange-500">{cleanResults.total_accounts_closed}</div>
-                <div className="text-xs text-muted-foreground">Accounts Closed</div>
-              </div>
-              <div className="bg-green-500/10 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-green-500">
-                  {cleanResults.total_sol_recovered.toFixed(4)} SOL
+          <TabsContent value="scan" className="space-y-4">
+            {/* Summary Stats */}
+            {scanResults && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-muted/50 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold">{scanResults.walletsScanned}</div>
+                  <div className="text-xs text-muted-foreground">Wallets Scanned</div>
                 </div>
-                <div className="text-xs text-muted-foreground">Recovered</div>
-              </div>
-              {cleanResults.consolidation && (
-                <div className="bg-amber-500/10 rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-amber-500">
-                    {cleanResults.consolidation.total_consolidated.toFixed(4)} SOL
-                  </div>
-                  <div className="text-xs text-muted-foreground">→ FlipIt Wallet</div>
+                <div className="bg-muted/50 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold">{scanResults.walletsWithEmptyAccounts}</div>
+                  <div className="text-xs text-muted-foreground">With Empty Accounts</div>
                 </div>
-              )}
-            </div>
-
-            {/* Consolidation Summary */}
-            {cleanResults.consolidation && cleanResults.consolidation.total_consolidated > 0 && (
-              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Flame className="h-5 w-5 text-amber-500" />
-                    <span className="font-medium">Consolidated to FlipIt Wallet</span>
+                <div className="bg-orange-500/10 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-500">{scanResults.totalEmptyAccounts}</div>
+                  <div className="text-xs text-muted-foreground">Total Empty Accounts</div>
+                </div>
+                <div className="bg-green-500/10 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-green-500">
+                    {scanResults.totalRecoverableSol.toFixed(4)} SOL
                   </div>
-                  <div className="flex items-center gap-3">
-                    <code className="text-xs bg-background/50 px-2 py-1 rounded">
-                      {shortenAddress(cleanResults.consolidation.target_wallet)}
-                    </code>
-                    <span className="text-amber-500 font-bold">
-                      +{cleanResults.consolidation.total_consolidated.toFixed(4)} SOL
-                    </span>
-                    {cleanResults.consolidation.signatures.length > 0 && (
-                      <a
-                        href={`https://solscan.io/tx/${cleanResults.consolidation.signatures[0]}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    )}
-                  </div>
+                  <div className="text-xs text-muted-foreground">Recoverable</div>
                 </div>
               </div>
             )}
 
-            {/* Per-wallet results */}
-            <ScrollArea className="h-[300px]">
-              <div className="space-y-2">
-                {cleanResults.results.filter(r => r.accounts_closed > 0 || r.errors.length > 0).map((result, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="text-xs">
-                        {result.source}
-                      </Badge>
-                      <code className="text-xs">{shortenAddress(result.wallet_pubkey)}</code>
+            {/* Clean Results */}
+            {cleanResults && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-muted/50 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold">{cleanResults.wallets_processed}</div>
+                    <div className="text-xs text-muted-foreground">Wallets Processed</div>
+                  </div>
+                  <div className="bg-orange-500/10 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-orange-500">{cleanResults.total_accounts_closed}</div>
+                    <div className="text-xs text-muted-foreground">Accounts Closed</div>
+                  </div>
+                  <div className="bg-green-500/10 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-green-500">
+                      {cleanResults.total_sol_recovered.toFixed(4)} SOL
                     </div>
-                    <div className="flex items-center gap-3">
-                      {result.accounts_closed > 0 && (
-                        <span className="text-green-500 text-sm">
-                          +{result.sol_recovered.toFixed(4)} SOL ({result.accounts_closed} accounts)
-                        </span>
-                      )}
-                      {result.errors.length > 0 && (
-                        <span className="text-destructive text-xs">
-                          {result.errors.length} errors
-                        </span>
-                      )}
-                      {result.signatures.length > 0 && (
-                        <a
-                          href={`https://solscan.io/tx/${result.signatures[0]}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      )}
+                    <div className="text-xs text-muted-foreground">Recovered</div>
+                  </div>
+                  {cleanResults.consolidation && (
+                    <div className="bg-amber-500/10 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-amber-500">
+                        {cleanResults.consolidation.total_consolidated.toFixed(4)} SOL
+                      </div>
+                      <div className="text-xs text-muted-foreground">→ FlipIt Wallet</div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        )}
-
-        {/* Scan Results Detail */}
-        {scanResults && scanResults.results.length > 0 && !cleanResults && (
-          <ScrollArea className="h-[300px]">
-            <div className="space-y-2">
-              {scanResults.results.map((result, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="text-xs">
-                      {result.source}
-                    </Badge>
-                    <code className="text-xs">{shortenAddress(result.wallet_pubkey)}</code>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-orange-500 text-sm">
-                      {result.empty_accounts.length} empty
-                    </span>
-                    <span className="text-green-500 text-sm">
-                      ~{result.total_recoverable_sol.toFixed(4)} SOL
-                    </span>
-                  </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
-        )}
 
-        {/* Empty state */}
-        {!scanResults && !cleanResults && (
-          <div className="text-center py-8 text-muted-foreground">
-            <Flame className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <p>Click "Scan All Wallets" to find empty token accounts</p>
-            <p className="text-xs mt-2">Each empty account holds ~0.002 SOL in rent that can be reclaimed</p>
-          </div>
-        )}
+                {/* Consolidation Summary */}
+                {cleanResults.consolidation && cleanResults.consolidation.total_consolidated > 0 && (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Flame className="h-5 w-5 text-amber-500" />
+                        <span className="font-medium">Consolidated to FlipIt Wallet</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <code className="text-xs bg-background/50 px-2 py-1 rounded font-mono">
+                          {cleanResults.consolidation.target_wallet}
+                        </code>
+                        <span className="text-amber-500 font-bold">
+                          +{cleanResults.consolidation.total_consolidated.toFixed(4)} SOL
+                        </span>
+                        {cleanResults.consolidation.signatures.length > 0 && (
+                          <a
+                            href={`https://solscan.io/tx/${cleanResults.consolidation.signatures[0]}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Per-wallet results */}
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-2">
+                    {cleanResults.results.filter(r => r.accounts_closed > 0 || r.errors.length > 0).map((result, i) => (
+                      <Collapsible key={i}>
+                        <CollapsibleTrigger className="w-full">
+                          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <Badge variant="outline" className="text-xs">
+                                {result.source}
+                              </Badge>
+                              <code className="text-xs font-mono">{result.wallet_pubkey}</code>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(result.wallet_pubkey);
+                                }}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {result.accounts_closed > 0 && (
+                                <span className="text-green-500 text-sm">
+                                  +{result.sol_recovered.toFixed(4)} SOL ({result.accounts_closed} accounts)
+                                </span>
+                              )}
+                              {result.errors.length > 0 && (
+                                <span className="text-destructive text-xs">
+                                  {result.errors.length} errors
+                                </span>
+                              )}
+                              {result.signatures.length > 0 && (
+                                <a
+                                  href={`https://solscan.io/tx/${result.signatures[0]}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-muted-foreground hover:text-foreground"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              )}
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="px-3 py-2 space-y-1 text-xs">
+                            {result.signatures.map((sig, j) => (
+                              <div key={j} className="flex items-center gap-2">
+                                <span className="text-muted-foreground">TX:</span>
+                                <a
+                                  href={`https://solscan.io/tx/${sig}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-mono"
+                                >
+                                  {sig}
+                                </a>
+                              </div>
+                            ))}
+                            {result.errors.map((err, j) => (
+                              <div key={j} className="text-destructive">
+                                Error: {err}
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+
+            {/* Scan Results Detail */}
+            {scanResults && scanResults.results.length > 0 && !cleanResults && (
+              <ScrollArea className="h-[300px]">
+                <div className="space-y-2">
+                  {scanResults.results.map((result, i) => (
+                    <Collapsible key={i}>
+                      <CollapsibleTrigger className="w-full">
+                        <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="text-xs">
+                              {result.source}
+                            </Badge>
+                            <code className="text-xs font-mono">{result.wallet_pubkey}</code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(result.wallet_pubkey);
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-orange-500 text-sm">
+                              {result.empty_accounts.length} empty
+                            </span>
+                            <span className="text-green-500 text-sm">
+                              ~{result.total_recoverable_sol.toFixed(4)} SOL
+                            </span>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="px-3 py-2 space-y-1 text-xs">
+                          {result.empty_accounts.slice(0, 10).map((acc, j) => (
+                            <div key={j} className="flex items-center gap-2 text-muted-foreground">
+                              <span>Mint:</span>
+                              <code className="font-mono">{acc.mint}</code>
+                            </div>
+                          ))}
+                          {result.empty_accounts.length > 10 && (
+                            <div className="text-muted-foreground">
+                              ... and {result.empty_accounts.length - 10} more
+                            </div>
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+
+            {/* Empty state */}
+            {!scanResults && !cleanResults && (
+              <div className="text-center py-8 text-muted-foreground">
+                <Flame className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p>Click "Scan All Wallets" to find empty token accounts</p>
+                <p className="text-xs mt-2">Each empty account holds ~0.002 SOL in rent that can be reclaimed</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="wallets">
+            <RentReclaimerWalletManager 
+              systemWallets={systemWallets} 
+              onWalletsChange={loadSystemWallets}
+            />
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

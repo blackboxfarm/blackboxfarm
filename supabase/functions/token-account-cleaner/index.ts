@@ -176,6 +176,7 @@ const WALLET_SOURCES = [
   { table: 'wallet_pools', pubkeyCol: 'pubkey', secretCol: 'secret_key', activeCol: 'is_active', label: 'Wallet Pool', encrypted: false },
   { table: 'airdrop_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Airdrop', encrypted: true },
   { table: 'mega_whale_auto_buy_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Mega Whale', encrypted: true },
+  { table: 'rent_reclaimer_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Custom', encrypted: true },
 ];
 
 // Rent per token account (approximately 0.00203 SOL)
