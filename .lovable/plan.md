@@ -1,146 +1,91 @@
 
-# Twitter Scanner: Single Token per 16-Minute Cycle
 
-## Overview
-Redesign the Twitter Token Mention Scanner to work within Twitter's free tier limit (1 request per 15 minutes) by searching for **one token at a time**, rotating through tokens every 16 minutes.
+## Plan: OG Image Default Toggle + V-Parameter Investigation
 
-## New Logic Flow
+Based on my investigation, I've identified why the `v=` parameter isn't changing the OG image on Twitter and how to fix it.
+
+### Problem Found
+
+The `v=` parameter **is correctly handled** in the edge function code, but **Twitter never reaches it**. Here's what happens:
+
+1. Twitter scrapes `https://blackbox.farm/holders?v=newimage`
+2. Your static hosting serves `index.html` (which has the hardcoded default image)
+3. Twitter reads the hardcoded image, ignores the edge function
+
+The code in `holders-og` edge function correctly:
+- Reads `v=` parameter 
+- Looks for `holders_og_[nickname].png`
+- Falls back to `holders_og.png` if not found
+
+But it only works if Twitter hits the edge function URL directly.
+
+### Hardcoded Locations Found
+
+| File | Issue |
+|------|-------|
+| `index.html` | 4 hardcoded references to `holders_og.png` |
+| `public/holders-og/index.html` | 4 hardcoded references to `holders_og.png` |
+| Edge function | Dynamic (correct) |
+
+### Solution: Add "Set as Default" Toggle
+
+Since Twitter will always hit the static HTML first, the most reliable solution is to let you **swap which image is the default** from the UI:
+
+**What You'll Be Able to Do:**
+- Click a "Set as Default" button on any uploaded image
+- That image gets copied to `holders_og.png` (replacing the current default)
+- Twitter/Discord/etc. will immediately show the new image
+
+**UI Changes:**
+- Add a star/crown icon button next to each non-default image
+- Show "Default" badge on the current default image
+- Clicking the button on any image promotes it to default
+- Confirmation dialog before replacing
+
+### Technical Details
 
 ```text
-Every 16 minutes:
-┌────────────────────────────────────────────────────────────────┐
-│  1. SELECT strongest token not searched in last 2 hours       │
-│     → Score by: times_seen, health_grade, boost_count, recency │
-│                                                                │
-│  2. Search Twitter for ONLY that one token                    │
-│                                                                │
-│  3. Store all results, sorted by quality                       │
-│                                                                │
-│  4. Mark token as "last_twitter_scanned_at = now()"           │
-│                                                                │
-│  5. Wait for next cron trigger (16 mins)                       │
-│     → Pick next strongest token (different from before)        │
-└────────────────────────────────────────────────────────────────┘
-
-After 1 hour = 4 different tokens, each with their own tweet results
+OGImageManager.tsx Changes:
+┌─────────────────────────────────────────────────────────┐
+│ [Thumbnail] ?v=newpromo  [Copy][Open][Edit][Set Default]│
+│ [Thumbnail] Default ⭐   [Copy][Open]                   │
+│ [Thumbnail] ?v=winter    [Copy][Open][Edit][Set Default]│
+└─────────────────────────────────────────────────────────┘
 ```
 
-## Database Changes
+**New "Set as Default" function:**
+1. Download the selected versioned image
+2. Upload it as `holders_og.png` (upsert)
+3. Refresh the list to show the new default thumbnail
+4. Toast success message
 
-### New Table: `twitter_scanner_state`
-Track which tokens have been scanned and when:
+### Files to Modify
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `id` | uuid | Primary key |
-| `token_mint` | text | Token address (unique) |
-| `symbol` | text | Token symbol |
-| `last_scanned_at` | timestamptz | When we last searched Twitter for this token |
-| `scan_count` | int | How many times we've scanned this token |
-| `virality_score` | int | Calculated score for prioritization |
-| `source` | text | Where token came from (dex_trigger, queue, seen) |
+1. **`src/components/admin/OGImageManager.tsx`**
+   - Add `handleSetAsDefault` function
+   - Add "Set as Default" button with star icon
+   - Update UI to show which image is current default
+   - Add confirmation dialog
 
-### Token Selection Query
-Pick the strongest token that hasn't been scanned in the last 2 hours:
+### Why This Approach
 
-```sql
-SELECT token_mint, symbol, virality_score
-FROM twitter_scanner_state
-WHERE last_scanned_at IS NULL 
-   OR last_scanned_at < NOW() - INTERVAL '2 hours'
-ORDER BY virality_score DESC, last_scanned_at ASC NULLS FIRST
-LIMIT 1
-```
+- **No server changes needed** - works with existing static hosting
+- **Instant effect** - Twitter cache aside, the next scrape shows the new image
+- **Simple UX** - one-click to change what Twitter shows
+- **Keeps versioning** - you can still use `v=` for edge function direct links
 
-### Virality Score Calculation
-Combines multiple signals:
+### Alternative Consideration
 
-| Source | Score Boost |
-|--------|-------------|
-| DEX trigger (boost_100+) | +1000 |
-| DEX trigger (dex_paid) | +500 |
-| From post queue | +300 |
-| Health grade A | +200 |
-| Health grade B | +100 |
-| Each time_seen | +50 |
+If you want `v=` to work on Twitter directly, that would require:
+- Custom domain routing rules (not available in Lovable)
+- Edge middleware to intercept `/holders` requests and proxy to the edge function
+- This is significantly more complex and may not be possible with current hosting
 
-## Edge Function Changes
+### Testing After Implementation
 
-### `twitter-token-mention-scanner/index.ts`
+1. Upload a new test image with nickname `test123`
+2. Click "Set as Default" on that image
+3. Verify `holders_og.png` in storage shows the new image
+4. Use Twitter Card Validator to verify the change
+5. Clear Twitter's cache or wait for it to expire
 
-**Remove:**
-- `MAX_TOKENS_PER_RUN` (was 10)
-- `API_DELAY_MS` (was 10000ms)
-- Loop through multiple tokens
-
-**Add:**
-1. Query `twitter_scanner_state` for single best token
-2. If no token available, populate state table from sources:
-   - `holders_intel_dex_triggers` (boost/paid tokens)
-   - `holders_intel_post_queue` (recent queue items)
-   - `holders_intel_seen_tokens` (seen with good grades)
-3. Make **ONE** Twitter search request
-4. Update `last_scanned_at` on the token
-
-### Simplified Flow
-```text
-START
-  ↓
-Check twitter_scanner_state for best unscanned token
-  ↓
-If empty → Populate from dex_triggers, queue, seen_tokens
-  ↓
-Pick TOP 1 by virality_score where last_scanned_at > 2h ago
-  ↓
-Search Twitter for $SYMBOL OR contract_prefix
-  ↓
-Store all results in twitter_token_mentions
-  ↓
-Update token's last_scanned_at = NOW()
-  ↓
-END (wait for next cron in 16 mins)
-```
-
-## Cron Schedule Change
-
-Current: Unknown/manual
-New: Every 16 minutes
-
-```sql
-SELECT cron.schedule(
-  'twitter-scanner-16min',
-  '*/16 * * * *',  -- Every 16 minutes
-  $$
-  SELECT net.http_post(
-    url := 'https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/twitter-token-mention-scanner',
-    headers := '{"Authorization": "Bearer <anon_key>"}'::jsonb
-  );
-  $$
-);
-```
-
-## Result: After 1 Hour
-
-| Time | Token Searched | Results |
-|------|----------------|---------|
-| :00 | $COPPEGG (boost 100) | 15 tweets |
-| :16 | $HOPE (dex_paid) | 8 tweets |
-| :32 | $CLICK (boost 500) | 12 tweets |
-| :48 | $CHICKEN (grade A) | 6 tweets |
-
-**4 sets of sorted tweet results ready for review in admin panel**
-
-## Admin UI Enhancement
-
-Update `TwitterScrapesView.tsx` to show:
-- **Current token being tracked** (next up for scan)
-- **Last scanned token** with timestamp
-- **Tokens in queue** with their virality scores
-- Group results by token for easy review
-
-## Technical Implementation Summary
-
-1. **Create migration**: Add `twitter_scanner_state` table
-2. **Update edge function**: Single-token logic with state tracking
-3. **Schedule cron**: 16-minute interval
-4. **Update admin UI**: Show scanner state and grouped results
