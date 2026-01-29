@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -478,6 +479,42 @@ export function MasterWalletsDashboard() {
     }
   };
 
+  // Toggle wallet active status
+  const toggleWalletActive = async (wallet: MasterWallet) => {
+    const newStatus = !wallet.isActive;
+    
+    // Optimistically update UI
+    setWallets(prev => prev.map(w => 
+      w.id === wallet.id ? { ...w, isActive: newStatus } : w
+    ));
+
+    try {
+      // Different tables have different column names
+      const { error } = await supabase
+        .from(wallet.sourceTable as any)
+        .update({ is_active: newStatus })
+        .eq('id', wallet.id);
+
+      if (error) throw error;
+
+      toast({
+        title: newStatus ? "✅ Wallet Activated" : "⏸️ Wallet Deactivated",
+        description: `${wallet.pubkey.slice(0, 8)}... is now ${newStatus ? 'active' : 'inactive'}`,
+      });
+    } catch (error: any) {
+      // Revert on failure
+      setWallets(prev => prev.map(w => 
+        w.id === wallet.id ? { ...w, isActive: !newStatus } : w
+      ));
+      console.error('[MasterWallets] Toggle active failed:', error);
+      toast({
+        title: "Toggle Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   // Filter wallets based on search, tab, and history filter
   const filteredWallets = wallets.filter(wallet => {
     const matchesSearch = 
@@ -682,10 +719,17 @@ export function MasterWalletsDashboard() {
                           </Badge>
                         )}
                         
-                        {/* Active Status */}
-                        <Badge variant={wallet.isActive ? "default" : "secondary"}>
-                          {wallet.isActive ? '✅ Active' : '⏸️ Inactive'}
-                        </Badge>
+                        {/* Active Status Toggle */}
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={wallet.isActive}
+                            onCheckedChange={() => toggleWalletActive(wallet)}
+                            className="data-[state=checked]:bg-green-600"
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            {wallet.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
                         
                         {/* Label if exists */}
                         {wallet.label && (
