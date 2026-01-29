@@ -25,6 +25,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
+import { CustomWalletManager } from './CustomWalletManager';
 
 interface TokenBalance {
   mint: string;
@@ -782,6 +783,9 @@ export function MasterWalletsDashboard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Import Custom Wallets Section */}
+      <CustomWalletManager onWalletsChange={loadAllWallets} />
 
       {/* Legend */}
       <Card>
