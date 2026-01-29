@@ -1,66 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SecureStorage } from "../_shared/encryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Decryption function matching encrypt-data logic
-async function decryptData(encryptedData: string): Promise<string> {
-  // Check if this is AES encrypted data
-  if (encryptedData.startsWith("AES:")) {
-    const keyMaterial = Deno.env.get("ENCRYPTION_KEY");
-    if (!keyMaterial) {
-      throw new Error("ENCRYPTION_KEY required for AES decryption");
-    }
-    
-    try {
-      const encoder = new TextEncoder();
-      const decoder = new TextDecoder();
-      
-      const keyData = encoder.encode(keyMaterial.padEnd(32, '0').slice(0, 32));
-      
-      const key = await crypto.subtle.importKey(
-        "raw",
-        keyData,
-        { name: "AES-GCM" },
-        false,
-        ["decrypt"]
-      );
-      
-      // Remove AES prefix and decode from base64
-      const aesData = encryptedData.substring(4);
-      const combined = new Uint8Array(
-        atob(aesData).split('').map(char => char.charCodeAt(0))
-      );
-      
-      // Extract IV and encrypted data
-      const iv = combined.slice(0, 12);
-      const encrypted = combined.slice(12);
-      
-      // Decrypt
-      const decrypted = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: iv },
-        key,
-        encrypted
-      );
-      
-      return decoder.decode(decrypted);
-    } catch (error) {
-      console.error("AES decryption failed:", error);
-      throw error;
-    }
-  } else {
-    // Fallback to base64 decoding for legacy data
-    try {
-      return atob(encryptedData);
-    } catch (error) {
-      console.error("Base64 decryption failed:", error);
-      // If base64 fails, it might be plain text
-      return encryptedData;
-    }
-  }
+async function decryptWalletSecretAuto(raw: string): Promise<string> {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) throw new Error("Empty wallet secret");
+
+  // Some legacy rows were stored with an `AES:` prefix. Our shared SecureStorage
+  // uses the same AES-256-GCM scheme but expects the raw base64 payload.
+  const payload = trimmed.startsWith("AES:") ? trimmed.slice(4) : trimmed;
+
+  return await SecureStorage.decryptWalletSecret(payload);
 }
 
 // Wallet source configurations
@@ -160,7 +115,7 @@ serve(async (req) => {
     if (sourceConfig.encrypted) {
       // Decrypt the secret using the same logic as encrypt-data
       try {
-        secretKey = await decryptData(rawSecret);
+        secretKey = await decryptWalletSecretAuto(rawSecret);
       } catch (err: any) {
         console.error("[export-wallet-key] Decryption failed:", err.message);
         return new Response(

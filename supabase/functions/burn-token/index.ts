@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SecureStorage } from "../_shared/encryption.ts";
 import { 
   Connection, 
   Keypair, 
@@ -31,49 +32,11 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
-// Decrypt AES-encrypted data
-async function decryptData(encryptedData: string): Promise<string> {
-  if (encryptedData.startsWith("AES:")) {
-    const keyMaterial = Deno.env.get("ENCRYPTION_KEY");
-    if (!keyMaterial) {
-      throw new Error("ENCRYPTION_KEY required for AES decryption");
-    }
-    
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    const keyData = encoder.encode(keyMaterial.padEnd(32, '0').slice(0, 32));
-    
-    const key = await crypto.subtle.importKey(
-      "raw",
-      keyData,
-      { name: "AES-GCM" },
-      false,
-      ["decrypt"]
-    );
-    
-    const aesData = encryptedData.substring(4);
-    const combined = new Uint8Array(
-      atob(aesData).split('').map(char => char.charCodeAt(0))
-    );
-    
-    const iv = combined.slice(0, 12);
-    const encrypted = combined.slice(12);
-    
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: iv },
-      key,
-      encrypted
-    );
-    
-    return decoder.decode(decrypted);
-  }
-  
-  // Fallback to base64
-  try {
-    return atob(encryptedData);
-  } catch {
-    return encryptedData;
-  }
+async function decryptWalletSecretAuto(raw: string): Promise<string> {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) throw new Error("Empty wallet secret");
+  const payload = trimmed.startsWith("AES:") ? trimmed.slice(4) : trimmed;
+  return await SecureStorage.decryptWalletSecret(payload);
 }
 
 function parseKeypair(secret: string): Keypair {
@@ -178,7 +141,7 @@ serve(async (req) => {
 
     let secretKey: string;
     if (isEncrypted) {
-      secretKey = await decryptData(rawSecret);
+      secretKey = await decryptWalletSecretAuto(rawSecret);
     } else {
       secretKey = rawSecret;
     }
