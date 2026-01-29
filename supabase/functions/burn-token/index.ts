@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SecureStorage } from "../_shared/encryption.ts";
+import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
 import { 
   Connection, 
   Keypair, 
@@ -30,13 +30,6 @@ function ok(data: unknown, status = 200) {
 
 function bad(message: string, status = 400) {
   return ok({ error: message }, status);
-}
-
-async function decryptWalletSecretAuto(raw: string): Promise<string> {
-  const trimmed = String(raw ?? "").trim();
-  if (!trimmed) throw new Error("Empty wallet secret");
-  const payload = trimmed.startsWith("AES:") ? trimmed.slice(4) : trimmed;
-  return await SecureStorage.decryptWalletSecret(payload);
 }
 
 function parseKeypair(secret: string): Keypair {
