@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,22 @@ import { toast } from '@/hooks/use-toast';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { CustomWalletManager } from './CustomWalletManager';
+import { SortableWalletCard } from './SortableWalletCard';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 interface TokenBalance {
   mint: string;
@@ -79,6 +95,7 @@ const WALLET_PURPOSE_EMOJIS: Record<string, { emoji: string; label: string }> = 
 
 export function MasterWalletsDashboard() {
   const [wallets, setWallets] = useState<MasterWallet[]>([]);
+  const [walletOrder, setWalletOrder] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
@@ -88,6 +105,18 @@ export function MasterWalletsDashboard() {
   const [isReclaiming, setIsReclaiming] = useState(false);
   const [isConsolidating, setIsConsolidating] = useState(false);
   const { price: solPrice } = useSolPrice();
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Reclaim rent from empty token accounts across all wallets
   const handleReclaimRent = async () => {
@@ -516,23 +545,68 @@ export function MasterWalletsDashboard() {
   };
 
   // Filter wallets based on search, tab, and history filter
-  const filteredWallets = wallets.filter(wallet => {
-    const matchesSearch = 
-      wallet.pubkey.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wallet.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wallet.sourceLabel.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wallet.tokens.some(t => t.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesTab = 
-      activeTab === 'all' ||
-      (activeTab === 'active' && wallet.isActive) ||
-      (activeTab === 'inactive' && !wallet.isActive) ||
-      activeTab === wallet.source;
+  const filteredWallets = useMemo(() => {
+    const filtered = wallets.filter(wallet => {
+      const matchesSearch = 
+        wallet.pubkey.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        wallet.label?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        wallet.sourceLabel.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        wallet.tokens.some(t => t.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      const matchesTab = 
+        activeTab === 'all' ||
+        (activeTab === 'active' && wallet.isActive) ||
+        (activeTab === 'inactive' && !wallet.isActive) ||
+        activeTab === wallet.source;
 
-    const matchesHistory = !showOnlyWithHistory || wallet.hasTransactionHistory || wallet.solBalance > 0;
+      const matchesHistory = !showOnlyWithHistory || wallet.hasTransactionHistory || wallet.solBalance > 0;
 
-    return matchesSearch && matchesTab && matchesHistory;
-  });
+      return matchesSearch && matchesTab && matchesHistory;
+    });
+
+    // Sort: custom order first, then active wallets first, then by balance
+    return filtered.sort((a, b) => {
+      // Check custom order first
+      const aOrderIndex = walletOrder.indexOf(a.id);
+      const bOrderIndex = walletOrder.indexOf(b.id);
+      
+      if (aOrderIndex !== -1 && bOrderIndex !== -1) {
+        return aOrderIndex - bOrderIndex;
+      }
+      if (aOrderIndex !== -1) return -1;
+      if (bOrderIndex !== -1) return 1;
+      
+      // Active wallets first
+      if (a.isActive !== b.isActive) {
+        return a.isActive ? -1 : 1;
+      }
+      
+      // Then by balance (higher first)
+      return b.solBalance - a.solBalance;
+    });
+  }, [wallets, searchTerm, activeTab, showOnlyWithHistory, walletOrder]);
+
+  // Handle drag end
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = filteredWallets.findIndex(w => w.id === active.id);
+      const newIndex = filteredWallets.findIndex(w => w.id === over.id);
+      
+      const newOrder = arrayMove(
+        filteredWallets.map(w => w.id),
+        oldIndex,
+        newIndex
+      );
+      
+      setWalletOrder(newOrder);
+      toast({
+        title: "📋 Order Updated",
+        description: "Wallet order has been changed",
+      });
+    }
+  };
 
   // Count wallets with balance (for history filter)
   const walletsWithBalance = wallets.filter(w => w.solBalance > 0 || w.hasTransactionHistory).length;
@@ -541,6 +615,7 @@ export function MasterWalletsDashboard() {
   const totalSol = filteredWallets.reduce((sum, w) => sum + w.solBalance, 0);
   const totalUsd = totalSol * (solPrice || 0);
   const activeCount = filteredWallets.filter(w => w.isActive).length;
+
 
   return (
     <div className="space-y-6">
@@ -703,155 +778,34 @@ export function MasterWalletsDashboard() {
                 </CardContent>
               </Card>
             ) : (
-              filteredWallets.map((wallet) => (
-                <Card key={wallet.id} className={`transition-all ${!wallet.isActive ? 'opacity-60' : ''}`}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        {/* Source Badge */}
-                        <Badge className={WALLET_SOURCE_CONFIG[wallet.source].color}>
-                          <span className="mr-1">{wallet.sourceEmoji}</span>
-                          {wallet.sourceLabel}
-                        </Badge>
-                        
-                        {/* Purpose Badge */}
-                        {wallet.purpose && (
-                          <Badge variant="outline">
-                            <span className="mr-1">{wallet.purposeEmoji}</span>
-                            {WALLET_PURPOSE_EMOJIS[wallet.purpose]?.label || wallet.purpose}
-                          </Badge>
-                        )}
-                        
-                        {/* Active Status Toggle */}
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={wallet.isActive}
-                            onCheckedChange={() => toggleWalletActive(wallet)}
-                            className="data-[state=checked]:bg-green-600"
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            {wallet.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                        
-                        {/* Label if exists */}
-                        {wallet.label && (
-                          <span className="text-sm font-medium">{wallet.label}</span>
-                        )}
-                        
-                        {/* Linked campaigns */}
-                        {wallet.linkedCampaigns && wallet.linkedCampaigns.length > 0 && (
-                          <Badge variant="outline" className="bg-primary/10">
-                            🎯 {wallet.linkedCampaigns.length} campaign{wallet.linkedCampaigns.length > 1 ? 's' : ''}
-                          </Badge>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {/* Balance display */}
-                        <div className="text-right">
-                          <div className="font-mono font-bold">
-                            {wallet.isLoading ? (
-                              <RefreshCw className="h-4 w-4 animate-spin inline" />
-                            ) : (
-                              <>
-                                {wallet.solBalance.toFixed(4)} SOL
-                                <span className="text-xs text-muted-foreground ml-1">
-                                  (${(wallet.solBalance * (solPrice || 0)).toFixed(2)})
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          {wallet.tokens.length > 1 && (
-                            <div className="text-xs text-muted-foreground">
-                              +{wallet.tokens.length - 1} tokens
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Token summary row - show tokens inline */}
-                    {wallet.tokens.length > 1 && !wallet.isLoading && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {wallet.tokens.slice(1).map(t => (
-                          <Badge key={t.mint} variant="outline" className="text-xs font-mono bg-accent/50">
-                            {t.uiAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} {t.symbol}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Wallet address row */}
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                        {wallet.pubkey}
-                      </span>
-                      <Button variant="ghost" size="sm" onClick={() => copyToClipboard(wallet.pubkey)}>
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openInSolscan(wallet.pubkey)}>
-                        <ExternalLink className="h-3 w-3" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => loadWalletBalance(wallet.pubkey)}
-                        disabled={wallet.isLoading}
-                      >
-                        <RefreshCw className={`h-3 w-3 ${wallet.isLoading ? 'animate-spin' : ''}`} />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => exportPrivateKey(wallet)}
-                        disabled={exportingKey === wallet.id}
-                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
-                      >
-                        {exportingKey === wallet.id ? (
-                          <RefreshCw className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Key className="h-3 w-3" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleExpanded(wallet.id)}
-                      >
-                        {expandedWallets.has(wallet.id) ? (
-                          <><ChevronUp className="h-3 w-3 mr-1" /> Hide</>
-                        ) : (
-                          <><ChevronDown className="h-3 w-3 mr-1" /> Manage</>
-                        )}
-                      </Button>
-                    </div>
-                    
-                    {/* Last updated */}
-                    {wallet.lastUpdated && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Last updated: {wallet.lastUpdated.toLocaleString()}
-                      </div>
-                    )}
-                  </CardHeader>
-                  
-                  {/* Expandable Token Manager */}
-                  <Collapsible open={expandedWallets.has(wallet.id)}>
-                    <CollapsibleContent>
-                      <CardContent className="pt-0">
-                        <div className="border-t pt-4">
-                          <WalletTokenManager
-                            walletId={wallet.id}
-                            walletPubkey={wallet.pubkey}
-                            initialTokens={wallet.tokens}
-                            onTokensSold={() => loadWalletBalance(wallet.pubkey)}
-                          />
-                        </div>
-                      </CardContent>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </Card>
-              ))
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={filteredWallets.map(w => w.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {filteredWallets.map((wallet) => (
+                    <SortableWalletCard
+                      key={wallet.id}
+                      wallet={wallet}
+                      solPrice={solPrice}
+                      isExpanded={expandedWallets.has(wallet.id)}
+                      isExporting={exportingKey === wallet.id}
+                      sourceConfig={WALLET_SOURCE_CONFIG}
+                      purposeEmojis={WALLET_PURPOSE_EMOJIS}
+                      onToggleActive={toggleWalletActive}
+                      onToggleExpanded={toggleExpanded}
+                      onRefreshBalance={loadWalletBalance}
+                      onExportKey={exportPrivateKey}
+                      onCopy={copyToClipboard}
+                      onOpenSolscan={openInSolscan}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             )}
           </div>
         </TabsContent>
