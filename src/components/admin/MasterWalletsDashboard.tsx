@@ -614,7 +614,10 @@ export function MasterWalletsDashboard() {
             With Balance ({walletsWithBalance})
           </Button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {/* Import Custom Wallet Button */}
+          <CustomWalletManager onWalletsChange={loadAllWallets} />
+
           {/* Reclaim Rent Button */}
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -853,9 +856,6 @@ export function MasterWalletsDashboard() {
           </div>
         </TabsContent>
       </Tabs>
-
-      {/* Import Custom Wallets Section */}
-      <CustomWalletManager onWalletsChange={loadAllWallets} />
 
       {/* Legend */}
       <Card>
