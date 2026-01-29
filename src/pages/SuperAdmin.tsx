@@ -180,7 +180,7 @@ export default function SuperAdmin() {
 
           <TabsContent value="holders-intel">
             <ActiveTabOnly activeTab={activeTab} tabValue="holders-intel">
-              <Tabs defaultValue="token-holders" className="space-y-4">
+              <Tabs defaultValue="visitors" className="space-y-4">
                 <TabsList className="flex flex-wrap gap-1">
                   <TabsTrigger value="token-holders">📊 Token Holders</TabsTrigger>
                   <TabsTrigger value="accounts">👥 Accounts</TabsTrigger>
