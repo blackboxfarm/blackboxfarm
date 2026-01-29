@@ -41,7 +41,7 @@ interface TokenBalance {
 interface MasterWallet {
   id: string;
   pubkey: string;
-  source: 'wallet_pool' | 'blackbox' | 'super_admin' | 'airdrop';
+  source: 'wallet_pool' | 'blackbox' | 'super_admin' | 'airdrop' | 'custom';
   sourceTable: string;
   sourceEmoji: string;
   sourceLabel: string;
@@ -62,6 +62,7 @@ const WALLET_SOURCE_CONFIG = {
   blackbox: { emoji: '📦', label: 'BlackBox', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', table: 'blackbox_wallets' },
   super_admin: { emoji: '👑', label: 'Super Admin', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', table: 'super_admin_wallets' },
   airdrop: { emoji: '🪂', label: 'Airdrop', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', table: 'airdrop_wallets' },
+  custom: { emoji: '🔑', label: 'Custom Import', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200', table: 'rent_reclaimer_wallets' },
 };
 
 const WALLET_PURPOSE_EMOJIS: Record<string, { emoji: string; label: string }> = {
@@ -261,12 +262,13 @@ export function MasterWalletsDashboard() {
     setIsLoading(true);
     
     try {
-      // Fetch all wallet sources in parallel
-      const [poolWallets, blackboxWallets, superAdminWallets, airdropWallets, campaignLinks] = await Promise.all([
+      // Fetch all wallet sources in parallel (including custom imported wallets)
+      const [poolWallets, blackboxWallets, superAdminWallets, airdropWallets, customWallets, campaignLinks] = await Promise.all([
         supabase.from('wallet_pools').select('id, pubkey, sol_balance, is_active'),
         supabase.from('blackbox_wallets').select('id, pubkey, sol_balance, is_active, updated_at'),
         supabase.from('super_admin_wallets').select('id, pubkey, label, wallet_type, is_active, created_at'),
         supabase.from('airdrop_wallets').select('id, pubkey, nickname, sol_balance, is_active, updated_at'),
+        supabase.functions.invoke('rent-reclaimer-wallets', { body: { action: 'list' } }),
         supabase.from('campaign_wallets').select('wallet_id, campaign_id, blackbox_campaigns(nickname)')
       ]);
 
@@ -367,6 +369,29 @@ export function MasterWalletsDashboard() {
           isLoading: false,
           lastUpdated: w.updated_at ? new Date(w.updated_at) : undefined,
           hasTransactionHistory: (w.sol_balance || 0) > 0,
+        });
+      });
+
+      // Process custom imported wallets (from rent-reclaimer-wallets edge function)
+      const customWalletsData = customWallets.data?.wallets || [];
+      customWalletsData.forEach((w: any) => {
+        const cfg = WALLET_SOURCE_CONFIG.custom;
+        allWallets.push({
+          id: w.id,
+          pubkey: w.pubkey,
+          source: 'custom',
+          sourceTable: cfg.table,
+          sourceEmoji: cfg.emoji,
+          sourceLabel: cfg.label,
+          label: w.nickname,
+          purpose: 'trading',
+          purposeEmoji: WALLET_PURPOSE_EMOJIS.trading.emoji,
+          isActive: w.is_active ?? true,
+          solBalance: 0,
+          tokens: [],
+          isLoading: false,
+          lastUpdated: w.updated_at ? new Date(w.updated_at) : undefined,
+          hasTransactionHistory: false,
         });
       });
 
@@ -624,6 +649,7 @@ export function MasterWalletsDashboard() {
           <TabsTrigger value="blackbox">📦 BlackBox ({wallets.filter(w => w.source === 'blackbox').length})</TabsTrigger>
           <TabsTrigger value="super_admin">👑 Admin ({wallets.filter(w => w.source === 'super_admin').length})</TabsTrigger>
           <TabsTrigger value="airdrop">🪂 Airdrop ({wallets.filter(w => w.source === 'airdrop').length})</TabsTrigger>
+          <TabsTrigger value="custom">🔑 Custom ({wallets.filter(w => w.source === 'custom').length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-4">
@@ -801,6 +827,7 @@ export function MasterWalletsDashboard() {
                 <div>📦 BlackBox - Automation wallets</div>
                 <div>👑 Admin - Platform wallets</div>
                 <div>🪂 Airdrop - Distribution wallets</div>
+                <div>🔑 Custom - Imported via private key</div>
               </div>
             </div>
             <div>
