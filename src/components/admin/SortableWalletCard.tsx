@@ -241,6 +241,8 @@ export function SortableWalletCard({
                 walletPubkey={wallet.pubkey}
                 initialTokens={wallet.tokens}
                 onTokensSold={() => onRefreshBalance(wallet.pubkey)}
+                useDirectSwap={true}
+                walletSource={wallet.sourceTable}
               />
             </div>
           </CardContent>
