@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { Shield, Radar } from "lucide-react";
+import { Shield } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { ActiveTabOnly } from "@/components/ui/ActiveTabOnly";
@@ -31,7 +31,7 @@ const BaglessHoldersReport = lazy(() => import("@/components/BaglessHoldersRepor
 const ReferralDashboard = lazy(() => import("@/components/blackbox/ReferralDashboard").then(m => ({ default: m.ReferralDashboard })));
 const EnhancedWalletView = lazy(() => import("@/components/blackbox/EnhancedWalletView").then(m => ({ default: m.EnhancedWalletView })));
 const SecurityDashboard = lazy(() => import("@/components/security/SecurityDashboard").then(m => ({ default: m.SecurityDashboard })));
-const TokenCandidatesDashboard = lazy(() => import("@/components/admin/TokenCandidatesDashboard").then(m => ({ default: m.TokenCandidatesDashboard })));
+
 
 export default function BlackBox() {
   usePageTracking('home'); // Track main page visits
@@ -103,10 +103,6 @@ export default function BlackBox() {
             <TabsTrigger value="holders" onClick={(e) => { e.preventDefault(); window.location.href = '/holders'; }}>Holders</TabsTrigger>
             {isAdminView && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
             {isAdminView && <TabsTrigger value="wallets">Wallets</TabsTrigger>}
-            {isAdminView && <TabsTrigger value="discovery" className="flex items-center gap-1">
-              <Radar className="h-3 w-3" />
-              Discovery
-            </TabsTrigger>}
             {isAdminView && <TabsTrigger value="security">Security</TabsTrigger>}
           </TabsList>
 
@@ -210,12 +206,6 @@ export default function BlackBox() {
           <TabsContent value="wallets" className="space-y-6">
             <ActiveTabOnly activeTab={activeTab} tabValue="wallets">
               <EnhancedWalletView />
-            </ActiveTabOnly>
-          </TabsContent>
-
-          <TabsContent value="discovery" className="space-y-6">
-            <ActiveTabOnly activeTab={activeTab} tabValue="discovery">
-              <TokenCandidatesDashboard />
             </ActiveTabOnly>
           </TabsContent>
 
