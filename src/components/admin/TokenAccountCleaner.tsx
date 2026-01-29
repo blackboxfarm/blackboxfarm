@@ -8,18 +8,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Flame, Search, Trash2, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 
 interface ScanResult {
-  walletPubkey: string;
+  wallet_pubkey: string;
   source: string;
-  emptyAccountCount: number;
-  estimatedRecoverySol: number;
-  accounts: { mint: string; programId: string }[];
+  empty_accounts: { mint: string; programId: string }[];
+  total_recoverable_sol: number;
 }
 
 interface CleanResult {
-  walletPubkey: string;
+  wallet_pubkey: string;
   source: string;
-  accountsClosed: number;
-  solRecovered: number;
+  accounts_closed: number;
+  sol_recovered: number;
   signatures: string[];
   errors: string[];
 }
@@ -35,13 +34,13 @@ interface ScanResponse {
 
 interface CleanResponse {
   action: string;
-  walletsProcessed: number;
-  totalAccountsClosed: number;
-  totalSolRecovered: number;
+  wallets_processed: number;
+  total_accounts_closed: number;
+  total_sol_recovered: number;
   consolidation?: {
-    targetWallet: string;
-    walletsConsolidated: number;
-    totalConsolidated: number;
+    target_wallet: string;
+    wallets_consolidated: number;
+    total_consolidated: number;
     signatures: string[];
     errors: string[];
   } | null;
@@ -187,23 +186,23 @@ export function TokenAccountCleaner() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-muted/50 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold">{cleanResults.walletsProcessed}</div>
+                <div className="text-2xl font-bold">{cleanResults.wallets_processed}</div>
                 <div className="text-xs text-muted-foreground">Wallets Processed</div>
               </div>
               <div className="bg-orange-500/10 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-orange-500">{cleanResults.totalAccountsClosed}</div>
+                <div className="text-2xl font-bold text-orange-500">{cleanResults.total_accounts_closed}</div>
                 <div className="text-xs text-muted-foreground">Accounts Closed</div>
               </div>
               <div className="bg-green-500/10 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-green-500">
-                  {cleanResults.totalSolRecovered.toFixed(4)} SOL
+                  {cleanResults.total_sol_recovered.toFixed(4)} SOL
                 </div>
                 <div className="text-xs text-muted-foreground">Recovered</div>
               </div>
               {cleanResults.consolidation && (
                 <div className="bg-amber-500/10 rounded-lg p-4 text-center">
                   <div className="text-2xl font-bold text-amber-500">
-                    {cleanResults.consolidation.totalConsolidated.toFixed(4)} SOL
+                    {cleanResults.consolidation.total_consolidated.toFixed(4)} SOL
                   </div>
                   <div className="text-xs text-muted-foreground">→ FlipIt Wallet</div>
                 </div>
@@ -211,7 +210,7 @@ export function TokenAccountCleaner() {
             </div>
 
             {/* Consolidation Summary */}
-            {cleanResults.consolidation && cleanResults.consolidation.totalConsolidated > 0 && (
+            {cleanResults.consolidation && cleanResults.consolidation.total_consolidated > 0 && (
               <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -220,10 +219,10 @@ export function TokenAccountCleaner() {
                   </div>
                   <div className="flex items-center gap-3">
                     <code className="text-xs bg-background/50 px-2 py-1 rounded">
-                      {shortenAddress(cleanResults.consolidation.targetWallet)}
+                      {shortenAddress(cleanResults.consolidation.target_wallet)}
                     </code>
                     <span className="text-amber-500 font-bold">
-                      +{cleanResults.consolidation.totalConsolidated.toFixed(4)} SOL
+                      +{cleanResults.consolidation.total_consolidated.toFixed(4)} SOL
                     </span>
                     {cleanResults.consolidation.signatures.length > 0 && (
                       <a
@@ -243,18 +242,18 @@ export function TokenAccountCleaner() {
             {/* Per-wallet results */}
             <ScrollArea className="h-[300px]">
               <div className="space-y-2">
-                {cleanResults.results.filter(r => r.accountsClosed > 0 || r.errors.length > 0).map((result, i) => (
+                {cleanResults.results.filter(r => r.accounts_closed > 0 || r.errors.length > 0).map((result, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                     <div className="flex items-center gap-3">
                       <Badge variant="outline" className="text-xs">
                         {result.source}
                       </Badge>
-                      <code className="text-xs">{shortenAddress(result.walletPubkey)}</code>
+                      <code className="text-xs">{shortenAddress(result.wallet_pubkey)}</code>
                     </div>
                     <div className="flex items-center gap-3">
-                      {result.accountsClosed > 0 && (
+                      {result.accounts_closed > 0 && (
                         <span className="text-green-500 text-sm">
-                          +{result.solRecovered.toFixed(4)} SOL ({result.accountsClosed} accounts)
+                          +{result.sol_recovered.toFixed(4)} SOL ({result.accounts_closed} accounts)
                         </span>
                       )}
                       {result.errors.length > 0 && (
@@ -290,14 +289,14 @@ export function TokenAccountCleaner() {
                     <Badge variant="outline" className="text-xs">
                       {result.source}
                     </Badge>
-                    <code className="text-xs">{shortenAddress(result.walletPubkey)}</code>
+                    <code className="text-xs">{shortenAddress(result.wallet_pubkey)}</code>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-orange-500 text-sm">
-                      {result.emptyAccountCount} empty
+                      {result.empty_accounts.length} empty
                     </span>
                     <span className="text-green-500 text-sm">
-                      ~{result.estimatedRecoverySol.toFixed(4)} SOL
+                      ~{result.total_recoverable_sol.toFixed(4)} SOL
                     </span>
                   </div>
                 </div>
