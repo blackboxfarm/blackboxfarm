@@ -66,7 +66,7 @@ const AccountManagementDashboard = lazy(() => import("@/components/admin/Account
 const TwitterScrapesView = lazy(() => import("@/components/admin/TwitterScrapesView").then(m => ({ default: m.TwitterScrapesView })));
 
 export default function SuperAdmin() {
-  const [activeTab, setActiveTab] = useState("fuckoff");
+  const [activeTab, setActiveTab] = useState("utilities");
   const { isSuperAdmin, isLoading } = useUserRoles();
 
   useEffect(() => {
@@ -126,7 +126,7 @@ export default function SuperAdmin() {
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
-            <TabsTrigger value="fuckoff" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-red-500/20">FUCKOFF</TabsTrigger>
+            <TabsTrigger value="utilities" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">🛠️ Utilities</TabsTrigger>
             <TabsTrigger value="blackbox" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-zinc-700/30 data-[state=active]:to-zinc-800/20">📦 BlackBox</TabsTrigger>
             <TabsTrigger value="holders-intel" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-violet-500/20">🔮 Holders Intel</TabsTrigger>
             <TabsTrigger value="whales-mints" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-teal-500/20">🐋 Whales & MINTS</TabsTrigger>
@@ -136,8 +136,27 @@ export default function SuperAdmin() {
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun Monitor</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="fuckoff">
-            {/* Empty tab */}
+          <TabsContent value="utilities">
+            <ActiveTabOnly activeTab={activeTab} tabValue="utilities">
+              <Tabs defaultValue="spider" className="space-y-4">
+                <TabsList className="flex flex-wrap gap-1">
+                  <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
+                  <TabsTrigger value="api-resources">📡 API Resources</TabsTrigger>
+                  <TabsTrigger value="sol-price">💰 SOL Price</TabsTrigger>
+                  <TabsTrigger value="sniff">🔍 SNIFF</TabsTrigger>
+                  <TabsTrigger value="helius">⚡ Helius API</TabsTrigger>
+                  <TabsTrigger value="api-providers">🔌 API Providers</TabsTrigger>
+                  <TabsTrigger value="liquidity">💧 Liquidity Checker</TabsTrigger>
+                </TabsList>
+                <TabsContent value="spider"><SpiderRouteMap /></TabsContent>
+                <TabsContent value="api-resources"><HoldersResourceDashboard /></TabsContent>
+                <TabsContent value="sol-price"><SolPriceAnalytics /></TabsContent>
+                <TabsContent value="sniff"><SniffDashboard /></TabsContent>
+                <TabsContent value="helius"><HeliusUsageDashboard /></TabsContent>
+                <TabsContent value="api-providers"><ApiProviderManager /></TabsContent>
+                <TabsContent value="liquidity"><LiquidityLockChecker /></TabsContent>
+              </Tabs>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="blackbox">
