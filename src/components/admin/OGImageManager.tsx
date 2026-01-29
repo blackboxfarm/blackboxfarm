@@ -64,12 +64,6 @@ export function OGImageManager() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      toast.error('PNG, JPG, or WEBP only');
-      return;
-    }
-
     setPendingFile(file);
     setPendingPreview(URL.createObjectURL(file));
     setNickname('');
@@ -235,7 +229,7 @@ export function OGImageManager() {
           <label className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-muted-foreground/25 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
             <Plus className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Add New</span>
-            <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={handleFileSelect} className="sr-only" />
+            <input type="file" accept="image/*" onChange={handleFileSelect} className="sr-only" />
           </label>
         ) : (
           <div className="flex items-center gap-3 p-2 border rounded-lg bg-muted/20">
