@@ -7605,6 +7605,36 @@ export type Database = {
         }
         Relationships: []
       }
+      rent_reclaimer_wallets: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          nickname: string | null
+          pubkey: string
+          secret_key_encrypted: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          nickname?: string | null
+          pubkey: string
+          secret_key_encrypted: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          nickname?: string | null
+          pubkey?: string
+          secret_key_encrypted?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       revenue_transactions: {
         Row: {
           amount_sol: number
