@@ -113,7 +113,7 @@ export function TokenAccountCleaner() {
     }
   };
 
-  const shortenAddress = (addr: string) => `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+  const shortenAddress = (addr?: string) => addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : 'Unknown';
 
   return (
     <Card>
