@@ -1,22 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SecureStorage } from "../_shared/encryption.ts";
+import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-async function decryptWalletSecretAuto(raw: string): Promise<string> {
-  const trimmed = String(raw ?? "").trim();
-  if (!trimmed) throw new Error("Empty wallet secret");
-
-  // Some legacy rows were stored with an `AES:` prefix. Our shared SecureStorage
-  // uses the same AES-256-GCM scheme but expects the raw base64 payload.
-  const payload = trimmed.startsWith("AES:") ? trimmed.slice(4) : trimmed;
-
-  return await SecureStorage.decryptWalletSecret(payload);
-}
 
 // Wallet source configurations
 const WALLET_SOURCES = [
