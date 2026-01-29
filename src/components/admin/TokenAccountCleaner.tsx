@@ -260,7 +260,7 @@ export function TokenAccountCleaner() {
             </TabsTrigger>
             <TabsTrigger value="wallets">
               <Wallet className="h-4 w-4 mr-2" />
-              Manage Wallets
+              View Wallets
             </TabsTrigger>
           </TabsList>
 
@@ -494,10 +494,18 @@ export function TokenAccountCleaner() {
           </TabsContent>
 
           <TabsContent value="wallets">
-            <RentReclaimerWalletManager 
-              systemWallets={systemWallets} 
-              onWalletsChange={loadSystemWallets}
-            />
+            <div className="space-y-4">
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-2">
+                  These wallets are scanned for empty token accounts. To import custom wallets, go to{" "}
+                  <strong>Master Wallets Dashboard → Import Custom Wallets</strong>.
+                </p>
+              </div>
+              <RentReclaimerWalletManager 
+                systemWallets={systemWallets} 
+                onWalletsChange={loadSystemWallets}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>
