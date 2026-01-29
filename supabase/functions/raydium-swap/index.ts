@@ -869,13 +869,44 @@ serve(async (req) => {
           if (rawSecret) {
             console.log(`Found wallet in ${table}`);
             walletSecret = rawSecret;
-            // wallet_pools stores plain base58, others are encrypted
+            // wallet_pools stores plain base58, others are usually encrypted.
+            // Some legacy rows may still be stored plaintext even in *_encrypted columns;
+            // if decryption fails, fall back to treating it as a raw secret (base58/JSON).
             if (table === 'wallet_pools') {
-              secretToUse = rawSecret; // Already plaintext
+              secretToUse = String(rawSecret); // Already plaintext
               console.log(`Using plaintext secret from wallet_pools`);
             } else {
-              secretToUse = await SecureStorage.decryptWalletSecret(rawSecret);
-              console.log(`Decrypted wallet secret for ${walletId}`);
+              const raw = String(rawSecret).trim();
+              try {
+                secretToUse = await SecureStorage.decryptWalletSecret(raw);
+                console.log(`Decrypted wallet secret for ${walletId}`);
+              } catch (e) {
+                // Fallback: if it looks like a real Solana secret (base58 or JSON array), use it directly
+                let looksPlain = false;
+                try {
+                  const decoded = bs58.decode(raw);
+                  looksPlain = decoded.length === 64 || decoded.length === 32;
+                } catch {
+                  // not base58
+                }
+
+                if (!looksPlain && raw.startsWith('[')) {
+                  try {
+                    const arr = JSON.parse(raw);
+                    looksPlain = Array.isArray(arr) && arr.length >= 32;
+                  } catch {
+                    // not JSON
+                  }
+                }
+
+                if (looksPlain) {
+                  secretToUse = raw;
+                  console.log(`Wallet secret appears plaintext in ${table}; using directly for ${walletId}`);
+                } else {
+                  console.error(`Failed to decrypt wallet secret for ${walletId} in ${table}`);
+                  throw e;
+                }
+              }
             }
             break;
           }
