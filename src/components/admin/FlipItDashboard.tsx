@@ -107,6 +107,8 @@ interface FlipPosition {
   // Bonding curve status
   is_on_curve: boolean | null;
   bonding_curve_progress: number | null;
+  // Sell priority fee (persisted per-position)
+  sell_priority_fee_sol: number | null;
 }
 
 interface SuperAdminWallet {
@@ -2020,7 +2022,40 @@ export function FlipItDashboard() {
   };
 
   // Per-position sell fee state - stores custom priority fee for each position
+  // Initialized from DB values when positions load
   const [positionSellFees, setPositionSellFees] = useState<Record<string, string>>({});
+
+  // Initialize positionSellFees from loaded positions (runs when positions change)
+  useEffect(() => {
+    const feeMap: Record<string, string> = {};
+    positions.forEach((p) => {
+      // Use DB value if set, otherwise default to 0.0005
+      const fee = p.sell_priority_fee_sol ?? 0.0005;
+      feeMap[p.id] = fee.toString();
+    });
+    setPositionSellFees(feeMap);
+  }, [positions]);
+
+  // Handler to update sell fee both in state and DB
+  const handleSellFeeChange = async (positionId: string, value: string) => {
+    // Update local state immediately for responsive UI
+    setPositionSellFees(prev => ({ ...prev, [positionId]: value }));
+    
+    // Persist to database
+    try {
+      const { error } = await supabase
+        .from('flip_positions')
+        .update({ sell_priority_fee_sol: parseFloat(value) })
+        .eq('id', positionId);
+      
+      if (error) {
+        console.error('[FlipIt] Failed to save sell fee:', error);
+        toast.error('Failed to save gas fee preference');
+      }
+    } catch (err) {
+      console.error('[FlipIt] Error saving sell fee:', err);
+    }
+  };
 
   const handleForceSell = async (positionId: string, customPriorityFee?: number) => {
     try {
@@ -4250,7 +4285,7 @@ export function FlipItDashboard() {
                             </Button>
                             <Select
                               value={positionSellFees[position.id] || '0.0005'}
-                              onValueChange={(value) => setPositionSellFees(prev => ({ ...prev, [position.id]: value }))}
+                              onValueChange={(value) => handleSellFeeChange(position.id, value)}
                             >
                               <SelectTrigger className="h-5 text-[9px] px-1 w-20">
                                 <SelectValue />

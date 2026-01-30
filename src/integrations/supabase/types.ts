@@ -2965,6 +2965,7 @@ export type Database = {
           scalp_take_profit_pct: number | null
           sell_executed_at: string | null
           sell_price_usd: number | null
+          sell_priority_fee_sol: number | null
           sell_signature: string | null
           source: string | null
           source_channel_id: string | null
@@ -3044,6 +3045,7 @@ export type Database = {
           scalp_take_profit_pct?: number | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
+          sell_priority_fee_sol?: number | null
           sell_signature?: string | null
           source?: string | null
           source_channel_id?: string | null
@@ -3123,6 +3125,7 @@ export type Database = {
           scalp_take_profit_pct?: number | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
+          sell_priority_fee_sol?: number | null
           sell_signature?: string | null
           source?: string | null
           source_channel_id?: string | null
