@@ -408,3 +408,6 @@ verify_jwt = false
 
 [functions.token-ai-interpreter]
 verify_jwt = false
+
+[functions.social-predictor-ai]
+verify_jwt = false
