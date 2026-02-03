@@ -5272,6 +5272,11 @@ export type Database = {
           display_name: string | null
           email_verified: boolean | null
           id: string
+          oauth_full_name: string | null
+          oauth_provider: string | null
+          oauth_provider_id: string | null
+          oauth_raw_data: Json | null
+          oauth_username: string | null
           phone_number: string | null
           phone_verified: boolean | null
           two_factor_enabled: boolean | null
@@ -5285,6 +5290,11 @@ export type Database = {
           display_name?: string | null
           email_verified?: boolean | null
           id?: string
+          oauth_full_name?: string | null
+          oauth_provider?: string | null
+          oauth_provider_id?: string | null
+          oauth_raw_data?: Json | null
+          oauth_username?: string | null
           phone_number?: string | null
           phone_verified?: boolean | null
           two_factor_enabled?: boolean | null
@@ -5298,6 +5308,11 @@ export type Database = {
           display_name?: string | null
           email_verified?: boolean | null
           id?: string
+          oauth_full_name?: string | null
+          oauth_provider?: string | null
+          oauth_provider_id?: string | null
+          oauth_raw_data?: Json | null
+          oauth_username?: string | null
           phone_number?: string | null
           phone_verified?: boolean | null
           two_factor_enabled?: boolean | null
