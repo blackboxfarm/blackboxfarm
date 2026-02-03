@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Bell, X, Check, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,12 +21,54 @@ interface AdminNotification {
   created_at: string;
 }
 
+// Request browser notification permission
+const requestNotificationPermission = async () => {
+  if (!('Notification' in window)) {
+    console.log('Browser does not support notifications');
+    return false;
+  }
+  
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+  
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  }
+  
+  return false;
+};
+
+// Show browser notification
+const showBrowserNotification = (title: string, message: string, type: string) => {
+  if (Notification.permission !== 'granted') return;
+  
+  const icon = type === 'new_signup' ? '👤' : type === 'banner_purchase' ? '🎨' : '🔔';
+  
+  const notification = new Notification(`${icon} ${title}`, {
+    body: message,
+    icon: '/favicon.ico',
+    tag: `admin-${Date.now()}`,
+    requireInteraction: true,
+  });
+  
+  notification.onclick = () => {
+    window.focus();
+    notification.close();
+  };
+  
+  // Auto-close after 10 seconds
+  setTimeout(() => notification.close(), 10000);
+};
+
 export function AdminNotificationsBadge() {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [hasPermission, setHasPermission] = useState(false);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     // Type assertion needed until types.ts regenerates with new table
     const { data, error } = await (supabase
       .from('admin_notifications' as any)
@@ -38,9 +80,12 @@ export function AdminNotificationsBadge() {
       setNotifications(data as AdminNotification[]);
       setUnreadCount((data as AdminNotification[]).filter((n) => !n.is_read).length);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // Request notification permission on mount
+    requestNotificationPermission().then(setHasPermission);
+    
     fetchNotifications();
 
     // Subscribe to realtime updates
@@ -48,7 +93,21 @@ export function AdminNotificationsBadge() {
       .channel('admin_notifications_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'admin_notifications' },
+        { event: 'INSERT', schema: 'public', table: 'admin_notifications' },
+        (payload) => {
+          // New notification received - show browser notification
+          const newNotification = payload.new as AdminNotification;
+          showBrowserNotification(
+            newNotification.title,
+            newNotification.message,
+            newNotification.notification_type
+          );
+          fetchNotifications();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'admin_notifications' },
         () => {
           fetchNotifications();
         }
@@ -58,7 +117,7 @@ export function AdminNotificationsBadge() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchNotifications]);
 
   const markAsRead = async (id: string) => {
     await (supabase

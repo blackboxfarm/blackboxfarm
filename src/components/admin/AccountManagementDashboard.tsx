@@ -57,11 +57,24 @@ interface UserAccount {
     providers?: string[];
   };
   raw_user_meta_data: Record<string, unknown>;
+  identities?: {
+    provider: string;
+    identity_id: string;
+    identity_data: {
+      email?: string;
+      full_name?: string;
+      avatar_url?: string;
+      user_name?: string;
+    };
+  }[];
   profile?: {
     display_name: string | null;
     avatar_url: string | null;
     two_factor_enabled: boolean;
     email_verified: boolean;
+    oauth_provider: string | null;
+    oauth_username: string | null;
+    oauth_full_name: string | null;
   };
   roles?: string[];
   advertiser?: {
@@ -182,11 +195,15 @@ export function AccountManagementDashboard() {
           email_confirmed_at: authUser.email_confirmed_at,
           raw_app_meta_data: authUser.raw_app_meta_data || {},
           raw_user_meta_data: authUser.raw_user_meta_data || {},
+          identities: authUser.identities || [],
           profile: {
             display_name: profile.display_name,
             avatar_url: profile.avatar_url,
             two_factor_enabled: profile.two_factor_enabled || false,
-            email_verified: profile.email_verified || false
+            email_verified: profile.email_verified || false,
+            oauth_provider: profile.oauth_provider || null,
+            oauth_username: profile.oauth_username || null,
+            oauth_full_name: profile.oauth_full_name || null,
           },
           roles: userRoles,
           advertiser: advertiser ? {
@@ -425,8 +442,13 @@ export function AccountManagementDashboard() {
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{account.profile?.display_name || 'No name'}</p>
+                          <p className="font-medium text-sm">
+                            {account.profile?.display_name || account.profile?.oauth_full_name || 'No name'}
+                          </p>
                           <p className="text-xs text-muted-foreground">{account.email}</p>
+                          {account.profile?.oauth_username && (
+                            <p className="text-xs text-primary">@{account.profile.oauth_username}</p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
@@ -588,6 +610,63 @@ export function AccountManagementDashboard() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* OAuth Identity Info */}
+              {(selectedAccount.profile?.oauth_provider || selectedAccount.identities?.length > 0) && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-blue-500" />
+                      OAuth Identity Data
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    {selectedAccount.profile?.oauth_provider && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Primary Provider</span>
+                        <Badge variant="outline">{selectedAccount.profile.oauth_provider}</Badge>
+                      </div>
+                    )}
+                    {selectedAccount.profile?.oauth_full_name && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Full Name (OAuth)</span>
+                        <span>{selectedAccount.profile.oauth_full_name}</span>
+                      </div>
+                    )}
+                    {selectedAccount.profile?.oauth_username && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Username (OAuth)</span>
+                        <span className="text-primary">@{selectedAccount.profile.oauth_username}</span>
+                      </div>
+                    )}
+                    {selectedAccount.identities && selectedAccount.identities.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-muted-foreground text-xs mb-2">Linked Identities:</p>
+                        <div className="space-y-2">
+                          {selectedAccount.identities.map((identity, idx) => (
+                            <div key={idx} className="bg-muted/50 rounded p-2">
+                              <div className="flex items-center gap-2 mb-1">
+                                {identity.provider === 'google' && <Globe className="h-3 w-3" />}
+                                {identity.provider === 'twitter' && <Twitter className="h-3 w-3" />}
+                                <span className="font-medium text-xs capitalize">{identity.provider}</span>
+                              </div>
+                              {identity.identity_data?.full_name && (
+                                <p className="text-xs">Name: {identity.identity_data.full_name}</p>
+                              )}
+                              {identity.identity_data?.user_name && (
+                                <p className="text-xs text-primary">@{identity.identity_data.user_name}</p>
+                              )}
+                              {identity.identity_data?.email && (
+                                <p className="text-xs text-muted-foreground">{identity.identity_data.email}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Advertiser Info */}
               {selectedAccount.advertiser && (
