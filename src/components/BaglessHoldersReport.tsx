@@ -471,6 +471,36 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     }
   };
 
+  // Notify BlackBox TG group about report generation (fire-and-forget)
+  const notifyTelegramGroup = async (reportData: HoldersReport, mint: string) => {
+    try {
+      const symbol = tokenData?.metadata?.symbol || 'TOKEN';
+      const totalHolders = reportData.totalHolders;
+      const realHolders = reportData.realHolders || reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length;
+      const dustPct = Math.round((reportData.holders.filter(h => h.isDustWallet).length / totalHolders) * 100);
+      const healthGrade = reportData.healthScore?.grade || 'N/A';
+      
+      const message = `📊 *Holders Report Generated*\n\n` +
+        `🪙 *$${symbol.toUpperCase()}*\n` +
+        `├ Total: ${totalHolders.toLocaleString()}\n` +
+        `├ Real: ${realHolders.toLocaleString()}\n` +
+        `├ Dust: ${dustPct}%\n` +
+        `└ Grade: ${healthGrade}\n\n` +
+        `🔗 blackbox.farm/holders?token=${mint}`;
+      
+      await supabase.functions.invoke('admin-notify', {
+        body: {
+          type: 'holder_report',
+          title: `Holders Report: $${symbol.toUpperCase()}`,
+          message,
+          metadata: { tokenMint: mint, totalHolders, realHolders, healthGrade },
+          channels: ['telegram'],
+        },
+      });
+    } catch (err) {
+      console.warn('[TG Notify] Failed to send TG notification:', err);
+    }
+  };
 
   const generateReport = async () => {
     if (!tokenMint) {
@@ -554,6 +584,9 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       
       // Generate share card image in background (non-blocking)
       generateShareCard(data);
+      
+      // Notify BlackBox TG group about the report generation (fire-and-forget)
+      notifyTelegramGroup(data, tokenMint.trim());
       
       // Toast removed - UI feedback is sufficient
     } catch (error) {
