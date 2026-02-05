@@ -9654,6 +9654,45 @@ export type Database = {
         }
         Relationships: []
       }
+      token_banners: {
+        Row: {
+          banner_url: string
+          created_at: string
+          id: string
+          is_active: boolean
+          link_url: string
+          notes: string | null
+          symbol: string | null
+          token_address: string
+          updated_at: string
+          x_community_id: string | null
+        }
+        Insert: {
+          banner_url: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          link_url: string
+          notes?: string | null
+          symbol?: string | null
+          token_address: string
+          updated_at?: string
+          x_community_id?: string | null
+        }
+        Update: {
+          banner_url?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          link_url?: string
+          notes?: string | null
+          symbol?: string | null
+          token_address?: string
+          updated_at?: string
+          x_community_id?: string | null
+        }
+        Relationships: []
+      }
       token_dex_status_history: {
         Row: {
           active_boosts: number | null
