@@ -13,19 +13,25 @@ export function AdBanner({ size, position }: AdBannerProps) {
   const [banner, setBanner] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Read token address from URL for position 1 token-specific banners
-  const tokenAddress = typeof window !== 'undefined' 
-    ? new URLSearchParams(window.location.search).get('token') 
+  // Read token address and utm_community from URL for position 1 token-specific banners
+  const urlParams = typeof window !== 'undefined' 
+    ? new URLSearchParams(window.location.search) 
     : null;
+  const tokenAddress = urlParams?.get('token') || null;
+  const utmCommunity = urlParams?.get('utm_community') || null;
 
   useEffect(() => {
     fetchBanner();
-  }, [position, tokenAddress]);
+  }, [position, tokenAddress, utmCommunity]);
 
   const fetchBanner = async () => {
     try {
       const { data } = await supabase.functions.invoke('get-banner-for-position', {
-        body: { position, tokenAddress: position === 1 ? tokenAddress : undefined }
+        body: { 
+          position, 
+          tokenAddress: position === 1 ? tokenAddress : undefined,
+          xCommunityId: position === 1 ? utmCommunity : undefined
+        }
       });
       
       if (data?.banner) {

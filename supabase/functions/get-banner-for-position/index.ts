@@ -69,7 +69,7 @@ serve(async (req) => {
   }
 
   try {
-    const { position, includeDexscreener, tokenAddress } = await req.json();
+    const { position, includeDexscreener, tokenAddress, xCommunityId } = await req.json();
 
     if (!position || position < 1 || position > 4) {
       return new Response(
@@ -82,17 +82,34 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // PRIORITY 1: Check for token-specific banner (position 1 only)
-    if (position === 1 && tokenAddress) {
-      const { data: tokenBanner, error: tokenBannerError } = await supabase
-        .from('token_banners')
-        .select('*')
-        .eq('token_address', tokenAddress)
-        .eq('is_active', true)
-        .single();
+    // PRIORITY 1: Check for community-specific or token-specific banner (position 1 only)
+    if (position === 1 && (xCommunityId || tokenAddress)) {
+      // First try lookup by X community ID, then fallback to token address
+      let tokenBanner = null;
+      
+      if (xCommunityId) {
+        const { data, error } = await supabase
+          .from('token_banners')
+          .select('*')
+          .eq('x_community_id', xCommunityId)
+          .eq('is_active', true)
+          .single();
+        if (data && !error) tokenBanner = data;
+      }
+      
+      // Fallback to token address lookup if no community match
+      if (!tokenBanner && tokenAddress) {
+        const { data, error } = await supabase
+          .from('token_banners')
+          .select('*')
+          .eq('token_address', tokenAddress)
+          .eq('is_active', true)
+          .single();
+        if (data && !error) tokenBanner = data;
+      }
 
-      if (tokenBanner && !tokenBannerError) {
-        console.log('Serving token-specific banner for:', tokenAddress, tokenBanner.symbol);
+      if (tokenBanner) {
+        console.log('Serving community/token banner:', xCommunityId || tokenAddress, tokenBanner.symbol);
         return new Response(
           JSON.stringify({
             banner: {
@@ -107,6 +124,7 @@ serve(async (req) => {
               is_token_banner: true,
               token_address: tokenBanner.token_address,
               token_symbol: tokenBanner.symbol,
+              x_community_id: tokenBanner.x_community_id,
             }
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
