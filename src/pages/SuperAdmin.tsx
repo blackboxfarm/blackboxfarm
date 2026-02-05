@@ -6,6 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBadge";
 import { LazyLoader } from "@/components/ui/lazy-loader";
+import { TelegramBroadcastToggle } from "@/components/admin/TelegramBroadcastToggle";
 
 // Lazy load entire tab content sections - they ONLY load when their tab is clicked
 const UtilitiesTab = lazy(() => import("@/components/admin/tabs/UtilitiesTab"));
@@ -78,14 +79,17 @@ export default function SuperAdmin() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-6 py-8">
-        <div className="mb-8 flex items-start justify-between">
+        <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-4xl font-bold mb-2">Super Admin</h1>
             <p className="text-muted-foreground">
               Manage platform wallets and administrative functions
             </p>
           </div>
-          <AdminNotificationsBadge />
+          <div className="flex items-start gap-4">
+            <TelegramBroadcastToggle />
+            <AdminNotificationsBadge />
+          </div>
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
