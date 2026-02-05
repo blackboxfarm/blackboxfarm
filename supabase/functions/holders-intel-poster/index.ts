@@ -457,12 +457,30 @@ Deno.serve(async (req) => {
       
       // Also post to BlackBox TG group (fire-and-forget)
       try {
+        // Generate ASCII bar for TG messages
+        const generateAsciiBar = (percentage: number, width: number = 10): string => {
+          const filled = Math.round((percentage / 100) * width);
+          const empty = width - filled;
+          return '█'.repeat(filled) + '░'.repeat(empty);
+        };
+        
+        // Calculate tier percentages
+        const whalePct = stats.totalHolders > 0 ? Math.round((stats.whaleCount / stats.totalHolders) * 100) : 0;
+        const seriousPct = stats.totalHolders > 0 ? Math.round((stats.seriousCount / stats.totalHolders) * 100) : 0;
+        const retailPct = stats.totalHolders > 0 ? Math.round((stats.activeCount / stats.totalHolders) * 100) : 0;
+        const dustPctVal = stats.totalHolders > 0 ? Math.round((stats.dustCount / stats.totalHolders) * 100) : 0;
+        
         const tgMessage = `📢 *Intel XBot Posted*\n\n` +
           `🪙 *$${stats.symbol.toUpperCase()}*\n` +
           `├ Holders: ${stats.totalHolders.toLocaleString()}\n` +
           `├ Real: ${stats.realHolders.toLocaleString()}\n` +
           `├ Grade: ${stats.healthGrade}\n` +
           `└ Post #${stats.timesPosted}\n\n` +
+          `📈 Distribution\n` +
+          `\`Whales  ${generateAsciiBar(whalePct)} ${whalePct.toString().padStart(2)}%\`\n` +
+          `\`Serious ${generateAsciiBar(seriousPct)} ${seriousPct.toString().padStart(2)}%\`\n` +
+          `\`Retail  ${generateAsciiBar(retailPct)} ${retailPct.toString().padStart(2)}%\`\n` +
+          `\`Dust    ${generateAsciiBar(dustPctVal)} ${dustPctVal.toString().padStart(2)}%\`\n\n` +
           `🐦 ${tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`}`;
         
         await supabase.functions.invoke('admin-notify', {

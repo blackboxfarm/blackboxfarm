@@ -472,20 +472,41 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   };
 
   // Notify BlackBox TG group about report generation (fire-and-forget)
+  // Generate ASCII bar for TG messages
+  const generateAsciiBar = (percentage: number, width: number = 10): string => {
+    const filled = Math.round((percentage / 100) * width);
+    const empty = width - filled;
+    return '█'.repeat(filled) + '░'.repeat(empty);
+  };
+
   const notifyTelegramGroup = async (reportData: HoldersReport, mint: string) => {
     try {
       const symbol = tokenData?.metadata?.symbol || 'TOKEN';
       const totalHolders = reportData.totalHolders;
       const realHolders = reportData.realHolders || reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length;
-      const dustPct = Math.round((reportData.holders.filter(h => h.isDustWallet).length / totalHolders) * 100);
       const healthGrade = reportData.healthScore?.grade || 'N/A';
+      
+      // Calculate tier percentages for bar graphs
+      const whaleCount = reportData.simpleTiers?.whales?.count || 0;
+      const seriousCount = reportData.simpleTiers?.serious?.count || 0;
+      const retailCount = reportData.simpleTiers?.retail?.count || 0;
+      const dustCount = reportData.simpleTiers?.dust?.count || reportData.dustWallets || 0;
+      
+      const whalePct = totalHolders > 0 ? Math.round((whaleCount / totalHolders) * 100) : 0;
+      const seriousPct = totalHolders > 0 ? Math.round((seriousCount / totalHolders) * 100) : 0;
+      const retailPct = totalHolders > 0 ? Math.round((retailCount / totalHolders) * 100) : 0;
+      const dustPct = totalHolders > 0 ? Math.round((dustCount / totalHolders) * 100) : 0;
       
       const message = `📊 *Holders Report Generated*\n\n` +
         `🪙 *$${symbol.toUpperCase()}*\n` +
         `├ Total: ${totalHolders.toLocaleString()}\n` +
         `├ Real: ${realHolders.toLocaleString()}\n` +
-        `├ Dust: ${dustPct}%\n` +
         `└ Grade: ${healthGrade}\n\n` +
+        `📈 Distribution\n` +
+        `\`Whales  ${generateAsciiBar(whalePct)} ${whalePct.toString().padStart(2)}%\`\n` +
+        `\`Serious ${generateAsciiBar(seriousPct)} ${seriousPct.toString().padStart(2)}%\`\n` +
+        `\`Retail  ${generateAsciiBar(retailPct)} ${retailPct.toString().padStart(2)}%\`\n` +
+        `\`Dust    ${generateAsciiBar(dustPct)} ${dustPct.toString().padStart(2)}%\`\n\n` +
         `🔗 blackbox.farm/holders?token=${mint}`;
       
       await supabase.functions.invoke('admin-notify', {
