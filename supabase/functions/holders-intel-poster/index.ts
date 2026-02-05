@@ -470,18 +470,42 @@ Deno.serve(async (req) => {
         const retailPct = stats.totalHolders > 0 ? Math.round((stats.activeCount / stats.totalHolders) * 100) : 0;
         const dustPctVal = stats.totalHolders > 0 ? Math.round((stats.dustCount / stats.totalHolders) * 100) : 0;
         
-        const tgMessage = `📢 *Intel XBot Posted*\n\n` +
-          `🪙 *$${stats.symbol.toUpperCase()}*\n` +
-          `├ Holders: ${stats.totalHolders.toLocaleString()}\n` +
-          `├ Real: ${stats.realHolders.toLocaleString()}\n` +
-          `├ Grade: ${stats.healthGrade}\n` +
-          `└ Post #${stats.timesPosted}\n\n` +
-          `📈 Distribution\n` +
-          `\`Whales  ${generateAsciiBar(whalePct)} ${whalePct.toString().padStart(2)}%\`\n` +
-          `\`Serious ${generateAsciiBar(seriousPct)} ${seriousPct.toString().padStart(2)}%\`\n` +
-          `\`Retail  ${generateAsciiBar(retailPct)} ${retailPct.toString().padStart(2)}%\`\n` +
-          `\`Dust    ${generateAsciiBar(dustPctVal)} ${dustPctVal.toString().padStart(2)}%\`\n\n` +
-          `🐦 ${tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`}`;
+        // Fetch tg_posted template from database
+        let tgTemplate = `📢 *Intel XBot Posted*\n\n🪙 *$\{ticker}*\n├ Holders: {totalWallets}\n├ Real: {realHolders}\n├ Grade: {healthGrade}\n└ Post #{timesPosted}\n\n📈 Distribution\n\`Whales  {whaleBar} {whalePct}%\`\n\`Serious {seriousBar} {seriousPct}%\`\n\`Retail  {retailBar} {retailPct}%\`\n\`Dust    {dustBar} {dustPct}%\`\n\n🐦 {tweetUrl}`;
+        
+        try {
+          const { data: tgTplData } = await supabase
+            .from('holders_intel_templates')
+            .select('template_text')
+            .eq('template_name', 'tg_posted')
+            .maybeSingle();
+          
+          if (tgTplData?.template_text) {
+            tgTemplate = tgTplData.template_text;
+            console.log('[poster] Using tg_posted template from database');
+          }
+        } catch (tplErr) {
+          console.warn('[poster] Failed to fetch tg_posted template, using fallback');
+        }
+        
+        // Process template with variables
+        const tgMessage = tgTemplate
+          .replace(/\{ticker\}/g, stats.symbol.toUpperCase())
+          .replace(/\$\{ticker\}/g, `$${stats.symbol.toUpperCase()}`)
+          .replace(/\{TICKER\}/g, stats.symbol.toUpperCase())
+          .replace(/\{totalWallets\}/g, stats.totalHolders.toLocaleString())
+          .replace(/\{realHolders\}/g, stats.realHolders.toLocaleString())
+          .replace(/\{healthGrade\}/g, stats.healthGrade)
+          .replace(/\{timesPosted\}/g, String(stats.timesPosted))
+          .replace(/\{whaleBar\}/g, generateAsciiBar(whalePct))
+          .replace(/\{seriousBar\}/g, generateAsciiBar(seriousPct))
+          .replace(/\{retailBar\}/g, generateAsciiBar(retailPct))
+          .replace(/\{dustBar\}/g, generateAsciiBar(dustPctVal))
+          .replace(/\{whalePct\}/g, whalePct.toString().padStart(2))
+          .replace(/\{seriousPct\}/g, seriousPct.toString().padStart(2))
+          .replace(/\{retailPct\}/g, retailPct.toString().padStart(2))
+          .replace(/\{dustPct\}/g, dustPctVal.toString().padStart(2))
+          .replace(/\{tweetUrl\}/g, tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`);
         
         // Send with retry (cold start can cause first attempt to fail)
         let tgSuccess = false;

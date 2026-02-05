@@ -77,6 +77,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     small: false,
     large: false,
     shares: false,
+    tg_posted: false,
+    tg_search: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
@@ -536,8 +538,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </CardHeader>
         <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="small" className="relative">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="small" className="relative text-xs">
               Small
               {activeIntelTemplate === 'small' && (
                 <Badge variant="default" className="absolute -top-2 -right-2 text-[10px] px-1 py-0">
@@ -545,7 +547,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="large" className="relative">
+            <TabsTrigger value="large" className="relative text-xs">
               Large
               {activeIntelTemplate === 'large' && (
                 <Badge variant="default" className="absolute -top-2 -right-2 text-[10px] px-1 py-0">
@@ -553,10 +555,12 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="shares">Shares</TabsTrigger>
+            <TabsTrigger value="shares" className="text-xs">Shares</TabsTrigger>
+            <TabsTrigger value="tg_posted" className="text-xs">TG Posted</TabsTrigger>
+            <TabsTrigger value="tg_search" className="text-xs">TG Search</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'shares'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'shares', 'tg_posted', 'tg_search'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
@@ -581,6 +585,26 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                   <Label className="font-medium">Public Share Template</Label>
                   <p className="text-xs text-muted-foreground">
                     Used when users click the Share button on the holders page
+                  </p>
+                </div>
+              )}
+
+              {name === 'tg_posted' && (
+                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <Label className="font-medium text-blue-300">📢 Telegram: Posted Notification</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Sent to BlackBox Telegram group after each successful Intel XBot tweet.
+                    Uses Markdown formatting (*bold*, \`code\`).
+                  </p>
+                </div>
+              )}
+
+              {name === 'tg_search' && (
+                <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                  <Label className="font-medium text-orange-300">🔎 Telegram: Search Surge</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Sent to BlackBox Telegram group when a token search surge is detected.
+                    Uses Markdown formatting (*bold*, \`code\`).
                   </p>
                 </div>
               )}
@@ -632,6 +656,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                   <Label>
                     Preview 
                     {fetchedStats && <Badge variant="secondary" className="ml-2">${fetchedStats.symbol}</Badge>}
+                    {(name === 'tg_posted' || name === 'tg_search') && (
+                      <Badge variant="outline" className="ml-2 text-xs">Telegram Markdown</Badge>
+                    )}
                   </Label>
                   <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
                     {processTemplate(templates[name], tokenData)}
@@ -646,24 +673,32 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         <div className="pt-2 border-t border-border">
           <p className="text-xs text-muted-foreground mb-2">Available variables:</p>
           <div className="flex flex-wrap gap-2">
-            {TEMPLATE_VARIABLES.map((v) => (
-              <Badge 
-                key={v.var} 
-                variant="outline" 
-                className={`text-xs cursor-pointer hover:bg-muted ${
-                  v.var.includes('ai_summary') || v.var.includes('lifecycle') 
-                    ? 'border-purple-500/50 text-purple-300' 
-                    : ''
-                }`}
-                onClick={() => {
-                  navigator.clipboard.writeText(v.var);
-                  toast.success(`Copied ${v.var}`);
-                }}
-                title={v.desc}
-              >
-                {v.var}
-              </Badge>
-            ))}
+            {TEMPLATE_VARIABLES.map((v) => {
+              // Highlight category based on variable type
+              const isTelegramVar = v.var.includes('Bar') || v.var.includes('Pct') || 
+                v.var === '{timesPosted}' || v.var === '{tweetUrl}' ||
+                v.var === '{searchCount}' || v.var === '{timeWindow}' || 
+                v.var === '{uniqueIps}' || v.var === '{triggerType}';
+              const isAIVar = v.var.includes('ai_summary') || v.var.includes('lifecycle');
+              
+              return (
+                <Badge 
+                  key={v.var} 
+                  variant="outline" 
+                  className={`text-xs cursor-pointer hover:bg-muted ${
+                    isAIVar ? 'border-purple-500/50 text-purple-300' : 
+                    isTelegramVar ? 'border-blue-500/50 text-blue-300' : ''
+                  }`}
+                  onClick={() => {
+                    navigator.clipboard.writeText(v.var);
+                    toast.success(`Copied ${v.var}`);
+                  }}
+                  title={v.desc}
+                >
+                  {v.var}
+                </Badge>
+              );
+            })}
           </div>
           
           {/* AI Variables Explanation */}
@@ -672,6 +707,15 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <p className="text-xs text-muted-foreground">
               Add <code className="bg-muted px-1 rounded">{'{ai_summary}'}</code> or <code className="bg-muted px-1 rounded">{'{lifecycle}'}</code> to your template to include AI-generated interpretation. 
               The AI summary will only be fetched when these variables are present in the active template.
+            </p>
+          </div>
+          
+          {/* Telegram Variables Explanation */}
+          <div className="mt-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <p className="text-xs font-medium text-blue-300 mb-1">📱 Telegram-Specific Variables</p>
+            <p className="text-xs text-muted-foreground">
+              Variables like <code className="bg-muted px-1 rounded">{'{whaleBar}'}</code>, <code className="bg-muted px-1 rounded">{'{tweetUrl}'}</code>, <code className="bg-muted px-1 rounded">{'{searchCount}'}</code> are only populated in Telegram templates.
+              Use Markdown formatting: *bold*, \`code\`.
             </p>
           </div>
         </div>

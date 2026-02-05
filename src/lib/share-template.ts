@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -59,6 +59,34 @@ Health: {healthGrade} ({healthScore}/100)
 💨 {dust} Dust (<$1)
 
 Analyze any token 👉 blackbox.farm/holders`,
+
+  tg_posted: `📢 *Intel XBot Posted*
+
+🪙 *$\{ticker}*
+├ Holders: {totalWallets}
+├ Real: {realHolders}
+├ Grade: {healthGrade}
+└ Post #{timesPosted}
+
+📈 Distribution
+\`Whales  {whaleBar} {whalePct}%\`
+\`Serious {seriousBar} {seriousPct}%\`
+\`Retail  {retailBar} {retailPct}%\`
+\`Dust    {dustBar} {dustPct}%\`
+
+🐦 {tweetUrl}`,
+
+  tg_search: `🔎 *Search Surge Detected*
+
+🪙 *$\{ticker}* ({name})
+
+📊 {searchCount} searches in {timeWindow}
+👥 {uniqueIps} unique IPs
+
+⚡ Trigger: {triggerType}
+📍 Status: Queued for analysis
+
+🔗 blackbox.farm/holders?token={ca}`,
 };
 
 // Legacy default for backwards compatibility
@@ -83,6 +111,21 @@ export const TEMPLATE_VARIABLES = [
   { var: '{comment1}', desc: 'Milestone comment (Intel posts)' },
   { var: '{ai_summary}', desc: 'AI-generated 1-2 sentence interpretation (when enabled)' },
   { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
+  // Telegram-specific variables
+  { var: '{timesPosted}', desc: 'Number of times token was posted (TG Posted)' },
+  { var: '{whaleBar}', desc: 'ASCII bar for whale percentage (TG)' },
+  { var: '{seriousBar}', desc: 'ASCII bar for serious percentage (TG)' },
+  { var: '{retailBar}', desc: 'ASCII bar for retail percentage (TG)' },
+  { var: '{dustBar}', desc: 'ASCII bar for dust percentage (TG)' },
+  { var: '{whalePct}', desc: 'Whale percentage number (TG)' },
+  { var: '{seriousPct}', desc: 'Serious percentage number (TG)' },
+  { var: '{retailPct}', desc: 'Retail percentage number (TG)' },
+  { var: '{tweetUrl}', desc: 'URL of the posted tweet (TG Posted)' },
+  // Search surge variables
+  { var: '{searchCount}', desc: 'Number of searches detected (TG Search)' },
+  { var: '{timeWindow}', desc: 'Time window description (TG Search)' },
+  { var: '{uniqueIps}', desc: 'Unique IP count (TG Search)' },
+  { var: '{triggerType}', desc: 'Surge trigger type (TG Search)' },
 ];
 
 export interface TokenShareData {
