@@ -1,14 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
+import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// BlackBox Telegram supergroup chat ID (upgraded from -5274739643)
-const BLACKBOX_CHAT_ID = -1003739469076;
 const ADMIN_EMAIL = "admin@blackbox.farm";
 
 interface NotifyRequest {
@@ -96,7 +95,7 @@ serve(async (req) => {
       }
     }
 
-    // 3. Send Telegram notification to BlackBox group
+    // 3. Send Telegram notification to BlackBox group (from database)
     if (channels.includes("telegram")) {
       try {
         // Format Telegram message
@@ -113,20 +112,16 @@ serve(async (req) => {
         
         tgMessage += `\n⏰ ${new Date().toLocaleString('en-US', { timeZone: 'UTC' })} UTC`;
 
-        // Send via MTProto (same method as FlipIt)
-        const { data, error } = await supabase.functions.invoke("telegram-mtproto-auth", {
-          body: {
-            action: "send_message",
-            chatId: BLACKBOX_CHAT_ID,
-            message: tgMessage,
-          },
-        });
-
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || "Failed to send");
+        // Broadcast to BLACKBOX group(s) from database
+        const broadcastResults = await broadcastToBlackBox(supabase, tgMessage);
+        const successCount = broadcastResults.filter(r => r.success).length;
         
-        results.push({ channel: "telegram", success: true });
-        console.log("[admin-notify] ✓ Telegram sent to BlackBox group");
+        if (successCount > 0) {
+          results.push({ channel: "telegram", success: true });
+          console.log(`[admin-notify] ✓ Telegram sent to ${successCount} BLACKBOX target(s)`);
+        } else {
+          throw new Error("No targets received the message");
+        }
       } catch (e) {
         console.error("[admin-notify] Telegram error:", e);
         results.push({ channel: "telegram", success: false, error: e instanceof Error ? e.message : "Unknown error" });

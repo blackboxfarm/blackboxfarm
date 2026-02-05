@@ -5,8 +5,8 @@
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { CoinGeckoErrorInfo } from "./coingecko-error-handler.ts";
+import { broadcastToBlackBox } from "./telegram-broadcast.ts";
 
-const BLACKBOX_TG_GROUP_ID = -1003739469076;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between same error type alerts
 
 // In-memory cooldown tracker (resets on function cold start)
@@ -186,21 +186,12 @@ export async function sendCoinGeckoAlert(
     console.error('[CoinGecko Alert] Failed to log to database:', e);
   }
 
-  // 2. Send Telegram message
+  // 2. Send Telegram message via broadcast utility
   try {
     const telegramMessage = formatTelegramMessage(errorInfo, context);
-    const { error: tgError } = await supabase.functions.invoke('telegram-mtproto-auth', {
-      body: {
-        action: 'send_message',
-        chatId: BLACKBOX_TG_GROUP_ID,
-        message: telegramMessage,
-      },
-    });
-    
-    if (tgError) {
-      console.warn('[CoinGecko Alert] Telegram failed:', tgError);
-    } else {
-      result.telegramSent = true;
+    const results = await broadcastToBlackBox(supabase, telegramMessage);
+    result.telegramSent = results.some(r => r.success);
+    if (result.telegramSent) {
       console.log('[CoinGecko Alert] ✓ Telegram message sent');
     }
   } catch (e) {

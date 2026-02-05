@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -135,8 +136,6 @@ async function sendTelegramAlert(supabase: any, alertData: {
   targetMultiplier: number;
   alertOnly: boolean;
 }) {
-  const BLACKBOX_TG_GROUP_ID = -1003739469076;
-  
   const alertType = alertData.alertOnly ? '🔔 ALERT ONLY' : '🎯 LIMIT BUY EXECUTED';
   const message = `${alertType}
 
@@ -151,45 +150,16 @@ async function sendTelegramAlert(supabase: any, alertData: {
 📊 [DexScreener](https://dexscreener.com/solana/${alertData.tokenMint})`;
 
   try {
-    // Try MTProto first
-    const { error: mtprotoError } = await supabase.functions.invoke('telegram-mtproto-auth', {
-      body: {
-        action: 'send_message',
-        chatId: BLACKBOX_TG_GROUP_ID,
-        message: message,
-      },
-    });
-
-    if (!mtprotoError) {
-      console.log('[Limit Order] Telegram alert sent via MTProto');
-      return true;
+    const results = await broadcastToBlackBox(supabase, message);
+    const success = results.some(r => r.success);
+    if (success) {
+      console.log('[Limit Order] Telegram alert sent to BLACKBOX');
     }
-    console.warn('[Limit Order] MTProto failed:', mtprotoError);
+    return success;
   } catch (e) {
-    console.warn('[Limit Order] MTProto exception:', e);
+    console.warn('[Limit Order] Telegram broadcast exception:', e);
+    return false;
   }
-
-  // Fallback to bot webhook
-  try {
-    const { error: botError } = await supabase.functions.invoke('telegram-bot-webhook', {
-      body: {
-        action: 'send_message',
-        chat_id: BLACKBOX_TG_GROUP_ID,
-        text: message,
-        parse_mode: 'Markdown',
-      },
-    });
-
-    if (!botError) {
-      console.log('[Limit Order] Telegram alert sent via bot webhook');
-      return true;
-    }
-    console.warn('[Limit Order] Bot webhook failed:', botError);
-  } catch (e) {
-    console.warn('[Limit Order] Bot webhook exception:', e);
-  }
-
-  return false;
 }
 
 serve(async (req) => {
