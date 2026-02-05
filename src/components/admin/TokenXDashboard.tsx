@@ -94,6 +94,8 @@ export function TokenXDashboard() {
   const [bondedFilter, setBondedFilter] = useState<BondedFilter>('all');
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [activeTab, setActiveTab] = useState('posted');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(50);
 
   const fetchTokens = async () => {
     setLoading(true);
@@ -217,6 +219,17 @@ export function TokenXDashboard() {
 
     return result;
   }, [tokens, communityFilter, bondedFilter, sortOrder]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredAndSortedTokens.length / itemsPerPage);
+  const paginatedTokens = itemsPerPage === 0 
+    ? filteredAndSortedTokens 
+    : filteredAndSortedTokens.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [communityFilter, bondedFilter, sortOrder, itemsPerPage]);
 
   const runBackfill = async () => {
     setBackfilling(true);
@@ -379,13 +392,29 @@ ${holdersUrl}
             </Select>
           </div>
 
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Per page:</span>
+            <Select value={itemsPerPage.toString()} onValueChange={(v) => setItemsPerPage(Number(v))}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+                <SelectItem value="250">250</SelectItem>
+                <SelectItem value="0">All</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="ml-auto text-sm text-muted-foreground">
-            Showing {filteredAndSortedTokens.length} of {tokens.length}
+            Showing {paginatedTokens.length} of {filteredAndSortedTokens.length}
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border max-h-[600px] overflow-auto">
+        <div className="rounded-md border">
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
@@ -402,7 +431,7 @@ ${holdersUrl}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAndSortedTokens.map((token) => (
+              {paginatedTokens.map((token) => (
                 <TableRow 
                   key={token.token_mint} 
                   className={doneTokens.has(token.token_mint) ? 'opacity-50 bg-muted/30' : ''}
@@ -522,6 +551,49 @@ ${holdersUrl}
             </TableBody>
           </Table>
         </div>
+        
+        {/* Pagination Controls */}
+        {itemsPerPage > 0 && totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+              >
+                First
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+              >
+                Last
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
