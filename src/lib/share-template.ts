@@ -76,15 +76,18 @@ Analyze any token 👉 blackbox.farm/holders`,
 
 🐦 {tweetUrl}`,
 
-  tg_search: `🔎 *Search Surge Detected*
+  tg_search: `📊 *Holders Report Generated*
 
 🪙 *$\{ticker}* ({name})
 
-📊 {searchCount} searches in {timeWindow}
-👥 {uniqueIps} unique IPs
+📈 Analysis Complete
+├ Total: {totalWallets}
+├ Real: {realHolders}
+├ Dust: {dustPct}%
+└ Grade: {healthGrade}
 
-⚡ Trigger: {triggerType}
-📍 Status: Queued for analysis
+🐋 Whale: {whales} | 💼 Serious: {serious}
+🌱 Retail: {retail} | 💨 Dust: {dust}
 
 🔗 blackbox.farm/holders?token={ca}`,
 };
@@ -121,11 +124,7 @@ export const TEMPLATE_VARIABLES = [
   { var: '{seriousPct}', desc: 'Serious percentage number (TG)' },
   { var: '{retailPct}', desc: 'Retail percentage number (TG)' },
   { var: '{tweetUrl}', desc: 'URL of the posted tweet (TG Posted)' },
-  // Search surge variables
-  { var: '{searchCount}', desc: 'Number of searches detected (TG Search)' },
-  { var: '{timeWindow}', desc: 'Time window description (TG Search)' },
-  { var: '{uniqueIps}', desc: 'Unique IP count (TG Search)' },
-  { var: '{triggerType}', desc: 'Surge trigger type (TG Search)' },
+  // TG Search (Holders Report Generated) uses the same variables as other templates
 ];
 
 export interface TokenShareData {
