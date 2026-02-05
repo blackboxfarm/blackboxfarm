@@ -32,8 +32,7 @@ export function TokenXDashboard() {
         .from('holders_intel_seen_tokens')
         .select('token_mint, symbol, banner_url, image_uri, times_posted')
         .eq('was_posted', true)
-        .order('times_posted', { ascending: false })
-        .limit(200);
+        .order('times_posted', { ascending: false });
 
       if (error) throw error;
 
