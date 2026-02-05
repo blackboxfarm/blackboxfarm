@@ -1,6 +1,5 @@
 // Admin notification service - broadcasts to Telegram groups from database (inlined v2)
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.54.0";
 import { Resend } from "npm:resend@2.0.0";
 
 // Inlined broadcast function to avoid import issues
@@ -50,7 +49,7 @@ interface NotifyRequest {
   channels?: ("email" | "telegram" | "database")[];
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
