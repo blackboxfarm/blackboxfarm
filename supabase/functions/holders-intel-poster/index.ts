@@ -455,6 +455,30 @@ Deno.serve(async (req) => {
       
       console.log(`[poster] Successfully posted tweet: ${tweetResult.tweetId}`);
       
+      // Also post to BlackBox TG group (fire-and-forget)
+      try {
+        const tgMessage = `📢 *Intel XBot Posted*\n\n` +
+          `🪙 *$${stats.symbol.toUpperCase()}*\n` +
+          `├ Holders: ${stats.totalHolders.toLocaleString()}\n` +
+          `├ Real: ${stats.realHolders.toLocaleString()}\n` +
+          `├ Grade: ${stats.healthGrade}\n` +
+          `└ Post #${stats.timesPosted}\n\n` +
+          `🐦 ${tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`}`;
+        
+        await supabase.functions.invoke('admin-notify', {
+          body: {
+            type: 'intel_xbot_post',
+            title: `XBot: $${stats.symbol.toUpperCase()}`,
+            message: tgMessage,
+            metadata: { tokenMint: item.token_mint, tweetId: tweetResult.tweetId },
+            channels: ['telegram'],
+          },
+        });
+        console.log('[poster] TG notification sent');
+      } catch (tgErr) {
+        console.warn('[poster] TG notification failed:', tgErr);
+      }
+      
       const elapsed = Date.now() - startTime;
       
       return new Response(
