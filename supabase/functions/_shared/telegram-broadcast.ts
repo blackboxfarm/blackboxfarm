@@ -91,10 +91,29 @@ async function sendToTarget(
  * @param labels - Optional array of labels to filter targets. If empty, sends to all targets.
  * @returns Array of results for each target
  */
+// Default delay between messages to avoid rate limiting (in milliseconds)
+const DEFAULT_MESSAGE_DELAY_MS = 2000;
+
+/**
+ * Sleep utility for rate limiting
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Broadcasts a message to multiple Telegram targets with rate limiting
+ * @param supabase - Supabase client with service role
+ * @param message - The message to send (supports Markdown)
+ * @param labels - Optional array of labels to filter targets. If empty, sends to all targets.
+ * @param delayMs - Delay between messages in milliseconds (default: 2000ms)
+ * @returns Array of results for each target
+ */
 export async function broadcastToTelegram(
   supabase: SupabaseClient,
   message: string,
-  labels?: string[]
+  labels?: string[],
+  delayMs: number = DEFAULT_MESSAGE_DELAY_MS
 ): Promise<BroadcastResult[]> {
   const targets = await getTelegramTargets(supabase, labels);
 
@@ -103,12 +122,20 @@ export async function broadcastToTelegram(
     return [];
   }
 
-  console.log(`[telegram-broadcast] Broadcasting to ${targets.length} target(s):`, 
+  console.log(`[telegram-broadcast] Broadcasting to ${targets.length} target(s) with ${delayMs}ms delay:`, 
     targets.map(t => t.label).join(", "));
 
   const results: BroadcastResult[] = [];
 
-  for (const target of targets) {
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i];
+    
+    // Add delay between messages (skip delay for first message)
+    if (i > 0 && delayMs > 0) {
+      console.log(`[telegram-broadcast] Rate limit delay: ${delayMs}ms...`);
+      await sleep(delayMs);
+    }
+    
     console.log(`[telegram-broadcast] Sending to ${target.label} (${target.chat_id})...`);
     const result = await sendToTarget(supabase, target, message);
     results.push(result);
