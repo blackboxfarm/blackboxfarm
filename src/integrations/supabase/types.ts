@@ -3722,6 +3722,7 @@ export type Database = {
       }
       holders_intel_seen_tokens: {
         Row: {
+          banner_url: string | null
           first_seen_at: string
           health_grade: string | null
           image_uri: string | null
@@ -3736,6 +3737,7 @@ export type Database = {
           was_posted: boolean
         }
         Insert: {
+          banner_url?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
@@ -3750,6 +3752,7 @@ export type Database = {
           was_posted?: boolean
         }
         Update: {
+          banner_url?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null

@@ -245,10 +245,10 @@ export function AdBanner({ size, position }: AdBannerProps) {
               loading="lazy"
             />
           )}
-          {/* Ticker overlay for Dexscreener banners */}
+          {/* Ticker overlay for Dexscreener banners - bottom left */}
           {isDexBanner && tickerDisplay && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] tracking-wider">
+            <div className="absolute inset-0 flex items-end justify-start pointer-events-none p-4">
+              <h1 className="text-3xl md:text-4xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] tracking-wider">
                 {tickerDisplay}
               </h1>
             </div>
