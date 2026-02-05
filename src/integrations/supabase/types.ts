@@ -3723,11 +3723,13 @@ export type Database = {
       holders_intel_seen_tokens: {
         Row: {
           banner_url: string | null
+          bonded_at: string | null
           first_seen_at: string
           health_grade: string | null
           image_uri: string | null
           last_seen_at: string
           market_cap_at_discovery: number | null
+          minted_at: string | null
           name: string | null
           snapshot_slot: string | null
           symbol: string | null
@@ -3738,11 +3740,13 @@ export type Database = {
         }
         Insert: {
           banner_url?: string | null
+          bonded_at?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
           last_seen_at?: string
           market_cap_at_discovery?: number | null
+          minted_at?: string | null
           name?: string | null
           snapshot_slot?: string | null
           symbol?: string | null
@@ -3753,11 +3757,13 @@ export type Database = {
         }
         Update: {
           banner_url?: string | null
+          bonded_at?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
           last_seen_at?: string
           market_cap_at_discovery?: number | null
+          minted_at?: string | null
           name?: string | null
           snapshot_slot?: string | null
           symbol?: string | null

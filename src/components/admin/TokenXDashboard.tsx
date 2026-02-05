@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown } from 'lucide-react';
+import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PostedToken {
@@ -17,15 +17,62 @@ interface PostedToken {
   x_community_id?: string | null;
   x_community_url?: string | null;
   snapshot_slot?: string | null;
+  minted_at?: string | null;
+  bonded_at?: string | null;
 }
 
 type CommunityFilter = 'all' | 'with-community' | 'no-community';
 type SortOrder = 'newest' | 'oldest' | 'most-posted';
 
+// Format date to Toronto timezone: "Feb03/26|14:33"
+function formatTorontoDate(isoDate: string | null | undefined): string {
+  if (!isoDate) return '-';
+  try {
+    const date = new Date(isoDate);
+    return date.toLocaleString('en-US', {
+      timeZone: 'America/Toronto',
+      month: 'short',
+      day: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).replace(',', '|').replace(' ', '/').replace(' ', '');
+  } catch {
+    return '-';
+  }
+}
+
+// Calculate relative time ago from a date
+function getTimeAgo(isoDate: string | null | undefined): string {
+  if (!isoDate) return '-';
+  try {
+    const date = new Date(isoDate);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffDays > 0) {
+      const remainingHours = Math.floor((diffMs % 86400000) / 3600000);
+      return `${diffDays}d ${remainingHours}h ago`;
+    } else if (diffHours > 0) {
+      const remainingMins = Math.floor((diffMs % 3600000) / 60000);
+      return `${diffHours}h ${remainingMins}m ago`;
+    } else {
+      return `${diffMins}m ago`;
+    }
+  } catch {
+    return '-';
+  }
+}
+
 export function TokenXDashboard() {
   const [tokens, setTokens] = useState<PostedToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [backfilling, setBackfilling] = useState(false);
+  const [backfillingTimestamps, setBackfillingTimestamps] = useState(false);
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const [doneTokens, setDoneTokens] = useState<Set<string>>(new Set());
   const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('all');
@@ -34,12 +81,12 @@ export function TokenXDashboard() {
   const fetchTokens = async () => {
     setLoading(true);
     try {
-      // Get posted tokens - use snapshot_slot for date ordering (format: YYYY-MM-DD_HH:MM)
+      // Get posted tokens with timestamps
       const { data: postedTokens, error } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('token_mint, symbol, banner_url, image_uri, times_posted, snapshot_slot')
+        .select('token_mint, symbol, banner_url, image_uri, times_posted, snapshot_slot, minted_at, bonded_at')
         .eq('was_posted', true)
-        .order('snapshot_slot', { ascending: false });
+        .order('minted_at', { ascending: false, nullsFirst: false });
 
       if (error) throw error;
 
@@ -83,12 +130,16 @@ export function TokenXDashboard() {
       result = result.filter(t => !t.x_community_id);
     }
 
-    // Apply sorting (snapshot_slot format: YYYY-MM-DD_HH:MM)
+    // Apply sorting based on minted_at or bonded_at
     result.sort((a, b) => {
       if (sortOrder === 'newest') {
-        return (b.snapshot_slot || '').localeCompare(a.snapshot_slot || '');
+        const dateA = a.minted_at || a.snapshot_slot || '';
+        const dateB = b.minted_at || b.snapshot_slot || '';
+        return dateB.localeCompare(dateA);
       } else if (sortOrder === 'oldest') {
-        return (a.snapshot_slot || '').localeCompare(b.snapshot_slot || '');
+        const dateA = a.minted_at || a.snapshot_slot || '';
+        const dateB = b.minted_at || b.snapshot_slot || '';
+        return dateA.localeCompare(dateB);
       } else {
         return (b.times_posted || 0) - (a.times_posted || 0);
       }
@@ -147,7 +198,24 @@ ${holdersUrl}
     toast.success('Marked as done');
   };
 
+  const runTimestampBackfill = async () => {
+    setBackfillingTimestamps(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('backfill-token-timestamps');
+      if (error) throw error;
+      
+      toast.success(`Timestamps: ${data?.results?.mintedUpdated || 0} minted, ${data?.results?.bondedUpdated || 0} bonded`);
+      fetchTokens();
+    } catch (err) {
+      console.error('Timestamp backfill error:', err);
+      toast.error('Timestamp backfill failed');
+    } finally {
+      setBackfillingTimestamps(false);
+    }
+  };
+
   const missingBanners = tokens.filter(t => !t.banner_url).length;
+  const missingTimestamps = tokens.filter(t => !t.minted_at).length;
   const withCommunity = tokens.filter(t => t.x_community_id).length;
 
   return (
@@ -157,10 +225,10 @@ ${holdersUrl}
           <div>
             <CardTitle>Token X Posts</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              {tokens.length} total • {filteredAndSortedTokens.length} shown • {withCommunity} with community • {missingBanners} missing banners
+              {tokens.length} total • {filteredAndSortedTokens.length} shown • {withCommunity} with community • {missingBanners} missing banners • {missingTimestamps} missing timestamps
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={fetchTokens} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -173,6 +241,15 @@ ${holdersUrl}
             >
               <Play className={`h-4 w-4 mr-2 ${backfilling ? 'animate-spin' : ''}`} />
               {backfilling ? 'Backfilling...' : `Backfill Banners (${missingBanners})`}
+            </Button>
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={runTimestampBackfill} 
+              disabled={backfillingTimestamps || missingTimestamps === 0}
+            >
+              <Clock className={`h-4 w-4 mr-2 ${backfillingTimestamps ? 'animate-spin' : ''}`} />
+              {backfillingTimestamps ? 'Backfilling...' : `Backfill Timestamps (${missingTimestamps})`}
             </Button>
           </div>
         </div>
@@ -215,6 +292,9 @@ ${holdersUrl}
               <TableRow>
                 <TableHead className="w-16">Icon</TableHead>
                 <TableHead>Token</TableHead>
+                <TableHead className="text-center">Minted</TableHead>
+                <TableHead className="text-center">Bonded</TableHead>
+                <TableHead className="text-center">Age</TableHead>
                 <TableHead>Links</TableHead>
                 <TableHead>X Community</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -246,6 +326,23 @@ ${holdersUrl}
                         {token.token_mint.slice(0, 8)}...
                       </span>
                     </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {formatTorontoDate(token.minted_at)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {token.bonded_at ? formatTorontoDate(token.bonded_at) : (
+                        <Badge variant="outline" className="text-xs">Not Bonded</Badge>
+                      )}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="text-xs font-medium">
+                      {getTimeAgo(token.bonded_at || token.minted_at)}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
