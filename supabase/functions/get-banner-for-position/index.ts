@@ -69,7 +69,7 @@ serve(async (req) => {
   }
 
   try {
-    const { position, includeDexscreener } = await req.json();
+    const { position, includeDexscreener, tokenAddress } = await req.json();
 
     if (!position || position < 1 || position > 4) {
       return new Response(
@@ -81,6 +81,38 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // PRIORITY 1: Check for token-specific banner (position 1 only)
+    if (position === 1 && tokenAddress) {
+      const { data: tokenBanner, error: tokenBannerError } = await supabase
+        .from('token_banners')
+        .select('*')
+        .eq('token_address', tokenAddress)
+        .eq('is_active', true)
+        .single();
+
+      if (tokenBanner && !tokenBannerError) {
+        console.log('Serving token-specific banner for:', tokenAddress, tokenBanner.symbol);
+        return new Response(
+          JSON.stringify({
+            banner: {
+              id: tokenBanner.id,
+              title: tokenBanner.symbol || 'TOKEN',
+              description: '',
+              image_url: tokenBanner.banner_url,
+              link_url: tokenBanner.link_url,
+              position: 1,
+              is_active: true,
+              is_dexscreener: false,
+              is_token_banner: true,
+              token_address: tokenBanner.token_address,
+              token_symbol: tokenBanner.symbol,
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Get active banners for this position
     const now = new Date().toISOString();
