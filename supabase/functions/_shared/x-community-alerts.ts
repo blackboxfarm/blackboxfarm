@@ -5,7 +5,7 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const BLACKBOX_TG_GROUP_ID = -5274739643;
+const BLACKBOX_TG_GROUP_ID = -1003739469076;
 
 export interface CommunityAlertInfo {
   communityId: string;
