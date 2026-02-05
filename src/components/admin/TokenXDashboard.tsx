@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { ExternalLink, Copy, Check, RefreshCw, Play } from 'lucide-react';
+import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PostedToken {
   token_mint: string;
@@ -15,7 +16,11 @@ interface PostedToken {
   times_posted: number | null;
   x_community_id?: string | null;
   x_community_url?: string | null;
+  snapshot_slot?: string | null;
 }
+
+type CommunityFilter = 'all' | 'with-community' | 'no-community';
+type SortOrder = 'newest' | 'oldest' | 'most-posted';
 
 export function TokenXDashboard() {
   const [tokens, setTokens] = useState<PostedToken[]>([]);
@@ -23,16 +28,18 @@ export function TokenXDashboard() {
   const [backfilling, setBackfilling] = useState(false);
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const [doneTokens, setDoneTokens] = useState<Set<string>>(new Set());
+  const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('all');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
 
   const fetchTokens = async () => {
     setLoading(true);
     try {
-      // Get posted tokens
+      // Get posted tokens - use snapshot_slot for date ordering (format: YYYY-MM-DD_HH:MM)
       const { data: postedTokens, error } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('token_mint, symbol, banner_url, image_uri, times_posted')
+        .select('token_mint, symbol, banner_url, image_uri, times_posted, snapshot_slot')
         .eq('was_posted', true)
-        .order('times_posted', { ascending: false });
+        .order('snapshot_slot', { ascending: false });
 
       if (error) throw error;
 
@@ -64,6 +71,31 @@ export function TokenXDashboard() {
   useEffect(() => {
     fetchTokens();
   }, []);
+
+  // Apply filtering and sorting
+  const filteredAndSortedTokens = useMemo(() => {
+    let result = [...tokens];
+
+    // Apply community filter
+    if (communityFilter === 'with-community') {
+      result = result.filter(t => t.x_community_id);
+    } else if (communityFilter === 'no-community') {
+      result = result.filter(t => !t.x_community_id);
+    }
+
+    // Apply sorting (snapshot_slot format: YYYY-MM-DD_HH:MM)
+    result.sort((a, b) => {
+      if (sortOrder === 'newest') {
+        return (b.snapshot_slot || '').localeCompare(a.snapshot_slot || '');
+      } else if (sortOrder === 'oldest') {
+        return (a.snapshot_slot || '').localeCompare(b.snapshot_slot || '');
+      } else {
+        return (b.times_posted || 0) - (a.times_posted || 0);
+      }
+    });
+
+    return result;
+  }, [tokens, communityFilter, sortOrder]);
 
   const runBackfill = async () => {
     setBackfilling(true);
@@ -116,30 +148,64 @@ ${holdersUrl}
   };
 
   const missingBanners = tokens.filter(t => !t.banner_url).length;
+  const withCommunity = tokens.filter(t => t.x_community_id).length;
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Token X Posts</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">
-            {tokens.length} posted tokens • {missingBanners} missing banners
-          </p>
+      <CardHeader className="flex flex-col gap-4">
+        <div className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Token X Posts</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              {tokens.length} total • {filteredAndSortedTokens.length} shown • {withCommunity} with community • {missingBanners} missing banners
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={fetchTokens} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={runBackfill} 
+              disabled={backfilling || missingBanners === 0}
+            >
+              <Play className={`h-4 w-4 mr-2 ${backfilling ? 'animate-spin' : ''}`} />
+              {backfilling ? 'Backfilling...' : `Backfill Banners (${missingBanners})`}
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchTokens} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button 
-            variant="default" 
-            size="sm" 
-            onClick={runBackfill} 
-            disabled={backfilling || missingBanners === 0}
-          >
-            <Play className={`h-4 w-4 mr-2 ${backfilling ? 'animate-spin' : ''}`} />
-            {backfilling ? 'Backfilling...' : `Backfill Banners (${missingBanners})`}
-          </Button>
+        
+        {/* Filter and Sort Controls */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={communityFilter} onValueChange={(v) => setCommunityFilter(v as CommunityFilter)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by community" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tokens</SelectItem>
+                <SelectItem value="with-community">With X Community</SelectItem>
+                <SelectItem value="no-community">No Community</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as SortOrder)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Newest First</SelectItem>
+                <SelectItem value="oldest">Oldest First</SelectItem>
+                <SelectItem value="most-posted">Most Posted</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -155,7 +221,7 @@ ${holdersUrl}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tokens.map((token) => (
+              {filteredAndSortedTokens.map((token) => (
                 <TableRow 
                   key={token.token_mint} 
                   className={doneTokens.has(token.token_mint) ? 'opacity-50 bg-muted/30' : ''}
