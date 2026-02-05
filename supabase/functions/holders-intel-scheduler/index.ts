@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,6 +72,35 @@ function getPreviousSnapshotSlots(currentSlot: string): string[] {
 
 const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
 
+// Fetch mint address from DexScreener pair page if worker didn't resolve it
+async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null; symbol: string; name: string }> {
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pairId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      }
+    });
+    
+    if (!response.ok) return { mint: null, symbol: 'UNKNOWN', name: 'Unknown' };
+    
+    const data = await response.json();
+    const pair = data.pair || data.pairs?.[0];
+    
+    if (pair?.baseToken?.address) {
+      return {
+        mint: pair.baseToken.address,
+        symbol: pair.baseToken.symbol || 'UNKNOWN',
+        name: pair.baseToken.name || 'Unknown',
+      };
+    }
+    return { mint: null, symbol: 'UNKNOWN', name: 'Unknown' };
+  } catch (e) {
+    console.error(`[scheduler] Failed to fetch pair ${pairId}:`, e);
+    return { mint: null, symbol: 'UNKNOWN', name: 'Unknown' };
+  }
+}
+
 async function fetchTrendingTokens(): Promise<TrendingToken[]> {
   console.log('[scheduler] Fetching from Cloudflare KV worker...');
   
@@ -89,21 +118,44 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
       console.warn('[scheduler] Warning: Worker data is stale');
     }
     
-    console.log(`[scheduler] Got ${data.countPairsResolved || 0}/${data.countPairsRequested || 0} pairs from worker`);
+    console.log(`[scheduler] Got ${data.countPairsResolved || 0}/${data.countPairsRequested || 0} resolved pairs from worker`);
     
-    // Map worker response to our TrendingToken format
-    const tokens = (data.pairs || [])
-      .filter((p: any) => p.ok && p.tokenMint)
-      .map((p: any) => ({
-        mint: p.tokenMint,
-        symbol: p.symbol || 'UNKNOWN',
-        name: p.name || 'Unknown Token',
-        marketCap: p.fdv || 0,
-        priceChange24h: 0,
-      }))
-      .slice(0, 50);
+    const allPairs = data.pairs || [];
+    const tokens: TrendingToken[] = [];
     
-    console.log(`[scheduler] Mapped ${tokens.length} tokens`);
+    // Process ALL pairs, not just resolved ones
+    for (let i = 0; i < Math.min(allPairs.length, 50); i++) {
+      const p = allPairs[i];
+      
+      if (p.ok && p.tokenMint) {
+        // Worker resolved it - use directly
+        tokens.push({
+          mint: p.tokenMint,
+          symbol: p.symbol || 'UNKNOWN',
+          name: p.name || 'Unknown Token',
+          marketCap: p.fdv || 0,
+          priceChange24h: 0,
+        });
+      } else if (p.pairId) {
+        // Worker didn't resolve - fetch from DexScreener ourselves
+        console.log(`[scheduler] Resolving unresolved pair #${i + 1}: ${p.pairId}`);
+        const resolved = await fetchMintFromPair(p.pairId);
+        
+        if (resolved.mint) {
+          tokens.push({
+            mint: resolved.mint,
+            symbol: resolved.symbol,
+            name: resolved.name,
+            marketCap: p.fdv || 0,
+            priceChange24h: 0,
+          });
+        } else {
+          console.warn(`[scheduler] Could not resolve pair ${p.pairId}`);
+        }
+      }
+    }
+    
+    console.log(`[scheduler] Total tokens after resolution: ${tokens.length}`);
     if (tokens.length > 0) {
       console.log(`[scheduler] Sample: ${tokens.slice(0, 5).map((t: TrendingToken) => t.symbol).join(', ')}`);
     }
