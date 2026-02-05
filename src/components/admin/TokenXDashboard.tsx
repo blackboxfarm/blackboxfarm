@@ -258,7 +258,7 @@ ${holdersUrl}
                         DEX <ExternalLink className="h-3 w-3" />
                       </a>
                       <a
-                        href={`https://padre.gg/${token.symbol}`}
+                        href={`https://trade.padre.gg/trade/solana/${token.token_mint}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-primary hover:underline flex items-center gap-1"
