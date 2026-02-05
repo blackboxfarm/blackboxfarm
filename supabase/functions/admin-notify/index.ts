@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// BlackBox Telegram group chat ID
-const BLACKBOX_CHAT_ID = -5274739643;
+// BlackBox Telegram supergroup chat ID (upgraded from -5274739643)
+const BLACKBOX_CHAT_ID = -1003739469076;
 const ADMIN_EMAIL = "admin@blackbox.farm";
 
 interface NotifyRequest {

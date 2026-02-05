@@ -6,7 +6,7 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { CoinGeckoErrorInfo } from "./coingecko-error-handler.ts";
 
-const BLACKBOX_TG_GROUP_ID = -5274739643;
+const BLACKBOX_TG_GROUP_ID = -1003739469076;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between same error type alerts
 
 // In-memory cooldown tracker (resets on function cold start)

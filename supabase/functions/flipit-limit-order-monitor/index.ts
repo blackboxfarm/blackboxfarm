@@ -135,7 +135,7 @@ async function sendTelegramAlert(supabase: any, alertData: {
   targetMultiplier: number;
   alertOnly: boolean;
 }) {
-  const BLACKBOX_TG_GROUP_ID = -5274739643;
+  const BLACKBOX_TG_GROUP_ID = -1003739469076;
   
   const alertType = alertData.alertOnly ? '🔔 ALERT ONLY' : '🎯 LIMIT BUY EXECUTED';
   const message = `${alertType}
