@@ -1,8 +1,39 @@
-// Admin notification service - broadcasts to Telegram groups from database
+// Admin notification service - broadcasts to Telegram groups from database (inlined v2)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
-import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
+
+// Inlined broadcast function to avoid import issues
+async function broadcastToBlackBox(supabase: SupabaseClient, message: string) {
+  const { data: targets, error } = await supabase
+    .from("telegram_message_targets")
+    .select("id, chat_id, label, resolved_name")
+    .eq("label", "BLACKBOX");
+
+  if (error || !targets?.length) {
+    console.log("[admin-notify] No BLACKBOX targets found:", error);
+    return [];
+  }
+
+  const results = [];
+  for (const target of targets) {
+    try {
+      const { data, error: sendError } = await supabase.functions.invoke("telegram-mtproto-auth", {
+        body: { action: "send_message", chatId: Number(target.chat_id), message },
+      });
+      
+      if (sendError || !data?.success) {
+        results.push({ target, success: false, error: sendError?.message || data?.error });
+      } else {
+        await supabase.from("telegram_message_targets").update({ last_used_at: new Date().toISOString() }).eq("id", target.id);
+        results.push({ target, success: true });
+      }
+    } catch (e) {
+      results.push({ target, success: false, error: e instanceof Error ? e.message : "Unknown" });
+    }
+  }
+  return results;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
