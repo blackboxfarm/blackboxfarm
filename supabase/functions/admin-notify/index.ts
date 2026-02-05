@@ -128,7 +128,24 @@ Deno.serve(async (req) => {
 
     // 3. Send Telegram notification to BlackBox group (from database)
     if (channels.includes("telegram")) {
+      // Check if broadcasts are suspended
+      let isSuspended = false;
       try {
+        const { data: settingData } = await supabase
+          .from("system_settings")
+          .select("value")
+          .eq("key", "telegram_broadcast_suspended")
+          .maybeSingle();
+        isSuspended = settingData?.value === true;
+      } catch (checkErr) {
+        console.warn("[admin-notify] Could not check suspension status, proceeding");
+      }
+
+      if (isSuspended) {
+        console.log("[admin-notify] Telegram broadcasts are suspended, skipping");
+        results.push({ channel: "telegram", success: false, error: "Broadcasts suspended" });
+      } else {
+        try {
         // Format Telegram message
         let tgMessage = `🔔 *${title}*\n\n`;
         tgMessage += `${message}\n`;
@@ -153,9 +170,10 @@ Deno.serve(async (req) => {
         } else {
           throw new Error("No targets received the message");
         }
-      } catch (e) {
-        console.error("[admin-notify] Telegram error:", e);
-        results.push({ channel: "telegram", success: false, error: e instanceof Error ? e.message : "Unknown error" });
+        } catch (e) {
+          console.error("[admin-notify] Telegram error:", e);
+          results.push({ channel: "telegram", success: false, error: e instanceof Error ? e.message : "Unknown error" });
+        }
       }
     }
 
