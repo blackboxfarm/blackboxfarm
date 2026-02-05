@@ -3,9 +3,8 @@
  * Sends notifications when X Communities are deleted
  */
 
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const BLACKBOX_TG_GROUP_ID = -1003739469076;
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { broadcastToBlackBox } from "./telegram-broadcast.ts";
 
 export interface CommunityAlertInfo {
   communityId: string;
@@ -66,47 +65,16 @@ export async function sendCommunityDeletionAlert(
     const message = formatDeletionAlert(info);
     console.log(`[X Community Alert] Sending deletion alert for community ${info.communityId}`);
 
-    // Try MTProto first (more reliable)
-    try {
-      const { error: mtprotoError } = await supabase.functions.invoke('telegram-mtproto-auth', {
-        body: {
-          action: 'send_message',
-          chatId: BLACKBOX_TG_GROUP_ID,
-          message: message,
-        },
-      });
-
-      if (!mtprotoError) {
-        console.log('[X Community Alert] Sent via MTProto');
-        return true;
-      }
-      console.warn('[X Community Alert] MTProto failed:', mtprotoError);
-    } catch (e) {
-      console.warn('[X Community Alert] MTProto exception:', e);
+    const results = await broadcastToBlackBox(supabase, message);
+    const success = results.some(r => r.success);
+    
+    if (success) {
+      console.log('[X Community Alert] ✓ Alert sent to BLACKBOX');
+    } else {
+      console.error('[X Community Alert] All delivery methods failed');
     }
-
-    // Fallback to bot webhook
-    try {
-      const { error: botError } = await supabase.functions.invoke('telegram-bot-webhook', {
-        body: {
-          action: 'send_message',
-          chat_id: BLACKBOX_TG_GROUP_ID,
-          text: message,
-          parse_mode: 'Markdown',
-        },
-      });
-
-      if (!botError) {
-        console.log('[X Community Alert] Sent via bot webhook');
-        return true;
-      }
-      console.warn('[X Community Alert] Bot webhook failed:', botError);
-    } catch (e) {
-      console.warn('[X Community Alert] Bot webhook exception:', e);
-    }
-
-    console.error('[X Community Alert] All delivery methods failed');
-    return false;
+    
+    return success;
   } catch (error) {
     console.error('[X Community Alert] Error sending alert:', error);
     return false;
