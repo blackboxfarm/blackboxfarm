@@ -40,15 +40,24 @@ Deno.serve(async (req) => {
     for (const pattern of SURGE_PATTERNS) {
       const cutoffTime = new Date(Date.now() - pattern.minutes * 60 * 1000).toISOString();
 
-      // Query for surge patterns using raw SQL for GROUP BY with HAVING
-      const { data: surges, error: surgeError } = await supabase.rpc('get_search_surges', {
-        p_cutoff_time: cutoffTime,
-        p_threshold: pattern.threshold
-      }).catch(() => ({ data: null, error: { message: 'RPC not found, using fallback' } }));
+      // Query for surge patterns using RPC if available, else fallback
+      let surgeData: any[] | null = null;
+      
+      try {
+        const { data: surges, error: surgeError } = await supabase.rpc('get_search_surges', {
+          p_cutoff_time: cutoffTime,
+          p_threshold: pattern.threshold
+        });
+        
+        if (!surgeError && surges) {
+          surgeData = surges;
+        }
+      } catch (rpcErr) {
+        console.log('RPC not found, using fallback query');
+      }
 
-      // Fallback: Use direct query if RPC doesn't exist
-      let surgeData = surges;
-      if (!surges) {
+      // Fallback: Use direct query if RPC doesn't exist or failed
+      if (!surgeData) {
         const { data: rawData } = await supabase
           .from('token_search_log')
           .select('token_mint')

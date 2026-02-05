@@ -455,7 +455,7 @@ Deno.serve(async (req) => {
       
       console.log(`[poster] Successfully posted tweet: ${tweetResult.tweetId}`);
       
-      // Also post to BlackBox TG group (fire-and-forget)
+      // Also post to BlackBox TG group (fire-and-forget, with retry)
       try {
         // Generate ASCII bar for TG messages
         const generateAsciiBar = (percentage: number, width: number = 10): string => {
@@ -483,16 +483,35 @@ Deno.serve(async (req) => {
           `\`Dust    ${generateAsciiBar(dustPctVal)} ${dustPctVal.toString().padStart(2)}%\`\n\n` +
           `🐦 ${tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`}`;
         
-        await supabase.functions.invoke('admin-notify', {
-          body: {
-            type: 'intel_xbot_post',
-            title: `XBot: $${stats.symbol.toUpperCase()}`,
-            message: tgMessage,
-            metadata: { tokenMint: item.token_mint, tweetId: tweetResult.tweetId },
-            channels: ['telegram'],
-          },
-        });
-        console.log('[poster] TG notification sent');
+        // Send with retry (cold start can cause first attempt to fail)
+        let tgSuccess = false;
+        for (let attempt = 1; attempt <= 2 && !tgSuccess; attempt++) {
+          try {
+            const { error } = await supabase.functions.invoke('admin-notify', {
+              body: {
+                type: 'intel_xbot_post',
+                title: `XBot: $${stats.symbol.toUpperCase()}`,
+                message: tgMessage,
+                metadata: { tokenMint: item.token_mint, tweetId: tweetResult.tweetId },
+                channels: ['telegram'],
+              },
+            });
+            if (!error) {
+              tgSuccess = true;
+              console.log(`[poster] TG notification sent (attempt ${attempt})`);
+            } else if (attempt === 1) {
+              console.warn(`[poster] TG attempt ${attempt} failed, retrying...`);
+              await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+            }
+          } catch (attemptErr) {
+            if (attempt === 1) {
+              console.warn(`[poster] TG attempt ${attempt} error, retrying...`);
+              await new Promise(r => setTimeout(r, 1000));
+            } else {
+              console.warn('[poster] TG notification failed after retries:', attemptErr);
+            }
+          }
+        }
       } catch (tgErr) {
         console.warn('[poster] TG notification failed:', tgErr);
       }
