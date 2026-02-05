@@ -557,7 +557,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             </TabsTrigger>
             <TabsTrigger value="shares" className="text-xs">Shares</TabsTrigger>
             <TabsTrigger value="tg_posted" className="text-xs">TG Posted</TabsTrigger>
-            <TabsTrigger value="tg_search" className="text-xs">TG Search</TabsTrigger>
+            <TabsTrigger value="tg_search" className="text-xs">TG Report</TabsTrigger>
           </TabsList>
 
           {(['small', 'large', 'shares', 'tg_posted', 'tg_search'] as TemplateName[]).map((name) => (
@@ -600,10 +600,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
               )}
 
               {name === 'tg_search' && (
-                <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                  <Label className="font-medium text-orange-300">🔎 Telegram: Search Surge</Label>
+                <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <Label className="font-medium text-green-300">📊 Telegram: Holders Report</Label>
                   <p className="text-xs text-muted-foreground">
-                    Sent to BlackBox Telegram group when a token search surge is detected.
+                    Sent to BlackBox Telegram group when a holders report is generated on /holders.
                     Uses Markdown formatting (*bold*, \`code\`).
                   </p>
                 </div>
