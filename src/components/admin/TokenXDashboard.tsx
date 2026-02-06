@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign } from 'lucide-react';
+import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PostedToken {
@@ -77,6 +77,7 @@ export function TokenXDashboard() {
   const [backfilling, setBackfilling] = useState(false);
   const [backfillingTimestamps, setBackfillingTimestamps] = useState(false);
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
+  const [enrichingToken, setEnrichingToken] = useState<string | null>(null);
   const [doneTokens, setDoneTokens] = useState<Set<string>>(new Set());
   const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('all');
   const [bondedFilter, setBondedFilter] = useState<BondedFilter>('all');
@@ -237,6 +238,43 @@ ${holdersUrl}
   const handleDone = (tokenMint: string) => {
     setDoneTokens(prev => new Set([...prev, tokenMint]));
     toast.success('Marked as done');
+  };
+
+  // Manual X Community enrichment - prompts for community URL and links it to token
+  const handleEnrichCommunity = async (token: PostedToken) => {
+    const communityUrl = prompt(`Enter X Community URL to link to $${token.symbol}:\n\nExample: https://x.com/i/communities/1234567890`);
+    if (!communityUrl) return;
+    
+    if (!communityUrl.includes('communities/')) {
+      toast.error('Invalid community URL. Must contain /communities/');
+      return;
+    }
+
+    setEnrichingToken(token.token_mint);
+    try {
+      const { data, error } = await supabase.functions.invoke('x-community-enricher', {
+        body: { 
+          communityUrl,
+          linkedTokenMint: token.token_mint
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.isDeleted) {
+        toast.error('That community has been deleted');
+      } else if (data?.success) {
+        toast.success(`Community linked to $${token.symbol}!`);
+        fetchTokens(); // Refresh to show new community
+      } else {
+        toast.error(data?.error || 'Failed to enrich community');
+      }
+    } catch (err) {
+      console.error('Community enrichment error:', err);
+      toast.error('Failed to link community');
+    } finally {
+      setEnrichingToken(null);
+    }
   };
 
   const runTimestampBackfill = async () => {
@@ -444,18 +482,35 @@ ${holdersUrl}
                     </div>
                   </TableCell>
                   <TableCell>
-                    {token.x_community_url ? (
-                      <a
-                        href={token.x_community_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline flex items-center gap-1"
-                      >
-                        Community <ExternalLink className="h-3 w-3" />
-                      </a>
-                    ) : (
-                      <Badge variant="outline" className="text-xs">None</Badge>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {token.x_community_url ? (
+                        <a
+                          href={token.x_community_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          Community <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleEnrichCommunity(token)}
+                          disabled={enrichingToken === token.token_mint}
+                          className="h-6 px-2 text-xs"
+                        >
+                          {enrichingToken === token.token_mint ? (
+                            <RefreshCw className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Users className="h-3 w-3 mr-1" />
+                              Link
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
