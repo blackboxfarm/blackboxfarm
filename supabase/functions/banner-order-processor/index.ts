@@ -180,6 +180,24 @@ serve(async (req) => {
 
     console.log('Created banner order:', order.id);
 
+    // Generate the paid composite image asynchronously
+    // Don't await - let it run in the background
+    supabase.functions.invoke('generate-paid-composite', {
+      body: {
+        bannerUrl: imageUrl,
+        durationHours,
+        orderId: order.id,
+      },
+    }).then(({ data, error }) => {
+      if (error) {
+        console.error('Failed to generate paid composite:', error);
+      } else {
+        console.log('Paid composite generated:', data?.compositeUrl);
+      }
+    }).catch(err => {
+      console.error('Paid composite error:', err);
+    });
+
     // Send admin notifications (email + telegram + database badge)
     try {
       await supabase.functions.invoke('admin-notify', {

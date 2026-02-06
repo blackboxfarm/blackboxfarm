@@ -1086,6 +1086,7 @@ export type Database = {
           image_url: string
           is_active: boolean | null
           link_url: string
+          paid_composite_url: string | null
           payment_confirmed_at: string | null
           payment_sender_wallet: string | null
           payment_status: string | null
@@ -1115,6 +1116,7 @@ export type Database = {
           image_url: string
           is_active?: boolean | null
           link_url: string
+          paid_composite_url?: string | null
           payment_confirmed_at?: string | null
           payment_sender_wallet?: string | null
           payment_status?: string | null
@@ -1144,6 +1146,7 @@ export type Database = {
           image_url?: string
           is_active?: boolean | null
           link_url?: string
+          paid_composite_url?: string | null
           payment_confirmed_at?: string | null
           payment_sender_wallet?: string | null
           payment_status?: string | null
