@@ -210,12 +210,17 @@ export function TokenXDashboard() {
   };
 
   const generatePostText = (token: PostedToken) => {
-    const holdersUrl = `https://blackboxfarm.lovable.app/holders?token=${token.token_mint}${token.x_community_id ? `&utm_community=${token.x_community_id}` : ''}`;
+    // Use edge function URL for dynamic OG images on social platforms
+    const holdersUrl = new URL('https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/holders-og');
+    holdersUrl.searchParams.set('token', token.token_mint);
+    if (token.x_community_id) {
+      holdersUrl.searchParams.set('utm_community', token.x_community_id);
+    }
     
     return `Just paid for the $${token.symbol} banner on Holders 🔥
 
 Check the live report here:
-${holdersUrl}
+${holdersUrl.toString()}
 
 #${token.symbol} #Solana`;
   };
