@@ -109,21 +109,36 @@ export function TokenXDashboard() {
 
       if (error) throw error;
 
-      // Cross-reference with x_communities to find linked communities
-      const tokensWithCommunities: PostedToken[] = [];
-      for (const token of postedTokens || []) {
-        const { data: communities } = await supabase
-          .from('x_communities')
-          .select('community_id, community_url')
-          .contains('linked_token_mints', [token.token_mint])
-          .limit(1);
+      // Fetch ALL communities with linked tokens in ONE query (fix N+1 problem)
+      const { data: allCommunities } = await supabase
+        .from('x_communities')
+        .select('community_id, community_url, linked_token_mints');
 
-        tokensWithCommunities.push({
-          ...token,
-          x_community_id: communities?.[0]?.community_id || null,
-          x_community_url: communities?.[0]?.community_url || null,
-        });
+      // Build a lookup map: token_mint -> community
+      const communityMap = new Map<string, { community_id: string; community_url: string }>();
+      for (const community of allCommunities || []) {
+        const linkedMints = community.linked_token_mints as string[] | null;
+        if (linkedMints) {
+          for (const mint of linkedMints) {
+            if (!communityMap.has(mint)) {
+              communityMap.set(mint, {
+                community_id: community.community_id,
+                community_url: community.community_url,
+              });
+            }
+          }
+        }
       }
+
+      // Map tokens with communities using the lookup
+      const tokensWithCommunities: PostedToken[] = (postedTokens || []).map(token => {
+        const community = communityMap.get(token.token_mint);
+        return {
+          ...token,
+          x_community_id: community?.community_id || null,
+          x_community_url: community?.community_url || null,
+        };
+      });
 
       setTokens(tokensWithCommunities);
     } catch (err) {
