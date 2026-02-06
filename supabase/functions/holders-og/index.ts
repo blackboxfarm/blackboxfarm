@@ -80,8 +80,26 @@ serve(async (req) => {
     let tokenName: string | null = null;
     let isTokenSpecific = false;
 
-    // PRIORITY 1: If token param exists, try to get the token's banner
+    // PRIORITY 0: Check for paid_composite_url in holders_intel_seen_tokens FIRST
+    // This is used for marketing shares where we want the PAID badge overlay
     if (tokenParam) {
+      const { data: seenToken } = await supabase
+        .from('holders_intel_seen_tokens')
+        .select('paid_composite_url, banner_url, symbol, name')
+        .eq('token_mint', tokenParam)
+        .single();
+      
+      if (seenToken?.paid_composite_url) {
+        ogImage = seenToken.paid_composite_url;
+        tokenSymbol = seenToken.symbol;
+        tokenName = seenToken.name;
+        isTokenSpecific = true;
+        console.log(`Using paid_composite_url for: ${tokenSymbol}`);
+      }
+    }
+
+    // PRIORITY 1: If no composite found, check token_banners then holders_intel_seen_tokens for banner
+    if (!isTokenSpecific && tokenParam) {
       // First check token_banners table (for curated/paid banners)
       let bannerFound = false;
       
@@ -119,33 +137,24 @@ serve(async (req) => {
         }
       }
       
-      // Fallback: Check holders_intel_seen_tokens for banner_url or paid_composite_url
+      // Fallback: Check holders_intel_seen_tokens for banner_url
       if (!bannerFound) {
         const { data: seenToken } = await supabase
           .from('holders_intel_seen_tokens')
-          .select('banner_url, paid_composite_url, symbol, name')
+          .select('banner_url, symbol, name')
           .eq('token_mint', tokenParam)
           .single();
         
-        if (seenToken) {
-          // Prefer paid_composite_url for marketing shares, fallback to banner_url
-          if (seenToken.paid_composite_url) {
-            ogImage = seenToken.paid_composite_url;
-            tokenSymbol = seenToken.symbol;
-            tokenName = seenToken.name;
-            isTokenSpecific = true;
-            console.log(`Using paid_composite_url for: ${tokenSymbol}`);
-          } else if (seenToken.banner_url) {
-            ogImage = seenToken.banner_url;
-            tokenSymbol = seenToken.symbol;
-            tokenName = seenToken.name;
-            isTokenSpecific = true;
-            console.log(`Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
-          } else {
-            tokenSymbol = seenToken.symbol;
-            tokenName = seenToken.name;
-            console.log(`Token found but no banner: ${tokenSymbol}`);
-          }
+        if (seenToken?.banner_url) {
+          ogImage = seenToken.banner_url;
+          tokenSymbol = seenToken.symbol;
+          tokenName = seenToken.name;
+          isTokenSpecific = true;
+          console.log(`Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
+        } else if (seenToken) {
+          tokenSymbol = seenToken.symbol;
+          tokenName = seenToken.name;
+          console.log(`Token found but no banner: ${tokenSymbol}`);
         }
       }
     }
