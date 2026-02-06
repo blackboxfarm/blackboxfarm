@@ -48,12 +48,14 @@ serve(async (req) => {
     const url = new URL(req.url);
     const versionParam = url.searchParams.get("v");
     const tokenParam = url.searchParams.get("token");
+    const communityParam = url.searchParams.get("utm_community");
     const userAgent = req.headers.get("user-agent");
 
-    // Build canonical URL (preserve token + v)
+    // Build canonical URL (preserve token + v + utm_community)
     const canonicalUrl = new URL("https://blackbox.farm/holders");
     if (versionParam) canonicalUrl.searchParams.set('v', versionParam);
     if (tokenParam) canonicalUrl.searchParams.set('token', tokenParam);
+    if (communityParam) canonicalUrl.searchParams.set('utm_community', communityParam);
     const canonical = canonicalUrl.toString();
     
     // If not a bot, redirect to the actual SPA
@@ -67,14 +69,80 @@ serve(async (req) => {
       });
     }
 
-    // Determine which OG image to use based on version param.
-    // Supports:
-    // - v=20260128 -> holders_og_20260128.png
-    // - v=holders3 -> holders_og_holders3.png
-    // If not found, falls back to holders_og.png.
-    let ogImage = DEFAULT_OG_IMAGE;
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    if (versionParam) {
+    // Determine which OG image to use
+    let ogImage = DEFAULT_OG_IMAGE;
+    let tokenSymbol: string | null = null;
+    let tokenName: string | null = null;
+    let isTokenSpecific = false;
+
+    // PRIORITY 1: If token param exists, try to get the token's banner
+    if (tokenParam) {
+      // First check token_banners table (for curated/paid banners)
+      let bannerFound = false;
+      
+      if (communityParam) {
+        const { data: tokenBanner } = await supabase
+          .from('token_banners')
+          .select('banner_url, symbol')
+          .eq('x_community_id', communityParam)
+          .eq('is_active', true)
+          .single();
+        
+        if (tokenBanner?.banner_url) {
+          ogImage = tokenBanner.banner_url;
+          tokenSymbol = tokenBanner.symbol;
+          isTokenSpecific = true;
+          bannerFound = true;
+          console.log(`Using token_banners (community): ${tokenSymbol}`);
+        }
+      }
+      
+      if (!bannerFound) {
+        const { data: tokenBanner } = await supabase
+          .from('token_banners')
+          .select('banner_url, symbol')
+          .eq('token_address', tokenParam)
+          .eq('is_active', true)
+          .single();
+        
+        if (tokenBanner?.banner_url) {
+          ogImage = tokenBanner.banner_url;
+          tokenSymbol = tokenBanner.symbol;
+          isTokenSpecific = true;
+          bannerFound = true;
+          console.log(`Using token_banners (address): ${tokenSymbol}`);
+        }
+      }
+      
+      // Fallback: Check holders_intel_seen_tokens for banner_url
+      if (!bannerFound) {
+        const { data: seenToken } = await supabase
+          .from('holders_intel_seen_tokens')
+          .select('banner_url, symbol, name')
+          .eq('token_mint', tokenParam)
+          .single();
+        
+        if (seenToken?.banner_url) {
+          ogImage = seenToken.banner_url;
+          tokenSymbol = seenToken.symbol;
+          tokenName = seenToken.name;
+          isTokenSpecific = true;
+          console.log(`Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
+        } else if (seenToken) {
+          tokenSymbol = seenToken.symbol;
+          tokenName = seenToken.name;
+          console.log(`Token found but no banner: ${tokenSymbol}`);
+        }
+      }
+    }
+
+    // PRIORITY 2: Version param for promotional OG images (if no token-specific banner found)
+    if (!isTokenSpecific && versionParam) {
       const safeV = slugifyVersion(versionParam);
       if (safeV) {
         const versionedImageName = `holders_og_${safeV}.png`;
@@ -93,12 +161,14 @@ serve(async (req) => {
       }
     }
 
-    // OG metadata for /holders page
-    const title = "You Don't Grow on Dust.";
-    const description = `Markets are fields.
-Some roots hold.
-Some inflate the count.
-BlackBox.farm shows what actually grows — and what gets culled.`;
+    // Dynamic OG metadata based on whether we have token-specific content
+    const title = isTokenSpecific && tokenSymbol 
+      ? `$${tokenSymbol} Holder Analysis — BlackBox Farm`
+      : "You Don't Grow on Dust.";
+    
+    const description = isTokenSpecific && tokenSymbol
+      ? `Detailed holder distribution and wallet analysis for $${tokenSymbol}${tokenName ? ` (${tokenName})` : ''}. Discover diamond hands vs dust wallets.`
+      : `Markets are fields. Some roots hold. Some inflate the count. BlackBox.farm shows what actually grows — and what gets culled.`;
 
     const html = `<!doctype html>
 <html lang="en">
@@ -118,7 +188,7 @@ BlackBox.farm shows what actually grows — and what gets culled.`;
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="BlackBox Farm - You Don't Grow on Dust" />
+  <meta property="og:image:alt" content="${isTokenSpecific && tokenSymbol ? `$${tokenSymbol} Holder Analysis` : 'BlackBox Farm - You Don\'t Grow on Dust'}" />
   <meta property="og:site_name" content="BlackBox Farm" />
   <meta property="og:locale" content="en_US" />
 
@@ -126,7 +196,7 @@ BlackBox.farm shows what actually grows — and what gets culled.`;
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${description.replace(/\n/g, ' ')}" />
   <meta name="twitter:image" content="${ogImage}" />
-  <meta name="twitter:site" content="@blackboxfarm" />
+  <meta name="twitter:site" content="@holdersintel" />
 
   <!-- WhatsApp / iMessage / General Messaging -->
   <meta itemprop="name" content="${title}" />
@@ -157,7 +227,8 @@ BlackBox.farm shows what actually grows — and what gets culled.`;
       headers: {
         ...corsHeaders,
         "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "public, max-age=3600",
+        // Short cache for token-specific (banner might change), longer for generic
+        "Cache-Control": isTokenSpecific ? "public, max-age=300" : "public, max-age=3600",
       },
     });
   } catch (e) {
