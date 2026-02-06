@@ -82,55 +82,88 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // PRIORITY 1: Check for community-specific or token-specific banner (position 1 only)
-    if (position === 1 && (xCommunityId || tokenAddress)) {
-      // First try lookup by X community ID, then fallback to token address
-      let tokenBanner = null;
-      
-      if (xCommunityId) {
-        const { data, error } = await supabase
-          .from('token_banners')
-          .select('*')
-          .eq('x_community_id', xCommunityId)
-          .eq('is_active', true)
-          .single();
-        if (data && !error) tokenBanner = data;
-      }
-      
-      // Fallback to token address lookup if no community match
-      if (!tokenBanner && tokenAddress) {
-        const { data, error } = await supabase
-          .from('token_banners')
-          .select('*')
-          .eq('token_address', tokenAddress)
-          .eq('is_active', true)
-          .single();
-        if (data && !error) tokenBanner = data;
-      }
+  // PRIORITY 1: Check for community-specific or token-specific banner (position 1 only)
+  if (position === 1 && (xCommunityId || tokenAddress)) {
+    // First try lookup by X community ID in token_banners, then fallback to token address
+    let tokenBanner = null;
+    
+    if (xCommunityId) {
+      const { data, error } = await supabase
+        .from('token_banners')
+        .select('*')
+        .eq('x_community_id', xCommunityId)
+        .eq('is_active', true)
+        .single();
+      if (data && !error) tokenBanner = data;
+    }
+    
+    // Fallback to token address lookup in token_banners if no community match
+    if (!tokenBanner && tokenAddress) {
+      const { data, error } = await supabase
+        .from('token_banners')
+        .select('*')
+        .eq('token_address', tokenAddress)
+        .eq('is_active', true)
+        .single();
+      if (data && !error) tokenBanner = data;
+    }
 
-      if (tokenBanner) {
-        console.log('Serving community/token banner:', xCommunityId || tokenAddress, tokenBanner.symbol);
+    // FALLBACK: Check holders_intel_seen_tokens for banner_url if no token_banners record
+    if (!tokenBanner && tokenAddress) {
+      const { data: seenToken, error } = await supabase
+        .from('holders_intel_seen_tokens')
+        .select('token_mint, symbol, banner_url')
+        .eq('token_mint', tokenAddress)
+        .not('banner_url', 'is', null)
+        .single();
+      
+      if (seenToken && !error && seenToken.banner_url) {
+        console.log('Serving banner from holders_intel_seen_tokens:', tokenAddress, seenToken.symbol);
         return new Response(
           JSON.stringify({
             banner: {
-              id: tokenBanner.id,
-              title: tokenBanner.symbol || 'TOKEN',
+              id: `seen-${seenToken.token_mint}`,
+              title: seenToken.symbol || 'TOKEN',
               description: '',
-              image_url: tokenBanner.banner_url,
-              link_url: tokenBanner.link_url,
+              image_url: seenToken.banner_url,
+              link_url: `https://dexscreener.com/solana/${seenToken.token_mint}`,
               position: 1,
               is_active: true,
               is_dexscreener: false,
               is_token_banner: true,
-              token_address: tokenBanner.token_address,
-              token_symbol: tokenBanner.symbol,
-              x_community_id: tokenBanner.x_community_id,
+              token_address: seenToken.token_mint,
+              token_symbol: seenToken.symbol,
+              x_community_id: xCommunityId || null,
             }
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
+
+    if (tokenBanner) {
+      console.log('Serving community/token banner:', xCommunityId || tokenAddress, tokenBanner.symbol);
+      return new Response(
+        JSON.stringify({
+          banner: {
+            id: tokenBanner.id,
+            title: tokenBanner.symbol || 'TOKEN',
+            description: '',
+            image_url: tokenBanner.banner_url,
+            link_url: tokenBanner.link_url,
+            position: 1,
+            is_active: true,
+            is_dexscreener: false,
+            is_token_banner: true,
+            token_address: tokenBanner.token_address,
+            token_symbol: tokenBanner.symbol,
+            x_community_id: tokenBanner.x_community_id,
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
 
     // Get active banners for this position
     const now = new Date().toISOString();
