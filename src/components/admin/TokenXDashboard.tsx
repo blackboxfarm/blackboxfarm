@@ -212,10 +212,8 @@ export function TokenXDashboard() {
   };
 
   const generatePostText = (token: PostedToken) => {
-    // If token has a paid composite, use the paid-og endpoint for dynamic OG with composite image
-    // Otherwise use the regular holders-og endpoint
-    const baseEndpoint = token.paid_composite_url ? 'paid-og' : 'holders-og';
-    const holdersUrl = new URL(`https://blackbox.farm/og/${baseEndpoint}`);
+    // Always use holders-og - it already serves paid_composite_url when available
+    const holdersUrl = new URL(`https://blackbox.farm/og/holders-og`);
     holdersUrl.searchParams.set('token', token.token_mint);
     if (token.x_community_id) {
       holdersUrl.searchParams.set('utm_community', token.x_community_id);
