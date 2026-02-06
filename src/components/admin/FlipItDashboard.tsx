@@ -186,7 +186,7 @@ export function FlipItDashboard() {
   const [tokenAddress, setTokenAddress] = useState('');
   const [buyAmount, setBuyAmount] = useState('0.1');
   // REMOVED: buyAmountMode - always SOL only, no USD option
-  const [targetMultiplier, setTargetMultiplier] = useState(2);
+  const [targetMultiplier, setTargetMultiplier] = useState(100); // Default to 100x auto-sell target
   const [isLoading, setIsLoading] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -897,8 +897,8 @@ export function FlipItDashboard() {
   }, []);
   
   // Unified token data fetch function - single source of truth
-  // CRITICAL: Uses flipit-preflight for REAL-TIME venue-aware executable price
-  // DO NOT use DexScreener for price - it's stale by 10-30 seconds
+  // CRITICAL: Helius getAsset is called FIRST for instant price display
+  // Metadata is fetched in BACKGROUND after price is shown
   const fetchInputTokenData = useCallback(async (tokenMint: string, forceRefresh = false): Promise<boolean> => {
     const mint = tokenMint.trim();
     if (!mint || mint.length < 32) {
@@ -909,73 +909,104 @@ export function FlipItDashboard() {
     setIsLoadingInputToken(true);
     
     try {
-      // Step 1: Fetch metadata (symbol, name, socials) from token-metadata
-      // Note: We'll IGNORE the price from this - it uses stale DexScreener data
-      let symbol: string | null = null;
-      let name: string | null = null;
-      let image: string | null = null;
-      let marketCap: number | null = null;
-      let liquidity: number | null = null;
-      let twitterUrl: string | null = null;
-      let websiteUrl: string | null = null;
-      let telegramUrl: string | null = null;
-      let creatorWallet: string | null = null;
+      // ===========================================
+      // STEP 1: HELIUS FAST PRICE - CALL FIRST!
+      // This is the FASTEST path to get price on screen
+      // User can click Flip-It as soon as this returns
+      // ===========================================
+      let executablePrice: number | null = null;
+      let priceSource = 'unknown';
+      let quickSymbol: string | null = null;
+      let quickName: string | null = null;
+      let quickImage: string | null = null;
 
       try {
-        const { data: metaData, error: metaError } = await supabase.functions.invoke('token-metadata', {
+        console.log(`[fetchInputTokenData] 🚀 HELIUS FIRST: Fetching price for ${mint.slice(0, 8)}...`);
+        const heliusStart = Date.now();
+        
+        const { data: heliusData, error: heliusError } = await supabase.functions.invoke('helius-fast-price', {
           body: { tokenMint: mint }
         });
 
-        if (!metaError && metaData?.success && metaData?.metadata) {
-          const meta = metaData.metadata;
-          const priceInfo = metaData.priceInfo;
+        const heliusLatency = Date.now() - heliusStart;
+        console.log(`[fetchInputTokenData] Helius responded in ${heliusLatency}ms`);
+
+        if (!heliusError && heliusData?.success && heliusData?.price > 0) {
+          executablePrice = heliusData.price;
+          priceSource = 'helius_getAsset';
+          quickSymbol = heliusData.symbol || null;
+          quickName = heliusData.name || null;
+          quickImage = heliusData.image || null;
           
-          symbol = meta.symbol || null;
-          name = meta.name || null;
-          image = meta.image || meta.logoURI || null;
-          marketCap = priceInfo?.marketCap ?? null;
-          liquidity = priceInfo?.liquidity ?? null;
-          twitterUrl = meta.socialLinks?.twitter ?? null;
-          websiteUrl = meta.socialLinks?.website ?? null;
-          telegramUrl = meta.socialLinks?.telegram ?? null;
-          creatorWallet = meta.creatorWallet || metaData.launchpadInfo?.creatorWallet || null;
+          console.log(`[fetchInputTokenData] ✅ HELIUS PRICE: $${executablePrice} (${heliusLatency}ms)`);
           
-          // Check blacklist/whitelist
-          checkBlacklistStatus(mint, creatorWallet, twitterUrl);
+          // IMMEDIATELY show price - don't wait for metadata!
+          setInputToken({
+            mint: mint,
+            symbol: quickSymbol,
+            name: quickName,
+            price: executablePrice,
+            image: quickImage,
+            marketCap: null,
+            liquidity: null,
+            holders: null,
+            dexStatus: null,
+            twitterUrl: null,
+            websiteUrl: null,
+            telegramUrl: null,
+            lastFetched: new Date().toISOString(),
+            source: priceSource,
+            creatorWallet: null
+          });
+
+          // Show success toast with price
+          const displaySymbol = quickSymbol || 'Token';
+          toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (Helius)`);
+        } else {
+          console.log(`[fetchInputTokenData] Helius no price: ${heliusData?.error || 'unknown'}`);
         }
-      } catch (metaErr) {
-        console.warn('Metadata fetch failed, continuing with price fetch:', metaErr);
+      } catch (heliusErr) {
+        console.warn('[fetchInputTokenData] Helius fast-price failed:', heliusErr);
       }
 
-      // Step 2: Fetch REAL-TIME executable price from flipit-preflight
-      // This uses venue-aware quote (pump.fun bonding curve, Jupiter, Raydium, etc.)
-      // A small SOL amount (0.01) is used just to get the price quote
-      let executablePrice: number | null = null;
-      let priceSource = 'unknown';
-      let venue = 'unknown';
+      // ===========================================
+      // STEP 2: If Helius failed, try flipit-preflight
+      // This is slower but handles bonding curves etc.
+      // ===========================================
+      if (executablePrice === null) {
+        try {
+          console.log(`[fetchInputTokenData] Helius failed, trying flipit-preflight...`);
+          const { data: preflightData, error: preflightError } = await supabase.functions.invoke('flipit-preflight', {
+            body: {
+              tokenMint: mint,
+              solAmount: 0.01,
+              slippageBps: 500
+            }
+          });
 
-      try {
-        const { data: preflightData, error: preflightError } = await supabase.functions.invoke('flipit-preflight', {
-          body: {
-            tokenMint: mint,
-            solAmount: 0.01, // Small amount just for price discovery
-            slippageBps: 500
+          if (!preflightError && preflightData?.success && preflightData?.executablePriceUsd) {
+            executablePrice = preflightData.executablePriceUsd;
+            priceSource = preflightData.source || 'preflight';
+            
+            // Update state with price
+            setInputToken(prev => ({
+              ...prev,
+              mint: mint,
+              price: executablePrice,
+              source: priceSource,
+              lastFetched: new Date().toISOString()
+            }));
+
+            toast.success(`Price: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (${preflightData.venue || 'preflight'})`);
           }
-        });
-
-        if (!preflightError && preflightData?.success && preflightData?.executablePriceUsd) {
-          executablePrice = preflightData.executablePriceUsd;
-          priceSource = preflightData.source || 'preflight';
-          venue = preflightData.venue || 'unknown';
-          console.log(`[fetchInputTokenData] Real-time price: $${executablePrice} from ${venue} via ${priceSource}`);
-        } else if (preflightData?.error) {
-          console.warn('[fetchInputTokenData] Preflight failed:', preflightData.error);
+        } catch (preflightErr) {
+          console.warn('[fetchInputTokenData] Preflight request failed:', preflightErr);
         }
-      } catch (preflightErr) {
-        console.warn('[fetchInputTokenData] Preflight request failed:', preflightErr);
       }
 
-      // Step 3: If preflight failed, fallback to raydium-quote (still better than DexScreener)
+      // ===========================================
+      // STEP 3: If still no price, try raydium-quote
+      // ===========================================
       if (executablePrice === null) {
         try {
           const response = await fetch(
@@ -993,6 +1024,16 @@ export function FlipItDashboard() {
             if (priceData?.priceUSD) {
               executablePrice = priceData.priceUSD;
               priceSource = priceData.source || 'raydium-quote';
+              
+              setInputToken(prev => ({
+                ...prev,
+                mint: mint,
+                price: executablePrice,
+                source: priceSource,
+                lastFetched: new Date().toISOString()
+              }));
+
+              toast.success(`Price: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (raydium)`);
             }
           }
         } catch (fallbackErr) {
@@ -1000,45 +1041,74 @@ export function FlipItDashboard() {
         }
       }
 
-      // Set the state with all collected data
-      setInputToken({
-        mint: mint,
-        symbol: symbol,
-        name: name,
-        price: executablePrice,
-        image: image,
-        marketCap: marketCap,
-        liquidity: liquidity,
-        holders: null,
-        dexStatus: null,
-        twitterUrl: twitterUrl,
-        websiteUrl: websiteUrl,
-        telegramUrl: telegramUrl,
-        lastFetched: new Date().toISOString(),
-        source: priceSource,
-        creatorWallet: creatorWallet
-      });
+      // ===========================================
+      // STEP 4: BACKGROUND - Fetch full metadata (socials, image, etc.)
+      // This runs AFTER price is already displayed
+      // User can already click Flip-It while this loads
+      // ===========================================
+      // Fire and forget - don't await, don't block
+      (async () => {
+        try {
+          const { data: metaData, error: metaError } = await supabase.functions.invoke('token-metadata', {
+            body: { tokenMint: mint }
+          });
 
+          if (!metaError && metaData?.success && metaData?.metadata) {
+            const meta = metaData.metadata;
+            const priceInfo = metaData.priceInfo;
+            
+            // Update state with metadata (preserve existing price!)
+            setInputToken(prev => {
+              // Only update if still looking at same token
+              if (prev.mint !== mint) return prev;
+              
+              return {
+                ...prev,
+                symbol: meta.symbol || prev.symbol,
+                name: meta.name || prev.name,
+                image: meta.image || meta.logoURI || prev.image,
+                marketCap: priceInfo?.marketCap ?? prev.marketCap,
+                liquidity: priceInfo?.liquidity ?? prev.liquidity,
+                twitterUrl: meta.socialLinks?.twitter ?? prev.twitterUrl,
+                websiteUrl: meta.socialLinks?.website ?? prev.websiteUrl,
+                telegramUrl: meta.socialLinks?.telegram ?? prev.telegramUrl,
+                creatorWallet: meta.creatorWallet || metaData.launchpadInfo?.creatorWallet || prev.creatorWallet
+              };
+            });
+            
+            // Check blacklist/whitelist with creator info
+            const creatorWallet = meta.creatorWallet || metaData.launchpadInfo?.creatorWallet || null;
+            const twitterUrl = meta.socialLinks?.twitter ?? null;
+            checkBlacklistStatus(mint, creatorWallet, twitterUrl);
+          }
+        } catch (metaErr) {
+          console.warn('Background metadata fetch failed:', metaErr);
+        }
+      })();
+
+      // Return success based on whether we got a price
       if (executablePrice !== null) {
-        const displaySymbol = symbol || 'Token';
-        const venueTag = venue !== 'unknown' ? ` (${venue})` : '';
-        toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')}${venueTag}`);
+        setIsLoadingInputToken(false);
         return true;
-      } else if (symbol) {
-        toast.info(`${symbol} loaded (no price available)`);
+      }
+
+      // No price from any source
+      if (quickSymbol || quickName) {
+        toast.info(`${quickSymbol || quickName} loaded (no price available)`);
+        setIsLoadingInputToken(false);
         return true;
       }
 
       toast.error('Could not fetch token data');
+      setIsLoadingInputToken(false);
       return false;
     } catch (err: any) {
       console.error('Failed to fetch token data:', err);
       toast.error(err.message || 'Failed to fetch token data');
-      return false;
-    } finally {
       setIsLoadingInputToken(false);
+      return false;
     }
-  }, []);
+  }, [checkBlacklistStatus]);
 
   // Store fetchInputTokenData in a ref to avoid useEffect re-triggering
   const fetchInputTokenDataRef = useRef(fetchInputTokenData);
