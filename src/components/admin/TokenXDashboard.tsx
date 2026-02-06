@@ -241,38 +241,81 @@ ${holdersUrl}
     toast.success('Marked as done');
   };
 
-  // Manual X Community enrichment - prompts for community URL and links it to token
-  const handleEnrichCommunity = async (token: PostedToken) => {
-    const communityUrl = prompt(`Enter X Community URL to link to $${token.symbol}:\n\nExample: https://x.com/i/communities/1234567890`);
-    if (!communityUrl) return;
-    
-    if (!communityUrl.includes('communities/')) {
-      toast.error('Invalid community URL. Must contain /communities/');
-      return;
-    }
-
+  // Single token enrichment - fetches X/Twitter URL from DexScreener and links it
+  const handleEnrichSingleToken = async (token: PostedToken) => {
     setEnrichingToken(token.token_mint);
     try {
-      const { data, error } = await supabase.functions.invoke('x-community-enricher', {
-        body: { 
-          communityUrl,
-          linkedTokenMint: token.token_mint
-        }
-      });
-      
-      if (error) throw error;
-      
-      if (data?.isDeleted) {
-        toast.error('That community has been deleted');
-      } else if (data?.success) {
-        toast.success(`Community linked to $${token.symbol}!`);
-        fetchTokens(); // Refresh to show new community
-      } else {
-        toast.error(data?.error || 'Failed to enrich community');
+      // Fetch from DexScreener
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.token_mint}`);
+      if (!dexRes.ok) {
+        toast.error('Failed to fetch from DexScreener');
+        return;
       }
+      
+      const dexData = await dexRes.json();
+      const pair = dexData?.pairs?.[0];
+      
+      if (!pair?.info?.socials) {
+        toast.error(`No socials found for $${token.symbol}`);
+        return;
+      }
+      
+      // Find Twitter/X URL
+      let twitterUrl: string | null = null;
+      for (const social of pair.info.socials) {
+        if (social.url && (social.url.includes('twitter.com') || social.url.includes('x.com'))) {
+          twitterUrl = social.url;
+          break;
+        }
+      }
+      
+      if (!twitterUrl) {
+        toast.error(`No Twitter/X URL found for $${token.symbol}`);
+        return;
+      }
+      
+      // Extract a community ID or use URL as identifier
+      const communityMatch = twitterUrl.match(/communities\/(\d+)/);
+      const effectiveId = communityMatch ? communityMatch[1] : twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
+      
+      // Check if community exists
+      const { data: existingCommunity } = await supabase
+        .from('x_communities')
+        .select('id, linked_token_mints')
+        .eq('community_id', effectiveId)
+        .single();
+      
+      if (existingCommunity) {
+        // Update existing community
+        const existingMints = (existingCommunity.linked_token_mints as string[]) || [];
+        if (!existingMints.includes(token.token_mint)) {
+          await supabase
+            .from('x_communities')
+            .update({
+              linked_token_mints: [...existingMints, token.token_mint],
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingCommunity.id);
+        }
+      } else {
+        // Create new community
+        await supabase
+          .from('x_communities')
+          .insert({
+            community_id: effectiveId,
+            community_url: twitterUrl,
+            name: token.symbol ? `$${token.symbol} Community` : null,
+            linked_token_mints: [token.token_mint],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+      }
+      
+      toast.success(`Linked $${token.symbol} → ${twitterUrl.includes('communities/') ? 'Community' : 'Twitter'}`);
+      fetchTokens();
     } catch (err) {
-      console.error('Community enrichment error:', err);
-      toast.error('Failed to link community');
+      console.error('Single token enrichment error:', err);
+      toast.error('Failed to enrich token');
     } finally {
       setEnrichingToken(null);
     }
@@ -524,16 +567,17 @@ ${holdersUrl}
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleEnrichCommunity(token)}
+                          onClick={() => handleEnrichSingleToken(token)}
                           disabled={enrichingToken === token.token_mint}
                           className="h-6 px-2 text-xs"
+                          title="Fetch X/Twitter URL from DexScreener"
                         >
                           {enrichingToken === token.token_mint ? (
                             <RefreshCw className="h-3 w-3 animate-spin" />
                           ) : (
                             <>
-                              <Users className="h-3 w-3 mr-1" />
-                              Link
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Enrich
                             </>
                           )}
                         </Button>
