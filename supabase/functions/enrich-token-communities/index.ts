@@ -56,7 +56,7 @@ async function enrichSingleToken(
   supabase: any, 
   tokenMint: string, 
   symbol: string | null
-): Promise<{ linked: boolean; twitterUrl?: string; error?: string }> {
+): Promise<{ linked: boolean; twitterUrl?: string; bannerCreated?: boolean; error?: string }> {
   const dexData = await fetchDexScreenerWithRateLimit(tokenMint);
   if (!dexData) return { linked: false, error: 'Failed to fetch DexScreener' };
   
@@ -107,7 +107,37 @@ async function enrichSingleToken(
       });
   }
   
-  return { linked: true, twitterUrl };
+  // Also create/update token_banners if a banner exists
+  let bannerCreated = false;
+  const bannerUrl = pair?.info?.header;
+  if (bannerUrl && communityId) {
+    // Check if token_banners entry already exists
+    const { data: existingBanner } = await supabase
+      .from('token_banners')
+      .select('id')
+      .eq('token_address', tokenMint)
+      .single();
+    
+    if (!existingBanner) {
+      const { error: bannerError } = await supabase
+        .from('token_banners')
+        .insert({
+          token_address: tokenMint,
+          symbol: symbol || 'TOKEN',
+          banner_url: bannerUrl,
+          link_url: `https://dexscreener.com/solana/${tokenMint}`,
+          x_community_id: communityId,
+          is_active: true
+        });
+      
+      if (!bannerError) {
+        bannerCreated = true;
+        console.log(`[enrich] Created token_banners entry for ${symbol || tokenMint}`);
+      }
+    }
+  }
+  
+  return { linked: true, twitterUrl, bannerCreated };
 }
 
 Deno.serve(async (req) => {
