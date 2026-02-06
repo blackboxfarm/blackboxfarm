@@ -213,8 +213,8 @@ export function TokenXDashboard() {
 
   const generatePostText = (token: PostedToken) => {
     // Use branded OG endpoint so social bots receive dynamic OG meta tags
-    // Add a stable cache-buster when a composite exists (X aggressively caches cards by URL)
-    const holdersUrl = new URL(`https://blackbox.farm/og/holders-og`);
+    // Call Supabase edge function directly (bypasses need for proxy/worker)
+    const holdersUrl = new URL(`https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/holders-og`);
     holdersUrl.searchParams.set('token', token.token_mint);
 
     if (token.paid_composite_url) {
