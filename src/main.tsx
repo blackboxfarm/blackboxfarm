@@ -2,37 +2,37 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-// If a previously-installed PWA/service worker cached an old build (HTML/JS),
-// the app can appear “stuck” even after publishing + hard refresh.
-// Purge once per tab on Lovable preview/published domains (and in PROD).
+// PWA/service-worker note:
+// A previously-installed service worker can cache an old build and make the UI look “stuck”.
+// However, auto-purging + auto-reloading can cause lockups in the Lovable preview.
+//
+// Manual fix (only runs if you add ?purge-sw=1 to the URL):
+//   https://blackboxfarm.lovable.app/super-admin?purge-sw=1
+//
+// This unregisters SW + clears CacheStorage ONCE, then removes the query param and reloads.
 if ('serviceWorker' in navigator) {
-  const isLovableHost =
-    window.location.hostname.includes('lovable.app') ||
-    window.location.hostname.includes('lovableproject.com');
-
-  const shouldPurge = import.meta.env.PROD || isLovableHost;
+  const url = new URL(window.location.href);
+  const shouldPurge = url.searchParams.get('purge-sw') === '1';
 
   if (shouldPurge) {
-    const SW_PURGE_KEY = 'bb_sw_purged_v2';
-    if (!sessionStorage.getItem(SW_PURGE_KEY)) {
-      sessionStorage.setItem(SW_PURGE_KEY, '1');
+    url.searchParams.delete('purge-sw');
+    const cleanedUrl = url.toString();
 
-      Promise.all([
-        navigator.serviceWorker.getRegistrations().then((regs) =>
-          Promise.all(regs.map((r) => r.unregister()))
-        ),
-        typeof caches !== 'undefined'
-          ? caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-          : Promise.resolve(),
-      ])
-        .then(() => {
-          // Reload so the browser fetches the latest assets.
-          window.location.reload();
-        })
-        .catch(() => {
-          // If anything fails, just continue to app render.
-        });
-    }
+    Promise.all([
+      navigator.serviceWorker.getRegistrations().then((regs) =>
+        Promise.all(regs.map((r) => r.unregister()))
+      ),
+      typeof caches !== 'undefined'
+        ? caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        : Promise.resolve(),
+    ])
+      .then(() => {
+        // Navigate without the query param; this causes a single fresh load.
+        window.location.replace(cleanedUrl);
+      })
+      .catch(() => {
+        // If anything fails, just continue to app render.
+      });
   }
 }
 
