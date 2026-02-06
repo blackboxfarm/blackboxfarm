@@ -6,8 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users } from 'lucide-react';
+import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users, Image, ImageOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface PostedToken {
   token_mint: string;
@@ -20,6 +21,7 @@ interface PostedToken {
   snapshot_slot?: string | null;
   minted_at?: string | null;
   bonded_at?: string | null;
+  has_paid_dex?: boolean; // Paid DEX boost detected
 }
 
 type CommunityFilter = 'all' | 'with-community' | 'no-community';
@@ -498,7 +500,23 @@ ${holdersUrl}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
-                      <span className="font-medium">${token.symbol}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">${token.symbol}</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              {token.banner_url ? (
+                                <Image className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <ImageOff className="h-3 w-3 text-muted-foreground/50" />
+                              )}
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {token.banner_url ? 'Has banner' : 'No banner'}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <span className="text-xs text-muted-foreground font-mono">
                         {token.token_mint.slice(0, 6)}...
                       </span>

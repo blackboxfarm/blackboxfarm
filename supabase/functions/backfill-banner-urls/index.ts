@@ -1,10 +1,49 @@
-// Backfill banner_url, image_uri, and x_community links for existing posted tokens
+// Backfill banner_url for tokens with Paid DEX boost only
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// Check if token has Paid DEX (boosted) and get banner
+async function checkTokenDexStatus(tokenMint: string): Promise<{ hasPaidDex: boolean; bannerUrl: string | null; imageUrl: string | null }> {
+  try {
+    const response = await fetch(
+      `https://api.dexscreener.com/tokens/v1/solana/${tokenMint}`,
+      { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0 (compatible; BlackBox/1.0)" } }
+    );
+
+    if (!response.ok) return { hasPaidDex: false, bannerUrl: null, imageUrl: null };
+
+    const data = await response.json();
+    const pairs = Array.isArray(data) ? data : [];
+    
+    let bannerUrl: string | null = null;
+    let imageUrl: string | null = null;
+    let hasPaidDex = false;
+
+    for (const pair of pairs) {
+      // Check for paid boost indicators
+      if (pair?.boosts?.active > 0 || pair?.info?.header) {
+        hasPaidDex = true;
+      }
+      if (!bannerUrl && pair?.info?.header) {
+        bannerUrl = pair.info.header;
+      }
+      if (!imageUrl && pair?.info?.imageUrl) {
+        imageUrl = pair.info.imageUrl;
+      }
+    }
+
+    return { hasPaidDex, bannerUrl, imageUrl };
+  } catch (err) {
+    console.error(`[checkTokenDexStatus] Error for ${tokenMint}:`, err);
+    return { hasPaidDex: false, bannerUrl: null, imageUrl: null };
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -17,7 +56,43 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get tokens missing banner_url OR image_uri
+    const body = await req.json().catch(() => ({}));
+    const { singleMint } = body;
+
+    // SINGLE TOKEN MODE - check one token for Paid DEX + banner
+    if (singleMint) {
+      console.log(`[backfill] Single token mode: ${singleMint}`);
+      
+      const status = await checkTokenDexStatus(singleMint);
+      
+      if (status.hasPaidDex || status.bannerUrl) {
+        const updates: Record<string, any> = {};
+        if (status.bannerUrl) updates.banner_url = status.bannerUrl;
+        if (status.imageUrl) updates.image_uri = status.imageUrl;
+        
+        if (Object.keys(updates).length > 0) {
+          await supabase
+            .from("holders_intel_seen_tokens")
+            .update(updates)
+            .eq("token_mint", singleMint);
+        }
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          hasPaidDex: status.hasPaidDex,
+          bannerFound: !!status.bannerUrl,
+          bannerUrl: status.bannerUrl
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        hasPaidDex: false,
+        bannerFound: false
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // BULK MODE - process tokens missing banners, check Paid DEX first
     const { data: tokens, error: fetchError } = await supabase
       .from("holders_intel_seen_tokens")
       .select("token_mint, symbol, banner_url, image_uri")
@@ -27,129 +102,72 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch tokens: ${fetchError.message}`);
     }
 
-    // Filter to those needing updates
-    const tokensToProcess = (tokens || []).filter(t => !t.banner_url || !t.image_uri);
-    console.log(`[backfill] Found ${tokensToProcess.length} tokens needing updates (of ${tokens?.length || 0} total)`);
+    // Filter to those needing banner check (missing banner_url)
+    const tokensToProcess = (tokens || []).filter(t => !t.banner_url);
+    console.log(`[backfill] Found ${tokensToProcess.length} tokens missing banners (of ${tokens?.length || 0} total)`);
 
     const results = {
       total: tokensToProcess.length,
+      processed: 0,
       bannersUpdated: 0,
       imagesUpdated: 0,
-      communitiesLinked: 0,
-      noHeader: 0,
+      paidDexFound: 0,
+      noPaidDex: 0,
       errors: 0,
-      details: [] as { mint: string; symbol: string; status: string; banner?: string; image?: string; community?: string }[],
+      details: [] as { mint: string; symbol: string; hasPaidDex: boolean; bannerFound: boolean }[],
     };
 
-    // Process in batches to avoid rate limits
-    const BATCH_SIZE = 10;
-    const DELAY_MS = 1000;
+    // Process SEQUENTIALLY with 300ms delay (rate limit safe)
+    const maxTokens = Math.min(tokensToProcess.length, 50);
 
-    for (let i = 0; i < tokensToProcess.length; i += BATCH_SIZE) {
-      const batch = tokensToProcess.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < maxTokens; i++) {
+      const token = tokensToProcess[i];
       
-      const batchPromises = batch.map(async (token) => {
-        try {
-          const updates: { banner_url?: string; image_uri?: string } = {};
-          let detailStatus = "";
-          let bannerUrl: string | null = null;
-          let imageUrl: string | null = null;
-
-          // Fetch from Dexscreener
-          const response = await fetch(
-            `https://api.dexscreener.com/tokens/v1/solana/${token.token_mint}`,
-            { headers: { "Accept": "application/json" } }
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            const pairs = Array.isArray(data) ? data : [];
-            
-            // Get header and image from first pair with them
-            for (const pair of pairs) {
-              if (!bannerUrl && pair?.info?.header) {
-                bannerUrl = pair.info.header;
-              }
-              if (!imageUrl && pair?.info?.imageUrl) {
-                imageUrl = pair.info.imageUrl;
-              }
-              if (bannerUrl && imageUrl) break;
-            }
-          }
-
-          // Update banner_url if missing and found
-          if (!token.banner_url && bannerUrl) {
-            updates.banner_url = bannerUrl;
-            results.bannersUpdated++;
-            detailStatus += "banner ";
-          }
-
-          // Update image_uri if missing and found
-          if (!token.image_uri && imageUrl) {
-            updates.image_uri = imageUrl;
-            results.imagesUpdated++;
-            detailStatus += "image ";
-          }
-
-          // Apply updates if any
-          if (Object.keys(updates).length > 0) {
-            const { error: updateError } = await supabase
-              .from("holders_intel_seen_tokens")
-              .update(updates)
-              .eq("token_mint", token.token_mint);
-
-            if (updateError) {
-              results.errors++;
-              results.details.push({ mint: token.token_mint, symbol: token.symbol, status: "update_error" });
-              return;
-            }
-          }
-
-          // Check if X Community is already linked
-          const { data: existingCommunity } = await supabase
-            .from("x_communities")
-            .select("community_id")
-            .contains("linked_token_mints", [token.token_mint])
-            .limit(1);
-
-          if (!existingCommunity || existingCommunity.length === 0) {
-            // No community linked - this is expected, just note it
-            detailStatus += "no_community";
-          } else {
-            results.communitiesLinked++;
-            detailStatus += `community:${existingCommunity[0].community_id}`;
-          }
-
-          if (!detailStatus) {
-            results.noHeader++;
-            detailStatus = "no_new_data";
-          }
-
-          results.details.push({ 
-            mint: token.token_mint, 
-            symbol: token.symbol, 
-            status: detailStatus.trim(),
-            banner: bannerUrl || undefined,
-            image: imageUrl || undefined,
-            community: existingCommunity?.[0]?.community_id,
-          });
-        } catch (err) {
-          results.errors++;
-          results.details.push({ mint: token.token_mint, symbol: token.symbol, status: `error: ${err}` });
+      if (i > 0) await delay(300);
+      
+      try {
+        const status = await checkTokenDexStatus(token.token_mint);
+        results.processed++;
+        
+        if (status.hasPaidDex) {
+          results.paidDexFound++;
+        } else {
+          results.noPaidDex++;
         }
-      });
-
-      await Promise.all(batchPromises);
-
-      // Delay between batches
-      if (i + BATCH_SIZE < tokensToProcess.length) {
-        await new Promise((r) => setTimeout(r, DELAY_MS));
+        
+        // Only update if we found data
+        const updates: Record<string, any> = {};
+        if (!token.banner_url && status.bannerUrl) {
+          updates.banner_url = status.bannerUrl;
+          results.bannersUpdated++;
+        }
+        if (!token.image_uri && status.imageUrl) {
+          updates.image_uri = status.imageUrl;
+          results.imagesUpdated++;
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          await supabase
+            .from("holders_intel_seen_tokens")
+            .update(updates)
+            .eq("token_mint", token.token_mint);
+        }
+        
+        results.details.push({
+          mint: token.token_mint,
+          symbol: token.symbol,
+          hasPaidDex: status.hasPaidDex,
+          bannerFound: !!status.bannerUrl
+        });
+        
+        console.log(`[backfill] ${i+1}/${maxTokens} ${token.symbol}: paidDex=${status.hasPaidDex}, banner=${!!status.bannerUrl}`);
+      } catch (err) {
+        results.errors++;
+        console.error(`[backfill] Error for ${token.token_mint}:`, err);
       }
-
-      console.log(`[backfill] Processed ${Math.min(i + BATCH_SIZE, tokensToProcess.length)}/${tokensToProcess.length}`);
     }
 
-    console.log(`[backfill] Complete: ${results.bannersUpdated} banners, ${results.imagesUpdated} images, ${results.communitiesLinked} with communities`);
+    console.log(`[backfill] Complete: ${results.bannersUpdated} banners found, ${results.paidDexFound} with Paid DEX`);
 
     return new Response(JSON.stringify({ success: true, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
