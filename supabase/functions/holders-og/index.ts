@@ -119,24 +119,33 @@ serve(async (req) => {
         }
       }
       
-      // Fallback: Check holders_intel_seen_tokens for banner_url
+      // Fallback: Check holders_intel_seen_tokens for banner_url or paid_composite_url
       if (!bannerFound) {
         const { data: seenToken } = await supabase
           .from('holders_intel_seen_tokens')
-          .select('banner_url, symbol, name')
+          .select('banner_url, paid_composite_url, symbol, name')
           .eq('token_mint', tokenParam)
           .single();
         
-        if (seenToken?.banner_url) {
-          ogImage = seenToken.banner_url;
-          tokenSymbol = seenToken.symbol;
-          tokenName = seenToken.name;
-          isTokenSpecific = true;
-          console.log(`Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
-        } else if (seenToken) {
-          tokenSymbol = seenToken.symbol;
-          tokenName = seenToken.name;
-          console.log(`Token found but no banner: ${tokenSymbol}`);
+        if (seenToken) {
+          // Prefer paid_composite_url for marketing shares, fallback to banner_url
+          if (seenToken.paid_composite_url) {
+            ogImage = seenToken.paid_composite_url;
+            tokenSymbol = seenToken.symbol;
+            tokenName = seenToken.name;
+            isTokenSpecific = true;
+            console.log(`Using paid_composite_url for: ${tokenSymbol}`);
+          } else if (seenToken.banner_url) {
+            ogImage = seenToken.banner_url;
+            tokenSymbol = seenToken.symbol;
+            tokenName = seenToken.name;
+            isTokenSpecific = true;
+            console.log(`Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
+          } else {
+            tokenSymbol = seenToken.symbol;
+            tokenName = seenToken.name;
+            console.log(`Token found but no banner: ${tokenSymbol}`);
+          }
         }
       }
     }

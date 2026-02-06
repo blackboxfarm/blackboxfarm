@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users, Image, ImageOff } from 'lucide-react';
+import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users, Image, ImageOff, Layers } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -15,6 +15,7 @@ interface PostedToken {
   symbol: string;
   banner_url: string | null;
   image_uri: string | null;
+  paid_composite_url: string | null;
   times_posted: number | null;
   x_community_id?: string | null;
   x_community_url?: string | null;
@@ -82,6 +83,7 @@ export function TokenXDashboard() {
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const [enrichingToken, setEnrichingToken] = useState<string | null>(null);
   const [doneTokens, setDoneTokens] = useState<Set<string>>(new Set());
+  const [buildingComposite, setBuildingComposite] = useState<string | null>(null);
   const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('all');
   const [bondedFilter, setBondedFilter] = useState<BondedFilter>('all');
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
@@ -92,10 +94,10 @@ export function TokenXDashboard() {
   const fetchTokens = async () => {
     setLoading(true);
     try {
-      // Get posted tokens with timestamps
+      // Get posted tokens with timestamps and composite URLs
       const { data: postedTokens, error } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('token_mint, symbol, banner_url, image_uri, times_posted, snapshot_slot, minted_at, bonded_at')
+        .select('token_mint, symbol, banner_url, image_uri, paid_composite_url, times_posted, snapshot_slot, minted_at, bonded_at')
         .eq('was_posted', true)
         .order('minted_at', { ascending: false, nullsFirst: false });
 
@@ -210,8 +212,10 @@ export function TokenXDashboard() {
   };
 
   const generatePostText = (token: PostedToken) => {
-    // Use cleaner blackbox.farm/og/* URL for dynamic OG images on social platforms
-    const holdersUrl = new URL('https://blackbox.farm/og/holders-og');
+    // If token has a paid composite, use the paid-og endpoint for dynamic OG with composite image
+    // Otherwise use the regular holders-og endpoint
+    const baseEndpoint = token.paid_composite_url ? 'paid-og' : 'holders-og';
+    const holdersUrl = new URL(`https://blackbox.farm/og/${baseEndpoint}`);
     holdersUrl.searchParams.set('token', token.token_mint);
     if (token.x_community_id) {
       holdersUrl.searchParams.set('utm_community', token.x_community_id);
@@ -223,6 +227,35 @@ Check the live report here:
 ${holdersUrl.toString()}
 
 #${token.symbol} #Solana`;
+  };
+
+  // Build paid composite image for a token
+  const handleBuildComposite = async (token: PostedToken) => {
+    if (!token.banner_url) {
+      toast.error('No banner URL found for this token');
+      return;
+    }
+    
+    setBuildingComposite(token.token_mint);
+    try {
+      const { data, error } = await supabase.functions.invoke('build-token-composite', {
+        body: { tokenMint: token.token_mint, bannerUrl: token.banner_url }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.compositeUrl) {
+        toast.success(`Composite built for $${token.symbol}`);
+        fetchTokens(); // Refresh to get the new composite URL
+      } else {
+        throw new Error('No composite URL returned');
+      }
+    } catch (err: any) {
+      console.error('Build composite error:', err);
+      toast.error(`Failed to build composite: ${err.message || 'Unknown error'}`);
+    } finally {
+      setBuildingComposite(null);
+    }
   };
 
   const handlePost = async (token: PostedToken) => {
@@ -521,6 +554,31 @@ ${holdersUrl.toString()}
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
+                        {/* Build Composite button - only show if has banner */}
+                        {token.banner_url && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => handleBuildComposite(token)}
+                                  disabled={buildingComposite === token.token_mint}
+                                  className={`ml-1 p-0.5 rounded hover:bg-muted transition-colors ${
+                                    token.paid_composite_url ? 'text-amber-500' : 'text-muted-foreground/50 hover:text-muted-foreground'
+                                  }`}
+                                >
+                                  {buildingComposite === token.token_mint ? (
+                                    <RefreshCw className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Layers className="h-3 w-3" />
+                                  )}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {token.paid_composite_url ? 'Rebuild composite (has one)' : 'Build paid composite'}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                       </div>
                       <span className="text-xs text-muted-foreground font-mono">
                         {token.token_mint.slice(0, 6)}...
