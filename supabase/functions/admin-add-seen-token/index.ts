@@ -73,6 +73,7 @@ serve(async (req) => {
     }
 
     // Upsert into holders_intel_seen_tokens
+    // Set was_posted = true so it appears in Token X Dashboard
     const { data, error } = await supabase
       .from('holders_intel_seen_tokens')
       .upsert({
@@ -84,7 +85,7 @@ serve(async (req) => {
         first_seen_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
         times_seen: 1,
-        was_posted: false,
+        was_posted: true,
         minted_at: mintedAt,
         bonded_at: bondedAt,
       }, { 
