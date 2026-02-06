@@ -212,8 +212,8 @@ export function TokenXDashboard() {
   };
 
   const generatePostText = (token: PostedToken) => {
-    // Always use holders-og - it already serves paid_composite_url when available
-    const holdersUrl = new URL(`https://blackbox.farm/og/holders-og`);
+    // Use direct Supabase URL - the /og/* proxy doesn't reliably pass to Twitter's crawler
+    const holdersUrl = new URL(`https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/holders-og`);
     holdersUrl.searchParams.set('token', token.token_mint);
     if (token.x_community_id) {
       holdersUrl.searchParams.set('utm_community', token.x_community_id);
