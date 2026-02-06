@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Copy, Check, Clock, AlertCircle, ExternalLink, RefreshCw, Wallet, Undo2 } from 'lucide-react';
+import { Copy, Check, Clock, AlertCircle, ExternalLink, RefreshCw, Wallet, Undo2, Share2, Twitter } from 'lucide-react';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
 
@@ -27,6 +27,7 @@ interface BannerOrder {
   payment_status: string;
   activation_key: string | null;
   created_at: string;
+  paid_composite_url?: string | null;
 }
 
 interface AdvertiserAccount {
@@ -49,6 +50,7 @@ export default function BannerCheckout() {
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundWallet, setRefundWallet] = useState('');
   const [processingRefund, setProcessingRefund] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
 
   useEffect(() => {
     if (orderId) {
@@ -406,31 +408,101 @@ export default function BannerCheckout() {
                 </div>
               </>
             ) : (
-              <Card className="border-green-500 bg-green-500/5">
-                <CardContent className="pt-6 text-center">
-                  <Check className="h-16 w-16 mx-auto text-green-500 mb-4" />
-                  <h3 className="text-xl font-bold text-green-500 mb-2">Payment Complete!</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Your banner is scheduled and will go live at the selected start time.
-                  </p>
-                  <div className="flex gap-2 justify-center">
-                    <Button onClick={() => navigate(`/banner-preview/${orderId}`)}>
-                      View Preview
-                    </Button>
-                    {canRefund && (
-                      <Button variant="outline" onClick={() => setShowRefundModal(true)}>
-                        <Undo2 className="h-4 w-4 mr-2" />
-                        Request Refund
-                      </Button>
-                    )}
-                  </div>
-                  {canRefund && (
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Refunds available before start time ($10 fee applies)
+              <div className="space-y-6">
+                <Card className="border-green-500 bg-green-500/5">
+                  <CardContent className="pt-6 text-center">
+                    <Check className="h-16 w-16 mx-auto text-green-500 mb-4" />
+                    <h3 className="text-xl font-bold text-green-500 mb-2">Payment Complete!</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Your banner is scheduled and will go live at the selected start time.
                     </p>
-                  )}
-                </CardContent>
-              </Card>
+                    <div className="flex gap-2 justify-center">
+                      <Button onClick={() => navigate(`/banner-preview/${orderId}`)}>
+                        View Preview
+                      </Button>
+                      {canRefund && (
+                        <Button variant="outline" onClick={() => setShowRefundModal(true)}>
+                          <Undo2 className="h-4 w-4 mr-2" />
+                          Request Refund
+                        </Button>
+                      )}
+                    </div>
+                    {canRefund && (
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Refunds available before start time ($10 fee applies)
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Share Proof of Payment Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Share2 className="h-5 w-5" />
+                      Share Proof of Payment
+                    </CardTitle>
+                    <CardDescription>
+                      Let your community know you've invested in promoting on BlackBox
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {order.paid_composite_url && (
+                      <div className="rounded-lg overflow-hidden border">
+                        <img 
+                          src={order.paid_composite_url} 
+                          alt="Paid banner preview"
+                          className="w-full"
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={async () => {
+                          const shareUrl = `https://blackbox.farm/og/paid-og?order=${orderId}`;
+                          await navigator.clipboard.writeText(shareUrl);
+                          setCopiedShareLink(true);
+                          toast.success('Share link copied!');
+                          setTimeout(() => setCopiedShareLink(false), 2000);
+                        }}
+                      >
+                        {copiedShareLink ? (
+                          <>
+                            <Check className="h-4 w-4 mr-2 text-green-500" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy Link
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        onClick={() => {
+                          const shareUrl = `https://blackbox.farm/og/paid-og?order=${orderId}`;
+                          const tweetText = `Just paid for a banner ad on @BlackBoxFarm! 🔥\n\nCheck it out:\n${shareUrl}`;
+                          window.open(
+                            `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
+                            '_blank'
+                          );
+                        }}
+                      >
+                        <Twitter className="h-4 w-4 mr-2" />
+                        Post on X
+                      </Button>
+                    </div>
+                    
+                    <p className="text-xs text-muted-foreground text-center">
+                      When shared, this link will display your banner with a "Paid" verification badge
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
             )}
           </div>
         </div>
