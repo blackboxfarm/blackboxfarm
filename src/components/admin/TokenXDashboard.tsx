@@ -76,6 +76,7 @@ export function TokenXDashboard() {
   const [loading, setLoading] = useState(true);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillingTimestamps, setBackfillingTimestamps] = useState(false);
+  const [enrichingCommunities, setEnrichingCommunities] = useState(false);
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const [enrichingToken, setEnrichingToken] = useState<string | null>(null);
   const [doneTokens, setDoneTokens] = useState<Set<string>>(new Set());
@@ -293,6 +294,23 @@ ${holdersUrl}
     }
   };
 
+  // Bulk enrich all tokens missing community links from DexScreener
+  const runCommunityEnrichment = async () => {
+    setEnrichingCommunities(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-token-communities');
+      if (error) throw error;
+      
+      toast.success(`Communities: ${data?.enriched || 0} linked, ${data?.noTwitterUrl || 0} no Twitter URL`);
+      fetchTokens();
+    } catch (err) {
+      console.error('Community enrichment error:', err);
+      toast.error('Community enrichment failed');
+    } finally {
+      setEnrichingCommunities(false);
+    }
+  };
+
   const missingBanners = tokens.filter(t => !t.banner_url).length;
   const missingTimestamps = tokens.filter(t => !t.minted_at).length;
   const withCommunity = tokens.filter(t => t.x_community_id).length;
@@ -331,6 +349,16 @@ ${holdersUrl}
             >
               <Play className={`h-4 w-4 mr-2 ${backfilling ? 'animate-spin' : ''}`} />
               {backfilling ? 'Backfilling...' : `Backfill Banners (${missingBanners})`}
+            </Button>
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={runCommunityEnrichment} 
+              disabled={enrichingCommunities}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              <Users className={`h-4 w-4 mr-2 ${enrichingCommunities ? 'animate-spin' : ''}`} />
+              {enrichingCommunities ? 'Enriching...' : `Enrich Communities (${tokens.length - withCommunity})`}
             </Button>
           </div>
         </div>
