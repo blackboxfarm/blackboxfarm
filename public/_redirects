@@ -1,3 +1,5 @@
-# Proxy /og/* paths to Supabase edge functions for dynamic OG images
-# This allows cleaner URLs like blackbox.farm/og/holders-og?token=xxx
-/og/*  https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/:splat  200
+# Dynamic OG proxy to Supabase Edge Functions (must come before SPA fallback)
+/og/*  https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/:splat  200!
+
+# SPA fallback
+/*  /index.html  200
