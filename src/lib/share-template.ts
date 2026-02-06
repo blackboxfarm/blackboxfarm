@@ -5,12 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 export const HOLDERS_SHARE_VERSION = "20260122";
 
-// Edge function URL for dynamic OG images (bots get token-specific banners)
-export const SUPABASE_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
-export const HOLDERS_OG_EDGE_URL = `${SUPABASE_URL}/functions/v1/holders-og`;
-
 export const HOLDERS_SHARE_URL = (() => {
-  const url = new URL(HOLDERS_OG_EDGE_URL);
+  const url = new URL("https://blackbox.farm/holders");
   url.searchParams.set("v", HOLDERS_SHARE_VERSION);
   return url.toString();
 })();
@@ -334,13 +330,10 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{LIFECYCLE\}/g, lifecycle);
 }
 
-// Get share URL with token address (uses edge function for dynamic OG images)
-export function getShareUrl(tokenAddress: string, utmCommunity?: string): string {
-  const url = new URL(HOLDERS_OG_EDGE_URL);
+// Get share URL with token address
+export function getShareUrl(tokenAddress: string): string {
+  const url = new URL("https://blackbox.farm/holders");
   url.searchParams.set("token", tokenAddress);
-  if (utmCommunity) {
-    url.searchParams.set("utm_community", utmCommunity);
-  }
   url.searchParams.set("v", HOLDERS_SHARE_VERSION);
   return url.toString();
 }

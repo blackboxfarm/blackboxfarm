@@ -1,15 +1,14 @@
-import { Share2, MessageCircle, Send, Loader2, Link2 } from "lucide-react";
+import { Share2, MessageCircle, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { fetchTemplate, processTemplate, getShareUrl, DEFAULT_TEMPLATES, type TokenShareData } from "@/lib/share-template";
+import { fetchTemplate, processTemplate, HOLDERS_SHARE_URL, DEFAULT_TEMPLATES, type TokenShareData } from "@/lib/share-template";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -54,11 +53,6 @@ export function ShareToXButton({
   const { user } = useAuth();
   const [template, setTemplate] = useState(DEFAULT_TEMPLATES.shares);
   
-  // Get utm_community from URL if present
-  const utmCommunity = typeof window !== 'undefined' 
-    ? new URLSearchParams(window.location.search).get('utm_community') || undefined
-    : undefined;
-  
   // Fetch the shares template from database on mount
   useEffect(() => {
     fetchTemplate('shares').then(setTemplate);
@@ -67,7 +61,7 @@ export function ShareToXButton({
   const dustPct = totalWallets > 0 ? Math.round((dustWallets / totalWallets) * 100) : 0;
 
   // Track share click to analytics
-  const trackShareClick = async (platform: 'x' | 'discord' | 'telegram' | 'copy_link') => {
+  const trackShareClick = async (platform: 'x' | 'discord' | 'telegram') => {
     try {
       await supabase.from('feature_usage_analytics').insert({
         user_id: user?.id || null,
@@ -103,21 +97,6 @@ export function ShareToXButton({
     return processTemplate(template, tokenData);
   };
 
-  // Get the edge function URL for social sharing (shows token banner in previews)
-  const getEdgeFunctionUrl = () => {
-    return getShareUrl(tokenMint, utmCommunity);
-  };
-
-  const handleCopyLink = () => {
-    trackShareClick('copy_link');
-    const shareLink = getEdgeFunctionUrl();
-    navigator.clipboard.writeText(shareLink);
-    toast({
-      title: "Link copied!",
-      description: "Share link copied - Twitter will show the token banner",
-    });
-  };
-
   const handleShareToX = () => {
     trackShareClick('x');
     const tweetText = getShareText();
@@ -140,9 +119,8 @@ export function ShareToXButton({
   const handleShareToTelegram = () => {
     trackShareClick('telegram');
     const shareText = getShareText();
-    const shareUrl = getEdgeFunctionUrl();
     window.open(
-      `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`,
+      `https://t.me/share/url?url=${encodeURIComponent(HOLDERS_SHARE_URL)}&text=${encodeURIComponent(shareText)}`,
       '_blank'
     );
   };
@@ -170,11 +148,6 @@ export function ShareToXButton({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="w-48">
-        <DropdownMenuItem onClick={handleCopyLink}>
-          <Link2 className="h-4 w-4 mr-2" />
-          Copy Link
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleShareToX}>
           <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
             <span className="text-background text-xs font-bold">𝕏</span>
