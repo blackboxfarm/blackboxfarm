@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, TrendingUp, DollarSign, Loader2 } from 'lucide-react';
+import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PostedToken {
@@ -20,10 +20,6 @@ interface PostedToken {
   snapshot_slot?: string | null;
   minted_at?: string | null;
   bonded_at?: string | null;
-  // Live market data (fetched on demand)
-  marketCap?: number;
-  liquidity?: number;
-  priceUsd?: number;
 }
 
 type CommunityFilter = 'all' | 'with-community' | 'no-community';
@@ -74,20 +70,12 @@ function getTimeAgo(isoDate: string | null | undefined): string {
   }
 }
 
-function formatMarketCap(value: number | undefined): string {
-  if (!value) return '-';
-  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-  if (value >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
-  return `$${value.toFixed(0)}`;
-}
 
 export function TokenXDashboard() {
   const [tokens, setTokens] = useState<PostedToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillingTimestamps, setBackfillingTimestamps] = useState(false);
-  const [fetchingMarketData, setFetchingMarketData] = useState(false);
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const [doneTokens, setDoneTokens] = useState<Set<string>>(new Set());
   const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('all');
@@ -149,51 +137,6 @@ export function TokenXDashboard() {
     }
   };
 
-  // Fetch live market data from DexScreener for visible tokens
-  const fetchMarketData = async (tokenList: PostedToken[]) => {
-    setFetchingMarketData(true);
-    try {
-      const updated = [...tokenList];
-      
-      // Process in batches of 5 with delay
-      for (let i = 0; i < updated.length; i += 5) {
-        const batch = updated.slice(i, i + 5);
-        
-        await Promise.all(batch.map(async (token, idx) => {
-          try {
-            const resp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.token_mint}`);
-            if (resp.ok) {
-              const data = await resp.json();
-              const pair = data.pairs?.[0];
-              if (pair) {
-                updated[i + idx] = {
-                  ...updated[i + idx],
-                  marketCap: pair.marketCap || pair.fdv || 0,
-                  liquidity: pair.liquidity?.usd || 0,
-                  priceUsd: parseFloat(pair.priceUsd) || 0,
-                };
-              }
-            }
-          } catch (e) {
-            console.error(`Failed to fetch market data for ${token.symbol}:`, e);
-          }
-        }));
-        
-        // Rate limit delay
-        if (i + 5 < updated.length) {
-          await new Promise(r => setTimeout(r, 500));
-        }
-      }
-      
-      setTokens(updated);
-      toast.success('Market data refreshed');
-    } catch (err) {
-      console.error('Error fetching market data:', err);
-      toast.error('Failed to fetch market data');
-    } finally {
-      setFetchingMarketData(false);
-    }
-  };
 
   useEffect(() => {
     fetchTokens();
@@ -334,15 +277,6 @@ ${holdersUrl}
               Refresh
             </Button>
             <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => fetchMarketData(filteredAndSortedTokens)} 
-              disabled={fetchingMarketData}
-            >
-              <TrendingUp className={`h-4 w-4 mr-2 ${fetchingMarketData ? 'animate-pulse' : ''}`} />
-              {fetchingMarketData ? 'Fetching...' : 'Fetch Prices'}
-            </Button>
-            <Button 
               variant="secondary" 
               size="sm" 
               onClick={runTimestampBackfill} 
@@ -438,8 +372,6 @@ ${holdersUrl}
                 <TableHead className="text-center">Minted</TableHead>
                 <TableHead className="text-center">Bonded</TableHead>
                 <TableHead className="text-center">Age</TableHead>
-                <TableHead className="text-right">MCap</TableHead>
-                <TableHead className="text-right">Liq</TableHead>
                 <TableHead>Links</TableHead>
                 <TableHead>Community</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -489,16 +421,6 @@ ${holdersUrl}
                   <TableCell className="text-center">
                     <span className="text-xs font-medium">
                       {getTimeAgo(token.bonded_at || token.minted_at)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className={`text-xs font-medium ${token.marketCap && token.marketCap > 1e6 ? 'text-green-500' : ''}`}>
-                      {formatMarketCap(token.marketCap)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="text-xs text-muted-foreground">
-                      {formatMarketCap(token.liquidity)}
                     </span>
                   </TableCell>
                   <TableCell>
