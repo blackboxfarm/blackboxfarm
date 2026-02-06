@@ -6,6 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Extract community ID from X community URL
+function extractCommunityId(url: string): string | null {
+  const match = url.match(/communities\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+// Check if a URL is an X/Twitter link
+function isTwitterUrl(url: string): boolean {
+  return url.includes('twitter.com') || url.includes('x.com');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -32,6 +43,7 @@ serve(async (req) => {
     let marketCap = null;
     let mintedAt = null;
     let bondedAt = null;
+    let twitterUrl: string | null = null;
 
     try {
       const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
@@ -47,6 +59,17 @@ serve(async (req) => {
           // Get creation time
           if (pair.pairCreatedAt) {
             bondedAt = new Date(pair.pairCreatedAt).toISOString();
+          }
+          
+          // Extract Twitter/X URL from socials
+          if (pair.info?.socials) {
+            for (const social of pair.info.socials) {
+              if (social.url && isTwitterUrl(social.url)) {
+                twitterUrl = social.url;
+                console.log(`[admin-add-seen-token] Found Twitter URL: ${twitterUrl}`);
+                break;
+              }
+            }
           }
         }
       }
@@ -103,10 +126,75 @@ serve(async (req) => {
       });
     }
 
+    // If we found a Twitter URL, link it to x_communities
+    let communityLinked = false;
+    let communityId: string | null = null;
+    
+    if (twitterUrl) {
+      // Check if it's a community URL (contains /communities/)
+      communityId = extractCommunityId(twitterUrl);
+      
+      // For any Twitter URL, we'll create/update an x_communities entry
+      // Use the URL as a pseudo community_id if not a real community
+      const effectiveId = communityId || twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
+      
+      // Check if this community already exists
+      const { data: existingCommunity } = await supabase
+        .from('x_communities')
+        .select('id, linked_token_mints')
+        .eq('community_id', effectiveId)
+        .single();
+      
+      if (existingCommunity) {
+        // Add token to existing community's linked_token_mints
+        const existingMints = existingCommunity.linked_token_mints || [];
+        if (!existingMints.includes(tokenMint)) {
+          const { error: updateError } = await supabase
+            .from('x_communities')
+            .update({
+              linked_token_mints: [...existingMints, tokenMint],
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingCommunity.id);
+          
+          if (!updateError) {
+            communityLinked = true;
+            console.log(`[admin-add-seen-token] Added ${tokenMint} to existing community ${effectiveId}`);
+          }
+        } else {
+          communityLinked = true; // Already linked
+        }
+      } else {
+        // Create new x_communities entry
+        const { error: insertError } = await supabase
+          .from('x_communities')
+          .insert({
+            community_id: effectiveId,
+            community_url: twitterUrl,
+            name: symbol ? `$${symbol} Community` : null,
+            linked_token_mints: [tokenMint],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        
+        if (!insertError) {
+          communityLinked = true;
+          console.log(`[admin-add-seen-token] Created new community ${effectiveId} for ${tokenMint}`);
+        } else {
+          console.error('Failed to create community:', insertError);
+        }
+      }
+    }
+
     return new Response(JSON.stringify({ 
       success: true, 
       token: data,
-      metadata: { symbol, name, imageUri, marketCap }
+      metadata: { symbol, name, imageUri, marketCap },
+      community: {
+        linked: communityLinked,
+        url: twitterUrl,
+        communityId
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
