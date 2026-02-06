@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -19,7 +18,99 @@ function isTwitterUrl(url: string): boolean {
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-serve(async (req) => {
+// Rate-limited DexScreener fetch with retry
+async function fetchDexScreenerWithRateLimit(tokenMint: string, retries = 2): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; BlackBox/1.0)',
+          'Referer': 'https://dexscreener.com/'
+        }
+      });
+      
+      if (res.status === 429) {
+        // Rate limited - wait longer and retry
+        console.warn(`[DexScreener] Rate limited, waiting 5s before retry...`);
+        await delay(5000);
+        continue;
+      }
+      
+      if (!res.ok) {
+        console.warn(`[DexScreener] HTTP ${res.status} for ${tokenMint}`);
+        return null;
+      }
+      
+      return await res.json();
+    } catch (err) {
+      console.error(`[DexScreener] Fetch error for ${tokenMint}:`, err);
+      if (attempt < retries) await delay(1000);
+    }
+  }
+  return null;
+}
+
+// Process a single token
+async function enrichSingleToken(
+  supabase: any, 
+  tokenMint: string, 
+  symbol: string | null
+): Promise<{ linked: boolean; twitterUrl?: string; error?: string }> {
+  const dexData = await fetchDexScreenerWithRateLimit(tokenMint);
+  if (!dexData) return { linked: false, error: 'Failed to fetch DexScreener' };
+  
+  const pair = dexData?.pairs?.[0];
+  if (!pair?.info?.socials) return { linked: false, error: 'No socials' };
+  
+  let twitterUrl: string | null = null;
+  for (const social of pair.info.socials) {
+    if (social.url && isTwitterUrl(social.url)) {
+      twitterUrl = social.url;
+      break;
+    }
+  }
+  
+  if (!twitterUrl) return { linked: false, error: 'No Twitter URL' };
+  
+  const communityId = extractCommunityId(twitterUrl);
+  const effectiveId = communityId || twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
+  
+  // Check if community exists
+  const { data: existingCommunity } = await supabase
+    .from('x_communities')
+    .select('id, linked_token_mints')
+    .eq('community_id', effectiveId)
+    .single();
+  
+  if (existingCommunity) {
+    const existingMints = existingCommunity.linked_token_mints || [];
+    if (!existingMints.includes(tokenMint)) {
+      await supabase
+        .from('x_communities')
+        .update({
+          linked_token_mints: [...existingMints, tokenMint],
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingCommunity.id);
+    }
+  } else {
+    await supabase
+      .from('x_communities')
+      .insert({
+        community_id: effectiveId,
+        community_url: twitterUrl,
+        name: symbol ? `$${symbol} Community` : null,
+        linked_token_mints: [tokenMint],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+  }
+  
+  return { linked: true, twitterUrl };
+}
+
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -29,7 +120,42 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get all tokens from holders_intel_seen_tokens that are was_posted = true
+    const body = await req.json().catch(() => ({}));
+    const { singleMint } = body;
+
+    // SINGLE TOKEN MODE - for per-row enrich button
+    if (singleMint) {
+      console.log(`[enrich] Single token mode: ${singleMint}`);
+      
+      // Get token symbol
+      const { data: tokenData } = await supabase
+        .from('holders_intel_seen_tokens')
+        .select('symbol')
+        .eq('token_mint', singleMint)
+        .single();
+      
+      const result = await enrichSingleToken(supabase, singleMint, tokenData?.symbol);
+      
+      if (result.linked) {
+        console.log(`[enrich] Linked ${singleMint} -> ${result.twitterUrl}`);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          enriched: 1,
+          noTwitterUrl: 0,
+          twitterUrl: result.twitterUrl
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } else {
+        console.log(`[enrich] No Twitter for ${singleMint}: ${result.error}`);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          enriched: 0,
+          noTwitterUrl: 1,
+          error: result.error
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // BULK MODE - process all missing tokens with proper rate limiting
     const { data: allTokens, error: fetchError } = await supabase
       .from('holders_intel_seen_tokens')
       .select('token_mint, symbol')
@@ -71,93 +197,29 @@ serve(async (req) => {
     let noTwitter = 0;
     const results: { mint: string; symbol: string; twitterUrl?: string; linked: boolean }[] = [];
 
-    // Process in batches of 5 with rate limiting
-    const batchSize = 5;
-    const maxTokens = Math.min(missingTokens.length, 100); // Limit to 100 per run
+    // Process SEQUENTIALLY with 300ms delay between each (DexScreener rate limit safe)
+    const maxTokens = Math.min(missingTokens.length, 50); // Limit to 50 per run for safety
 
-    for (let i = 0; i < maxTokens; i += batchSize) {
-      const batch = missingTokens.slice(i, i + batchSize);
+    for (let i = 0; i < maxTokens; i++) {
+      const token = missingTokens[i];
       
-      await Promise.all(batch.map(async (token) => {
-        try {
-          let twitterUrl: string | null = null;
-          
-          // Fetch from DexScreener
-          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.token_mint}`, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'BlackBox-Enricher/1.0'
-            }
-          });
-          
-          if (dexRes.ok) {
-            const dexData = await dexRes.json();
-            const pair = dexData?.pairs?.[0];
-            
-            if (pair?.info?.socials) {
-              for (const social of pair.info.socials) {
-                if (social.url && isTwitterUrl(social.url)) {
-                  twitterUrl = social.url;
-                  break;
-                }
-              }
-            }
-          }
-
-          if (!twitterUrl) {
-            noTwitter++;
-            results.push({ mint: token.token_mint, symbol: token.symbol || '?', linked: false });
-            return;
-          }
-
-          // Link to x_communities
-          const communityId = extractCommunityId(twitterUrl);
-          const effectiveId = communityId || twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
-
-          // Check if community exists
-          const { data: existingCommunity } = await supabase
-            .from('x_communities')
-            .select('id, linked_token_mints')
-            .eq('community_id', effectiveId)
-            .single();
-
-          if (existingCommunity) {
-            const existingMints = existingCommunity.linked_token_mints || [];
-            if (!existingMints.includes(token.token_mint)) {
-              await supabase
-                .from('x_communities')
-                .update({
-                  linked_token_mints: [...existingMints, token.token_mint],
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', existingCommunity.id);
-            }
-          } else {
-            await supabase
-              .from('x_communities')
-              .insert({
-                community_id: effectiveId,
-                community_url: twitterUrl,
-                name: token.symbol ? `$${token.symbol} Community` : null,
-                linked_token_mints: [token.token_mint],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              });
-          }
-
+      // Rate limit: 300ms between requests
+      if (i > 0) await delay(300);
+      
+      try {
+        const result = await enrichSingleToken(supabase, token.token_mint, token.symbol);
+        
+        if (result.linked) {
           enriched++;
-          results.push({ mint: token.token_mint, symbol: token.symbol || '?', twitterUrl, linked: true });
-          console.log(`[enrich] Linked ${token.symbol || token.token_mint.slice(0,8)} -> ${twitterUrl}`);
-
-        } catch (e) {
-          console.error(`[enrich] Error for ${token.token_mint}:`, e);
+          results.push({ mint: token.token_mint, symbol: token.symbol || '?', twitterUrl: result.twitterUrl, linked: true });
+          console.log(`[enrich] ${i+1}/${maxTokens} Linked ${token.symbol || token.token_mint.slice(0,8)} -> ${result.twitterUrl}`);
+        } else {
+          noTwitter++;
           results.push({ mint: token.token_mint, symbol: token.symbol || '?', linked: false });
         }
-      }));
-
-      // Rate limit between batches
-      if (i + batchSize < maxTokens) {
-        await delay(500);
+      } catch (e) {
+        console.error(`[enrich] Error for ${token.token_mint}:`, e);
+        results.push({ mint: token.token_mint, symbol: token.symbol || '?', linked: false });
       }
     }
 
@@ -168,7 +230,7 @@ serve(async (req) => {
       totalTokens: allTokens?.length || 0,
       alreadyLinked: linkedTokens.size,
       missing: missingTokens.length,
-      processed: Math.min(missingTokens.length, maxTokens),
+      processed: maxTokens,
       enriched,
       noTwitterUrl: noTwitter,
       results
