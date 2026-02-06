@@ -77,13 +77,50 @@ serve(async (req) => {
         const content = data.result?.content;
         const metadata = content?.metadata;
         
+        let finalPrice = pricePerToken;
+        let priceSource = 'helius_getAsset';
+        
+        // Check if token is graduated (not on bonding curve)
+        // Helius index can lag for graduated tokens - validate with DexScreener
+        try {
+          const dexController = new AbortController();
+          const dexTimeoutId = setTimeout(() => dexController.abort(), 2000);
+          
+          const dexRes = await fetch(
+            `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+            { signal: dexController.signal }
+          );
+          clearTimeout(dexTimeoutId);
+          
+          if (dexRes.ok) {
+            const dexData = await dexRes.json();
+            const dexPrice = parseFloat(dexData?.pairs?.[0]?.priceUsd);
+            
+            if (dexPrice > 0) {
+              const deviation = Math.abs(pricePerToken - dexPrice) / dexPrice;
+              
+              // If Helius price deviates >5% from DexScreener, use DexScreener
+              // DexScreener is real-time, Helius index can lag 30-60s
+              if (deviation > 0.05) {
+                console.log(`[helius-fast-price] Price deviation ${(deviation * 100).toFixed(1)}% - Helius: $${pricePerToken}, DexScreener: $${dexPrice}. Using DexScreener.`);
+                finalPrice = dexPrice;
+                priceSource = 'dexscreener_validated';
+              }
+            }
+          }
+        } catch (dexErr) {
+          // DexScreener failed or timed out - use Helius price
+          console.log(`[helius-fast-price] DexScreener validation skipped: ${dexErr.message}`);
+        }
+        
         return new Response(
           JSON.stringify({
             success: true,
-            price: pricePerToken,
+            price: finalPrice,
             currency: priceInfo?.currency || 'USDC',
-            source: 'helius_getAsset',
-            latencyMs,
+            source: priceSource,
+            heliusPrice: pricePerToken,
+            latencyMs: Date.now() - startTime,
             // Bonus: include basic metadata if available
             symbol: metadata?.symbol || null,
             name: metadata?.name || null,
