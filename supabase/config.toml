@@ -420,3 +420,6 @@ verify_jwt = false
 
 [functions.firecrawl-scrape]
 verify_jwt = false
+
+[functions.build-token-composite]
+verify_jwt = false

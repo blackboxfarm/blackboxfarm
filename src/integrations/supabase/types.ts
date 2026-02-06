@@ -3734,6 +3734,7 @@ export type Database = {
           market_cap_at_discovery: number | null
           minted_at: string | null
           name: string | null
+          paid_composite_url: string | null
           snapshot_slot: string | null
           symbol: string | null
           times_posted: number | null
@@ -3751,6 +3752,7 @@ export type Database = {
           market_cap_at_discovery?: number | null
           minted_at?: string | null
           name?: string | null
+          paid_composite_url?: string | null
           snapshot_slot?: string | null
           symbol?: string | null
           times_posted?: number | null
@@ -3768,6 +3770,7 @@ export type Database = {
           market_cap_at_discovery?: number | null
           minted_at?: string | null
           name?: string | null
+          paid_composite_url?: string | null
           snapshot_slot?: string | null
           symbol?: string | null
           times_posted?: number | null
