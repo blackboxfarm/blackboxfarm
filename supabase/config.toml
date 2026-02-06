@@ -423,3 +423,6 @@ verify_jwt = false
 
 [functions.build-token-composite]
 verify_jwt = false
+
+[functions.holders-og]
+verify_jwt = false
