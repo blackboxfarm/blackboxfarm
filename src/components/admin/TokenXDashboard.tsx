@@ -213,12 +213,24 @@ export function TokenXDashboard() {
 
   const generatePostText = (token: PostedToken) => {
     // Use branded OG endpoint so social bots receive dynamic OG meta tags
+    // Add a stable cache-buster when a composite exists (X aggressively caches cards by URL)
     const holdersUrl = new URL(`https://blackbox.farm/og/holders-og`);
     holdersUrl.searchParams.set('token', token.token_mint);
+
+    if (token.paid_composite_url) {
+      try {
+        const file = new URL(token.paid_composite_url).pathname.split('/').pop() || 'composite';
+        const safe = `comp_${file}`.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48);
+        if (safe) holdersUrl.searchParams.set('v', safe);
+      } catch {
+        holdersUrl.searchParams.set('v', 'composite');
+      }
+    }
+
     if (token.x_community_id) {
       holdersUrl.searchParams.set('utm_community', token.x_community_id);
     }
-    
+
     return `Just paid for the $${token.symbol} banner on Holders 🔥
 
 Check the live report here:
