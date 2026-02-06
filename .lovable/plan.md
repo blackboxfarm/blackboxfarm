@@ -1,87 +1,86 @@
 
-## Token-Specific Banner System via UTM
+# Fix: Stale Price Display from Helius Index Lag
 
-### Overview
-When a user lands on `/holders?token=XXX&utm_community=YYY`, we check a new **token_banners** database table for that token's Dexscreener banner. If found, Banner #1 shows that specific banner instead of the random/scheduled rotation.
+## Problem Identified
 
-### Database Schema
+The screenshot shows price **$0.0000054165** but Helius currently returns **$0.0000030132887** (correct). The token (Buddy) graduated from pump.fun and now trades on PumpSwap.
 
-**New Table: `token_banners`**
+**Root Cause**: Helius `getAsset` returns **indexed** price data from `token_info.price_info`. This index can lag real-time prices by 30-60 seconds, especially for:
+- Recently graduated tokens
+- Tokens with high volatility
+- Tokens just listed on DEXes
+
+The user sees a stale price from when they first pasted, then it doesn't update.
+
+## Solution
+
+Add **DexScreener real-time price** as a validation/fallback for graduated tokens (not on bonding curve).
+
+### Current Flow
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│ token_banners                                               │
-├─────────────────────────────────────────────────────────────┤
-│ id              UUID (PK)                                   │
-│ token_address   TEXT (unique, indexed)                      │
-│ symbol          TEXT                                        │
-│ banner_url      TEXT (Dexscreener header URL)               │
-│ link_url        TEXT (e.g., dexscreener.com/solana/TOKEN)   │
-│ x_community_id  TEXT (optional - X community number)        │
-│ notes           TEXT                                        │
-│ is_active       BOOLEAN (default true)                      │
-│ created_at      TIMESTAMPTZ                                 │
-│ updated_at      TIMESTAMPTZ                                 │
-└─────────────────────────────────────────────────────────────┘
+1. Helius getAsset → price (may be stale for graduated tokens)
+2. Display price immediately
+3. Background: token-metadata (no price override)
 ```
 
-### Flow
-
+### Fixed Flow
 ```text
-User clicks UTM link from X Community
-        ↓
-/holders?token=ABC&utm_community=123
-        ↓
-usePageTracking captures UTM params (already works)
-        ↓
-AdBanner component passes token param to edge function
-        ↓
-get-banner-for-position checks token_banners table
-        ↓
-If token found → return that banner for position 1
-If not found → normal rotation/Dexscreener fallback
+1. Helius getAsset → price + isOnCurve check
+2. Display price immediately (fast UX)
+3. IF graduated (no curve): Quick DexScreener check (async)
+4. IF DexScreener price differs significantly (>5%): Update display
 ```
 
-### Code Changes
+## Technical Details
 
-**1. Create `token_banners` table**
-- Migration SQL with RLS (super_admin can manage)
+### Changes to `helius-fast-price` Edge Function
 
-**2. Update `AdBanner.tsx`**
-- Read `token` from URL params
-- Pass `tokenAddress` to `get-banner-for-position`
+Add quick DexScreener validation for graduated tokens:
 
-**3. Update `get-banner-for-position/index.ts`**
-- Accept optional `tokenAddress` param
-- If provided, check `token_banners` table first
-- If match found, return that banner (highest priority)
-- If no match, fall through to existing logic
-
-**4. Admin UI for managing token_banners**
-- Add to SuperAdmin dashboard
-- Fields: token address, symbol, banner URL, link URL, X community ID
-
-### Technical Details
-
-**AdBanner change:**
 ```typescript
-const urlParams = new URLSearchParams(window.location.search);
-const tokenAddress = urlParams.get('token');
+// After getting Helius price, check if graduated
+const isOnCurve = ... // from bonding curve check
 
-// Pass to edge function
-const { data } = await supabase.functions.invoke('get-banner-for-position', {
-  body: { position, tokenAddress }
-});
+if (!isOnCurve && pricePerToken > 0) {
+  // Graduated token - validate against DexScreener
+  try {
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+    const dexData = await dexRes.json();
+    const dexPrice = parseFloat(dexData?.pairs?.[0]?.priceUsd);
+    
+    if (dexPrice > 0) {
+      const deviation = Math.abs(pricePerToken - dexPrice) / dexPrice;
+      if (deviation > 0.05) {
+        // DexScreener is >5% different - use it (more real-time)
+        return { price: dexPrice, source: 'dexscreener', ... };
+      }
+    }
+  } catch (e) {
+    // DexScreener failed, use Helius price anyway
+  }
+}
 ```
 
-**Edge function priority:**
-1. Token-specific banner (if `tokenAddress` provided and found in `token_banners`)
-2. Scheduled/paid banners
-3. Default banners
-4. Dexscreener fallback
+### Alternative Simpler Approach
 
-### UTM Format
-```
-blackbox.farm/holders?token=ABC123&utm_source=x&utm_community=solana-degens
-```
-- `token` = the token address for report
-- `utm_community` = X community identifier (tracked in page_visits)
+Don't modify helius-fast-price (keep it fast). Instead:
+
+1. Display Helius price immediately (current behavior)
+2. In background, fetch DexScreener price for graduated tokens
+3. If differs >5%, update the displayed price
+
+This keeps the instant price display but corrects stale data automatically.
+
+### Files to Modify
+
+1. **`supabase/functions/helius-fast-price/index.ts`** - Add optional DexScreener validation for graduated tokens
+
+OR
+
+2. **`src/components/admin/FlipItDashboard.tsx`** - Add background price validation after initial display
+
+## Expected Result
+
+- Price displays instantly (~200ms from Helius)
+- For graduated tokens, price auto-corrects within 500ms if stale
+- User always sees real-time executable price before clicking Flip-It
