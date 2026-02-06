@@ -241,24 +241,69 @@ ${holdersUrl}
     toast.success('Marked as done');
   };
 
-  // Single token enrichment - calls edge function which handles rate limiting
+  // Single token enrichment - direct DexScreener fetch (no rate limit needed for 1 request)
   const handleEnrichSingleToken = async (token: PostedToken) => {
     setEnrichingToken(token.token_mint);
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-token-communities', {
-        body: { singleMint: token.token_mint }
-      });
-      
-      if (error) throw error;
-      
-      if (data?.enriched > 0) {
-        toast.success(`Linked $${token.symbol} to X/Twitter`);
-        fetchTokens();
-      } else if (data?.noTwitterUrl > 0) {
-        toast.error(`No Twitter/X URL found for $${token.symbol}`);
-      } else {
-        toast.info(`$${token.symbol} already linked or no data found`);
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.token_mint}`);
+      if (!dexRes.ok) {
+        toast.error('Failed to fetch from DexScreener');
+        return;
       }
+      
+      const dexData = await dexRes.json();
+      const pair = dexData?.pairs?.[0];
+      
+      if (!pair?.info?.socials) {
+        toast.error(`No socials found for $${token.symbol}`);
+        return;
+      }
+      
+      let twitterUrl: string | null = null;
+      for (const social of pair.info.socials) {
+        if (social.url && (social.url.includes('twitter.com') || social.url.includes('x.com'))) {
+          twitterUrl = social.url;
+          break;
+        }
+      }
+      
+      if (!twitterUrl) {
+        toast.error(`No Twitter/X URL found for $${token.symbol}`);
+        return;
+      }
+      
+      const communityMatch = twitterUrl.match(/communities\/(\d+)/);
+      const effectiveId = communityMatch ? communityMatch[1] : twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
+      
+      const { data: existingCommunity } = await supabase
+        .from('x_communities')
+        .select('id, linked_token_mints')
+        .eq('community_id', effectiveId)
+        .single();
+      
+      if (existingCommunity) {
+        const existingMints = (existingCommunity.linked_token_mints as string[]) || [];
+        if (!existingMints.includes(token.token_mint)) {
+          await supabase
+            .from('x_communities')
+            .update({ linked_token_mints: [...existingMints, token.token_mint], updated_at: new Date().toISOString() })
+            .eq('id', existingCommunity.id);
+        }
+      } else {
+        await supabase
+          .from('x_communities')
+          .insert({
+            community_id: effectiveId,
+            community_url: twitterUrl,
+            name: token.symbol ? `$${token.symbol} Community` : null,
+            linked_token_mints: [token.token_mint],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+      }
+      
+      toast.success(`Linked $${token.symbol} → ${twitterUrl.includes('communities/') ? 'Community' : 'Twitter'}`);
+      fetchTokens();
     } catch (err) {
       console.error('Single token enrichment error:', err);
       toast.error('Failed to enrich token');

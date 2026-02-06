@@ -121,39 +121,6 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json().catch(() => ({}));
-    const { singleMint } = body;
-
-    // SINGLE TOKEN MODE - for per-row enrich button
-    if (singleMint) {
-      console.log(`[enrich] Single token mode: ${singleMint}`);
-      
-      // Get token symbol
-      const { data: tokenData } = await supabase
-        .from('holders_intel_seen_tokens')
-        .select('symbol')
-        .eq('token_mint', singleMint)
-        .single();
-      
-      const result = await enrichSingleToken(supabase, singleMint, tokenData?.symbol);
-      
-      if (result.linked) {
-        console.log(`[enrich] Linked ${singleMint} -> ${result.twitterUrl}`);
-        return new Response(JSON.stringify({ 
-          success: true, 
-          enriched: 1,
-          noTwitterUrl: 0,
-          twitterUrl: result.twitterUrl
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      } else {
-        console.log(`[enrich] No Twitter for ${singleMint}: ${result.error}`);
-        return new Response(JSON.stringify({ 
-          success: true, 
-          enriched: 0,
-          noTwitterUrl: 1,
-          error: result.error
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-    }
 
     // BULK MODE - process all missing tokens with proper rate limiting
     const { data: allTokens, error: fetchError } = await supabase
