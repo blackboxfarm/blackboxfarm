@@ -163,7 +163,7 @@ interface InputTokenData {
   websiteUrl: string | null;
   telegramUrl: string | null;
   lastFetched: string | null;
-  source: 'token-metadata' | 'raydium-quote' | 'dexscreener' | null;
+  source: 'token-metadata' | 'raydium-quote' | 'dexscreener' | 'preflight' | 'pumpfun' | 'jupiter' | 'bonding_curve' | string | null;
   creatorWallet: string | null;
 }
 
@@ -897,6 +897,8 @@ export function FlipItDashboard() {
   }, []);
   
   // Unified token data fetch function - single source of truth
+  // CRITICAL: Uses flipit-preflight for REAL-TIME venue-aware executable price
+  // DO NOT use DexScreener for price - it's stale by 10-30 seconds
   const fetchInputTokenData = useCallback(async (tokenMint: string, forceRefresh = false): Promise<boolean> => {
     const mint = tokenMint.trim();
     if (!mint || mint.length < 32) {
@@ -904,54 +906,77 @@ export function FlipItDashboard() {
       return false;
     }
 
-    // REMOVED CACHE: Always fetch fresh price to avoid stale price bugs
-    // The 30-second cache was causing users to see old prices and buy at stale rates
-    // Fresh prices are critical for accurate FlipIt execution
-
     setIsLoadingInputToken(true);
     
     try {
-      // Primary: Use token-metadata which returns both metadata AND price
-      const { data: metaData, error: metaError } = await supabase.functions.invoke('token-metadata', {
-        body: { tokenMint: mint }
-      });
+      // Step 1: Fetch metadata (symbol, name, socials) from token-metadata
+      // Note: We'll IGNORE the price from this - it uses stale DexScreener data
+      let symbol: string | null = null;
+      let name: string | null = null;
+      let image: string | null = null;
+      let marketCap: number | null = null;
+      let liquidity: number | null = null;
+      let twitterUrl: string | null = null;
+      let websiteUrl: string | null = null;
+      let telegramUrl: string | null = null;
+      let creatorWallet: string | null = null;
 
-      if (metaError) throw metaError;
-
-      if (metaData?.success && metaData?.metadata) {
-        const meta = metaData.metadata;
-        const priceInfo = metaData.priceInfo;
-        
-        const creatorWallet = meta.creatorWallet || metaData.launchpadInfo?.creatorWallet || null;
-        
-        setInputToken({
-          mint: mint,
-          symbol: meta.symbol || null,
-          name: meta.name || null,
-          price: priceInfo?.priceUsd ?? null,
-          image: meta.image || meta.logoURI || null,
-          marketCap: priceInfo?.marketCap ?? null,
-          liquidity: priceInfo?.liquidity ?? null,
-          holders: null, // Will be populated separately if available
-          dexStatus: null, // Not available from token-metadata directly
-          twitterUrl: meta.socialLinks?.twitter ?? null,
-          websiteUrl: meta.socialLinks?.website ?? null,
-          telegramUrl: meta.socialLinks?.telegram ?? null,
-          lastFetched: new Date().toISOString(),
-          source: 'token-metadata',
-          creatorWallet: creatorWallet
+      try {
+        const { data: metaData, error: metaError } = await supabase.functions.invoke('token-metadata', {
+          body: { tokenMint: mint }
         });
-        
-        // Check blacklist/whitelist for the token and creator
-        checkBlacklistStatus(mint, creatorWallet, meta.socialLinks?.twitter);
 
-        // If token-metadata returned a price, we're done
-        if (priceInfo?.priceUsd) {
-          toast.success(`${meta.symbol || 'Token'}: $${priceInfo.priceUsd.toFixed(10).replace(/\.?0+$/, '')}`);
-          return true;
+        if (!metaError && metaData?.success && metaData?.metadata) {
+          const meta = metaData.metadata;
+          const priceInfo = metaData.priceInfo;
+          
+          symbol = meta.symbol || null;
+          name = meta.name || null;
+          image = meta.image || meta.logoURI || null;
+          marketCap = priceInfo?.marketCap ?? null;
+          liquidity = priceInfo?.liquidity ?? null;
+          twitterUrl = meta.socialLinks?.twitter ?? null;
+          websiteUrl = meta.socialLinks?.website ?? null;
+          telegramUrl = meta.socialLinks?.telegram ?? null;
+          creatorWallet = meta.creatorWallet || metaData.launchpadInfo?.creatorWallet || null;
+          
+          // Check blacklist/whitelist
+          checkBlacklistStatus(mint, creatorWallet, twitterUrl);
         }
+      } catch (metaErr) {
+        console.warn('Metadata fetch failed, continuing with price fetch:', metaErr);
+      }
 
-        // Fallback: If no price from token-metadata, try raydium-quote
+      // Step 2: Fetch REAL-TIME executable price from flipit-preflight
+      // This uses venue-aware quote (pump.fun bonding curve, Jupiter, Raydium, etc.)
+      // A small SOL amount (0.01) is used just to get the price quote
+      let executablePrice: number | null = null;
+      let priceSource = 'unknown';
+      let venue = 'unknown';
+
+      try {
+        const { data: preflightData, error: preflightError } = await supabase.functions.invoke('flipit-preflight', {
+          body: {
+            tokenMint: mint,
+            solAmount: 0.01, // Small amount just for price discovery
+            slippageBps: 500
+          }
+        });
+
+        if (!preflightError && preflightData?.success && preflightData?.executablePriceUsd) {
+          executablePrice = preflightData.executablePriceUsd;
+          priceSource = preflightData.source || 'preflight';
+          venue = preflightData.venue || 'unknown';
+          console.log(`[fetchInputTokenData] Real-time price: $${executablePrice} from ${venue} via ${priceSource}`);
+        } else if (preflightData?.error) {
+          console.warn('[fetchInputTokenData] Preflight failed:', preflightData.error);
+        }
+      } catch (preflightErr) {
+        console.warn('[fetchInputTokenData] Preflight request failed:', preflightErr);
+      }
+
+      // Step 3: If preflight failed, fallback to raydium-quote (still better than DexScreener)
+      if (executablePrice === null) {
         try {
           const response = await fetch(
             `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`,
@@ -966,49 +991,42 @@ export function FlipItDashboard() {
           if (response.ok) {
             const priceData = await response.json();
             if (priceData?.priceUSD) {
-              setInputToken(prev => ({
-                ...prev,
-                price: priceData.priceUSD,
-                source: 'raydium-quote',
-                lastFetched: new Date().toISOString()
-              }));
-              toast.success(`${meta.symbol || 'Token'}: $${priceData.priceUSD.toFixed(10).replace(/\.?0+$/, '')}`);
-              return true;
+              executablePrice = priceData.priceUSD;
+              priceSource = priceData.source || 'raydium-quote';
             }
           }
-        } catch (priceErr) {
-          console.warn('Raydium price fallback failed:', priceErr);
+        } catch (fallbackErr) {
+          console.warn('Raydium-quote fallback failed:', fallbackErr);
         }
-
-        // Got metadata but no price
-        toast.info(`${meta.symbol || 'Token'} loaded (no price available)`);
-        return true;
       }
 
-      // token-metadata failed - try raydium-quote alone as last resort
-      const response = await fetch(
-        `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`,
-        {
-          method: 'GET',
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
-          }
-        }
-      );
-      
-      if (response.ok) {
-        const priceData = await response.json();
-        if (priceData?.priceUSD) {
-          setInputToken({
-            ...getEmptyInputToken(),
-            mint: mint,
-            price: priceData.priceUSD,
-            lastFetched: new Date().toISOString(),
-            source: 'raydium-quote'
-          });
-          toast.success(`Price: $${priceData.priceUSD.toFixed(10).replace(/\.?0+$/, '')}`);
-          return true;
-        }
+      // Set the state with all collected data
+      setInputToken({
+        mint: mint,
+        symbol: symbol,
+        name: name,
+        price: executablePrice,
+        image: image,
+        marketCap: marketCap,
+        liquidity: liquidity,
+        holders: null,
+        dexStatus: null,
+        twitterUrl: twitterUrl,
+        websiteUrl: websiteUrl,
+        telegramUrl: telegramUrl,
+        lastFetched: new Date().toISOString(),
+        source: priceSource,
+        creatorWallet: creatorWallet
+      });
+
+      if (executablePrice !== null) {
+        const displaySymbol = symbol || 'Token';
+        const venueTag = venue !== 'unknown' ? ` (${venue})` : '';
+        toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')}${venueTag}`);
+        return true;
+      } else if (symbol) {
+        toast.info(`${symbol} loaded (no price available)`);
+        return true;
       }
 
       toast.error('Could not fetch token data');
@@ -1020,7 +1038,7 @@ export function FlipItDashboard() {
     } finally {
       setIsLoadingInputToken(false);
     }
-  }, [inputToken.mint, inputToken.lastFetched]);
+  }, []);
 
   // Store fetchInputTokenData in a ref to avoid useEffect re-triggering
   const fetchInputTokenDataRef = useRef(fetchInputTokenData);
