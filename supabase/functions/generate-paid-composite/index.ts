@@ -36,9 +36,9 @@ serve(async (req) => {
     if (durationHours >= 168) { // 1 week
       badgeName = 'paid_1week.png';
     } else if (durationHours >= 72) {
-      badgeName = 'paid_72h.png';
+      badgeName = 'paid_72hrs.png';
     } else if (durationHours >= 48) {
-      badgeName = 'paid_48h.png';
+      badgeName = 'paid_48hrs.png';
     }
 
     // Get the badge URL from storage
