@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users, Image, ImageOff, Layers } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 
 interface PostedToken {
   token_mint: string;
@@ -546,44 +547,78 @@ ${holdersUrl.toString()}`;
                     <div className="flex flex-col">
                       <div className="flex items-center gap-1">
                         <span className="font-medium">${token.symbol}</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              {token.banner_url ? (
+                        {/* Banner preview on hover */}
+                        {token.banner_url ? (
+                          <HoverCard openDelay={200} closeDelay={100}>
+                            <HoverCardTrigger asChild>
+                              <button className="p-0.5 rounded hover:bg-muted transition-colors">
                                 <Image className="h-3 w-3 text-green-500" />
-                              ) : (
-                                <ImageOff className="h-3 w-3 text-muted-foreground/50" />
-                              )}
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {token.banner_url ? 'Has banner' : 'No banner'}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        {/* Build Composite button - only show if has banner */}
-                        {token.banner_url && (
+                              </button>
+                            </HoverCardTrigger>
+                            <HoverCardContent side="right" className="w-80 p-2">
+                              <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground font-medium">Banner Preview</p>
+                                <img 
+                                  src={token.banner_url} 
+                                  alt={`${token.symbol} banner`}
+                                  className="w-full h-auto rounded border border-border"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            </HoverCardContent>
+                          </HoverCard>
+                        ) : (
                           <TooltipProvider>
                             <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => handleBuildComposite(token)}
-                                  disabled={buildingComposite === token.token_mint}
-                                  className={`ml-1 p-0.5 rounded hover:bg-muted transition-colors ${
-                                    token.paid_composite_url ? 'text-amber-500' : 'text-muted-foreground/50 hover:text-muted-foreground'
-                                  }`}
-                                >
-                                  {buildingComposite === token.token_mint ? (
-                                    <RefreshCw className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Layers className="h-3 w-3" />
-                                  )}
-                                </button>
+                              <TooltipTrigger>
+                                <ImageOff className="h-3 w-3 text-muted-foreground/50" />
                               </TooltipTrigger>
-                              <TooltipContent>
-                                {token.paid_composite_url ? 'Rebuild composite (has one)' : 'Build paid composite'}
-                              </TooltipContent>
+                              <TooltipContent>No banner</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                        )}
+                        {/* Build Composite button with preview on hover */}
+                        {token.banner_url && (
+                          <HoverCard openDelay={200} closeDelay={100}>
+                            <HoverCardTrigger asChild>
+                              <button
+                                onClick={() => handleBuildComposite(token)}
+                                disabled={buildingComposite === token.token_mint}
+                                className={`ml-1 p-0.5 rounded hover:bg-muted transition-colors ${
+                                  token.paid_composite_url ? 'text-amber-500' : 'text-muted-foreground/50 hover:text-muted-foreground'
+                                }`}
+                              >
+                                {buildingComposite === token.token_mint ? (
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Layers className="h-3 w-3" />
+                                )}
+                              </button>
+                            </HoverCardTrigger>
+                            <HoverCardContent side="right" className="w-80 p-2">
+                              <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground font-medium">
+                                  {token.paid_composite_url ? 'Composite Preview (click to rebuild)' : 'No composite yet (click to build)'}
+                                </p>
+                                {token.paid_composite_url ? (
+                                  <img 
+                                    src={token.paid_composite_url} 
+                                    alt={`${token.symbol} composite`}
+                                    className="w-full h-auto rounded border border-border"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = token.banner_url || '';
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="h-20 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
+                                    Click to generate composite
+                                  </div>
+                                )}
+                              </div>
+                            </HoverCardContent>
+                          </HoverCard>
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground font-mono">
