@@ -31,8 +31,38 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // If bannerUrl not provided, fetch from database
+    // ALWAYS fetch the latest banner from DexScreener to avoid stale cached data
     let actualBannerUrl = bannerUrl;
+    
+    // Try to get fresh banner from DexScreener first
+    try {
+      console.log('Fetching latest banner from DexScreener for:', tokenMint);
+      const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        }
+      });
+      
+      if (dexResponse.ok) {
+        const dexData = await dexResponse.json();
+        const freshBanner = dexData.pairs?.[0]?.info?.header;
+        if (freshBanner) {
+          console.log('Found fresh banner from DexScreener:', freshBanner);
+          actualBannerUrl = freshBanner;
+          
+          // Also update our database with the fresh banner
+          await supabase
+            .from('holders_intel_seen_tokens')
+            .update({ banner_url: freshBanner })
+            .eq('token_mint', tokenMint);
+        }
+      }
+    } catch (dexError) {
+      console.log('DexScreener fetch failed, will use fallback:', dexError);
+    }
+    
+    // Fallback to provided URL or database if DexScreener didn't return a banner
     if (!actualBannerUrl) {
       const { data: token } = await supabase
         .from('holders_intel_seen_tokens')
@@ -47,6 +77,7 @@ serve(async (req) => {
         );
       }
       actualBannerUrl = token.banner_url;
+      console.log('Using fallback banner from database:', actualBannerUrl);
     }
 
     // Use the 24h badge for marketing purposes
