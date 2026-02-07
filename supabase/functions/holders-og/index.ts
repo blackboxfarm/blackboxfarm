@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,12 +32,10 @@ const STORAGE_BASE = `${SUPABASE_URL}/storage/v1/object/public/OG`;
 const DEFAULT_OG_IMAGE = `${STORAGE_BASE}/holders_og.png`;
 
 function slugifyVersion(v: string): string {
-  // Allow a-z0-9_- for friendly nicknames like "holders3" or "winter_promo".
-  // Anything else is stripped to avoid path tricks.
   return v.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48);
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -51,12 +48,7 @@ serve(async (req) => {
     const communityParam = url.searchParams.get("utm_community");
     const userAgent = req.headers.get("user-agent");
 
-    // DEBUG: Log incoming request details
-    console.log(`[holders-og] ========== REQUEST START ==========`);
-    console.log(`[holders-og] Full URL: ${req.url}`);
-    console.log(`[holders-og] token=${tokenParam}, v=${versionParam}, utm_community=${communityParam}`);
-    console.log(`[holders-og] User-Agent: ${userAgent}`);
-    console.log(`[holders-og] Is bot: ${isBot(userAgent)}`);
+    console.log(`[holders-og] REQUEST: token=${tokenParam}, UA=${userAgent?.slice(0,50)}`);
 
     // Build canonical URL (preserve token + v + utm_community)
     const canonicalUrl = new URL("https://blackbox.farm/holders");
@@ -67,13 +59,9 @@ serve(async (req) => {
     
     // If not a bot, redirect to the actual SPA
     if (!isBot(userAgent)) {
-      console.log(`[holders-og] Not a bot, redirecting to: ${canonical}`);
       return new Response(null, {
         status: 302,
-        headers: {
-          ...corsHeaders,
-          "Location": canonical,
-        },
+        headers: { ...corsHeaders, "Location": canonical },
       });
     }
 
@@ -87,134 +75,64 @@ serve(async (req) => {
     let tokenSymbol: string | null = null;
     let tokenName: string | null = null;
     let isTokenSpecific = false;
-    let ogImageSource = 'default';
 
-    // PRIORITY 0: Check for paid_composite_url in holders_intel_seen_tokens FIRST
-    // This is used for marketing shares where we want the PAID badge overlay
+    // PRIORITY 0: Check for paid_composite_url first
     if (tokenParam) {
-      console.log(`[holders-og] Looking up token: ${tokenParam}`);
-      const { data: seenToken, error: seenError } = await supabase
+      const { data: seenToken } = await supabase
         .from('holders_intel_seen_tokens')
         .select('paid_composite_url, banner_url, symbol, name')
         .eq('token_mint', tokenParam)
         .single();
-      
-      console.log(`[holders-og] seen_tokens query result:`, JSON.stringify(seenToken));
-      if (seenError) console.log(`[holders-og] seen_tokens error:`, seenError.message);
       
       if (seenToken?.paid_composite_url) {
         ogImage = seenToken.paid_composite_url;
         tokenSymbol = seenToken.symbol;
         tokenName = seenToken.name;
         isTokenSpecific = true;
-        ogImageSource = 'paid_composite_url';
-        console.log(`[holders-og] Using paid_composite_url for ${tokenSymbol}: ${ogImage}`);
+      } else if (seenToken?.banner_url) {
+        ogImage = seenToken.banner_url;
+        tokenSymbol = seenToken.symbol;
+        tokenName = seenToken.name;
+        isTokenSpecific = true;
+      } else if (seenToken) {
+        tokenSymbol = seenToken.symbol;
+        tokenName = seenToken.name;
       }
     }
 
-    // PRIORITY 1: If no composite found, check token_banners then holders_intel_seen_tokens for banner
+    // PRIORITY 1: Check token_banners if no composite found
     if (!isTokenSpecific && tokenParam) {
-      console.log(`[holders-og] No paid_composite_url, checking token_banners...`);
-      // First check token_banners table (for curated/paid banners)
-      let bannerFound = false;
+      const { data: tokenBanner } = await supabase
+        .from('token_banners')
+        .select('banner_url, symbol')
+        .eq('token_address', tokenParam)
+        .eq('is_active', true)
+        .single();
       
-      if (communityParam) {
-        const { data: tokenBanner, error: tbErr } = await supabase
-          .from('token_banners')
-          .select('banner_url, symbol')
-          .eq('x_community_id', communityParam)
-          .eq('is_active', true)
-          .single();
-        
-        console.log(`[holders-og] token_banners (community) result:`, JSON.stringify(tokenBanner));
-        if (tbErr) console.log(`[holders-og] token_banners (community) error:`, tbErr.message);
-        
-        if (tokenBanner?.banner_url) {
-          ogImage = tokenBanner.banner_url;
-          tokenSymbol = tokenBanner.symbol;
-          isTokenSpecific = true;
-          bannerFound = true;
-          ogImageSource = 'token_banners_community';
-          console.log(`[holders-og] Using token_banners (community): ${tokenSymbol}`);
-        }
-      }
-      
-      if (!bannerFound) {
-        const { data: tokenBanner, error: tbErr2 } = await supabase
-          .from('token_banners')
-          .select('banner_url, symbol')
-          .eq('token_address', tokenParam)
-          .eq('is_active', true)
-          .single();
-        
-        console.log(`[holders-og] token_banners (address) result:`, JSON.stringify(tokenBanner));
-        if (tbErr2) console.log(`[holders-og] token_banners (address) error:`, tbErr2.message);
-        
-        if (tokenBanner?.banner_url) {
-          ogImage = tokenBanner.banner_url;
-          tokenSymbol = tokenBanner.symbol;
-          isTokenSpecific = true;
-          bannerFound = true;
-          ogImageSource = 'token_banners_address';
-          console.log(`[holders-og] Using token_banners (address): ${tokenSymbol}`);
-        }
-      }
-      
-      // Fallback: Check holders_intel_seen_tokens for banner_url
-      if (!bannerFound) {
-        const { data: seenToken, error: stErr } = await supabase
-          .from('holders_intel_seen_tokens')
-          .select('banner_url, symbol, name')
-          .eq('token_mint', tokenParam)
-          .single();
-        
-        console.log(`[holders-og] seen_tokens (fallback banner) result:`, JSON.stringify(seenToken));
-        if (stErr) console.log(`[holders-og] seen_tokens (fallback banner) error:`, stErr.message);
-        
-        if (seenToken?.banner_url) {
-          ogImage = seenToken.banner_url;
-          tokenSymbol = seenToken.symbol;
-          tokenName = seenToken.name;
-          isTokenSpecific = true;
-          ogImageSource = 'seen_tokens_banner';
-          console.log(`[holders-og] Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
-        } else if (seenToken) {
-          tokenSymbol = seenToken.symbol;
-          tokenName = seenToken.name;
-          console.log(`[holders-og] Token found but no banner: ${tokenSymbol}`);
-        }
+      if (tokenBanner?.banner_url) {
+        ogImage = tokenBanner.banner_url;
+        tokenSymbol = tokenBanner.symbol;
+        isTokenSpecific = true;
       }
     }
 
-    // PRIORITY 2: Version param for promotional OG images (if no token-specific banner found)
+    // PRIORITY 2: Version param for promotional OG images
     if (!isTokenSpecific && versionParam) {
       const safeV = slugifyVersion(versionParam);
       if (safeV) {
-        const versionedImageName = `holders_og_${safeV}.png`;
-        const versionedImageUrl = `${STORAGE_BASE}/${versionedImageName}`;
+        const versionedImageUrl = `${STORAGE_BASE}/holders_og_${safeV}.png`;
         try {
           const checkResponse = await fetch(versionedImageUrl, { method: 'HEAD' });
           if (checkResponse.ok) {
             ogImage = versionedImageUrl;
-            console.log(`Using versioned OG image: ${versionedImageName}`);
-          } else {
-            console.log(`Versioned image not found (${versionedImageName}), using default`);
           }
-        } catch {
-          console.log(`Failed to check versioned image, using default`);
-        }
+        } catch { /* use default */ }
       }
     }
 
-    // Final summary log before generating HTML
-    console.log(`[holders-og] ========== FINAL OG SELECTION ==========`);
-    console.log(`[holders-og] ogImage: ${ogImage}`);
-    console.log(`[holders-og] ogImageSource: ${ogImageSource}`);
-    console.log(`[holders-og] isTokenSpecific: ${isTokenSpecific}`);
-    console.log(`[holders-og] tokenSymbol: ${tokenSymbol}, tokenName: ${tokenName}`);
-    console.log(`[holders-og] canonical: ${canonical}`);
+    console.log(`[holders-og] Serving: ${tokenSymbol || 'default'}, image=${ogImage.slice(-50)}`);
 
-    // Dynamic OG metadata based on whether we have token-specific content
+    // Dynamic OG metadata
     const title = isTokenSpecific && tokenSymbol 
       ? `$${tokenSymbol} Holder Analysis — BlackBox Farm`
       : "You Don't Grow on Dust.";
@@ -251,7 +169,6 @@ serve(async (req) => {
   <meta name="twitter:image" content="${ogImage}" />
   <meta name="twitter:site" content="@holdersintel" />
 
-  <!-- WhatsApp / iMessage / General Messaging -->
   <meta itemprop="name" content="${title}" />
   <meta itemprop="description" content="${description.replace(/\n/g, ' ')}" />
   <meta itemprop="image" content="${ogImage}" />
@@ -261,7 +178,7 @@ serve(async (req) => {
     body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: #0b0b0f; color: #eaeaf2; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
     main { max-width: 600px; text-align: center; padding: 40px 20px; }
     h1 { font-size: 2rem; margin-bottom: 1rem; }
-    p { opacity: 0.8; line-height: 1.6; white-space: pre-line; }
+    p { opacity: 0.8; line-height: 1.6; }
     a { color: #6ee7b7; text-decoration: none; display: inline-block; margin-top: 2rem; padding: 12px 24px; border: 1px solid #6ee7b7; border-radius: 8px; }
     a:hover { background: rgba(110, 231, 183, 0.1); }
   </style>
@@ -280,7 +197,6 @@ serve(async (req) => {
       headers: {
         ...corsHeaders,
         "Content-Type": "text/html; charset=utf-8",
-        // Short cache for token-specific (banner might change), longer for generic
         "Cache-Control": isTokenSpecific ? "public, max-age=300" : "public, max-age=3600",
       },
     });
