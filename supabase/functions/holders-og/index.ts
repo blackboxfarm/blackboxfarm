@@ -51,6 +51,13 @@ serve(async (req) => {
     const communityParam = url.searchParams.get("utm_community");
     const userAgent = req.headers.get("user-agent");
 
+    // DEBUG: Log incoming request details
+    console.log(`[holders-og] ========== REQUEST START ==========`);
+    console.log(`[holders-og] Full URL: ${req.url}`);
+    console.log(`[holders-og] token=${tokenParam}, v=${versionParam}, utm_community=${communityParam}`);
+    console.log(`[holders-og] User-Agent: ${userAgent}`);
+    console.log(`[holders-og] Is bot: ${isBot(userAgent)}`);
+
     // Build canonical URL (preserve token + v + utm_community)
     const canonicalUrl = new URL("https://blackbox.farm/holders");
     if (versionParam) canonicalUrl.searchParams.set('v', versionParam);
@@ -60,6 +67,7 @@ serve(async (req) => {
     
     // If not a bot, redirect to the actual SPA
     if (!isBot(userAgent)) {
+      console.log(`[holders-og] Not a bot, redirecting to: ${canonical}`);
       return new Response(null, {
         status: 302,
         headers: {
@@ -79,82 +87,101 @@ serve(async (req) => {
     let tokenSymbol: string | null = null;
     let tokenName: string | null = null;
     let isTokenSpecific = false;
+    let ogImageSource = 'default';
 
     // PRIORITY 0: Check for paid_composite_url in holders_intel_seen_tokens FIRST
     // This is used for marketing shares where we want the PAID badge overlay
     if (tokenParam) {
-      const { data: seenToken } = await supabase
+      console.log(`[holders-og] Looking up token: ${tokenParam}`);
+      const { data: seenToken, error: seenError } = await supabase
         .from('holders_intel_seen_tokens')
         .select('paid_composite_url, banner_url, symbol, name')
         .eq('token_mint', tokenParam)
         .single();
+      
+      console.log(`[holders-og] seen_tokens query result:`, JSON.stringify(seenToken));
+      if (seenError) console.log(`[holders-og] seen_tokens error:`, seenError.message);
       
       if (seenToken?.paid_composite_url) {
         ogImage = seenToken.paid_composite_url;
         tokenSymbol = seenToken.symbol;
         tokenName = seenToken.name;
         isTokenSpecific = true;
-        console.log(`Using paid_composite_url for: ${tokenSymbol}`);
+        ogImageSource = 'paid_composite_url';
+        console.log(`[holders-og] Using paid_composite_url for ${tokenSymbol}: ${ogImage}`);
       }
     }
 
     // PRIORITY 1: If no composite found, check token_banners then holders_intel_seen_tokens for banner
     if (!isTokenSpecific && tokenParam) {
+      console.log(`[holders-og] No paid_composite_url, checking token_banners...`);
       // First check token_banners table (for curated/paid banners)
       let bannerFound = false;
       
       if (communityParam) {
-        const { data: tokenBanner } = await supabase
+        const { data: tokenBanner, error: tbErr } = await supabase
           .from('token_banners')
           .select('banner_url, symbol')
           .eq('x_community_id', communityParam)
           .eq('is_active', true)
           .single();
         
+        console.log(`[holders-og] token_banners (community) result:`, JSON.stringify(tokenBanner));
+        if (tbErr) console.log(`[holders-og] token_banners (community) error:`, tbErr.message);
+        
         if (tokenBanner?.banner_url) {
           ogImage = tokenBanner.banner_url;
           tokenSymbol = tokenBanner.symbol;
           isTokenSpecific = true;
           bannerFound = true;
-          console.log(`Using token_banners (community): ${tokenSymbol}`);
+          ogImageSource = 'token_banners_community';
+          console.log(`[holders-og] Using token_banners (community): ${tokenSymbol}`);
         }
       }
       
       if (!bannerFound) {
-        const { data: tokenBanner } = await supabase
+        const { data: tokenBanner, error: tbErr2 } = await supabase
           .from('token_banners')
           .select('banner_url, symbol')
           .eq('token_address', tokenParam)
           .eq('is_active', true)
           .single();
         
+        console.log(`[holders-og] token_banners (address) result:`, JSON.stringify(tokenBanner));
+        if (tbErr2) console.log(`[holders-og] token_banners (address) error:`, tbErr2.message);
+        
         if (tokenBanner?.banner_url) {
           ogImage = tokenBanner.banner_url;
           tokenSymbol = tokenBanner.symbol;
           isTokenSpecific = true;
           bannerFound = true;
-          console.log(`Using token_banners (address): ${tokenSymbol}`);
+          ogImageSource = 'token_banners_address';
+          console.log(`[holders-og] Using token_banners (address): ${tokenSymbol}`);
         }
       }
       
       // Fallback: Check holders_intel_seen_tokens for banner_url
       if (!bannerFound) {
-        const { data: seenToken } = await supabase
+        const { data: seenToken, error: stErr } = await supabase
           .from('holders_intel_seen_tokens')
           .select('banner_url, symbol, name')
           .eq('token_mint', tokenParam)
           .single();
+        
+        console.log(`[holders-og] seen_tokens (fallback banner) result:`, JSON.stringify(seenToken));
+        if (stErr) console.log(`[holders-og] seen_tokens (fallback banner) error:`, stErr.message);
         
         if (seenToken?.banner_url) {
           ogImage = seenToken.banner_url;
           tokenSymbol = seenToken.symbol;
           tokenName = seenToken.name;
           isTokenSpecific = true;
-          console.log(`Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
+          ogImageSource = 'seen_tokens_banner';
+          console.log(`[holders-og] Using holders_intel_seen_tokens banner: ${tokenSymbol}`);
         } else if (seenToken) {
           tokenSymbol = seenToken.symbol;
           tokenName = seenToken.name;
-          console.log(`Token found but no banner: ${tokenSymbol}`);
+          console.log(`[holders-og] Token found but no banner: ${tokenSymbol}`);
         }
       }
     }
@@ -178,6 +205,14 @@ serve(async (req) => {
         }
       }
     }
+
+    // Final summary log before generating HTML
+    console.log(`[holders-og] ========== FINAL OG SELECTION ==========`);
+    console.log(`[holders-og] ogImage: ${ogImage}`);
+    console.log(`[holders-og] ogImageSource: ${ogImageSource}`);
+    console.log(`[holders-og] isTokenSpecific: ${isTokenSpecific}`);
+    console.log(`[holders-og] tokenSymbol: ${tokenSymbol}, tokenName: ${tokenName}`);
+    console.log(`[holders-og] canonical: ${canonical}`);
 
     // Dynamic OG metadata based on whether we have token-specific content
     const title = isTokenSpecific && tokenSymbol 
