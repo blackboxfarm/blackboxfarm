@@ -6,10 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users, Image, ImageOff, Layers } from 'lucide-react';
+import { ExternalLink, Copy, Check, RefreshCw, Play, Filter, ArrowUpDown, Clock, DollarSign, Users, Image, ImageOff, Layers, Plus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { Input } from '@/components/ui/input';
 
 interface PostedToken {
   token_mint: string;
@@ -91,6 +92,8 @@ export function TokenXDashboard() {
   const [activeTab, setActiveTab] = useState('posted');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(50);
+  const [manualTokenInput, setManualTokenInput] = useState('');
+  const [addingToken, setAddingToken] = useState(false);
 
   const fetchTokens = async () => {
     setLoading(true);
@@ -392,6 +395,46 @@ ${holdersUrl.toString()}`;
     }
   };
 
+  // Manual token addition
+  const handleAddToken = async () => {
+    const tokenMint = manualTokenInput.trim();
+    
+    // Basic Solana address validation
+    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    if (!base58Regex.test(tokenMint)) {
+      toast.error('Invalid Solana token address');
+      return;
+    }
+    
+    // Check if already exists
+    if (tokens.some(t => t.token_mint === tokenMint)) {
+      toast.error('Token already exists in dashboard');
+      return;
+    }
+    
+    setAddingToken(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-add-seen-token', {
+        body: { tokenMint }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast.success(`Added $${data.symbol || 'token'} to dashboard`);
+        setManualTokenInput('');
+        fetchTokens();
+      } else {
+        throw new Error(data?.error || 'Failed to add token');
+      }
+    } catch (err: any) {
+      console.error('Add token error:', err);
+      toast.error(err.message || 'Failed to add token');
+    } finally {
+      setAddingToken(false);
+    }
+  };
+
   const missingBanners = tokens.filter(t => !t.banner_url).length;
   const missingTimestamps = tokens.filter(t => !t.minted_at).length;
   const withCommunity = tokens.filter(t => t.x_community_id).length;
@@ -442,6 +485,30 @@ ${holdersUrl.toString()}`;
               {enrichingCommunities ? 'Enriching...' : `Enrich Communities (${tokens.length - withCommunity})`}
             </Button>
           </div>
+        </div>
+        
+        {/* Manual Token Input */}
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Paste token address to add..."
+            value={manualTokenInput}
+            onChange={(e) => setManualTokenInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddToken()}
+            className="max-w-md font-mono text-sm"
+            disabled={addingToken}
+          />
+          <Button
+            size="sm"
+            onClick={handleAddToken}
+            disabled={addingToken || !manualTokenInput.trim()}
+          >
+            {addingToken ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4 mr-2" />
+            )}
+            {addingToken ? 'Adding...' : 'Add Token'}
+          </Button>
         </div>
         
         {/* Filter and Sort Controls */}
