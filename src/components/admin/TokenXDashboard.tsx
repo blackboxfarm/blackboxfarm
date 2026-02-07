@@ -231,12 +231,9 @@ export function TokenXDashboard() {
       holdersUrl.searchParams.set('utm_community', token.x_community_id);
     }
 
-    return `Just paid for the $${token.symbol} banner on Holders 🔥
+    return `paid small Holders ads from gains
 
-Check the live report here:
-${holdersUrl.toString()}
-
-#${token.symbol} #Solana`;
+${holdersUrl.toString()}`;
   };
 
   // Build paid composite image for a token
