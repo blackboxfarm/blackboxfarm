@@ -23,6 +23,39 @@ interface TokenData {
   launchpad?: string;
 }
 
+// Cloudflare Worker URL - proven to bypass 403s
+const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
+
+// Fallback: Fetch mint from DexScreener pair endpoint
+async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null; symbol: string; name: string; fdv?: number }> {
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pairId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      }
+    });
+    
+    if (!response.ok) return { mint: null, symbol: 'UNKNOWN', name: 'Unknown' };
+    
+    const data = await response.json();
+    const pair = data.pair || data.pairs?.[0];
+    
+    if (pair?.baseToken?.address) {
+      return {
+        mint: pair.baseToken.address,
+        symbol: pair.baseToken.symbol || 'UNKNOWN',
+        name: pair.baseToken.name || 'Unknown',
+        fdv: pair.fdv,
+      };
+    }
+    return { mint: null, symbol: 'UNKNOWN', name: 'Unknown' };
+  } catch (e) {
+    console.error(`[DexCompiler] Failed to fetch pair ${pairId}:`, e);
+    return { mint: null, symbol: 'UNKNOWN', name: 'Unknown' };
+  }
+}
+
 // Detect launchpad based on pair data
 const detectLaunchpad = (pair: any): string | null => {
   if (pair?.url?.includes('pump.fun') || pair?.info?.websites?.some((w: any) => w.url?.includes('pump.fun'))) {
@@ -51,28 +84,95 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log('[DexCompiler] 🚀 Multi-Source Token Discovery');
-    console.log('[DexCompiler] 📊 Phase 1: Discovering tokens from multiple sources');
+    console.log('[DexCompiler] 🚀 Multi-Source Token Discovery (Cloudflare Worker Strategy)');
+    console.log('[DexCompiler] 📊 Phase 1: Fetching top 50 trending from Cloudflare Worker');
 
     const discoveredTokens = new Map<string, TokenData>();
     const capturedAt = new Date().toISOString();
 
-    // SOURCE 1: Top Boosted Tokens (promoted tokens)
+    // PRIMARY SOURCE: Cloudflare Worker (bypasses 403s, returns top 50 trending)
+    console.log('[DexCompiler] 🌐 Fetching from Cloudflare Worker...');
+    try {
+      const workerResponse = await fetch(CLOUDFLARE_WORKER_URL);
+      
+      if (workerResponse.ok) {
+        const workerData = await workerResponse.json();
+        
+        if (workerData.stale) {
+          console.warn('[DexCompiler] ⚠️ Warning: Worker data is stale');
+        }
+        
+        console.log(`[DexCompiler] ✅ Got ${workerData.countPairsResolved || 0}/${workerData.countPairsRequested || 0} resolved pairs from worker`);
+        
+        const allPairs = workerData.pairs || [];
+        
+        // Process ALL pairs - resolve missing mints ourselves
+        for (let i = 0; i < Math.min(allPairs.length, 50); i++) {
+          const p = allPairs[i];
+          
+          if (p.ok && p.tokenMint) {
+            // Worker resolved it - use directly
+            discoveredTokens.set(p.tokenMint, {
+              address: p.tokenMint,
+              symbol: p.symbol || 'UNKNOWN',
+              name: p.name || 'Unknown Token',
+              fdv: p.fdv,
+              marketCap: p.fdv,
+              discoverySource: 'cf_worker',
+            });
+          } else if (p.pairId) {
+            // Worker didn't resolve - fetch from DexScreener ourselves
+            console.log(`[DexCompiler] 🔄 Resolving unresolved pair #${i + 1}: ${p.pairId}`);
+            const resolved = await fetchMintFromPair(p.pairId);
+            
+            if (resolved.mint) {
+              discoveredTokens.set(resolved.mint, {
+                address: resolved.mint,
+                symbol: resolved.symbol,
+                name: resolved.name,
+                fdv: resolved.fdv,
+                marketCap: resolved.fdv,
+                discoverySource: 'cf_worker_resolved',
+              });
+            } else {
+              console.warn(`[DexCompiler] ⚠️ Could not resolve pair ${p.pairId}`);
+            }
+          }
+        }
+        
+        console.log(`[DexCompiler] ✅ Total tokens from Cloudflare Worker: ${discoveredTokens.size}`);
+      } else {
+        console.error('[DexCompiler] ❌ Cloudflare Worker fetch failed:', workerResponse.status);
+      }
+    } catch (error) {
+      console.error('[DexCompiler] ❌ Failed to fetch from Cloudflare Worker:', error);
+    }
+
+    // SECONDARY SOURCE: Top Boosted Tokens (promoted tokens)
     console.log('[DexCompiler] 💰 Fetching top boosted tokens...');
     try {
-      const boostsResponse = await fetch('https://api.dexscreener.com/token-boosts/top/v1');
+      const boostsResponse = await fetch('https://api.dexscreener.com/token-boosts/top/v1', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        }
+      });
       if (boostsResponse.ok) {
         const boosts = await boostsResponse.json();
         console.log(`[DexCompiler] ✅ Found ${boosts.length} boosted tokens`);
         
         for (const boost of boosts) {
           if (boost.chainId === 'solana' && boost.tokenAddress) {
+            const existing = discoveredTokens.get(boost.tokenAddress);
             discoveredTokens.set(boost.tokenAddress, {
               address: boost.tokenAddress,
-              symbol: boost.icon ? undefined : boost.description?.split(' ')[0],
-              imageUrl: boost.icon,
+              symbol: existing?.symbol || boost.description?.split(' ')[0],
+              name: existing?.name,
+              imageUrl: existing?.imageUrl || boost.icon,
               activeBoosts: boost.amount || 1,
-              discoverySource: 'boosted'
+              fdv: existing?.fdv,
+              marketCap: existing?.marketCap,
+              discoverySource: existing ? `${existing.discoverySource}+boosted` : 'boosted'
             });
           }
         }
@@ -81,46 +181,15 @@ Deno.serve(async (req) => {
       console.error('[DexCompiler] ⚠️ Failed to fetch boosted tokens:', error);
     }
 
-    // SOURCE 2: Recent SOL Pairs (new launches)
-    console.log('[DexCompiler] 🔍 Searching for recent SOL pairs...');
-    try {
-      const searchResponse = await fetch('https://api.dexscreener.com/latest/dex/search?q=SOL');
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json();
-        console.log(`[DexCompiler] ✅ Found ${searchData.pairs?.length || 0} SOL pairs`);
-        
-        if (searchData.pairs) {
-          for (const pair of searchData.pairs.slice(0, 50)) { // Top 50 results
-            if (pair.chainId === 'solana' && pair.baseToken?.address) {
-              const existing = discoveredTokens.get(pair.baseToken.address);
-              discoveredTokens.set(pair.baseToken.address, {
-                address: pair.baseToken.address,
-                symbol: pair.baseToken.symbol,
-                name: pair.baseToken.name,
-                pairAddress: pair.pairAddress,
-                dexId: pair.dexId,
-                liquidityUsd: pair.liquidity?.usd,
-                volume24h: pair.volume?.h24,
-                marketCap: pair.marketCap,
-                fdv: pair.fdv,
-                priceUsd: parseFloat(pair.priceUsd),
-                pairCreatedAt: pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toISOString() : undefined,
-                imageUrl: existing?.imageUrl || pair.info?.imageUrl,
-                activeBoosts: existing?.activeBoosts || 0,
-                discoverySource: existing?.discoverySource === 'boosted' ? 'boosted+search' : 'search'
-              });
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[DexCompiler] ⚠️ Failed to search SOL pairs:', error);
-    }
-
-    // SOURCE 3: Token Profile Updates
+    // TERTIARY SOURCE: Token Profile Updates
     console.log('[DexCompiler] 🎨 Fetching token profile updates...');
     try {
-      const profilesResponse = await fetch('https://api.dexscreener.com/token-profiles/latest/v1');
+      const profilesResponse = await fetch('https://api.dexscreener.com/token-profiles/latest/v1', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        }
+      });
       if (profilesResponse.ok) {
         const profiles = await profilesResponse.json();
         console.log(`[DexCompiler] ✅ Found ${profiles.length} profile updates`);
@@ -145,64 +214,7 @@ Deno.serve(async (req) => {
       console.error('[DexCompiler] ⚠️ Failed to fetch profiles:', error);
     }
 
-    console.log(`[DexCompiler] 📊 Phase 2: Enriching ${discoveredTokens.size} unique tokens with full data`);
-
-    // PHASE 2: Batch fetch complete data for tokens missing details
-    const tokensNeedingEnrichment = Array.from(discoveredTokens.entries())
-      .filter(([_, data]) => !data.symbol || !data.liquidityUsd)
-      .map(([address]) => address);
-
-    if (tokensNeedingEnrichment.length > 0) {
-      console.log(`[DexCompiler] 🔄 Enriching ${tokensNeedingEnrichment.length} tokens...`);
-      
-      // Batch process in groups of 30
-      for (let i = 0; i < tokensNeedingEnrichment.length; i += 30) {
-        const batch = tokensNeedingEnrichment.slice(i, i + 30);
-        const addresses = batch.join(',');
-        
-        try {
-          const tokensResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addresses}`);
-          if (tokensResponse.ok) {
-            const tokensData = await tokensResponse.json();
-            
-            for (const [address, pairData] of Object.entries(tokensData.pairs || {})) {
-              const pairs = pairData as any[];
-              if (pairs && pairs.length > 0) {
-                // Get best pair by liquidity
-                const bestPair = pairs.reduce((best, current) => 
-                  (current.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? current : best
-                );
-                
-                const tokenData = discoveredTokens.get(address);
-                if (tokenData) {
-                  tokenData.symbol = tokenData.symbol || bestPair.baseToken?.symbol;
-                  tokenData.name = tokenData.name || bestPair.baseToken?.name;
-                  tokenData.pairAddress = tokenData.pairAddress || bestPair.pairAddress;
-                  tokenData.dexId = tokenData.dexId || bestPair.dexId;
-                  tokenData.liquidityUsd = tokenData.liquidityUsd || bestPair.liquidity?.usd;
-                  tokenData.volume24h = tokenData.volume24h || bestPair.volume?.h24;
-                  tokenData.marketCap = tokenData.marketCap || bestPair.marketCap;
-                  tokenData.fdv = tokenData.fdv || bestPair.fdv;
-                  tokenData.priceUsd = tokenData.priceUsd || parseFloat(bestPair.priceUsd);
-                  tokenData.pairCreatedAt = tokenData.pairCreatedAt || (bestPair.pairCreatedAt ? new Date(bestPair.pairCreatedAt).toISOString() : undefined);
-                  tokenData.imageUrl = tokenData.imageUrl || bestPair.info?.imageUrl;
-                  tokenData.launchpad = tokenData.launchpad || detectLaunchpad(bestPair);
-                }
-              }
-            }
-          }
-          
-          // Rate limiting - wait 200ms between batches
-          if (i + 30 < tokensNeedingEnrichment.length) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
-        } catch (error) {
-          console.error(`[DexCompiler] ⚠️ Failed to enrich batch ${i}-${i+30}:`, error);
-        }
-      }
-    }
-
-    console.log(`[DexCompiler] 💾 Phase 3: Saving to database`);
+    console.log(`[DexCompiler] 📊 Phase 2: Total unique tokens discovered: ${discoveredTokens.size}`);
 
     // Get existing tokens from database
     const { data: existingTokens } = await supabase
@@ -221,7 +233,7 @@ Deno.serve(async (req) => {
     console.log(`[DexCompiler] 🔄 Updating ${existingToUpdate.length} existing tokens`);
     console.log(`[DexCompiler] 📦 Already tracking ${existingSet.size} total tokens`);
 
-    // Insert new tokens with full data
+    // Insert new tokens with minimal data (enrichment happens later)
     if (newTokens.length > 0) {
       const tokenInserts = newTokens.map(token => ({
         token_mint: token.address,
@@ -242,8 +254,9 @@ Deno.serve(async (req) => {
         first_seen_at: capturedAt,
         last_seen_at: capturedAt,
         last_fetched_at: capturedAt,
-        highest_rank: null, // Will be calculated from liquidity rankings
-        lowest_rank: null
+        highest_rank: null,
+        lowest_rank: null,
+        oracle_analyzed: false
       }));
 
       const { error: insertError } = await supabase
@@ -266,7 +279,6 @@ Deno.serve(async (req) => {
           last_fetched_at: capturedAt
         };
         
-        // Only update if we have new data
         if (token.symbol) updateData.symbol = token.symbol;
         if (token.name) updateData.name = token.name;
         if (token.pairAddress) updateData.pair_address = token.pairAddress;
@@ -291,12 +303,8 @@ Deno.serve(async (req) => {
       console.log(`[DexCompiler] ✅ Updated ${updateCount} existing tokens`);
     }
 
-    // Create ranking snapshot based on liquidity
-    const tokensWithLiquidity = allTokens
-      .filter(t => t.liquidityUsd && t.liquidityUsd > 0)
-      .sort((a, b) => (b.liquidityUsd || 0) - (a.liquidityUsd || 0));
-
-    const rankingSnapshot = tokensWithLiquidity.slice(0, 500).map((token, index) => ({
+    // Create ranking snapshot based on discovery order (Cloudflare worker returns in rank order)
+    const rankingSnapshot = allTokens.slice(0, 100).map((token, index) => ({
       token_mint: token.address,
       rank: index + 1,
       captured_at: capturedAt,
@@ -319,7 +327,7 @@ Deno.serve(async (req) => {
       if (snapshotError) {
         console.error('[DexCompiler] ❌ Failed to insert rankings:', snapshotError);
       } else {
-        console.log(`[DexCompiler] ✅ Inserted ${rankingSnapshot.length} ranking records (Top ${rankingSnapshot.length} by liquidity)`);
+        console.log(`[DexCompiler] ✅ Inserted ${rankingSnapshot.length} ranking records`);
       }
     }
 
@@ -351,26 +359,15 @@ Deno.serve(async (req) => {
 
     console.log(`[DexCompiler] 📊 Total tokens in database: ${totalCount}`);
     console.log(`[DexCompiler] 🎉 Collection complete!`);
-    console.log(`[DexCompiler] 📈 Discovery breakdown:`);
+    
     const sourceBreakdown = allTokens.reduce((acc, t) => {
       acc[t.discoverySource] = (acc[t.discoverySource] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    console.log(JSON.stringify(sourceBreakdown, null, 2));
+    console.log('[DexCompiler] 📈 Discovery breakdown:', JSON.stringify(sourceBreakdown));
 
-    // Trigger enrichment in background (don't wait for it)
+    // Trigger Oracle auto-classifier for new tokens (non-blocking)
     if (newTokens.length > 0) {
-      console.log('[DexCompiler] 🎨 Triggering background enrichment for scraped_tokens...');
-      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/enrich-scraped-tokens`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
-        },
-        body: JSON.stringify({ batchSize: 50 })
-      }).catch(err => console.error('[DexCompiler] Background enrichment failed:', err));
-
-      // 🔮 Oracle Integration: Trigger auto-classifier for new tokens
       console.log('[DexCompiler] 🔮 Triggering Oracle auto-classifier for new tokens...');
       supabase.functions.invoke('oracle-auto-classifier', {
         body: { 
@@ -390,7 +387,7 @@ Deno.serve(async (req) => {
         tokensDiscovered: allTokens.length,
         newTokens: newTokens.length,
         updatedTokens: existingToUpdate.length,
-        top500Tracked: rankingSnapshot.length,
+        top100Tracked: rankingSnapshot.length,
         totalInDatabase: totalCount,
         discoveryBreakdown: sourceBreakdown,
         timestamp: capturedAt
@@ -402,7 +399,7 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[TokenCollector] ❌ Fatal error:', error);
+    console.error('[DexCompiler] ❌ Fatal error:', error);
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Unknown error',
