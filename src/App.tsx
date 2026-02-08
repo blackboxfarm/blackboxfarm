@@ -55,6 +55,7 @@ const ApiLanding = lazy(() => import("./pages/ApiLanding"));
 const ApiDocsLanding = lazy(() => import("./pages/ApiDocsLanding"));
 const AIAnalysis = lazy(() => import("./pages/AIAnalysis"));
 const Socials = lazy(() => import("./pages/Socials"));
+const Oracle = lazy(() => import("./pages/Oracle"));
 
 const queryClient = new QueryClient();
 
@@ -118,6 +119,7 @@ const App = () => {
                       <Route path="/api-docs" element={<ApiDocsLanding />} />
                       <Route path="/ai-analysis" element={<AIAnalysis />} />
                       <Route path="/socials" element={<Socials />} />
+                      <Route path="/oracle" element={<Oracle />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
