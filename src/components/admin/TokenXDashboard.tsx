@@ -223,13 +223,9 @@ export function TokenXDashboard() {
     holdersUrl.searchParams.set('token', token.token_mint);
 
     if (token.paid_composite_url) {
-      try {
-        const file = new URL(token.paid_composite_url).pathname.split('/').pop() || 'composite';
-        const safe = `comp_${file}`.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48);
-        if (safe) holdersUrl.searchParams.set('v', safe);
-      } catch {
-        holdersUrl.searchParams.set('v', 'composite');
-      }
+      // Use current timestamp to bust Twitter's cache after composite rebuild
+      const cacheBuster = `comp_${Date.now()}`;
+      holdersUrl.searchParams.set('v', cacheBuster);
     }
 
     if (token.x_community_id) {
