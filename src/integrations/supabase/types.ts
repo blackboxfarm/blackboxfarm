@@ -5190,6 +5190,45 @@ export type Database = {
         }
         Relationships: []
       }
+      oracle_backfill_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          new_devs_discovered: number | null
+          started_at: string | null
+          status: string | null
+          target_date: string
+          tokens_found: number | null
+          tokens_scanned: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          new_devs_discovered?: number | null
+          started_at?: string | null
+          status?: string | null
+          target_date: string
+          tokens_found?: number | null
+          tokens_scanned?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          new_devs_discovered?: number | null
+          started_at?: string | null
+          status?: string | null
+          target_date?: string
+          tokens_found?: number | null
+          tokens_scanned?: number | null
+        }
+        Relationships: []
+      }
       phone_verifications: {
         Row: {
           created_at: string
@@ -5373,8 +5412,10 @@ export type Database = {
       pumpfun_blacklist: {
         Row: {
           added_by: string | null
+          auto_classified: boolean | null
           auto_discovered_links: Json | null
           blacklist_reason: string | null
+          classification_score: number | null
           created_at: string
           enriched_at: string | null
           enrichment_error: string | null
@@ -5391,6 +5432,7 @@ export type Database = {
           linked_token_mints: string[] | null
           linked_twitter: string[] | null
           linked_wallets: string[] | null
+          recommendation_text: string | null
           risk_level: string
           source: string | null
           tags: string[] | null
@@ -5401,8 +5443,10 @@ export type Database = {
         }
         Insert: {
           added_by?: string | null
+          auto_classified?: boolean | null
           auto_discovered_links?: Json | null
           blacklist_reason?: string | null
+          classification_score?: number | null
           created_at?: string
           enriched_at?: string | null
           enrichment_error?: string | null
@@ -5419,6 +5463,7 @@ export type Database = {
           linked_token_mints?: string[] | null
           linked_twitter?: string[] | null
           linked_wallets?: string[] | null
+          recommendation_text?: string | null
           risk_level?: string
           source?: string | null
           tags?: string[] | null
@@ -5429,8 +5474,10 @@ export type Database = {
         }
         Update: {
           added_by?: string | null
+          auto_classified?: boolean | null
           auto_discovered_links?: Json | null
           blacklist_reason?: string | null
+          classification_score?: number | null
           created_at?: string
           enriched_at?: string | null
           enrichment_error?: string | null
@@ -5447,6 +5494,7 @@ export type Database = {
           linked_token_mints?: string[] | null
           linked_twitter?: string[] | null
           linked_wallets?: string[] | null
+          recommendation_text?: string | null
           risk_level?: string
           source?: string | null
           tags?: string[] | null
@@ -7491,7 +7539,9 @@ export type Database = {
       pumpfun_whitelist: {
         Row: {
           added_by: string | null
+          auto_classified: boolean | null
           avg_token_lifespan_hours: number | null
+          classification_score: number | null
           created_at: string | null
           entry_type: string
           evidence_notes: string | null
@@ -7504,6 +7554,7 @@ export type Database = {
           linked_token_mints: string[] | null
           linked_twitter: string[] | null
           linked_wallets: string[] | null
+          recommendation_text: string | null
           source: string | null
           tags: string[] | null
           tokens_launched: number | null
@@ -7515,7 +7566,9 @@ export type Database = {
         }
         Insert: {
           added_by?: string | null
+          auto_classified?: boolean | null
           avg_token_lifespan_hours?: number | null
+          classification_score?: number | null
           created_at?: string | null
           entry_type: string
           evidence_notes?: string | null
@@ -7528,6 +7581,7 @@ export type Database = {
           linked_token_mints?: string[] | null
           linked_twitter?: string[] | null
           linked_wallets?: string[] | null
+          recommendation_text?: string | null
           source?: string | null
           tags?: string[] | null
           tokens_launched?: number | null
@@ -7539,7 +7593,9 @@ export type Database = {
         }
         Update: {
           added_by?: string | null
+          auto_classified?: boolean | null
           avg_token_lifespan_hours?: number | null
+          classification_score?: number | null
           created_at?: string | null
           entry_type?: string
           evidence_notes?: string | null
@@ -7552,6 +7608,7 @@ export type Database = {
           linked_token_mints?: string[] | null
           linked_twitter?: string[] | null
           linked_wallets?: string[] | null
+          recommendation_text?: string | null
           source?: string | null
           tags?: string[] | null
           tokens_launched?: number | null
@@ -7698,6 +7755,45 @@ export type Database = {
           pubkey?: string
           secret_key_encrypted?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      reputation_mesh: {
+        Row: {
+          confidence: number | null
+          discovered_at: string | null
+          discovered_via: string | null
+          evidence: Json | null
+          id: string
+          linked_id: string
+          linked_type: string
+          relationship: string
+          source_id: string
+          source_type: string
+        }
+        Insert: {
+          confidence?: number | null
+          discovered_at?: string | null
+          discovered_via?: string | null
+          evidence?: Json | null
+          id?: string
+          linked_id: string
+          linked_type: string
+          relationship: string
+          source_id: string
+          source_type: string
+        }
+        Update: {
+          confidence?: number | null
+          discovered_at?: string | null
+          discovered_via?: string | null
+          evidence?: Json | null
+          id?: string
+          linked_id?: string
+          linked_type?: string
+          relationship?: string
+          source_id?: string
+          source_type?: string
         }
         Relationships: []
       }
@@ -9837,6 +9933,9 @@ export type Database = {
           market_cap: number | null
           metadata: Json | null
           name: string | null
+          oracle_analyzed: boolean | null
+          oracle_analyzed_at: string | null
+          oracle_score: number | null
           pair_address: string | null
           pair_created_at: string | null
           price_usd: number | null
@@ -9867,6 +9966,9 @@ export type Database = {
           market_cap?: number | null
           metadata?: Json | null
           name?: string | null
+          oracle_analyzed?: boolean | null
+          oracle_analyzed_at?: string | null
+          oracle_score?: number | null
           pair_address?: string | null
           pair_created_at?: string | null
           price_usd?: number | null
@@ -9897,6 +9999,9 @@ export type Database = {
           market_cap?: number | null
           metadata?: Json | null
           name?: string | null
+          oracle_analyzed?: boolean | null
+          oracle_analyzed_at?: string | null
+          oracle_score?: number | null
           pair_address?: string | null
           pair_created_at?: string | null
           price_usd?: number | null

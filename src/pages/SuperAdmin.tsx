@@ -17,6 +17,7 @@ const FlipItDashboard = lazy(() => import("@/components/admin/FlipItDashboard").
 const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramChannelMonitor"));
 const TwitterAccountManager = lazy(() => import("@/components/admin/TwitterAccountManager"));
 const PumpfunMonitorTab = lazy(() => import("@/components/admin/tabs/PumpfunMonitorTab"));
+const OracleTab = lazy(() => import("@/components/admin/tabs/OracleTab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
@@ -96,8 +97,9 @@ export default function SuperAdmin() {
           {/* Main category tabs - minimal, just 8 triggers */}
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
             <TabsTrigger value="utilities" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">🛠️ Utilities</TabsTrigger>
+            <TabsTrigger value="oracle" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20">🔮 Oracle</TabsTrigger>
             <TabsTrigger value="blackbox" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-zinc-700/30 data-[state=active]:to-zinc-800/20">📦 BlackBox</TabsTrigger>
-            <TabsTrigger value="holders-intel" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-violet-500/20">🔮 Holders Intel</TabsTrigger>
+            <TabsTrigger value="holders-intel" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-violet-500/20">📊 Holders Intel</TabsTrigger>
             <TabsTrigger value="whales-mints" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-teal-500/20">🐋 Whales & MINTS</TabsTrigger>
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram</TabsTrigger>
@@ -110,6 +112,14 @@ export default function SuperAdmin() {
             {activeTab === "utilities" && (
               <Suspense fallback={<TabLoader />}>
                 <UtilitiesTab />
+              </Suspense>
+            )}
+          </TabsContent>
+
+          <TabsContent value="oracle">
+            {activeTab === "oracle" && (
+              <Suspense fallback={<TabLoader />}>
+                <OracleTab />
               </Suspense>
             )}
           </TabsContent>
