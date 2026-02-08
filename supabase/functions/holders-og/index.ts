@@ -141,15 +141,17 @@ Deno.serve(async (req) => {
     // Use an image-proxy edge function for og:image so crawlers never hit Storage/CDNs directly.
     // This is much more reliable for X/Twitter.
     const ogImageUpstream = ogImage;
-    const reqUrl = new URL(req.url);
-    const edgeBase = reqUrl.pathname.startsWith('/functions/v1/')
-      ? `${reqUrl.origin}/functions/v1`
-      : reqUrl.origin;
 
-    const proxyUrl = new URL(`${edgeBase}/holders-og-image`);
-    if (tokenParam) proxyUrl.searchParams.set('token', tokenParam);
-    if (versionParam) proxyUrl.searchParams.set('v', versionParam);
-    if (communityParam) proxyUrl.searchParams.set('utm_community', communityParam);
+    // IMPORTANT: Do NOT derive the function base from req.url.
+    // Depending on how the function is invoked (direct vs /functions/v1 proxy), req.url may not include
+    // the /functions/v1 prefix and may even show a non-https origin.
+    // Always generate a stable, https, absolute URL to the deployed edge-function endpoint.
+    const functionsOrigin = Deno.env.get("SUPABASE_URL") || SUPABASE_URL;
+
+    const proxyUrl = new URL(`${functionsOrigin}/functions/v1/holders-og-image`);
+    if (tokenParam) proxyUrl.searchParams.set("token", tokenParam);
+    if (versionParam) proxyUrl.searchParams.set("v", versionParam);
+    if (communityParam) proxyUrl.searchParams.set("utm_community", communityParam);
 
     const ogImageForMeta = proxyUrl.toString();
 
