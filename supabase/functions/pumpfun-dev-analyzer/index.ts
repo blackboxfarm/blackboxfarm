@@ -26,25 +26,94 @@ interface DevAnalysis {
   tokens: any[];
 }
 
-// Fetch all tokens created by a wallet from pump.fun API
+// Fetch all tokens created by a wallet - tries Pump.fun first, then Helius DAS as fallback
 async function fetchDevTokenHistory(walletAddress: string): Promise<any[]> {
-  try {
-    const response = await fetch(
-      `https://frontend-api.pump.fun/coins/user-created-coins/${walletAddress}?limit=100&offset=0`,
-      { headers: { 'Accept': 'application/json' } }
-    );
-    
-    if (!response.ok) {
-      console.log(`Failed to fetch dev history for ${walletAddress}: ${response.status}`);
-      return [];
+  // Try pump.fun endpoints first with proper headers
+  const pumpEndpoints = [
+    `https://frontend-api.pump.fun/coins/user-created-coins/${walletAddress}?limit=200&offset=0`,
+    `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}?limit=200&offset=0`
+  ];
+  
+  const pumpHeaders = {
+    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Origin': 'https://pump.fun',
+    'Referer': 'https://pump.fun/'
+  };
+  
+  for (const endpoint of pumpEndpoints) {
+    try {
+      console.log(`[DevAnalyzer] Trying pump.fun: ${endpoint.includes('frontend') ? 'frontend-api' : 'client-api'}`);
+      const response = await fetch(endpoint, { headers: pumpHeaders });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          console.log(`[DevAnalyzer] Pump.fun returned ${data.length} tokens`);
+          return data;
+        }
+      } else {
+        console.log(`[DevAnalyzer] Pump.fun returned ${response.status}`);
+      }
+    } catch (error) {
+      console.log(`[DevAnalyzer] Pump.fun error:`, error);
     }
-    
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    console.error(`Error fetching dev tokens:`, error);
+  }
+  
+  // Fallback to Helius DAS API to get tokens created by this wallet
+  console.log(`[DevAnalyzer] Pump.fun failed, trying Helius DAS API...`);
+  const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+  
+  if (!heliusApiKey) {
+    console.log(`[DevAnalyzer] No HELIUS_API_KEY, cannot fallback`);
     return [];
   }
+  
+  try {
+    // Use Helius DAS to search for assets created by this wallet
+    const heliusResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'dev-tokens',
+        method: 'searchAssets',
+        params: {
+          ownerAddress: walletAddress,
+          creatorAddress: walletAddress,
+          tokenType: 'fungible',
+          page: 1,
+          limit: 200
+        }
+      })
+    });
+    
+    if (heliusResponse.ok) {
+      const heliusData = await heliusResponse.json();
+      const items = heliusData?.result?.items || [];
+      
+      // Transform Helius format to pump.fun-like format
+      const tokens = items.map((item: any) => ({
+        mint: item.id,
+        name: item.content?.metadata?.name || 'Unknown',
+        symbol: item.content?.metadata?.symbol || '???',
+        complete: false, // Helius doesn't tell us graduation status
+        usd_market_cap: 0, // Would need separate lookup
+        created_timestamp: item.created_at || null
+      }));
+      
+      console.log(`[DevAnalyzer] Helius DAS returned ${tokens.length} tokens`);
+      return tokens;
+    } else {
+      console.log(`[DevAnalyzer] Helius DAS error: ${heliusResponse.status}`);
+    }
+  } catch (error) {
+    console.error(`[DevAnalyzer] Helius DAS error:`, error);
+  }
+  
+  // Final fallback: try to get created tokens from database
+  console.log(`[DevAnalyzer] All APIs failed, checking local DB...`);
+  return [];
 }
 
 // Classify token outcome based on its metrics
