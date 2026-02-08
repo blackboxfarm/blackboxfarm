@@ -426,3 +426,6 @@ verify_jwt = false
 
 [functions.holders-og]
 verify_jwt = false
+
+[functions.holders-og-image]
+verify_jwt = false
