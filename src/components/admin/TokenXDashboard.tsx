@@ -769,12 +769,18 @@ ${holdersUrl.toString()}`;
                         variant={copiedMint === token.token_mint ? "default" : "outline"}
                         onClick={() => handlePost(token)}
                         disabled={doneTokens.has(token.token_mint)}
-                        className="h-7 px-2"
+                        className="h-7 px-3"
                       >
                         {copiedMint === token.token_mint ? (
-                          <Check className="h-3 w-3" />
+                          <>
+                            <Check className="h-3 w-3 mr-1" />
+                            Copied
+                          </>
                         ) : (
-                          <Copy className="h-3 w-3" />
+                          <>
+                            <Copy className="h-3 w-3 mr-1" />
+                            POST
+                          </>
                         )}
                       </Button>
                       <Button
