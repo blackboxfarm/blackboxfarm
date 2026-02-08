@@ -10,20 +10,31 @@ import './index.css'
   if (!('serviceWorker' in navigator)) return;
 
   const host = window.location.hostname || '';
-  const isLovablePreview =
-    /(^|\.)lovable\.app$/.test(host) ||
-    /(^|\.)lovable\.dev$/.test(host) ||
-    /(^|\.)lovableproject\.com$/.test(host);
+  const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+  if (isLocalhost) return;
 
-  // Only auto-purge on Lovable preview domains
-  if (!isLovablePreview) return;
-
-  // Also allow manual ?purge-sw=1 trigger
   const url = new URL(window.location.href);
+
+  // Clean up our one-time cache-buster param (no reload)
+  if (url.searchParams.has('__cb')) {
+    url.searchParams.delete('__cb');
+    window.history.replaceState(null, '', url.toString());
+  }
+
+  // Allow manual ?purge-sw=1 trigger anytime
   const forceManual = url.searchParams.get('purge-sw') === '1';
 
+  // Guard against reload loops: only auto-run once per tab session
+  const alreadyPurgedThisSession = sessionStorage.getItem('__BB_SW_PURGED__') === '1';
+  if (alreadyPurgedThisSession && !forceManual) return;
+
   const regs = await navigator.serviceWorker.getRegistrations();
-  if (regs.length === 0 && !forceManual) return; // No SW to purge
+  const hasAnySW = regs.length > 0;
+
+  // If there is no SW, do nothing unless manually requested.
+  if (!hasAnySW && !forceManual) return;
+
+  sessionStorage.setItem('__BB_SW_PURGED__', '1');
 
   // Unregister all SWs and clear all caches
   await Promise.all([
@@ -38,7 +49,8 @@ import './index.css'
     url.searchParams.delete('purge-sw');
   }
 
-  // Single reload to fetch fresh assets
+  // Single reload to fetch fresh assets (cache-busted once)
+  url.searchParams.set('__cb', Date.now().toString(36));
   window.location.replace(url.toString());
 })();
 
