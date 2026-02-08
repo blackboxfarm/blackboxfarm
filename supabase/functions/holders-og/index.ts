@@ -130,15 +130,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[holders-og] Serving: ${tokenSymbol || 'default'}, image=${ogImage.slice(-50)}`);
+    // Determine OG image source for debug header
+    let ogSource = 'default';
+    if (isTokenSpecific && tokenParam) {
+      ogSource = ogImage.includes('composite') ? 'composite' : 'banner';
+    } else if (versionParam) {
+      ogSource = 'versioned';
+    }
+
+    // Propagate cache-buster to og:image URL to defeat X/Twitter's aggressive caching
+    let ogImageForMeta = ogImage;
+    if (versionParam) {
+      ogImageForMeta = ogImage.includes('?') ? `${ogImage}&v=${versionParam}` : `${ogImage}?v=${versionParam}`;
+    }
+
+    // Trim symbol/name to avoid leading/trailing spaces in meta tags
+    const cleanSymbol = tokenSymbol?.trim() || null;
+    const cleanName = tokenName?.trim() || null;
+
+    console.log(`[holders-og] Serving: ${cleanSymbol || 'default'}, source=${ogSource}, image=${ogImageForMeta.slice(-60)}`);
 
     // Dynamic OG metadata
-    const title = isTokenSpecific && tokenSymbol 
-      ? `$${tokenSymbol} Holder Analysis — BlackBox Farm`
+    const title = isTokenSpecific && cleanSymbol 
+      ? `$${cleanSymbol} Holder Analysis — BlackBox Farm`
       : "You Don't Grow on Dust.";
     
-    const description = isTokenSpecific && tokenSymbol
-      ? `Detailed holder distribution and wallet analysis for $${tokenSymbol}${tokenName ? ` (${tokenName})` : ''}. Discover diamond hands vs dust wallets.`
+    const description = isTokenSpecific && cleanSymbol
+      ? `Detailed holder distribution and wallet analysis for $${cleanSymbol}${cleanName ? ` (${cleanName})` : ''}. Discover diamond hands vs dust wallets.`
       : `Markets are fields. Some roots hold. Some inflate the count. BlackBox.farm shows what actually grows — and what gets culled.`;
 
     const html = `<!doctype html>
@@ -154,24 +172,23 @@ Deno.serve(async (req) => {
   <meta property="og:title" content="${title}" />
   <meta property="og:description" content="${description.replace(/\n/g, ' ')}" />
   <meta property="og:url" content="${canonical}" />
-  <meta property="og:image" content="${ogImage}" />
-  <meta property="og:image:secure_url" content="${ogImage}" />
-  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image" content="${ogImageForMeta}" />
+  <meta property="og:image:secure_url" content="${ogImageForMeta}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="${isTokenSpecific && tokenSymbol ? `$${tokenSymbol} Holder Analysis` : 'BlackBox Farm - You Don\'t Grow on Dust'}" />
+  <meta property="og:image:alt" content="${isTokenSpecific && cleanSymbol ? `$${cleanSymbol} Holder Analysis` : 'BlackBox Farm - You Don\'t Grow on Dust'}" />
   <meta property="og:site_name" content="BlackBox Farm" />
   <meta property="og:locale" content="en_US" />
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${description.replace(/\n/g, ' ')}" />
-  <meta name="twitter:image" content="${ogImage}" />
+  <meta name="twitter:image" content="${ogImageForMeta}" />
   <meta name="twitter:site" content="@holdersintel" />
 
   <meta itemprop="name" content="${title}" />
   <meta itemprop="description" content="${description.replace(/\n/g, ' ')}" />
-  <meta itemprop="image" content="${ogImage}" />
+  <meta itemprop="image" content="${ogImageForMeta}" />
 
   <style>
     :root { color-scheme: dark; }
@@ -198,6 +215,8 @@ Deno.serve(async (req) => {
         ...corsHeaders,
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": isTokenSpecific ? "public, max-age=300" : "public, max-age=3600",
+        "X-Debug-OG-Source": ogSource,
+        "X-Debug-OG-Image": ogImageForMeta.slice(-80),
       },
     });
   } catch (e) {
