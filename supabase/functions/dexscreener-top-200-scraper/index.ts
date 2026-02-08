@@ -21,13 +21,24 @@ interface TokenData {
   imageUrl?: string;
   discoverySource: string;
   launchpad?: string;
+  twitter?: string;
+  telegram?: string;
+  website?: string;
 }
 
 // Cloudflare Worker URL - proven to bypass 403s
 const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
 
-// Fallback: Fetch mint from DexScreener pair endpoint
-async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null; symbol: string; name: string; fdv?: number }> {
+// Fallback: Fetch mint AND socials from DexScreener pair endpoint
+async function fetchPairDetails(pairId: string): Promise<{ 
+  mint: string | null; 
+  symbol: string; 
+  name: string; 
+  fdv?: number;
+  twitter?: string;
+  telegram?: string;
+  website?: string;
+}> {
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pairId}`, {
       headers: {
@@ -42,11 +53,29 @@ async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null;
     const pair = data.pair || data.pairs?.[0];
     
     if (pair?.baseToken?.address) {
+      // Extract socials from info.socials array
+      let twitter: string | undefined;
+      let telegram: string | undefined;
+      let website: string | undefined;
+      
+      if (pair.info?.socials) {
+        for (const social of pair.info.socials) {
+          if (social.type === 'twitter') twitter = social.url;
+          if (social.type === 'telegram') telegram = social.url;
+        }
+      }
+      if (pair.info?.websites?.[0]?.url) {
+        website = pair.info.websites[0].url;
+      }
+      
       return {
         mint: pair.baseToken.address,
         symbol: pair.baseToken.symbol || 'UNKNOWN',
         name: pair.baseToken.name || 'Unknown',
         fdv: pair.fdv,
+        twitter,
+        telegram,
+        website,
       };
     }
     return { mint: null, symbol: 'UNKNOWN', name: 'Unknown' };
@@ -56,22 +85,99 @@ async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null;
   }
 }
 
-// Detect launchpad based on pair data
-const detectLaunchpad = (pair: any): string | null => {
-  if (pair?.url?.includes('pump.fun') || pair?.info?.websites?.some((w: any) => w.url?.includes('pump.fun'))) {
-    return 'pump.fun';
+// Fetch token socials directly from DexScreener token endpoint
+async function fetchTokenSocials(tokenMint: string): Promise<{
+  twitter?: string;
+  telegram?: string;
+  website?: string;
+}> {
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      }
+    });
+    
+    if (!response.ok) return {};
+    
+    const data = await response.json();
+    const pairs = data.pairs || [];
+    
+    // Find the main pair (highest liquidity)
+    const mainPair = pairs.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+    
+    if (!mainPair?.info) return {};
+    
+    let twitter: string | undefined;
+    let telegram: string | undefined;
+    let website: string | undefined;
+    
+    if (mainPair.info.socials) {
+      for (const social of mainPair.info.socials) {
+        if (social.type === 'twitter') twitter = social.url;
+        if (social.type === 'telegram') telegram = social.url;
+      }
+    }
+    if (mainPair.info.websites?.[0]?.url) {
+      website = mainPair.info.websites[0].url;
+    }
+    
+    return { twitter, telegram, website };
+  } catch (e) {
+    console.error(`[DexCompiler] Failed to fetch token socials for ${tokenMint}:`, e);
+    return {};
   }
-  if (pair?.url?.includes('bonk.fun') || pair?.info?.websites?.some((w: any) => w.url?.includes('bonk.fun'))) {
-    return 'bonk.fun';
+}
+
+// Add mesh link between entities
+async function addMeshLink(
+  supabase: any,
+  sourceType: string, 
+  sourceId: string, 
+  linkedType: string, 
+  linkedId: string, 
+  relationship: string,
+  confidence: number = 80,
+  discoveredVia: string = 'dex-scraper'
+) {
+  try {
+    // Check if link exists
+    const { data: existing } = await supabase
+      .from('reputation_mesh')
+      .select('id')
+      .eq('source_type', sourceType)
+      .eq('source_id', sourceId)
+      .eq('linked_type', linkedType)
+      .eq('linked_id', linkedId)
+      .maybeSingle();
+    
+    if (!existing) {
+      await supabase
+        .from('reputation_mesh')
+        .insert({
+          source_type: sourceType,
+          source_id: sourceId,
+          linked_type: linkedType,
+          linked_id: linkedId,
+          relationship,
+          confidence,
+          discovered_via: discoveredVia,
+          discovered_at: new Date().toISOString()
+        });
+      console.log(`[Mesh] Added link: ${sourceType}:${sourceId.slice(0,8)} -> ${linkedType}:${linkedId.slice(0,20)}`);
+    }
+  } catch (e) {
+    console.error('[Mesh] Failed to add link:', e);
   }
-  if (pair?.url?.includes('bags.fm') || pair?.info?.websites?.some((w: any) => w.url?.includes('bags.fm'))) {
-    return 'bags.fm';
-  }
-  if (pair?.dexId === 'raydium') {
-    return 'raydium';
-  }
-  return null;
-};
+}
+
+// Extract X handle from twitter URL
+function extractXHandle(twitterUrl?: string): string | null {
+  if (!twitterUrl) return null;
+  const match = twitterUrl.match(/(?:twitter\.com|x\.com)\/(@?[\w]+)/i);
+  return match ? match[1].replace('@', '') : null;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -84,7 +190,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log('[DexCompiler] 🚀 Multi-Source Token Discovery (Cloudflare Worker Strategy)');
+    console.log('[DexCompiler] 🚀 Multi-Source Token Discovery + Mesh Building');
     console.log('[DexCompiler] 📊 Phase 1: Fetching top 50 trending from Cloudflare Worker');
 
     const discoveredTokens = new Map<string, TokenData>();
@@ -106,12 +212,13 @@ Deno.serve(async (req) => {
         
         const allPairs = workerData.pairs || [];
         
-        // Process ALL pairs - resolve missing mints ourselves
+        // Process ALL pairs - resolve missing mints and fetch socials
         for (let i = 0; i < Math.min(allPairs.length, 50); i++) {
           const p = allPairs[i];
           
           if (p.ok && p.tokenMint) {
-            // Worker resolved it - use directly
+            // Worker resolved it - fetch socials
+            const socials = await fetchTokenSocials(p.tokenMint);
             discoveredTokens.set(p.tokenMint, {
               address: p.tokenMint,
               symbol: p.symbol || 'UNKNOWN',
@@ -119,11 +226,14 @@ Deno.serve(async (req) => {
               fdv: p.fdv,
               marketCap: p.fdv,
               discoverySource: 'cf_worker',
+              twitter: socials.twitter,
+              telegram: socials.telegram,
+              website: socials.website,
             });
           } else if (p.pairId) {
             // Worker didn't resolve - fetch from DexScreener ourselves
             console.log(`[DexCompiler] 🔄 Resolving unresolved pair #${i + 1}: ${p.pairId}`);
-            const resolved = await fetchMintFromPair(p.pairId);
+            const resolved = await fetchPairDetails(p.pairId);
             
             if (resolved.mint) {
               discoveredTokens.set(resolved.mint, {
@@ -133,11 +243,17 @@ Deno.serve(async (req) => {
                 fdv: resolved.fdv,
                 marketCap: resolved.fdv,
                 discoverySource: 'cf_worker_resolved',
+                twitter: resolved.twitter,
+                telegram: resolved.telegram,
+                website: resolved.website,
               });
             } else {
               console.warn(`[DexCompiler] ⚠️ Could not resolve pair ${p.pairId}`);
             }
           }
+          
+          // Small delay to avoid rate limits
+          if (i % 10 === 9) await new Promise(r => setTimeout(r, 200));
         }
         
         console.log(`[DexCompiler] ✅ Total tokens from Cloudflare Worker: ${discoveredTokens.size}`);
@@ -164,6 +280,13 @@ Deno.serve(async (req) => {
         for (const boost of boosts) {
           if (boost.chainId === 'solana' && boost.tokenAddress) {
             const existing = discoveredTokens.get(boost.tokenAddress);
+            
+            // Fetch socials if new token
+            let socials = {};
+            if (!existing) {
+              socials = await fetchTokenSocials(boost.tokenAddress);
+            }
+            
             discoveredTokens.set(boost.tokenAddress, {
               address: boost.tokenAddress,
               symbol: existing?.symbol || boost.description?.split(' ')[0],
@@ -172,7 +295,10 @@ Deno.serve(async (req) => {
               activeBoosts: boost.amount || 1,
               fdv: existing?.fdv,
               marketCap: existing?.marketCap,
-              discoverySource: existing ? `${existing.discoverySource}+boosted` : 'boosted'
+              discoverySource: existing ? `${existing.discoverySource}+boosted` : 'boosted',
+              twitter: existing?.twitter || (socials as any).twitter,
+              telegram: existing?.telegram || (socials as any).telegram,
+              website: existing?.website || (socials as any).website,
             });
           }
         }
@@ -331,6 +457,36 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============ PHASE 3: BUILD REPUTATION MESH ============
+    console.log('[DexCompiler] 🕸️ Phase 3: Building Reputation Mesh...');
+    let meshLinksAdded = 0;
+    const creatorsToSpider: string[] = [];
+
+    // For each token with socials, add mesh links
+    for (const token of allTokens) {
+      const xHandle = extractXHandle(token.twitter);
+      
+      if (xHandle) {
+        // Link: Token -> X Account
+        await addMeshLink(supabase, 'token', token.address, 'x_account', xHandle, 'official_twitter');
+        meshLinksAdded++;
+      }
+      
+      if (token.telegram) {
+        // Link: Token -> Telegram
+        await addMeshLink(supabase, 'token', token.address, 'telegram', token.telegram, 'official_telegram');
+        meshLinksAdded++;
+      }
+      
+      if (token.website) {
+        // Link: Token -> Website
+        await addMeshLink(supabase, 'token', token.address, 'website', token.website, 'official_website');
+        meshLinksAdded++;
+      }
+    }
+    
+    console.log(`[DexCompiler] 🕸️ Added ${meshLinksAdded} mesh links`);
+
     // Trigger token-creator-linker for new tokens
     if (newTokens.length > 0) {
       console.log('[DexCompiler] 🔗 Triggering token-creator-linker...');
@@ -380,6 +536,42 @@ Deno.serve(async (req) => {
         console.error('[DexCompiler] ⚠️ Oracle auto-classifier failed:', err);
       });
     }
+    
+    // ============ PHASE 4: SPIDER CREATOR WALLETS ============
+    // Get creator wallets that need spidering
+    console.log('[DexCompiler] 🕷️ Phase 4: Spidering creator wallets...');
+    const { data: tokensWithCreators } = await supabase
+      .from('token_lifecycle')
+      .select('creator_wallet')
+      .not('creator_wallet', 'is', null)
+      .in('token_mint', allTokens.map(t => t.address));
+    
+    const uniqueCreators = [...new Set((tokensWithCreators || []).map(t => t.creator_wallet).filter(Boolean))];
+    
+    if (uniqueCreators.length > 0) {
+      console.log(`[DexCompiler] 🕷️ Found ${uniqueCreators.length} unique creators to spider`);
+      
+      // Spider first 10 creators (don't overwhelm)
+      for (const creatorWallet of uniqueCreators.slice(0, 10)) {
+        try {
+          // Trigger oracle-unified-lookup to spider this wallet
+          supabase.functions.invoke('oracle-unified-lookup', {
+            body: { 
+              query: creatorWallet,
+              source: 'dex-mesh-spider'
+            }
+          }).catch(err => {
+            console.error(`[DexCompiler] ⚠️ Spider failed for ${creatorWallet}:`, err);
+          });
+          
+          creatorsToSpider.push(creatorWallet);
+        } catch (e) {
+          console.error(`[DexCompiler] ⚠️ Failed to spider ${creatorWallet}:`, e);
+        }
+      }
+      
+      console.log(`[DexCompiler] 🕷️ Triggered spider for ${creatorsToSpider.length} creators`);
+    }
 
     return new Response(
       JSON.stringify({
@@ -390,6 +582,8 @@ Deno.serve(async (req) => {
         top100Tracked: rankingSnapshot.length,
         totalInDatabase: totalCount,
         discoveryBreakdown: sourceBreakdown,
+        meshLinksAdded,
+        creatorsSpidered: creatorsToSpider.length,
         timestamp: capturedAt
       }),
       { 
