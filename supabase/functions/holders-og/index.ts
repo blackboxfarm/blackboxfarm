@@ -138,17 +138,26 @@ Deno.serve(async (req) => {
       ogSource = 'versioned';
     }
 
-    // Propagate cache-buster to og:image URL to defeat X/Twitter's aggressive caching
-    let ogImageForMeta = ogImage;
-    if (versionParam) {
-      ogImageForMeta = ogImage.includes('?') ? `${ogImage}&v=${versionParam}` : `${ogImage}?v=${versionParam}`;
-    }
+    // Use an image-proxy edge function for og:image so crawlers never hit Storage/CDNs directly.
+    // This is much more reliable for X/Twitter.
+    const ogImageUpstream = ogImage;
+    const reqUrl = new URL(req.url);
+    const edgeBase = reqUrl.pathname.startsWith('/functions/v1/')
+      ? `${reqUrl.origin}/functions/v1`
+      : reqUrl.origin;
+
+    const proxyUrl = new URL(`${edgeBase}/holders-og-image`);
+    if (tokenParam) proxyUrl.searchParams.set('token', tokenParam);
+    if (versionParam) proxyUrl.searchParams.set('v', versionParam);
+    if (communityParam) proxyUrl.searchParams.set('utm_community', communityParam);
+
+    const ogImageForMeta = proxyUrl.toString();
 
     // Trim symbol/name to avoid leading/trailing spaces in meta tags
     const cleanSymbol = tokenSymbol?.trim() || null;
     const cleanName = tokenName?.trim() || null;
 
-    console.log(`[holders-og] Serving: ${cleanSymbol || 'default'}, source=${ogSource}, image=${ogImageForMeta.slice(-60)}`);
+    console.log(`[holders-og] Serving: ${cleanSymbol || 'default'}, source=${ogSource}, upstream=${ogImageUpstream.slice(-60)}, proxy=${ogImageForMeta.slice(-60)}`);
 
     // Dynamic OG metadata
     const title = isTokenSpecific && cleanSymbol 
@@ -216,7 +225,8 @@ Deno.serve(async (req) => {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": isTokenSpecific ? "public, max-age=300" : "public, max-age=3600",
         "X-Debug-OG-Source": ogSource,
-        "X-Debug-OG-Image": ogImageForMeta.slice(-80),
+        "X-Debug-OG-Image": ogImageUpstream.slice(-80),
+        "X-Debug-OG-Proxy": ogImageForMeta.slice(-80),
       },
     });
   } catch (e) {
