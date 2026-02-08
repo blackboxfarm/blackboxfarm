@@ -228,7 +228,7 @@ export function AdminNotificationsBadge() {
                           {notification.notification_type.replace('_', ' ')}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-line">
+                      <p className="text-xs text-muted-foreground whitespace-pre-line">
                         {notification.message}
                       </p>
                       <p className="text-xs text-muted-foreground/70 mt-1">
