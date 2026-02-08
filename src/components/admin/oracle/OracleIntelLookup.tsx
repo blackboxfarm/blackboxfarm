@@ -328,6 +328,50 @@ const OracleIntelLookup = () => {
                   </div>
                 </div>
               )}
+
+              {/* Always show rescan options */}
+              <div className="mt-6 pt-4 border-t border-border/50">
+                <h4 className="font-semibold flex items-center gap-2 mb-3 text-sm text-muted-foreground">
+                  <Scan className="h-4 w-4" />
+                  Rescan / Update Data
+                </h4>
+                <div className="grid md:grid-cols-3 gap-3">
+                  <Button 
+                    onClick={() => handleLookup('deep')} 
+                    disabled={isLoading}
+                    size="sm"
+                    className="h-auto py-3 flex flex-col items-center gap-1 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                  >
+                    <Scan className="h-5 w-5" />
+                    <span className="font-semibold text-xs">🔥 Deep Scan</span>
+                    <span className="text-[10px] opacity-80">Full ATH + rug analysis</span>
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => handleLookup('quick')} 
+                    disabled={isLoading}
+                    variant="secondary"
+                    size="sm"
+                    className="h-auto py-3 flex flex-col items-center gap-1"
+                  >
+                    <Zap className="h-5 w-5" />
+                    <span className="font-semibold text-xs">⚡ Quick Check</span>
+                    <span className="text-[10px] opacity-80">Basic pattern detection</span>
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => handleLookup('spider')} 
+                    disabled={isLoading}
+                    variant="outline"
+                    size="sm"
+                    className="h-auto py-3 flex flex-col items-center gap-1"
+                  >
+                    <Eye className="h-5 w-5" />
+                    <span className="font-semibold text-xs">🕸️ Spider Only</span>
+                    <span className="text-[10px] opacity-80">Just refresh DB entry</span>
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
