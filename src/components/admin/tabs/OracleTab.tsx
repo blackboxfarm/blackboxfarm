@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { lazy, Suspense, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LazyLoader } from "@/components/ui/lazy-loader";
 import OracleIntelLookup from "@/components/admin/oracle/OracleIntelLookup";
 import OracleClassificationsFeed from "@/components/admin/oracle/OracleClassificationsFeed";
 import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus";
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
+
+const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 
 const OracleTab = () => {
   const [activeSubTab, setActiveSubTab] = useState("lookup");
@@ -23,9 +26,12 @@ const OracleTab = () => {
       </Card>
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-flex">
           <TabsTrigger value="lookup" className="data-[state=active]:bg-violet-500/20">
             🔍 Intel Lookup
+          </TabsTrigger>
+          <TabsTrigger value="pipeline" className="data-[state=active]:bg-violet-500/20">
+            🕸️ Mesh Pipeline
           </TabsTrigger>
           <TabsTrigger value="classifications" className="data-[state=active]:bg-violet-500/20">
             📊 Auto-Classifications
@@ -34,12 +40,18 @@ const OracleTab = () => {
             📅 Historical Backfill
           </TabsTrigger>
           <TabsTrigger value="mesh" className="data-[state=active]:bg-violet-500/20">
-            🕸️ Reputation Mesh
+            🔗 Mesh Viewer
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="lookup" className="space-y-4">
           <OracleIntelLookup />
+        </TabsContent>
+
+        <TabsContent value="pipeline" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <MeshPipelineDashboard />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="classifications" className="space-y-4">
