@@ -40,15 +40,24 @@ interface OracleLookupResult {
   };
   recommendation: string;
   meshLinksAdded: number;
+  // New scan mode fields
+  requiresScan?: boolean;
+  scanMode?: 'deep' | 'quick' | 'spider';
+  liveAnalysis?: {
+    pattern: string;
+    tokensAnalyzed: number;
+    graduatedTokens: number;
+    successRate: number;
+  };
 }
 
 export const useOracleLookup = () => {
   const queryClient = useQueryClient();
 
   const lookupMutation = useMutation({
-    mutationFn: async (input: string): Promise<OracleLookupResult> => {
+    mutationFn: async ({ input, scanMode }: { input: string; scanMode?: 'deep' | 'quick' | 'spider' }): Promise<OracleLookupResult> => {
       const { data, error } = await supabase.functions.invoke('oracle-unified-lookup', {
-        body: { input }
+        body: { input, scanMode }
       });
 
       if (error) throw error;
@@ -62,8 +71,8 @@ export const useOracleLookup = () => {
   });
 
   return {
-    lookup: lookupMutation.mutate,
-    lookupAsync: lookupMutation.mutateAsync,
+    lookup: (input: string, scanMode?: 'deep' | 'quick' | 'spider') => lookupMutation.mutate({ input, scanMode }),
+    lookupAsync: (input: string, scanMode?: 'deep' | 'quick' | 'spider') => lookupMutation.mutateAsync({ input, scanMode }),
     result: lookupMutation.data,
     isLoading: lookupMutation.isPending,
     error: lookupMutation.error,

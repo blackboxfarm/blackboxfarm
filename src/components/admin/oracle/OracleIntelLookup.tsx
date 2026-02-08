@@ -4,19 +4,19 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useOracleLookup } from "@/hooks/useOracleLookup";
-import { Search, AlertTriangle, CheckCircle, AlertCircle, Shield, Users, Coins, ExternalLink, Copy } from "lucide-react";
+import { Search, AlertTriangle, CheckCircle, AlertCircle, Shield, Users, Coins, ExternalLink, Copy, Zap, Scan, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 const OracleIntelLookup = () => {
   const [query, setQuery] = useState("");
   const { lookup, result, isLoading, error, reset } = useOracleLookup();
 
-  const handleLookup = () => {
+  const handleLookup = (scanMode?: 'deep' | 'quick' | 'spider') => {
     if (!query.trim()) {
       toast.error("Please enter a token address, wallet, or @X handle");
       return;
     }
-    lookup(query.trim());
+    lookup(query.trim(), scanMode);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -36,6 +36,7 @@ const OracleIntelLookup = () => {
       case 'YELLOW': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
       case 'GREEN': return 'bg-green-500/20 text-green-400 border-green-500/50';
       case 'BLUE': return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
+      case 'UNKNOWN': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -46,6 +47,23 @@ const OracleIntelLookup = () => {
     if (score < 60) return 'text-yellow-500';
     if (score < 80) return 'text-green-500';
     return 'text-blue-500';
+  };
+
+  const getPatternBadge = (pattern: string) => {
+    switch (pattern) {
+      case 'serial_spammer':
+        return <Badge variant="destructive">🚨 Serial Spammer</Badge>;
+      case 'fee_farmer':
+        return <Badge variant="destructive">💸 Fee Farmer</Badge>;
+      case 'test_launcher':
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50">🧪 Test Launcher</Badge>;
+      case 'legitimate_builder':
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/50">✅ Legitimate Builder</Badge>;
+      case 'mixed_track_record':
+        return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50">📊 Mixed Record</Badge>;
+      default:
+        return <Badge variant="outline">❓ Unknown</Badge>;
+    }
   };
 
   return (
@@ -70,7 +88,7 @@ const OracleIntelLookup = () => {
               onKeyDown={handleKeyDown}
               className="flex-1"
             />
-            <Button onClick={handleLookup} disabled={isLoading}>
+            <Button onClick={() => handleLookup()} disabled={isLoading}>
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
@@ -104,8 +122,120 @@ const OracleIntelLookup = () => {
         </Card>
       )}
 
-      {/* Results Display */}
-      {result && (
+      {/* Scan Required - Developer not in database */}
+      {result && result.requiresScan && (
+        <Card className="border-2 border-purple-500/50 bg-purple-500/10">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/50">
+                  UNKNOWN DEVELOPER
+                </Badge>
+                <CardTitle className="text-xl">
+                  Developer Found on Pump.fun
+                </CardTitle>
+              </div>
+            </div>
+            {result.resolvedWallet && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-mono">{result.resolvedWallet}</span>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => copyToClipboard(result.resolvedWallet!)}>
+                  <Copy className="h-3 w-3" />
+                </Button>
+                <a 
+                  href={`https://pump.fun/profile/${result.resolvedWallet}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Quick Stats from Live Check */}
+            {result.liveAnalysis && (
+              <div className="p-4 rounded-lg bg-background/50 border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="h-4 w-4 text-yellow-400" />
+                  <span className="font-semibold">Quick Analysis (Live from Pump.fun)</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{result.liveAnalysis.tokensAnalyzed}</div>
+                    <div className="text-xs text-muted-foreground">Total Tokens</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-500">{result.liveAnalysis.graduatedTokens}</div>
+                    <div className="text-xs text-muted-foreground">Graduated</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{result.liveAnalysis.successRate.toFixed(1)}%</div>
+                    <div className="text-xs text-muted-foreground">Success Rate</div>
+                  </div>
+                  <div className="text-center">
+                    {getPatternBadge(result.liveAnalysis.pattern)}
+                    <div className="text-xs text-muted-foreground mt-1">Pattern</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Recommendation */}
+            <div className="p-4 rounded-lg bg-background/50 border border-yellow-500/30">
+              <p className="text-lg">{result.recommendation}</p>
+            </div>
+
+            {/* Scan Options */}
+            <div className="space-y-3">
+              <h4 className="font-semibold flex items-center gap-2">
+                <Scan className="h-4 w-4" />
+                Add to Database & Get Full Analysis
+              </h4>
+              <div className="grid md:grid-cols-3 gap-3">
+                <Button 
+                  onClick={() => handleLookup('deep')} 
+                  disabled={isLoading}
+                  className="h-auto py-4 flex flex-col items-center gap-2 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                >
+                  <Scan className="h-6 w-6" />
+                  <span className="font-semibold">🔥 Deep Scan</span>
+                  <span className="text-xs opacity-80">Full analysis - ATH, rug signals, patterns</span>
+                  <span className="text-xs opacity-60">30-120s for prolific devs</span>
+                </Button>
+                
+                <Button 
+                  onClick={() => handleLookup('quick')} 
+                  disabled={isLoading}
+                  variant="secondary"
+                  className="h-auto py-4 flex flex-col items-center gap-2"
+                >
+                  <Zap className="h-6 w-6" />
+                  <span className="font-semibold">⚡ Quick Check</span>
+                  <span className="text-xs opacity-80">Basic stats & pattern detection</span>
+                  <span className="text-xs opacity-60">5-15s</span>
+                </Button>
+                
+                <Button 
+                  onClick={() => handleLookup('spider')} 
+                  disabled={isLoading}
+                  variant="outline"
+                  className="h-auto py-4 flex flex-col items-center gap-2"
+                >
+                  <Eye className="h-6 w-6" />
+                  <span className="font-semibold">🕸️ Spider Only</span>
+                  <span className="text-xs opacity-80">Just add to database</span>
+                  <span className="text-xs opacity-60">Instant</span>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results Display - Full Data */}
+      {result && !result.requiresScan && (
         <div className="space-y-4">
           {/* Main Score Card */}
           <Card className={`border-2 ${getTrafficLightColor(result.trafficLight)}`}>
@@ -118,6 +248,7 @@ const OracleIntelLookup = () => {
                   <CardTitle className="text-xl">
                     {result.profile?.displayName || `Dev ${result.resolvedWallet?.slice(0, 8)}...`}
                   </CardTitle>
+                  {result.liveAnalysis && getPatternBadge(result.liveAnalysis.pattern)}
                 </div>
                 <div className={`text-4xl font-bold ${getScoreColor(result.score)}`}>
                   {result.score}/100
@@ -173,6 +304,30 @@ const OracleIntelLookup = () => {
                   <div className="text-xs text-muted-foreground">Avg Lifespan (hrs)</div>
                 </div>
               </div>
+
+              {/* Live Analysis Extra Info */}
+              {result.liveAnalysis && (
+                <div className="mt-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="h-4 w-4 text-purple-400" />
+                    <span className="text-sm font-medium text-purple-400">Fresh Analysis</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Pattern: </span>
+                      <span className="font-medium">{result.liveAnalysis.pattern.replace(/_/g, ' ')}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Graduated: </span>
+                      <span className="font-medium text-green-400">{result.liveAnalysis.graduatedTokens}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Success Rate: </span>
+                      <span className="font-medium">{result.liveAnalysis.successRate.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
