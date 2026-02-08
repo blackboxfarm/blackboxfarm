@@ -369,6 +369,19 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({ batchSize: 50 })
       }).catch(err => console.error('[DexCompiler] Background enrichment failed:', err));
+
+      // 🔮 Oracle Integration: Trigger auto-classifier for new tokens
+      console.log('[DexCompiler] 🔮 Triggering Oracle auto-classifier for new tokens...');
+      supabase.functions.invoke('oracle-auto-classifier', {
+        body: { 
+          tokenMints: newTokens.map(t => t.address),
+          source: 'dexscreener-hourly-scan'
+        }
+      }).then(() => {
+        console.log('[DexCompiler] ✅ Oracle auto-classifier triggered');
+      }).catch(err => {
+        console.error('[DexCompiler] ⚠️ Oracle auto-classifier failed:', err);
+      });
     }
 
     return new Response(
