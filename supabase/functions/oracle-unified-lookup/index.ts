@@ -128,9 +128,9 @@ function generateRecommendation(score: number, stats: OracleResult['stats'], req
   return `🔵 VERIFIED BUILDER - Consistent track record with ${stats.successfulTokens} active tokens. Lower risk for longer-term positions.`;
 }
 
-// Fetch tokens from pump.fun for a wallet
-async function fetchPumpfunTokens(walletAddress: string): Promise<any[]> {
-  // Try multiple endpoints with proper headers
+// Fetch tokens from pump.fun for a wallet - with Firecrawl fallback
+async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise<any[]> {
+  // Try multiple pump.fun endpoints with proper headers
   const endpoints = [
     `https://frontend-api.pump.fun/coins/user-created-coins/${walletAddress}?limit=200&offset=0`,
     `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}?limit=200&offset=0`
@@ -163,7 +163,77 @@ async function fetchPumpfunTokens(walletAddress: string): Promise<any[]> {
     }
   }
   
-  console.log('[Oracle] All pump.fun endpoints failed');
+  // Fallback: Use Firecrawl to scrape the pump.fun profile page
+  console.log('[Oracle] Pump.fun APIs blocked, trying Firecrawl scraper...');
+  
+  try {
+    const { data: firecrawlResult, error: firecrawlError } = await supabase.functions.invoke('firecrawl-scrape', {
+      body: {
+        url: `https://pump.fun/profile/${walletAddress}`,
+        options: {
+          formats: ['markdown', 'links'],
+          waitFor: 3000 // Wait 3s for JS to load
+        }
+      }
+    });
+    
+    if (!firecrawlError && firecrawlResult?.success && firecrawlResult?.data) {
+      const markdown = firecrawlResult.data.markdown || '';
+      const links = firecrawlResult.data.links || [];
+      
+      // Extract token mints from links (format: /coin/MINTADDRESS)
+      const tokenMints = links
+        .filter((link: string) => link.includes('/coin/'))
+        .map((link: string) => {
+          const match = link.match(/\/coin\/([A-Za-z0-9]+)/);
+          return match ? match[1] : null;
+        })
+        .filter(Boolean);
+      
+      // Parse token info from markdown if possible
+      const tokens = tokenMints.map((mint: string) => ({
+        mint,
+        name: 'Unknown',
+        symbol: '???',
+        complete: false,
+        usd_market_cap: 0
+      }));
+      
+      if (tokens.length > 0) {
+        console.log(`[Oracle] Firecrawl found ${tokens.length} token links`);
+        return tokens;
+      }
+    } else {
+      console.log('[Oracle] Firecrawl failed:', firecrawlError || 'no data');
+    }
+  } catch (error) {
+    console.error('[Oracle] Firecrawl error:', error);
+  }
+  
+  // Final fallback: Check developer_tokens table for cached data
+  console.log('[Oracle] Checking local DB for cached tokens...');
+  try {
+    const { data: cachedTokens } = await supabase
+      .from('developer_tokens')
+      .select('token_mint, token_symbol, outcome, peak_market_cap_usd, is_active')
+      .eq('creator_wallet', walletAddress)
+      .limit(100);
+    
+    if (cachedTokens && cachedTokens.length > 0) {
+      console.log(`[Oracle] Found ${cachedTokens.length} cached tokens in DB`);
+      return cachedTokens.map((t: any) => ({
+        mint: t.token_mint,
+        symbol: t.token_symbol || '???',
+        name: t.token_symbol || 'Unknown',
+        complete: t.outcome === 'graduated',
+        usd_market_cap: t.peak_market_cap_usd || 0
+      }));
+    }
+  } catch (error) {
+    console.error('[Oracle] DB lookup error:', error);
+  }
+  
+  console.log('[Oracle] All token fetch methods failed');
   return [];
 }
 
@@ -362,72 +432,90 @@ Deno.serve(async (req) => {
     // Check if we have any data on this developer
     const hasExistingData = !!(developerProfile || devWalletRep || blacklistEntry || whitelistEntry || developerTokens.length > 0);
     
-    // If no data and no scan mode requested, offer scan options
-    if (!hasExistingData && !scanMode && resolvedWallet) {
-      console.log('[Oracle] No existing data found, offering scan options...');
+    // AUTO-SPIDER: Always fetch from pump.fun and write to DB on every lookup
+    let liveTokens: any[] = [];
+    let liveAnalysis: any = null;
+    
+    if (resolvedWallet) {
+      console.log('[Oracle] Auto-spider: fetching tokens from Pump.fun...');
+      liveTokens = await fetchPumpfunTokens(resolvedWallet, supabase);
       
-      // Try to get pump.fun data (may fail due to rate limits)
-      const pumpfunTokens = await fetchPumpfunTokens(resolvedWallet);
-      
-      if (pumpfunTokens.length > 0) {
-        // They ARE a developer with data from pump.fun
-        const quickStats = quickAnalyzeTokens(pumpfunTokens);
-        console.log(`[Oracle] Found ${pumpfunTokens.length} tokens on pump.fun, pattern: ${quickStats.pattern}`);
+      if (liveTokens.length > 0) {
+        const quickStats = quickAnalyzeTokens(liveTokens);
+        console.log(`[Oracle] Found ${liveTokens.length} tokens, pattern: ${quickStats.pattern}`);
         
-        return new Response(
-          JSON.stringify({
-            found: false,
-            requiresScan: true,
-            inputType,
-            resolvedWallet,
-            score: 50,
-            trafficLight: 'UNKNOWN' as const,
-            stats: {
-              totalTokens: quickStats.totalTokens,
-              successfulTokens: quickStats.graduated + quickStats.successful,
-              failedTokens: quickStats.failed,
-              rugPulls: quickStats.rugged,
-              slowDrains: 0,
-              avgLifespanHours: 0
-            },
-            network: { linkedWallets: [], linkedXAccounts: [], sharedMods: [], relatedTokens: [] },
-            blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
-            whitelistStatus: { isWhitelisted: false },
-            recommendation: `⚠️ UNKNOWN DEVELOPER with ${quickStats.totalTokens} tokens on Pump.fun. Pattern detected: ${quickStats.pattern.replace(/_/g, ' ')}. Run a scan to add them to the database and get full analysis.`,
-            meshLinksAdded: 0,
-            liveAnalysis: {
-              pattern: quickStats.pattern,
-              tokensAnalyzed: quickStats.totalTokens,
-              graduatedTokens: quickStats.graduated,
-              successRate: quickStats.successRate
-            }
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
-      } else {
-        // Pump.fun API failed or no tokens - still offer scan option
-        console.log('[Oracle] Pump.fun API unavailable, offering manual scan option');
-        return new Response(
-          JSON.stringify({
-            found: false,
-            requiresScan: true,
-            inputType,
-            resolvedWallet,
-            score: 50,
-            trafficLight: 'UNKNOWN' as const,
-            stats: { totalTokens: 0, successfulTokens: 0, failedTokens: 0, rugPulls: 0, slowDrains: 0, avgLifespanHours: 0 },
-            network: { linkedWallets: [], linkedXAccounts: [], sharedMods: [], relatedTokens: [] },
-            blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
-            whitelistStatus: { isWhitelisted: false },
-            recommendation: `⚠️ UNKNOWN DEVELOPER - Not in our database. Click "Deep Scan" to fetch their full token history from Pump.fun and analyze their track record.`,
-            meshLinksAdded: 0
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
+        liveAnalysis = {
+          pattern: quickStats.pattern,
+          tokensAnalyzed: quickStats.totalTokens,
+          graduatedTokens: quickStats.graduated,
+          successRate: quickStats.successRate
+        };
+        
+        // Write to dev_wallet_reputation
+        await supabase
+          .from('dev_wallet_reputation')
+          .upsert({
+            wallet_address: resolvedWallet,
+            total_tokens_launched: quickStats.totalTokens,
+            tokens_graduated: quickStats.graduated,
+            tokens_successful: quickStats.successful,
+            tokens_rugged: quickStats.rugged,
+            success_rate_pct: quickStats.successRate,
+            dev_pattern: quickStats.pattern,
+            is_serial_spammer: quickStats.pattern === 'serial_spammer',
+            is_test_launcher: quickStats.pattern === 'test_launcher',
+            is_legitimate_builder: quickStats.pattern === 'legitimate_builder',
+            last_analyzed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'wallet_address' });
+        
+        console.log(`[Oracle] Updated dev_wallet_reputation for ${resolvedWallet.slice(0, 8)}...`);
+        
+        // Write individual tokens to developer_tokens (first 50)
+        const tokenUpserts = liveTokens.slice(0, 50).map((token: any) => ({
+          token_mint: token.mint,
+          creator_wallet: resolvedWallet,
+          developer_id: resolvedWallet, // Use wallet as developer ID
+          token_symbol: token.symbol,
+          is_active: token.usd_market_cap > 1000,
+          outcome: token.complete ? 'graduated' : (token.usd_market_cap > 50000 ? 'success' : (token.usd_market_cap < 100 ? 'failed' : 'unknown')),
+          peak_market_cap_usd: token.usd_market_cap || 0,
+          launch_date: token.created_timestamp || new Date().toISOString(),
+          launchpad: 'pumpfun'
+        }));
+        
+        if (tokenUpserts.length > 0) {
+          await supabase
+            .from('developer_tokens')
+            .upsert(tokenUpserts, { onConflict: 'token_mint' });
+          console.log(`[Oracle] Upserted ${tokenUpserts.length} tokens to developer_tokens`);
+        }
       }
     }
     
-    // If scan mode was requested, run the pumpfun-dev-analyzer
+    // If no existing data AND no live tokens found, offer scan options
+    if (!hasExistingData && liveTokens.length === 0 && resolvedWallet) {
+      console.log('[Oracle] No data found anywhere, offering scan options...');
+      return new Response(
+        JSON.stringify({
+          found: false,
+          requiresScan: true,
+          inputType,
+          resolvedWallet,
+          score: 50,
+          trafficLight: 'UNKNOWN' as const,
+          stats: { totalTokens: 0, successfulTokens: 0, failedTokens: 0, rugPulls: 0, slowDrains: 0, avgLifespanHours: 0 },
+          network: { linkedWallets: [], linkedXAccounts: [], sharedMods: [], relatedTokens: [] },
+          blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
+          whitelistStatus: { isWhitelisted: false },
+          recommendation: `⚠️ UNKNOWN DEVELOPER - Could not fetch data from Pump.fun or Helius. Try "Deep Scan" for manual analysis.`,
+          meshLinksAdded: 0
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+    
+    // If scan mode was requested, run the pumpfun-dev-analyzer for deeper analysis
     if (scanMode && resolvedWallet) {
       console.log(`[Oracle] Running ${scanMode} scan for ${resolvedWallet}`);
       
@@ -510,10 +598,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Calculate stats from existing data
+    // Calculate stats - prefer live data if available, otherwise use DB
     const stats: OracleResult['stats'] = {
-      totalTokens: developerProfile?.total_tokens_created || devWalletRep?.total_tokens_launched || developerTokens.length || 0,
-      successfulTokens: developerProfile?.successful_tokens || devWalletRep?.tokens_successful || developerTokens.filter(t => t.outcome === 'success').length || 0,
+      totalTokens: liveAnalysis?.tokensAnalyzed || developerProfile?.total_tokens_created || devWalletRep?.total_tokens_launched || developerTokens.length || 0,
+      successfulTokens: liveAnalysis?.graduatedTokens || developerProfile?.successful_tokens || devWalletRep?.tokens_successful || developerTokens.filter(t => t.outcome === 'success').length || 0,
       failedTokens: developerProfile?.failed_tokens || devWalletRep?.tokens_rugged || developerTokens.filter(t => t.outcome === 'failed').length || 0,
       rugPulls: developerProfile?.rug_pull_count || devWalletRep?.rug_pull_count || 0,
       slowDrains: developerProfile?.slow_drain_count || devWalletRep?.slow_drain_count || 0,
@@ -574,7 +662,7 @@ Deno.serve(async (req) => {
     }
 
     const result: OracleResult = {
-      found: hasExistingData,
+      found: hasExistingData || liveTokens.length > 0,
       inputType,
       resolvedWallet,
       profile: developerProfile ? {
@@ -598,7 +686,8 @@ Deno.serve(async (req) => {
         reason: whitelistEntry?.notes
       },
       recommendation,
-      meshLinksAdded
+      meshLinksAdded,
+      liveAnalysis: liveAnalysis || undefined
     };
 
     console.log(`[Oracle] Result: score=${score}, trafficLight=${trafficLight}, found=${result.found}`);
