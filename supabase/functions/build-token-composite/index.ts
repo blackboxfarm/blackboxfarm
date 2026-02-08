@@ -91,6 +91,7 @@ serve(async (req) => {
     console.log('Generating token composite:', { tokenMint, bannerUrl: actualBannerUrl, badgeUrl });
 
     // Use Lovable AI to generate a composite image
+    // Request 1200x630 (Twitter's ideal OG size) to ensure < 1MB output
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -105,7 +106,15 @@ serve(async (req) => {
             content: [
               {
                 type: 'text',
-                text: `Create a composite image by overlaying the second image (the "PAID" badge) onto the first image (the banner). Place the badge in the top-left corner with approximately 20 pixels of padding from both the top and left edges. The badge should maintain its original size and aspect ratio. Keep the banner at its original dimensions and quality. Do not add any other modifications or text.`
+                text: `Create a composite image by overlaying the second image (the "PAID" badge) onto the first image (the banner). 
+                
+OUTPUT REQUIREMENTS:
+- Final image dimensions: exactly 1200x630 pixels (Twitter's ideal OG image size)
+- Place the badge in the top-left corner with approximately 20 pixels of padding from both the top and left edges
+- Scale the badge proportionally to fit nicely (roughly 15-20% of image width)
+- Resize/crop the banner to fill 1200x630, maintaining its visual center
+- Output as JPEG format for smaller file size
+- Do not add any other modifications or text`
               },
               {
                 type: 'image_url',
