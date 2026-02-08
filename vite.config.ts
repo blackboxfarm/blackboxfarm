@@ -16,6 +16,17 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
+
+      // IMPORTANT:
+      // A previously-installed SW can pin users to an old build forever.
+      // We ship a self-destroying SW to forcefully unregister + clear caches.
+      // This prioritizes "always latest" over offline/PWA caching.
+      filename: 'sw.js',
+      selfDestroying: true,
+      devOptions: {
+        enabled: false,
+      },
+
       includeAssets: ['favicon-barn.png', 'farm-banner.svg', 'blackbox-cube-logo.png'],
       manifest: {
         name: 'BlackBox Farm',
