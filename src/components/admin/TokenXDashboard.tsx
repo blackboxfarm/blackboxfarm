@@ -24,6 +24,7 @@ interface PostedToken {
   snapshot_slot?: string | null;
   minted_at?: string | null;
   bonded_at?: string | null;
+  first_seen_at?: string | null;
   has_paid_dex?: boolean; // Paid DEX boost detected
 }
 
@@ -99,11 +100,12 @@ export function TokenXDashboard() {
     setLoading(true);
     try {
       // Get posted tokens with timestamps and composite URLs
+      // Include first_seen_at as fallback for sorting when minted_at is null
       const { data: postedTokens, error } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('token_mint, symbol, banner_url, image_uri, paid_composite_url, times_posted, snapshot_slot, minted_at, bonded_at')
+        .select('token_mint, symbol, banner_url, image_uri, paid_composite_url, times_posted, snapshot_slot, minted_at, bonded_at, first_seen_at')
         .eq('was_posted', true)
-        .order('minted_at', { ascending: false, nullsFirst: false });
+        .order('first_seen_at', { ascending: false });
 
       if (error) throw error;
 
@@ -170,15 +172,15 @@ export function TokenXDashboard() {
       result = result.filter(t => !t.bonded_at);
     }
 
-    // Apply sorting
+    // Apply sorting - use first_seen_at as fallback when minted_at is null
     result.sort((a, b) => {
       if (sortOrder === 'newest') {
-        const dateA = a.minted_at || a.snapshot_slot || '';
-        const dateB = b.minted_at || b.snapshot_slot || '';
+        const dateA = a.minted_at || a.first_seen_at || a.snapshot_slot || '';
+        const dateB = b.minted_at || b.first_seen_at || b.snapshot_slot || '';
         return dateB.localeCompare(dateA);
       } else if (sortOrder === 'oldest') {
-        const dateA = a.minted_at || a.snapshot_slot || '';
-        const dateB = b.minted_at || b.snapshot_slot || '';
+        const dateA = a.minted_at || a.first_seen_at || a.snapshot_slot || '';
+        const dateB = b.minted_at || b.first_seen_at || b.snapshot_slot || '';
         return dateA.localeCompare(dateB);
       } else {
         return (b.times_posted || 0) - (a.times_posted || 0);
