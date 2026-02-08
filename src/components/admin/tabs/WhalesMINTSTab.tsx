@@ -23,6 +23,7 @@ const PumpfunKOLActivity = lazy(() => import("@/components/admin/PumpfunKOLActiv
 const PumpfunKOLTwitter = lazy(() => import("@/components/admin/PumpfunKOLTwitter"));
 const PumpfunKOLCabals = lazy(() => import("@/components/admin/PumpfunKOLCabals"));
 const DevTeamsView = lazy(() => import("@/components/admin/DevTeamsView").then(m => ({ default: m.DevTeamsView })));
+const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 
 export default function WhalesMINTSTab() {
   const [activeSubTab, setActiveSubTab] = useState("mega-whale");
@@ -32,6 +33,7 @@ export default function WhalesMINTSTab() {
     <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
         <TabsTrigger value="mega-whale">👑 MEGA WHALE</TabsTrigger>
+        <TabsTrigger value="mesh-pipeline">🕸️ Mesh Pipeline</TabsTrigger>
         <TabsTrigger value="whale-frenzy">🔥 Whale Frenzy</TabsTrigger>
         <TabsTrigger value="wallet-monitor">👁️ Wallet Monitor</TabsTrigger>
         <TabsTrigger value="genealogy">🧬 Token Genealogy</TabsTrigger>
@@ -52,6 +54,9 @@ export default function WhalesMINTSTab() {
 
       <TabsContent value="mega-whale">
         {activeSubTab === "mega-whale" && <Suspense fallback={<LazyLoader />}><MegaWhaleDashboard /></Suspense>}
+      </TabsContent>
+      <TabsContent value="mesh-pipeline">
+        {activeSubTab === "mesh-pipeline" && <Suspense fallback={<LazyLoader />}><MeshPipelineDashboard /></Suspense>}
       </TabsContent>
       <TabsContent value="whale-frenzy">
         {activeSubTab === "whale-frenzy" && <Suspense fallback={<LazyLoader />}><WhaleFrenzyDashboard /></Suspense>}
