@@ -142,13 +142,10 @@ Deno.serve(async (req) => {
     // This is much more reliable for X/Twitter.
     const ogImageUpstream = ogImage;
 
-    // IMPORTANT: Do NOT derive the function base from req.url.
-    // Depending on how the function is invoked (direct vs /functions/v1 proxy), req.url may not include
-    // the /functions/v1 prefix and may even show a non-https origin.
-    // Always generate a stable, https, absolute URL to the deployed edge-function endpoint.
-    const functionsOrigin = Deno.env.get("SUPABASE_URL") || SUPABASE_URL;
-
-    const proxyUrl = new URL(`${functionsOrigin}/functions/v1/holders-og-image`);
+    // Route through the Cloudflare Worker at og.blackbox.farm for the image proxy too.
+    // This avoids Twitter blocking Supabase edge function URLs directly.
+    // The CF worker will forward /holders-og-image to the Supabase function.
+    const proxyUrl = new URL("https://og.blackbox.farm/holders-og-image");
     if (tokenParam) proxyUrl.searchParams.set("token", tokenParam);
     if (versionParam) proxyUrl.searchParams.set("v", versionParam);
     if (communityParam) proxyUrl.searchParams.set("utm_community", communityParam);
