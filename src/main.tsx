@@ -2,38 +2,44 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-// PWA/service-worker note:
-// A previously-installed service worker can cache an old build and make the UI look “stuck”.
-// However, auto-purging + auto-reloading can cause lockups in the Lovable preview.
-//
-// Manual fix (only runs if you add ?purge-sw=1 to the URL):
-//   https://blackboxfarm.lovable.app/super-admin?purge-sw=1
-//
-// This unregisters SW + clears CacheStorage ONCE, then removes the query param and reloads.
-if ('serviceWorker' in navigator) {
+/**
+ * Auto-purge stale Service Worker on Lovable preview domains.
+ * This runs ONCE per stale SW scenario, clears all caches, then reloads.
+ */
+(async () => {
+  if (!('serviceWorker' in navigator)) return;
+
+  const host = window.location.hostname || '';
+  const isLovablePreview =
+    /(^|\.)lovable\.app$/.test(host) ||
+    /(^|\.)lovable\.dev$/.test(host) ||
+    /(^|\.)lovableproject\.com$/.test(host);
+
+  // Only auto-purge on Lovable preview domains
+  if (!isLovablePreview) return;
+
+  // Also allow manual ?purge-sw=1 trigger
   const url = new URL(window.location.href);
-  const shouldPurge = url.searchParams.get('purge-sw') === '1';
+  const forceManual = url.searchParams.get('purge-sw') === '1';
 
-  if (shouldPurge) {
+  const regs = await navigator.serviceWorker.getRegistrations();
+  if (regs.length === 0 && !forceManual) return; // No SW to purge
+
+  // Unregister all SWs and clear all caches
+  await Promise.all([
+    ...regs.map((r) => r.unregister()),
+    typeof caches !== 'undefined'
+      ? caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      : Promise.resolve(),
+  ]);
+
+  // Clean URL if manual param was used
+  if (forceManual) {
     url.searchParams.delete('purge-sw');
-    const cleanedUrl = url.toString();
-
-    Promise.all([
-      navigator.serviceWorker.getRegistrations().then((regs) =>
-        Promise.all(regs.map((r) => r.unregister()))
-      ),
-      typeof caches !== 'undefined'
-        ? caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-        : Promise.resolve(),
-    ])
-      .then(() => {
-        // Navigate without the query param; this causes a single fresh load.
-        window.location.replace(cleanedUrl);
-      })
-      .catch(() => {
-        // If anything fails, just continue to app render.
-      });
   }
-}
+
+  // Single reload to fetch fresh assets
+  window.location.replace(url.toString());
+})();
 
 createRoot(document.getElementById("root")!).render(<App />);
