@@ -2290,6 +2290,75 @@ export type Database = {
           },
         ]
       }
+      developer_mint_alerts: {
+        Row: {
+          alert_level: string
+          alert_sent_at: string | null
+          alert_type: string
+          created_at: string
+          creator_wallet: string
+          developer_id: string | null
+          email_sent: boolean | null
+          id: string
+          launchpad: string | null
+          metadata: Json | null
+          notified_users: string[] | null
+          telegram_sent: boolean | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+        }
+        Insert: {
+          alert_level?: string
+          alert_sent_at?: string | null
+          alert_type: string
+          created_at?: string
+          creator_wallet: string
+          developer_id?: string | null
+          email_sent?: boolean | null
+          id?: string
+          launchpad?: string | null
+          metadata?: Json | null
+          notified_users?: string[] | null
+          telegram_sent?: boolean | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+        }
+        Update: {
+          alert_level?: string
+          alert_sent_at?: string | null
+          alert_type?: string
+          created_at?: string
+          creator_wallet?: string
+          developer_id?: string | null
+          email_sent?: boolean | null
+          id?: string
+          launchpad?: string | null
+          metadata?: Json | null
+          notified_users?: string[] | null
+          telegram_sent?: boolean | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "developer_mint_alerts_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "developer_mint_alerts_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       developer_profiles: {
         Row: {
           average_token_lifespan_days: number | null
@@ -2520,6 +2589,8 @@ export type Database = {
           first_seen_at: string | null
           id: string
           last_active_at: string | null
+          last_scanned_at: string | null
+          launchpad_detected: string | null
           parent_wallet_address: string | null
           total_sol_received: number | null
           total_sol_sent: number | null
@@ -2534,6 +2605,8 @@ export type Database = {
           first_seen_at?: string | null
           id?: string
           last_active_at?: string | null
+          last_scanned_at?: string | null
+          launchpad_detected?: string | null
           parent_wallet_address?: string | null
           total_sol_received?: number | null
           total_sol_sent?: number | null
@@ -2548,6 +2621,8 @@ export type Database = {
           first_seen_at?: string | null
           id?: string
           last_active_at?: string | null
+          last_scanned_at?: string | null
+          launchpad_detected?: string | null
           parent_wallet_address?: string | null
           total_sol_received?: number | null
           total_sol_sent?: number | null
@@ -12232,6 +12307,19 @@ export type Database = {
         }
         Relationships: []
       }
+      mesh_summary: {
+        Row: {
+          admin_links: number | null
+          co_mod_links: number | null
+          last_refreshed: string | null
+          mod_links: number | null
+          token_links: number | null
+          total_links: number | null
+          unique_accounts: number | null
+          unique_communities: number | null
+        }
+        Relationships: []
+      }
       security_summary: {
         Row: {
           encrypted_keys: number | null
@@ -12468,6 +12556,21 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_rotation_patterns: {
+        Args: {
+          min_communities?: number
+          result_limit?: number
+          result_offset?: number
+        }
+        Returns: {
+          account: string
+          admin_communities: string[]
+          co_mod_count: number
+          mod_communities: string[]
+          risk_score: number
+          total_communities: number
+        }[]
+      }
       get_security_config: { Args: { config_key_param: string }; Returns: Json }
       get_security_status: { Args: never; Returns: Json }
       get_super_admin_ids: {
@@ -12627,6 +12730,7 @@ export type Database = {
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
+      refresh_mesh_summary: { Args: never; Returns: undefined }
       reset_daily_auto_buy_counts: { Args: never; Returns: undefined }
       schedule_arb_scanner: { Args: never; Returns: undefined }
       schedule_cron_job: {

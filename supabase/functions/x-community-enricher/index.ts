@@ -347,18 +347,26 @@ Deno.serve(async (req) => {
       }
 
       // Co-mod links: all admins/mods are co-mods with each other
+      // SCALING FIX: Limit to first 10 staff to prevent quadratic explosion (n*(n-1)/2)
+      // With 10 staff, max 45 co_mod links per community instead of potentially thousands
       const allStaff = [...communityData.adminUsernames, ...communityData.moderatorUsernames];
-      for (let i = 0; i < allStaff.length; i++) {
-        for (let j = i + 1; j < allStaff.length; j++) {
+      const staffForCoMod = allStaff.slice(0, 10); // Cap at 10 staff members
+      
+      if (allStaff.length > 10) {
+        console.log(`[Scaling] Community ${communityId} has ${allStaff.length} staff, limiting co_mod links to first 10`);
+      }
+      
+      for (let i = 0; i < staffForCoMod.length; i++) {
+        for (let j = i + 1; j < staffForCoMod.length; j++) {
           meshLinks.push({
             source_type: 'x_account',
-            source_id: allStaff[i].toLowerCase(),
+            source_id: staffForCoMod[i].toLowerCase(),
             linked_type: 'x_account',
-            linked_id: allStaff[j].toLowerCase(),
+            linked_id: staffForCoMod[j].toLowerCase(),
             relationship: 'co_mod',
             confidence: 90,
             discovered_via: 'x_community_enricher',
-            metadata: { community_id: communityId, scraped_at: now }
+            metadata: { community_id: communityId, scraped_at: now, staff_count: allStaff.length }
           });
         }
       }
