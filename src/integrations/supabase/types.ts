@@ -402,6 +402,111 @@ export type Database = {
         }
         Relationships: []
       }
+      api_service_config: {
+        Row: {
+          alert_threshold_critical: number | null
+          alert_threshold_exceeded: number | null
+          alert_threshold_warning: number | null
+          api_key_last_rotated: string | null
+          api_key_rotation_date: string | null
+          api_key_rotation_reminder_days: number | null
+          billing_cycle_start: string | null
+          cost_per_unit: number | null
+          created_at: string | null
+          currency: string | null
+          dashboard_url: string | null
+          description: string | null
+          display_name: string
+          documentation_url: string | null
+          error_count_today: number | null
+          id: string
+          is_enabled: boolean | null
+          is_paid_service: boolean | null
+          last_error_at: string | null
+          last_request_at: string | null
+          metadata: Json | null
+          monthly_cost_cap: number | null
+          monthly_quota: number | null
+          monthly_quota_used: number | null
+          notes: string | null
+          rate_limit_per_day: number | null
+          rate_limit_per_hour: number | null
+          rate_limit_per_minute: number | null
+          service_name: string
+          success_count_today: number | null
+          tier: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          alert_threshold_critical?: number | null
+          alert_threshold_exceeded?: number | null
+          alert_threshold_warning?: number | null
+          api_key_last_rotated?: string | null
+          api_key_rotation_date?: string | null
+          api_key_rotation_reminder_days?: number | null
+          billing_cycle_start?: string | null
+          cost_per_unit?: number | null
+          created_at?: string | null
+          currency?: string | null
+          dashboard_url?: string | null
+          description?: string | null
+          display_name: string
+          documentation_url?: string | null
+          error_count_today?: number | null
+          id?: string
+          is_enabled?: boolean | null
+          is_paid_service?: boolean | null
+          last_error_at?: string | null
+          last_request_at?: string | null
+          metadata?: Json | null
+          monthly_cost_cap?: number | null
+          monthly_quota?: number | null
+          monthly_quota_used?: number | null
+          notes?: string | null
+          rate_limit_per_day?: number | null
+          rate_limit_per_hour?: number | null
+          rate_limit_per_minute?: number | null
+          service_name: string
+          success_count_today?: number | null
+          tier?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          alert_threshold_critical?: number | null
+          alert_threshold_exceeded?: number | null
+          alert_threshold_warning?: number | null
+          api_key_last_rotated?: string | null
+          api_key_rotation_date?: string | null
+          api_key_rotation_reminder_days?: number | null
+          billing_cycle_start?: string | null
+          cost_per_unit?: number | null
+          created_at?: string | null
+          currency?: string | null
+          dashboard_url?: string | null
+          description?: string | null
+          display_name?: string
+          documentation_url?: string | null
+          error_count_today?: number | null
+          id?: string
+          is_enabled?: boolean | null
+          is_paid_service?: boolean | null
+          last_error_at?: string | null
+          last_request_at?: string | null
+          metadata?: Json | null
+          monthly_cost_cap?: number | null
+          monthly_quota?: number | null
+          monthly_quota_used?: number | null
+          notes?: string | null
+          rate_limit_per_day?: number | null
+          rate_limit_per_hour?: number | null
+          rate_limit_per_minute?: number | null
+          service_name?: string
+          success_count_today?: number | null
+          tier?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       api_usage_log: {
         Row: {
           credits_used: number | null
@@ -12377,6 +12482,18 @@ export type Database = {
         Args: { user_id_param: string }
         Returns: Json
       }
+      check_api_service_alerts: {
+        Args: never
+        Returns: {
+          alert_type: string
+          current_usage: number
+          days_until_rotation: number
+          display_name: string
+          limit_value: number
+          service_name: string
+          usage_percentage: number
+        }[]
+      }
       check_notification_cooldown: {
         Args: {
           p_campaign_id: string
@@ -12573,6 +12690,16 @@ export type Database = {
       }
       get_security_config: { Args: { config_key_param: string }; Returns: Json }
       get_security_status: { Args: never; Returns: Json }
+      get_service_usage_today: {
+        Args: { p_service_name: string }
+        Returns: {
+          avg_response_time: number
+          failed_calls: number
+          successful_calls: number
+          total_calls: number
+          total_credits: number
+        }[]
+      }
       get_super_admin_ids: {
         Args: never
         Returns: {
@@ -12737,6 +12864,7 @@ export type Database = {
         Args: { job_command: string; job_name: string; job_schedule: string }
         Returns: undefined
       }
+      sync_api_service_usage: { Args: never; Returns: undefined }
       track_referral_signup: {
         Args: { new_user_id: string; referral_code_param: string }
         Returns: Json
