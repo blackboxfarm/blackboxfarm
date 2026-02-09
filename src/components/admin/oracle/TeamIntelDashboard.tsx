@@ -57,10 +57,20 @@ interface MeshStats {
 
 interface RotationPattern {
   account: string;
-  communities_admin: string[];
-  communities_mod: string[];
-  co_mods: string[];
-  linked_tokens: number;
+  admin_communities: string[];
+  mod_communities: string[];
+  co_mod_count: number;
+  total_communities: number;
+  risk_score: number;
+}
+
+// Server-side rotation pattern from Postgres function
+interface ServerRotationPattern {
+  account: string;
+  admin_communities: string[];
+  mod_communities: string[];
+  co_mod_count: number;
+  total_communities: number;
   risk_score: number;
 }
 
@@ -72,94 +82,92 @@ export function TeamIntelDashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+  
+  // Pagination state
+  const [teamsPage, setTeamsPage] = useState(0);
+  const [rotationsPage, setRotationsPage] = useState(0);
+  const [hasMoreTeams, setHasMoreTeams] = useState(true);
+  const [hasMoreRotations, setHasMoreRotations] = useState(true);
+  const PAGE_SIZE = 50;
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (resetPagination = true) => {
     setLoading(true);
     try {
-      // Fetch dev teams
+      if (resetPagination) {
+        setTeamsPage(0);
+        setRotationsPage(0);
+        setTeams([]);
+        setRotationPatterns([]);
+      }
+
+      // Fetch dev teams with pagination
       const { data: teamsData, error: teamsError } = await supabase
         .from('dev_teams')
         .select('*')
         .eq('is_active', true)
         .order('tokens_created', { ascending: false })
-        .limit(100);
+        .range(0, PAGE_SIZE - 1);
 
       if (teamsError) throw teamsError;
       setTeams(teamsData || []);
+      setHasMoreTeams((teamsData?.length || 0) === PAGE_SIZE);
 
-      // Fetch mesh statistics
-      const { data: meshData, error: meshError } = await supabase
-        .from('reputation_mesh')
-        .select('relationship, source_type, linked_type')
-        .in('relationship', ['admin_of', 'mod_of', 'co_mod', 'community_for']);
+      // Use materialized view for mesh statistics (much faster at scale)
+      const { data: meshSummary, error: meshSummaryError } = await supabase
+        .from('mesh_summary')
+        .select('*')
+        .single();
 
-      if (!meshError && meshData) {
-        const stats: MeshStats = {
-          total_links: meshData.length,
-          admin_links: meshData.filter(m => m.relationship === 'admin_of').length,
-          mod_links: meshData.filter(m => m.relationship === 'mod_of').length,
-          co_mod_links: meshData.filter(m => m.relationship === 'co_mod').length,
-          token_links: meshData.filter(m => m.relationship === 'community_for').length,
-          unique_accounts: new Set(meshData.filter(m => m.source_type === 'x_account').map(m => m.source_type)).size,
-          unique_communities: new Set(meshData.filter(m => m.linked_type === 'x_community').map(m => m.linked_type)).size
-        };
-        setMeshStats(stats);
+      if (!meshSummaryError && meshSummary) {
+        setMeshStats({
+          total_links: Number(meshSummary.total_links) || 0,
+          admin_links: Number(meshSummary.admin_links) || 0,
+          mod_links: Number(meshSummary.mod_links) || 0,
+          co_mod_links: Number(meshSummary.co_mod_links) || 0,
+          token_links: Number(meshSummary.token_links) || 0,
+          unique_accounts: Number(meshSummary.unique_accounts) || 0,
+          unique_communities: Number(meshSummary.unique_communities) || 0
+        });
+      } else {
+        // Fallback to direct query if materialized view not yet populated
+        console.log('Materialized view not available, using fallback query');
+        const { data: meshData } = await supabase
+          .from('reputation_mesh')
+          .select('relationship, source_type, linked_type')
+          .in('relationship', ['admin_of', 'mod_of', 'co_mod', 'community_for']);
+
+        if (meshData) {
+          setMeshStats({
+            total_links: meshData.length,
+            admin_links: meshData.filter(m => m.relationship === 'admin_of').length,
+            mod_links: meshData.filter(m => m.relationship === 'mod_of').length,
+            co_mod_links: meshData.filter(m => m.relationship === 'co_mod').length,
+            token_links: meshData.filter(m => m.relationship === 'community_for').length,
+            unique_accounts: new Set(meshData.filter(m => m.source_type === 'x_account').map(m => m.source_type)).size,
+            unique_communities: new Set(meshData.filter(m => m.linked_type === 'x_community').map(m => m.linked_type)).size
+          });
+        }
       }
 
-      // Detect rotation patterns (accounts appearing in multiple communities)
+      // Use server-side Postgres function for rotation patterns (SCALING FIX)
       const { data: rotationData, error: rotationError } = await supabase
-        .from('reputation_mesh')
-        .select('source_id, linked_id, relationship')
-        .eq('source_type', 'x_account')
-        .eq('linked_type', 'x_community')
-        .in('relationship', ['admin_of', 'mod_of']);
+        .rpc('get_rotation_patterns', { 
+          min_communities: 2, 
+          result_limit: PAGE_SIZE,
+          result_offset: 0
+        });
 
       if (!rotationError && rotationData) {
-        const accountMap = new Map<string, { admin: Set<string>; mod: Set<string> }>();
-        
-        for (const link of rotationData) {
-          if (!accountMap.has(link.source_id)) {
-            accountMap.set(link.source_id, { admin: new Set(), mod: new Set() });
-          }
-          const entry = accountMap.get(link.source_id)!;
-          if (link.relationship === 'admin_of') {
-            entry.admin.add(link.linked_id);
-          } else {
-            entry.mod.add(link.linked_id);
-          }
-        }
-
-        // Get co-mod relationships
-        const { data: coModData } = await supabase
-          .from('reputation_mesh')
-          .select('source_id, linked_id')
-          .eq('relationship', 'co_mod');
-
-        const coModMap = new Map<string, Set<string>>();
-        for (const link of coModData || []) {
-          if (!coModMap.has(link.source_id)) coModMap.set(link.source_id, new Set());
-          coModMap.get(link.source_id)!.add(link.linked_id);
-        }
-
-        // Build patterns for accounts in 2+ communities
-        const patterns: RotationPattern[] = [];
-        for (const [account, data] of accountMap.entries()) {
-          const totalCommunities = data.admin.size + data.mod.size;
-          if (totalCommunities >= 2) {
-            patterns.push({
-              account,
-              communities_admin: Array.from(data.admin),
-              communities_mod: Array.from(data.mod),
-              co_mods: Array.from(coModMap.get(account) || []),
-              linked_tokens: 0, // Will be enriched
-              risk_score: Math.min(100, totalCommunities * 15 + (coModMap.get(account)?.size || 0) * 5)
-            });
-          }
-        }
-
-        // Sort by risk score
-        patterns.sort((a, b) => b.risk_score - a.risk_score);
-        setRotationPatterns(patterns.slice(0, 50));
+        const patterns: RotationPattern[] = (rotationData as ServerRotationPattern[]).map(p => ({
+          account: p.account,
+          admin_communities: p.admin_communities || [],
+          mod_communities: p.mod_communities || [],
+          co_mod_count: Number(p.co_mod_count) || 0,
+          total_communities: Number(p.total_communities) || 0,
+          risk_score: p.risk_score
+        }));
+        setRotationPatterns(patterns);
+        setHasMoreRotations(patterns.length === PAGE_SIZE);
       }
 
     } catch (err: any) {
@@ -167,7 +175,47 @@ export function TeamIntelDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [PAGE_SIZE]);
+
+  const loadMoreTeams = async () => {
+    const nextPage = teamsPage + 1;
+    const { data: moreTeams, error } = await supabase
+      .from('dev_teams')
+      .select('*')
+      .eq('is_active', true)
+      .order('tokens_created', { ascending: false })
+      .range(nextPage * PAGE_SIZE, (nextPage + 1) * PAGE_SIZE - 1);
+
+    if (!error && moreTeams) {
+      setTeams(prev => [...prev, ...moreTeams]);
+      setTeamsPage(nextPage);
+      setHasMoreTeams(moreTeams.length === PAGE_SIZE);
+    }
+  };
+
+  const loadMoreRotations = async () => {
+    const nextPage = rotationsPage + 1;
+    const { data: moreRotations, error } = await supabase
+      .rpc('get_rotation_patterns', {
+        min_communities: 2,
+        result_limit: PAGE_SIZE,
+        result_offset: nextPage * PAGE_SIZE
+      });
+
+    if (!error && moreRotations) {
+      const patterns: RotationPattern[] = (moreRotations as ServerRotationPattern[]).map(p => ({
+        account: p.account,
+        admin_communities: p.admin_communities || [],
+        mod_communities: p.mod_communities || [],
+        co_mod_count: Number(p.co_mod_count) || 0,
+        total_communities: Number(p.total_communities) || 0,
+        risk_score: p.risk_score
+      }));
+      setRotationPatterns(prev => [...prev, ...patterns]);
+      setRotationsPage(nextPage);
+      setHasMoreRotations(patterns.length === PAGE_SIZE);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -184,8 +232,8 @@ export function TeamIntelDashboard() {
         rotation_accounts: rotationPatterns.length,
         top_rotators: rotationPatterns.slice(0, 5).map(p => ({
           account: p.account,
-          communities: p.communities_admin.length + p.communities_mod.length,
-          co_mods: p.co_mods.length
+          communities: p.admin_communities.length + p.mod_communities.length,
+          co_mod_count: p.co_mod_count
         })),
         teams_sample: teams.slice(0, 10).map(t => ({
           wallets: t.member_wallets.length,
@@ -298,7 +346,7 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
 
       {/* Actions */}
       <div className="flex items-center gap-3">
-        <Button variant="outline" onClick={fetchData} disabled={loading}>
+        <Button variant="outline" onClick={() => fetchData(true)} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
@@ -566,18 +614,18 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Crown className="h-4 w-4 text-yellow-400" />
-                              <span className="font-mono">{pattern.communities_admin.length}</span>
+                              <span className="font-mono">{pattern.admin_communities.length}</span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Shield className="h-4 w-4 text-blue-400" />
-                              <span className="font-mono">{pattern.communities_mod.length}</span>
+                              <span className="font-mono">{pattern.mod_communities.length}</span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="font-mono">
-                              {pattern.co_mods.length}
+                              {pattern.co_mod_count}
                             </Badge>
                           </TableCell>
                           <TableCell>
