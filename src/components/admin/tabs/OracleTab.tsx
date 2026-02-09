@@ -9,6 +9,7 @@ import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 
 const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 const XCommunityManager = lazy(() => import("@/components/admin/oracle/XCommunityManager"));
+const TeamIntelDashboard = lazy(() => import("@/components/admin/oracle/TeamIntelDashboard"));
 
 const OracleTab = () => {
   const [activeSubTab, setActiveSubTab] = useState("lookup");
@@ -34,6 +35,9 @@ const OracleTab = () => {
           <TabsTrigger value="communities" className="data-[state=active]:bg-primary/20">
             🏠 X Communities
           </TabsTrigger>
+          <TabsTrigger value="team-intel" className="data-[state=active]:bg-primary/20">
+            🔗 Team Intel
+          </TabsTrigger>
           <TabsTrigger value="pipeline" className="data-[state=active]:bg-primary/20">
             🕸️ Mesh Pipeline
           </TabsTrigger>
@@ -44,7 +48,7 @@ const OracleTab = () => {
             📅 Historical Backfill
           </TabsTrigger>
           <TabsTrigger value="mesh" className="data-[state=active]:bg-primary/20">
-            🔗 Mesh Viewer
+            🗺️ Mesh Viewer
           </TabsTrigger>
         </TabsList>
 
@@ -61,6 +65,12 @@ const OracleTab = () => {
         <TabsContent value="pipeline" className="space-y-4">
           <Suspense fallback={<LazyLoader />}>
             <MeshPipelineDashboard />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="team-intel" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <TeamIntelDashboard />
           </Suspense>
         </TabsContent>
 
