@@ -2,7 +2,9 @@ import React, { useState, useEffect, lazy, Suspense, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRoles } from "@/hooks/useUserRoles";
+import { useAuth } from "@/hooks/useAuth";
 import { AlertTriangle } from "lucide-react";
+import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBadge";
 import { LazyLoader } from "@/components/ui/lazy-loader";
@@ -33,6 +35,7 @@ TabLoader.displayName = 'TabLoader';
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("utilities");
   const { isSuperAdmin, isLoading } = useUserRoles();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -42,7 +45,12 @@ export default function SuperAdmin() {
     }
   }, []);
 
-  if (isLoading) {
+  // Redirect unauthenticated users to auth page
+  if (!authLoading && !isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (isLoading || authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
