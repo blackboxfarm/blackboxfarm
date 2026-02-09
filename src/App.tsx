@@ -12,6 +12,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { UserRolesProvider } from "@/contexts/UserRolesContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { useDomainRedirect } from "@/hooks/useDomainRedirect";
+import { SuperAdminRoute } from "@/components/guards/SuperAdminRoute";
 
 // Lazy load all pages for code splitting
 const BlackBox = lazy(() => import("./pages/BlackBox"));
@@ -79,11 +80,11 @@ const App = () => {
                     <Routes>
                       <Route path="/" element={<BlackBox />} />
                       <Route path="/auth" element={<Auth />} />
-                      <Route path="/admin" element={<Index />} />
-                      <Route path="/bb" element={<BumpBot />} />
+                      <Route path="/admin" element={<SuperAdminRoute><Index /></SuperAdminRoute>} />
+                      <Route path="/bb" element={<SuperAdminRoute><BumpBot /></SuperAdminRoute>} />
                       <Route path="/blackbox" element={<BlackBox />} />
                       <Route path="/competitive-analysis" element={<CompetitiveAnalysis />} />
-                      <Route path="/community-wallet" element={<CommunityWallet />} />
+                      <Route path="/community-wallet" element={<SuperAdminRoute><CommunityWallet /></SuperAdminRoute>} />
                       <Route path="/reset-password" element={<ResetPassword />} />
                       <Route path="/terms" element={<TermsOfService />} />
                       <Route path="/tos" element={<TOS />} />
@@ -105,11 +106,11 @@ const App = () => {
                       <Route path="/my-banners" element={<MyBanners />} />
                       <Route path="/banner-checkout/:orderId" element={<BannerCheckout />} />
                       <Route path="/banner-preview/:orderId" element={<BannerPreview />} />
-                      <Route path="/copy-trading" element={<CopyTrading />} />
-                      <Route path="/breadcrumbs" element={<BreadCrumbs />} />
-                      <Route path="/helius-usage" element={<HeliusUsage />} />
-                      <Route path="/token-analysis" element={<TokenAnalysisDownload />} />
-                      <Route path="/share-card-demo" element={<ShareCardDemoPage />} />
+                      <Route path="/copy-trading" element={<SuperAdminRoute><CopyTrading /></SuperAdminRoute>} />
+                      <Route path="/breadcrumbs" element={<SuperAdminRoute><BreadCrumbs /></SuperAdminRoute>} />
+                      <Route path="/helius-usage" element={<SuperAdminRoute><HeliusUsage /></SuperAdminRoute>} />
+                      <Route path="/token-analysis" element={<SuperAdminRoute><TokenAnalysisDownload /></SuperAdminRoute>} />
+                      <Route path="/share-card-demo" element={<SuperAdminRoute><ShareCardDemoPage /></SuperAdminRoute>} />
                       <Route path="/bumpbot" element={<BumpBotLanding />} />
                       <Route path="/volumebot" element={<VolumeBotLanding />} />
                       <Route path="/holders-info" element={<HoldersLanding />} />
@@ -118,8 +119,8 @@ const App = () => {
                       <Route path="/api" element={<ApiLanding />} />
                       <Route path="/api-docs" element={<ApiDocsLanding />} />
                       <Route path="/ai-analysis" element={<AIAnalysis />} />
-                      <Route path="/socials" element={<Socials />} />
-                      <Route path="/oracle" element={<Oracle />} />
+                      <Route path="/socials" element={<SuperAdminRoute><Socials /></SuperAdminRoute>} />
+                      <Route path="/oracle" element={<SuperAdminRoute><Oracle /></SuperAdminRoute>} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
