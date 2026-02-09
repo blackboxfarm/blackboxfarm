@@ -314,6 +314,85 @@ Deno.serve(async (req) => {
         }
       }
 
+      // === CREATE REPUTATION MESH LINKS ===
+      const meshLinks: any[] = [];
+      const now = new Date().toISOString();
+
+      // Admin links: X account → admin_of → X community
+      for (const admin of communityData.adminUsernames) {
+        meshLinks.push({
+          source_type: 'x_account',
+          source_id: admin.toLowerCase(),
+          linked_type: 'x_community',
+          linked_id: communityId,
+          relationship: 'admin_of',
+          confidence: 100,
+          discovered_via: 'x_community_enricher',
+          metadata: { scraped_at: now }
+        });
+      }
+
+      // Mod links: X account → mod_of → X community
+      for (const mod of communityData.moderatorUsernames) {
+        meshLinks.push({
+          source_type: 'x_account',
+          source_id: mod.toLowerCase(),
+          linked_type: 'x_community',
+          linked_id: communityId,
+          relationship: 'mod_of',
+          confidence: 100,
+          discovered_via: 'x_community_enricher',
+          metadata: { scraped_at: now }
+        });
+      }
+
+      // Co-mod links: all admins/mods are co-mods with each other
+      const allStaff = [...communityData.adminUsernames, ...communityData.moderatorUsernames];
+      for (let i = 0; i < allStaff.length; i++) {
+        for (let j = i + 1; j < allStaff.length; j++) {
+          meshLinks.push({
+            source_type: 'x_account',
+            source_id: allStaff[i].toLowerCase(),
+            linked_type: 'x_account',
+            linked_id: allStaff[j].toLowerCase(),
+            relationship: 'co_mod',
+            confidence: 90,
+            discovered_via: 'x_community_enricher',
+            metadata: { community_id: communityId, scraped_at: now }
+          });
+        }
+      }
+
+      // Community → token links
+      for (const tokenMint of linkedTokenMints) {
+        meshLinks.push({
+          source_type: 'x_community',
+          source_id: communityId,
+          linked_type: 'token',
+          linked_id: tokenMint,
+          relationship: 'community_for',
+          confidence: 95,
+          discovered_via: 'x_community_enricher',
+          metadata: { scraped_at: now }
+        });
+      }
+
+      // Batch upsert mesh links
+      if (meshLinks.length > 0) {
+        const { error: meshError } = await supabase
+          .from('reputation_mesh')
+          .upsert(meshLinks, { 
+            onConflict: 'source_type,source_id,linked_type,linked_id,relationship',
+            ignoreDuplicates: true 
+          });
+        
+        if (meshError) {
+          console.warn('Failed to upsert mesh links:', meshError.message);
+        } else {
+          console.log(`Created ${meshLinks.length} mesh links for community ${communityId}`);
+        }
+      }
+
       // Trigger team detection if enabled
       if (triggerTeamDetection && (linkedTokenMint || linkedWallet)) {
         await supabase.functions.invoke('blacklist-enricher', {
