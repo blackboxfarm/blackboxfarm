@@ -72,7 +72,7 @@ serve(async (req) => {
             walletPool.map(async (wallet: any) => ({
               session_id: session.id,
               pubkey: wallet.pubkey,
-              secret_key: await SecureStorage.encryptWalletSecret(wallet.secret),
+              secret_key_encrypted: 'AES:' + await SecureStorage.encryptWalletSecret(wallet.secret),
               sol_balance: wallet.balance
             }))
           );
