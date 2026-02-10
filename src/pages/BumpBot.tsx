@@ -99,7 +99,8 @@ const BumpBot = () => {
   const [usdToBuy, setUsdToBuy] = useState<string>("25");
   const [slippageBps, setSlippageBps] = useState<number>(100);
   const [swapping, setSwapping] = useState(false);
-  const ownerSecret = useMemo(() => secrets?.tradingPrivateKey || poolWallets[0]?.secretBase58 || "", [secrets?.tradingPrivateKey, poolWallets]);
+  const activeWalletId = useMemo(() => poolWallets[0]?.id || "", [poolWallets]);
+  const hasWallet = useMemo(() => !!displayPubkey, [displayPubkey]);
   const [autoTrading, setAutoTrading] = useState(false);
   const autoTimer = useRef<number | null>(null);
   const autoActive = useRef(false);
@@ -179,8 +180,8 @@ const BumpBot = () => {
 
   // Swap actions
   const invokeSwap = useCallback(async (body: any) => {
-    if (!ownerSecret) {
-      toast.error("No wallet secret found. Add a wallet in Wallet Pool.");
+    if (!hasWallet) {
+      toast.error("No wallet found. Add a wallet in Wallet Pool.");
       return { error: "no-owner" } as const;
     }
     if (!secrets?.functionToken) {
@@ -188,14 +189,14 @@ const BumpBot = () => {
       return { error: "no-function-token" } as const;
     }
     console.log("Invoking swap with:", { 
-      body: { ...body, ownerSecret: ownerSecret.slice(0, 8) + "..." }, 
+      body: { ...body, walletId: activeWalletId }, 
       hasFunctionToken: !!secrets?.functionToken 
     });
     try {
       const headers: Record<string, string> = {};
       if (secrets?.functionToken) headers["x-function-token"] = secrets.functionToken;
       const { data, error } = await supabase.functions.invoke("raydium-swap", {
-        body: { confirmPolicy: "processed", slippageBps, ownerSecret, ...body },
+        body: { confirmPolicy: "processed", slippageBps, walletId: activeWalletId, walletSource: "wallet_pools", ...body },
         headers,
       });
       if (error) {
@@ -210,7 +211,7 @@ const BumpBot = () => {
       toast.error(String(e?.message || e) || "Swap error");
       return { error: e } as const;
     }
-  }, [ownerSecret, secrets?.functionToken, slippageBps]);
+  }, [hasWallet, activeWalletId, secrets?.functionToken, slippageBps]);
 
   const onBuy = useCallback(async () => {
     const mint = tokenMint.trim();
@@ -244,7 +245,7 @@ const BumpBot = () => {
   // BumpBot logic - buys fixed amount at regular intervals, sells after N buys
   const startBumpBot = useCallback(async () => {
     if (!tokenMint.trim()) return toast.error("Enter a token mint first");
-    if (!ownerSecret) return toast.error("No wallet secret found");
+    if (!hasWallet) return toast.error("No wallet found");
     if (bumpBotRunning.current) return;
     
     bumpBotRunning.current = true;
@@ -318,7 +319,7 @@ const BumpBot = () => {
     
     buyLoop(); // Start immediately
     if (!running) setRunning(true);
-  }, [tokenMint, ownerSecret, usdToBuy, bumpBotDelaySec, bumpBotBuyCount, invokeSwap, refresh, running]);
+  }, [tokenMint, hasWallet, usdToBuy, bumpBotDelaySec, bumpBotBuyCount, invokeSwap, refresh, running]);
 
   const stopBumpBot = useCallback(() => {
     bumpBotRunning.current = false;
@@ -333,7 +334,7 @@ const BumpBot = () => {
   // Auto-trade loop (buy random $0.50–$3, sell after 3 minutes)
   const startAuto = useCallback(async () => {
     if (!tokenMint.trim()) return toast.error("Enter a token mint first");
-    if (!ownerSecret) return toast.error("No wallet secret found");
+    if (!hasWallet) return toast.error("No wallet found");
     if (autoActive.current) return;
     autoActive.current = true;
     setAutoTrading(true);
@@ -360,7 +361,7 @@ const BumpBot = () => {
       }, next);
     }, 180000);
     if (!running) setRunning(true);
-  }, [tokenMint, ownerSecret, onBuy, onSellAll, running]);
+  }, [tokenMint, hasWallet, onBuy, onSellAll, running]);
 
   const stopAuto = useCallback(() => {
     autoActive.current = false;
@@ -539,7 +540,7 @@ const BumpBot = () => {
                 <div className="flex items-end gap-2 sm:col-span-1">
                   <Button 
                     onClick={onBuy} 
-                    disabled={swapping || !tokenMint || !ownerSecret}
+                    disabled={swapping || !tokenMint || !hasWallet}
                     className="tech-button"
                   >
                     Buy
@@ -547,7 +548,7 @@ const BumpBot = () => {
                   <Button 
                     variant="secondary" 
                     onClick={onSellAll} 
-                    disabled={swapping || !tokenMint || !ownerSecret}
+                    disabled={swapping || !tokenMint || !hasWallet}
                     className="bg-destructive hover:bg-destructive/80 text-destructive-foreground"
                   >
                     Sell All
@@ -601,7 +602,7 @@ const BumpBot = () => {
                       <Button 
                         variant="default" 
                         onClick={startBumpBot} 
-                        disabled={bumpBotActive || swapping || !tokenMint || !ownerSecret}
+                        disabled={bumpBotActive || swapping || !tokenMint || !hasWallet}
                         className="bg-primary text-primary-foreground hover:bg-primary/90"
                       >
                         Start BumpBot
@@ -673,7 +674,7 @@ const BumpBot = () => {
                   <Button 
                     variant="outline" 
                     onClick={startAuto} 
-                    disabled={autoTrading || swapping || !tokenMint || !ownerSecret}
+                    disabled={autoTrading || swapping || !tokenMint || !hasWallet}
                     className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
                   >
                     Start Auto

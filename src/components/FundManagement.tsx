@@ -16,7 +16,7 @@ import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 interface FundManagementProps {
   wallets: Array<{
     pubkey: string;
-    secretBase58: string;
+    secretBase58?: string;
     balance?: number;
   }>;
   onWalletUpdate: () => void;
@@ -80,6 +80,10 @@ export function FundManagement({ wallets, onWalletUpdate }: FundManagementProps)
         : wallets;
 
       for (const wallet of processWallets) {
+        if (!wallet.secretBase58) {
+          toast({ title: "Key unavailable", description: `${wallet.pubkey.slice(0, 8)}... secret not loaded client-side` });
+          continue;
+        }
         const owner = Keypair.fromSecretKey(bs58.decode(wallet.secretBase58));
         
         switch (selectedAction) {

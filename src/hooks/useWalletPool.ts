@@ -4,7 +4,8 @@ import { Keypair } from "@solana/web3.js";
 import { supabase } from "@/integrations/supabase/client";
 
 export type StoredWallet = {
-  secretBase58: string; // base58-encoded 64-byte secret key
+  id?: string; // database ID for server-side secret lookup
+  secretBase58?: string; // only used locally during generation, NOT persisted to localStorage
   pubkey: string;
 };
 
@@ -27,7 +28,13 @@ function read(): WalletPoolState | null {
 }
 
 function write(v: WalletPoolState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
+  // Strip secrets before persisting to localStorage — only store pubkeys
+  const sanitized: WalletPoolState = {
+    ...v,
+    generated: v.generated.map(w => ({ pubkey: w.pubkey, id: w.id })),
+    custom: v.custom.map(w => ({ pubkey: w.pubkey, id: w.id })),
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }
 
 function genKeypair(): StoredWallet {
@@ -80,8 +87,9 @@ async function loadWalletsFromDatabase(): Promise<StoredWallet[]> {
     if (error) throw error;
     
     return data?.map(row => ({
-      secretBase58: row.secret_key,
+      id: row.id,
       pubkey: row.pubkey
+      // secrets are NOT loaded client-side — edge functions fetch them from DB
     })) || [];
   } catch (error) {
     console.warn('Failed to load wallets from database:', error);

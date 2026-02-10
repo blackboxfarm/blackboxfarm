@@ -13,8 +13,14 @@ export function readSecrets(): Secrets | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (typeof parsed?.rpcUrl === "string" && typeof parsed?.tradingPrivateKey === "string") {
-      return parsed as Secrets;
+    if (typeof parsed?.rpcUrl === "string") {
+      // Strip private key from localStorage on read (security fix)
+      if (parsed.tradingPrivateKey && parsed.tradingPrivateKey !== '***') {
+        parsed.tradingPrivateKey = '***';
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        console.log('[security] Stripped plaintext trading key from localStorage');
+      }
+      return { ...parsed, tradingPrivateKey: parsed.tradingPrivateKey || '***' } as Secrets;
     }
     return null;
   } catch {
