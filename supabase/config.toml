@@ -429,3 +429,6 @@ verify_jwt = false
 
 [functions.holders-og-image]
 verify_jwt = false
+
+[functions.encrypt-wallet-pool]
+verify_jwt = false

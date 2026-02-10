@@ -11886,6 +11886,7 @@ export type Database = {
           last_balance_check: string | null
           pubkey: string
           secret_key: string
+          secret_key_encrypted: string | null
           session_id: string | null
           sol_balance: number | null
           user_id: string
@@ -11897,6 +11898,7 @@ export type Database = {
           last_balance_check?: string | null
           pubkey: string
           secret_key: string
+          secret_key_encrypted?: string | null
           session_id?: string | null
           sol_balance?: number | null
           user_id: string
@@ -11908,6 +11910,7 @@ export type Database = {
           last_balance_check?: string | null
           pubkey?: string
           secret_key?: string
+          secret_key_encrypted?: string | null
           session_id?: string | null
           sol_balance?: number | null
           user_id?: string
