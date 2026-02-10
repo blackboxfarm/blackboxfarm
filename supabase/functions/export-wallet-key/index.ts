@@ -9,7 +9,7 @@ const corsHeaders = {
 
 // Wallet source configurations
 const WALLET_SOURCES = [
-  { table: 'wallet_pools', secretCol: 'secret_key', encrypted: false },
+  { table: 'wallet_pools', secretCol: 'secret_key_encrypted', encrypted: true },
   { table: 'blackbox_wallets', secretCol: 'secret_key_encrypted', encrypted: true },
   { table: 'super_admin_wallets', secretCol: 'secret_key_encrypted', encrypted: true },
   { table: 'airdrop_wallets', secretCol: 'secret_key_encrypted', encrypted: true },

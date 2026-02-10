@@ -852,8 +852,8 @@ serve(async (req) => {
         let walletSecret: string | null = null;
 
         for (const table of tables) {
-          // wallet_pools uses 'secret_key' not 'secret_key_encrypted'
-          const secretCol = table === 'wallet_pools' ? 'secret_key' : 'secret_key_encrypted';
+          // All wallet tables now use secret_key_encrypted
+          const secretCol = 'secret_key_encrypted';
           const { data, error } = await supabaseAdmin
             .from(table)
             .select(secretCol)

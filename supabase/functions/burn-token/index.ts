@@ -110,9 +110,9 @@ serve(async (req) => {
 
     console.log(`[burn-token] Burning token ${token_mint} from ${wallet_source}/${wallet_id}`);
 
-    // Determine secret column based on source
-    const secretCol = wallet_source === 'wallet_pools' ? 'secret_key' : 'secret_key_encrypted';
-    const isEncrypted = wallet_source !== 'wallet_pools';
+    // All wallet tables now use secret_key_encrypted
+    const secretCol = 'secret_key_encrypted';
+    const isEncrypted = true;
 
     // Fetch wallet
     const { data: wallet, error: fetchError } = await supabase
