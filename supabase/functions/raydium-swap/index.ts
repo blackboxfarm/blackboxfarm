@@ -11,6 +11,7 @@ import {
   TransactionInstruction,
 } from "npm:@solana/web3.js@1.95.3";
 import { SecureStorage } from "../_shared/encryption.ts";
+import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
 // Lightweight ATA helper (avoid @solana/spl-token dependency)
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
@@ -869,44 +870,14 @@ serve(async (req) => {
           if (rawSecret) {
             console.log(`Found wallet in ${table}`);
             walletSecret = rawSecret;
-            // wallet_pools stores plain base58, others are usually encrypted.
-            // Some legacy rows may still be stored plaintext even in *_encrypted columns;
-            // if decryption fails, fall back to treating it as a raw secret (base58/JSON).
-            if (table === 'wallet_pools') {
-              secretToUse = String(rawSecret); // Already plaintext
-              console.log(`Using plaintext secret from wallet_pools`);
-            } else {
-              const raw = String(rawSecret).trim();
-              try {
-                secretToUse = await SecureStorage.decryptWalletSecret(raw);
-                console.log(`Decrypted wallet secret for ${walletId}`);
-              } catch (e) {
-                // Fallback: if it looks like a real Solana secret (base58 or JSON array), use it directly
-                let looksPlain = false;
-                try {
-                  const decoded = bs58.decode(raw);
-                  looksPlain = decoded.length === 64 || decoded.length === 32;
-                } catch {
-                  // not base58
-                }
-
-                if (!looksPlain && raw.startsWith('[')) {
-                  try {
-                    const arr = JSON.parse(raw);
-                    looksPlain = Array.isArray(arr) && arr.length >= 32;
-                  } catch {
-                    // not JSON
-                  }
-                }
-
-                if (looksPlain) {
-                  secretToUse = raw;
-                  console.log(`Wallet secret appears plaintext in ${table}; using directly for ${walletId}`);
-                } else {
-                  console.error(`Failed to decrypt wallet secret for ${walletId} in ${table}`);
-                  throw e;
-                }
-              }
+            // All wallet tables now use encrypted secrets - use decryptWalletSecretAuto for universal decryption
+            const raw = String(rawSecret).trim();
+            try {
+              secretToUse = await decryptWalletSecretAuto(raw);
+              console.log(`Decrypted wallet secret for ${walletId} from ${table}`);
+            } catch (e) {
+              console.error(`Failed to decrypt wallet secret for ${walletId} in ${table}:`, e);
+              throw e;
             }
             break;
           }

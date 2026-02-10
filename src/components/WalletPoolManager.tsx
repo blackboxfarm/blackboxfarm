@@ -58,6 +58,7 @@ export default function WalletPoolManager() {
     if (!conn) return toast({ title: "RPC missing", description: "Set RPC URL in Secrets" });
     try {
       const w = wallets[idx]!;
+      if (!w.secretBase58) return toast({ title: "Key unavailable", description: "Wallet secret not loaded client-side. Use server-side operations." });
       const owner = Keypair.fromSecretKey(bs58.decode(w.secretBase58));
       const override = overrideAddr ? new PublicKey(overrideAddr) : null;
       const sig = await refundToFunder({ connection: conn, owner, overrideDestination: override });
@@ -72,6 +73,7 @@ export default function WalletPoolManager() {
     if (!conn) return toast({ title: "RPC missing", description: "Set RPC URL in Secrets" });
     try {
       const from = wallets[idx]!;
+      if (!from.secretBase58) return toast({ title: "Key unavailable", description: "Wallet secret not loaded client-side. Use server-side operations." });
       const others = wallets.filter((_, i) => i !== idx).map((x) => new PublicKey(x.pubkey));
       const owner = Keypair.fromSecretKey(bs58.decode(from.secretBase58));
       const sig = await splitEvenly({ connection: conn, owner, targets: others });
