@@ -143,13 +143,41 @@ export default function HeliusUsage() {
     );
   }
 
-  const functionData = stats ? Object.entries(stats.calls_by_function || {}).map(([name, data]) => ({
-    name: name.replace('supabase/functions/', '').slice(0, 20),
-    fullName: name.replace('supabase/functions/', ''),
-    calls: data.calls,
-    credits: data.credits,
-    avg_time: data.avg_time_ms
-  })).sort((a, b) => b.credits - a.credits) : [];
+  // All 53 functions with Helius tracking enabled
+  const ALL_TRACKED_FUNCTIONS = [
+    'mint-monitor-scanner', 'pumpfun-dev-tracker', 'pumpfun-dev-analyzer',
+    'wallet-behavior-analysis', 'flipit-verify-positions', 'flipit-execute',
+    'check-banner-payment', 'execution-monitor', 'scan-offspring-wallets',
+    'token-mint-watchdog-monitor', 'admin-add-seen-token', 'helius-fast-price',
+    'token-metadata', 'token-metadata-batch', 'get-wallet-balance',
+    'get-wallet-transactions', 'refresh-wallet-balances', 'wallet-monitor',
+    'scalp-mode-validator', 'flipit-preflight', 'offspring-mint-scanner',
+    'banner-refund', 'dust-wallet-monitor', 'developer-wallet-rescan',
+    'token-creator-linker', 'telegram-channel-monitor', 'oracle-unified-lookup',
+    'developer-enrichment', 'flipit-price-monitor', 'flipit-unified-monitor',
+    'flipit-deep-order-monitor', 'flipit-limit-order-monitor', 'flipit-rebuy-monitor',
+    'flipit-emergency-monitor', 'flipit-repair-positions', 'flipit-import-position',
+    'flipit-cleanup-phantom-positions', 'pumpfun-buy-executor', 'pumpfun-sell-monitor',
+    'pumpfun-curve-analyzer', 'pumpfun-early-trade-analyzer', 'pumpfun-lifecycle-monitor',
+    'pumpfun-vip-monitor', 'pumpfun-watchlist-monitor', 'pumpfun-fantasy-executor',
+    'pumpfun-fantasy-sell-monitor', 'pumpfun-kol-tracker', 'liquidity-lock-checker',
+    'whale-transaction-dump', 'wallet-investigator', 'wallet-genealogy-scanner',
+    'wallet-sns-lookup', 'developer-token-scanner'
+  ];
+
+  const activeFunctionMap = stats?.calls_by_function || {};
+
+  const functionData = ALL_TRACKED_FUNCTIONS.map((fn) => {
+    const key = Object.keys(activeFunctionMap).find(k => k.includes(fn)) || fn;
+    const data = activeFunctionMap[key];
+    return {
+      name: fn.slice(0, 20),
+      fullName: fn,
+      calls: data?.calls || 0,
+      credits: data?.credits || 0,
+      avg_time: data?.avg_time_ms || 0,
+    };
+  }).sort((a, b) => b.credits - a.credits);
 
   const dailyData = stats ? Object.entries(stats.calls_by_day || {})
     .map(([date, calls]) => ({
