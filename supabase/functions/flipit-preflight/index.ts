@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getVenueAwareQuote, detectVenue } from "../_shared/venue-aware-quote.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
 enableHeliusTracking('flipit-preflight');
 
 const corsHeaders = {
@@ -8,17 +9,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-/**
- * FLIPIT PREFLIGHT ENDPOINT
- * 
- * Returns venue-aware executable price quote BEFORE trade execution.
- * Frontend should call this to display accurate price to user before confirmation.
- * 
- * This ensures:
- * 1. User sees the SAME price that will be used for Trade Guard validation
- * 2. User can confirm/reject based on actual executable price, not stale display price
- * 3. No "silent repricing" - full transparency
- */
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -41,21 +31,12 @@ serve(async (req) => {
       );
     }
 
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-    
-    if (!heliusApiKey) {
-      return new Response(
-        JSON.stringify({ error: 'Server configuration error: missing HELIUS_API_KEY' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const heliusApiKey = requireHeliusApiKey();
 
     const solAmountLamports = Math.floor(solAmount * 1e9);
     
-    // Get venue detection first for metadata
     const { venue, isOnCurve } = await detectVenue(tokenMint, heliusApiKey);
     
-    // Get venue-aware quote
     const quote = await getVenueAwareQuote(
       tokenMint,
       solAmountLamports,
@@ -79,7 +60,6 @@ serve(async (req) => {
       );
     }
 
-    // Return comprehensive preflight data
     return new Response(
       JSON.stringify({
         success: true,
@@ -97,9 +77,9 @@ serve(async (req) => {
     );
 
   } catch (err) {
-    console.error('[flipit-preflight] Error:', err);
+    console.error('[flipit-preflight] Error:', redactHeliusSecrets((err as Error).message || 'Internal server error'));
     return new Response(
-      JSON.stringify({ error: err.message || 'Internal server error' }),
+      JSON.stringify({ error: redactHeliusSecrets((err as Error).message || 'Internal server error') }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
