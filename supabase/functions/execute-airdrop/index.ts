@@ -111,7 +111,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
     
     // Get user from auth header
     const authHeader = req.headers.get("Authorization");

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('flipit-verify-positions');
 
 const corsHeaders = {
@@ -236,9 +237,9 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { action = "verify_all", positionId, dryRun = true } = body;
 
-    const heliusKey = Deno.env.get("HELIUS_API_KEY");
+    const heliusKey = getHeliusApiKey();
     const rpcUrl = heliusKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+      ? getHeliusRpcUrl(heliusKey)
       : "https://api.mainnet-beta.solana.com";
 
     console.log(`FlipIt Verify: action=${action}, dryRun=${dryRun}, hasHelius=${!!heliusKey}`);

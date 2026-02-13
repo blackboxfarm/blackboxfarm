@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, requireHeliusApiKey, heliusRestFetch, redactHeliusSecrets } from '../_shared/helius-client.ts';
 enableHeliusTracking('whale-transaction-dump');
 
 const corsHeaders = {
@@ -39,13 +40,9 @@ function calculateBondingProgress(realTokenReserves: number): number {
 }
 
 // Fetch bonding curve state for Pump.fun token
-async function getBondingCurvePercent(mint: string, heliusApiKey: string): Promise<string> {
+async function getBondingCurvePercent(mint: string): Promise<string> {
   try {
-    // Use Helius to get the bonding curve account
-    // The bonding curve PDA is derived from the mint
-    // We'll query DAS API for token info to check if it's still on curve
-    
-    const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+    const response = await fetch(getHeliusRpcUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -82,7 +79,7 @@ async function getBondingCurvePercent(mint: string, heliusApiKey: string): Promi
 }
 
 // Get token metadata including symbol
-async function getTokenMetadata(mints: string[], heliusApiKey: string): Promise<Map<string, {symbol: string, name: string}>> {
+async function getTokenMetadata(mints: string[]): Promise<Map<string, {symbol: string, name: string}>> {
   const result = new Map<string, {symbol: string, name: string}>();
   
   if (mints.length === 0) return result;
@@ -93,10 +90,9 @@ async function getTokenMetadata(mints: string[], heliusApiKey: string): Promise<
     for (let i = 0; i < mints.length; i += batchSize) {
       const batch = mints.slice(i, i + batchSize);
       
-      const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`, {
+      const response = await heliusRestFetch('/v0/token-metadata', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mintAccounts: batch })
+        body: { mintAccounts: batch }
       });
       
       if (!response.ok) continue;
@@ -141,19 +137,11 @@ serve(async (req) => {
       );
     }
 
-    const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
-    if (!HELIUS_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    requireHeliusApiKey(); // Validate key exists upfront
 
     // Track start time - edge functions timeout at ~60s, we'll stop at 50s to be safe
     const startTime = Date.now();
     const MAX_RUNTIME_MS = 50000; // 50 seconds max
-
-    const API_URL = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${HELIUS_API_KEY}`;
     const cutoffTs = Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
     const cutoffDate = new Date(cutoffTs * 1000).toISOString();
 
@@ -182,7 +170,8 @@ serve(async (req) => {
       }
 
       pageCount++;
-      const url = before ? `${API_URL}&before=${before}` : API_URL;
+      const extraParams: Record<string, string> = {};
+      if (before) extraParams.before = before;
       
       console.log(`Page ${pageCount}: fetching... (${results.length} trades)`);
 
@@ -198,7 +187,7 @@ serve(async (req) => {
           break;
         }
         
-        res = await fetch(url);
+        res = await heliusRestFetch(`/v0/addresses/${wallet}/transactions`, { extraParams });
         if (res.ok) break;
         
         if (res.status === 429) {
@@ -337,7 +326,7 @@ serve(async (req) => {
     const timeRemaining = MAX_RUNTIME_MS - (Date.now() - startTime);
     if (uniqueMints.size > 0 && timeRemaining > 5000) {
       console.log(`Fetching metadata for ${uniqueMints.size} tokens (${Math.round(timeRemaining/1000)}s remaining)...`);
-      const metadata = await getTokenMetadata(Array.from(uniqueMints), HELIUS_API_KEY);
+      const metadata = await getTokenMetadata(Array.from(uniqueMints));
       
       for (const r of results) {
         if (r.mint && r.mint !== 'SOL' && metadata.has(r.mint)) {

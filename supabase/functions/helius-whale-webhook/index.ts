@@ -193,9 +193,10 @@ Deno.serve(async (req) => {
           tokenMetadata.set(mint, { symbol: cached.symbol, image: cached.image_uri })
         } else {
           // Fetch from Helius DAS API
-          const heliusKey = Deno.env.get('HELIUS_API_KEY')
+          const { getHeliusApiKey: getKey, getHeliusRpcUrl: getRpcUrl } = await import('../_shared/helius-client.ts')
+          const heliusKey = getKey()
           if (heliusKey) {
-            const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+            const response = await fetch(getRpcUrl(heliusKey), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

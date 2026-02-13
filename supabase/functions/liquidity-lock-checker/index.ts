@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('liquidity-lock-checker');
 import {
   KNOWN_DEX_PROGRAMS,
@@ -282,12 +283,12 @@ serve(async (req) => {
     }
 
     // Method 3: Enhanced LP token distribution and pool analysis
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusApiKey = getHeliusApiKey();
     if (heliusApiKey && !result.isLocked) {
       try {
         console.log('🔍 Analyzing LP token distribution and pool contracts...');
         
-        const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
+        const rpcUrl = getHeliusRpcUrl(heliusApiKey);
         
         const response = await fetch(rpcUrl, {
           method: 'POST',

@@ -3,13 +3,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "https://esm.sh/@solana/web3.js@1.98.0";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 import { SecureStorage } from "../_shared/encryption.ts";
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get("HELIUS_API_KEY")}`;
+const HELIUS_RPC = getHeliusRpcUrl();
 
 async function getLatestInboundFunder(connection: Connection, recipient: PublicKey): Promise<PublicKey | null> {
   try {

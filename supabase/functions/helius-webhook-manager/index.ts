@@ -1,11 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
-
-const HELIUS_API_URL = 'https://api.helius.xyz/v0'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,14 +14,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
-    
-    if (!heliusApiKey) {
-      return new Response(JSON.stringify({ error: 'HELIUS_API_KEY not configured' }), {
-        status: 500,
-        headers: corsHeaders
-      })
-    }
+    const heliusApiKey = requireHeliusApiKey();
 
     const supabase = createClient(supabaseUrl, serviceKey)
     const { action, user_id } = await req.json()
@@ -70,7 +62,7 @@ Deno.serve(async (req) => {
         // Update existing webhook
         console.log(`Updating existing webhook: ${webhookId}`)
         
-        const updateResponse = await fetch(`${HELIUS_API_URL}/webhooks/${webhookId}?api-key=${heliusApiKey}`, {
+        const updateResponse = await fetch(getHeliusRestUrl(`/v0/webhooks/${webhookId}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -111,7 +103,7 @@ Deno.serve(async (req) => {
         // Create new webhook
         console.log('Creating new Helius webhook...')
         
-        const createResponse = await fetch(`${HELIUS_API_URL}/webhooks?api-key=${heliusApiKey}`, {
+        const createResponse = await fetch(getHeliusRestUrl('/v0/webhooks'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -163,7 +155,7 @@ Deno.serve(async (req) => {
       }
 
       const deleteResponse = await fetch(
-        `${HELIUS_API_URL}/webhooks/${config.helius_webhook_id}?api-key=${heliusApiKey}`,
+        getHeliusRestUrl(`/v0/webhooks/${config.helius_webhook_id}`),
         { method: 'DELETE' }
       )
 
@@ -201,7 +193,7 @@ Deno.serve(async (req) => {
 
       // Verify webhook exists on Helius
       const statusResponse = await fetch(
-        `${HELIUS_API_URL}/webhooks/${config.helius_webhook_id}?api-key=${heliusApiKey}`
+        getHeliusRestUrl(`/v0/webhooks/${config.helius_webhook_id}`)
       )
 
       if (!statusResponse.ok) {

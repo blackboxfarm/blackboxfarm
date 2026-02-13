@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "npm:@solana/web3.js@1.87.6";
 import bs58 from "https://esm.sh/bs58@5.0.0";
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,11 +17,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-
-    if (!heliusApiKey) {
-      throw new Error("HELIUS_API_KEY not configured");
-    }
 
     // Auth check
     const authHeader = req.headers.get("Authorization");
@@ -113,8 +109,7 @@ serve(async (req) => {
     }
 
     // Connect to Solana
-    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
-    const connection = new Connection(rpcUrl, "confirmed");
+    const connection = new Connection(getHeliusRpcUrl(), "confirmed");
 
     // Get balance
     const balance = await connection.getBalance(keypair.publicKey);

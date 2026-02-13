@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.87.6";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('flipit-cleanup-phantom-positions');
 
 const corsHeaders = {
@@ -71,9 +72,8 @@ serve(async (req) => {
     const walletMap = new Map(wallets.map(w => [w.id, w.pubkey]));
 
     // Setup RPC connection
-    const heliusKey = Deno.env.get("HELIUS_API_KEY");
-    const rpcUrl = heliusKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+    const rpcUrl = getHeliusApiKey() 
+      ? getHeliusRpcUrl()
       : "https://api.mainnet-beta.solana.com";
     
     const connection = new Connection(rpcUrl, "confirmed");
