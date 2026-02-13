@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from 'npm:@solana/web3.js@1.87.6';
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('check-banner-payment');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

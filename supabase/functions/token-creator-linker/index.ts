@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('token-creator-linker');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

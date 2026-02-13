@@ -6,6 +6,8 @@ import {
   fetchSolPrice,
   type PriceResult 
 } from "../_shared/price-resolver.ts";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('flipit-price-monitor');
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

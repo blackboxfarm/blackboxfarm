@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { validateStaleAlpha } from "../_shared/historical-price.ts";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('telegram-channel-monitor');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

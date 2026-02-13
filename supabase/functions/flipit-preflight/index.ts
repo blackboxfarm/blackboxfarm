@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getVenueAwareQuote, detectVenue } from "../_shared/venue-aware-quote.ts";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('flipit-preflight');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

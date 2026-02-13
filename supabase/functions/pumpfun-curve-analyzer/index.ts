@@ -2,6 +2,8 @@
 // Analyzes emerging bonding curve patterns to identify ideal buy-in opportunities
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('pumpfun-curve-analyzer');
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

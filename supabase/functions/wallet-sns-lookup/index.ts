@@ -1,6 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Connection, PublicKey } from 'npm:@solana/web3.js@1.95.8'
 import { getTwitterRegistry, NameRegistryState } from 'npm:@bonfida/spl-name-service@0.1.51'
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('wallet-sns-lookup');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

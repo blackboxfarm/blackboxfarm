@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('get-wallet-balance');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
