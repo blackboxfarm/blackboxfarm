@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('execution-monitor');
 
 const corsHeaders = {
@@ -38,11 +39,11 @@ serve(async (req) => {
     );
 
     // Get transaction status from Solana
-    const rpcResponse = await fetch(`${Deno.env.get('SOLANA_RPC_URL')}`, {
+    const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || getHeliusRpcUrl();
+    const rpcResponse = await fetch(rpcUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('HELIUS_API_KEY')}`,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -58,11 +59,10 @@ serve(async (req) => {
     // Get detailed transaction info if confirmed
     let detailedTx = null;
     if (txStatus?.confirmationStatus === 'finalized') {
-      const txResponse = await fetch(`${Deno.env.get('SOLANA_RPC_URL')}`, {
+      const txResponse = await fetch(rpcUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('HELIUS_API_KEY')}`,
         },
         body: JSON.stringify({
           jsonrpc: '2.0',

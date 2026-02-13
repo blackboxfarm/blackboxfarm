@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction } from "npm:@solana/web3.js@1.95.3";
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "npm:@solana/spl-token@0.4.0";
 import bs58 from "https://esm.sh/bs58@5.0.0";
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,13 +58,11 @@ serve(async (req) => {
     // Get required secrets
     const tokenMint = Deno.env.get('FUCT_TOKEN_MINT');
     const senderSecret = Deno.env.get('FUCT_SENDER_WALLET_SECRET');
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
 
-    if (!tokenMint || !senderSecret || !heliusApiKey) {
+    if (!tokenMint || !senderSecret) {
       console.error('Missing required secrets:', { 
         hasMint: !!tokenMint, 
-        hasSender: !!senderSecret, 
-        hasHelius: !!heliusApiKey 
+        hasSender: !!senderSecret
       });
       return new Response(JSON.stringify({ error: 'Server configuration error' }), {
         status: 500,
@@ -143,7 +142,7 @@ serve(async (req) => {
     console.log('Created pending claim:', claimRecord.id);
 
     // Setup Solana connection
-    const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, 'confirmed');
+    const connection = new Connection(getHeliusRpcUrl(), 'confirmed');
 
     // Decode sender wallet
     let senderKeypair: Keypair;

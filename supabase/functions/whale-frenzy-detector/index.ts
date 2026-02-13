@@ -53,14 +53,6 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
-
-  if (!heliusApiKey) {
-    return new Response(
-      JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-  }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 

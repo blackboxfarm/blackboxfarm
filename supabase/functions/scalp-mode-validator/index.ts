@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('scalp-mode-validator');
 
 const corsHeaders = {
@@ -60,18 +61,12 @@ async function fetchDexScreenerData(tokenMint: string) {
 }
 
 async function fetchBondingCurvePercent(tokenMint: string): Promise<number | null> {
-  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-  if (!heliusApiKey) return null;
-
   try {
     const { Connection, PublicKey } = await import("npm:@solana/web3.js@1.95.3");
     const PUMP_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
     const seed = new TextEncoder().encode("bonding-curve");
 
-    const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
-      "confirmed"
-    );
+    const connection = new Connection(getHeliusRpcUrl(), "confirmed");
 
     const mint = new PublicKey(tokenMint);
     const [bondingCurvePda] = PublicKey.findProgramAddressSync(

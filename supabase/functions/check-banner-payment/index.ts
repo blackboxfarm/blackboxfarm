@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from 'npm:@solana/web3.js@1.87.6';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('check-banner-payment');
 
 const corsHeaders = {
@@ -100,9 +101,8 @@ serve(async (req) => {
     }
 
     // Check wallet balance on Solana
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    const rpcUrl = heliusApiKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+    const rpcUrl = getHeliusApiKey() 
+      ? getHeliusRpcUrl()
       : 'https://api.mainnet-beta.solana.com';
     const connection = new Connection(rpcUrl);
     

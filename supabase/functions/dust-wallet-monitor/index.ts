@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('dust-wallet-monitor');
 
 const corsHeaders = {
@@ -33,9 +34,8 @@ serve(async (req) => {
     console.log(`[Dust Monitor] Action: ${action}, Whale: ${mega_whale_id || 'all'}`);
 
     // Get RPC URL
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    const rpcUrl = heliusApiKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+    const rpcUrl = getHeliusApiKey() 
+      ? getHeliusRpcUrl()
       : 'https://api.mainnet-beta.solana.com';
 
     if (action === 'initial_balance_check') {

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, getHeliusApiKey, heliusRestFetch } from '../_shared/helius-client.ts';
 enableHeliusTracking('scan-offspring-wallets');
 
 const corsHeaders = {
@@ -29,7 +30,6 @@ serve(async (req) => {
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
@@ -71,13 +71,13 @@ serve(async (req) => {
           activity_count: 0
         };
         
-        if (!heliusApiKey) {
+        if (!getHeliusApiKey()) {
           console.log(`[ScanOffspring] No Helius API key, skipping ${wallet.wallet_address}`);
           return result;
         }
         
         // 1. Get balance
-        const balanceResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+        const balanceResponse = await fetch(getHeliusRpcUrl(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -92,7 +92,7 @@ serve(async (req) => {
         result.current_sol_balance = (balanceData.result?.value || 0) / 1e9;
         
         // 2. Get recent transactions to check for minting and activity
-        const txResponse = await fetch(`https://api.helius.xyz/v0/addresses/${wallet.wallet_address}/transactions?api-key=${heliusApiKey}&limit=20`);
+        const txResponse = await heliusRestFetch(`/v0/addresses/${wallet.wallet_address}/transactions`, { extraParams: { limit: '20' } });
         
         if (txResponse.ok) {
           const transactions = await txResponse.json();
