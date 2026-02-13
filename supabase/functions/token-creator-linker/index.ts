@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('token-creator-linker');
 
 const corsHeaders = {
@@ -15,7 +16,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const heliusKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusKey = getHeliusApiKey();
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { tokenMints } = await req.json();
@@ -36,7 +37,7 @@ Deno.serve(async (req) => {
     for (const tokenMint of tokenMints) {
       try {
         // Get token creation transaction from Helius
-        const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
+        const heliusUrl = getHeliusRpcUrl(heliusKey);
         const response = await fetch(heliusUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

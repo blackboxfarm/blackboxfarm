@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from 'npm:@solana/web3.js@1.87.6';
 import bs58 from 'https://esm.sh/bs58@5.0.0';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('banner-refund');
 
 const corsHeaders = {
@@ -22,7 +23,6 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!;
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!;
 
     // Validate user
@@ -146,7 +146,7 @@ serve(async (req) => {
     const secretKey = new TextDecoder().decode(decryptedData);
     const keypair = Keypair.fromSecretKey(bs58.decode(secretKey));
 
-    const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, 'confirmed');
+    const connection = new Connection(getHeliusRpcUrl(), 'confirmed');
 
     // Get balance
     const balance = await connection.getBalance(keypair.publicKey);

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**
@@ -147,7 +148,7 @@ async function checkMayhemMode(tokenMint: string): Promise<boolean> {
 
 // Fetch token metrics from HELIUS API (PRIMARY FALLBACK - most reliable)
 async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusApiKey = getHeliusApiKey();
   if (!heliusApiKey) {
     console.log(`   ⚠️ HELIUS_API_KEY not set`);
     return null;
@@ -155,7 +156,7 @@ async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
 
   try {
     // Use Helius DAS API for token info
-    const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+    const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

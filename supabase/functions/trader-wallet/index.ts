@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1.95.3";
 import { SecureStorage } from '../_shared/encryption.ts';
+import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 
@@ -88,9 +89,9 @@ serve(async (req) => {
     }
 
     // Build RPC URL from env, preferring SOLANA_RPC_URL, then HELIUS_API_KEY, then public fallback
-    const heliusKey = Deno.env.get("HELIUS_API_KEY");
+    const heliusKey = getHeliusApiKey();
     const rpcUrl = Deno.env.get("SOLANA_RPC_URL") 
-      || (heliusKey ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}` : null)
+      || (heliusKey ? getHeliusRpcUrl(heliusKey) : null)
       || "https://api.mainnet-beta.solana.com";
     const headerSecret = req.headers.get("x-owner-secret");
     const envSecret = Deno.env.get("TRADER_PRIVATE_KEY");

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('pumpfun-dev-analyzer');
 
 const corsHeaders = {
@@ -64,7 +65,7 @@ async function fetchDevTokenHistory(walletAddress: string): Promise<any[]> {
   
   // Fallback to Helius DAS API to get tokens created by this wallet
   console.log(`[DevAnalyzer] Pump.fun failed, trying Helius DAS API...`);
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusApiKey = getHeliusApiKey();
   
   if (!heliusApiKey) {
     console.log(`[DevAnalyzer] No HELIUS_API_KEY, cannot fallback`);
@@ -73,7 +74,7 @@ async function fetchDevTokenHistory(walletAddress: string): Promise<any[]> {
   
   try {
     // Use Helius DAS to search for assets created by this wallet
-    const heliusResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+    const heliusResponse = await fetch(getHeliusRpcUrl(heliusApiKey), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { PublicKey } from 'npm:@solana/web3.js@1.95.3';
 import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
-import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 enableHeliusTracking('token-metadata');
 
@@ -154,7 +154,7 @@ async function fetchPumpFunMetadata(mintAddress: string): Promise<{
 // Helius helper
 async function fetchHeliusMetadata(mintAddress: string, heliusApiKey: string) {
   try {
-    const url = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+    const url = getHeliusRpcUrl(heliusApiKey);
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -398,7 +398,7 @@ serve(async (req) => {
     // Support batch requests with tokenMints array
     if (tokenMints && Array.isArray(tokenMints) && tokenMints.length > 0) {
       console.log(`Batch fetching metadata for ${tokenMints.length} tokens`);
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+      const heliusApiKey = getHeliusApiKey();
       
       const tokens: Array<{ mint: string; symbol: string; name: string }> = [];
       
@@ -468,7 +468,7 @@ serve(async (req) => {
       throw new Error('Invalid mint address format');
     }
 
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusApiKey = getHeliusApiKey();
     const rpcUrl = heliusApiKey 
       ? getHeliusRpcUrl(heliusApiKey)
       : 'https://api.mainnet-beta.solana.com';

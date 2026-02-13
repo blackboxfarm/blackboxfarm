@@ -8,6 +8,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseBuyFromHelius } from "../_shared/helius-api.ts";
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 enableHeliusTracking('flipit-import-position');
 import { fetchSolPrice } from "../_shared/price-resolver.ts";
@@ -36,7 +37,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+    const heliusApiKey = getHeliusApiKey();
 
     if (!heliusApiKey) {
       return bad("HELIUS_API_KEY required");
@@ -74,7 +75,7 @@ serve(async (req) => {
       // Scan wallet history via Helius to find the buy
       console.log(`[import] Scanning wallet history...`);
       
-      const historyUrl = `https://api.helius.xyz/v0/addresses/${walletPubkey}/transactions?api-key=${heliusApiKey}&limit=100`;
+      const historyUrl = getHeliusRestUrl(`/v0/addresses/${walletPubkey}/transactions`, { limit: '100' });
       const historyRes = await fetch(historyUrl);
       
       if (!historyRes.ok) {
@@ -135,7 +136,7 @@ serve(async (req) => {
     let tokenImage: string | null = null;
 
     try {
-      const metaUrl = `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`;
+      const metaUrl = getHeliusRestUrl('/v0/token-metadata');
       const metaRes = await fetch(metaUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

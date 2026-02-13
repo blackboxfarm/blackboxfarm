@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('token-mint-watchdog-monitor');
 
 const corsHeaders = {
@@ -679,7 +680,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -696,7 +697,7 @@ Deno.serve(async (req) => {
       const maxPages = 50
       
       while (pageCount < maxPages) {
-        const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100${beforeSignature ? `&before=${beforeSignature}` : ''}`
+        const url = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { limit: '100', ...(beforeSignature ? { before: beforeSignature } : {}) })
         
         console.log(`Wallet trace page ${pageCount + 1}`)
         
@@ -891,7 +892,7 @@ Deno.serve(async (req) => {
 
     // HELIUS FULL TRANSACTION HISTORY - ALL tx types including transfers
     if (action === 'helius_full_history' && tokenMint) {
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -923,7 +924,7 @@ Deno.serve(async (req) => {
         console.log(`Helius page ${pageCount + 1}, before: ${beforeSignature || 'start'}`)
         
         const response = await fetch(
-          `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=100${beforeSignature ? `&before=${beforeSignature}` : ''}`,
+          getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '100', ...(beforeSignature ? { before: beforeSignature } : {}) }),
           { method: 'GET' }
         )
         
@@ -1179,7 +1180,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -1190,7 +1191,7 @@ Deno.serve(async (req) => {
       console.log(`🌿 Tracing offspring wallets from mint wallet: ${mintWallet}`)
       
       // Fetch mint wallet transaction history
-      const walletTxUrl = `https://api.helius.xyz/v0/addresses/${mintWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+      const walletTxUrl = getHeliusRestUrl(`/v0/addresses/${mintWallet}/transactions`, { limit: '100' })
       const walletTxResponse = await fetch(walletTxUrl)
       
       if (!walletTxResponse.ok) {
@@ -1295,7 +1296,7 @@ Deno.serve(async (req) => {
       for (const offspring of topOffspring) {
         console.log(`Tracing level 2 from offspring: ${offspring.wallet.slice(0, 8)}...`)
         
-        const level2TxUrl = `https://api.helius.xyz/v0/addresses/${offspring.wallet}/transactions?api-key=${heliusApiKey}&limit=50`
+        const level2TxUrl = getHeliusRestUrl(`/v0/addresses/${offspring.wallet}/transactions`, { limit: '50' })
         const level2Response = await fetch(level2TxUrl)
         
         if (!level2Response.ok) continue
@@ -1376,7 +1377,7 @@ Deno.serve(async (req) => {
 
     // TRACE TOKEN GENEALOGY - Find creator wallet and trace to funding source
     if (action === 'trace_token_genealogy' && tokenMint) {
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -1387,7 +1388,7 @@ Deno.serve(async (req) => {
       console.log(`🧬 Tracing genealogy for token: ${tokenMint}`)
       
       // Step 1: Get the earliest transactions for this token to find the minter
-      const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=100`
+      const tokenTxUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '100' })
       console.log(`Fetching token transactions to find creator...`)
       
       const tokenTxResponse = await fetch(tokenTxUrl)
@@ -1475,7 +1476,7 @@ Deno.serve(async (req) => {
       // Step 2: Trace the mint wallet's transaction history to find funding sources
       console.log(`Tracing mint wallet history to find funding sources...`)
       
-      const walletTxUrl = `https://api.helius.xyz/v0/addresses/${mintWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+      const walletTxUrl = getHeliusRestUrl(`/v0/addresses/${mintWallet}/transactions`, { limit: '100' })
       const walletTxResponse = await fetch(walletTxUrl)
       
       if (!walletTxResponse.ok) {
@@ -1583,7 +1584,7 @@ Deno.serve(async (req) => {
       if (parentWallet) {
         console.log(`Tracing parent wallet to find grandparent...`)
         
-        const parentTxUrl = `https://api.helius.xyz/v0/addresses/${parentWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+        const parentTxUrl = getHeliusRestUrl(`/v0/addresses/${parentWallet}/transactions`, { limit: '100' })
         const parentTxResponse = await fetch(parentTxUrl)
         
         if (parentTxResponse.ok) {
@@ -1677,7 +1678,7 @@ Deno.serve(async (req) => {
 
     // TRACE FULL GENEALOGY - Recursively trace back to KYC/CEX wallet
     if (action === 'trace_full_genealogy' && tokenMint) {
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -1812,7 +1813,7 @@ Deno.serve(async (req) => {
       // Fallback to Helius if Solana Tracker didn't work
       if (!mintWallet) {
         console.log(`Falling back to Helius to find creator...`)
-        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
+        const tokenTxUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '50' })
         const tokenTxResponse = await fetch(tokenTxUrl)
         
         if (tokenTxResponse.ok) {
@@ -1967,7 +1968,7 @@ Deno.serve(async (req) => {
         }
         
         // Fetch wallet transactions to find funding sources
-        const walletTxUrl = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=100`
+        const walletTxUrl = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: '100' })
         
         try {
           const walletTxResponse = await fetch(walletTxUrl)
@@ -2225,7 +2226,7 @@ Deno.serve(async (req) => {
     // TRACE MONEY FLOW - Follow money FORWARD (where it goes, not where it came from)
     // This traces outbound transfers from the creator to find splitter wallets and profit extraction
     if (action === 'trace_money_flow' && tokenMint) {
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -2302,7 +2303,7 @@ Deno.serve(async (req) => {
       // Fallback to Helius if Solana Tracker didn't work
       if (!creatorWallet) {
         console.log(`Falling back to Helius to find creator...`)
-        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
+        const tokenTxUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '50' })
         const tokenTxResponse = await fetch(tokenTxUrl)
         
         if (tokenTxResponse.ok) {
@@ -2367,7 +2368,7 @@ Deno.serve(async (req) => {
         }
 
         // Fetch transactions
-        const walletTxUrl = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=200`
+        const walletTxUrl = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: '200' })
         
         try {
           const walletTxResponse = await fetch(walletTxUrl)
@@ -2625,7 +2626,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -2643,7 +2644,7 @@ Deno.serve(async (req) => {
         try {
           // Fetch wallet transactions from Helius
           const response = await fetch(
-            `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100`,
+            getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { limit: '100' }),
             { method: 'GET' }
           )
           
@@ -2787,7 +2788,7 @@ Deno.serve(async (req) => {
 
     // IDENTIFY SPAWNER WALLETS - Main feature: trace token → find wallets likely spawning new mint wallets
     if (action === 'identify_spawner_wallets' && tokenMint) {
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -2817,7 +2818,7 @@ Deno.serve(async (req) => {
 
       // Fallback to Helius
       if (!mintWallet) {
-        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=20`
+        const tokenTxUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '20' })
         const tokenTxResponse = await fetch(tokenTxUrl)
         if (tokenTxResponse.ok) {
           const txs = await tokenTxResponse.json()
@@ -2859,7 +2860,7 @@ Deno.serve(async (req) => {
         console.log(`🔍 Depth ${currentDepth}: Analyzing ${currentWallet.slice(0, 8)}...`)
         
         // Fetch wallet transactions
-        const walletTxUrl = `https://api.helius.xyz/v0/addresses/${currentWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+        const walletTxUrl = getHeliusRestUrl(`/v0/addresses/${currentWallet}/transactions`, { limit: '100' })
         
         try {
           const walletTxResponse = await fetch(walletTxUrl)
@@ -3184,7 +3185,7 @@ Deno.serve(async (req) => {
     // TRACE ANCESTRY FROM TOKEN & AUTO-ADD TO WATCHDOG
     // Starting from a token: find creator → trace 5 levels back → check each for mints → add spawners to watchdog
     if (action === 'trace_ancestry_add_watchdog' && tokenMint) {
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (!heliusApiKey) {
         return new Response(
           JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
@@ -3242,7 +3243,7 @@ Deno.serve(async (req) => {
 
       // Fallback to Helius
       if (!creatorWallet) {
-        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=20`
+        const tokenTxUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '20' })
         const tokenTxResponse = await fetch(tokenTxUrl)
         if (tokenTxResponse.ok) {
           const txs = await tokenTxResponse.json()
@@ -3284,7 +3285,7 @@ Deno.serve(async (req) => {
         console.log(`🔍 Depth ${currentDepth}: ${currentWallet.slice(0, 8)}...`)
 
         try {
-          const walletTxUrl = `https://api.helius.xyz/v0/addresses/${currentWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+          const walletTxUrl = getHeliusRestUrl(`/v0/addresses/${currentWallet}/transactions`, { limit: '100' })
           const walletTxResponse = await fetch(walletTxUrl)
           if (!walletTxResponse.ok) break
 

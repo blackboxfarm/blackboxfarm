@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('offspring-mint-scanner');
 
 const corsHeaders = {
@@ -78,7 +79,7 @@ async function getOutgoingTransfers(
   minAmountSol: number = 0.01
 ): Promise<Array<{ to: string; amount: number; timestamp: string; signature: string }>> {
   try {
-    const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=100`;
+    const url = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: '100' });
     const response = await fetchWithRetry(url, { method: 'GET' });
     
     if (!response.ok) {
@@ -128,7 +129,7 @@ async function getWalletMintedTokens(
   heliusApiKey: string
 ): Promise<MintedToken[]> {
   try {
-    const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=100&type=CREATE`;
+    const url = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: '100', type: 'CREATE' });
     const response = await fetchWithRetry(url, { method: 'GET' });
     
     if (!response.ok) return [];
@@ -181,7 +182,7 @@ async function getWalletMintedTokens(
     
     // Also try to get tokens where this wallet is the update authority/creator
     try {
-      const assetsUrl = `https://api.helius.xyz/v0/addresses/${wallet}/balances?api-key=${heliusApiKey}`;
+      const assetsUrl = getHeliusRestUrl(`/v0/addresses/${wallet}/balances`);
       const assetsResponse = await fetchWithRetry(assetsUrl, { method: 'GET' });
       if (assetsResponse.ok) {
         const assets = await assetsResponse.json();
