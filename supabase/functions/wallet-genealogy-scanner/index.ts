@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('wallet-genealogy-scanner');
 
 const corsHeaders = {
@@ -127,7 +128,7 @@ async function getWalletTransactions(
   heliusApiKey: string,
   limit = 50
 ): Promise<any[]> {
-  const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=${limit}`;
+  const url = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: String(limit) });
   
   try {
     const response = await fetchWithRetry(url, {
@@ -309,13 +310,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-    if (!heliusApiKey) {
-      return new Response(
-        JSON.stringify({ error: "HELIUS_API_KEY not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const heliusApiKey = requireHeliusApiKey();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

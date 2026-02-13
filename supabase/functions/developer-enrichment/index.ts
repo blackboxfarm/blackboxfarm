@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('developer-enrichment');
 
 const corsHeaders = {
@@ -477,14 +478,15 @@ function combineRiskAssessments(
 // ============================================================================
 
 async function findTokenCreator(tokenMint: string): Promise<string | null> {
-  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusKey = getHeliusApiKey();
   if (!heliusKey) {
     console.warn('[developer-enrichment] HELIUS_API_KEY not set');
     return null;
   }
 
   try {
-    const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusKey}`, {
+    const metadataUrl = getHeliusRestUrl('/v0/token-metadata');
+    const response = await fetch(metadataUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mintAccounts: [tokenMint] })
@@ -501,7 +503,8 @@ async function findTokenCreator(tokenMint: string): Promise<string | null> {
     }
 
     // Fallback: try to get from transaction history
-    const txResponse = await fetch(`https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusKey}&type=MINT`);
+    const txUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'MINT' });
+    const txResponse = await fetch(txUrl);
     
     if (txResponse.ok) {
       const txData = await txResponse.json();

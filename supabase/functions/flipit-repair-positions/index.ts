@@ -8,6 +8,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseBuyFromHelius, parseSellFromHelius } from "../_shared/helius-api.ts";
+import { requireHeliusApiKey } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 enableHeliusTracking('flipit-repair-positions');
 import { parseBuyFromSolscan as parseBuyFromSolscanDirect, parseSellFromSolscan as parseSellFromSolscanDirect } from "../_shared/solscan-api.ts";
@@ -88,12 +89,8 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+    const heliusApiKey = requireHeliusApiKey();
     const solscanApiKey = Deno.env.get("SOLSCAN_API_KEY");
-    
-    if (!heliusApiKey) {
-      return bad("HELIUS_API_KEY required");
-    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await req.json().catch(() => ({}));

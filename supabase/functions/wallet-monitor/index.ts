@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('wallet-monitor');
 
 const corsHeaders = {
@@ -38,9 +39,10 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
-
-  if (!heliusApiKey) {
+  let heliusApiKey: string;
+  try {
+    heliusApiKey = requireHeliusApiKey();
+  } catch {
     console.error('HELIUS_API_KEY not configured')
     socket.close(1008, 'Server configuration error')
     return response
@@ -110,7 +112,7 @@ Deno.serve(async (req) => {
   // Function to detect platform
   const detectPlatform = async (signature: string): Promise<string> => {
     try {
-      const response = await fetch(`https://api.helius.xyz/v0/transactions/${signature}?api-key=${heliusApiKey}`)
+      const response = await fetch(getHeliusRestUrl(`/v0/transactions/${signature}`))
       const data = await response.json()
       
       // Check for Raydium program IDs

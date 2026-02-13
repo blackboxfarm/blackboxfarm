@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { heliusFetch, canMakeHeliusCall } from "../_shared/helius-rate-limiter.ts";
+import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -166,7 +167,7 @@ async function detectBundledBuys(
     }
   }
   
-  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusKey = getHeliusApiKey();
   if (!heliusKey) {
     return { bundledCount: existingBundleCount || 0, details: { error: 'No Helius key' }, fromCache: false };
   }
@@ -247,7 +248,7 @@ async function detectBundledBuys(
 async function detectBumpBotActivity(
   mint: string
 ): Promise<{ detected: boolean; microTxCount: number; microTxRatio: number; details: any }> {
-  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusKey = getHeliusApiKey();
   if (!heliusKey) {
     return { detected: false, microTxCount: 0, microTxRatio: 0, details: { error: 'No Helius key' } };
   }
@@ -528,10 +529,9 @@ async function checkTokenAuthorities(
     }
   }
   
-  const heliusKey = Deno.env.get('HELIUS_API_KEY');
-  const { getHeliusRpcUrl: getRpcUrl } = await import('../_shared/helius-client.ts');
+  const heliusKey = getHeliusApiKey();
   const rpcUrl = heliusKey 
-    ? getRpcUrl(heliusKey)
+    ? getHeliusRpcUrl(heliusKey)
     : 'https://api.mainnet-beta.solana.com';
   
   try {

@@ -287,7 +287,8 @@ export async function heliusFetch(
     // Auto-inject X-Api-Key header for Helius REST API calls
     const isHeliusRest = url.includes('api.helius.xyz');
     if (isHeliusRest) {
-      const heliusKey = Deno.env.get('HELIUS_API_KEY');
+      // Import dynamically to avoid circular deps
+      const heliusKey = Deno.env.get('HELIUS_API_KEY'); // Keep direct access here to avoid circular import
       if (heliusKey) {
         const existingHeaders = options.headers instanceof Headers 
           ? Object.fromEntries(options.headers.entries())
