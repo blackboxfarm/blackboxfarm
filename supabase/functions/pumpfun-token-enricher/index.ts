@@ -180,7 +180,7 @@ async function detectBundledBuys(
   
   try {
     // Fetch recent transactions for the token using rate-limited wrapper
-    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`;
+    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?limit=50`;
     const response = await heliusFetch(url, { method: 'GET' }, {
       functionName: 'pumpfun-token-enricher',
       endpoint: 'transactions',
@@ -261,7 +261,7 @@ async function detectBumpBotActivity(
   
   try {
     // Fetch recent transactions using rate-limited wrapper
-    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`;
+    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?limit=50`;
     const response = await heliusFetch(url, { method: 'GET' }, {
       functionName: 'pumpfun-token-enricher',
       endpoint: 'transactions',
@@ -529,8 +529,9 @@ async function checkTokenAuthorities(
   }
   
   const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  const { getHeliusRpcUrl: getRpcUrl } = await import('../_shared/helius-client.ts');
   const rpcUrl = heliusKey 
-    ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+    ? getRpcUrl(heliusKey)
     : 'https://api.mainnet-beta.solana.com';
   
   try {

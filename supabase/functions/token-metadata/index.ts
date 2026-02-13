@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { PublicKey } from 'npm:@solana/web3.js@1.95.3';
 import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 enableHeliusTracking('token-metadata');
 
@@ -469,7 +470,7 @@ serve(async (req) => {
 
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
     const rpcUrl = heliusApiKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+      ? getHeliusRpcUrl(heliusApiKey)
       : 'https://api.mainnet-beta.solana.com';
 
     // Initialize response data

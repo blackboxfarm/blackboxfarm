@@ -12,6 +12,7 @@
  */
 
 import { getVenueAwareQuote, detectVenue, type VenueQuote } from "./venue-aware-quote.ts";
+import { getHeliusRpcUrl, getHeliusApiKey, redactHeliusSecrets } from './helius-client.ts';
 
 export interface TradeGuardConfig {
   maxPricePremiumPct: number;  // e.g., 10 = block if > 10% above display price
@@ -248,7 +249,7 @@ async function fetchOnChainCurveState(tokenMint: string): Promise<{
   virtualTokenReserves: number;
   complete: boolean;
 } | null> {
-  const heliusApiKey = Deno.env.get("HELIUS_API_KEY") || "";
+  const heliusApiKey = getHeliusApiKey() || "";
   if (!heliusApiKey) {
     console.log("[TradeGuard] No HELIUS_API_KEY, skipping on-chain fallback");
     return null;
@@ -258,7 +259,7 @@ async function fetchOnChainCurveState(tokenMint: string): Promise<{
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -592,7 +593,7 @@ export async function validateBuyQuote(
   // - graduated: Jupiter quote
   // ========================================================
   const solAmountLamports = Math.floor(solAmount * 1e9);
-  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+  const heliusApiKey = getHeliusApiKey();
   
   console.log(`[TradeGuard] Fetching VENUE-AWARE quote with slippage: ${slippageBps} bps (${slippageBps / 100}%)`);
   

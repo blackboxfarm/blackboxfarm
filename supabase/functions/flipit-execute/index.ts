@@ -8,6 +8,7 @@ import {
 import { parseBuyFromSolscan } from "../_shared/solscan-api.ts";
 import { validateBuyQuote, getTradeGuardConfig } from "../_shared/trade-guard.ts";
 import { verifyBuyTransaction, updatePositionWithVerifiedBuy } from "../_shared/helius-verify.ts";
+import { getHeliusRpcUrl, getHeliusApiKey } from "../_shared/helius-client.ts";
 import { createExecutionLogger, type ExecutionLogger } from "../_shared/execution-logger.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 enableHeliusTracking('flipit-execute');
@@ -620,9 +621,9 @@ serve(async (req) => {
       // Always fetch fresh balance from RPC (fail closed if RPC errors)
       let walletBalance: number | null = null;
 
-      const heliusKey = Deno.env.get("HELIUS_API_KEY");
+      const heliusKey = getHeliusApiKey();
       const rpcUrls = [
-        ...(heliusKey ? [`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`] : []),
+        ...(heliusKey ? [getHeliusRpcUrl(heliusKey)] : []),
         "https://api.mainnet-beta.solana.com",
         "https://rpc.ankr.com/solana",
       ];
@@ -796,9 +797,9 @@ serve(async (req) => {
       execLog.logPhaseStart('PRE_BUY_BALANCE');
       let preBuyTokenBalance: string | null = null;
       try {
-        const heliusKey = Deno.env.get("HELIUS_API_KEY");
+        const heliusKey = getHeliusApiKey();
         const preBuyRpcUrl = heliusKey 
-          ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+          ? getHeliusRpcUrl(heliusKey)
           : "https://api.mainnet-beta.solana.com";
         
         const preBuyRes = await fetch(preBuyRpcUrl, {
@@ -974,9 +975,9 @@ serve(async (req) => {
             await new Promise(resolve => setTimeout(resolve, 3000));
             
             console.log("Parsing transaction via Helius to get exact token output:", signature);
-            const parseRes = await fetch(`https://api.helius.xyz/v0/transactions/?api-key=${heliusKey}`, {
+            const parseRes = await fetch(`https://api.helius.xyz/v0/transactions/`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", "X-Api-Key": heliusKey },
               body: JSON.stringify({ transactions: [signature] }),
             });
             
@@ -1056,7 +1057,7 @@ serve(async (req) => {
         if (!quantityTokens) {
           try {
             const verifyRpcUrl = heliusKey 
-              ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+              ? getHeliusRpcUrl(heliusKey)
               : "https://api.mainnet-beta.solana.com";
             
             console.log("Fallback: calculating delta from pre/post buy balance");
