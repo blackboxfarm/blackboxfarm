@@ -397,7 +397,7 @@ serve(async (req) => {
     // Support batch requests with tokenMints array
     if (tokenMints && Array.isArray(tokenMints) && tokenMints.length > 0) {
       console.log(`Batch fetching metadata for ${tokenMints.length} tokens`);
-      const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY') || Deno.env.get('HELIUS_API_KEY');
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
       
       const tokens: Array<{ mint: string; symbol: string; name: string }> = [];
       
@@ -467,8 +467,7 @@ serve(async (req) => {
       throw new Error('Invalid mint address format');
     }
 
-    // Uses dedicated HELIUS_HOLDERS_KEY for /holders page functions
-    const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY');
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
     const rpcUrl = heliusApiKey 
       ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
       : 'https://api.mainnet-beta.solana.com';

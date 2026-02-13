@@ -48,8 +48,8 @@ serve(async (req) => {
       userAgent,
     });
 
-    const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY');
-    console.log(`[HELIUS] HOLDERS_KEY ${heliusApiKey ? 'FOUND' : 'NOT FOUND'}`);
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    console.log(`[HELIUS] API_KEY ${heliusApiKey ? 'FOUND' : 'NOT FOUND'}`);
 
     console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint}`);
 
