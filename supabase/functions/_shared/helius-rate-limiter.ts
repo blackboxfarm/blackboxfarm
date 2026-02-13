@@ -284,6 +284,21 @@ export async function heliusFetch(
   const startTime = Date.now();
   
   try {
+    // Auto-inject X-Api-Key header for Helius REST API calls
+    const isHeliusRest = url.includes('api.helius.xyz');
+    if (isHeliusRest) {
+      const heliusKey = Deno.env.get('HELIUS_API_KEY');
+      if (heliusKey) {
+        const existingHeaders = options.headers instanceof Headers 
+          ? Object.fromEntries(options.headers.entries())
+          : (options.headers || {}) as Record<string, string>;
+        options = {
+          ...options,
+          headers: { ...existingHeaders, 'X-Api-Key': heliusKey }
+        };
+      }
+    }
+    
     const response = await fetch(url, options);
     const responseTime = Date.now() - startTime;
     

@@ -66,8 +66,8 @@ async function fetchEarlyTrades(tokenMint: string, heliusApiKey: string, limit =
   console.log(`[Early Trade Analyzer] Fetching first ${limit} trades for ${tokenMint}`);
   
   try {
-    const url = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=${limit}`;
-    const response = await fetch(url);
+    const url = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?limit=${limit}`;
+    const response = await fetch(url, { headers: { 'X-Api-Key': heliusApiKey } });
     
     if (!response.ok) {
       console.error(`[Early Trade Analyzer] Helius API error: ${response.status}`);
@@ -85,8 +85,8 @@ async function fetchEarlyTrades(tokenMint: string, heliusApiKey: string, limit =
 // Detect wallet funding sources to find linked wallets
 async function getWalletFundingSource(walletAddress: string, heliusApiKey: string): Promise<string | null> {
   try {
-    const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=10&type=TRANSFER`;
-    const response = await fetch(url);
+    const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?limit=10&type=TRANSFER`;
+    const response = await fetch(url, { headers: { 'X-Api-Key': heliusApiKey } });
     
     if (!response.ok) return null;
     

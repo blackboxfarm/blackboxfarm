@@ -52,8 +52,9 @@ async function fetchPumpFunCurveOnChain(
   try {
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
 
+    const { getHeliusRpcUrl } = await import('./helius-client.ts');
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -385,8 +386,9 @@ async function checkMeteoraDBC(tokenMint: string, heliusApiKey: string): Promise
   try {
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
+    const { getHeliusRpcUrl } = await import('./helius-client.ts');
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -475,8 +477,9 @@ async function checkRaydiumLaunchlab(tokenMint: string, heliusApiKey: string): P
   try {
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
+    const { getHeliusRpcUrl } = await import('./helius-client.ts');
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -532,8 +535,9 @@ async function computeMeteoraDBC_Quote(
   try {
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
+    const { getHeliusRpcUrl } = await import('./helius-client.ts');
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -611,8 +615,9 @@ async function computeRaydiumLaunchlab_Quote(
   try {
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
+    const { getHeliusRpcUrl } = await import('./helius-client.ts');
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 

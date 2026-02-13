@@ -11,7 +11,8 @@ export async function tryHeliusEnhancedApi(
   const results: Omit<BuyerRow, "rank">[] = [];
   
   try {
-    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+    const { getHeliusRpcUrl } = await import('../helius-client.ts');
+    const rpcUrl = getHeliusRpcUrl(heliusApiKey);
     
     // Use Helius Enhanced Transactions API with mint search
     console.log('Calling Helius Enhanced Transactions API (mint search) for token:', tokenMint);

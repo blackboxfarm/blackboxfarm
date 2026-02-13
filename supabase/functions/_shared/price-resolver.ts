@@ -9,6 +9,7 @@
  */
 
 import { getSolPriceWithLogging } from './sol-price-fetcher.ts';
+import { getHeliusRpcUrl, redactHeliusSecrets } from './helius-client.ts';
 
 // ============================================
 // TYPES
@@ -116,7 +117,7 @@ export async function fetchBondingCurveState(
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -210,7 +211,7 @@ export async function fetchMeteoraDBC(
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -331,7 +332,7 @@ async function fetchMeteoraCurveProgressFromPool(
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -465,7 +466,7 @@ export async function fetchRaydiumLaunchlab(
     const { Connection, PublicKey, TOKEN_PROGRAM_ID } = await import('npm:@solana/web3.js@1.95.3');
     
     const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      getHeliusRpcUrl(heliusApiKey),
       'confirmed'
     );
 
@@ -1100,10 +1101,10 @@ export async function verifyBuyFromChain(
   try {
     // Use Helius enhanced transaction API
     const res = await fetch(
-      `https://api.helius.xyz/v0/transactions/?api-key=${heliusApiKey}`,
+      `https://api.helius.xyz/v0/transactions/`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Api-Key': heliusApiKey },
         body: JSON.stringify({ transactions: [signature] }),
         signal: AbortSignal.timeout(10000)
       }

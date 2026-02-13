@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { getHeliusRpcUrl, getHeliusApiKey, redactHeliusSecrets } from './helius-client.ts';
 
 export interface ProviderConfig {
   provider_name: string;
@@ -83,8 +84,8 @@ export async function getRpcUrl(): Promise<string> {
   
   switch (provider) {
     case 'helius':
-      const heliusKey = Deno.env.get('HELIUS_API_KEY');
-      return heliusKey ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}` : getPublicRpcUrl();
+      const heliusKey = getHeliusApiKey();
+      return heliusKey ? getHeliusRpcUrl(heliusKey) : getPublicRpcUrl();
     case 'shyft':
       const shyftKey = Deno.env.get('SHYFT_API_KEY');
       return shyftKey ? `https://rpc.shyft.to?api_key=${shyftKey}` : getPublicRpcUrl();
@@ -138,13 +139,14 @@ export async function fetchTransactionHistory(
 }
 
 async function fetchHeliusTransactions(wallet: string, limit: number): Promise<RpcResult<any[]>> {
-  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusKey = getHeliusApiKey();
   if (!heliusKey) {
     throw new Error('HELIUS_API_KEY not configured');
   }
 
   const response = await fetch(
-    `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusKey}&limit=${limit}`
+    `https://api.helius.xyz/v0/addresses/${wallet}/transactions?limit=${limit}`,
+    { headers: { 'X-Api-Key': heliusKey } }
   );
 
   if (!response.ok) {
