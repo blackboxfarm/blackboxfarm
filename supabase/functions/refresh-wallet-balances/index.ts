@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Connection, PublicKey } from "npm:@solana/web3.js@1.95.3";
 import { TOKEN_PROGRAM_ID } from "npm:@solana/spl-token@0.4.6";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('refresh-wallet-balances');
 
 // KILL SWITCH - Set to true to disable function
 const FUNCTION_DISABLED = false;

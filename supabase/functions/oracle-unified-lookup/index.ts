@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

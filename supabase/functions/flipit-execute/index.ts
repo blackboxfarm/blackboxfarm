@@ -9,6 +9,8 @@ import { parseBuyFromSolscan } from "../_shared/solscan-api.ts";
 import { validateBuyQuote, getTradeGuardConfig } from "../_shared/trade-guard.ts";
 import { verifyBuyTransaction, updatePositionWithVerifiedBuy } from "../_shared/helius-verify.ts";
 import { createExecutionLogger, type ExecutionLogger } from "../_shared/execution-logger.ts";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('flipit-execute');
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

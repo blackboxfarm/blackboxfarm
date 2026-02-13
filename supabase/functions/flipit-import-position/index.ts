@@ -8,6 +8,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseBuyFromHelius } from "../_shared/helius-api.ts";
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('flipit-import-position');
 import { fetchSolPrice } from "../_shared/price-resolver.ts";
 
 const corsHeaders = {

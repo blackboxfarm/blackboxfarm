@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('liquidity-lock-checker');
 import {
   KNOWN_DEX_PROGRAMS,
   BONDING_CURVE_PROGRAMS,

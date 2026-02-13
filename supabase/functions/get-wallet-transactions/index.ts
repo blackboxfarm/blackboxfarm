@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+enableHeliusTracking('get-wallet-transactions');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

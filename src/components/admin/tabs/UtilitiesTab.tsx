@@ -23,7 +23,7 @@ export default function UtilitiesTab() {
         <TabsTrigger value="api-usage">📡 API Usage</TabsTrigger>
         <TabsTrigger value="sol-price">💰 SOL Price</TabsTrigger>
         <TabsTrigger value="sniff">🔍 SNIFF</TabsTrigger>
-        <TabsTrigger value="helius">⚡ Helius API</TabsTrigger>
+        <TabsTrigger value="helius">⚡ HELIUS</TabsTrigger>
         <TabsTrigger value="api-providers">🔌 API Providers</TabsTrigger>
         <TabsTrigger value="liquidity">💧 Liquidity Checker</TabsTrigger>
       </TabsList>
