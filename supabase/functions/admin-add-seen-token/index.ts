@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('admin-add-seen-token');
 
 const corsHeaders = {
@@ -82,9 +83,9 @@ serve(async (req) => {
     // Try to get minted_at from Helius if pump.fun token
     if (tokenMint.endsWith('pump')) {
       try {
-        const heliusKey = Deno.env.get('HELIUS_API_KEY');
+        const heliusKey = getHeliusApiKey();
         if (heliusKey) {
-          const sigRes = await fetch(`https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusKey}&limit=1&type=NFT_MINT`);
+          const sigRes = await fetch(getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '1', type: 'NFT_MINT' }));
           if (sigRes.ok) {
             const txs = await sigRes.json();
             if (txs?.[0]?.timestamp) {

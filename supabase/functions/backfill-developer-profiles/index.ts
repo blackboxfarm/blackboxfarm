@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +20,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusApiKey = getHeliusApiKey();
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
@@ -41,7 +42,7 @@ serve(async (req) => {
       
       try {
         const response = await fetch(
-          `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`,
+          getHeliusRestUrl('/v0/token-metadata'),
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

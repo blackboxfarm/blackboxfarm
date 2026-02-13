@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -187,7 +188,7 @@ async function getTokenTransactions(tokenMint: string, heliusApiKey: string): Pr
   try {
     // Use Helius to get token transactions
     const response = await fetchWithRetry(
-      `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&type=SWAP`,
+      getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'SWAP' }),
       { headers: { 'Accept': 'application/json' } }
     );
     
@@ -204,7 +205,7 @@ async function getTokenTransactions(tokenMint: string, heliusApiKey: string): Pr
 async function getWalletFundingHistory(wallet: string, heliusApiKey: string): Promise<any[]> {
   try {
     const response = await fetchWithRetry(
-      `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=50`,
+      getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: '50' }),
       { headers: { 'Accept': 'application/json' } }
     );
     
@@ -410,7 +411,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
   
   try {
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusApiKey = getHeliusApiKey();
     
     const body = await req.json();
     const { tokenMint, maxSellers = 30, traceDepth = 2 }: InvestigationRequest = body;

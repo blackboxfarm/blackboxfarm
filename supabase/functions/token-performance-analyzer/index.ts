@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Connection, PublicKey } from 'npm:@solana/web3.js@1.95.3'
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,10 +15,9 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!
     
     const supabase = createClient(supabaseUrl, supabaseKey)
-    const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`)
+    const connection = new Connection(getHeliusRpcUrl())
 
     const authHeader = req.headers.get('Authorization')!
     const token = authHeader.replace('Bearer ', '')

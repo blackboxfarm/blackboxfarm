@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
@@ -383,10 +384,10 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
   // STEP 4: Try Helius API for transaction history to find created tokens
   console.log('[Oracle] Trying Helius transaction history for created tokens...');
   try {
-    const heliusKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusKey = getHeliusApiKey();
     if (heliusKey) {
       // Use Helius parsed transaction history - find TOKEN_MINT transactions
-      const txHistoryUrl = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusKey}&type=TOKEN_MINT&limit=100`;
+      const txHistoryUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100' });
       
       let allMints: string[] = [];
       let currentUrl = txHistoryUrl;
@@ -431,7 +432,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
             // Get last signature for pagination
             const lastTx = transactions[transactions.length - 1];
             if (lastTx?.signature) {
-              currentUrl = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusKey}&type=TOKEN_MINT&limit=100&before=${lastTx.signature}`;
+              currentUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100', before: lastTx.signature });
               pageCount++;
             } else {
               break;
@@ -458,7 +459,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
       
       // Also try DAS getAssetsByCreator
       console.log('[Oracle] Trying Helius DAS getAssetsByCreator...');
-      const heliusRpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
+      const heliusRpcUrl = getHeliusRpcUrl(heliusKey);
       
       const dasResponse = await fetch(heliusRpcUrl, {
         method: 'POST',

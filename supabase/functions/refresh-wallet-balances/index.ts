@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno
 import { Connection, PublicKey } from "npm:@solana/web3.js@1.95.3";
 import { TOKEN_PROGRAM_ID } from "npm:@solana/spl-token@0.4.6";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('refresh-wallet-balances');
 
 // KILL SWITCH - Set to true to disable function
@@ -53,9 +54,9 @@ serve(async (req) => {
     );
 
     // Use Helius if available, otherwise fallback to public RPC
-    const heliusKey = Deno.env.get("HELIUS_API_KEY");
+    const heliusKey = getHeliusApiKey();
     const rpcUrl = heliusKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+      ? getHeliusRpcUrl(heliusKey)
       : (Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com");
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
     logStep("Connected to Solana RPC", { hasHelius: !!heliusKey });
@@ -78,7 +79,7 @@ serve(async (req) => {
 
         // Use Helius RPC if available for better reliability
         const rpcEndpoints = heliusKey 
-          ? [`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`]
+          ? [getHeliusRpcUrl(heliusKey)]
           : [
               "https://solana-mainnet.g.alchemy.com/v2/demo",
               "https://api.mainnet-beta.solana.com",
@@ -116,7 +117,7 @@ serve(async (req) => {
         if (heliusKey) {
           try {
             logStep("Fetching tokens via Helius DAS API (preferred)");
-            const dasResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+            const dasResponse = await fetch(getHeliusRpcUrl(heliusKey), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -276,7 +277,7 @@ serve(async (req) => {
           if (tokens.length > 0 && heliusKey) {
             try {
               logStep("Enriching RPC tokens with Helius metadata");
-              const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+              const response = await fetch(getHeliusRpcUrl(heliusKey), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

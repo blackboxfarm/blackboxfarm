@@ -49,7 +49,7 @@ function firstSignature(swapResult: any): string | null {
  * - Post-Raydium (graduated): DexScreener -> Jupiter fallback
  */
 async function fetchTokenPrice(tokenMint: string, options: { forceFresh?: boolean } = {}): Promise<{ price: number; metadata: PriceResult } | null> {
-  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+  const heliusApiKey = getHeliusApiKey();
   // CRITICAL: Pass forceFresh to bypass cache for accurate buy execution
   const result = await resolvePrice(tokenMint, { 
     heliusApiKey, 
@@ -967,7 +967,7 @@ serve(async (req) => {
 
         // CRITICAL: Use Helius Parse Transaction API to get EXACT tokens received from THIS swap
         // This is the only reliable way to know exactly how many tokens this specific buy received
-        const heliusKey = Deno.env.get("HELIUS_API_KEY");
+        const heliusKey = getHeliusApiKey();
         
         if (heliusKey && signature) {
           try {

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,10 +60,10 @@ Deno.serve(async (req) => {
         .eq('id', job.id)
 
       // Fetch token metadata to find creator
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      const heliusApiKey = getHeliusApiKey()
       if (heliusApiKey) {
         const response = await fetch(
-          `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`,
+          getHeliusRestUrl('/v0/token-metadata'),
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

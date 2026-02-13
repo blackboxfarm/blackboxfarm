@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('pumpfun-early-trade-analyzer');
 
 /**
@@ -118,7 +119,7 @@ async function analyzeEarlyTrades(
 ): Promise<any> {
   console.log(`[Early Trade Analyzer] Analyzing token: ${tokenMint}, creator: ${creatorWallet}`);
   
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusApiKey = getHeliusApiKey();
   if (!heliusApiKey) {
     return { error: 'HELIUS_API_KEY not configured' };
   }

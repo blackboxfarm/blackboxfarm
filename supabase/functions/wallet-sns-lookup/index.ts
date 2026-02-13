@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Connection, PublicKey } from 'npm:@solana/web3.js@1.95.8'
 import { getTwitterRegistry, NameRegistryState } from 'npm:@bonfida/spl-name-service@0.1.51'
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('wallet-sns-lookup');
 
 const corsHeaders = {
@@ -111,9 +112,9 @@ Deno.serve(async (req) => {
 
     // Perform SNS lookups for non-cached wallets
     if (walletsToLookup.length > 0) {
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+      const heliusApiKey = getHeliusApiKey();
       const heliusRpc = heliusApiKey 
-        ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+        ? getHeliusRpcUrl(heliusApiKey)
         : 'https://api.mainnet-beta.solana.com'
       const connection = new Connection(heliusRpc)
 

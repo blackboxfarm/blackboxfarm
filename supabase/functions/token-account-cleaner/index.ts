@@ -12,6 +12,7 @@ import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
 } from "https://esm.sh/@solana/spl-token@0.3.8";
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -233,9 +234,9 @@ serve(async (req) => {
     console.log(`Token Account Cleaner - action: ${action}, wallet: ${walletPubkey || 'all'}, source: ${source || 'all'}`);
 
     // Setup RPC connection
-    const heliusKey = Deno.env.get("HELIUS_API_KEY");
+    const heliusKey = getHeliusApiKey();
     const rpcUrl = heliusKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+      ? getHeliusRpcUrl(heliusKey)
       : "https://api.mainnet-beta.solana.com";
     
     const connection = new Connection(rpcUrl, "confirmed");

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('developer-wallet-rescan');
 
 const corsHeaders = {
@@ -63,7 +64,7 @@ async function fetchRecentMints(
   try {
     // Query Helius for token creation transactions
     const response = await fetch(
-      `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&type=TOKEN_MINT`,
+      getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { type: 'TOKEN_MINT' }),
       { method: 'GET' }
     );
 
@@ -281,7 +282,7 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+  const heliusApiKey = getHeliusApiKey();
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {

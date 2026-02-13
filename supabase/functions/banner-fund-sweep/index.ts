@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from 'npm:@solana/web3.js@1.87.6';
 import bs58 from 'https://esm.sh/bs58@5.0.0';
+import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,7 +19,6 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!;
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!;
     
     // Get the main treasury wallet (you can add this as a secret or config)
@@ -55,7 +55,7 @@ serve(async (req) => {
       );
     }
 
-    const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, 'confirmed');
+    const connection = new Connection(getHeliusRpcUrl(), 'confirmed');
     const sweptOrders: string[] = [];
     const errors: { orderId: string; error: string }[] = [];
 

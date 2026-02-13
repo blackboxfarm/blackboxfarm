@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -94,7 +95,7 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
 
 async function getWalletCreatedTokens(wallet: string, heliusApiKey: string): Promise<string[]> {
   try {
-    const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=100`;
+    const url = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: '100' });
     const response = await fetchWithRetry(url, { method: "GET" });
     if (!response.ok) return [];
     
@@ -141,7 +142,7 @@ async function traceWalletFunding(
   await delay(300); // Rate limiting
   
   try {
-    const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=50`;
+    const url = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { limit: '50' });
     const response = await fetchWithRetry(url, { method: "GET" });
     if (!response.ok) return { wallet, depth: currentDepth, children: [], source_type: "error" };
     
@@ -201,7 +202,7 @@ function extractAllWallets(node: any): string[] {
 
 async function getTokenCreatorWallet(tokenMint: string, heliusApiKey: string): Promise<string | null> {
   try {
-    const url = `https://api.helius.xyz/v0/tokens/${tokenMint}/metadata?api-key=${heliusApiKey}`;
+    const url = getHeliusRestUrl(`/v0/tokens/${tokenMint}/metadata`);
     const response = await fetchWithRetry(url, { method: "GET" });
     if (!response.ok) return null;
     
@@ -324,7 +325,7 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+  const heliusApiKey = getHeliusApiKey();
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {

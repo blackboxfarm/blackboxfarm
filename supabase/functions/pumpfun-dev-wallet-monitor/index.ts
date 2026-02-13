@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { getHeliusApiKey, getHeliusRpcUrl, getHeliusRestUrl } from '../_shared/helius-client.ts';
 /**
  * PUMPFUN DEV WALLET MONITOR
  * 
@@ -92,7 +92,7 @@ async function getDevWalletStatus(devWallet: string, tokenMint: string): Promise
   };
 
   try {
-    const heliusKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusKey = getHeliusApiKey();
     
     if (!heliusKey) {
       console.log('⚠️ No Helius API key - skipping detailed dev check');
@@ -102,7 +102,7 @@ async function getDevWalletStatus(devWallet: string, tokenMint: string): Promise
     // 1. Check current token balance in dev wallet
     try {
       const balanceResponse = await fetchWithBackoff(
-        `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`,
+        getHeliusRpcUrl(heliusKey),
         3,
         {
           method: 'POST',
@@ -145,7 +145,7 @@ async function getDevWalletStatus(devWallet: string, tokenMint: string): Promise
 
     // 2. Check transaction history for sells and buybacks
     const response = await fetchWithBackoff(
-      `https://api.helius.xyz/v0/addresses/${devWallet}/transactions?api-key=${heliusKey}&type=SWAP&limit=100`
+      `${getHeliusRestUrl(`/v0/addresses/${devWallet}/transactions`, { type: 'SWAP', limit: '100' })}`
     );
     
     if (response.ok) {
