@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+  // heliusApiKey no longer used directly - prices fetched via Jupiter/DexScreener
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 

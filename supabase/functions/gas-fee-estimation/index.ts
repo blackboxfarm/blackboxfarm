@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,11 +55,11 @@ serve(async (req) => {
     );
 
     // Get current Solana network fees from Helius RPC
-    const heliusResponse = await fetch(`${Deno.env.get('SOLANA_RPC_URL')}`, {
+    const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || (getHeliusApiKey() ? getHeliusRpcUrl() : 'https://api.mainnet-beta.solana.com');
+    const heliusResponse = await fetch(rpcUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('HELIUS_API_KEY')}`,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',

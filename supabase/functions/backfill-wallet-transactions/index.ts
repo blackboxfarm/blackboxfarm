@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=deno'
 import { logHeliusCall } from '../_shared/helius-logger.ts';
+import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,10 +33,11 @@ async function fetchJsonWithRetry(url: string, opts = {}, attempts = 5) {
   throw new Error(`Helius retry exhausted: ${url}`);
 }
 
-async function getSolPriceUSD(heliusApiKey: string) {
+async function getSolPriceUSD(_heliusApiKey?: string) {
   if (cachedSolPriceUsd != null) return cachedSolPriceUsd;
   try {
-    const res = await fetch(`https://api.helius.xyz/v0/tokens/metadata?api-key=${heliusApiKey}`, {
+    const url = getHeliusRestUrl('/v0/tokens/metadata');
+    const res = await fetch(url, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ mintAccounts: ['So11111111111111111111111111111111111111112'] })
@@ -65,7 +67,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!
+    const heliusApiKey = requireHeliusApiKey()
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -331,9 +333,9 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
 }
 
 // Fetch enhanced transaction details from Helius for a specific signature
-async function hydrateTransaction(signature: string, heliusApiKey: string) {
+async function hydrateTransaction(signature: string, _heliusApiKey?: string) {
   try {
-    const url = `https://api.helius.xyz/v0/transactions?api-key=${heliusApiKey}`
+    const url = getHeliusRestUrl('/v0/transactions')
     const data = await fetchJsonWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -360,10 +362,10 @@ async function getWalletTransactions(address: string, heliusApiKey: string, hour
 
   while (true) {
     const pageLimit = remaining != null ? Math.min(100, remaining) : 100;
-    const params = new URLSearchParams({ 'api-key': heliusApiKey, limit: String(pageLimit) });
-    if (before) params.set('before', before);
+    const extraParams: Record<string, string> = { limit: String(pageLimit) };
+    if (before) extraParams.before = before;
 
-    const url = `https://api.helius.xyz/v0/addresses/${address}/transactions?${params.toString()}`;
+    const url = getHeliusRestUrl(`/v0/addresses/${address}/transactions`, extraParams);
     
     // Log this API call
     const logger = await logHeliusCall({
@@ -436,8 +438,7 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
   if (!swaps) {
     try {
       console.log(`Hydrating ${signature} via Helius /v0/transactions...`);
-      const heliusApiKeyLocal = Deno.env.get('HELIUS_API_KEY')!;
-      const hydrated = await hydrateTransaction(signature, heliusApiKeyLocal);
+      const hydrated = await hydrateTransaction(signature);
       if (hydrated) {
         // Try events.swap from hydrated
         swaps = hydrated.events?.swap;
@@ -471,8 +472,7 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
   const isSol = (m: string) => m === SOL_MINT;
 
   const processed = [];
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!;
-  const solPriceUsd = await getSolPriceUSD(heliusApiKey);
+  const solPriceUsd = await getSolPriceUSD();
 
   for (const swapEvent of events) {
     const inArr  = Array.isArray(swapEvent.tokenInputs)  ? swapEvent.tokenInputs  : (swapEvent.tokenInputs  ? [swapEvent.tokenInputs]  : []);

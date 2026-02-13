@@ -48,13 +48,14 @@ serve(async (req) => {
       userAgent,
     });
 
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const { getHeliusApiKey, getHeliusRpcUrl } = await import('../_shared/helius-client.ts');
+    const heliusApiKey = getHeliusApiKey();
     console.log(`[HELIUS] API_KEY ${heliusApiKey ? 'FOUND' : 'NOT FOUND'}`);
 
     console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint}`);
 
     const rpcEndpoints = heliusApiKey
-      ? [`https://rpc.helius.xyz/?api-key=${heliusApiKey}`, 'https://api.mainnet-beta.solana.com']
+      ? [getHeliusRpcUrl(heliusApiKey), 'https://api.mainnet-beta.solana.com']
       : ['https://api.mainnet-beta.solana.com'];
 
     let usedRpc = '';

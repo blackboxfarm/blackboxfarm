@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
-import { getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { getHeliusRestUrl, requireHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('offspring-mint-scanner');
 
 const corsHeaders = {
@@ -297,10 +297,7 @@ Deno.serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    if (!heliusApiKey) {
-      throw new Error('HELIUS_API_KEY not configured');
-    }
+    const heliusApiKey = requireHeliusApiKey();
 
     const { 
       parentWallet, 

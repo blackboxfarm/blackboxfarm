@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('mint-monitor-scanner');
 
 const corsHeaders = {
@@ -126,9 +127,10 @@ async function fetchDexScreenerData(mint: string): Promise<Partial<TokenMint> & 
   }
 }
 
-async function fetchHolderCount(mint: string, heliusApiKey: string): Promise<number | undefined> {
+async function fetchHolderCount(mint: string, _heliusApiKey?: string): Promise<number | undefined> {
   try {
-    const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`, {
+    const url = getHeliusRestUrl('/v0/token-metadata');
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mintAccounts: [mint], includeOffChain: true })
@@ -203,7 +205,7 @@ async function scanWalletForMints(
   console.log(`Scanning wallet ${walletAddress} for TRUE token creations only...`);
   
   // Use Helius parsed transaction history for better type detection
-  const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100&type=TOKEN_MINT`;
+  const url = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { limit: '100', type: 'TOKEN_MINT' });
   
   const response = await fetch(url);
   if (!response.ok) {
@@ -303,8 +305,8 @@ async function validateTokenCreation(
     if (EXCLUDED_TOKENS.has(mint)) return false;
     
     // Fetch token metadata to check mint authority
-    const url = `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`;
-    const response = await fetch(url, {
+    const metaUrl = getHeliusRestUrl('/v0/token-metadata');
+    const response = await fetch(metaUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mintAccounts: [mint] })
@@ -362,7 +364,7 @@ async function scanWalletForMintsLegacy(
 ): Promise<TokenMint[]> {
   console.log(`Using legacy scan for wallet ${walletAddress}...`);
   
-  const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100`;
+  const url = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { limit: '100' });
   
   const response = await fetch(url);
   if (!response.ok) {
@@ -428,8 +430,8 @@ async function fetchTokenMetadata(
   heliusApiKey: string
 ): Promise<{ name?: string; symbol?: string; image?: string } | null> {
   try {
-    const url = `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`;
-    const response = await fetch(url, {
+    const tokenMetaUrl = getHeliusRestUrl('/v0/token-metadata');
+    const response = await fetch(tokenMetaUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mintAccounts: [mint] })
@@ -461,7 +463,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!;
+    const heliusApiKey = requireHeliusApiKey();
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     

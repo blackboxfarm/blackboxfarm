@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { validateStaleAlpha } from "../_shared/historical-price.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('telegram-channel-monitor');
 
 const corsHeaders = {
@@ -206,12 +207,12 @@ interface RuleEvaluationResult {
 
 // Quick holder count check using Helius RPC for accurate count
 async function getQuickHolderCount(tokenMint: string): Promise<number | null> {
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+  const heliusApiKey = getHeliusApiKey();
   
   // PRIORITY 1: Use Helius RPC for accurate holder count
   if (heliusApiKey) {
     try {
-      const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+      const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

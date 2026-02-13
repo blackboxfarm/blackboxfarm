@@ -11,6 +11,7 @@ import {
   TransactionInstruction,
 } from "npm:@solana/web3.js@1.95.3";
 import { SecureStorage } from "../_shared/encryption.ts";
+import { getHeliusRpcUrl, getHeliusApiKey, getRpcEndpoints } from '../_shared/helius-client.ts';
 import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
 // Lightweight ATA helper (avoid @solana/spl-token dependency)
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
@@ -788,16 +789,7 @@ serve(async (req) => {
     } = body;
 
     // Build list of RPC endpoints to try (with fallback)
-    const rpcEndpoints: string[] = [];
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-    if (heliusApiKey) {
-      rpcEndpoints.push(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`);
-    }
-    const customRpc = Deno.env.get("SOLANA_RPC_URL");
-    if (customRpc) {
-      rpcEndpoints.push(customRpc);
-    }
-    rpcEndpoints.push("https://api.mainnet-beta.solana.com");
+    const rpcEndpoints = getRpcEndpoints();
     
     // Try each RPC until one works for initial connection test
     let rpcUrl = rpcEndpoints[0] || "https://api.mainnet-beta.solana.com";
@@ -1405,9 +1397,9 @@ serve(async (req) => {
             if ("tx" in pumpResult) {
               const vtx = VersionedTransaction.deserialize(pumpResult.tx);
 
-              const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
-              const txRpc = HELIUS_API_KEY
-                ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+              const _heliusKey1 = getHeliusApiKey();
+              const txRpc = _heliusKey1
+                ? new Connection(getHeliusRpcUrl(_heliusKey1), { commitment: "confirmed" })
                 : connection;
 
               const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
@@ -1779,9 +1771,9 @@ serve(async (req) => {
             const u8 = b64ToU8(meteoraResult.tx);
             const vtx = VersionedTransaction.deserialize(u8);
             
-            const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
-            const txRpc = HELIUS_API_KEY 
-              ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+            const _heliusKey2 = getHeliusApiKey();
+            const txRpc = _heliusKey2 
+              ? new Connection(getHeliusRpcUrl(_heliusKey2), { commitment: "confirmed" })
               : connection;
             
             const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
@@ -1824,9 +1816,9 @@ serve(async (req) => {
             const u8 = b64ToU8(bagsFmResult.tx);
             const vtx = VersionedTransaction.deserialize(u8);
             
-            const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
-            const txRpc = HELIUS_API_KEY 
-              ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+            const _heliusKey3 = getHeliusApiKey();
+            const txRpc = _heliusKey3 
+              ? new Connection(getHeliusRpcUrl(_heliusKey3), { commitment: "confirmed" })
               : connection;
             
             const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
@@ -1884,9 +1876,9 @@ serve(async (req) => {
               vtx.sign([owner]);
               
               // Use Helius RPC for better transaction submission
-              const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
-              const txRpc = HELIUS_API_KEY 
-                ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+              const _heliusKey4 = getHeliusApiKey();
+              const txRpc = _heliusKey4 
+                ? new Connection(getHeliusRpcUrl(_heliusKey4), { commitment: "confirmed" })
                 : new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
               
               const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");

@@ -7,6 +7,7 @@ import {
   type PriceResult 
 } from "../_shared/price-resolver.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('flipit-price-monitor');
 
 const corsHeaders = {
@@ -102,8 +103,8 @@ serve(async (req) => {
     const tokenMints = [...new Set(positions.map(p => p.token_mint))];
 
     // Fetch all prices using centralized resolver (handles pump.fun vs DexScreener routing)
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-    const { prices, metadata: priceMetadata } = await fetchTokenPricesWithMetadata(tokenMints, heliusApiKey);
+    const heliusApiKey = getHeliusApiKey();
+    const { prices, metadata: priceMetadata } = await fetchTokenPricesWithMetadata(tokenMints, heliusApiKey ?? undefined);
     
     // Extract bonding curve data from price metadata
     const bondingCurveData: Record<string, number> = {};
