@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusApiKey, heliusRestFetch, redactHeliusSecrets } from '../_shared/helius-client.ts';
 enableHeliusTracking('wallet-behavior-analysis');
 
 const corsHeaders = {
@@ -25,7 +26,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const heliusApiKey = getHeliusApiKey();
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Check if we have a recent profile
@@ -37,36 +38,30 @@ serve(async (req) => {
 
     const shouldUpdate = !existingProfile || 
       (existingProfile.last_analyzed_at && 
-       new Date(existingProfile.last_analyzed_at).getTime() < Date.now() - 60 * 60 * 1000); // 1 hour
+       new Date(existingProfile.last_analyzed_at).getTime() < Date.now() - 60 * 60 * 1000);
 
     if (shouldUpdate && heliusApiKey) {
-      // Fetch transaction history from Helius
       try {
-        const heliusResponse = await fetch(
-          `https://api.helius.xyz/v0/addresses/${wallet_address}/transactions?api-key=${heliusApiKey}`,
-          {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          }
+        // Use heliusRestFetch — key goes in X-Api-Key header, NOT in URL
+        const heliusResponse = await heliusRestFetch(
+          `/v0/addresses/${wallet_address}/transactions`,
+          { method: 'GET', timeoutMs: 10000 }
         );
 
         if (heliusResponse.ok) {
           const transactions = await heliusResponse.json();
           
-          // Analyze transactions and calculate Smart Money Score
-          let smartMoneyScore = 50; // Base score
+          let smartMoneyScore = 50;
           let earlyEntryCount = 0;
           let diamondHandsCount = 0;
           let paperHandsCount = 0;
           let totalRealizedPnl = 0;
 
-          // Simple heuristics (can be enhanced)
           const tokenTransactions = transactions.filter((tx: any) => 
             tx.tokenTransfers?.some((t: any) => t.mint === token_mint)
           );
 
           if (tokenTransactions.length > 0) {
-            // Early entry bonus
             const firstTxTimestamp = tokenTransactions[0]?.timestamp;
             if (firstTxTimestamp) {
               const daysSinceLaunch = (Date.now() / 1000 - firstTxTimestamp) / 86400;
@@ -76,7 +71,6 @@ serve(async (req) => {
               }
             }
 
-            // Look for diamond hands behavior (no sells for >30 days)
             const lastSell = tokenTransactions
               .filter((tx: any) => tx.type === 'SELL')
               .sort((a: any, b: any) => b.timestamp - a.timestamp)[0];
@@ -87,7 +81,6 @@ serve(async (req) => {
             }
           }
 
-          // Update or create profile
           await supabase.from('wallet_profiles').upsert({
             wallet_address,
             smart_money_score: Math.max(0, Math.min(100, smartMoneyScore)),
@@ -100,11 +93,10 @@ serve(async (req) => {
           });
         }
       } catch (error) {
-        console.error('Helius API error:', error);
+        console.error('Helius API error:', redactHeliusSecrets((error as Error).message));
       }
     }
 
-    // Get wallet history for this token
     const { data: tokenHistory } = await supabase
       .from('wallet_token_history')
       .select('*')
@@ -112,7 +104,6 @@ serve(async (req) => {
       .eq('token_mint', token_mint)
       .order('entry_date', { ascending: true });
 
-    // Get updated profile
     const { data: profile } = await supabase
       .from('wallet_profiles')
       .select('*')
@@ -131,9 +122,9 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
-    console.error('Error analyzing wallet behavior:', error);
+    console.error('Error analyzing wallet behavior:', redactHeliusSecrets(error.message));
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: redactHeliusSecrets(error.message) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

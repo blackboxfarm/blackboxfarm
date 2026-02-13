@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getHeliusRpcUrl, requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
 enableHeliusTracking('helius-fast-price');
 
 const corsHeaders = {
@@ -9,11 +10,7 @@ const corsHeaders = {
 
 /**
  * HELIUS FAST PRICE - Fastest possible price fetch
- * 
  * Uses Helius getAsset RPC method to get real-time price from token_info.price_info
- * This is the PRIMARY price source - called FIRST on paste, before any other API
- * 
- * Target latency: 200-500ms
  */
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -32,18 +29,9 @@ serve(async (req) => {
       );
     }
 
-    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+    requireHeliusApiKey(); // Throws if not configured
+    const url = getHeliusRpcUrl();
     
-    if (!heliusApiKey) {
-      return new Response(
-        JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const url = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
-    
-    // Use AbortController for fast timeout (3 seconds max)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
 
@@ -69,21 +57,17 @@ serve(async (req) => {
       const data = await response.json();
       const latencyMs = Date.now() - startTime;
 
-      // Extract price from token_info.price_info
       const tokenInfo = data.result?.token_info;
       const priceInfo = tokenInfo?.price_info;
       const pricePerToken = priceInfo?.price_per_token;
 
       if (pricePerToken && pricePerToken > 0) {
-        // Also extract basic metadata while we're here
         const content = data.result?.content;
         const metadata = content?.metadata;
         
         let finalPrice = pricePerToken;
         let priceSource = 'helius_getAsset';
         
-        // Check if token is graduated (not on bonding curve)
-        // Helius index can lag for graduated tokens - validate with DexScreener
         try {
           const dexController = new AbortController();
           const dexTimeoutId = setTimeout(() => dexController.abort(), 2000);
@@ -101,8 +85,6 @@ serve(async (req) => {
             if (dexPrice > 0) {
               const deviation = Math.abs(pricePerToken - dexPrice) / dexPrice;
               
-              // If Helius price deviates >5% from DexScreener, use DexScreener
-              // DexScreener is real-time, Helius index can lag 30-60s
               if (deviation > 0.05) {
                 console.log(`[helius-fast-price] Price deviation ${(deviation * 100).toFixed(1)}% - Helius: $${pricePerToken}, DexScreener: $${dexPrice}. Using DexScreener.`);
                 finalPrice = dexPrice;
@@ -111,8 +93,7 @@ serve(async (req) => {
             }
           }
         } catch (dexErr) {
-          // DexScreener failed or timed out - use Helius price
-          console.log(`[helius-fast-price] DexScreener validation skipped: ${dexErr.message}`);
+          console.log(`[helius-fast-price] DexScreener validation skipped: ${redactHeliusSecrets((dexErr as Error).message)}`);
         }
         
         return new Response(
@@ -123,7 +104,6 @@ serve(async (req) => {
             source: priceSource,
             heliusPrice: pricePerToken,
             latencyMs: Date.now() - startTime,
-            // Bonus: include basic metadata if available
             symbol: metadata?.symbol || null,
             name: metadata?.name || null,
             image: content?.links?.image || content?.files?.[0]?.uri || null,
@@ -134,8 +114,6 @@ serve(async (req) => {
         );
       }
 
-      // Price not available in Helius response
-      // This happens for very new tokens not yet indexed
       console.log(`[helius-fast-price] No price in getAsset for ${tokenMint.slice(0, 8)}... (${latencyMs}ms)`);
       
       return new Response(
@@ -144,7 +122,6 @@ serve(async (req) => {
           error: 'NO_PRICE',
           message: 'Token price not available in Helius index',
           latencyMs,
-          // Still return any metadata we found
           symbol: data.result?.content?.metadata?.symbol || null,
           name: data.result?.content?.metadata?.name || null
         }),
@@ -154,7 +131,7 @@ serve(async (req) => {
     } catch (fetchError) {
       clearTimeout(timeoutId);
       
-      if (fetchError.name === 'AbortError') {
+      if ((fetchError as Error).name === 'AbortError') {
         return new Response(
           JSON.stringify({ 
             success: false, 
@@ -169,11 +146,11 @@ serve(async (req) => {
     }
 
   } catch (err) {
-    console.error('[helius-fast-price] Error:', err);
+    console.error('[helius-fast-price] Error:', redactHeliusSecrets((err as Error).message || 'Internal server error'));
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: err.message || 'Internal server error',
+        error: redactHeliusSecrets((err as Error).message || 'Internal server error'),
         latencyMs: Date.now() - startTime
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

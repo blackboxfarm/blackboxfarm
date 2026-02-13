@@ -1,31 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { getRpcEndpoints, redactHeliusUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('get-wallet-balance');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// RPC endpoints to try in order (Helius first, then fallbacks)
-function getRpcEndpoints(): string[] {
-  const endpoints: string[] = [];
-  
-  const heliusKey = Deno.env.get('HELIUS_API_KEY');
-  if (heliusKey) {
-    endpoints.push(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`);
-  }
-  
-  const customRpc = Deno.env.get('SOLANA_RPC_URL');
-  if (customRpc) {
-    endpoints.push(customRpc);
-  }
-  
-  // Public fallbacks (rate limited but work)
-  endpoints.push('https://api.mainnet-beta.solana.com');
-  
-  return endpoints;
-}
 
 async function fetchBalanceFromRpc(rpcUrl: string, walletAddress: string): Promise<{ balance: number; lamports: number } | null> {
   const controller = new AbortController();
@@ -46,11 +27,10 @@ async function fetchBalanceFromRpc(rpcUrl: string, walletAddress: string): Promi
 
     const data = await response.json();
     
-    // Check for rate limit or errors
     if (data.error) {
       const errMsg = data.error.message || JSON.stringify(data.error);
       if (errMsg.includes('max usage') || errMsg.includes('rate limit') || errMsg.includes('429')) {
-        console.log(`RPC rate limited: ${rpcUrl.substring(0, 50)}...`);
+        console.log(`RPC rate limited: ${redactHeliusUrl(rpcUrl.substring(0, 80))}`);
         return null;
       }
       throw new Error(errMsg);
@@ -61,7 +41,7 @@ async function fetchBalanceFromRpc(rpcUrl: string, walletAddress: string): Promi
     
     return { balance: balanceSol, lamports: balanceLamports };
   } catch (error) {
-    console.log(`RPC failed (${rpcUrl.substring(0, 50)}...): ${(error as Error).message}`);
+    console.log(`RPC failed (${redactHeliusUrl(rpcUrl.substring(0, 80))}): ${(error as Error).message}`);
     return null;
   } finally {
     clearTimeout(timeout);
@@ -84,9 +64,7 @@ serve(async (req) => {
     }
 
     const endpoints = getRpcEndpoints();
-    let lastError = 'No RPC endpoints available';
     
-    // Try each RPC endpoint until one succeeds
     for (const rpcUrl of endpoints) {
       const result = await fetchBalanceFromRpc(rpcUrl, walletAddress);
       if (result !== null) {
@@ -97,7 +75,6 @@ serve(async (req) => {
       }
     }
 
-    // All endpoints failed
     return new Response(
       JSON.stringify({ error: 'All RPC endpoints failed or rate limited', fallbackTried: endpoints.length }),
       { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
