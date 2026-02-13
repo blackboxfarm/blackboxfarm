@@ -146,6 +146,46 @@ async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   }
 }
 
+// Fetch actual holder count from Helius using getTokenAccounts
+async function fetchHeliusHolderCount(mint: string): Promise<number> {
+  const heliusApiKey = getHeliusApiKey();
+  if (!heliusApiKey) return 0;
+
+  try {
+    const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'holder-count',
+        method: 'getTokenAccounts',
+        params: { 
+          mint,
+          limit: 500, // Enough for bonding curve tokens
+        }
+      })
+    });
+
+    if (!response.ok) return 0;
+    const data = await response.json();
+    
+    if (data.error || !data.result) return 0;
+    
+    // Count non-zero balance accounts
+    const accounts = data.result.token_accounts || [];
+    const activeHolders = accounts.filter((a: any) => {
+      const amount = Number(a.amount || 0);
+      return amount > 0;
+    }).length;
+    
+    console.log(`   👥 Helius holder count: ${mint.slice(0, 8)} - ${activeHolders} holders`);
+    return activeHolders;
+  } catch (error) {
+    console.error(`Error fetching Helius holder count for ${mint}:`, error);
+    return 0;
+  }
+}
+
 // Fetch token metrics from HELIUS API (PRIMARY FALLBACK - most reliable)
 async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
   const heliusApiKey = getHeliusApiKey();
@@ -155,48 +195,40 @@ async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
   }
 
   try {
-    // Use Helius DAS API for token info
-    const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'helius-token-metrics',
-        method: 'getAsset',
-        params: { id: mint }
-      })
-    });
+    // Parallel: getAsset for price + getTokenAccounts for holder count
+    const [assetResponse, holderCount] = await Promise.all([
+      fetch(getHeliusRpcUrl(heliusApiKey), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'helius-token-metrics',
+          method: 'getAsset',
+          params: { id: mint }
+        })
+      }),
+      fetchHeliusHolderCount(mint),
+    ]);
 
-    if (!response.ok) {
-      console.log(`   📊 Helius API error for ${mint}: ${response.status}`);
-      return null;
+    let pricePerToken: number | null = null;
+    let supply = 0;
+    let decimals = 6;
+
+    if (assetResponse.ok) {
+      const data = await assetResponse.json();
+      if (!data.error && data.result) {
+        const tokenInfo = data.result.token_info || {};
+        supply = tokenInfo.supply || 0;
+        decimals = tokenInfo.decimals || 6;
+        pricePerToken = tokenInfo.price_info?.price_per_token || null;
+      }
     }
-
-    const data = await response.json();
     
-    if (data.error) {
-      console.log(`   📊 Helius error: ${data.error.message}`);
-      return null;
-    }
+    console.log(`   📊 Helius fallback: ${mint.slice(0, 8)} - ${holderCount} holders, price: $${pricePerToken?.toFixed(8) || 'N/A'}`);
 
-    const asset = data.result;
-    if (!asset) {
-      console.log(`   📊 Helius: No asset data for ${mint}`);
-      return null;
-    }
-
-    // Helius provides supply info, try to get holder count from token_info
-    const tokenInfo = asset.token_info || {};
-    const supply = tokenInfo.supply || 0;
-    const decimals = tokenInfo.decimals || 6;
-    const pricePerToken = tokenInfo.price_info?.price_per_token || null;
-    
-    console.log(`   📊 Helius fallback: ${mint.slice(0, 8)} - price: $${pricePerToken?.toFixed(8) || 'N/A'}`);
-
-    // Helius doesn't give us holder count directly from getAsset, but it's reliable for price
     return {
-      holders: 0, // Will need separate call or use cached value
-      volume24hSol: 0, // Helius doesn't provide this in getAsset
+      holders: holderCount,
+      volume24hSol: 0, // Helius doesn't provide volume in getAsset
       priceUsd: pricePerToken,
       liquidityUsd: null,
       marketCapUsd: pricePerToken && supply ? (pricePerToken * supply / Math.pow(10, decimals)) : null,
@@ -329,130 +361,96 @@ async function fetchJupiterPrice(mint: string): Promise<number | null> {
   }
 }
 
-// Fetch token metrics from pump.fun API with fallbacks: Helius -> SolanaTracker -> DexScreener -> Jupiter
+// Fetch token metrics with composite fallback: pump.fun -> merge(Helius holders + DexScreener price)
 async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
+  // Try pump.fun first
   try {
     const response = await fetchWithBackoff(
       `https://frontend-api.pump.fun/coins/${mint}`,
       { headers: { 'Accept': 'application/json' } }
     );
 
-    // If pump.fun returns 5xx error, try fallbacks
-    if (response.status >= 500) {
-      console.log(`   ⚠️ pump.fun API error ${response.status} for ${mint}, trying HELIUS first...`);
+    if (response.ok) {
+      const data = await response.json();
       
-      // Fallback 1: HELIUS (most reliable - primary fallback)
-      const heliusMetrics = await fetchHeliusMetrics(mint);
-      if (heliusMetrics && heliusMetrics.priceUsd && heliusMetrics.priceUsd > 0) {
-        console.log(`   ✅ Helius returned valid data for ${mint}`);
-        return heliusMetrics;
-      }
+      const virtualSolReserves = data.virtual_sol_reserves || 0;
+      const virtualTokenReserves = data.virtual_token_reserves || 0;
+      const totalSupply = data.total_supply || 1000000000000000;
+      const priceUsd = data.usd_market_cap ? data.usd_market_cap / (totalSupply / 1e6) : null;
+      const bondingCurveTokens = virtualTokenReserves / 1e6;
+      const maxBondingCurveTokens = 800000000;
+      const bondingCurvePct = Math.min(100, Math.max(0, (bondingCurveTokens / maxBondingCurveTokens) * 100));
       
-      // Fallback 2: SolanaTracker (has holder count)
-      const stMetrics = await fetchSolanaTrackerMetrics(mint);
-      if (stMetrics && stMetrics.holders > 0) {
-        return stMetrics;
-      }
-      
-      // Fallback 3: DexScreener (better for graduated tokens)
-      const dexMetrics = await fetchDexScreenerMetrics(mint);
-      if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
-        return dexMetrics;
-      }
-      
-      // Fallback 4: Jupiter for price only (last resort)
-      const jupPrice = await fetchJupiterPrice(mint);
-      if (jupPrice) {
-        return {
-          holders: 0, // Unknown from Jupiter
-          volume24hSol: 0, // Unknown from Jupiter
-          priceUsd: jupPrice,
-          liquidityUsd: null,
-          marketCapUsd: null,
-          bondingCurvePct: null,
-          buys: 0,
-          sells: 0,
-        };
-      }
-      
-      // All fallbacks failed
-      console.log(`   ❌ All API fallbacks (Helius, SolanaTracker, DexScreener, Jupiter) failed for ${mint}`);
-      return null;
+      return {
+        holders: data.holder_count || 0,
+        volume24hSol: (data.volume_24h || 0) / 1e9,
+        priceUsd,
+        liquidityUsd: virtualSolReserves > 0 ? (virtualSolReserves / 1e9) * 200 : null,
+        marketCapUsd: data.usd_market_cap || null,
+        bondingCurvePct: data.complete ? 0 : bondingCurvePct,
+        buys: data.buy_count || 0,
+        sells: data.sell_count || 0,
+      };
     }
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        return { holders: 0, volume24hSol: 0, priceUsd: null, liquidityUsd: null, marketCapUsd: null, bondingCurvePct: null, buys: 0, sells: 0 };
-      }
-      console.error(`pump.fun API error for ${mint}: ${response.status}, trying Helius...`);
-      
-      // Try Helius first for non-5xx errors too
-      const heliusMetrics = await fetchHeliusMetrics(mint);
-      if (heliusMetrics && heliusMetrics.priceUsd && heliusMetrics.priceUsd > 0) {
-        return heliusMetrics;
-      }
-      
-      // Then SolanaTracker
-      const stMetrics = await fetchSolanaTrackerMetrics(mint);
-      if (stMetrics && stMetrics.holders > 0) {
-        return stMetrics;
-      }
-      
-      // Then DexScreener
-      const dexMetrics = await fetchDexScreenerMetrics(mint);
-      if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
-        return dexMetrics;
-      }
-      
-      return null;
+    if (response.status !== 404) {
+      console.log(`   ⚠️ pump.fun API ${response.status} for ${mint}, using composite fallback...`);
     }
-
-    const data = await response.json();
-    
-    // Calculate bonding curve percentage
-    const virtualSolReserves = data.virtual_sol_reserves || 0;
-    const virtualTokenReserves = data.virtual_token_reserves || 0;
-    const totalSupply = data.total_supply || 1000000000000000;
-    
-    const priceUsd = data.usd_market_cap ? data.usd_market_cap / (totalSupply / 1e6) : null;
-    
-    const bondingCurveTokens = virtualTokenReserves / 1e6;
-    const maxBondingCurveTokens = 800000000;
-    const bondingCurvePct = Math.min(100, Math.max(0, (bondingCurveTokens / maxBondingCurveTokens) * 100));
-    
-    return {
-      holders: data.holder_count || 0,
-      volume24hSol: (data.volume_24h || 0) / 1e9,
-      priceUsd: priceUsd,
-      liquidityUsd: virtualSolReserves > 0 ? (virtualSolReserves / 1e9) * 200 : null,
-      marketCapUsd: data.usd_market_cap || null,
-      bondingCurvePct: data.complete ? 0 : bondingCurvePct,
-      buys: data.buy_count || 0,
-      sells: data.sell_count || 0,
-    };
-  } catch (error) {
-    console.error(`Error fetching pump.fun metrics for ${mint}:`, error);
-    
-    // Try Helius first on error
-    const heliusMetrics = await fetchHeliusMetrics(mint);
-    if (heliusMetrics && heliusMetrics.priceUsd && heliusMetrics.priceUsd > 0) {
-      return heliusMetrics;
-    }
-    
-    // Then SolanaTracker
-    const stMetrics = await fetchSolanaTrackerMetrics(mint);
-    if (stMetrics && stMetrics.holders > 0) {
-      return stMetrics;
-    }
-    
-    // Then DexScreener
-    const dexMetrics = await fetchDexScreenerMetrics(mint);
-    if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
-      return dexMetrics;
-    }
-    
-    return null;
+  } catch (e) {
+    console.log(`   ⚠️ pump.fun fetch error for ${mint}, using composite fallback...`);
   }
+
+  // === COMPOSITE FALLBACK: Helius (holders + price) + DexScreener (volume + liquidity) ===
+  // Run in parallel for speed
+  const [heliusMetrics, dexMetrics] = await Promise.all([
+    fetchHeliusMetrics(mint),
+    fetchDexScreenerMetrics(mint),
+  ]);
+
+  // Merge: prefer Helius for holders (accurate), DexScreener for price/volume
+  if (heliusMetrics || dexMetrics) {
+    const holders = (heliusMetrics?.holders || 0) > 0 
+      ? heliusMetrics!.holders 
+      : (dexMetrics?.holders || 0);
+    
+    const priceUsd = heliusMetrics?.priceUsd || dexMetrics?.priceUsd || null;
+    const volume = dexMetrics?.volume24hSol || heliusMetrics?.volume24hSol || 0;
+    const marketCap = heliusMetrics?.marketCapUsd || dexMetrics?.marketCapUsd || null;
+    const liquidity = dexMetrics?.liquidityUsd || heliusMetrics?.liquidityUsd || null;
+
+    console.log(`   🔗 Composite: ${mint.slice(0, 8)} - ${holders} holders, $${priceUsd?.toFixed(8) || 'N/A'}, vol: ${volume.toFixed(2)} SOL`);
+
+    return {
+      holders,
+      volume24hSol: volume,
+      priceUsd,
+      liquidityUsd: liquidity,
+      marketCapUsd: marketCap,
+      bondingCurvePct: null,
+      buys: dexMetrics?.buys || 0,
+      sells: dexMetrics?.sells || 0,
+    };
+  }
+
+  // Last resort: Jupiter price only
+  const jupPrice = await fetchJupiterPrice(mint);
+  if (jupPrice) {
+    // Still try to get holder count from Helius even if getAsset failed
+    const holderCount = await fetchHeliusHolderCount(mint);
+    return {
+      holders: holderCount,
+      volume24hSol: 0,
+      priceUsd: jupPrice,
+      liquidityUsd: null,
+      marketCapUsd: null,
+      bondingCurvePct: null,
+      buys: 0,
+      sells: 0,
+    };
+  }
+
+  console.log(`   ❌ All fallbacks failed for ${mint}`);
+  return null;
 }
 
 // Get current SOL price
