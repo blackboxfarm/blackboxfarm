@@ -46,7 +46,17 @@ interface MetricComparison {
   losersAbove: number;
 }
 
-export default function FantasyAnalysisTab() {
+interface FantasyAnalysisProps {
+  configThresholds?: {
+    maxRugcheck: number;
+    minHolders: number;
+    minVolume: number;
+    minMcap: number;
+  };
+}
+
+export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysisProps) {
+  const thresholds = configThresholds ?? { maxRugcheck: 5000, minHolders: 100, minVolume: 5, minMcap: 5000 };
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AnalysisData[]>([]);
 
@@ -116,40 +126,40 @@ export default function FantasyAnalysisTab() {
         winnersAvg: avg(wRugcheck.filter(v => v !== null) as number[]),
         losersAvg: avg(lRugcheck.filter(v => v !== null) as number[]),
         unit: '',
-        recommendation: 'Reject > 5000',
-        threshold: 5000,
-        winnersAbove: countAbove(wRugcheck, 5000),
-        losersAbove: countAbove(lRugcheck, 5000),
+        recommendation: `Reject > ${thresholds.maxRugcheck}`,
+        threshold: thresholds.maxRugcheck,
+        winnersAbove: countAbove(wRugcheck, thresholds.maxRugcheck),
+        losersAbove: countAbove(lRugcheck, thresholds.maxRugcheck),
       },
       {
         metric: 'Holder Count',
         winnersAvg: avg(wHolders.filter(v => v !== null) as number[]),
         losersAvg: avg(lHolders.filter(v => v !== null) as number[]),
         unit: '',
-        recommendation: 'Require ≥ 100',
-        threshold: 100,
-        winnersAbove: countBelow(wHolders, 100),
-        losersAbove: countBelow(lHolders, 100),
+        recommendation: `Require ≥ ${thresholds.minHolders}`,
+        threshold: thresholds.minHolders,
+        winnersAbove: countBelow(wHolders, thresholds.minHolders),
+        losersAbove: countBelow(lHolders, thresholds.minHolders),
       },
       {
         metric: 'Volume (SOL)',
         winnersAvg: avg(wVolume.filter(v => v !== null) as number[]),
         losersAvg: avg(lVolume.filter(v => v !== null) as number[]),
         unit: ' SOL',
-        recommendation: 'Require ≥ 5 SOL',
-        threshold: 5,
-        winnersAbove: countBelow(wVolume, 5),
-        losersAbove: countBelow(lVolume, 5),
+        recommendation: `Require ≥ ${thresholds.minVolume} SOL`,
+        threshold: thresholds.minVolume,
+        winnersAbove: countBelow(wVolume, thresholds.minVolume),
+        losersAbove: countBelow(lVolume, thresholds.minVolume),
       },
       {
         metric: 'Market Cap (USD)',
         winnersAvg: avg(wMcap.filter(v => v !== null) as number[]),
         losersAvg: avg(lMcap.filter(v => v !== null) as number[]),
         unit: '',
-        recommendation: 'Require ≥ $5k',
-        threshold: '$5,000',
-        winnersAbove: countBelow(wMcap, 5000),
-        losersAbove: countBelow(lMcap, 5000),
+        recommendation: `Require ≥ $${(thresholds.minMcap / 1000).toFixed(0)}k`,
+        threshold: `$${thresholds.minMcap.toLocaleString()}`,
+        winnersAbove: countBelow(wMcap, thresholds.minMcap),
+        losersAbove: countBelow(lMcap, thresholds.minMcap),
       },
     ];
 
@@ -198,7 +208,7 @@ export default function FantasyAnalysisTab() {
     });
 
     return { winners, losers, comparisons, mcapBuckets, rugcheckBuckets };
-  }, [data]);
+  }, [data, thresholds]);
 
   if (loading) {
     return (
@@ -369,25 +379,25 @@ export default function FantasyAnalysisTab() {
         <CardContent>
           <div className="text-sm space-y-2">
             <p className="text-muted-foreground">
-              Applying all 4 filters (rugcheck ≤ 5000, holders ≥ 100, volume ≥ 5 SOL, mcap ≥ $5k):
+              Applying all 4 filters (rugcheck ≤ {thresholds.maxRugcheck}, holders ≥ {thresholds.minHolders}, volume ≥ {thresholds.minVolume} SOL, mcap ≥ ${thresholds.minMcap.toLocaleString()}):
             </p>
             {(() => {
               // Calculate projected impact
               const wouldRejectWinners = winners.filter(d => {
                 const wl = d.watchlist;
                 if (!wl) return false;
-                return (wl.rugcheck_score !== null && wl.rugcheck_score > 5000) ||
-                       (wl.holder_count !== null && wl.holder_count < 100) ||
-                       (wl.volume_sol !== null && wl.volume_sol < 5) ||
-                       (wl.market_cap_usd !== null && wl.market_cap_usd < 5000);
+                return (wl.rugcheck_score !== null && wl.rugcheck_score > thresholds.maxRugcheck) ||
+                       (wl.holder_count !== null && wl.holder_count < thresholds.minHolders) ||
+                       (wl.volume_sol !== null && wl.volume_sol < thresholds.minVolume) ||
+                       (wl.market_cap_usd !== null && wl.market_cap_usd < thresholds.minMcap);
               }).length;
               const wouldRejectLosers = losers.filter(d => {
                 const wl = d.watchlist;
                 if (!wl) return false;
-                return (wl.rugcheck_score !== null && wl.rugcheck_score > 5000) ||
-                       (wl.holder_count !== null && wl.holder_count < 100) ||
-                       (wl.volume_sol !== null && wl.volume_sol < 5) ||
-                       (wl.market_cap_usd !== null && wl.market_cap_usd < 5000);
+                return (wl.rugcheck_score !== null && wl.rugcheck_score > thresholds.maxRugcheck) ||
+                       (wl.holder_count !== null && wl.holder_count < thresholds.minHolders) ||
+                       (wl.volume_sol !== null && wl.volume_sol < thresholds.minVolume) ||
+                       (wl.market_cap_usd !== null && wl.market_cap_usd < thresholds.minMcap);
               }).length;
               const keptWinners = winners.length - wouldRejectWinners;
               const keptLosers = losers.length - wouldRejectLosers;
