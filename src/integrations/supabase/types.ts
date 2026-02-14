@@ -6722,6 +6722,7 @@ export type Database = {
           max_bundle_score: number
           max_bundled_buy_count: number | null
           max_buy_price_usd: number | null
+          max_dust_holder_pct: number | null
           max_fresh_wallet_pct: number | null
           max_gini_coefficient: number | null
           max_linked_wallet_count: number | null
@@ -6795,6 +6796,7 @@ export type Database = {
           max_bundle_score?: number
           max_bundled_buy_count?: number | null
           max_buy_price_usd?: number | null
+          max_dust_holder_pct?: number | null
           max_fresh_wallet_pct?: number | null
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
@@ -6868,6 +6870,7 @@ export type Database = {
           max_bundle_score?: number
           max_bundled_buy_count?: number | null
           max_buy_price_usd?: number | null
+          max_dust_holder_pct?: number | null
           max_fresh_wallet_pct?: number | null
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
@@ -7393,6 +7396,7 @@ export type Database = {
           dev_secondary_wallets: string[] | null
           dev_sold: boolean | null
           dump_from_ath_pct: number | null
+          dust_holder_pct: number | null
           fantasy_position_id: string | null
           first_10_buys_analyzed: boolean | null
           first_seen_at: string
@@ -7511,6 +7515,7 @@ export type Database = {
           dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
           dump_from_ath_pct?: number | null
+          dust_holder_pct?: number | null
           fantasy_position_id?: string | null
           first_10_buys_analyzed?: boolean | null
           first_seen_at?: string
@@ -7629,6 +7634,7 @@ export type Database = {
           dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
           dump_from_ath_pct?: number | null
+          dust_holder_pct?: number | null
           fantasy_position_id?: string | null
           first_10_buys_analyzed?: boolean | null
           first_seen_at?: string
