@@ -1826,12 +1826,13 @@ export function TokenCandidatesDashboard() {
                       <TableHead compact>Symbol</TableHead>
                       <TableHead compact>Token</TableHead>
                       <TableHead compact>Entry</TableHead>
-                      <TableHead compact>Price</TableHead>
+                      <TableHead compact>Exit</TableHead>
                       <TableHead compact>ATH</TableHead>
                       <TableHead compact>Exit X</TableHead>
                       <TableHead compact>Target</TableHead>
                       <TableHead compact>Status</TableHead>
                       <TableHead compact>P&L</TableHead>
+                      <TableHead compact>$$$</TableHead>
                       <TableHead compact>Buy Time (Toronto)</TableHead>
                       <TableHead compact>Links</TableHead>
                       <TableHead compact>Action</TableHead>
@@ -1840,7 +1841,7 @@ export function TokenCandidatesDashboard() {
                   <TableBody>
                     {fantasyPositions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
+                         <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
                           No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
                         </TableCell>
                       </TableRow>
@@ -1869,9 +1870,8 @@ export function TokenCandidatesDashboard() {
                               </div>
                             </TableCell>
                             <TableCell compact className="text-xs font-mono">${pos.entry_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
-                            <TableCell compact className="text-xs font-mono" title={pos.status === 'closed' ? 'Exit price' : 'Live price'}>
+                            <TableCell compact className="text-xs font-mono">
                               ${displayPrice?.toFixed(8) || '0.00000000'}
-                              {pos.status === 'closed' && <span className="text-[10px] text-muted-foreground ml-0.5">exit</span>}
                             </TableCell>
                             <TableCell compact className={`text-xs font-medium ${athMultiplier >= targetMultiplier ? 'text-green-500' : athMultiplier >= 1 ? 'text-yellow-500' : 'text-red-500'}`}>
                               {athMultiplier.toFixed(2)}x
@@ -1892,6 +1892,23 @@ export function TokenCandidatesDashboard() {
                             </TableCell>
                             <TableCell compact className={`text-xs font-medium ${(pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                               {(pnl || 0) >= 0 ? '+' : ''}{(pnl || 0).toFixed(4)}
+                            </TableCell>
+                            <TableCell compact className={`text-xs font-medium ${(() => {
+                              const usdPnl = pos.status === 'closed' && pos.main_sold_price_usd && pos.entry_price_usd && pos.token_amount
+                                ? (pos.main_sold_price_usd - pos.entry_price_usd) * pos.token_amount
+                                : pos.current_price_usd && pos.entry_price_usd && pos.token_amount
+                                  ? (pos.current_price_usd - pos.entry_price_usd) * pos.token_amount
+                                  : 0;
+                              return usdPnl >= 0 ? 'text-green-500' : 'text-red-500';
+                            })()}`}>
+                              {(() => {
+                                const usdPnl = pos.status === 'closed' && pos.main_sold_price_usd && pos.entry_price_usd && pos.token_amount
+                                  ? (pos.main_sold_price_usd - pos.entry_price_usd) * pos.token_amount
+                                  : pos.current_price_usd && pos.entry_price_usd && pos.token_amount
+                                    ? (pos.current_price_usd - pos.entry_price_usd) * pos.token_amount
+                                    : 0;
+                                return `${usdPnl >= 0 ? '+' : ''}$${usdPnl.toFixed(2)}`;
+                              })()}
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground font-mono">
                               {(() => {
@@ -1996,6 +2013,37 @@ export function TokenCandidatesDashboard() {
                           </TableRow>
                         );
                       })
+                    )}
+                    {fantasyPositions.length > 0 && (
+                      <TableRow className="border-t-2 border-primary/30 bg-muted/30">
+                        <TableCell compact colSpan={8} className="text-right text-xs font-semibold text-muted-foreground">
+                          Total $$$
+                        </TableCell>
+                        <TableCell compact className={`text-xs font-bold ${(() => {
+                          const total = fantasyPositions.reduce((sum, pos) => {
+                            const usdPnl = pos.status === 'closed' && pos.main_sold_price_usd && pos.entry_price_usd && pos.token_amount
+                              ? (pos.main_sold_price_usd - pos.entry_price_usd) * pos.token_amount
+                              : pos.current_price_usd && pos.entry_price_usd && pos.token_amount
+                                ? (pos.current_price_usd - pos.entry_price_usd) * pos.token_amount
+                                : 0;
+                            return sum + usdPnl;
+                          }, 0);
+                          return total >= 0 ? 'text-green-500' : 'text-red-500';
+                        })()}`}>
+                          {(() => {
+                            const total = fantasyPositions.reduce((sum, pos) => {
+                              const usdPnl = pos.status === 'closed' && pos.main_sold_price_usd && pos.entry_price_usd && pos.token_amount
+                                ? (pos.main_sold_price_usd - pos.entry_price_usd) * pos.token_amount
+                                : pos.current_price_usd && pos.entry_price_usd && pos.token_amount
+                                  ? (pos.current_price_usd - pos.entry_price_usd) * pos.token_amount
+                                  : 0;
+                              return sum + usdPnl;
+                            }, 0);
+                            return `${total >= 0 ? '+' : ''}$${total.toFixed(2)}`;
+                          })()}
+                        </TableCell>
+                        <TableCell compact colSpan={4} />
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
