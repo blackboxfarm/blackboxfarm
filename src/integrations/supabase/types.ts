@@ -6726,17 +6726,21 @@ export type Database = {
           max_gini_coefficient: number | null
           max_linked_wallet_count: number | null
           max_reevaluate_minutes: number | null
+          max_rugcheck_score_fantasy: number | null
           max_single_wallet_pct: number | null
           max_suspicious_wallet_pct: number | null
           max_ticker_length: number | null
           max_token_age_minutes: number
           max_watch_time_minutes: number | null
           max_watchdog_count: number | null
+          min_holder_count_fantasy: number | null
+          min_market_cap_usd: number | null
           min_rolling_win_rate: number | null
           min_rugcheck_score: number | null
           min_socials_count: number | null
           min_transactions: number
           min_volume_sol_5m: number
+          min_volume_sol_fantasy: number | null
           min_watch_time_minutes: number | null
           polling_interval_seconds: number | null
           qualification_holder_count: number | null
@@ -6795,17 +6799,21 @@ export type Database = {
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
           max_reevaluate_minutes?: number | null
+          max_rugcheck_score_fantasy?: number | null
           max_single_wallet_pct?: number | null
           max_suspicious_wallet_pct?: number | null
           max_ticker_length?: number | null
           max_token_age_minutes?: number
           max_watch_time_minutes?: number | null
           max_watchdog_count?: number | null
+          min_holder_count_fantasy?: number | null
+          min_market_cap_usd?: number | null
           min_rolling_win_rate?: number | null
           min_rugcheck_score?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
+          min_volume_sol_fantasy?: number | null
           min_watch_time_minutes?: number | null
           polling_interval_seconds?: number | null
           qualification_holder_count?: number | null
@@ -6864,17 +6872,21 @@ export type Database = {
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
           max_reevaluate_minutes?: number | null
+          max_rugcheck_score_fantasy?: number | null
           max_single_wallet_pct?: number | null
           max_suspicious_wallet_pct?: number | null
           max_ticker_length?: number | null
           max_token_age_minutes?: number
           max_watch_time_minutes?: number | null
           max_watchdog_count?: number | null
+          min_holder_count_fantasy?: number | null
+          min_market_cap_usd?: number | null
           min_rolling_win_rate?: number | null
           min_rugcheck_score?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
+          min_volume_sol_fantasy?: number | null
           min_watch_time_minutes?: number | null
           polling_interval_seconds?: number | null
           qualification_holder_count?: number | null
