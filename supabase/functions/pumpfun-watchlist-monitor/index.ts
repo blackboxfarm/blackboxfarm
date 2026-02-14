@@ -576,6 +576,11 @@ async function getConfig(supabase: any) {
     signal_strong_holder_threshold: data?.signal_strong_holder_threshold ?? 50,
     signal_strong_volume_threshold_sol: data?.signal_strong_volume_threshold_sol ?? 2.0,
     signal_strong_rugcheck_threshold: data?.signal_strong_rugcheck_threshold ?? 70,
+    // Fantasy red flag filters (Step 2 - tighter gates)
+    min_market_cap_usd: data?.min_market_cap_usd ?? 5000,
+    min_holder_count_fantasy: data?.min_holder_count_fantasy ?? 100,
+    max_rugcheck_score_fantasy: data?.max_rugcheck_score_fantasy ?? 5000,
+    min_volume_sol_fantasy: data?.min_volume_sol_fantasy ?? 5,
   };
 }
 
@@ -905,6 +910,27 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             (token.bundle_score === null || token.bundle_score <= config.max_bundle_score) &&
             passesWalletConcentration) {
           
+          // === FANTASY RED FLAG GATES (Step 2) ===
+          // Apply tighter filters to reject tokens with red flag characteristics
+          const fantasyRedFlags: string[] = [];
+          
+          if (metrics.holders < config.min_holder_count_fantasy) {
+            fantasyRedFlags.push(`holders:${metrics.holders}<${config.min_holder_count_fantasy}`);
+          }
+          if (metrics.volume24hSol < config.min_volume_sol_fantasy) {
+            fantasyRedFlags.push(`volume:${metrics.volume24hSol.toFixed(2)}<${config.min_volume_sol_fantasy}SOL`);
+          }
+          if (metrics.marketCapUsd !== null && metrics.marketCapUsd < config.min_market_cap_usd) {
+            fantasyRedFlags.push(`mcap:$${metrics.marketCapUsd.toFixed(0)}<$${config.min_market_cap_usd}`);
+          }
+          
+          if (fantasyRedFlags.length > 0) {
+            console.log(`   🚩 RED FLAGS: ${token.token_symbol} - ${fantasyRedFlags.join(', ')} - skipping qualification`);
+            // Don't promote but don't kill - let it keep watching in case metrics improve
+            updates.last_checked_at = now.toISOString();
+            updates.last_processor = 'watchlist-monitor';
+          } else {
+          
           // === BUY GATE RUGCHECK RE-VERIFICATION ===
           // Check if rugcheck needs re-verification (stale or missing)
           const rugcheckAge = token.rugcheck_checked_at 
@@ -941,6 +967,19 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             stats.rugcheckRejected++;
             stats.rugcheckTokens.push(`${token.token_symbol} (score: ${rugcheckResult?.normalised?.toFixed(0) || 'N/A'})`);
           } else {
+            // Check raw rugcheck score against fantasy max threshold
+            const rawScore = rugcheckResult?.score ?? token.rugcheck_score ?? 0;
+            if (rawScore > config.max_rugcheck_score_fantasy) {
+              console.log(`   🚩 RUGCHECK RAW SCORE TOO HIGH: ${token.token_symbol} - score: ${rawScore} > max: ${config.max_rugcheck_score_fantasy}`);
+              updates.status = 'rejected';
+              updates.rejection_type = 'soft';
+              updates.rejection_reason = `rugcheck_score_high:${rawScore}`;
+              updates.rejection_reasons = ['rugcheck_score_above_fantasy_max'];
+              updates.removed_at = now.toISOString();
+              
+              stats.rugcheckRejected++;
+              stats.rugcheckTokens.push(`${token.token_symbol} (raw score: ${rawScore})`);
+            } else {
             // All checks passed including RugCheck - classify signal strength and promote!
             const signalStrength = classifySignalStrength(
               metrics, 
@@ -979,6 +1018,8 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
               },
             }, { onConflict: 'token_mint' });
           }
+            } // end else (rugcheck raw score ok)
+          } // end else (no red flags)
         }
         
         // === AGGRESSIVE DEAD CHECK === 

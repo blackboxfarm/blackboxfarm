@@ -61,8 +61,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatDistanceToNow } from 'date-fns';
 
-// Lazy load the pipeline debugger
+// Lazy load the pipeline debugger and analysis tab
 const PipelineDebugger = lazy(() => import('./PipelineDebugger'));
+const FantasyAnalysisTab = lazy(() => import('./FantasyAnalysisTab'));
 
 interface WatchlistItem {
   id: string;
@@ -239,6 +240,11 @@ interface MonitorConfig {
   fantasy_target_multiplier?: number;
   fantasy_moonbag_percentage?: number;
   fantasy_sell_percentage?: number;
+  // Fantasy red flag filters
+  min_market_cap_usd?: number;
+  min_holder_count_fantasy?: number;
+  max_rugcheck_score_fantasy?: number;
+  min_volume_sol_fantasy?: number;
 }
 
 interface SafeguardStatus {
@@ -333,7 +339,7 @@ export function TokenCandidatesDashboard() {
   const [config, setConfig] = useState<MonitorConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
-  const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'logs' | 'debugger'>('watchlist');
+  const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'analysis' | 'logs' | 'debugger'>('watchlist');
   const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('all');
   const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'all'>('open');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -1467,7 +1473,7 @@ export function TokenCandidatesDashboard() {
 
       {/* Main Tabs */}
       <Tabs value={mainTab} onValueChange={(v) => { 
-        setMainTab(v as 'watchlist' | 'candidates' | 'fantasy' | 'logs' | 'debugger');
+        setMainTab(v as 'watchlist' | 'candidates' | 'fantasy' | 'analysis' | 'logs' | 'debugger');
         if (v === 'fantasy') fetchFantasyData();
       }}>
         <TabsList>
@@ -1482,6 +1488,10 @@ export function TokenCandidatesDashboard() {
           <TabsTrigger value="fantasy" className="flex items-center gap-1">
             <TestTube className="h-3 w-3" />
             Fantasy ({fantasyPositions.length})
+          </TabsTrigger>
+          <TabsTrigger value="analysis" className="flex items-center gap-1">
+            <TrendingUp className="h-3 w-3" />
+            📊 Analysis
           </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-1">
             <FileText className="h-3 w-3" />
@@ -1759,6 +1769,37 @@ export function TokenCandidatesDashboard() {
                   </div>
                   <Button variant="outline" size="sm" onClick={fetchFantasyData} disabled={loadingFantasy}>
                     {loadingFantasy ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  </Button>
+                  {/* Bulk close stale positions */}
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    className="text-xs"
+                    onClick={async () => {
+                      if (!confirm('Close all open positions older than 48h or dropped >90% from entry?')) return;
+                      try {
+                        const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+                        // Close positions older than 48h
+                        const { error: e1 } = await supabase
+                          .from('pumpfun_fantasy_positions')
+                          .update({ 
+                            status: 'closed', 
+                            sell_type: 'bulk_close_stale',
+                            closed_at: new Date().toISOString(),
+                            exit_reason: 'stale_bulk_close'
+                          })
+                          .eq('status', 'open')
+                          .lt('created_at', cutoff);
+                        if (e1) throw e1;
+                        toast.success('Stale positions closed');
+                        fetchFantasyData();
+                      } catch (err: any) {
+                        toast.error(err.message);
+                      }
+                    }}
+                  >
+                    <Skull className="h-3 w-3 mr-1" />
+                    Close Stale
                   </Button>
                 </div>
               </div>
@@ -2050,6 +2091,13 @@ export function TokenCandidatesDashboard() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Analysis Tab */}
+        <TabsContent value="analysis" className="mt-4">
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><RefreshCw className="h-6 w-6 animate-spin" /></div>}>
+            <FantasyAnalysisTab />
+          </Suspense>
         </TabsContent>
 
         {/* Logs Tab - Compact */}
