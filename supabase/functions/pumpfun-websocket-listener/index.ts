@@ -577,31 +577,10 @@ async function processNewToken(
   }
   
   // Quick Mayhem Mode check - PERMANENT rejection
+  // Do NOT store mayhem tokens at all - completely invisible
   const isMayhem = await checkMayhemMode(mint);
   if (isMayhem) {
-    console.log(`   🔴 REJECTED: Mayhem Mode active (PERMANENT)`);
-    
-    await supabase.from('pumpfun_watchlist').insert({
-      token_mint: mint,
-      token_name: name,
-      token_symbol: symbol,
-      creator_wallet: traderPublicKey,
-      status: 'rejected',
-      rejection_reason: 'mayhem_mode',
-      rejection_type: 'permanent',
-      rejection_reasons: ['mayhem_mode'],
-      source: 'websocket',
-      created_at_blockchain: new Date().toISOString(),
-      bonding_curve_pct: (vSolInBondingCurve / 85) * 100,
-      market_cap_sol: marketCapSol,
-      has_image: hasImage,
-      socials_count: socialsCount,
-      image_url: metadata?.image || null,
-      twitter_url: metadata?.twitter || null,
-      telegram_url: metadata?.telegram || null,
-      website_url: metadata?.website || null,
-    });
-    
+    console.log(`   🔴 MAYHEM SKIPPED: ${symbol} - not storing at all`);
     return { success: false, reason: 'mayhem_mode' };
   }
   
