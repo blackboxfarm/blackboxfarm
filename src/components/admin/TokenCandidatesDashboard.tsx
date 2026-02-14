@@ -1464,31 +1464,31 @@ export function TokenCandidatesDashboard() {
                     <span className="text-xs">Enabled</span>
                   </div>
                 </div>
-                {configEdits.fantasy_mode_enabled && (
-                  <div className="flex items-center gap-3 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 flex-wrap">
-                    <Shield className="h-3 w-3 text-amber-400" />
-                    <span className="text-xs font-medium text-amber-400">Red Flags:</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-muted-foreground">RC≤</span>
-                      <Input type="number" className="w-16 h-6 text-xs" value={configEdits.max_rugcheck_score_fantasy ?? 5000} onChange={(e) => setConfigEdits(prev => ({ ...prev, max_rugcheck_score_fantasy: parseInt(e.target.value) || 5000 }))} />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-muted-foreground">Hold≥</span>
-                      <Input type="number" className="w-14 h-6 text-xs" value={configEdits.min_holder_count_fantasy ?? 100} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_holder_count_fantasy: parseInt(e.target.value) || 100 }))} />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-muted-foreground">Vol≥</span>
-                      <Input type="number" step="0.5" className="w-14 h-6 text-xs" value={configEdits.min_volume_sol_fantasy ?? 5} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_volume_sol_fantasy: parseFloat(e.target.value) || 5 }))} />
-                      <span className="text-xs text-muted-foreground">SOL</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-muted-foreground">MC≥$</span>
-                      <Input type="number" className="w-16 h-6 text-xs" value={configEdits.min_market_cap_usd ?? 5000} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_market_cap_usd: parseInt(e.target.value) || 5000 }))} />
-                    </div>
-                  </div>
-                )}
                 <Button onClick={saveConfig} size="sm">Save</Button>
               </div>
+              {configEdits.fantasy_mode_enabled && (
+                <div className="flex items-center gap-3 px-2 py-1 mt-2 rounded-md bg-amber-500/10 border border-amber-500/30 flex-wrap">
+                  <Shield className="h-3 w-3 text-amber-400" />
+                  <span className="text-xs font-medium text-amber-400">Red Flags:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">RC≤</span>
+                    <Input type="number" className="w-16 h-6 text-xs" value={configEdits.max_rugcheck_score_fantasy ?? 5000} onChange={(e) => setConfigEdits(prev => ({ ...prev, max_rugcheck_score_fantasy: parseInt(e.target.value) || 5000 }))} />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Hold≥</span>
+                    <Input type="number" className="w-14 h-6 text-xs" value={configEdits.min_holder_count_fantasy ?? 100} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_holder_count_fantasy: parseInt(e.target.value) || 100 }))} />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Vol≥</span>
+                    <Input type="number" step="0.5" className="w-14 h-6 text-xs" value={configEdits.min_volume_sol_fantasy ?? 5} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_volume_sol_fantasy: parseFloat(e.target.value) || 5 }))} />
+                    <span className="text-xs text-muted-foreground">SOL</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">MC≥$</span>
+                    <Input type="number" className="w-16 h-6 text-xs" value={configEdits.min_market_cap_usd ?? 5000} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_market_cap_usd: parseInt(e.target.value) || 5000 }))} />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </CollapsibleContent>
