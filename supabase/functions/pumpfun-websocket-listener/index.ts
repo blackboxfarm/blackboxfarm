@@ -64,7 +64,7 @@ async function getConfig(supabase: any): Promise<IntakeConfig> {
     
   return {
     is_enabled: data?.is_enabled ?? true,
-    max_ticker_length: data?.max_ticker_length ?? 10,
+    max_ticker_length: data?.max_ticker_length ?? 15,
     require_image: data?.require_image ?? false,
     min_socials_count: data?.min_socials_count ?? 0,
   };

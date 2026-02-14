@@ -891,10 +891,10 @@ async function enrichTokenBatch(
       isPermanentReject = true;
     }
     
-    // RUGCHECK SCORE CHECK - SOFT (only if no critical risks and score is low)
-    if (!rugCheckResult.hasCriticalRisk && !rugCheckResult.passed && !rugCheckResult.error) {
-      rejectionReasons.push(`rugcheck_score:${rugCheckResult.normalised.toFixed(0)}<${config.min_rugcheck_score}`);
-    }
+    // RUGCHECK SCORE CHECK - DEFERRED to buy gate (watchlist-monitor)
+    // Early-stage tokens will always have low scores due to low holders/volume.
+    // Score-based rejection now only happens at the qualified/buy_gate stage.
+    // Critical risk rejection above still applies immediately.
     
     // MINT AUTHORITY CHECK - PERMANENT
     if (!authorityCheck.mintAuthorityRevoked) {

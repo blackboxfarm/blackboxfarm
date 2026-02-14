@@ -140,9 +140,9 @@ const FILTER_CONFIG = {
   },
   ticker_too_long: {
     order: 7,
-    name: 'Ticker > 12 chars',
-    description: 'Ticker exceeds 12 characters - unusual for legitimate tokens',
-    threshold: 12,
+    name: 'Ticker > 15 chars',
+    description: 'Ticker exceeds 15 characters - unusual for legitimate tokens',
+    threshold: 15,
   },
   // Lifecycle filters - detect graduated/missed tokens
   already_graduated: {
