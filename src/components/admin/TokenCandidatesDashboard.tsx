@@ -385,6 +385,7 @@ export function TokenCandidatesDashboard() {
       const { data, error } = await supabase
         .from('pumpfun_watchlist')
         .select('*')
+        .neq('rejection_reason', 'mayhem_mode')
         .order('last_checked_at', { ascending: false })
         .limit(500);
 
