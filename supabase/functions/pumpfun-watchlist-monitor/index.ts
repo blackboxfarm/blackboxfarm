@@ -186,6 +186,56 @@ async function fetchHeliusHolderCount(mint: string): Promise<number> {
   }
 }
 
+// Calculate dust holder percentage using Helius getTokenAccounts
+// Dust = holder with < $2 USD worth of the token
+async function calculateDustHolderPct(mint: string, priceUsd: number | null, decimals = 6): Promise<number | null> {
+  if (!priceUsd || priceUsd <= 0) return null;
+  
+  const heliusApiKey = getHeliusApiKey();
+  if (!heliusApiKey) return null;
+
+  try {
+    const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'dust-check',
+        method: 'getTokenAccounts',
+        params: { mint, limit: 500 }
+      })
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.error || !data.result) return null;
+
+    const accounts = data.result.token_accounts || [];
+    const activeAccounts = accounts.filter((a: any) => Number(a.amount || 0) > 0);
+    
+    if (activeAccounts.length === 0) return null;
+
+    const DUST_THRESHOLD_USD = 2;
+    let dustCount = 0;
+    
+    for (const account of activeAccounts) {
+      const rawAmount = Number(account.amount || 0);
+      const tokenAmount = rawAmount / Math.pow(10, decimals);
+      const valueUsd = tokenAmount * priceUsd;
+      if (valueUsd < DUST_THRESHOLD_USD) {
+        dustCount++;
+      }
+    }
+
+    const dustPct = (dustCount / activeAccounts.length) * 100;
+    console.log(`   🧹 Dust check: ${mint.slice(0, 8)} - ${dustCount}/${activeAccounts.length} holders are dust (${dustPct.toFixed(1)}%)`);
+    return dustPct;
+  } catch (error) {
+    console.error(`Error calculating dust for ${mint}:`, error);
+    return null;
+  }
+}
+
 // Fetch token metrics from HELIUS API (PRIMARY FALLBACK - most reliable)
 async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
   const heliusApiKey = getHeliusApiKey();
@@ -581,6 +631,7 @@ async function getConfig(supabase: any) {
     min_holder_count_fantasy: data?.min_holder_count_fantasy ?? 100,
     max_rugcheck_score_fantasy: data?.max_rugcheck_score_fantasy ?? 5000,
     min_volume_sol_fantasy: data?.min_volume_sol_fantasy ?? 5,
+    max_dust_holder_pct: data?.max_dust_holder_pct ?? 25,
   };
 }
 
@@ -980,7 +1031,17 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
               stats.rugcheckRejected++;
               stats.rugcheckTokens.push(`${token.token_symbol} (raw score: ${rawScore})`);
             } else {
-            // All checks passed including RugCheck - classify signal strength and promote!
+            // === DUST HOLDER CHECK (final gate before promotion) ===
+            const dustPct = await calculateDustHolderPct(token.token_mint, metrics.priceUsd);
+            updates.dust_holder_pct = dustPct;
+            
+            if (dustPct !== null && dustPct > config.max_dust_holder_pct) {
+              console.log(`   🧹 DUST TOO HIGH: ${token.token_symbol} - ${dustPct.toFixed(1)}% dust > max ${config.max_dust_holder_pct}% - skipping`);
+              // Don't reject permanently - let it keep watching, dust % can change
+              updates.last_checked_at = now.toISOString();
+              updates.last_processor = 'watchlist-monitor';
+            } else {
+            // All checks passed including RugCheck + Dust - classify signal strength and promote!
             const signalStrength = classifySignalStrength(
               metrics, 
               rugcheckResult?.normalised ?? token.rugcheck_normalised ?? null,
@@ -1018,6 +1079,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
               },
             }, { onConflict: 'token_mint' });
           }
+            } // end else (dust check ok)
             } // end else (rugcheck raw score ok)
           } // end else (no red flags)
         }

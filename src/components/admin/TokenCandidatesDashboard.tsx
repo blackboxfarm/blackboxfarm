@@ -245,6 +245,7 @@ interface MonitorConfig {
   min_holder_count_fantasy?: number;
   max_rugcheck_score_fantasy?: number;
   min_volume_sol_fantasy?: number;
+  max_dust_holder_pct?: number;
 }
 
 interface SafeguardStatus {
@@ -1486,6 +1487,11 @@ export function TokenCandidatesDashboard() {
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">MC≥$</span>
                     <Input type="number" className="w-20 h-6 text-xs" value={configEdits.min_market_cap_usd ?? 5000} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_market_cap_usd: parseInt(e.target.value) || 5000 }))} />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Dust≤</span>
+                    <Input type="number" className="w-20 h-6 text-xs" value={configEdits.max_dust_holder_pct ?? 25} onChange={(e) => setConfigEdits(prev => ({ ...prev, max_dust_holder_pct: parseInt(e.target.value) || 25 }))} />
+                    <span className="text-xs text-muted-foreground">%</span>
                   </div>
                 </div>
               )}
