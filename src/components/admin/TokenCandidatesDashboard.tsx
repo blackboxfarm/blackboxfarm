@@ -80,6 +80,7 @@ interface WatchlistItem {
   volume_sol_prev: number | null;
   price_usd: number | null;
   price_usd_prev: number | null;
+  price_at_mint: number | null;
   price_ath_usd: number | null;
   holder_count_peak: number | null;
   tx_count: number;
@@ -502,9 +503,9 @@ export function TokenCandidatesDashboard() {
       if (posError) throw posError;
       setFantasyPositions((positions || []) as FantasyPosition[]);
 
-      // Fetch stats from edge function
-      const { data: statsData, error: statsError } = await supabase.functions.invoke('pumpfun-fantasy-sell-monitor', {
-        body: { action: 'stats' }
+      // Fetch stats from edge function - pass action as query param (not body)
+      const { data: statsData, error: statsError } = await supabase.functions.invoke('pumpfun-fantasy-sell-monitor?action=stats', {
+        body: {}
       });
 
       if (!statsError && statsData) {
@@ -705,8 +706,9 @@ export function TokenCandidatesDashboard() {
     
     setAddingToFantasy(tokenMint);
     try {
-      const { data, error } = await supabase.functions.invoke('pumpfun-fantasy-executor', {
-        body: { action: 'manual_buy', tokenMint }
+      // Pass action as query param (edge function reads from URL, not body)
+      const { data, error } = await supabase.functions.invoke('pumpfun-fantasy-executor?action=manual_buy', {
+        body: { tokenMint }
       });
 
       if (error) throw error;
@@ -993,9 +995,27 @@ export function TokenCandidatesDashboard() {
   };
 
   // Filtered and sorted watchlist
-  const filteredWatchlist = watchlistFilter === 'all' 
-    ? watchlist 
-    : watchlist.filter(w => w.status === watchlistFilter);
+  // Hide DEV SOLD tokens that have dumped >90% from ATH (dead tokens cluttering the list)
+  const filteredWatchlist = useMemo(() => {
+    let filtered = watchlistFilter === 'all' 
+      ? watchlist 
+      : watchlist.filter(w => w.status === watchlistFilter);
+    
+    // Auto-hide DEV SOLD tokens with massive dumps (>90% from ATH) unless viewing rejected/dead
+    if (watchlistFilter !== 'dead' && watchlistFilter !== 'rejected') {
+      filtered = filtered.filter(item => {
+        if (!item.dev_sold) return true;
+        // If price dropped >90% from ATH, hide it
+        if (item.price_ath_usd && item.price_usd && item.price_ath_usd > 0) {
+          const dropPct = ((item.price_ath_usd - item.price_usd) / item.price_ath_usd) * 100;
+          if (dropPct > 90) return false;
+        }
+        return true;
+      });
+    }
+    
+    return filtered;
+  }, [watchlist, watchlistFilter]);
 
   const sortedWatchlist = useMemo(() => {
     return [...filteredWatchlist].sort((a, b) => {
@@ -1560,6 +1580,7 @@ export function TokenCandidatesDashboard() {
                       <SortableHeader column="holder_count" label="Holders" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <SortableHeader column="volume_sol" label="Vol (SOL)" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <TableHead compact>BC%</TableHead>
+                      <TableHead compact>Disc.</TableHead>
                       <TableHead compact>Price</TableHead>
                       <TableHead compact>ATH</TableHead>
                       <SortableHeader column="first_seen_at" label="Age" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
@@ -1571,7 +1592,7 @@ export function TokenCandidatesDashboard() {
                   <TableBody>
                     {sortedWatchlist.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
                           No tokens in watchlist
                         </TableCell>
                       </TableRow>
@@ -1603,6 +1624,9 @@ export function TokenCandidatesDashboard() {
                             </TableCell>
                             <TableCell compact className="text-xs text-cyan-400">
                               {formatBondingCurve(item.bonding_curve_pct)}
+                            </TableCell>
+                            <TableCell compact className="text-xs text-muted-foreground">
+                              {formatPrice(item.price_at_mint)}
                             </TableCell>
                             <TableCell compact className="text-xs">
                               {formatPrice(item.price_usd)}
@@ -1661,7 +1685,7 @@ export function TokenCandidatesDashboard() {
                           {/* Expanded Row */}
                           {expandedRows.has(item.id) && (
                             <TableRow className="bg-muted/20">
-                              <TableCell colSpan={12} className="py-3">
+                              <TableCell colSpan={13} className="py-3">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                                   <div><span className="text-muted-foreground">Name:</span> {item.token_name}</div>
                                   <div><span className="text-muted-foreground">Market Cap:</span> {item.market_cap_usd ? `$${Number(item.market_cap_usd).toLocaleString()}` : '-'}</div>
