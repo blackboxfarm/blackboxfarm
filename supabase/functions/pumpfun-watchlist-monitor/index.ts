@@ -665,7 +665,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         // === ENHANCED DEV BEHAVIOR CHECK (HIGHEST PRIORITY) ===
         // Use smarter logic: Only auto-reject on FULL EXIT for young tokens
         // Allow partial sells if dev still holds and token is still active
-        if (token.dev_sold === true) {
+        // SKIP for bonding curve tokens: dev_holding_pct is unreliable (often 0%) before migration
+        const currentBondingCurvePct = token.bonding_curve_pct ?? null;
+        const isOnBondingCurve = currentBondingCurvePct === null || currentBondingCurvePct > 5;
+        
+        if (token.dev_sold === true && !isOnBondingCurve) {
           const tokenAgeMinutes = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
           const devHoldingPct = token.dev_holding_pct ?? null;
           const devBoughtBack = token.dev_bought_back === true;
