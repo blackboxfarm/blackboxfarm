@@ -483,52 +483,52 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
         // Check if target hit
         if (multiplier >= position.target_multiplier) {
-          // TARGET HIT! Simulate 90% sell
+          // TARGET HIT! Simulate 100% sell (no moonbag)
           console.log(`🎯 TARGET HIT: ${position.token_symbol} @ ${multiplier.toFixed(2)}x (target: ${position.target_multiplier}x)`);
 
-          const sellPercentage = position.sell_percentage / 100;
-          const moonbagPercentage = position.moonbag_percentage / 100;
-          
-          // Calculate main sell
-          const tokensToSell = position.token_amount * sellPercentage;
-          const mainSellValueSol = tokensToSell * currentPriceSol;
-          const mainCostBasisSol = position.entry_amount_sol * sellPercentage;
-          const mainRealizedPnlSol = mainSellValueSol - mainCostBasisSol;
+          // Calculate full sell
+          const fullSellValueSol = position.token_amount * currentPriceSol;
+          const realizedPnlSol = fullSellValueSol - position.entry_amount_sol;
+          const realizedPnlPercent = ((fullSellValueSol / position.entry_amount_sol) - 1) * 100;
 
-          // Calculate moonbag
-          const moonbagTokens = position.token_amount * moonbagPercentage;
-          const moonbagValueSol = moonbagTokens * currentPriceSol;
-          const moonbagCostBasisSol = position.entry_amount_sol * moonbagPercentage;
+          // Classify outcome
+          const outcome = realizedPnlPercent > 0 ? 'success' : 'loss';
 
-          // Update position to moonbag status
+          // Update position to closed (100% sell, no moonbag)
           await supabase
             .from('pumpfun_fantasy_positions')
             .update({
-              status: 'moonbag',
+              status: 'closed',
               current_price_usd: currentPriceUsd,
               current_price_sol: currentPriceSol,
               main_sold_at: now,
               main_sold_price_usd: currentPriceUsd,
-              main_sold_amount_sol: mainSellValueSol,
-              main_realized_pnl_sol: mainRealizedPnlSol,
-              moonbag_active: true,
-              moonbag_token_amount: moonbagTokens,
-              moonbag_entry_value_sol: moonbagCostBasisSol,
-              moonbag_current_value_sol: moonbagValueSol,
-              moonbag_peak_price_usd: currentPriceUsd,
+              main_sold_amount_sol: fullSellValueSol,
+              main_realized_pnl_sol: realizedPnlSol,
+              moonbag_active: false,
+              moonbag_token_amount: 0,
+              moonbag_entry_value_sol: 0,
+              moonbag_current_value_sol: 0,
               moonbag_drawdown_pct: 0,
-              total_realized_pnl_sol: mainRealizedPnlSol,
+              sell_percentage: 100,
+              moonbag_percentage: 0,
+              total_realized_pnl_sol: realizedPnlSol,
+              total_pnl_percent: realizedPnlPercent,
+              exit_at: now,
+              exit_price_usd: currentPriceUsd,
+              exit_reason: 'target_hit',
               peak_price_usd: isNewPeak ? currentPriceUsd : position.peak_price_usd,
               peak_multiplier: isNewPeak ? multiplier : position.peak_multiplier,
               peak_at: isNewPeak ? now : position.peak_at,
+              outcome,
+              outcome_classified_at: now,
               updated_at: now,
             })
             .eq('id', position.id);
 
           stats.targetsSold++;
-          stats.moonbagsCreated++;
           
-          console.log(`💰 SOLD 90%: ${position.token_symbol} | +${mainRealizedPnlSol.toFixed(4)} SOL | Moonbag: ${moonbagTokens.toFixed(2)} tokens`);
+          console.log(`💰 SOLD 100%: ${position.token_symbol} | +${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
 
         } else {
           // Just update current price and P&L
