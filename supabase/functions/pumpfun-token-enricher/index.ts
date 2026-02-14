@@ -181,7 +181,8 @@ async function detectBundledBuys(
   
   try {
     // Fetch recent transactions for the token using rate-limited wrapper
-    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?limit=50`;
+    const heliusKeyForUrl = getHeliusApiKey();
+    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKeyForUrl}&limit=50`;
     const response = await heliusFetch(url, { method: 'GET' }, {
       functionName: 'pumpfun-token-enricher',
       endpoint: 'transactions',
@@ -262,7 +263,8 @@ async function detectBumpBotActivity(
   
   try {
     // Fetch recent transactions using rate-limited wrapper
-    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?limit=50`;
+    const heliusKeyForUrl = getHeliusApiKey();
+    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKeyForUrl}&limit=50`;
     const response = await heliusFetch(url, { method: 'GET' }, {
       functionName: 'pumpfun-token-enricher',
       endpoint: 'transactions',
@@ -1165,7 +1167,7 @@ serve(async (req) => {
       // Get pending_triage tokens
       const { data: pendingTokens, error } = await supabase
         .from('pumpfun_watchlist')
-        .select('id, token_mint, token_symbol, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol, has_image, socials_count, image_url, twitter_url, telegram_url, website_url')
+        .select('id, token_mint, token_symbol, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol, has_image, socials_count, image_url, twitter_url, telegram_url, website_url, mint_authority_revoked, freeze_authority_revoked, authority_checked_at, bundled_buy_count, bundle_checked_at')
         .eq('status', 'pending_triage')
         .order('created_at', { ascending: true })
         .limit(BATCH_SIZE);
