@@ -57,7 +57,8 @@ interface FantasyAnalysisProps {
 
 export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysisProps) {
   const thresholds = configThresholds ?? { maxRugcheck: 5000, minHolders: 100, minVolume: 5, minMcap: 5000 };
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [data, setData] = useState<AnalysisData[]>([]);
 
   const fetchAnalysis = async () => {
@@ -98,10 +99,11 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
       console.error('Error fetching analysis data:', err);
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   };
 
-  useEffect(() => { fetchAnalysis(); }, []);
+  useEffect(() => { setInitialLoad(true); fetchAnalysis(); }, []);
 
   const { winners, losers, comparisons, mcapBuckets, rugcheckBuckets } = useMemo(() => {
     const winners = data.filter(d => d.position.status === 'closed');
@@ -210,7 +212,7 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
     return { winners, losers, comparisons, mcapBuckets, rugcheckBuckets };
   }, [data, thresholds]);
 
-  if (loading) {
+  if (initialLoad && loading) {
     return (
       <div className="flex items-center justify-center h-32">
         <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
