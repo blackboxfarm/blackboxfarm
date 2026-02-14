@@ -166,6 +166,7 @@ interface FantasyPosition {
   status: string;
   target_multiplier: number;
   main_sold_at: string | null;
+  main_sold_price_usd: number | null;
   main_realized_pnl_sol: number | null;
   moonbag_active: boolean | null;
   moonbag_current_value_sol: number | null;
@@ -1825,9 +1826,9 @@ export function TokenCandidatesDashboard() {
                       <TableHead compact>Symbol</TableHead>
                       <TableHead compact>Token</TableHead>
                       <TableHead compact>Entry</TableHead>
-                      <TableHead compact>Current</TableHead>
+                      <TableHead compact>Price</TableHead>
                       <TableHead compact>ATH</TableHead>
-                      <TableHead compact>Gain</TableHead>
+                      <TableHead compact>Exit X</TableHead>
                       <TableHead compact>Target</TableHead>
                       <TableHead compact>Status</TableHead>
                       <TableHead compact>P&L</TableHead>
@@ -1845,7 +1846,11 @@ export function TokenCandidatesDashboard() {
                       </TableRow>
                     ) : (
                       fantasyPositions.map((pos) => {
-                        const currentGain = pos.current_price_usd && pos.entry_price_usd ? pos.current_price_usd / pos.entry_price_usd : 0;
+                        // For closed positions, use exit price; for open, use live price
+                        const displayPrice = pos.status === 'closed' && pos.main_sold_price_usd 
+                          ? pos.main_sold_price_usd 
+                          : pos.current_price_usd;
+                        const currentGain = displayPrice && pos.entry_price_usd ? displayPrice / pos.entry_price_usd : 0;
                         const targetMultiplier = pos.target_multiplier || 1.5;
                         const targetHit = currentGain >= targetMultiplier;
                         const pnl = pos.status === 'closed' ? pos.total_realized_pnl_sol : pos.unrealized_pnl_sol;
@@ -1864,7 +1869,10 @@ export function TokenCandidatesDashboard() {
                               </div>
                             </TableCell>
                             <TableCell compact className="text-xs font-mono">${pos.entry_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
-                            <TableCell compact className="text-xs font-mono">${pos.current_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
+                            <TableCell compact className="text-xs font-mono" title={pos.status === 'closed' ? 'Exit price' : 'Live price'}>
+                              ${displayPrice?.toFixed(8) || '0.00000000'}
+                              {pos.status === 'closed' && <span className="text-[10px] text-muted-foreground ml-0.5">exit</span>}
+                            </TableCell>
                             <TableCell compact className={`text-xs font-medium ${athMultiplier >= targetMultiplier ? 'text-green-500' : athMultiplier >= 1 ? 'text-yellow-500' : 'text-red-500'}`}>
                               {athMultiplier.toFixed(2)}x
                             </TableCell>
