@@ -1882,8 +1882,22 @@ export function TokenCandidatesDashboard() {
                                 pos.status === 'closed' ? 'bg-muted text-muted-foreground' : ''
                               }>{pos.status}</Badge>
                             </TableCell>
-                            <TableCell compact className={`text-xs ${(pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                              {(pnl || 0) >= 0 ? '+' : ''}{(pnl || 0).toFixed(4)}
+                            <TableCell compact className="text-xs">
+                              <div className={`font-medium ${(pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                {(pnl || 0) >= 0 ? '+' : ''}{(pnl || 0).toFixed(4)}
+                              </div>
+                              {pos.status === 'closed' && pos.main_realized_pnl_sol != null && (
+                                <div className="flex flex-col gap-0.5 mt-0.5 text-[10px]">
+                                  <span className={pos.main_realized_pnl_sol >= 0 ? 'text-green-500/70' : 'text-red-500/70'}>
+                                    sell: {pos.main_realized_pnl_sol >= 0 ? '+' : ''}{pos.main_realized_pnl_sol.toFixed(4)}
+                                  </span>
+                                  {pos.moonbag_active !== undefined && (
+                                    <span className={((pnl || 0) - (pos.main_realized_pnl_sol || 0)) >= 0 ? 'text-green-500/70' : 'text-red-500/70'}>
+                                      bag: {((pnl || 0) - (pos.main_realized_pnl_sol || 0)) >= 0 ? '+' : ''}{((pnl || 0) - (pos.main_realized_pnl_sol || 0)).toFixed(4)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground font-mono">
                               {(() => {
