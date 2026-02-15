@@ -467,6 +467,27 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
       const currentPriceUsd = priceMap.get(position.token_mint);
       
       if (!currentPriceUsd) {
+        // If no price available and position is older than 6 hours, auto-close as dead
+        const positionAgeHours = (Date.now() - new Date(position.created_at).getTime()) / (1000 * 60 * 60);
+        if (positionAgeHours > 6 && position.status === 'open') {
+          console.log(`💀 AUTO-CLOSE (no price, ${positionAgeHours.toFixed(1)}h old): ${position.token_symbol}`);
+          const lastKnownPriceSol = position.current_price_sol || position.entry_price_sol * 0.01;
+          const lastKnownPriceUsd = position.current_price_usd || position.entry_price_usd * 0.01;
+          const exitValueSol = position.token_amount * lastKnownPriceSol;
+          const realizedPnlSol = exitValueSol - position.entry_amount_sol;
+          const realizedPnlPercent = ((exitValueSol / position.entry_amount_sol) - 1) * 100;
+          await supabase.from('pumpfun_fantasy_positions').update({
+            status: 'closed', current_price_usd: lastKnownPriceUsd, current_price_sol: lastKnownPriceSol,
+            main_sold_at: now, main_sold_price_usd: lastKnownPriceUsd, main_sold_amount_sol: exitValueSol,
+            main_realized_pnl_sol: realizedPnlSol, sell_percentage: 100, moonbag_percentage: 0,
+            moonbag_active: false, moonbag_token_amount: 0, moonbag_entry_value_sol: 0, moonbag_current_value_sol: 0,
+            total_realized_pnl_sol: realizedPnlSol, total_pnl_percent: realizedPnlPercent,
+            exit_at: now, exit_price_usd: lastKnownPriceUsd, exit_reason: 'dead_no_price',
+            outcome: 'loss', outcome_classified_at: now, updated_at: now,
+          }).eq('id', position.id);
+          stats.targetsSold++;
+          continue;
+        }
         console.log(`⚠️ No price for ${position.token_symbol}, skipping`);
         continue;
       }
@@ -526,6 +547,36 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           stats.targetsSold++;
           console.log(`🛑 STOP-LOSS SOLD: ${position.token_symbol} | ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
 
+        }
+        // AUTO-CLOSE STALE: >12h old with >65% loss, or >24h old regardless
+        else if ((() => {
+          const positionAgeHours = (Date.now() - new Date(position.created_at).getTime()) / (1000 * 60 * 60);
+          return (positionAgeHours > 12 && multiplier < 0.35) || positionAgeHours > 24;
+        })()) {
+          const positionAgeHours = (Date.now() - new Date(position.created_at).getTime()) / (1000 * 60 * 60);
+          const isDeadDump = positionAgeHours > 12 && multiplier < 0.35;
+          const reason = isDeadDump ? `dead_dump_${positionAgeHours.toFixed(0)}h` : `stale_${positionAgeHours.toFixed(0)}h`;
+          console.log(`💀 AUTO-CLOSE (${reason}): ${position.token_symbol} @ ${multiplier.toFixed(3)}x`);
+
+          const fullSellValueSol = position.token_amount * currentPriceSol;
+          const realizedPnlSol = fullSellValueSol - position.entry_amount_sol;
+          const realizedPnlPercent = ((fullSellValueSol / position.entry_amount_sol) - 1) * 100;
+
+          await supabase.from('pumpfun_fantasy_positions').update({
+            status: 'closed', current_price_usd: currentPriceUsd, current_price_sol: currentPriceSol,
+            main_sold_at: now, main_sold_price_usd: currentPriceUsd, main_sold_amount_sol: fullSellValueSol,
+            main_realized_pnl_sol: realizedPnlSol, sell_percentage: 100, moonbag_percentage: 0,
+            moonbag_active: false, moonbag_token_amount: 0, moonbag_entry_value_sol: 0, moonbag_current_value_sol: 0,
+            total_realized_pnl_sol: realizedPnlSol, total_pnl_percent: realizedPnlPercent,
+            exit_at: now, exit_price_usd: currentPriceUsd, exit_reason: reason,
+            peak_price_usd: isNewPeak ? currentPriceUsd : position.peak_price_usd,
+            peak_multiplier: isNewPeak ? multiplier : position.peak_multiplier,
+            outcome: multiplier >= 1 ? 'breakeven' : 'loss', outcome_classified_at: now, updated_at: now,
+          }).eq('id', position.id);
+
+          stats.targetsSold++;
+          await createLearningRecord(supabase, position, currentPriceUsd, multiplier);
+          stats.learningsCreated++;
         }
         // Check if target hit
         else if (multiplier >= position.target_multiplier) {
