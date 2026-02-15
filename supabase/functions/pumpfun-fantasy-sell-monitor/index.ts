@@ -844,8 +844,37 @@ serve(async (req) => {
 
     switch (action) {
       case 'monitor': {
-        const stats = await monitorPositions(supabase);
-        return jsonResponse({ success: true, stats });
+        // Loop every 5 seconds for ~55 seconds within this single cron invocation
+        const MAX_RUNTIME_MS = 55_000;
+        const POLL_INTERVAL_MS = 5_000;
+        const loopStart = Date.now();
+        let cycles = 0;
+        let lastStats: any = null;
+
+        while (Date.now() - loopStart < MAX_RUNTIME_MS) {
+          cycles++;
+          const stats = await monitorPositions(supabase);
+          lastStats = stats;
+
+          // If a target was hit or position closed, log it prominently
+          if (stats.targetsSold > 0 || stats.moonbagsClosed > 0 || stats.drawdownExits > 0) {
+            console.log(`🔥 CYCLE ${cycles}: Action taken! Targets: ${stats.targetsSold}, Moonbags closed: ${stats.moonbagsClosed}`);
+          }
+
+          // If no open positions left, stop looping
+          if (stats.positionsChecked === 0) {
+            console.log(`📋 No positions to monitor, stopping loop after ${cycles} cycles`);
+            break;
+          }
+
+          // Wait 5 seconds before next check (unless we'd exceed runtime)
+          const elapsed = Date.now() - loopStart;
+          if (elapsed + POLL_INTERVAL_MS >= MAX_RUNTIME_MS) break;
+          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+        }
+
+        console.log(`🔄 MONITOR LOOP COMPLETE: ${cycles} cycles in ${((Date.now() - loopStart) / 1000).toFixed(1)}s`);
+        return jsonResponse({ success: true, cycles, stats: lastStats });
       }
 
       case 'stats': {
