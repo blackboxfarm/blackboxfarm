@@ -5,19 +5,28 @@ import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**
- * PUMPFUN WATCHLIST MONITOR
+ * PUMPFUN WATCHLIST MONITOR v2 — MOMENTUM SCORING ENGINE
  * 
- * Purpose: Monitor ALL watching tokens, update metrics, promote or demote
- * Schedule: Every 60-120 seconds via cron
+ * REPLACES binary pass/fail gates with a WEIGHTED SCORING SYSTEM.
  * 
- * Logic:
- * 1. Get ALL tokens with status 'watching' from database (batch of 50)
- * 2. Fetch current metrics for each token directly from pump.fun API
- * 3. Compare to previous metrics and update database
- * 4. CHECK DEV BEHAVIOR: If dev_sold or dev_launched_new -> immediate PERMANENT reject
- * 5. Promotion: If holders >= 20 AND volume >= 0.5 SOL AND watched >= 2 min -> 'qualified'
- * 6. Staleness: If NO changes for 3+ consecutive checks -> increment stale counter
- * 7. Dead check: If holders < 3 OR volume < 0.01 SOL after 15+ minutes -> 'dead'
+ * Data-driven scoring based on analysis of 395 fantasy positions:
+ * - Winners avg: 387 holders, 241 SOL vol, rugcheck 4847, $677k mcap, 1.84x peak
+ * - Losers avg: 194 holders, 140 SOL vol, rugcheck 9322, $1.1M mcap, 1.06x peak
+ * 
+ * KEY INSIGHTS:
+ * - 500+ holders = 39% win rate (vs 8.5% for 50-100)
+ * - 200+ SOL volume = 33% win rate (vs 5.6% for <10 SOL)
+ * - Rugcheck 6001-10000 = DEATH ZONE (5.6% win rate)
+ * - Mcap $50k-100k = 38% win rate (vs 5% for <$5k)
+ * - Volume ACCELERATION matters more than absolute volume
+ * - Dev reputation completely ignored = massive blind spot
+ * 
+ * SCORING: Token must score >= 70/100 to qualify for fantasy
+ * Score components:
+ *   Holder Score (0-25): Based on holder count with steep curve
+ *   Volume Score (0-25): Based on 24h volume with surge bonus
+ *   Safety Score (0-25): RugCheck + dev reputation + authority checks
+ *   Momentum Score (0-25): Price/volume/holder acceleration (deltas)
  */
 
 const corsHeaders = {
@@ -41,6 +50,9 @@ const CALL_DELAY_MS = 100;
 const TOKENS_PER_RUN = 50;
 const SKIP_RECENTLY_CHECKED_MINUTES = 3;
 
+// MINIMUM SCORE THRESHOLD for fantasy qualification
+const MIN_QUALIFICATION_SCORE = 65;
+
 interface MonitorStats {
   tokensChecked: number;
   tokensUpdated: number;
@@ -56,6 +68,7 @@ interface MonitorStats {
   skippedRecent: number;
   rugcheckRejected: number;
   rugcheckTokens: string[];
+  scoreBreakdowns: Array<{ symbol: string; total: number; holder: number; volume: number; safety: number; momentum: number; qualified: boolean }>;
 }
 
 interface TokenMetrics {
@@ -87,6 +100,16 @@ interface RugCheckResult {
   error?: string;
 }
 
+interface QualificationScore {
+  total: number;
+  holderScore: number;
+  volumeScore: number;
+  safetyScore: number;
+  momentumScore: number;
+  breakdown: string;
+  disqualifyReasons: string[];
+}
+
 // Delay helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -99,7 +122,7 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
       const response = await fetch(url, options);
       
       if (response.status === 429) {
-        const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        const backoffMs = Math.pow(2, attempt) * 1000;
         console.log(`Rate limited, backing off ${backoffMs}ms (attempt ${attempt + 1})`);
         await delay(backoffMs);
         continue;
@@ -118,7 +141,6 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
 }
 
 // === MAYHEM MODE CHECK ===
-// Detect tokens with suspicious program ID or supply (hard reject)
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
     const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
@@ -131,7 +153,7 @@ async function checkMayhemMode(tokenMint: string): Promise<boolean> {
     const program = data.program || null;
     
     const MAYHEM_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
-    const MAYHEM_SUPPLY = 2000000000000000; // 2 quadrillion
+    const MAYHEM_SUPPLY = 2000000000000000;
     
     const isMayhem = program === MAYHEM_PROGRAM_ID || totalSupply >= MAYHEM_SUPPLY;
     
@@ -146,7 +168,7 @@ async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   }
 }
 
-// Fetch actual holder count from Helius using getTokenAccounts
+// Fetch actual holder count from Helius
 async function fetchHeliusHolderCount(mint: string): Promise<number> {
   const heliusApiKey = getHeliusApiKey();
   if (!heliusApiKey) return 0;
@@ -159,24 +181,16 @@ async function fetchHeliusHolderCount(mint: string): Promise<number> {
         jsonrpc: '2.0',
         id: 'holder-count',
         method: 'getTokenAccounts',
-        params: { 
-          mint,
-          limit: 500, // Enough for bonding curve tokens
-        }
+        params: { mint, limit: 500 }
       })
     });
 
     if (!response.ok) return 0;
     const data = await response.json();
-    
     if (data.error || !data.result) return 0;
     
-    // Count non-zero balance accounts
     const accounts = data.result.token_accounts || [];
-    const activeHolders = accounts.filter((a: any) => {
-      const amount = Number(a.amount || 0);
-      return amount > 0;
-    }).length;
+    const activeHolders = accounts.filter((a: any) => Number(a.amount || 0) > 0).length;
     
     console.log(`   👥 Helius holder count: ${mint.slice(0, 8)} - ${activeHolders} holders`);
     return activeHolders;
@@ -186,8 +200,7 @@ async function fetchHeliusHolderCount(mint: string): Promise<number> {
   }
 }
 
-// Calculate dust holder percentage using Helius getTokenAccounts
-// Dust = holder with < $2 USD worth of the token
+// Calculate dust holder percentage
 async function calculateDustHolderPct(mint: string, priceUsd: number | null, decimals = 6): Promise<number | null> {
   if (!priceUsd || priceUsd <= 0) return null;
   
@@ -222,9 +235,7 @@ async function calculateDustHolderPct(mint: string, priceUsd: number | null, dec
       const rawAmount = Number(account.amount || 0);
       const tokenAmount = rawAmount / Math.pow(10, decimals);
       const valueUsd = tokenAmount * priceUsd;
-      if (valueUsd < DUST_THRESHOLD_USD) {
-        dustCount++;
-      }
+      if (valueUsd < DUST_THRESHOLD_USD) dustCount++;
     }
 
     const dustPct = (dustCount / activeAccounts.length) * 100;
@@ -236,16 +247,12 @@ async function calculateDustHolderPct(mint: string, priceUsd: number | null, dec
   }
 }
 
-// Fetch token metrics from HELIUS API (PRIMARY FALLBACK - most reliable)
+// Fetch Helius metrics
 async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
   const heliusApiKey = getHeliusApiKey();
-  if (!heliusApiKey) {
-    console.log(`   ⚠️ HELIUS_API_KEY not set`);
-    return null;
-  }
+  if (!heliusApiKey) return null;
 
   try {
-    // Parallel: getAsset for price + getTokenAccounts for holder count
     const [assetResponse, holderCount] = await Promise.all([
       fetch(getHeliusRpcUrl(heliusApiKey), {
         method: 'POST',
@@ -273,12 +280,10 @@ async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
         pricePerToken = tokenInfo.price_info?.price_per_token || null;
       }
     }
-    
-    console.log(`   📊 Helius fallback: ${mint.slice(0, 8)} - ${holderCount} holders, price: $${pricePerToken?.toFixed(8) || 'N/A'}`);
 
     return {
       holders: holderCount,
-      volume24hSol: 0, // Helius doesn't provide volume in getAsset
+      volume24hSol: 0,
       priceUsd: pricePerToken,
       liquidityUsd: null,
       marketCapUsd: pricePerToken && supply ? (pricePerToken * supply / Math.pow(10, decimals)) : null,
@@ -292,91 +297,34 @@ async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
   }
 }
 
-// Fetch token metrics from SolanaTracker API (better for pump.fun tokens)
-async function fetchSolanaTrackerMetrics(mint: string): Promise<TokenMetrics | null> {
-  try {
-    const response = await fetch(`https://data.solanatracker.io/tokens/${mint}`, {
-      headers: { 
-        'Accept': 'application/json',
-        'x-api-key': Deno.env.get('SOLANA_TRACKER_API_KEY') || '',
-      }
-    });
-
-    if (!response.ok) {
-      console.log(`   📊 SolanaTracker API error for ${mint}: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    
-    if (!data || data.error) {
-      console.log(`   📊 SolanaTracker: No data for ${mint}`);
-      return null;
-    }
-
-    const pools = data.pools || [];
-    const mainPool = pools[0] || {};
-    
-    console.log(`   📊 SolanaTracker fallback: ${mint.slice(0, 8)} - ${data.token?.holder || 0} holders`);
-
-    return {
-      holders: data.token?.holder || 0,
-      volume24hSol: (mainPool.volume?.h24 || 0) / (mainPool.price?.sol || 200),
-      priceUsd: mainPool.price?.usd || null,
-      liquidityUsd: mainPool.liquidity?.usd || null,
-      marketCapUsd: data.token?.market_cap || null,
-      bondingCurvePct: null, // SolanaTracker doesn't have bonding curve data
-      buys: mainPool.txns?.h24?.buys || 0,
-      sells: mainPool.txns?.h24?.sells || 0,
-    };
-  } catch (error) {
-    console.error(`Error fetching SolanaTracker metrics for ${mint}:`, error);
-    return null;
-  }
-}
-
-// Fetch token metrics from DexScreener (fallback API - better for graduated tokens)
+// Fetch DexScreener metrics
 async function fetchDexScreenerMetrics(mint: string): Promise<TokenMetrics | null> {
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
       headers: { 'Accept': 'application/json' }
     });
 
-    if (!response.ok) {
-      console.log(`   📊 DexScreener API error for ${mint}: ${response.status}`);
-      return null;
-    }
-
+    if (!response.ok) return null;
     const data = await response.json();
-    const pair = data?.pairs?.[0]; // Get first pair (usually SOL pair)
-
-    if (!pair) {
-      console.log(`   📊 DexScreener: No pairs found for ${mint}`);
-      return null;
-    }
+    const pair = data?.pairs?.[0];
+    if (!pair) return null;
 
     const priceUsd = parseFloat(pair.priceUsd) || 0;
     const volume24h = parseFloat(pair.volume?.h24) || 0;
     const liquidity = parseFloat(pair.liquidity?.usd) || 0;
     const marketCap = parseFloat(pair.marketCap) || (pair.fdv ? parseFloat(pair.fdv) : null);
-    
-    // Estimate holders from txns if available
     const txns24h = pair.txns?.h24 || {};
     const estimatedHolders = Math.min((txns24h.buys || 0) + (txns24h.sells || 0), 1000);
-
-    // Convert volume USD to SOL (estimate using price)
     const solPrice = priceUsd > 0 && pair.priceNative ? (priceUsd / parseFloat(pair.priceNative)) : 200;
     const volumeSol = volume24h / solPrice;
-
-    console.log(`   📊 DexScreener fallback: ${mint.slice(0, 8)} - $${priceUsd.toFixed(8)}, vol: ${volumeSol.toFixed(2)} SOL`);
 
     return {
       holders: estimatedHolders,
       volume24hSol: volumeSol,
-      priceUsd: priceUsd,
+      priceUsd,
       liquidityUsd: liquidity,
       marketCapUsd: marketCap,
-      bondingCurvePct: null, // DexScreener doesn't have bonding curve data
+      bondingCurvePct: null,
       buys: txns24h.buys || 0,
       sells: txns24h.sells || 0,
     };
@@ -386,32 +334,19 @@ async function fetchDexScreenerMetrics(mint: string): Promise<TokenMetrics | nul
   }
 }
 
-// Fetch just price from Jupiter (price-only fallback)
+// Fetch Jupiter price
 async function fetchJupiterPrice(mint: string): Promise<number | null> {
   try {
-    const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`, {
-      headers: { 'Accept': 'application/json' }
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
+    const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`);
+    if (!response.ok) return null;
     const data = await response.json();
-    const price = data?.data?.[mint]?.price;
-    
-    if (price) {
-      console.log(`   💹 Jupiter price fallback: ${mint.slice(0, 8)} - $${price.toFixed(8)}`);
-      return price;
-    }
-    return null;
-  } catch (error) {
-    console.error(`Error fetching Jupiter price for ${mint}:`, error);
+    return data?.data?.[mint]?.price || null;
+  } catch {
     return null;
   }
 }
 
-// Fetch token metrics with composite fallback: pump.fun -> merge(Helius holders + DexScreener price)
+// Composite metric fetcher
 async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   // Try pump.fun first
   try {
@@ -422,7 +357,6 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
 
     if (response.ok) {
       const data = await response.json();
-      
       const virtualSolReserves = data.virtual_sol_reserves || 0;
       const virtualTokenReserves = data.virtual_token_reserves || 0;
       const totalSupply = data.total_supply || 1000000000000000;
@@ -442,33 +376,22 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
         sells: data.sell_count || 0,
       };
     }
-
-    if (response.status !== 404) {
-      console.log(`   ⚠️ pump.fun API ${response.status} for ${mint}, using composite fallback...`);
-    }
   } catch (e) {
     console.log(`   ⚠️ pump.fun fetch error for ${mint}, using composite fallback...`);
   }
 
-  // === COMPOSITE FALLBACK: Helius (holders + price) + DexScreener (volume + liquidity) ===
-  // Run in parallel for speed
+  // Composite fallback
   const [heliusMetrics, dexMetrics] = await Promise.all([
     fetchHeliusMetrics(mint),
     fetchDexScreenerMetrics(mint),
   ]);
 
-  // Merge: prefer Helius for holders (accurate), DexScreener for price/volume
   if (heliusMetrics || dexMetrics) {
-    const holders = (heliusMetrics?.holders || 0) > 0 
-      ? heliusMetrics!.holders 
-      : (dexMetrics?.holders || 0);
-    
+    const holders = (heliusMetrics?.holders || 0) > 0 ? heliusMetrics!.holders : (dexMetrics?.holders || 0);
     const priceUsd = heliusMetrics?.priceUsd || dexMetrics?.priceUsd || null;
     const volume = dexMetrics?.volume24hSol || heliusMetrics?.volume24hSol || 0;
     const marketCap = heliusMetrics?.marketCapUsd || dexMetrics?.marketCapUsd || null;
     const liquidity = dexMetrics?.liquidityUsd || heliusMetrics?.liquidityUsd || null;
-
-    console.log(`   🔗 Composite: ${mint.slice(0, 8)} - ${holders} holders, $${priceUsd?.toFixed(8) || 'N/A'}, vol: ${volume.toFixed(2)} SOL`);
 
     return {
       holders,
@@ -482,21 +405,11 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
     };
   }
 
-  // Last resort: Jupiter price only
+  // Jupiter price fallback
   const jupPrice = await fetchJupiterPrice(mint);
   if (jupPrice) {
-    // Still try to get holder count from Helius even if getAsset failed
     const holderCount = await fetchHeliusHolderCount(mint);
-    return {
-      holders: holderCount,
-      volume24hSol: 0,
-      priceUsd: jupPrice,
-      liquidityUsd: null,
-      marketCapUsd: null,
-      bondingCurvePct: null,
-      buys: 0,
-      sells: 0,
-    };
+    return { holders: holderCount, volume24hSol: 0, priceUsd: jupPrice, liquidityUsd: null, marketCapUsd: null, bondingCurvePct: null, buys: 0, sells: 0 };
   }
 
   console.log(`   ❌ All fallbacks failed for ${mint}`);
@@ -506,31 +419,20 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
 // Get current SOL price
 async function getSolPrice(supabase: any): Promise<number> {
   try {
-    const { data } = await supabase
-      .from('sol_price_cache')
-      .select('price_usd')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
+    const { data } = await supabase.from('sol_price_cache').select('price_usd').order('updated_at', { ascending: false }).limit(1).single();
     return data?.price_usd || 200;
   } catch {
     return 200;
   }
 }
 
-// Fetch RugCheck analysis for buy gate verification
+// RugCheck for buy gate
 async function fetchRugCheckForBuyGate(mint: string, config: any): Promise<RugCheckResult> {
   const defaultResult: RugCheckResult = {
-    score: 0,
-    normalised: 0,
-    risks: [],
-    passed: false,
-    hasCriticalRisk: false,
-    criticalRiskNames: [],
+    score: 0, normalised: 0, risks: [], passed: false, hasCriticalRisk: false, criticalRiskNames: [],
   };
 
   try {
-    // Rate limit delay
     await delay(config.rugcheck_rate_limit_ms || 500);
     
     const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, {
@@ -538,34 +440,22 @@ async function fetchRugCheckForBuyGate(mint: string, config: any): Promise<RugCh
     });
 
     if (!response.ok) {
-      console.log(`   ⚠️ RugCheck API error: ${response.status} - failing open`);
-      // Fail open - don't block buy if API is down
       return { ...defaultResult, passed: true, error: `API error: ${response.status}` };
     }
 
     const data = await response.json();
-    
-    // Extract score (RugCheck score: 0-1000, higher = safer)
     const rawScore = data.score || 0;
-    const normalised = Math.min(100, Math.max(0, rawScore / 10)); // Convert to 0-100
+    const normalised = Math.min(100, Math.max(0, rawScore / 10));
     
-    // Extract risks
     const risks: RugCheckRisk[] = (data.risks || []).map((r: any) => ({
-      name: r.name || 'Unknown',
-      value: r.value || '',
-      description: r.description || '',
-      score: r.score || 0,
-      level: r.level || 'info',
+      name: r.name || 'Unknown', value: r.value || '', description: r.description || '',
+      score: r.score || 0, level: r.level || 'info',
     }));
     
-    // Check for critical risks
     const criticalRiskList: string[] = config.rugcheck_critical_risks || [
-      'Freeze Authority still enabled',
-      'Mint Authority still enabled',
-      'Low Liquidity',
-      'Copycat token',
-      'Top 10 holders own high percentage',
-      'Single holder owns high percentage',
+      'Freeze Authority still enabled', 'Mint Authority still enabled',
+      'Low Liquidity', 'Copycat token',
+      'Top 10 holders own high percentage', 'Single holder owns high percentage',
     ];
     
     const dangerRisks = risks.filter(r => r.level === 'danger');
@@ -577,109 +467,282 @@ async function fetchRugCheckForBuyGate(mint: string, config: any): Promise<RugCh
     const minScore = config.min_rugcheck_score || 50;
     const passed = normalised >= minScore && !hasCriticalRisk;
     
-    return {
-      score: rawScore,
-      normalised,
-      risks,
-      passed,
-      hasCriticalRisk,
-      criticalRiskNames,
-    };
+    return { score: rawScore, normalised, risks, passed, hasCriticalRisk, criticalRiskNames };
   } catch (error) {
-    console.error(`   ⚠️ RugCheck error for ${mint}:`, error);
-    // Fail open - don't block buy if API call fails
     return { ...defaultResult, passed: true, error: String(error) };
   }
 }
 
 // Get monitor config
 async function getConfig(supabase: any) {
-  const { data } = await supabase
-    .from('pumpfun_monitor_config')
-    .select('*')
-    .limit(1)
-    .single();
+  const { data } = await supabase.from('pumpfun_monitor_config').select('*').limit(1).single();
 
   return {
     is_enabled: data?.is_enabled ?? true,
     min_watch_time_minutes: data?.min_watch_time_minutes ?? 2,
-    max_watch_time_minutes: data?.max_watch_time_minutes ?? 60,
+    max_watch_time_minutes: data?.max_watch_time_minutes ?? 600,
     dead_holder_threshold: data?.dead_holder_threshold ?? 3,
     dead_volume_threshold_sol: data?.dead_volume_threshold_sol ?? 0.01,
     qualification_holder_count: data?.qualification_holder_count ?? 20,
     qualification_volume_sol: data?.qualification_volume_sol ?? 0.5,
     max_bundle_score: data?.max_bundle_score ?? 70,
     max_single_wallet_pct: data?.max_single_wallet_pct ?? 15,
-    // RugCheck thresholds
     min_rugcheck_score: data?.min_rugcheck_score ?? 50,
     rugcheck_critical_risks: data?.rugcheck_critical_risks ?? [
-      'Freeze Authority still enabled',
-      'Mint Authority still enabled',
-      'Low Liquidity',
-      'Copycat token',
-      'Top 10 holders own high percentage',
-      'Single holder owns high percentage',
+      'Freeze Authority still enabled', 'Mint Authority still enabled',
+      'Low Liquidity', 'Copycat token',
+      'Top 10 holders own high percentage', 'Single holder owns high percentage',
     ],
     rugcheck_recheck_minutes: data?.rugcheck_recheck_minutes ?? 30,
     rugcheck_rate_limit_ms: data?.rugcheck_rate_limit_ms ?? 500,
-    // Signal strength thresholds (Stage 11)
     signal_strong_holder_threshold: data?.signal_strong_holder_threshold ?? 50,
     signal_strong_volume_threshold_sol: data?.signal_strong_volume_threshold_sol ?? 2.0,
     signal_strong_rugcheck_threshold: data?.signal_strong_rugcheck_threshold ?? 70,
-    // Fantasy red flag filters (Step 2 - tighter gates)
     min_market_cap_usd: data?.min_market_cap_usd ?? 5000,
     min_holder_count_fantasy: data?.min_holder_count_fantasy ?? 100,
     max_rugcheck_score_fantasy: data?.max_rugcheck_score_fantasy ?? 5000,
     min_volume_sol_fantasy: data?.min_volume_sol_fantasy ?? 5,
     max_dust_holder_pct: data?.max_dust_holder_pct ?? 25,
+    // New v2 scoring thresholds
+    min_qualification_score: data?.min_qualification_score ?? MIN_QUALIFICATION_SCORE,
   };
 }
 
-// Determine signal strength classification (Stage 11)
-function classifySignalStrength(
-  metrics: TokenMetrics,
-  rugcheckNormalised: number | null,
-  config: any
-): 'strong' | 'weak' {
-  // SIGNAL_STRONG criteria:
-  // - High holder count
-  // - High volume
-  // - High rugcheck score
-  const passesHolders = metrics.holders >= config.signal_strong_holder_threshold;
-  const passesVolume = metrics.volume24hSol >= config.signal_strong_volume_threshold_sol;
-  const passesRugcheck = (rugcheckNormalised ?? 0) >= config.signal_strong_rugcheck_threshold;
-  
-  // Need to pass at least 2 of 3 criteria for STRONG
-  const passCount = [passesHolders, passesVolume, passesRugcheck].filter(Boolean).length;
-  
-  return passCount >= 2 ? 'strong' : 'weak';
+// ═══════════════════════════════════════════════════════════════════
+// ████ MOMENTUM SCORING ENGINE v2 ████
+// ═══════════════════════════════════════════════════════════════════
+
+function calculateHolderScore(holders: number): number {
+  // Data: 500+ = 39% win, 200-500 = 16%, 100-200 = 14%, 50-100 = 8.5%, <50 = 18%
+  // Steep exponential curve: reward high holder counts heavily
+  if (holders >= 500) return 25;
+  if (holders >= 300) return 20;
+  if (holders >= 200) return 16;
+  if (holders >= 150) return 13;
+  if (holders >= 100) return 10;
+  if (holders >= 50) return 5;
+  return 2;
 }
 
-// Main monitoring logic with rate limiting
+function calculateVolumeScore(volumeSol: number, buys: number, sells: number): number {
+  // Data: 200+ SOL = 33% win, 50-200 = 28%, 10-50 = 18%, <10 = 5.6%
+  // Buy/sell ratio bonus: more buys than sells = accumulation phase
+  let base = 0;
+  if (volumeSol >= 200) base = 20;
+  else if (volumeSol >= 100) base = 16;
+  else if (volumeSol >= 50) base = 13;
+  else if (volumeSol >= 20) base = 9;
+  else if (volumeSol >= 10) base = 5;
+  else base = 2;
+
+  // Buy pressure bonus: if buys significantly outpace sells
+  const totalTxns = buys + sells;
+  if (totalTxns > 10) {
+    const buyRatio = buys / totalTxns;
+    if (buyRatio >= 0.65) base = Math.min(25, base + 5); // Strong buy pressure
+    else if (buyRatio >= 0.55) base = Math.min(25, base + 2);
+    else if (buyRatio < 0.35) base = Math.max(0, base - 5); // Heavy selling
+  }
+
+  return base;
+}
+
+function calculateSafetyScore(
+  rugcheckScore: number | null,
+  rugcheckPassed: boolean,
+  hasCriticalRisk: boolean,
+  devReputation: { trustLevel: string | null; tokensRugged: number; totalLaunched: number; reputationScore: number | null } | null,
+  dustPct: number | null,
+  maxSingleWalletPct: number | null,
+  mintAuthorityRevoked: boolean | null,
+  freezeAuthorityRevoked: boolean | null,
+): number {
+  // Start with base safety
+  let score = 12;
+
+  // RugCheck scoring — DATA: 2001-4000 best (24% win), 6001-10000 DEATH (5.6%)
+  if (rugcheckScore !== null) {
+    if (rugcheckScore <= 2000) score += 5;
+    else if (rugcheckScore <= 4000) score += 7; // Sweet spot
+    else if (rugcheckScore <= 5000) score += 3;
+    else if (rugcheckScore <= 6000) score += 0;
+    else if (rugcheckScore <= 10000) score -= 8; // DEATH ZONE
+    else score -= 12; // Extremely risky
+  }
+
+  // Critical risk = instant penalty
+  if (hasCriticalRisk) score -= 10;
+  if (!rugcheckPassed) score -= 5;
+
+  // Authority checks
+  if (mintAuthorityRevoked === true) score += 2;
+  if (freezeAuthorityRevoked === true) score += 1;
+  if (mintAuthorityRevoked === false) score -= 5; // Mint authority NOT revoked = danger
+  if (freezeAuthorityRevoked === false) score -= 3;
+
+  // Dev reputation gate — THE BIGGEST BLIND SPOT IN v1
+  if (devReputation) {
+    const rep = devReputation;
+    if (rep.reputationScore !== null) {
+      if (rep.reputationScore >= 70) score += 5; // Trusted dev
+      else if (rep.reputationScore >= 40) score += 2;
+      else if (rep.reputationScore < 20) score -= 8; // Known bad actor
+    }
+    if (rep.tokensRugged > 0) score -= Math.min(15, rep.tokensRugged * 5); // Each rug = -5
+    if (rep.trustLevel === 'scammer' || rep.trustLevel === 'serial_rugger') score -= 15;
+    if (rep.trustLevel === 'legitimate_builder') score += 5;
+    if (rep.totalLaunched > 10 && rep.tokensRugged === 0) score += 3; // Prolific safe dev
+  }
+
+  // Dust holders
+  if (dustPct !== null) {
+    if (dustPct > 50) score -= 5;
+    else if (dustPct > 30) score -= 3;
+    else if (dustPct < 10) score += 2; // Very clean holder base
+  }
+
+  // Whale concentration
+  if (maxSingleWalletPct !== null) {
+    if (maxSingleWalletPct > 30) score -= 5;
+    else if (maxSingleWalletPct > 20) score -= 3;
+    else if (maxSingleWalletPct < 5) score += 2;
+  }
+
+  return Math.max(0, Math.min(25, score));
+}
+
+function calculateMomentumScore(
+  token: any,
+  metrics: TokenMetrics,
+): number {
+  let score = 5; // Base
+
+  // Holder growth: compare current to previous
+  const prevHolders = token.holder_count_prev || token.holder_count || 0;
+  const holderGrowth = prevHolders > 0 ? (metrics.holders - prevHolders) / prevHolders : 0;
+  
+  if (holderGrowth > 0.2) score += 8; // >20% growth since last check = surging
+  else if (holderGrowth > 0.1) score += 5;
+  else if (holderGrowth > 0.05) score += 3;
+  else if (holderGrowth < -0.1) score -= 5; // Holders leaving = bad
+  else if (holderGrowth < 0) score -= 2;
+
+  // Volume acceleration: compare to previous
+  const prevVolume = token.volume_sol_prev || 0;
+  const volumeGrowth = prevVolume > 0 ? (metrics.volume24hSol - prevVolume) / prevVolume : 0;
+  
+  if (volumeGrowth > 0.5) score += 6; // Volume surging >50%
+  else if (volumeGrowth > 0.2) score += 4;
+  else if (volumeGrowth > 0) score += 2;
+  else if (volumeGrowth < -0.3) score -= 5; // Volume collapsing
+
+  // Price momentum
+  const prevPrice = token.price_usd_prev || 0;
+  const currentPrice = metrics.priceUsd || 0;
+  if (prevPrice > 0 && currentPrice > 0) {
+    const priceChange = (currentPrice - prevPrice) / prevPrice;
+    if (priceChange > 0.15) score += 4; // Price up >15%
+    else if (priceChange > 0.05) score += 2;
+    else if (priceChange < -0.2) score -= 4; // Dumping
+    else if (priceChange < -0.1) score -= 2;
+  }
+
+  // Use delta fields if available
+  if (token.holders_delta_3m != null && token.holders_delta_3m > 10) score += 3;
+  if (token.volume_delta_3m != null && token.volume_delta_3m > 5) score += 2;
+  if (token.buy_pressure_3m != null && token.buy_pressure_3m > 0.7) score += 3;
+
+  return Math.max(0, Math.min(25, score));
+}
+
+// Look up dev reputation from database
+async function getDevReputation(supabase: any, creatorWallet: string | null): Promise<{
+  trustLevel: string | null;
+  tokensRugged: number;
+  totalLaunched: number;
+  reputationScore: number | null;
+} | null> {
+  if (!creatorWallet) return null;
+
+  try {
+    const { data } = await supabase
+      .from('dev_wallet_reputation')
+      .select('trust_level, tokens_rugged, total_tokens_launched, reputation_score')
+      .eq('wallet_address', creatorWallet)
+      .maybeSingle();
+
+    if (!data) return null;
+
+    return {
+      trustLevel: data.trust_level,
+      tokensRugged: data.tokens_rugged || 0,
+      totalLaunched: data.total_tokens_launched || 0,
+      reputationScore: data.reputation_score,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Full qualification score calculator
+async function calculateQualificationScore(
+  token: any,
+  metrics: TokenMetrics,
+  rugcheckResult: RugCheckResult | null,
+  devReputation: any,
+  dustPct: number | null,
+): Promise<QualificationScore> {
+  const disqualifyReasons: string[] = [];
+
+  // Hard disqualifiers (instant reject regardless of score)
+  if (rugcheckResult?.hasCriticalRisk) {
+    disqualifyReasons.push(`critical_risk:${rugcheckResult.criticalRiskNames.join(',')}`);
+  }
+  if (devReputation?.trustLevel === 'scammer' || devReputation?.trustLevel === 'serial_rugger') {
+    disqualifyReasons.push(`known_bad_dev:${devReputation.trustLevel}`);
+  }
+  if (devReputation?.tokensRugged >= 3) {
+    disqualifyReasons.push(`serial_rugger:${devReputation.tokensRugged}_rugs`);
+  }
+
+  const holderScore = calculateHolderScore(metrics.holders);
+  const volumeScore = calculateVolumeScore(metrics.volume24hSol, metrics.buys, metrics.sells);
+  const safetyScore = calculateSafetyScore(
+    rugcheckResult?.score ?? token.rugcheck_score ?? null,
+    rugcheckResult?.passed ?? token.rugcheck_passed ?? true,
+    rugcheckResult?.hasCriticalRisk ?? false,
+    devReputation,
+    dustPct,
+    token.max_single_wallet_pct,
+    token.mint_authority_revoked,
+    token.freeze_authority_revoked,
+  );
+  const momentumScore = calculateMomentumScore(token, metrics);
+
+  const total = holderScore + volumeScore + safetyScore + momentumScore;
+
+  const breakdown = `H:${holderScore}/25 V:${volumeScore}/25 S:${safetyScore}/25 M:${momentumScore}/25 = ${total}/100`;
+
+  return { total, holderScore, volumeScore, safetyScore, momentumScore, breakdown, disqualifyReasons };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+
+// Main monitoring logic
 async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   const startTime = Date.now();
   const stats: MonitorStats = {
-    tokensChecked: 0,
-    tokensUpdated: 0,
-    promoted: 0,
-    markedDead: 0,
-    markedStale: 0,
-    devSellRejected: 0,
-    errors: 0,
-    durationMs: 0,
-    promotedTokens: [],
-    deadTokens: [],
-    devSellTokens: [],
-    skippedRecent: 0,
-    rugcheckRejected: 0,
-    rugcheckTokens: [],
+    tokensChecked: 0, tokensUpdated: 0, promoted: 0, markedDead: 0, markedStale: 0,
+    devSellRejected: 0, errors: 0, durationMs: 0, promotedTokens: [], deadTokens: [],
+    devSellTokens: [], skippedRecent: 0, rugcheckRejected: 0, rugcheckTokens: [],
+    scoreBreakdowns: [],
   };
 
-  console.log('👁️ WATCHLIST MONITOR: Starting monitoring cycle...');
+  console.log('👁️ WATCHLIST MONITOR v2 (MOMENTUM SCORING): Starting...');
 
   const config = await getConfig(supabase);
   if (!config.is_enabled) {
-    console.log('⏸️ Monitor disabled, skipping');
+    console.log('⏸️ Monitor disabled');
     stats.durationMs = Date.now() - startTime;
     return stats;
   }
@@ -688,8 +751,6 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   const now = new Date();
   const skipCutoff = new Date(now.getTime() - SKIP_RECENTLY_CHECKED_MINUTES * 60 * 1000).toISOString();
 
-  // Get watching tokens, prioritize by: recently added, high holders, least recently checked
-  // Skip tokens checked within last 3 minutes
   const { data: watchingTokens, error: fetchError } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
@@ -706,22 +767,17 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
     return stats;
   }
 
-  console.log(`📋 Processing ${watchingTokens?.length || 0} watching tokens (skipping recently checked)`);
+  console.log(`📋 Processing ${watchingTokens?.length || 0} watching tokens`);
 
-  // Process in batches with rate limiting
   const tokens = watchingTokens || [];
   for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
     const batch = tokens.slice(i, i + BATCH_SIZE);
     
-    // Process batch
     for (const token of batch) {
       try {
         stats.tokensChecked++;
 
-        // === ENHANCED DEV BEHAVIOR CHECK (HIGHEST PRIORITY) ===
-        // Use smarter logic: Only auto-reject on FULL EXIT for young tokens
-        // Allow partial sells if dev still holds and token is still active
-        // SKIP for bonding curve tokens: dev_holding_pct is unreliable (often 0%) before migration
+        // === DEV BEHAVIOR CHECK (HIGHEST PRIORITY - unchanged) ===
         const currentBondingCurvePct = token.bonding_curve_pct ?? null;
         const isOnBondingCurve = currentBondingCurvePct === null || currentBondingCurvePct > 5;
         
@@ -730,86 +786,45 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           const devHoldingPct = token.dev_holding_pct ?? null;
           const devBoughtBack = token.dev_bought_back === true;
           const isFullExit = devHoldingPct !== null && devHoldingPct < 0.1;
-          
-          // Get current market cap to check if token is dead
           const currentMcap = token.market_cap_usd ?? token.market_cap_sol ?? 0;
-          const isCrashedToken = currentMcap < 4000; // Under $4k = basically dead
+          const isCrashedToken = currentMcap < 4000;
           
-          // FULL EXIT SCENARIO: Dev completely exited on young token = DEAD
-          // IF token_age < 30 minutes AND dev_sell = true AND dev_rebuy = false AND dev_wallet_empty
           if (isFullExit && tokenAgeMinutes < 30 && !devBoughtBack) {
-            console.log(`💀 DEV EXITED & RAN: ${token.token_symbol} - age: ${tokenAgeMinutes.toFixed(0)}m, holding: ${devHoldingPct?.toFixed(2) ?? 0}%, mcap: $${currentMcap.toFixed(0)} - PERMANENT REJECT`);
-            
-            await supabase
-              .from('pumpfun_watchlist')
-              .update({
-                status: 'rejected',
-                rejection_type: 'permanent',
-                rejection_reason: 'dev_full_exit',
-                rejection_reasons: ['dev_full_exit', 'young_token_abandon'],
-                removed_at: now.toISOString(),
-                removal_reason: `Dev fully exited at ${tokenAgeMinutes.toFixed(0)}m (0% holding, no rebuy)`,
-                last_checked_at: now.toISOString(),
-                last_processor: 'watchlist-monitor',
-              })
-              .eq('id', token.id);
-              
+            console.log(`💀 DEV EXITED: ${token.token_symbol} - age: ${tokenAgeMinutes.toFixed(0)}m - REJECT`);
+            await supabase.from('pumpfun_watchlist').update({
+              status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_full_exit',
+              rejection_reasons: ['dev_full_exit', 'young_token_abandon'],
+              removed_at: now.toISOString(), removal_reason: `Dev fully exited at ${tokenAgeMinutes.toFixed(0)}m`,
+              last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+            }).eq('id', token.id);
             stats.devSellRejected++;
-            stats.devSellTokens.push(`${token.token_symbol} (dev full exit @ ${tokenAgeMinutes.toFixed(0)}m)`);
+            stats.devSellTokens.push(`${token.token_symbol} (dev exit @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
           }
           
-          // CRASHED + DEV SOLD: Token crashed to near zero AND dev sold = dead test token
           if (isCrashedToken && !devBoughtBack) {
-            console.log(`💀 DEV SOLD + CRASHED: ${token.token_symbol} - mcap: $${currentMcap.toFixed(0)}, holding: ${devHoldingPct?.toFixed(2) ?? 'unknown'}% - PERMANENT REJECT`);
-            
-            await supabase
-              .from('pumpfun_watchlist')
-              .update({
-                status: 'rejected',
-                rejection_type: 'permanent',
-                rejection_reason: 'dev_sold_crashed',
-                rejection_reasons: ['dev_sold', 'token_crashed'],
-                removed_at: now.toISOString(),
-                removal_reason: `Dev sold + token crashed to $${currentMcap.toFixed(0)} (dead)`,
-                last_checked_at: now.toISOString(),
-                last_processor: 'watchlist-monitor',
-              })
-              .eq('id', token.id);
-              
+            await supabase.from('pumpfun_watchlist').update({
+              status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_sold_crashed',
+              rejection_reasons: ['dev_sold', 'token_crashed'],
+              removed_at: now.toISOString(), removal_reason: `Dev sold + token crashed to $${currentMcap.toFixed(0)}`,
+              last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+            }).eq('id', token.id);
             stats.devSellRejected++;
-            stats.devSellTokens.push(`${token.token_symbol} (dev sold + crashed $${currentMcap.toFixed(0)})`);
+            stats.devSellTokens.push(`${token.token_symbol} (crashed $${currentMcap.toFixed(0)})`);
             continue;
           }
           
-          // PARTIAL SELL WITH REBUY: Dev took some profit but bought back - allow to continue
           if (devBoughtBack) {
-            console.log(`⚠️ DEV SOLD BUT REBOUGHT: ${token.token_symbol} - holding: ${devHoldingPct?.toFixed(2) ?? 'unknown'}% - continuing to watch`);
-            // Don't reject - dev showed commitment by rebuying
-          }
-          // PARTIAL SELL: Dev still holds significant portion - log but maybe continue
-          else if (devHoldingPct !== null && devHoldingPct >= 1) {
-            console.log(`⚠️ DEV PARTIAL SELL: ${token.token_symbol} - still holds ${devHoldingPct.toFixed(2)}% - watching cautiously`);
-            // Don't auto-reject partial sells where dev still holds >1%
-          }
-          // UNKNOWN/OLD TOKEN: Default to original behavior for old tokens or unknown holding
-          else if (tokenAgeMinutes >= 30) {
-            console.log(`🚨 DEV SOLD (mature token): ${token.token_symbol} - age: ${tokenAgeMinutes.toFixed(0)}m - PERMANENT REJECT`);
-            
-            await supabase
-              .from('pumpfun_watchlist')
-              .update({
-                status: 'rejected',
-                rejection_type: 'permanent',
-                rejection_reason: 'dev_sold',
-                rejection_reasons: ['dev_sold'],
-                removed_at: now.toISOString(),
-                removal_reason: 'Developer sold tokens',
-                last_checked_at: now.toISOString(),
-                last_processor: 'watchlist-monitor',
-              })
-              .eq('id', token.id);
-              
+            console.log(`⚠️ DEV REBOUGHT: ${token.token_symbol} - continuing`);
+          } else if (devHoldingPct !== null && devHoldingPct >= 1) {
+            console.log(`⚠️ DEV PARTIAL SELL: ${token.token_symbol} - ${devHoldingPct.toFixed(2)}%`);
+          } else if (tokenAgeMinutes >= 30) {
+            await supabase.from('pumpfun_watchlist').update({
+              status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_sold',
+              rejection_reasons: ['dev_sold'], removed_at: now.toISOString(),
+              removal_reason: 'Developer sold tokens', last_checked_at: now.toISOString(),
+              last_processor: 'watchlist-monitor-v2',
+            }).eq('id', token.id);
             stats.devSellRejected++;
             stats.devSellTokens.push(`${token.token_symbol} (dev sold @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
@@ -817,96 +832,58 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         }
         
         if (token.dev_launched_new === true) {
-          console.log(`🚨 DEV LAUNCHED NEW: ${token.token_symbol} - PERMANENT REJECT`);
-          
-          await supabase
-            .from('pumpfun_watchlist')
-            .update({
-              status: 'rejected',
-              rejection_type: 'permanent',
-              rejection_reason: 'dev_launched_new',
-              rejection_reasons: ['dev_launched_new'],
-              removed_at: now.toISOString(),
-              removal_reason: 'Developer launched a new token',
-              last_checked_at: now.toISOString(),
-              last_processor: 'watchlist-monitor',
-            })
-            .eq('id', token.id);
-            
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_launched_new',
+            rejection_reasons: ['dev_launched_new'], removed_at: now.toISOString(),
+            removal_reason: 'Developer launched new token', last_checked_at: now.toISOString(),
+            last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
           stats.devSellRejected++;
           stats.devSellTokens.push(`${token.token_symbol} (dev launched new)`);
           continue;
         }
 
-        // Fetch current metrics from pump.fun API
+        // Fetch current metrics
         const metrics = await fetchPumpFunMetrics(token.token_mint);
-        
-        // === AGE-BASED KILL WHEN API FAILS ===
-        // If we can't get metrics, check if token is old enough to kill based on age alone
         const watchingMinutesNow = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
         
         if (!metrics) {
-          console.log(`⚠️ Could not fetch metrics for ${token.token_symbol} (age: ${watchingMinutesNow.toFixed(0)}m)`);
+          console.log(`⚠️ No metrics for ${token.token_symbol} (age: ${watchingMinutesNow.toFixed(0)}m)`);
           
-          // Kill tokens older than 60 minutes that we can't get metrics for
           if (watchingMinutesNow > 60) {
-            console.log(`💀 KILLING (API failed, old): ${token.token_symbol} - ${watchingMinutesNow.toFixed(0)}m old, no API response`);
-            await supabase
-              .from('pumpfun_watchlist')
-              .update({
-                status: 'dead',
-                rejection_type: 'soft',
-                removed_at: now.toISOString(),
-                removal_reason: `API failed, token ${watchingMinutesNow.toFixed(0)}m old - presumed dead`,
-                last_checked_at: now.toISOString(),
-                last_processor: 'watchlist-monitor',
-              })
-              .eq('id', token.id);
-            
+            await supabase.from('pumpfun_watchlist').update({
+              status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+              removal_reason: `API failed, ${watchingMinutesNow.toFixed(0)}m old`,
+              last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+            }).eq('id', token.id);
             stats.markedDead++;
-            stats.deadTokens.push(`${token.token_symbol} (API fail, ${watchingMinutesNow.toFixed(0)}m old)`);
-          }
-          // Kill tokens older than 30 minutes with only 1 holder in our last data
-          else if (watchingMinutesNow > 30 && (token.holder_count || 0) <= 1) {
-            console.log(`💀 KILLING (API failed, low holder): ${token.token_symbol} - ${watchingMinutesNow.toFixed(0)}m old, ${token.holder_count} holders`);
-            await supabase
-              .from('pumpfun_watchlist')
-              .update({
-                status: 'dead',
-                rejection_type: 'soft',
-                removed_at: now.toISOString(),
-                removal_reason: `API failed, only ${token.holder_count || 0} holder(s) after ${watchingMinutesNow.toFixed(0)}m`,
-                last_checked_at: now.toISOString(),
-                last_processor: 'watchlist-monitor',
-              })
-              .eq('id', token.id);
-            
+            stats.deadTokens.push(`${token.token_symbol} (API fail)`);
+          } else if (watchingMinutesNow > 30 && (token.holder_count || 0) <= 1) {
+            await supabase.from('pumpfun_watchlist').update({
+              status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+              removal_reason: `API failed, ${token.holder_count || 0} holders`,
+              last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+            }).eq('id', token.id);
             stats.markedDead++;
-            stats.deadTokens.push(`${token.token_symbol} (API fail, 1 holder)`);
+            stats.deadTokens.push(`${token.token_symbol} (1 holder)`);
           }
-          
           stats.errors++;
           continue;
         }
 
-        // Small delay between individual calls
         await delay(CALL_DELAY_MS);
 
         const txCount = metrics.buys + metrics.sells;
-        const watchingMinutes = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
-
-        // Generate metrics hash for staleness detection
+        const watchingMinutes = watchingMinutesNow;
         const newMetricsHash = `${metrics.holders}-${metrics.volume24hSol.toFixed(4)}-${metrics.priceUsd?.toFixed(8) || '0'}`;
         const isStale = token.metrics_hash === newMetricsHash;
 
         const updates: any = {
           last_checked_at: now.toISOString(),
           check_count: (token.check_count || 0) + 1,
-          // Shift current to prev
           holder_count_prev: token.holder_count,
           volume_sol_prev: token.volume_sol,
           price_usd_prev: token.price_usd,
-          // Set new current
           holder_count: metrics.holders,
           volume_sol: metrics.volume24hSol,
           tx_count: txCount,
@@ -914,90 +891,55 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           market_cap_usd: metrics.marketCapUsd,
           liquidity_usd: metrics.liquidityUsd,
           bonding_curve_pct: metrics.bondingCurvePct,
-          // Track peaks
           holder_count_peak: Math.max(token.holder_count_peak || 0, metrics.holders),
           price_ath_usd: Math.max(token.price_ath_usd || 0, metrics.priceUsd || 0),
-        // Staleness tracking
-        metrics_hash: newMetricsHash,
-        consecutive_stale_checks: isStale ? (token.consecutive_stale_checks || 0) + 1 : 0,
-        last_processor: 'watchlist-monitor',
-        // Graduation detection - if bonding curve is 0 or null (complete), mark as graduated
-        is_graduated: metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5,
-        graduated_at: (metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5 && !token.is_graduated) 
-          ? now.toISOString() 
-          : token.graduated_at,
+          metrics_hash: newMetricsHash,
+          consecutive_stale_checks: isStale ? (token.consecutive_stale_checks || 0) + 1 : 0,
+          last_processor: 'watchlist-monitor-v2',
+          is_graduated: metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5,
+          graduated_at: (metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5 && !token.is_graduated) 
+            ? now.toISOString() : token.graduated_at,
         };
 
-        // === QUALIFICATION CHECK ===
-        // Must pass all criteria including max_single_wallet_pct if we have the data
-        const passesWalletConcentration = token.max_single_wallet_pct === null || 
-          token.max_single_wallet_pct <= config.max_single_wallet_pct;
-        
-        // === MAYHEM CHECK (MANDATORY BEFORE QUALIFICATION) ===
-        // If mayhem_checked is false, check now before allowing qualification
+        // === MAYHEM CHECK ===
         let isMayhemToken = false;
         if (!token.mayhem_checked) {
-          console.log(`   🔍 Checking MAYHEM for ${token.token_symbol}...`);
           isMayhemToken = await checkMayhemMode(token.token_mint);
           updates.mayhem_checked = true;
-          
           if (isMayhemToken) {
-            console.log(`   ⛔ MAYHEM DETECTED: ${token.token_symbol} - REJECTING`);
             updates.status = 'rejected';
             updates.rejection_type = 'permanent';
             updates.rejection_reason = 'mayhem_mode';
             updates.rejection_reasons = ['mayhem_mode'];
             updates.removed_at = now.toISOString();
             updates.permanent_reject = true;
-            
-            stats.errors++; // Count as error for visibility
-            continue; // Skip to next token
+            await supabase.from('pumpfun_watchlist').update(updates).eq('id', token.id);
+            stats.errors++;
+            continue;
           }
         }
-        
+
+        // === BASIC QUALIFICATION CHECK (must pass minimum before scoring) ===
+        const passesWalletConcentration = token.max_single_wallet_pct === null || 
+          token.max_single_wallet_pct <= config.max_single_wallet_pct;
+
         if (watchingMinutes >= config.min_watch_time_minutes && 
             metrics.holders >= config.qualification_holder_count && 
             metrics.volume24hSol >= config.qualification_volume_sol &&
             (token.bundle_score === null || token.bundle_score <= config.max_bundle_score) &&
             passesWalletConcentration) {
           
-          // === FANTASY RED FLAG GATES (Step 2) ===
-          // Apply tighter filters to reject tokens with red flag characteristics
-          const fantasyRedFlags: string[] = [];
+          // === MOMENTUM SCORING ENGINE v2 ===
+          // Instead of binary red flag gates, compute a weighted score
           
-          if (metrics.holders < config.min_holder_count_fantasy) {
-            fantasyRedFlags.push(`holders:${metrics.holders}<${config.min_holder_count_fantasy}`);
-          }
-          if (metrics.volume24hSol < config.min_volume_sol_fantasy) {
-            fantasyRedFlags.push(`volume:${metrics.volume24hSol.toFixed(2)}<${config.min_volume_sol_fantasy}SOL`);
-          }
-          if (metrics.marketCapUsd !== null && metrics.marketCapUsd < config.min_market_cap_usd) {
-            fantasyRedFlags.push(`mcap:$${metrics.marketCapUsd.toFixed(0)}<$${config.min_market_cap_usd}`);
-          }
-          
-          if (fantasyRedFlags.length > 0) {
-            console.log(`   🚩 RED FLAGS: ${token.token_symbol} - ${fantasyRedFlags.join(', ')} - skipping qualification`);
-            // Don't promote but don't kill - let it keep watching in case metrics improve
-            updates.last_checked_at = now.toISOString();
-            updates.last_processor = 'watchlist-monitor';
-          } else {
-          
-          // === BUY GATE RUGCHECK RE-VERIFICATION ===
-          // Check if rugcheck needs re-verification (stale or missing)
+          // Re-verify RugCheck if stale
           const rugcheckAge = token.rugcheck_checked_at 
             ? (now.getTime() - new Date(token.rugcheck_checked_at).getTime()) / 60000 
             : Infinity;
-          const needsRugcheckRecheck = rugcheckAge > config.rugcheck_recheck_minutes;
           
-          let rugcheckPassed = token.rugcheck_passed === true;
           let rugcheckResult: RugCheckResult | null = null;
-          
-          if (needsRugcheckRecheck) {
-            console.log(`   🔍 Re-verifying RugCheck for ${token.token_symbol} (last check: ${rugcheckAge.toFixed(0)}m ago)`);
+          if (rugcheckAge > config.rugcheck_recheck_minutes) {
             rugcheckResult = await fetchRugCheckForBuyGate(token.token_mint, config);
-            rugcheckPassed = rugcheckResult.passed;
-            
-            // Update rugcheck fields
             updates.rugcheck_score = rugcheckResult.score;
             updates.rugcheck_normalised = rugcheckResult.normalised;
             updates.rugcheck_risks = rugcheckResult.risks;
@@ -1005,59 +947,62 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             updates.rugcheck_checked_at = now.toISOString();
             updates.rugcheck_version = (token.rugcheck_version || 0) + 1;
           }
-          
-          if (!rugcheckPassed) {
-            // RugCheck failed - reject instead of promote
-            console.log(`   ⛔ RUGCHECK FAILED at buy gate: ${token.token_symbol} - score: ${rugcheckResult?.normalised?.toFixed(0) || token.rugcheck_normalised || 'N/A'}`);
+
+          // Calculate dust
+          const dustPct = await calculateDustHolderPct(token.token_mint, metrics.priceUsd);
+          updates.dust_holder_pct = dustPct;
+
+          // Look up dev reputation
+          const devReputation = await getDevReputation(supabase, token.creator_wallet);
+
+          // CALCULATE THE SCORE
+          const score = await calculateQualificationScore(
+            token, metrics, rugcheckResult, devReputation, dustPct
+          );
+
+          console.log(`   📊 SCORE: ${token.token_symbol} — ${score.breakdown}${score.disqualifyReasons.length ? ' ⛔ DQ: ' + score.disqualifyReasons.join(', ') : ''}`);
+
+          stats.scoreBreakdowns.push({
+            symbol: token.token_symbol,
+            total: score.total,
+            holder: score.holderScore,
+            volume: score.volumeScore,
+            safety: score.safetyScore,
+            momentum: score.momentumScore,
+            qualified: score.total >= config.min_qualification_score && score.disqualifyReasons.length === 0,
+          });
+
+          // Hard disqualifiers override score
+          if (score.disqualifyReasons.length > 0) {
+            console.log(`   ⛔ DISQUALIFIED: ${token.token_symbol} - ${score.disqualifyReasons.join(', ')}`);
             updates.status = 'rejected';
-            updates.rejection_type = rugcheckResult?.hasCriticalRisk ? 'permanent' : 'soft';
-            updates.rejection_reason = `rugcheck_buy_gate:${rugcheckResult?.criticalRiskNames?.join(',') || 'low_score'}`;
-            updates.rejection_reasons = ['rugcheck_buy_gate_failed'];
+            updates.rejection_type = 'permanent';
+            updates.rejection_reason = `disqualified:${score.disqualifyReasons[0]}`;
+            updates.rejection_reasons = score.disqualifyReasons;
             updates.removed_at = now.toISOString();
-            
-            stats.rugcheckRejected++;
-            stats.rugcheckTokens.push(`${token.token_symbol} (score: ${rugcheckResult?.normalised?.toFixed(0) || 'N/A'})`);
-          } else {
-            // Check raw rugcheck score against fantasy max threshold
-            const rawScore = rugcheckResult?.score ?? token.rugcheck_score ?? 0;
-            if (rawScore > config.max_rugcheck_score_fantasy) {
-              console.log(`   🚩 RUGCHECK RAW SCORE TOO HIGH: ${token.token_symbol} - score: ${rawScore} > max: ${config.max_rugcheck_score_fantasy}`);
-              updates.status = 'rejected';
-              updates.rejection_type = 'soft';
-              updates.rejection_reason = `rugcheck_score_high:${rawScore}`;
-              updates.rejection_reasons = ['rugcheck_score_above_fantasy_max'];
-              updates.removed_at = now.toISOString();
-              
-              stats.rugcheckRejected++;
-              stats.rugcheckTokens.push(`${token.token_symbol} (raw score: ${rawScore})`);
-            } else {
-            // === DUST HOLDER CHECK (final gate before promotion) ===
-            const dustPct = await calculateDustHolderPct(token.token_mint, metrics.priceUsd);
-            updates.dust_holder_pct = dustPct;
-            
-            if (dustPct !== null && dustPct > config.max_dust_holder_pct) {
-              console.log(`   🧹 DUST TOO HIGH: ${token.token_symbol} - ${dustPct.toFixed(1)}% dust > max ${config.max_dust_holder_pct}% - skipping`);
-              // Don't reject permanently - let it keep watching, dust % can change
-              updates.last_checked_at = now.toISOString();
-              updates.last_processor = 'watchlist-monitor';
-            } else {
-            // All checks passed including RugCheck + Dust - classify signal strength and promote!
-            const signalStrength = classifySignalStrength(
-              metrics, 
-              rugcheckResult?.normalised ?? token.rugcheck_normalised ?? null,
-              config
-            );
+            updates.removal_reason = `DQ: ${score.disqualifyReasons.join(', ')} (score: ${score.total})`;
+          }
+          // Score too low
+          else if (score.total < config.min_qualification_score) {
+            console.log(`   🚩 SCORE TOO LOW: ${token.token_symbol} — ${score.total}/${config.min_qualification_score} — continuing to watch`);
+            // Don't reject — let it keep watching in case score improves
+            updates.priority_score = score.total;
+          }
+          // QUALIFIED!
+          else {
+            const signalStrength = score.total >= 80 ? 'strong' : 'weak';
             
             updates.status = 'qualified';
             updates.qualified_at = now.toISOString();
             updates.signal_strength = signalStrength;
-            updates.qualification_reason = `Holders: ${metrics.holders}, Volume: ${metrics.volume24hSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m, Bundle: ${token.bundle_score || 'N/A'}, RugCheck: ${rugcheckResult?.normalised?.toFixed(0) || token.rugcheck_normalised || 'cached'}, Signal: ${signalStrength.toUpperCase()}`;
+            updates.priority_score = score.total;
+            updates.qualification_reason = `SCORE:${score.total}/100 ${score.breakdown} | Holders:${metrics.holders} Vol:${metrics.volume24hSol.toFixed(2)}SOL Mcap:$${(metrics.marketCapUsd || 0).toFixed(0)} RugCheck:${rugcheckResult?.score ?? token.rugcheck_score ?? 'N/A'} DevRep:${devReputation?.reputationScore ?? 'unknown'}`;
             
             stats.promoted++;
-            stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${metrics.volume24hSol.toFixed(2)} SOL, ${signalStrength.toUpperCase()})`);
-            console.log(`🎉 PROMOTED [${signalStrength.toUpperCase()}]: ${token.token_symbol} - ${updates.qualification_reason}`);
+            stats.promotedTokens.push(`${token.token_symbol} (SCORE:${score.total} ${signalStrength.toUpperCase()})`);
+            console.log(`🎉 PROMOTED [${signalStrength.toUpperCase()} ${score.total}/100]: ${token.token_symbol}`);
 
-            // Also add to buy candidates with signal strength
+            // Add to buy candidates
             await supabase.from('pumpfun_buy_candidates').upsert({
               token_mint: token.token_mint,
               token_name: token.token_name,
@@ -1072,82 +1017,60 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
               status: 'pending',
               detected_at: now.toISOString(),
               metadata: { 
-                watchlist_qualification: updates.qualification_reason,
-                max_single_wallet_pct: token.max_single_wallet_pct,
-                rugcheck_score: rugcheckResult?.normalised || token.rugcheck_normalised,
+                qualification_score: score.total,
+                score_breakdown: score.breakdown,
                 signal_strength: signalStrength,
+                dev_reputation: devReputation?.reputationScore ?? null,
+                dev_trust_level: devReputation?.trustLevel ?? null,
+                dust_pct: dustPct,
               },
             }, { onConflict: 'token_mint' });
           }
-            } // end else (dust check ok)
-            } // end else (rugcheck raw score ok)
-          } // end else (no red flags)
         }
         
-        // === AGGRESSIVE DEAD CHECK === 
-        // Multiple conditions to quickly remove dead tokens
-        
-        // Condition 1: Watched > max time (60 min default) = dead immediately
+        // === DEAD CHECKS (unchanged from v1) ===
         if (watchingMinutes > config.max_watch_time_minutes) {
           updates.status = 'dead';
           updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
-          updates.removal_reason = `Exceeded max watch time: ${watchingMinutes.toFixed(0)}m > ${config.max_watch_time_minutes}m`;
-          
+          updates.removal_reason = `Exceeded max watch time: ${watchingMinutes.toFixed(0)}m`;
           stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (max time exceeded)`);
-          console.log(`💀 DEAD (max time): ${token.token_symbol} - ${updates.removal_reason}`);
+          stats.deadTokens.push(`${token.token_symbol} (max time)`);
         }
-        // Condition 2: Watched > 30 min with 1 holder and 0 volume = definitely dead
         else if (watchingMinutes > 30 && metrics.holders <= 1 && metrics.volume24hSol <= 0.001) {
           updates.status = 'dead';
           updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
-          updates.removal_reason = `Zombie token: ${watchingMinutes.toFixed(0)}m with ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(4)} SOL`;
-          
+          updates.removal_reason = `Zombie: ${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders`;
           stats.markedDead++;
           stats.deadTokens.push(`${token.token_symbol} (zombie)`);
-          console.log(`💀 DEAD (zombie): ${token.token_symbol} - ${updates.removal_reason}`);
         }
-        // Condition 3: Watched > 60 min with < 5 holders = dead
         else if (watchingMinutes > 60 && metrics.holders < 5) {
           updates.status = 'dead';
           updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
           updates.removal_reason = `Low activity after 1h: ${metrics.holders} holders`;
-          
           stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (low activity 1h)`);
-          console.log(`💀 DEAD (low activity): ${token.token_symbol} - ${updates.removal_reason}`);
+          stats.deadTokens.push(`${token.token_symbol} (low 1h)`);
         }
-        // Condition 4: Original dead check - 15+ min with very low metrics
         else if (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol) {
           updates.status = 'dead';
           updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
-          updates.removal_reason = `Watched ${watchingMinutes.toFixed(0)}m, only ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL`;
-          
+          updates.removal_reason = `${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL`;
           stats.markedDead++;
           stats.deadTokens.push(`${token.token_symbol} (${metrics.holders} holders)`);
-          console.log(`💀 DEAD: ${token.token_symbol} - ${updates.removal_reason}`);
         }
-        // Condition 5: Stale check - no metric changes for multiple consecutive checks
         else if (updates.consecutive_stale_checks >= 4 && watchingMinutes > 8) {
           updates.status = 'dead';
           updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
-          updates.removal_reason = `Stale: No metric changes for ${updates.consecutive_stale_checks} checks over ${watchingMinutes.toFixed(0)}m`;
-          
+          updates.removal_reason = `Stale: ${updates.consecutive_stale_checks} checks, ${watchingMinutes.toFixed(0)}m`;
           stats.markedStale++;
-          console.log(`🥀 STALE -> DEAD: ${token.token_symbol} (${updates.consecutive_stale_checks} stale checks)`);
         }
 
-        // Update the token
-        const { error: updateError } = await supabase
-          .from('pumpfun_watchlist')
-          .update(updates)
-          .eq('id', token.id);
-
+        // Update token
+        const { error: updateError } = await supabase.from('pumpfun_watchlist').update(updates).eq('id', token.id);
         if (updateError) {
           console.error(`Error updating ${token.token_symbol}:`, updateError);
           stats.errors++;
@@ -1161,15 +1084,19 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
       }
     }
     
-    // Delay between batches for rate limiting
     if (i + BATCH_SIZE < tokens.length) {
-      console.log(`⏳ Batch complete, waiting ${BATCH_DELAY_MS}ms before next batch...`);
       await delay(BATCH_DELAY_MS);
     }
   }
 
   stats.durationMs = Date.now() - startTime;
-  console.log(`📊 MONITOR COMPLETE: ${stats.tokensChecked} checked, ${stats.promoted} promoted, ${stats.markedDead} dead, ${stats.markedStale} stale, ${stats.devSellRejected} dev-rejected, ${stats.rugcheckRejected} rugcheck-rejected, ${stats.skippedRecent} skipped (${stats.durationMs}ms)`);
+  console.log(`📊 MONITOR v2 COMPLETE: ${stats.tokensChecked} checked, ${stats.promoted} promoted, ${stats.markedDead} dead, ${stats.devSellRejected} dev-rejected, ${stats.rugcheckRejected} rugcheck-rejected (${stats.durationMs}ms)`);
+  if (stats.scoreBreakdowns.length > 0) {
+    console.log(`📊 SCORE BREAKDOWNS:`);
+    for (const s of stats.scoreBreakdowns) {
+      console.log(`   ${s.qualified ? '✅' : '❌'} ${s.symbol}: ${s.total}/100 (H:${s.holder} V:${s.volume} S:${s.safety} M:${s.momentum})`);
+    }
+  }
 
   return stats;
 }
@@ -1188,7 +1115,7 @@ serve(async (req) => {
     const url = new URL(req.url);
     const action = url.searchParams.get('action') || 'monitor';
 
-    console.log(`🎯 pumpfun-watchlist-monitor action: ${action}`);
+    console.log(`🎯 pumpfun-watchlist-monitor v2 action: ${action}`);
 
     switch (action) {
       case 'monitor': {
@@ -1208,17 +1135,11 @@ serve(async (req) => {
           .eq('status', 'watching')
           .gte('consecutive_stale_checks', 3);
 
-        const { count: devSoldCount } = await supabase
-          .from('pumpfun_watchlist')
-          .select('id', { count: 'exact', head: true })
-          .eq('dev_sold', true);
-
         return jsonResponse({
           success: true,
           status: 'healthy',
           watchingCount: watchingCount || 0,
           staleCount: staleCount || 0,
-          devSoldCount: devSoldCount || 0,
         });
       }
 
