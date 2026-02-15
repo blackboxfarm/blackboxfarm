@@ -490,8 +490,7 @@ export function TokenCandidatesDashboard() {
       let query = supabase
         .from('pumpfun_fantasy_positions')
         .select('*, pumpfun_watchlist:watchlist_id(first_seen_at, qualified_at)')
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .order('created_at', { ascending: false });
 
       // Apply status filter (default to 'open' to avoid showing duplicates)
       if (fantasyFilter !== 'all') {
