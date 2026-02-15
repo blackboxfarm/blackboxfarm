@@ -37,6 +37,7 @@ interface MonitorConfig {
   fantasy_moonbag_percentage: number;
   fantasy_moonbag_drawdown_limit: number;
   fantasy_moonbag_volume_check: boolean;
+  fantasy_stop_loss_pct: number;
 }
 
 interface MonitorStats {
@@ -67,7 +68,7 @@ interface OutcomeClassification {
 async function getConfig(supabase: any): Promise<MonitorConfig> {
   const { data } = await supabase
     .from('pumpfun_monitor_config')
-    .select('fantasy_target_multiplier, fantasy_sell_percentage, fantasy_moonbag_percentage, fantasy_moonbag_drawdown_limit, fantasy_moonbag_volume_check')
+    .select('fantasy_target_multiplier, fantasy_sell_percentage, fantasy_moonbag_percentage, fantasy_moonbag_drawdown_limit, fantasy_moonbag_volume_check, fantasy_stop_loss_pct')
     .limit(1)
     .single();
 
@@ -77,6 +78,7 @@ async function getConfig(supabase: any): Promise<MonitorConfig> {
     fantasy_moonbag_percentage: data?.fantasy_moonbag_percentage ?? 10,
     fantasy_moonbag_drawdown_limit: data?.fantasy_moonbag_drawdown_limit ?? 70,
     fantasy_moonbag_volume_check: data?.fantasy_moonbag_volume_check ?? true,
+    fantasy_stop_loss_pct: data?.fantasy_stop_loss_pct ?? 35,
   };
 }
 
@@ -481,8 +483,52 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
         const unrealizedPnlSol = currentValue - position.entry_amount_sol;
         const unrealizedPnlPercent = ((currentValue / position.entry_amount_sol) - 1) * 100;
 
+        // STOP-LOSS CHECK: If price drops below stop-loss threshold from entry
+        const stopLossMultiplier = 1 - (config.fantasy_stop_loss_pct / 100);
+        if (multiplier <= stopLossMultiplier) {
+          console.log(`🛑 STOP-LOSS HIT: ${position.token_symbol} @ ${multiplier.toFixed(2)}x (SL: ${stopLossMultiplier.toFixed(2)}x = -${config.fantasy_stop_loss_pct}%)`);
+
+          const fullSellValueSol = position.token_amount * currentPriceSol;
+          const realizedPnlSol = fullSellValueSol - position.entry_amount_sol;
+          const realizedPnlPercent = ((fullSellValueSol / position.entry_amount_sol) - 1) * 100;
+
+          await supabase
+            .from('pumpfun_fantasy_positions')
+            .update({
+              status: 'closed',
+              current_price_usd: currentPriceUsd,
+              current_price_sol: currentPriceSol,
+              main_sold_at: now,
+              main_sold_price_usd: currentPriceUsd,
+              main_sold_amount_sol: fullSellValueSol,
+              main_realized_pnl_sol: realizedPnlSol,
+              moonbag_active: false,
+              moonbag_token_amount: 0,
+              moonbag_entry_value_sol: 0,
+              moonbag_current_value_sol: 0,
+              moonbag_drawdown_pct: 0,
+              sell_percentage: 100,
+              moonbag_percentage: 0,
+              total_realized_pnl_sol: realizedPnlSol,
+              total_pnl_percent: realizedPnlPercent,
+              exit_at: now,
+              exit_price_usd: currentPriceUsd,
+              exit_reason: 'stop_loss',
+              peak_price_usd: isNewPeak ? currentPriceUsd : position.peak_price_usd,
+              peak_multiplier: isNewPeak ? multiplier : position.peak_multiplier,
+              peak_at: isNewPeak ? now : position.peak_at,
+              outcome: 'loss',
+              outcome_classified_at: now,
+              updated_at: now,
+            })
+            .eq('id', position.id);
+
+          stats.targetsSold++;
+          console.log(`🛑 STOP-LOSS SOLD: ${position.token_symbol} | ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
+
+        }
         // Check if target hit
-        if (multiplier >= position.target_multiplier) {
+        else if (multiplier >= position.target_multiplier) {
           // TARGET HIT! Simulate 100% sell (no moonbag)
           console.log(`🎯 TARGET HIT: ${position.token_symbol} @ ${multiplier.toFixed(2)}x (target: ${position.target_multiplier}x)`);
 

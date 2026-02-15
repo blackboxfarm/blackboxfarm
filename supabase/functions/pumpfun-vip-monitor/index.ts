@@ -413,6 +413,7 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
         if (holdersOk && volumeOk) {
           updates.status = 'buy_now';
           updates.promoted_to_buy_now_at = nowIso;
+          updates.price_at_buy_now_usd = metrics.priceUsd || token.price_usd;
           updates.qualification_reason = `PROMOTED: ${metrics.holders || token.holder_count} holders, ${volumeSol.toFixed(2)} SOL volume`;
           
           stats.promotedToBuyNow++;

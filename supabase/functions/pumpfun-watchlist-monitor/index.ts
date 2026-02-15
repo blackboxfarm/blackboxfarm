@@ -499,6 +499,7 @@ async function getConfig(supabase: any) {
     signal_strong_volume_threshold_sol: data?.signal_strong_volume_threshold_sol ?? 2.0,
     signal_strong_rugcheck_threshold: data?.signal_strong_rugcheck_threshold ?? 70,
     min_market_cap_usd: data?.min_market_cap_usd ?? 5000,
+    max_market_cap_usd: data?.max_market_cap_usd ?? 12000,
     min_holder_count_fantasy: data?.min_holder_count_fantasy ?? 100,
     max_rugcheck_score_fantasy: data?.max_rugcheck_score_fantasy ?? 5000,
     min_volume_sol_fantasy: data?.min_volume_sol_fantasy ?? 5,
@@ -990,12 +991,27 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           }
           // QUALIFIED!
           else {
+            // MAX MCAP GATE: Reject if market cap exceeds max threshold
+            const currentMcapUsd = metrics.marketCapUsd || 0;
+            if (currentMcapUsd > config.max_market_cap_usd) {
+              console.log(`   🚫 MCAP TOO HIGH: ${token.token_symbol} — $${currentMcapUsd.toFixed(0)} > $${config.max_market_cap_usd} max`);
+              updates.priority_score = score.total;
+              // Don't reject, just don't promote — let it keep watching in case mcap drops
+            }
+            // BONDING CURVE GATE: Must still be on bonding curve (not graduated)
+            else if (token.is_graduated === true) {
+              console.log(`   🚫 GRADUATED: ${token.token_symbol} — already on Raydium, skipping`);
+              updates.priority_score = score.total;
+              // Don't promote graduated tokens
+            }
+            else {
             const signalStrength = score.total >= 80 ? 'strong' : 'weak';
             
             updates.status = 'qualified';
             updates.qualified_at = now.toISOString();
             updates.signal_strength = signalStrength;
             updates.priority_score = score.total;
+            updates.price_at_qualified_usd = metrics.priceUsd;
             updates.qualification_reason = `SCORE:${score.total}/100 ${score.breakdown} | Holders:${metrics.holders} Vol:${metrics.volume24hSol.toFixed(2)}SOL Mcap:$${(metrics.marketCapUsd || 0).toFixed(0)} RugCheck:${rugcheckResult?.score ?? token.rugcheck_score ?? 'N/A'} DevRep:${devReputation?.reputationScore ?? 'unknown'}`;
             
             stats.promoted++;
@@ -1025,6 +1041,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
                 dust_pct: dustPct,
               },
             }, { onConflict: 'token_mint' });
+          }
           }
         }
         

@@ -1085,6 +1085,7 @@ async function enrichTokenBatch(
           price_usd: priceUsd,
           price_start_usd: priceUsd,
           price_ath_usd: priceUsd,
+          price_at_discovery_usd: priceUsd,
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
           liquidity_usd: liquidityUsd,

@@ -514,6 +514,7 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
         .update({
           status: 'buy_now',
           last_checked_at: now.toISOString(),
+          price_at_buy_now_usd: token.price_usd,
           qualification_reason: `PROMOTED: ${token.holder_count} holders, ${token.volume_sol.toFixed(2)} SOL (3x threshold)`,
         })
         .eq('id', token.id);

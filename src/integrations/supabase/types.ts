@@ -6959,6 +6959,7 @@ export type Database = {
           fantasy_moonbag_percentage: number | null
           fantasy_moonbag_volume_check: boolean | null
           fantasy_sell_percentage: number | null
+          fantasy_stop_loss_pct: number | null
           fantasy_target_multiplier: number | null
           id: string
           is_enabled: boolean
@@ -6976,6 +6977,7 @@ export type Database = {
           max_fresh_wallet_pct: number | null
           max_gini_coefficient: number | null
           max_linked_wallet_count: number | null
+          max_market_cap_usd: number | null
           max_reevaluate_minutes: number | null
           max_rugcheck_score_fantasy: number | null
           max_single_wallet_pct: number | null
@@ -7033,6 +7035,7 @@ export type Database = {
           fantasy_moonbag_percentage?: number | null
           fantasy_moonbag_volume_check?: boolean | null
           fantasy_sell_percentage?: number | null
+          fantasy_stop_loss_pct?: number | null
           fantasy_target_multiplier?: number | null
           id?: string
           is_enabled?: boolean
@@ -7050,6 +7053,7 @@ export type Database = {
           max_fresh_wallet_pct?: number | null
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
+          max_market_cap_usd?: number | null
           max_reevaluate_minutes?: number | null
           max_rugcheck_score_fantasy?: number | null
           max_single_wallet_pct?: number | null
@@ -7107,6 +7111,7 @@ export type Database = {
           fantasy_moonbag_percentage?: number | null
           fantasy_moonbag_volume_check?: boolean | null
           fantasy_sell_percentage?: number | null
+          fantasy_stop_loss_pct?: number | null
           fantasy_target_multiplier?: number | null
           id?: string
           is_enabled?: boolean
@@ -7124,6 +7129,7 @@ export type Database = {
           max_fresh_wallet_pct?: number | null
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
+          max_market_cap_usd?: number | null
           max_reevaluate_minutes?: number | null
           max_rugcheck_score_fantasy?: number | null
           max_single_wallet_pct?: number | null
@@ -7683,7 +7689,10 @@ export type Database = {
           micro_tx_ratio: number | null
           mint_authority_revoked: boolean | null
           permanent_reject: boolean | null
+          price_at_buy_now_usd: number | null
+          price_at_discovery_usd: number | null
           price_at_mint: number | null
+          price_at_qualified_usd: number | null
           price_ath_usd: number | null
           price_change_pct_15m: number | null
           price_change_pct_3m: number | null
@@ -7802,7 +7811,10 @@ export type Database = {
           micro_tx_ratio?: number | null
           mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
+          price_at_buy_now_usd?: number | null
+          price_at_discovery_usd?: number | null
           price_at_mint?: number | null
+          price_at_qualified_usd?: number | null
           price_ath_usd?: number | null
           price_change_pct_15m?: number | null
           price_change_pct_3m?: number | null
@@ -7921,7 +7933,10 @@ export type Database = {
           micro_tx_ratio?: number | null
           mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
+          price_at_buy_now_usd?: number | null
+          price_at_discovery_usd?: number | null
           price_at_mint?: number | null
+          price_at_qualified_usd?: number | null
           price_ath_usd?: number | null
           price_change_pct_15m?: number | null
           price_change_pct_3m?: number | null
