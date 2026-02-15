@@ -93,19 +93,73 @@ async function getSolPrice(): Promise<number> {
   }
 }
 
-// Batch fetch prices - PumpFun API first (freshest), then watchlist cache, then DexScreener, then Jupiter
+// Batch fetch prices - DexScreener first (most reliable), then Jupiter, then PumpFun API, then watchlist cache
 async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<string, number>> {
   const priceMap = new Map<string, number>();
   
   if (mints.length === 0) return priceMap;
 
-  let pumpfunCount = 0;
-  let watchlistCount = 0;
   let dexscreenerCount = 0;
   let jupiterCount = 0;
+  let pumpfunCount = 0;
+  let watchlistCount = 0;
 
-  // 1. FIRST: Try PumpFun API directly for ALL mints (freshest real-time price)
+  // 1. FIRST: DexScreener (most reliable, not Cloudflare blocked)
   for (const mint of mints) {
+    try {
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.pairs?.[0]?.priceUsd) {
+          priceMap.set(mint, parseFloat(data.pairs[0].priceUsd));
+          dexscreenerCount++;
+        }
+      }
+      await new Promise(r => setTimeout(r, 100));
+    } catch (e) {
+      // Continue
+    }
+  }
+
+  let missingMints = mints.filter(m => !priceMap.has(m));
+  if (missingMints.length === 0) {
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount})`);
+    return priceMap;
+  }
+
+  // 2. SECOND: Jupiter API (great for graduated tokens)
+  if (missingMints.length > 0) {
+    try {
+      const batchSize = 100;
+      for (let i = 0; i < missingMints.length; i += batchSize) {
+        const batch = missingMints.slice(i, i + batchSize);
+        const response = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(',')}`);
+        const data = await response.json();
+        
+        for (const mint of batch) {
+          if (data?.data?.[mint]?.price) {
+            priceMap.set(mint, parseFloat(data.data[mint].price));
+            jupiterCount++;
+          }
+        }
+        
+        if (i + batchSize < missingMints.length) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  missingMints = mints.filter(m => !priceMap.has(m));
+  if (missingMints.length === 0) {
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount}, jupiter: ${jupiterCount})`);
+    return priceMap;
+  }
+
+  // 3. THIRD: PumpFun API (often Cloudflare blocked, but try anyway for bonding curve tokens)
+  for (const mint of missingMints) {
     try {
       const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
         headers: { 'Accept': 'application/json' }
@@ -113,26 +167,25 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
       if (response.ok) {
         const data = await response.json();
         if (data?.usd_market_cap && data?.total_supply) {
+          // total_supply is in raw units with 6 decimals
           const priceUsd = data.usd_market_cap / (data.total_supply / 1e6);
           priceMap.set(mint, priceUsd);
           pumpfunCount++;
         }
       }
-      await new Promise(r => setTimeout(r, 100)); // Rate limit
+      await new Promise(r => setTimeout(r, 100));
     } catch (e) {
-      // Continue to next source
+      // Continue - PumpFun API is often Cloudflare blocked
     }
   }
 
-  // Find mints still missing prices
-  let missingMints = mints.filter(m => !priceMap.has(m));
-  
+  missingMints = mints.filter(m => !priceMap.has(m));
   if (missingMints.length === 0) {
-    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount})`);
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount}, jupiter: ${jupiterCount}, pumpfun: ${pumpfunCount})`);
     return priceMap;
   }
 
-  // 2. SECOND: Fallback to watchlist cache for missing mints
+  // 4. LAST: Watchlist cache (stale but better than nothing)
   try {
     const { data: watchlistPrices } = await supabase
       .from('pumpfun_watchlist')
@@ -152,62 +205,8 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
     console.error('Error fetching watchlist prices:', error);
   }
 
-  // Find mints still missing prices
-  missingMints = mints.filter(m => !priceMap.has(m));
+  console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount}, jupiter: ${jupiterCount}, pumpfun: ${pumpfunCount}, watchlist: ${watchlistCount})`);
   
-  if (missingMints.length === 0) {
-    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}, watchlist: ${watchlistCount})`);
-    return priceMap;
-  }
-
-  // 3. THIRD: Try DexScreener for graduated tokens
-  for (const mint of missingMints) {
-    try {
-      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.pairs?.[0]?.priceUsd) {
-          priceMap.set(mint, parseFloat(data.pairs[0].priceUsd));
-          dexscreenerCount++;
-        }
-      }
-      await new Promise(r => setTimeout(r, 100)); // Rate limit
-    } catch (e) {
-      // Continue
-    }
-  }
-
-  // Find mints still missing
-  missingMints = mints.filter(m => !priceMap.has(m));
-
-  // 4. LAST: Jupiter API as final fallback (for graduated tokens on DEXes)
-  if (missingMints.length > 0) {
-    try {
-      const batchSize = 100;
-      for (let i = 0; i < missingMints.length; i += batchSize) {
-        const batch = missingMints.slice(i, i + batchSize);
-        const response = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(',')}`);
-        const data = await response.json();
-        
-        for (const mint of batch) {
-          if (data?.data?.[mint]?.price) {
-            priceMap.set(mint, data.data[mint].price);
-            jupiterCount++;
-          }
-        }
-        
-        if (i + batchSize < missingMints.length) {
-          await new Promise(r => setTimeout(r, 200));
-        }
-      }
-    } catch (e) {
-      // Ignore
-    }
-  }
-
-  console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}, watchlist: ${watchlistCount}, dex: ${dexscreenerCount}, jupiter: ${jupiterCount})`);
-  
-  // Log missing prices for debugging
   const stillMissing = mints.filter(m => !priceMap.has(m));
   if (stillMissing.length > 0) {
     console.log(`⚠️ Still missing prices for: ${stillMissing.join(', ')}`);
@@ -499,19 +498,19 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
       const isNewPeak = currentPriceUsd > (position.peak_price_usd || 0);
       
       if (position.status === 'open') {
-        // Calculate current unrealized P&L
-        const currentValue = position.token_amount * currentPriceSol;
-        const unrealizedPnlSol = currentValue - position.entry_amount_sol;
-        const unrealizedPnlPercent = ((currentValue / position.entry_amount_sol) - 1) * 100;
+        // Calculate current unrealized P&L using USD multiplier (consistent, not affected by SOL price changes)
+        const pnlPercent = (multiplier - 1) * 100;
+        const unrealizedPnlSol = position.entry_amount_sol * (multiplier - 1);
+        const unrealizedPnlPercent = pnlPercent;
 
         // STOP-LOSS CHECK: If price drops below stop-loss threshold from entry
         const stopLossMultiplier = 1 - (config.fantasy_stop_loss_pct / 100);
         if (multiplier <= stopLossMultiplier) {
           console.log(`🛑 STOP-LOSS HIT: ${position.token_symbol} @ ${multiplier.toFixed(2)}x (SL: ${stopLossMultiplier.toFixed(2)}x = -${config.fantasy_stop_loss_pct}%)`);
 
-          const fullSellValueSol = position.token_amount * currentPriceSol;
-          const realizedPnlSol = fullSellValueSol - position.entry_amount_sol;
-          const realizedPnlPercent = ((fullSellValueSol / position.entry_amount_sol) - 1) * 100;
+          const realizedPnlPercent = (multiplier - 1) * 100;
+          const realizedPnlSol = position.entry_amount_sol * (multiplier - 1);
+          const fullSellValueSol = position.entry_amount_sol * multiplier;
 
           await supabase
             .from('pumpfun_fantasy_positions')
@@ -558,9 +557,9 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           const reason = isDeadDump ? `dead_dump_${positionAgeHours.toFixed(0)}h` : `stale_${positionAgeHours.toFixed(0)}h`;
           console.log(`💀 AUTO-CLOSE (${reason}): ${position.token_symbol} @ ${multiplier.toFixed(3)}x`);
 
-          const fullSellValueSol = position.token_amount * currentPriceSol;
-          const realizedPnlSol = fullSellValueSol - position.entry_amount_sol;
-          const realizedPnlPercent = ((fullSellValueSol / position.entry_amount_sol) - 1) * 100;
+          const realizedPnlPercent = (multiplier - 1) * 100;
+          const realizedPnlSol = position.entry_amount_sol * (multiplier - 1);
+          const fullSellValueSol = position.entry_amount_sol * multiplier;
 
           await supabase.from('pumpfun_fantasy_positions').update({
             status: 'closed', current_price_usd: currentPriceUsd, current_price_sol: currentPriceSol,
@@ -583,13 +582,13 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           // TARGET HIT! Simulate 100% sell (no moonbag)
           console.log(`🎯 TARGET HIT: ${position.token_symbol} @ ${multiplier.toFixed(2)}x (target: ${position.target_multiplier}x)`);
 
-          // Calculate full sell
-          const fullSellValueSol = position.token_amount * currentPriceSol;
-          const realizedPnlSol = fullSellValueSol - position.entry_amount_sol;
-          const realizedPnlPercent = ((fullSellValueSol / position.entry_amount_sol) - 1) * 100;
+          // Calculate full sell using USD multiplier (not SOL conversion which drifts)
+          const realizedPnlPercent = (multiplier - 1) * 100;
+          const realizedPnlSol = position.entry_amount_sol * (multiplier - 1);
+          const fullSellValueSol = position.entry_amount_sol * multiplier;
 
           // Classify outcome
-          const outcome = realizedPnlPercent > 0 ? 'success' : 'loss';
+          const outcome = multiplier > 1 ? 'success' : 'loss';
 
           // Update position to closed (100% sell, no moonbag)
           await supabase
