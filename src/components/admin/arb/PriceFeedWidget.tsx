@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useVisibleInterval } from "@/hooks/useVisibleInterval";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,14 +62,13 @@ export const PriceFeedWidget = () => {
       )
       .subscribe();
 
-    // Refresh every 30 seconds
-    const interval = setInterval(loadPrices, 30000);
-
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(interval);
     };
   }, []);
+
+  // Polling fallback - pauses when tab hidden
+  useVisibleInterval(loadPrices, 30000);
 
   if (!prices) {
     return (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
+import { useVisibleInterval } from '@/hooks/useVisibleInterval';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -593,23 +594,11 @@ export function TokenCandidatesDashboard() {
     }
   }, [fantasyFilter, fetchFantasyData, mainTab]);
 
-  // Auto-refresh watchlist every 5 seconds when viewing watchlist tab
-  useEffect(() => {
-    if (mainTab !== 'watchlist') return;
-    const interval = setInterval(() => {
-      fetchWatchlist();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [mainTab, fetchWatchlist]);
+  // Auto-refresh watchlist every 5 seconds when viewing watchlist tab (pauses when tab hidden)
+  useVisibleInterval(fetchWatchlist, 5000, mainTab === 'watchlist');
 
-  // Auto-refresh fantasy positions every 5 seconds when viewing fantasy tab
-  useEffect(() => {
-    if (mainTab !== 'fantasy') return;
-    const interval = setInterval(() => {
-      fetchFantasyData();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [mainTab, fetchFantasyData]);
+  // Auto-refresh fantasy positions every 5 seconds when viewing fantasy tab (pauses when tab hidden)
+  useVisibleInterval(fetchFantasyData, 5000, mainTab === 'fantasy');
 
   // Continuous polling effect
   useEffect(() => {

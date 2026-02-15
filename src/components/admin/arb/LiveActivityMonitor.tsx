@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useVisibleInterval } from "@/hooks/useVisibleInterval";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,10 +20,36 @@ export const LiveActivityMonitor = () => {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [botStatus, setBotStatus] = useState<any>(null);
 
+  const loadData = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: activitiesData } = await supabase
+      .from("arb_opportunities")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("detected_at", { ascending: false })
+      .limit(10);
+
+    if (activitiesData) {
+      setActivities(activitiesData);
+    }
+
+    const { data: statusData } = await supabase
+      .from("arb_bot_status")
+      .select("*")
+      .eq("user_id", user.id)
+      .single();
+
+    setBotStatus(statusData);
+  }, []);
+
+  // Polling fallback - pauses when tab hidden
+  useVisibleInterval(loadData, 10000);
+
   useEffect(() => {
     loadData();
 
-    // Subscribe to real-time updates
     const channel = supabase
       .channel('activity-updates')
       .on(
@@ -45,39 +72,10 @@ export const LiveActivityMonitor = () => {
       )
       .subscribe();
 
-    const interval = setInterval(loadData, 10000);
-
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(interval);
     };
-  }, []);
-
-  const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Load recent activities
-    const { data: activitiesData } = await supabase
-      .from("arb_opportunities")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("detected_at", { ascending: false })
-      .limit(10);
-
-    if (activitiesData) {
-      setActivities(activitiesData);
-    }
-
-    // Load bot status
-    const { data: statusData } = await supabase
-      .from("arb_bot_status")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-
-    setBotStatus(statusData);
-  };
+  }, [loadData]);
 
   const getActivityIcon = (activity: ActivityLog) => {
     if (activity.executable) {
