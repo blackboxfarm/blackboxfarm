@@ -93,47 +93,19 @@ async function getSolPrice(): Promise<number> {
   }
 }
 
-// Batch fetch prices from multiple sources (watchlist, PumpFun, DexScreener, Jupiter)
+// Batch fetch prices - PumpFun API first (freshest), then watchlist cache, then DexScreener, then Jupiter
 async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<string, number>> {
   const priceMap = new Map<string, number>();
   
   if (mints.length === 0) return priceMap;
 
-  let watchlistCount = 0;
   let pumpfunCount = 0;
+  let watchlistCount = 0;
   let dexscreenerCount = 0;
   let jupiterCount = 0;
 
-  // 1. FIRST: Get prices from pumpfun_watchlist (already being updated by enricher)
-  try {
-    const { data: watchlistPrices } = await supabase
-      .from('pumpfun_watchlist')
-      .select('token_mint, price_usd')
-      .in('token_mint', mints)
-      .not('price_usd', 'is', null);
-
-    if (watchlistPrices) {
-      for (const wp of watchlistPrices) {
-        if (wp.price_usd && wp.price_usd > 0) {
-          priceMap.set(wp.token_mint, wp.price_usd);
-          watchlistCount++;
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching watchlist prices:', error);
-  }
-
-  // Find mints still missing prices
-  let missingMints = mints.filter(m => !priceMap.has(m));
-  
-  if (missingMints.length === 0) {
-    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (watchlist: ${watchlistCount})`);
-    return priceMap;
-  }
-
-  // 2. SECOND: Try PumpFun API for bonding curve tokens
-  for (const mint of missingMints) {
+  // 1. FIRST: Try PumpFun API directly for ALL mints (freshest real-time price)
+  for (const mint of mints) {
     try {
       const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
         headers: { 'Accept': 'application/json' }
@@ -152,11 +124,39 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
     }
   }
 
-  // Find mints still missing
+  // Find mints still missing prices
+  let missingMints = mints.filter(m => !priceMap.has(m));
+  
+  if (missingMints.length === 0) {
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount})`);
+    return priceMap;
+  }
+
+  // 2. SECOND: Fallback to watchlist cache for missing mints
+  try {
+    const { data: watchlistPrices } = await supabase
+      .from('pumpfun_watchlist')
+      .select('token_mint, price_usd')
+      .in('token_mint', missingMints)
+      .not('price_usd', 'is', null);
+
+    if (watchlistPrices) {
+      for (const wp of watchlistPrices) {
+        if (wp.price_usd && wp.price_usd > 0) {
+          priceMap.set(wp.token_mint, wp.price_usd);
+          watchlistCount++;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching watchlist prices:', error);
+  }
+
+  // Find mints still missing prices
   missingMints = mints.filter(m => !priceMap.has(m));
   
   if (missingMints.length === 0) {
-    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (watchlist: ${watchlistCount}, pumpfun: ${pumpfunCount})`);
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}, watchlist: ${watchlistCount})`);
     return priceMap;
   }
 
@@ -205,7 +205,7 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
     }
   }
 
-  console.log(`📈 Prices: ${priceMap.size}/${mints.length} (watchlist: ${watchlistCount}, pumpfun: ${pumpfunCount}, dex: ${dexscreenerCount}, jupiter: ${jupiterCount})`);
+  console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}, watchlist: ${watchlistCount}, dex: ${dexscreenerCount}, jupiter: ${jupiterCount})`);
   
   // Log missing prices for debugging
   const stillMissing = mints.filter(m => !priceMap.has(m));
