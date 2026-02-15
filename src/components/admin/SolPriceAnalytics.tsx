@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useVisibleInterval } from "@/hooks/useVisibleInterval";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -67,10 +68,10 @@ export function SolPriceAnalytics() {
 
   useEffect(() => {
     fetchData();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
   }, []);
+
+  // Auto-refresh every 30 seconds (pauses when tab hidden)
+  useVisibleInterval(fetchData, 30000);
 
   const getSourceColor = (source: string): string => {
     const colors: Record<string, string> = {
