@@ -1662,7 +1662,7 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact>
                               <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
-                                  onClick={() => window.open(`https://pump.fun/${item.token_mint}`, '_blank')}
+onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')}
                                   title="View on Pump.fun">
                                   <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
                                 </Button>
@@ -1777,7 +1777,7 @@ export function TokenCandidatesDashboard() {
                           <TableCell compact>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
-                                onClick={() => window.open(`https://pump.fun/${item.token_mint}`, '_blank')}
+                                onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')}
                                 title="View on Pump.fun">
                                 <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
                               </Button>
@@ -2083,7 +2083,7 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact>
                               <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
-                                  onClick={() => window.open(`https://pump.fun/${pos.token_mint}`, '_blank')}
+                                  onClick={() => window.open(`https://pump.fun/coin/${pos.token_mint}`, '_blank')}
                                   title="View on Pump.fun">
                                   <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
                                 </Button>
@@ -2261,7 +2261,7 @@ export function TokenCandidatesDashboard() {
                           <TableCell compact>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
-                                onClick={() => window.open(`https://pump.fun/${log.token_mint}`, '_blank')}
+                                onClick={() => window.open(`https://pump.fun/coin/${log.token_mint}`, '_blank')}
                                 title="View on Pump.fun">
                                 <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
                               </Button>

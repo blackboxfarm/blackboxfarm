@@ -767,6 +767,8 @@ async function getConfig(supabase: any) {
     ],
     rugcheck_recheck_minutes: data?.rugcheck_recheck_minutes ?? 30,
     rugcheck_rate_limit_ms: data?.rugcheck_rate_limit_ms ?? 500,
+    // MCap gate for enricher
+    max_market_cap_usd: data?.max_market_cap_usd ?? 12000,
   };
 }
 
@@ -815,6 +817,51 @@ async function enrichTokenBatch(
     
     console.log(`   Price: $${priceUsd?.toFixed(8) || 'N/A'}, Volume: ${volumeSol} SOL, MCap: $${marketCapUsd || 'N/A'}`);
     
+    // === EARLY MCAP GATE — reject immediately if above max market cap ===
+    if (marketCapUsd && marketCapUsd > config.max_market_cap_usd) {
+      console.log(`   🚫 MCAP TOO HIGH at enrichment: $${marketCapUsd.toFixed(0)} > $${config.max_market_cap_usd} — REJECTED`);
+      await supabase
+        .from('pumpfun_watchlist')
+        .update({
+          status: 'rejected',
+          rejection_reason: 'mcap_too_high',
+          rejection_type: 'permanent',
+          rejection_reasons: ['mcap_too_high'],
+          removed_at: new Date().toISOString(),
+          price_usd: priceUsd,
+          volume_sol: volumeSol,
+          market_cap_usd: marketCapUsd,
+          liquidity_usd: liquidityUsd,
+          last_checked_at: new Date().toISOString(),
+        })
+        .eq('id', token.id);
+      rejected++;
+      continue;
+    }
+    
+    // === DEV SOLD GATE — reject if pump.fun reports complete (dev sold / graduated) ===
+    if (pumpData?.complete === true) {
+      console.log(`   🚫 DEV SOLD / GRADUATED at enrichment — REJECTED`);
+      await supabase
+        .from('pumpfun_watchlist')
+        .update({
+          status: 'rejected',
+          rejection_reason: 'dev_sold_graduated',
+          rejection_type: 'permanent',
+          rejection_reasons: ['dev_sold_graduated'],
+          removed_at: new Date().toISOString(),
+          dev_sold: true,
+          price_usd: priceUsd,
+          volume_sol: volumeSol,
+          market_cap_usd: marketCapUsd,
+          liquidity_usd: liquidityUsd,
+          last_checked_at: new Date().toISOString(),
+        })
+        .eq('id', token.id);
+      rejected++;
+      continue;
+    }
+
     // Check token age if we have blockchain creation time
     const createdAt = tokenData?.events?.createdAt || (pumpData?.created_timestamp ? pumpData.created_timestamp / 1000 : null);
     if (createdAt) {

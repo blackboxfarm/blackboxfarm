@@ -1084,7 +1084,7 @@ export function MegaWhaleDashboard() {
                       // Generate appropriate trading link
                       const getTradeUrl = (mint: string) => {
                         if (mint.endsWith('pump')) {
-                          return `https://pump.fun/${mint}`;
+                          return `https://pump.fun/coin/${mint}`;
                         }
                         return `https://dexscreener.com/solana/${mint}`;
                       };
