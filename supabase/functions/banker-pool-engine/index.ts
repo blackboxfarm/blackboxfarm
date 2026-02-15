@@ -2,26 +2,23 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 /**
- * BANKER POOL ENGINE v2 — AUTONOMOUS $250 Bankroll Manager
+ * BANKER POOL ENGINE v3 — AUTONOMOUS $250 Bankroll Manager
  * 
- * THIS ENGINE FINDS ITS OWN TOKENS. No watchlist dependency.
+ * DISCOVERY SOURCE: Pump.fun Watchlist (pumpfun_watchlist table)
+ * Tokens are discovered by the existing Pump.fun scanner pipeline and
+ * this engine picks the best candidates from watching/qualified/buy_now statuses.
  * 
- * DISCOVERY SOURCES:
- * 1. DexScreener — trending Solana pairs, volume surges, new listings
- * 2. Jupiter — price verification
- * 3. Independent safety checks — liquidity, holder analysis, dev wallet screening
- * 
- * ENTRY CRITERIA (self-contained):
- * - Volume surge: 5m volume > 2x the 1h average
- * - Liquidity floor: > $5k USD
- * - Market cap: $10k-$500k sweet spot
- * - Pair age: 10min - 24h (not too new, not stale)
- * - Price trend: positive 5m and 1h change
- * - Not a known scam token (dev wallet check)
- * - Buy/sell ratio signals (more buys than sells)
+ * ENTRY CRITERIA:
+ * - Status: watching, qualified, or buy_now in pumpfun_watchlist
+ * - Market cap: $5k-$500k
+ * - Holders: >= 10
+ * - Volume: >= 5 SOL
+ * - RugCheck score < 5000 (if available)
+ * - Not dev_sold, not permanently rejected
+ * - Scored by weighted system (holder growth, volume, mcap sweet spot, rugcheck)
  * 
  * RISK MANAGEMENT:
- * - Max 4% bankroll per trade ($10 on $250)
+ * - Max 4% bankroll per trade
  * - Max 5 concurrent positions
  * - Stop-loss at -25%
  * - Take profit at +100% (2x)
@@ -58,7 +55,7 @@ serve(async (req) => {
     let body: any = {}
     try { body = await req.json() } catch {}
 
-    console.log(`🏦 Banker Pool Engine v2 — action: ${action}`)
+    console.log(`🏦 Banker Pool Engine v3 (Pump.fun) — action: ${action}`)
 
     switch (action) {
       case 'init': return await initPool(supabase)
@@ -67,7 +64,7 @@ serve(async (req) => {
       case 'daily-report': return await getDailyReport(supabase)
       case 'close-position': return await closePosition(supabase, body.trade_id, body.reason || 'manual')
       case 'reset': return await resetPool(supabase)
-      case 'scan-only': return await scanOnly()
+      case 'scan-only': return await scanOnly(supabase)
       default: return jsonResponse({ error: `Unknown action: ${action}` }, 400)
     }
   } catch (e) {
@@ -130,10 +127,10 @@ async function resetPool(supabase: any) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SCAN ONLY — Preview what the scanner finds without trading
+// SCAN ONLY — Preview what the Pump.fun watchlist has available
 // ═══════════════════════════════════════════════════════════════
-async function scanOnly() {
-  const candidates = await discoverTokens()
+async function scanOnly(supabase: any) {
+  const candidates = await discoverFromPumpfun(supabase)
   return jsonResponse({
     success: true,
     candidatesFound: candidates.length,
@@ -143,20 +140,21 @@ async function scanOnly() {
       mint: c.mint,
       price: c.priceUsd,
       mcap: c.mcap,
-      volume24h: c.volume24h,
+      volumeSol: c.volumeSol,
       liquidity: c.liquidity,
-      priceChange5m: c.priceChange5m,
-      priceChange1h: c.priceChange1h,
-      pairAge: c.pairAgeMinutes,
+      holders: c.holders,
+      rugcheckScore: c.rugcheckScore,
+      status: c.watchlistStatus,
       bankerScore: c.bankerScore,
-      source: c.source,
       reasons: c.reasons,
+      holderGrowth: c.holderGrowth,
+      devSold: c.devSold,
     })),
   })
 }
 
 // ═══════════════════════════════════════════════════════════════
-// RUN CYCLE — Main loop: scan → filter → enter → monitor → exit
+// RUN CYCLE — Main loop: scan pump.fun watchlist → filter → enter → monitor → exit
 // ═══════════════════════════════════════════════════════════════
 async function runCycle(supabase: any) {
   const pool = await getPool(supabase)
@@ -184,19 +182,15 @@ async function runCycle(supabase: any) {
   const exitActions = await monitorPositions(supabase, pool)
   actions.push(...exitActions)
 
-  // 3. AUTONOMOUS DISCOVERY — find our own tokens
-  const candidates = await discoverTokens()
-  actions.push(`🔍 Scanner found ${candidates.length} candidates`)
+  // 3. PUMP.FUN DISCOVERY — pull from pumpfun_watchlist
+  const candidates = await discoverFromPumpfun(supabase)
+  actions.push(`🔍 Pump.fun scanner found ${candidates.length} candidates`)
 
-  // 4. Check against known bad actors
-  const safeCandidates = await filterBadActors(supabase, candidates)
-  actions.push(`🛡️ ${safeCandidates.length} passed safety checks`)
-
-  // 5. Enter positions from our own discoveries
-  const entryActions = await enterFromDiscovery(supabase, pool, safeCandidates)
+  // 4. Enter positions
+  const entryActions = await enterFromDiscovery(supabase, pool, candidates)
   actions.push(...entryActions)
 
-  // 6. Update daily stats
+  // 5. Update daily stats
   await updateDailyStats(supabase, pool, today)
 
   return jsonResponse({
@@ -205,295 +199,202 @@ async function runCycle(supabase: any) {
     poolCapital: pool.current_capital,
     scan: {
       found: candidates.length,
-      passedSafety: safeCandidates.length,
-      topCandidates: safeCandidates.slice(0, 5).map(c => ({
-        symbol: c.symbol, score: c.bankerScore, mcap: c.mcap
+      passedSafety: candidates.length,
+      topCandidates: candidates.slice(0, 5).map(c => ({
+        symbol: c.symbol, score: c.bankerScore, mcap: c.mcap,
+        holders: c.holders, status: c.watchlistStatus,
       })),
     },
   })
 }
 
 // ═══════════════════════════════════════════════════════════════
-// AUTONOMOUS TOKEN DISCOVERY
-// Scans DexScreener for Solana opportunities
+// PUMP.FUN WATCHLIST DISCOVERY
+// Pulls candidates from pumpfun_watchlist table
 // ═══════════════════════════════════════════════════════════════
 
-interface TokenCandidate {
+interface PumpfunCandidate {
   mint: string
   symbol: string
   name: string
   priceUsd: number
   mcap: number
-  volume24h: number
+  volumeSol: number
   volume5m: number
-  volume1h: number
   liquidity: number
-  priceChange5m: number
-  priceChange1h: number
-  priceChange24h: number
-  pairAgeMinutes: number
-  pairAddress: string
-  txns5mBuys: number
-  txns5mSells: number
-  txns1hBuys: number
-  txns1hSells: number
+  holders: number
+  holdersPrev: number
+  holderGrowth: number
+  rugcheckScore: number
+  rugcheckPassed: boolean
+  devSold: boolean
+  watchlistStatus: string
+  priorityScore: number
   bankerScore: number
-  source: string
   reasons: string[]
-  dexId: string
+  priceAth: number
+  priceCurrent: number
+  mintAuthRevoked: boolean
+  freezeAuthRevoked: boolean
+  socialCount: number
+  bundleScore: number
+  maxWalletPct: number
+  createdAt: string
 }
 
-async function discoverTokens(): Promise<TokenCandidate[]> {
-  const allCandidates: TokenCandidate[] = []
+async function discoverFromPumpfun(supabase: any): Promise<PumpfunCandidate[]> {
+  // Pull tokens from watchlist that are actively being monitored
+  // Priority: buy_now > qualified > watching
+  const { data: watchlistTokens, error } = await supabase
+    .from('pumpfun_watchlist')
+    .select('*')
+    .in('status', ['watching', 'qualified', 'buy_now'])
+    .eq('permanent_reject', false)
+    .order('priority_score', { ascending: false })
+    .limit(100)
 
-  // Source 1: DexScreener Solana token profiles (boosted/trending)
-  try {
-    const res = await fetch('https://api.dexscreener.com/token-boosts/top/v1', {
-      headers: { 'Accept': 'application/json' },
-    })
-    if (res.ok) {
-      const boosts = await res.json()
-      const solanaBoosted = (boosts || [])
-        .filter((b: any) => b.chainId === 'solana')
-        .slice(0, 15)
-      
-      for (const boost of solanaBoosted) {
-        try {
-          const pairRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${boost.tokenAddress}`)
-          if (pairRes.ok) {
-            const pairData = await pairRes.json()
-            const parsed = parseDexScreenerPairs(pairData?.pairs || [], 'boosted')
-            allCandidates.push(...parsed)
-          }
-        } catch {}
-      }
-    }
-  } catch (e) {
-    console.error('Boosted scan error:', e)
+  if (error || !watchlistTokens?.length) {
+    console.log(`🔍 Pump.fun watchlist: ${error ? 'error: ' + error.message : 'no tokens found'}`)
+    return []
   }
 
-  // Source 2: DexScreener search for recent high-volume Solana pairs
-  try {
-    const res = await fetch('https://api.dexscreener.com/latest/dex/pairs/solana?sort=volume&order=desc', {
-      headers: { 'Accept': 'application/json' },
-    })
-    if (res.ok) {
-      const data = await res.json()
-      const parsed = parseDexScreenerPairs(data?.pairs || [], 'volume_scan')
-      allCandidates.push(...parsed)
-    }
-  } catch (e) {
-    console.error('Volume scan error:', e)
-  }
+  console.log(`🔍 Pump.fun watchlist: ${watchlistTokens.length} tokens in watching/qualified/buy_now`)
 
-  // Source 3: Trending tokens on DexScreener
-  try {
-    const res = await fetch('https://api.dexscreener.com/latest/dex/tokens/trending/solana', {
-      headers: { 'Accept': 'application/json' },
-    })
-    if (res.ok) {
-      const data = await res.json()
-      // This endpoint returns token addresses; need to look up pairs
-      if (Array.isArray(data)) {
-        for (const token of data.slice(0, 10)) {
-          try {
-            const addr = typeof token === 'string' ? token : token?.tokenAddress
-            if (!addr) continue
-            const pairRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`)
-            if (pairRes.ok) {
-              const pairData = await pairRes.json()
-              allCandidates.push(...parseDexScreenerPairs(pairData?.pairs || [], 'trending'))
-            }
-          } catch {}
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Trending scan error:', e)
-  }
+  const candidates: PumpfunCandidate[] = []
 
-  // Deduplicate by mint
-  const seen = new Set<string>()
-  const unique: TokenCandidate[] = []
-  for (const c of allCandidates) {
-    if (!seen.has(c.mint)) {
-      seen.add(c.mint)
-      unique.push(c)
-    }
-  }
+  for (const token of watchlistTokens) {
+    const mcap = parseFloat(token.market_cap_usd) || 0
+    const priceUsd = parseFloat(token.price_usd) || 0
+    const volumeSol = parseFloat(token.volume_sol) || 0
+    const holders = token.holder_count || 0
+    const holdersPrev = token.holder_count_prev || 0
+    const liquidity = parseFloat(token.liquidity_usd) || 0
+    const rugcheckScore = token.rugcheck_score || 0
+    const devSold = token.dev_sold || false
 
-  // Score and sort
-  const scored = unique.map(c => ({ ...c, bankerScore: scoreCandidateAutonomous(c) }))
-  scored.sort((a, b) => b.bankerScore - a.bankerScore)
+    // Hard filters — skip tokens that are clearly not viable
+    if (priceUsd <= 0) continue
+    if (mcap < 5000) continue // Too tiny
+    if (mcap > 500000) continue // Too big for early plays
+    if (holders < 10) continue // Not enough holders
+    if (volumeSol < 3) continue // No volume
+    if (devSold) continue // Dev dumped
+    if (rugcheckScore > 5000) continue // Too risky
 
-  console.log(`🔍 Discovery: ${allCandidates.length} raw → ${unique.length} unique → top score: ${scored[0]?.bankerScore || 0}`)
+    const holderGrowth = holdersPrev > 0 ? ((holders - holdersPrev) / holdersPrev) * 100 : 0
 
-  return scored.filter(c => c.bankerScore >= 50) // Only return viable candidates
-}
-
-function parseDexScreenerPairs(pairs: any[], source: string): TokenCandidate[] {
-  const results: TokenCandidate[] = []
-  
-  for (const pair of pairs) {
-    if (!pair || pair.chainId !== 'solana') continue
-    
-    const priceUsd = parseFloat(pair.priceUsd || '0')
-    const mcap = pair.marketCap || pair.fdv || 0
-    const liquidity = pair.liquidity?.usd || 0
-    const volume24h = pair.volume?.h24 || 0
-    const volume1h = pair.volume?.h1 || 0
-    const volume5m = pair.volume?.m5 || 0
-    
-    // Skip wrapped SOL, USDC, stablecoins
-    const symbol = (pair.baseToken?.symbol || '').toUpperCase()
-    if (['SOL', 'WSOL', 'USDC', 'USDT', 'BONK', 'WIF', 'JUP'].includes(symbol)) continue
-    
-    const pairCreated = pair.pairCreatedAt ? new Date(pair.pairCreatedAt).getTime() : 0
-    const pairAgeMinutes = pairCreated > 0 ? (Date.now() - pairCreated) / 60000 : 99999
-
-    const candidate: TokenCandidate = {
-      mint: pair.baseToken?.address || '',
-      symbol: pair.baseToken?.symbol || 'UNKNOWN',
-      name: pair.baseToken?.name || 'Unknown',
+    const candidate: PumpfunCandidate = {
+      mint: token.token_mint,
+      symbol: token.token_symbol || 'UNK',
+      name: token.token_name || 'Unknown',
       priceUsd,
       mcap,
-      volume24h,
-      volume5m,
-      volume1h,
+      volumeSol,
+      volume5m: parseFloat(token.volume_5m) || 0,
       liquidity,
-      priceChange5m: pair.priceChange?.m5 || 0,
-      priceChange1h: pair.priceChange?.h1 || 0,
-      priceChange24h: pair.priceChange?.h24 || 0,
-      pairAgeMinutes,
-      pairAddress: pair.pairAddress || '',
-      txns5mBuys: pair.txns?.m5?.buys || 0,
-      txns5mSells: pair.txns?.m5?.sells || 0,
-      txns1hBuys: pair.txns?.h1?.buys || 0,
-      txns1hSells: pair.txns?.h1?.sells || 0,
+      holders,
+      holdersPrev,
+      holderGrowth,
+      rugcheckScore,
+      rugcheckPassed: token.rugcheck_passed || false,
+      devSold,
+      watchlistStatus: token.status,
+      priorityScore: parseFloat(token.priority_score) || 0,
       bankerScore: 0,
-      source,
       reasons: [],
-      dexId: pair.dexId || '',
+      priceAth: parseFloat(token.price_ath_usd) || 0,
+      priceCurrent: parseFloat(token.price_current) || priceUsd,
+      mintAuthRevoked: token.mint_authority_revoked || false,
+      freezeAuthRevoked: token.freeze_authority_revoked || false,
+      socialCount: token.socials_count || 0,
+      bundleScore: token.bundle_score || 0,
+      maxWalletPct: parseFloat(token.max_single_wallet_pct) || 0,
+      createdAt: token.created_at_blockchain || token.first_seen_at || '',
     }
 
-    if (candidate.mint && priceUsd > 0) {
-      results.push(candidate)
-    }
+    candidate.bankerScore = scorePumpfunCandidate(candidate)
+    candidates.push(candidate)
   }
 
-  return results
+  // Sort by score
+  candidates.sort((a, b) => b.bankerScore - a.bankerScore)
+
+  console.log(`🔍 Discovery: ${watchlistTokens.length} watchlist → ${candidates.length} viable → top score: ${candidates[0]?.bankerScore || 0}`)
+
+  return candidates.filter(c => c.bankerScore >= 45)
 }
 
 // ═══════════════════════════════════════════════════════════════
-// AUTONOMOUS SCORING — No watchlist needed
+// PUMP.FUN SCORING ENGINE
+// Weights tuned for bonding curve / early pump.fun tokens
 // ═══════════════════════════════════════════════════════════════
-function scoreCandidateAutonomous(c: TokenCandidate): number {
+function scorePumpfunCandidate(c: PumpfunCandidate): number {
   let score = 0
   const reasons: string[] = []
 
+  // === WATCHLIST STATUS BONUS (0-15 pts) ===
+  if (c.watchlistStatus === 'buy_now') { score += 15; reasons.push('buy_now') }
+  else if (c.watchlistStatus === 'qualified') { score += 10; reasons.push('qualified') }
+  else { score += 3; reasons.push('watching') }
+
   // === MARKET CAP SWEET SPOT (0-20 pts) ===
-  // $10k-$500k is the sweet spot for early plays
-  if (c.mcap >= 10000 && c.mcap <= 50000) { score += 20; reasons.push('mcap-sweet-spot') }
+  if (c.mcap >= 10000 && c.mcap <= 50000) { score += 20; reasons.push('mcap-sweet') }
   else if (c.mcap > 50000 && c.mcap <= 150000) { score += 15; reasons.push('mcap-mid') }
   else if (c.mcap > 150000 && c.mcap <= 500000) { score += 10; reasons.push('mcap-high') }
-  else if (c.mcap > 500000) { score += 3; reasons.push('mcap-too-high') }
-  else if (c.mcap < 5000) { score -= 5; reasons.push('mcap-too-low') }
-  else { score += 5; reasons.push('mcap-borderline') }
+  else if (c.mcap >= 5000 && c.mcap < 10000) { score += 8; reasons.push('mcap-low') }
 
-  // === LIQUIDITY (0-15 pts) ===
-  if (c.liquidity >= 20000) { score += 15; reasons.push('liq-strong') }
-  else if (c.liquidity >= 10000) { score += 12; reasons.push('liq-good') }
-  else if (c.liquidity >= 5000) { score += 8; reasons.push('liq-ok') }
-  else { score -= 10; reasons.push('liq-LOW') } // Dangerous
+  // === HOLDER COUNT & GROWTH (0-20 pts) ===
+  if (c.holders >= 200) { score += 12; reasons.push('holders-strong') }
+  else if (c.holders >= 100) { score += 10; reasons.push('holders-good') }
+  else if (c.holders >= 50) { score += 7; reasons.push('holders-ok') }
+  else if (c.holders >= 20) { score += 4; reasons.push('holders-low') }
+  else { score += 1; reasons.push('holders-minimal') }
 
-  // === VOLUME SURGE (0-20 pts) ===
-  // 5m volume vs 1h average → surge detection
-  const avgVolPer5m = c.volume1h > 0 ? c.volume1h / 12 : 0
-  const volumeSurge = avgVolPer5m > 0 ? c.volume5m / avgVolPer5m : 0
-  
-  if (volumeSurge >= 3) { score += 20; reasons.push(`vol-surge-${volumeSurge.toFixed(1)}x`) }
-  else if (volumeSurge >= 2) { score += 15; reasons.push(`vol-surge-${volumeSurge.toFixed(1)}x`) }
-  else if (volumeSurge >= 1.5) { score += 10; reasons.push('vol-rising') }
-  else if (c.volume24h >= 50000) { score += 8; reasons.push('vol-24h-high') }
-  else if (c.volume24h >= 10000) { score += 5; reasons.push('vol-24h-ok') }
-  else { score -= 5; reasons.push('vol-weak') }
+  // Holder growth bonus
+  if (c.holderGrowth > 20) { score += 8; reasons.push(`holders+${c.holderGrowth.toFixed(0)}%`) }
+  else if (c.holderGrowth > 10) { score += 5; reasons.push(`holders+${c.holderGrowth.toFixed(0)}%`) }
+  else if (c.holderGrowth > 0) { score += 2; reasons.push('holders-growing') }
 
-  // === PRICE MOMENTUM (0-20 pts) ===
-  // Both 5m and 1h positive = strong momentum
-  if (c.priceChange5m > 5 && c.priceChange1h > 10) { score += 20; reasons.push('momentum-strong') }
-  else if (c.priceChange5m > 2 && c.priceChange1h > 5) { score += 15; reasons.push('momentum-good') }
-  else if (c.priceChange5m > 0 && c.priceChange1h > 0) { score += 10; reasons.push('momentum-positive') }
-  else if (c.priceChange5m < -10 || c.priceChange1h < -20) { score -= 15; reasons.push('momentum-DUMP') }
-  else if (c.priceChange5m < 0) { score -= 5; reasons.push('momentum-negative') }
+  // === VOLUME (0-15 pts) ===
+  if (c.volumeSol >= 100) { score += 15; reasons.push('vol-hot') }
+  else if (c.volumeSol >= 50) { score += 12; reasons.push('vol-strong') }
+  else if (c.volumeSol >= 20) { score += 8; reasons.push('vol-good') }
+  else if (c.volumeSol >= 5) { score += 4; reasons.push('vol-ok') }
 
-  // === BUY PRESSURE (0-15 pts) ===
-  const buyRatio5m = (c.txns5mBuys + c.txns5mSells) > 0 
-    ? c.txns5mBuys / (c.txns5mBuys + c.txns5mSells) 
-    : 0.5
-  const buyRatio1h = (c.txns1hBuys + c.txns1hSells) > 0 
-    ? c.txns1hBuys / (c.txns1hBuys + c.txns1hSells) 
-    : 0.5
-  
-  if (buyRatio5m > 0.65 && buyRatio1h > 0.55) { score += 15; reasons.push('buys-dominating') }
-  else if (buyRatio5m > 0.55) { score += 10; reasons.push('buys-positive') }
-  else if (buyRatio5m < 0.35) { score -= 10; reasons.push('sells-dominating') }
+  // === LIQUIDITY (0-10 pts) ===
+  if (c.liquidity >= 20000) { score += 10; reasons.push('liq-strong') }
+  else if (c.liquidity >= 10000) { score += 8; reasons.push('liq-good') }
+  else if (c.liquidity >= 5000) { score += 5; reasons.push('liq-ok') }
+  // On bonding curve, liquidity may be null/0 — don't penalize heavily
+  else if (c.liquidity > 0) { score += 2; reasons.push('liq-low') }
 
-  // === PAIR AGE (0-10 pts) ===
-  // Sweet spot: 10 min - 6 hours
-  if (c.pairAgeMinutes >= 10 && c.pairAgeMinutes <= 360) { score += 10; reasons.push('age-sweet-spot') }
-  else if (c.pairAgeMinutes > 360 && c.pairAgeMinutes <= 1440) { score += 5; reasons.push('age-ok') }
-  else if (c.pairAgeMinutes < 10) { score -= 10; reasons.push('age-TOO-NEW') } // Too risky
-  else { score -= 3; reasons.push('age-stale') }
+  // === SAFETY (0-10 pts) ===
+  if (c.rugcheckPassed || c.rugcheckScore <= 100) { score += 10; reasons.push('rugcheck-clean') }
+  else if (c.rugcheckScore <= 2000) { score += 6; reasons.push('rugcheck-ok') }
+  else if (c.rugcheckScore <= 5000) { score += 2; reasons.push('rugcheck-warn') }
 
-  // === DEX QUALITY ===
-  if (c.dexId === 'raydium') { score += 3; reasons.push('raydium') }
+  if (c.mintAuthRevoked && c.freezeAuthRevoked) { score += 3; reasons.push('auth-revoked') }
+
+  // === SOCIALS (0-5 pts) ===
+  if (c.socialCount >= 2) { score += 5; reasons.push('socials') }
+  else if (c.socialCount >= 1) { score += 2; reasons.push('1-social') }
 
   // === RED FLAGS ===
-  if (c.mcap > 0 && c.liquidity > 0 && c.liquidity / c.mcap < 0.05) {
-    score -= 15; reasons.push('liq-ratio-BAD')
-  }
-  // Pump and dump pattern: huge 5m spike with negative 1h
-  if (c.priceChange5m > 30 && c.priceChange1h < -10) {
-    score -= 20; reasons.push('pump-dump-pattern')
-  }
+  if (c.bundleScore && c.bundleScore > 50) { score -= 10; reasons.push('bundled') }
+  if (c.maxWalletPct > 30) { score -= 8; reasons.push('whale-concentrated') }
+
+  // === PRIORITY SCORE from pipeline (0-5 pts) ===
+  if (c.priorityScore >= 70) { score += 5; reasons.push('high-priority') }
+  else if (c.priorityScore >= 55) { score += 3; reasons.push('mid-priority') }
 
   c.reasons = reasons
   return Math.max(0, Math.min(100, score))
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SAFETY FILTER — Check against known bad actors
+// ENTER FROM DISCOVERY
 // ═══════════════════════════════════════════════════════════════
-async function filterBadActors(supabase: any, candidates: TokenCandidate[]): Promise<TokenCandidate[]> {
-  if (!candidates.length) return []
-
-  // Check dev_wallet_reputation for known scammers
-  const mints = candidates.map(c => c.mint)
-  
-  // Check if any of these tokens are already flagged in watchlist as rejected
-  const { data: flagged } = await supabase
-    .from('pumpfun_watchlist')
-    .select('token_mint, rejection_reasons')
-    .in('token_mint', mints)
-    .or('status.eq.rejected,status.eq.dead')
-
-  const flaggedMints = new Set((flagged || []).map((f: any) => f.token_mint))
-
-  return candidates.filter(c => {
-    // Skip if flagged as rejected/dead in our watchlist
-    if (flaggedMints.has(c.mint)) {
-      c.reasons.push('FLAGGED-in-watchlist')
-      return false
-    }
-    // Final score gate
-    return c.bankerScore >= 50
-  })
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ENTER FROM DISCOVERY — Enter positions from our scanner
-// ═══════════════════════════════════════════════════════════════
-async function enterFromDiscovery(supabase: any, pool: any, candidates: TokenCandidate[]): Promise<string[]> {
+async function enterFromDiscovery(supabase: any, pool: any, candidates: PumpfunCandidate[]): Promise<string[]> {
   const actions: string[] = []
 
   const { count: openCount } = await supabase
@@ -525,10 +426,10 @@ async function enterFromDiscovery(supabase: any, pool: any, candidates: TokenCan
 
     const streak = await getRecentStreak(supabase, pool.id)
     
-    // Position sizing
+    // Position sizing based on score
     let positionPct = pool.max_position_pct
     if (candidate.bankerScore >= 80) positionPct = Math.min(5, pool.max_position_pct + 1)
-    else if (candidate.bankerScore < 65) positionPct = Math.max(2, pool.max_position_pct - 1)
+    else if (candidate.bankerScore < 55) positionPct = Math.max(2, pool.max_position_pct - 1)
     if (Math.abs(streak) >= 3) positionPct = Math.min(positionPct, 2)
     
     const positionSizeUsd = pool.current_capital * (positionPct / 100)
@@ -544,9 +445,9 @@ async function enterFromDiscovery(supabase: any, pool: any, candidates: TokenCan
     const entryReason = [
       `Score:${candidate.bankerScore}`,
       `MCap:$${(candidate.mcap / 1000).toFixed(0)}k`,
-      `Liq:$${(candidate.liquidity / 1000).toFixed(0)}k`,
-      `Vol5m:${candidate.priceChange5m > 0 ? '+' : ''}${candidate.priceChange5m.toFixed(0)}%`,
-      `Src:${candidate.source}`,
+      `Holders:${candidate.holders}`,
+      `Vol:${candidate.volumeSol.toFixed(0)}SOL`,
+      `Status:${candidate.watchlistStatus}`,
       ...(candidate.reasons.slice(0, 3)),
     ].join(' | ')
 
@@ -580,14 +481,14 @@ async function enterFromDiscovery(supabase: any, pool: any, candidates: TokenCan
       
       pool.current_capital -= positionSizeUsd
       
-      actions.push(`🟢 ENTRY: ${candidate.symbol} | $${positionSizeUsd.toFixed(2)} (${positionPct}%) | Score:${candidate.bankerScore} | ${candidate.source} | MCap:$${(candidate.mcap/1000).toFixed(0)}k`)
+      actions.push(`🟢 ENTRY: ${candidate.symbol} | $${positionSizeUsd.toFixed(2)} (${positionPct}%) | Score:${candidate.bankerScore} | ${candidate.watchlistStatus} | Holders:${candidate.holders}`)
       entered++
       tradedMints.add(candidate.mint)
     }
   }
 
   if (entered === 0 && candidates.length > 0) {
-    actions.push(`⏳ ${candidates.length} candidates found but none met all criteria`)
+    actions.push(`⏳ ${candidates.length} candidates found but none met all entry criteria`)
   }
 
   return actions
@@ -729,6 +630,27 @@ async function closeTrade(supabase: any, pool: any, trade: any, exitPrice: numbe
   Object.assign(pool, updates)
 }
 
+async function closePosition(supabase: any, tradeId: string, reason: string) {
+  if (!tradeId) return jsonResponse({ error: 'trade_id required' }, 400)
+  
+  const pool = await getPool(supabase)
+  if (!pool) return jsonResponse({ error: 'No pool' }, 404)
+
+  const { data: trade } = await supabase
+    .from('banker_pool_trades').select('*')
+    .eq('id', tradeId).single()
+
+  if (!trade) return jsonResponse({ error: 'Trade not found' }, 404)
+
+  const currentPrice = await fetchCurrentPrice(trade.token_mint) || trade.current_price_usd || trade.entry_price_usd
+  const multiplier = currentPrice / trade.entry_price_usd
+  const pnlPct = (multiplier - 1) * 100
+  const pnlUsd = trade.position_size_usd * (multiplier - 1)
+
+  await closeTrade(supabase, pool, trade, currentPrice, reason, pnlUsd, pnlPct)
+  return jsonResponse({ success: true, symbol: trade.token_symbol, pnlPct, pnlUsd })
+}
+
 async function closeAllPositions(supabase: any, pool: any, reason: string) {
   const { data: openTrades } = await supabase
     .from('banker_pool_trades').select('*')
@@ -864,27 +786,7 @@ async function getDailyReport(supabase: any) {
     .eq('pool_id', pool.id)
     .or(`entered_at.gte.${today}T00:00:00Z,exited_at.gte.${today}T00:00:00Z`)
 
-  return jsonResponse({ success: true, pool, dailyStats: stats || [], todayTrades: todayTrades || [] })
-}
-
-async function closePosition(supabase: any, tradeId: string, reason: string) {
-  if (!tradeId) return jsonResponse({ error: 'trade_id required' }, 400)
-
-  const pool = await getPool(supabase)
-  if (!pool) return jsonResponse({ error: 'No pool' }, 404)
-
-  const { data: trade } = await supabase
-    .from('banker_pool_trades').select('*')
-    .eq('id', tradeId).eq('status', 'open').single()
-
-  if (!trade) return jsonResponse({ error: 'Trade not found or already closed' }, 404)
-
-  const currentPrice = await fetchCurrentPrice(trade.token_mint) || trade.current_price_usd || trade.entry_price_usd
-  const multiplier = currentPrice / trade.entry_price_usd
-  const pnlPct = (multiplier - 1) * 100
-  const pnlUsd = trade.position_size_usd * (multiplier - 1)
-
-  await closeTrade(supabase, pool, trade, currentPrice, reason, pnlUsd, pnlPct)
-
-  return jsonResponse({ success: true, pnlUsd, pnlPct, exitPrice: currentPrice })
+  return jsonResponse({
+    success: true, pool, stats, todayTrades,
+  })
 }
