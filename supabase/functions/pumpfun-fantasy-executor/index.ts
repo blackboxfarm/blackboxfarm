@@ -307,7 +307,24 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
         continue;
       }
 
-      // LIVENESS CHECK: Verify token still has activity (volume or recent tx)
+      // MAX MCAP GATE: Verify token's mcap is within min/max range
+      const entryMcap = token.market_cap || token.market_cap_usd || 0;
+      const { data: gateConfig } = await supabase.from('pumpfun_monitor_config').select('min_market_cap_usd, max_market_cap_usd').limit(1).single();
+      const minMcap = gateConfig?.min_market_cap_usd ?? 5000;
+      const maxMcap = gateConfig?.max_market_cap_usd ?? 12000;
+      
+      if (entryMcap > 0 && entryMcap > maxMcap) {
+        console.log(`🚫 MCAP TOO HIGH at entry: ${token.token_symbol} $${entryMcap.toFixed(0)} > $${maxMcap}`);
+        stats.errors.push(`${token.token_symbol}: MCap $${entryMcap.toFixed(0)} exceeds max $${maxMcap}`);
+        continue;
+      }
+
+      // BONDING CURVE GATE: Must still be on bonding curve
+      if (token.is_graduated === true) {
+        console.log(`🚫 GRADUATED: ${token.token_symbol} — already on Raydium, skipping`);
+        stats.errors.push(`${token.token_symbol}: Already graduated to Raydium`);
+        continue;
+      }
       const hasVolume = (token.volume_sol || 0) > 0.05 || (token.tx_count || 0) > 5;
       if (!hasVolume && tokenAgeMinutes > 10) {
         console.log(`💀 Skipping ${token.token_symbol} - no volume/activity detected`);
@@ -330,6 +347,19 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const entrySignalStrengthRaw = token.signal_strength || null;
       const entrySocialsCount = countSocials(token);
 
+      // DYNAMIC TARGET MULTIPLIER based on entry MCap
+      let dynamicTarget = config.fantasy_target_multiplier;
+      if (entryMarketCapUsd && entryMarketCapUsd > 0) {
+        if (entryMarketCapUsd <= 7000) {
+          dynamicTarget = 2.0;
+        } else if (entryMarketCapUsd <= 10000) {
+          dynamicTarget = 1.5;
+        } else {
+          dynamicTarget = 1.25;
+        }
+        console.log(`🎯 Dynamic target for ${token.token_symbol}: ${dynamicTarget}x (MCap: $${entryMarketCapUsd.toFixed(0)})`);
+      }
+
       console.log(`📸 Entry snapshot for ${token.token_symbol}: MC=$${entryMarketCapUsd?.toFixed(0) || '?'}, Holders=${entryHolderCount || '?'}, Age=${entryTokenAgeMins || '?'}m, Rugcheck=${entryRugcheckScore || '?'}`);
 
       // Create fantasy position with entry snapshot
@@ -348,7 +378,7 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
           current_price_usd: entryPriceUsd,
           current_price_sol: entryPriceSol,
           status: 'open',
-          target_multiplier: config.fantasy_target_multiplier,
+          target_multiplier: dynamicTarget,
           sell_percentage: config.fantasy_sell_percentage,
           moonbag_percentage: config.fantasy_moonbag_percentage,
           signal_strength: typeof token.score === 'number' ? token.score : null,

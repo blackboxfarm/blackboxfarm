@@ -243,6 +243,8 @@ interface MonitorConfig {
   fantasy_sell_percentage?: number;
   // Fantasy red flag filters
   min_market_cap_usd?: number;
+  max_market_cap_usd?: number;
+  fantasy_stop_loss_pct?: number;
   min_holder_count_fantasy?: number;
   max_rugcheck_score_fantasy?: number;
   min_volume_sol_fantasy?: number;
@@ -489,7 +491,7 @@ export function TokenCandidatesDashboard() {
       // Filter by status based on fantasyFilter
       let query = supabase
         .from('pumpfun_fantasy_positions')
-        .select('*, pumpfun_watchlist:watchlist_id(first_seen_at, qualified_at)')
+        .select('*, pumpfun_watchlist:watchlist_id(first_seen_at, qualified_at, price_at_discovery_usd, price_at_qualified_usd, price_at_buy_now_usd)')
         .order('created_at', { ascending: false });
 
       // Apply status filter (default to 'open' to avoid showing duplicates)
@@ -1508,6 +1510,15 @@ export function TokenCandidatesDashboard() {
                     <Input type="number" className="w-20 h-6 text-xs" value={configEdits.min_market_cap_usd ?? 5000} onChange={(e) => setConfigEdits(prev => ({ ...prev, min_market_cap_usd: parseInt(e.target.value) || 5000 }))} />
                   </div>
                   <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">MC≤$</span>
+                    <Input type="number" className="w-20 h-6 text-xs" value={configEdits.max_market_cap_usd ?? 12000} onChange={(e) => setConfigEdits(prev => ({ ...prev, max_market_cap_usd: parseInt(e.target.value) || 12000 }))} />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">SL≥</span>
+                    <Input type="number" className="w-16 h-6 text-xs" value={configEdits.fantasy_stop_loss_pct ?? 35} onChange={(e) => setConfigEdits(prev => ({ ...prev, fantasy_stop_loss_pct: parseInt(e.target.value) || 35 }))} />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                  <div className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">Dust≤</span>
                     <Input type="number" className="w-20 h-6 text-xs" value={configEdits.max_dust_holder_pct ?? 25} onChange={(e) => setConfigEdits(prev => ({ ...prev, max_dust_holder_pct: parseInt(e.target.value) || 25 }))} />
                     <span className="text-xs text-muted-foreground">%</span>
@@ -1918,8 +1929,10 @@ export function TokenCandidatesDashboard() {
                     <TableRow>
                       <TableHead compact>Symbol</TableHead>
                       <TableHead compact>Token</TableHead>
+                      <TableHead compact>Disc $</TableHead>
+                      <TableHead compact>Qual $</TableHead>
                       <TableHead compact>Entry</TableHead>
-                      <TableHead compact>Exit</TableHead>
+                      <TableHead compact>{fantasyFilter === 'open' ? 'Current' : 'Exit'}</TableHead>
                       <TableHead compact>ATH</TableHead>
                       <TableHead compact>Exit X</TableHead>
                       <TableHead compact>Target</TableHead>
@@ -1934,7 +1947,7 @@ export function TokenCandidatesDashboard() {
                   <TableBody>
                     {fantasyPositions.length === 0 ? (
                       <TableRow>
-                         <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
+                       <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
                           No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
                         </TableCell>
                       </TableRow>
@@ -1961,6 +1974,13 @@ export function TokenCandidatesDashboard() {
                                   <Copy className="h-2.5 w-2.5" />
                                 </Button>
                               </div>
+                            </TableCell>
+                            <TableCell compact className="text-xs font-mono">${pos.entry_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
+                            <TableCell compact className="text-xs font-mono text-muted-foreground">
+                              {formatPrice((pos as any).pumpfun_watchlist?.price_at_discovery_usd)}
+                            </TableCell>
+                            <TableCell compact className="text-xs font-mono text-purple-400">
+                              {formatPrice((pos as any).pumpfun_watchlist?.price_at_qualified_usd)}
                             </TableCell>
                             <TableCell compact className="text-xs font-mono">${pos.entry_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
                             <TableCell compact className="text-xs font-mono">
