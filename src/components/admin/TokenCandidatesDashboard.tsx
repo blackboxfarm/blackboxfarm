@@ -586,6 +586,15 @@ export function TokenCandidatesDashboard() {
     }
   }, [fantasyFilter, fetchFantasyData, mainTab]);
 
+  // Auto-refresh watchlist every 5 seconds when viewing watchlist tab
+  useEffect(() => {
+    if (mainTab !== 'watchlist') return;
+    const interval = setInterval(() => {
+      fetchWatchlist();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [mainTab, fetchWatchlist]);
+
   // Continuous polling effect
   useEffect(() => {
     if (continuousPolling) {
