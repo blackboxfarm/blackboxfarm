@@ -345,7 +345,7 @@ export function TokenCandidatesDashboard() {
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
   const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'analysis' | 'logs' | 'debugger'>('watchlist');
-  const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('all');
+  const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('watching');
   const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'dead' | 'all'>('open');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted'>('all');
