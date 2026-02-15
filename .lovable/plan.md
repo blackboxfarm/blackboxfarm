@@ -1,60 +1,88 @@
 
+# Fantasy Dashboard Improvements Plan
 
-## Fantasy Trade Red Flag Analysis and Filter Enhancement
+## Issues Identified
 
-### Problem
-85% of fantasy positions (335 of 394) never hit the 1.5x target and remain "open" as stalled/dead tokens. Analysis of the data reveals clear statistical patterns separating winners from losers that can be used to reject bad tokens before entry.
+### 1. "Exit" Column is Misleading for Open Positions
+The "Exit" column currently shows `current_price_usd` for open positions (the live price). This is confusing because nothing has been "exited." For closed positions it correctly shows `main_sold_price_usd`.
 
-### Data-Driven Red Flags Identified
+**Fix**: Rename the column to "Current" when viewing open positions, or split it into two columns: "Current" (live price) and "Exit" (only populated for closed trades).
 
-1. **RugCheck Score > 5000**: The single biggest predictor of failure. 184 of 335 losers (55%) had scores above 5000, versus only 18 of 59 winners (30%). Tightening from current threshold to 5000 max would dramatically improve win rate.
+---
 
-2. **Low Holder Count at Entry (< 100)**: Winners averaged 374 holders; losers averaged 182. Tokens entering with fewer than ~100 holders rarely succeed.
+### 2. Pipeline Price Tracking (3 New Columns)
+You want to see prices at each stage: Discovery, Watchlist Qualification, and Fantasy Entry. Currently the watchlist has `price_at_mint` and `price_start_usd` columns but they are never populated (all NULL). Timestamps exist (`first_seen_at`, `qualified_at`, `promoted_to_buy_now_at`) but no corresponding price snapshots.
 
-3. **Low Volume (< 50 SOL)**: Winners averaged 242 SOL volume; losers averaged 135 SOL. Requiring minimum volume filters out low-conviction tokens.
+**What needs to happen**:
 
-4. **Micro Market Cap (< $5k)**: The under-$10k bucket had the worst win rate by far (23 winners vs 254 losers). Many of these are pump-and-dump or test tokens.
+- **Database**: Add 3 new columns to `pumpfun_watchlist`: `price_at_discovery_usd`, `price_at_qualified_usd`, `price_at_buy_now_usd`
+- **Edge Functions**: Update `pumpfun-token-enricher` to store `price_at_discovery_usd` when a token first gets enriched. Update `pumpfun-watchlist-monitor` to store `price_at_qualified_usd` when status changes to `qualified` and `price_at_buy_now_usd` when promoted to `buy_now`.
+- **UI**: Add 3 new compact columns to the Fantasy table showing: "Disc $" (discovery price from watchlist), "Qual $" (qualified price), and keep "Entry" as the fantasy buy price. This lets you see price drift through the pipeline.
 
-5. **Zero Socials**: Both groups show 0 socials, meaning this data isn't being captured well -- improving social detection could add another filter.
+---
 
-### Implementation Plan
+### 3. Maximum Market Cap + Bonding Curve Gate
 
-#### Step 1: Build a "Post-Mortem Analysis" Dashboard Tab
-Add a new **"Analysis"** sub-tab in the Fantasy section that shows:
-- Side-by-side comparison table of winners vs losers entry metrics
-- RugCheck score distribution chart
-- Market cap bucket win rates
-- Recommended filter thresholds with projected impact (e.g., "Rejecting rugcheck > 5000 would have avoided 184 losses, missed 18 wins")
+Currently there is only a `min_market_cap_usd` filter. No max cap and no check that the token is still on the bonding curve.
 
-#### Step 2: Add Tighter Qualification Gates in Watchlist Monitor
-Update `pumpfun-watchlist-monitor` qualification criteria:
-- **RugCheck max score**: Lower from current soft threshold to **5000** (configurable in `pumpfun_monitor_config`)
-- **Minimum holder count at qualification**: Raise from 20 to **100**
-- **Minimum volume**: Raise from 0.5 SOL to **5 SOL**
-- **Minimum market cap**: Add new gate of **$5,000 minimum**
-- All thresholds stored in `pumpfun_monitor_config` so they can be tuned without code changes
+**What needs to happen**:
 
-#### Step 3: Close Stale Open Positions
-Add a mechanism (either manual button or automated) to bulk-close open fantasy positions that are clearly dead (e.g., current price dropped > 90% from entry, or token age > 48 hours with no recovery). This cleans up the dashboard and locks in the loss numbers for accurate reporting.
+- **Database**: Add `max_market_cap_usd` column to `pumpfun_monitor_config` (default: 12000)
+- **UI**: Add "MC <= $" input next to the existing "MC >= $" in the Red Flags section
+- **Edge Function** (`pumpfun-watchlist-monitor`): Add a hard gate that rejects tokens with mcap above the max threshold AND requires `is_graduated = false` (still on bonding curve). Tokens that have already graduated to Raydium will be blocked from reaching `buy_now` status.
+- **Edge Function** (`pumpfun-fantasy-executor`): Double-check at entry time that the token's mcap is within the min/max range and `is_graduated` is false.
 
-#### Step 4: Add New Config Columns
-Add to `pumpfun_monitor_config`:
-- `min_market_cap_usd` (default: 5000)
-- `min_holder_count_fantasy` (default: 100)  
-- `max_rugcheck_score_fantasy` (default: 5000)
-- `min_volume_sol_fantasy` (default: 5)
+This ensures entries stay in the safe zone of the bonding curve (roughly $5k-$12k), giving room for a 1.5x target to ~$18k before hitting the volatile top of the curve.
 
-### Technical Details
+---
 
-**Files to modify:**
-- `supabase/functions/pumpfun-watchlist-monitor/index.ts` -- tighten qualification gates with new thresholds
-- `src/components/admin/TokenCandidatesDashboard.tsx` -- add Analysis sub-tab with win/loss comparison
-- New SQL migration -- add config columns and bulk-close stale positions
+### 4. Stop-Loss for Fantasy Positions
 
-**Projected Impact (based on historical data):**
-- With rugcheck <= 5000 + holders >= 100 + volume >= 5 SOL + mcap >= $5k:
-  - Would keep ~41 of 59 winners (70% retention)
-  - Would reject ~220 of 335 losers (66% elimination)  
-  - Estimated new win rate: ~26% (up from 15%)
-  - Net effect on $10 buys over 2 weeks: roughly $350+ gain instead of $233
+Currently the `pumpfun-fantasy-sell-monitor` only checks upside (target hit). There is zero downside protection -- if a token dumps 90%, the position just sits there as "open" until you manually bulk-close stale ones.
 
+**What needs to happen**:
+
+- **Database**: Add `fantasy_stop_loss_pct` column to `pumpfun_monitor_config` (default: 35, meaning -35% from entry)
+- **UI**: Add "SL%" input in the Red Flags / Fantasy config section
+- **Edge Function** (`pumpfun-fantasy-sell-monitor`): In the open position monitoring loop, after updating the price, add a check:
+  - If `multiplier <= (1 - stop_loss_pct/100)` (e.g., price drops 35% from entry), immediately close the position with `exit_reason: 'stop_loss'`
+  - Record `main_sold_price_usd` at the current dump price so P&L is accurately captured
+  - This protects the $25 position from becoming a total loss
+
+---
+
+### 5. Dynamic Target Multiplier Based on Entry MCap
+
+Instead of a flat 1.5x for all positions, adjust the target based on where on the curve you entered:
+
+- Entry MCap $5k-$7k: target = 2.0x (more room to grow early)
+- Entry MCap $7k-$10k: target = 1.5x (standard)  
+- Entry MCap $10k+: target = 1.25x (less room, take profits faster)
+
+**What needs to happen**:
+
+- **Edge Function** (`pumpfun-fantasy-executor`): At position creation time, calculate the dynamic target based on `entry_market_cap_usd` instead of using the flat config value. Store the calculated multiplier in `target_multiplier` on the position row.
+- **UI**: No change needed -- the Target column already reads from `pos.target_multiplier` per position.
+- **Config UI**: Add a note or toggle "Dynamic Target" with the 3 tier thresholds configurable.
+
+---
+
+## Technical Summary
+
+| Change | Files Affected |
+|--------|---------------|
+| Fix "Exit" column label for open view | `TokenCandidatesDashboard.tsx` |
+| Add 3 pipeline price columns to DB | New migration |
+| Store prices at each pipeline stage | `pumpfun-token-enricher`, `pumpfun-watchlist-monitor` |
+| Show pipeline prices in Fantasy table | `TokenCandidatesDashboard.tsx` |
+| Add max mcap + bonding curve gate | Migration, `TokenCandidatesDashboard.tsx`, `pumpfun-watchlist-monitor`, `pumpfun-fantasy-executor` |
+| Add stop-loss logic | Migration, `TokenCandidatesDashboard.tsx`, `pumpfun-fantasy-sell-monitor` |
+| Dynamic target multiplier | `pumpfun-fantasy-executor` |
+| Regenerate Supabase types | `types.ts` |
+
+## Execution Order
+
+1. Database migration (new columns on `pumpfun_watchlist` and `pumpfun_monitor_config`)
+2. Update edge functions (enricher, watchlist-monitor, fantasy-executor, fantasy-sell-monitor)
+3. Update UI (column labels, new columns, new config inputs)
+4. Regenerate types
