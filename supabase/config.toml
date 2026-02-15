@@ -432,3 +432,6 @@ verify_jwt = false
 
 [functions.encrypt-wallet-pool]
 verify_jwt = false
+
+[functions.banker-pool-engine]
+verify_jwt = false

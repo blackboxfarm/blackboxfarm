@@ -57,6 +57,7 @@ const ApiDocsLanding = lazy(() => import("./pages/ApiDocsLanding"));
 const AIAnalysis = lazy(() => import("./pages/AIAnalysis"));
 const Socials = lazy(() => import("./pages/Socials"));
 const Oracle = lazy(() => import("./pages/Oracle"));
+const BankerPool = lazy(() => import("./pages/BankerPool"));
 
 const queryClient = new QueryClient();
 
@@ -121,6 +122,7 @@ const App = () => {
                       <Route path="/ai-analysis" element={<AIAnalysis />} />
                       <Route path="/socials" element={<SuperAdminRoute><Socials /></SuperAdminRoute>} />
                       <Route path="/oracle" element={<SuperAdminRoute><Oracle /></SuperAdminRoute>} />
+                      <Route path="/banker-pool" element={<SuperAdminRoute><BankerPool /></SuperAdminRoute>} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>

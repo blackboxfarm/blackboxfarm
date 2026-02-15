@@ -1065,6 +1065,256 @@ export type Database = {
         }
         Relationships: []
       }
+      banker_pool: {
+        Row: {
+          created_at: string
+          current_capital: number
+          daily_loss_limit_pct: number
+          id: string
+          is_active: boolean
+          largest_loss: number
+          largest_win: number
+          losing_trades: number
+          max_drawdown_pct: number
+          max_open_positions: number
+          max_position_pct: number
+          min_score_to_enter: number
+          peak_capital: number
+          starting_capital: number
+          stop_loss_pct: number
+          take_profit_pct: number
+          total_invested: number
+          total_pnl: number
+          total_returned: number
+          total_trades: number
+          trailing_stop_pct: number
+          updated_at: string
+          user_id: string
+          winning_trades: number
+        }
+        Insert: {
+          created_at?: string
+          current_capital?: number
+          daily_loss_limit_pct?: number
+          id?: string
+          is_active?: boolean
+          largest_loss?: number
+          largest_win?: number
+          losing_trades?: number
+          max_drawdown_pct?: number
+          max_open_positions?: number
+          max_position_pct?: number
+          min_score_to_enter?: number
+          peak_capital?: number
+          starting_capital?: number
+          stop_loss_pct?: number
+          take_profit_pct?: number
+          total_invested?: number
+          total_pnl?: number
+          total_returned?: number
+          total_trades?: number
+          trailing_stop_pct?: number
+          updated_at?: string
+          user_id?: string
+          winning_trades?: number
+        }
+        Update: {
+          created_at?: string
+          current_capital?: number
+          daily_loss_limit_pct?: number
+          id?: string
+          is_active?: boolean
+          largest_loss?: number
+          largest_win?: number
+          losing_trades?: number
+          max_drawdown_pct?: number
+          max_open_positions?: number
+          max_position_pct?: number
+          min_score_to_enter?: number
+          peak_capital?: number
+          starting_capital?: number
+          stop_loss_pct?: number
+          take_profit_pct?: number
+          total_invested?: number
+          total_pnl?: number
+          total_returned?: number
+          total_trades?: number
+          trailing_stop_pct?: number
+          updated_at?: string
+          user_id?: string
+          winning_trades?: number
+        }
+        Relationships: []
+      }
+      banker_pool_daily_stats: {
+        Row: {
+          best_trade_pnl: number | null
+          capital_at_risk: number
+          closing_capital: number
+          created_at: string
+          daily_pnl: number
+          daily_pnl_pct: number
+          date: string
+          id: string
+          losses: number
+          max_drawdown_pct: number | null
+          open_positions: number
+          opening_capital: number
+          pool_id: string
+          trades_closed: number
+          trades_opened: number
+          wins: number
+          worst_trade_pnl: number | null
+        }
+        Insert: {
+          best_trade_pnl?: number | null
+          capital_at_risk?: number
+          closing_capital: number
+          created_at?: string
+          daily_pnl?: number
+          daily_pnl_pct?: number
+          date: string
+          id?: string
+          losses?: number
+          max_drawdown_pct?: number | null
+          open_positions?: number
+          opening_capital: number
+          pool_id: string
+          trades_closed?: number
+          trades_opened?: number
+          wins?: number
+          worst_trade_pnl?: number | null
+        }
+        Update: {
+          best_trade_pnl?: number | null
+          capital_at_risk?: number
+          closing_capital?: number
+          created_at?: string
+          daily_pnl?: number
+          daily_pnl_pct?: number
+          date?: string
+          id?: string
+          losses?: number
+          max_drawdown_pct?: number | null
+          open_positions?: number
+          opening_capital?: number
+          pool_id?: string
+          trades_closed?: number
+          trades_opened?: number
+          wins?: number
+          worst_trade_pnl?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banker_pool_daily_stats_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "banker_pool"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      banker_pool_trades: {
+        Row: {
+          created_at: string
+          current_multiplier: number | null
+          current_price_usd: number | null
+          entered_at: string
+          entry_mcap: number | null
+          entry_price_usd: number
+          entry_reason: string | null
+          entry_score: number | null
+          exit_price_usd: number | null
+          exit_reason: string | null
+          exited_at: string | null
+          fantasy_position_id: string | null
+          id: string
+          peak_multiplier: number | null
+          peak_price_usd: number | null
+          pnl_pct: number | null
+          pnl_usd: number | null
+          pool_id: string
+          position_size_pct: number
+          position_size_usd: number
+          status: string
+          stop_loss_price: number | null
+          take_profit_price: number | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          trailing_stop_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_multiplier?: number | null
+          current_price_usd?: number | null
+          entered_at?: string
+          entry_mcap?: number | null
+          entry_price_usd: number
+          entry_reason?: string | null
+          entry_score?: number | null
+          exit_price_usd?: number | null
+          exit_reason?: string | null
+          exited_at?: string | null
+          fantasy_position_id?: string | null
+          id?: string
+          peak_multiplier?: number | null
+          peak_price_usd?: number | null
+          pnl_pct?: number | null
+          pnl_usd?: number | null
+          pool_id: string
+          position_size_pct: number
+          position_size_usd: number
+          status?: string
+          stop_loss_price?: number | null
+          take_profit_price?: number | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          trailing_stop_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_multiplier?: number | null
+          current_price_usd?: number | null
+          entered_at?: string
+          entry_mcap?: number | null
+          entry_price_usd?: number
+          entry_reason?: string | null
+          entry_score?: number | null
+          exit_price_usd?: number | null
+          exit_reason?: string | null
+          exited_at?: string | null
+          fantasy_position_id?: string | null
+          id?: string
+          peak_multiplier?: number | null
+          peak_price_usd?: number | null
+          pnl_pct?: number | null
+          pnl_usd?: number | null
+          pool_id?: string
+          position_size_pct?: number
+          position_size_usd?: number
+          status?: string
+          stop_loss_price?: number | null
+          take_profit_price?: number | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          trailing_stop_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banker_pool_trades_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "banker_pool"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       banner_ads: {
         Row: {
           created_at: string | null
