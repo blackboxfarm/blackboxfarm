@@ -10,7 +10,8 @@ import { toast } from 'sonner';
 import { 
   RefreshCw, DollarSign, TrendingUp, TrendingDown, 
   Target, Shield, Activity, Zap, RotateCcw, Play, 
-  Pause, X, AlertTriangle, CheckCircle, Clock, Wallet
+  Pause, X, AlertTriangle, CheckCircle, Clock, Wallet,
+  Search, Radar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -85,6 +86,8 @@ export default function BankerPool() {
   const [cycling, setCycling] = useState(false);
   const [winRate, setWinRate] = useState('0');
   const [totalReturn, setTotalReturn] = useState('0');
+  const [scanning, setScanning] = useState(false);
+  const [scanResults, setScanResults] = useState<any>(null);
   const navigate = useNavigate();
 
   const fetchStats = useCallback(async () => {
@@ -157,15 +160,28 @@ export default function BankerPool() {
     try {
       const result = await callEngine('cycle');
       if (result.success) {
-        toast.success('Cycle complete', {
-          description: (result.actions || []).join('\n') || 'No actions taken',
-        });
+        if (result.scan) setScanResults(result.scan);
+        const desc = (result.actions || []).join('\n') || 'No actions taken';
+        toast.success('Cycle complete', { description: desc });
         await fetchStats();
       } else {
         toast.error('Cycle failed', { description: result.error });
       }
     } finally {
       setCycling(false);
+    }
+  };
+
+  const handleScanOnly = async () => {
+    setScanning(true);
+    try {
+      const result = await callEngine('scan-only');
+      if (result.success) {
+        setScanResults(result);
+        toast.success(`Scanner found ${result.candidatesFound} candidates`);
+      }
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -208,12 +224,16 @@ export default function BankerPool() {
               <Wallet className="w-8 h-8 text-primary" />
               Banker Pool
             </h1>
-            <p className="text-muted-foreground mt-1">$250 Virtual Bankroll — Risk-Managed Fantasy Trading</p>
+            <p className="text-muted-foreground mt-1">$250 Autonomous Bankroll — Self-Scanning DexScreener Engine</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={fetchStats} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
+            </Button>
+            <Button variant="outline" onClick={handleScanOnly} disabled={scanning}>
+              <Radar className={`w-4 h-4 mr-2 ${scanning ? 'animate-spin' : ''}`} />
+              {scanning ? 'Scanning...' : 'Scan Only'}
             </Button>
             <Button onClick={handleCycle} disabled={cycling} className="bg-primary">
               <Zap className={`w-4 h-4 mr-2 ${cycling ? 'animate-pulse' : ''}`} />
@@ -284,6 +304,73 @@ export default function BankerPool() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Scanner Results */}
+        {scanResults && (
+          <Card className="border-primary/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Radar className="w-5 h-5 text-primary" />
+                Autonomous Scanner Results
+              </CardTitle>
+              <CardDescription>
+                Self-discovered from DexScreener — no watchlist dependency
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm mb-3 text-muted-foreground">
+                Found <span className="text-primary font-bold">{scanResults.candidatesFound ?? scanResults.found ?? 0}</span> candidates
+                {scanResults.passedSafety !== undefined && (
+                  <> · <span className="text-green-400 font-bold">{scanResults.passedSafety}</span> passed safety</>
+                )}
+              </div>
+              {(scanResults.candidates || scanResults.topCandidates || []).length > 0 && (
+                <ScrollArea className="max-h-[250px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Token</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>MCap</TableHead>
+                        <TableHead>Liquidity</TableHead>
+                        <TableHead>5m Δ</TableHead>
+                        <TableHead>1h Δ</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Signals</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(scanResults.candidates || scanResults.topCandidates || []).map((c: any, i: number) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-medium">{c.symbol}</TableCell>
+                          <TableCell>
+                            <Badge variant={c.score >= 70 || c.bankerScore >= 70 ? 'default' : 'outline'}>
+                              {c.score || c.bankerScore}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">${((c.mcap || 0) / 1000).toFixed(0)}k</TableCell>
+                          <TableCell className="font-mono text-xs">{c.liquidity ? `$${(c.liquidity / 1000).toFixed(0)}k` : '-'}</TableCell>
+                          <TableCell className={`font-mono text-xs ${(c.priceChange5m || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {(c.priceChange5m || 0) >= 0 ? '+' : ''}{(c.priceChange5m || 0).toFixed(1)}%
+                          </TableCell>
+                          <TableCell className={`font-mono text-xs ${(c.priceChange1h || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {(c.priceChange1h || 0) >= 0 ? '+' : ''}{(c.priceChange1h || 0).toFixed(1)}%
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{c.source || '-'}</Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                            {(c.reasons || []).join(', ')}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="positions" className="space-y-4">
