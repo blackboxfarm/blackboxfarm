@@ -778,11 +778,15 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
       try {
         stats.tokensChecked++;
 
-        // === DEV BEHAVIOR CHECK (HIGHEST PRIORITY - unchanged) ===
+        // === DEV BEHAVIOR CHECK (HIGHEST PRIORITY) ===
         const currentBondingCurvePct = token.bonding_curve_pct ?? null;
-        const isOnBondingCurve = currentBondingCurvePct === null || currentBondingCurvePct > 5;
+        // Only skip dev_sold check if we KNOW it's on bonding curve (explicit >5%)
+        // null bonding_curve_pct with high mcap means graduated — don't skip
+        const currentMcapForDevCheck = token.market_cap_usd ?? 0;
+        const isConfirmedOnBondingCurve = currentBondingCurvePct !== null && currentBondingCurvePct > 5;
+        const skipDevSoldCheck = isConfirmedOnBondingCurve && currentMcapForDevCheck < 10000;
         
-        if (token.dev_sold === true && !isOnBondingCurve) {
+        if (token.dev_sold === true && !skipDevSoldCheck) {
           const tokenAgeMinutes = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
           const devHoldingPct = token.dev_holding_pct ?? null;
           const devBoughtBack = token.dev_bought_back === true;
@@ -841,6 +845,19 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           }).eq('id', token.id);
           stats.devSellRejected++;
           stats.devSellTokens.push(`${token.token_symbol} (dev launched new)`);
+          continue;
+        }
+
+        // === EARLY MCAP GATE — reject immediately if way over cap ===
+        const earlyMcap = token.market_cap_usd ?? 0;
+        if (earlyMcap > config.max_market_cap_usd * 2) {
+          console.log(`🚫 EARLY MCAP REJECT: ${token.token_symbol} — $${earlyMcap.toFixed(0)} > $${(config.max_market_cap_usd * 2).toFixed(0)}`);
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'rejected', rejection_type: 'permanent', rejection_reason: 'mcap_exceeded',
+            rejection_reasons: ['mcap_exceeded'], removed_at: now.toISOString(),
+            removal_reason: `Market cap $${earlyMcap.toFixed(0)} exceeds 2x max`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
           continue;
         }
 
@@ -993,10 +1010,20 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           else {
             // MAX MCAP GATE: Reject if market cap exceeds max threshold
             const currentMcapUsd = metrics.marketCapUsd || 0;
-            if (currentMcapUsd > config.max_market_cap_usd) {
+            if (currentMcapUsd > config.max_market_cap_usd * 2) {
+              // Way over cap — reject permanently, it's not coming back
+              console.log(`   🚫 MCAP WAY OVER: ${token.token_symbol} — $${currentMcapUsd.toFixed(0)} > $${(config.max_market_cap_usd * 2).toFixed(0)} — REJECTED`);
+              updates.status = 'rejected';
+              updates.rejection_type = 'permanent';
+              updates.rejection_reason = 'mcap_exceeded';
+              updates.rejection_reasons = ['mcap_exceeded'];
+              updates.removed_at = now.toISOString();
+              updates.removal_reason = `Market cap $${currentMcapUsd.toFixed(0)} exceeds 2x max ($${config.max_market_cap_usd})`;
+              updates.priority_score = score.total;
+            } else if (currentMcapUsd > config.max_market_cap_usd) {
               console.log(`   🚫 MCAP TOO HIGH: ${token.token_symbol} — $${currentMcapUsd.toFixed(0)} > $${config.max_market_cap_usd} max`);
               updates.priority_score = score.total;
-              // Don't reject, just don't promote — let it keep watching in case mcap drops
+              // Slightly over — keep watching in case it drops back
             }
             // BONDING CURVE GATE: Must still be on bonding curve (not graduated)
             else if (token.is_graduated === true) {
