@@ -201,15 +201,7 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
     return stats;
   }
 
-  // Check daily cap
-  if (config.daily_buys_today >= config.daily_buy_cap) {
-    console.log(`⚠️ Daily cap reached (${config.daily_buys_today}/${config.daily_buy_cap})`);
-    stats.errors.push('Daily buy cap reached');
-    stats.durationMs = Date.now() - startTime;
-    return stats;
-  }
-
-  const remainingBuys = config.daily_buy_cap - config.daily_buys_today;
+  // Fantasy mode has no daily cap - it's paper trading, process all eligible tokens
 
   // FRESHNESS CHECK: Only get buy_now tokens that were promoted within the last 30 minutes
   const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
@@ -222,7 +214,7 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
     .is('fantasy_position_id', null)
     .gte('qualified_at', thirtyMinsAgo) // FRESHNESS: Must be promoted within 30 mins
     .order('qualified_at', { ascending: false }) // Newest first
-    .limit(Math.min(10, remainingBuys));
+    .limit(50);
 
   if (fetchError) {
     console.error('Error fetching buy_now tokens:', fetchError);
@@ -432,15 +424,7 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
     await new Promise(r => setTimeout(r, 100));
   }
 
-  // Update daily counter
-  if (stats.positionsCreated > 0) {
-    await supabase
-      .from('pumpfun_monitor_config')
-      .update({ 
-        daily_buys_today: config.daily_buys_today + stats.positionsCreated 
-      })
-      .not('id', 'is', null); // Update all rows
-  }
+  // Fantasy mode: no daily counter increment (uncapped paper trading)
 
   stats.durationMs = Date.now() - startTime;
   console.log(`📊 FANTASY EXECUTOR COMPLETE: ${stats.positionsCreated} positions created, ${stats.totalVirtualSolDeployed.toFixed(3)} virtual SOL deployed (${stats.durationMs}ms)`);
