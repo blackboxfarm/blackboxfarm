@@ -1,0 +1,1 @@
+UPDATE pumpfun_monitor_config SET dead_retention_hours = 3;
