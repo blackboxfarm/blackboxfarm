@@ -345,7 +345,7 @@ export function TokenCandidatesDashboard() {
   const [polling, setPolling] = useState(false);
   const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'analysis' | 'logs' | 'debugger'>('watchlist');
   const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('all');
-  const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'all'>('open');
+  const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'dead' | 'all'>('open');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted'>('all');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
@@ -494,10 +494,17 @@ export function TokenCandidatesDashboard() {
         .select('*, pumpfun_watchlist:watchlist_id(first_seen_at, qualified_at, price_at_discovery_usd, price_at_qualified_usd, price_at_buy_now_usd)')
         .order('created_at', { ascending: false });
 
-      // Apply status filter (default to 'open' to avoid showing duplicates)
-      if (fantasyFilter !== 'all') {
-        query = query.eq('status', fantasyFilter);
+      // Apply status filter
+      if (fantasyFilter === 'open') {
+        query = query.eq('status', 'open');
+      } else if (fantasyFilter === 'closed') {
+        // "Closed" = only winning exits (target_hit)
+        query = query.eq('status', 'closed').eq('exit_reason', 'target_hit');
+      } else if (fantasyFilter === 'dead') {
+        // "Dead" = all losing closed positions (stop_loss, dead_no_price, stale, lp_removed, drawdown, etc.)
+        query = query.eq('status', 'closed').neq('exit_reason', 'target_hit');
       }
+      // 'all' = no filter
 
       const { data: positions, error: posError } = await query;
 
@@ -1827,10 +1834,16 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                       Open
                     </button>
                     <button
-                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'closed' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'closed' ? 'bg-green-600 text-white' : 'bg-muted hover:bg-muted/80'}`}
                       onClick={() => setFantasyFilter('closed')}
                     >
                       Closed
+                    </button>
+                    <button
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'dead' ? 'bg-red-600 text-white' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={() => setFantasyFilter('dead')}
+                    >
+                      Dead
                     </button>
                     <button
                       className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
