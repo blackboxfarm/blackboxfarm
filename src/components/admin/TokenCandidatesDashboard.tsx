@@ -602,6 +602,15 @@ export function TokenCandidatesDashboard() {
     return () => clearInterval(interval);
   }, [mainTab, fetchWatchlist]);
 
+  // Auto-refresh fantasy positions every 5 seconds when viewing fantasy tab
+  useEffect(() => {
+    if (mainTab !== 'fantasy') return;
+    const interval = setInterval(() => {
+      fetchFantasyData();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [mainTab, fetchFantasyData]);
+
   // Continuous polling effect
   useEffect(() => {
     if (continuousPolling) {
