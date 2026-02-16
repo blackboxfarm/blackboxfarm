@@ -1226,6 +1226,75 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // ████ QUALIFIED DECAY CHECK — demote qualified tokens that dumped ████
+  // ═══════════════════════════════════════════════════════════════════
+  const QUALIFIED_DECAY_MCAP_THRESHOLD = 3000; // $3k
+  try {
+    const { data: qualifiedTokens } = await supabase
+      .from('pumpfun_watchlist')
+      .select('id, token_mint, token_symbol, market_cap_usd, qualified_at, creator_wallet, token_name')
+      .eq('status', 'qualified')
+      .limit(30);
+
+    if (qualifiedTokens && qualifiedTokens.length > 0) {
+      console.log(`🔄 QUALIFIED DECAY: Checking ${qualifiedTokens.length} qualified tokens...`);
+      
+      for (const qt of qualifiedTokens) {
+        try {
+          // Re-fetch live MCap from pump.fun
+          const liveMetrics = await fetchPumpFunMetrics(qt.token_mint);
+          if (!liveMetrics) continue;
+          
+          const liveMcap = liveMetrics.marketCapUsd || 0;
+          
+          if (liveMcap < QUALIFIED_DECAY_MCAP_THRESHOLD) {
+            console.log(`📉 QUALIFIED DECAY: ${qt.token_symbol} — MCap $${liveMcap.toFixed(0)} < $${QUALIFIED_DECAY_MCAP_THRESHOLD} — DEMOTING`);
+            
+            await supabase.from('pumpfun_watchlist').update({
+              status: 'rejected',
+              rejection_type: 'soft',
+              rejection_reason: 'post_qualify_dump',
+              rejection_reasons: ['post_qualify_dump', 'mcap_crashed'],
+              removed_at: now.toISOString(),
+              removal_reason: `Qualified token dumped: MCap $${liveMcap.toFixed(0)} < $${QUALIFIED_DECAY_MCAP_THRESHOLD}`,
+              market_cap_usd: liveMcap,
+              price_usd: liveMetrics.priceUsd,
+              holder_count: liveMetrics.holders,
+              volume_sol: liveMetrics.volume24hSol,
+              last_checked_at: now.toISOString(),
+              last_processor: 'watchlist-monitor-v2-decay',
+            }).eq('id', qt.id);
+            
+            // Also remove from buy candidates
+            await supabase.from('pumpfun_buy_candidates')
+              .update({ status: 'rejected' })
+              .eq('token_mint', qt.token_mint)
+              .eq('status', 'pending');
+            
+            stats.markedDead++;
+            stats.deadTokens.push(`${qt.token_symbol} (qualified_decay $${liveMcap.toFixed(0)})`);
+          } else {
+            // Update live metrics for qualified tokens too
+            await supabase.from('pumpfun_watchlist').update({
+              market_cap_usd: liveMcap,
+              price_usd: liveMetrics.priceUsd,
+              holder_count: liveMetrics.holders,
+              volume_sol: liveMetrics.volume24hSol,
+              last_checked_at: now.toISOString(),
+            }).eq('id', qt.id);
+          }
+          
+          await delay(CALL_DELAY_MS);
+        } catch (e) {
+          console.warn(`Error checking qualified decay for ${qt.token_symbol}:`, e);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Qualified decay check failed:', e);
+  }
+
   stats.durationMs = Date.now() - startTime;
   console.log(`📊 MONITOR v2 COMPLETE: ${stats.tokensChecked} checked, ${stats.promoted} promoted, ${stats.markedDead} dead, ${stats.devSellRejected} dev-rejected, ${stats.rugcheckRejected} rugcheck-rejected (${stats.durationMs}ms)`);
   if (stats.scoreBreakdowns.length > 0) {
