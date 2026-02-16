@@ -557,6 +557,7 @@ function calculateSafetyScore(
   maxSingleWalletPct: number | null,
   mintAuthorityRevoked: boolean | null,
   freezeAuthorityRevoked: boolean | null,
+  metrics?: { marketCapUsd?: number } | null,
 ): number {
   // Start with base safety
   let score = 12;
@@ -595,11 +596,16 @@ function calculateSafetyScore(
     if (rep.totalLaunched > 10 && rep.tokensRugged === 0) score += 3; // Prolific safe dev
   }
 
-  // Dust holders
-  if (dustPct !== null) {
+  // Dust holders — SKIP penalty for tokens under $15k mcap
+  // On cheap pump.fun tokens, nearly everyone has <$2 worth so dust% is meaningless
+  const tokenMcapForDust = metrics?.marketCapUsd ?? 0;
+  if (dustPct !== null && tokenMcapForDust >= 15000) {
     if (dustPct > 50) score -= 5;
     else if (dustPct > 30) score -= 3;
     else if (dustPct < 10) score += 2; // Very clean holder base
+  } else if (dustPct !== null && tokenMcapForDust < 15000) {
+    // Low mcap = dust is expected, only penalize extreme cases
+    if (dustPct < 10) score += 1; // Reward if somehow clean at low mcap
   }
 
   // Whale concentration
@@ -717,6 +723,7 @@ async function calculateQualificationScore(
     token.max_single_wallet_pct,
     token.mint_authority_revoked,
     token.freeze_authority_revoked,
+    metrics,
   );
   const momentumScore = calculateMomentumScore(token, metrics);
 
@@ -779,9 +786,9 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         stats.tokensChecked++;
 
         // === DEV BEHAVIOR CHECK (HIGHEST PRIORITY) ===
+        // NEW LOGIC: Only reject if dev sold >75% of holdings (retains <25% of original)
+        // A dev taking partial profits while keeping skin in the game is NORMAL
         const currentBondingCurvePct = token.bonding_curve_pct ?? null;
-        // Only skip dev_sold check if we KNOW it's on bonding curve (explicit >5%)
-        // null bonding_curve_pct with high mcap means graduated — don't skip
         const currentMcapForDevCheck = token.market_cap_usd ?? 0;
         const isConfirmedOnBondingCurve = currentBondingCurvePct !== null && currentBondingCurvePct > 5;
         const skipDevSoldCheck = isConfirmedOnBondingCurve && currentMcapForDevCheck < 10000;
@@ -790,28 +797,33 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           const tokenAgeMinutes = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
           const devHoldingPct = token.dev_holding_pct ?? null;
           const devBoughtBack = token.dev_bought_back === true;
-          const isFullExit = devHoldingPct !== null && devHoldingPct < 0.1;
           const currentMcap = token.market_cap_usd ?? token.market_cap_sol ?? 0;
           const isCrashedToken = currentMcap < 4000;
           
+          // Only consider it a "dump" if dev holds < 1% (sold >99% — near full exit)
+          const isFullExit = devHoldingPct !== null && devHoldingPct < 1;
+          // Partial dump: dev sold most but not all (holds 1-5%)
+          const isHeavyDump = devHoldingPct !== null && devHoldingPct < 5;
+          
           if (isFullExit && tokenAgeMinutes < 30 && !devBoughtBack) {
-            console.log(`💀 DEV EXITED: ${token.token_symbol} - age: ${tokenAgeMinutes.toFixed(0)}m - REJECT`);
+            console.log(`💀 DEV EXITED: ${token.token_symbol} - holds ${devHoldingPct?.toFixed(2)}% - age: ${tokenAgeMinutes.toFixed(0)}m - REJECT`);
             await supabase.from('pumpfun_watchlist').update({
               status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_full_exit',
               rejection_reasons: ['dev_full_exit', 'young_token_abandon'],
-              removed_at: now.toISOString(), removal_reason: `Dev fully exited at ${tokenAgeMinutes.toFixed(0)}m`,
+              removed_at: now.toISOString(), removal_reason: `Dev fully exited (${devHoldingPct?.toFixed(2)}%) at ${tokenAgeMinutes.toFixed(0)}m`,
               last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
             }).eq('id', token.id);
             stats.devSellRejected++;
-            stats.devSellTokens.push(`${token.token_symbol} (dev exit @ ${tokenAgeMinutes.toFixed(0)}m)`);
+            stats.devSellTokens.push(`${token.token_symbol} (dev exit ${devHoldingPct?.toFixed(1)}% @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
           }
           
-          if (isCrashedToken && !devBoughtBack) {
+          // Dev dumped + token crashed below $4k = dead
+          if (isCrashedToken && isHeavyDump && !devBoughtBack) {
             await supabase.from('pumpfun_watchlist').update({
               status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_sold_crashed',
               rejection_reasons: ['dev_sold', 'token_crashed'],
-              removed_at: now.toISOString(), removal_reason: `Dev sold + token crashed to $${currentMcap.toFixed(0)}`,
+              removed_at: now.toISOString(), removal_reason: `Dev dumped to ${devHoldingPct?.toFixed(1)}% + token crashed to $${currentMcap.toFixed(0)}`,
               last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
             }).eq('id', token.id);
             stats.devSellRejected++;
@@ -821,18 +833,23 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           
           if (devBoughtBack) {
             console.log(`⚠️ DEV REBOUGHT: ${token.token_symbol} - continuing`);
-          } else if (devHoldingPct !== null && devHoldingPct >= 1) {
-            console.log(`⚠️ DEV PARTIAL SELL: ${token.token_symbol} - ${devHoldingPct.toFixed(2)}%`);
-          } else if (tokenAgeMinutes >= 30) {
+          } else if (devHoldingPct !== null && devHoldingPct >= 5) {
+            // Dev still holds 5%+ — this is normal profit taking, continue watching
+            console.log(`ℹ️ DEV PARTIAL SELL: ${token.token_symbol} - still holds ${devHoldingPct.toFixed(2)}% — OK`);
+          } else if (isFullExit && tokenAgeMinutes >= 30) {
+            // Full exit after 30min — reject
             await supabase.from('pumpfun_watchlist').update({
-              status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_sold',
-              rejection_reasons: ['dev_sold'], removed_at: now.toISOString(),
-              removal_reason: 'Developer sold tokens', last_checked_at: now.toISOString(),
-              last_processor: 'watchlist-monitor-v2',
+              status: 'rejected', rejection_type: 'permanent', rejection_reason: 'dev_full_exit',
+              rejection_reasons: ['dev_full_exit'], removed_at: now.toISOString(),
+              removal_reason: `Dev fully exited (${devHoldingPct?.toFixed(2)}%) after ${tokenAgeMinutes.toFixed(0)}m`,
+              last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
             }).eq('id', token.id);
             stats.devSellRejected++;
-            stats.devSellTokens.push(`${token.token_symbol} (dev sold @ ${tokenAgeMinutes.toFixed(0)}m)`);
+            stats.devSellTokens.push(`${token.token_symbol} (dev exit @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
+          } else if (isHeavyDump && !isFullExit) {
+            // Dev holds 1-5% — warn but keep watching
+            console.log(`⚠️ DEV LOW HOLDINGS: ${token.token_symbol} - ${devHoldingPct?.toFixed(2)}% — watching closely`);
           }
         }
         
