@@ -1866,6 +1866,27 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
 
         {/* Fantasy Tab */}
         <TabsContent value="fantasy" className="mt-4">
+          {/* Manual Add to Fantasy */}
+          <div className="flex items-center gap-2 mb-4 p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+            <TestTube className="h-4 w-4 text-purple-400" />
+            <span className="text-xs text-purple-400 font-medium">Add Token to Fantasy:</span>
+            <Input 
+              placeholder="Paste token mint address..." 
+              className="flex-1 h-8 text-xs"
+              value={manualMintInput}
+              onChange={(e) => setManualMintInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleManualFantasyAdd()}
+            />
+            <Button 
+              size="sm" 
+              onClick={handleManualFantasyAdd}
+              disabled={!!addingToFantasy || !manualMintInput.trim()}
+              className="bg-purple-500 hover:bg-purple-600"
+            >
+              {addingToFantasy ? <RefreshCw className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+              Add
+            </Button>
+          </div>
           <Card>
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
@@ -1967,27 +1988,6 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
               </div>
             </CardHeader>
             <CardContent>
-              {/* Manual Add to Fantasy */}
-              <div className="flex items-center gap-2 mb-4 p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg">
-                <TestTube className="h-4 w-4 text-purple-400" />
-                <span className="text-xs text-purple-400 font-medium">Add Token to Fantasy:</span>
-                <Input 
-                  placeholder="Paste token mint address..." 
-                  className="flex-1 h-8 text-xs"
-                  value={manualMintInput}
-                  onChange={(e) => setManualMintInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleManualFantasyAdd()}
-                />
-                <Button 
-                  size="sm" 
-                  onClick={handleManualFantasyAdd}
-                  disabled={!!addingToFantasy || !manualMintInput.trim()}
-                  className="bg-purple-500 hover:bg-purple-600"
-                >
-                  {addingToFantasy ? <RefreshCw className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
-                  Add
-                </Button>
-              </div>
 
               {/* Stats Summary */}
               {fantasyStats && (
