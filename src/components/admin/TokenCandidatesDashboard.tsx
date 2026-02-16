@@ -1933,6 +1933,7 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                         onChange={e => setLossEntryPriceMin(e.target.value)}
                         className="h-7 w-24 text-xs"
                         step="0.000001"
+                        min="0"
                       />
                       <span className="text-xs text-muted-foreground">–</span>
                       <Input
@@ -1942,10 +1943,11 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                         onChange={e => setLossEntryPriceMax(e.target.value)}
                         className="h-7 w-24 text-xs"
                         step="0.000001"
+                        min="0"
                       />
                       {(lossEntryPriceMin || lossEntryPriceMax) && (
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => { setLossEntryPriceMin(''); setLossEntryPriceMax(''); }}>
-                          Clear
+                        <Button variant="outline" size="sm" className="h-7 px-2 text-xs text-orange-400 border-orange-400/50 hover:bg-orange-400/10" onClick={() => { setLossEntryPriceMin(''); setLossEntryPriceMax(''); }}>
+                          Reset Filter
                         </Button>
                       )}
                     </div>
