@@ -585,6 +585,28 @@ export function TokenCandidatesDashboard() {
         fetchConfig();
         fetchSafeguardStatus();
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'admin_notifications', filter: 'notification_type=in.(fantasy_buy,fantasy_sell)' }, (payload: any) => {
+        const notif = payload.new;
+        if (notif) {
+          const isBuy = notif.notification_type === 'fantasy_buy';
+          const meta = notif.metadata || {};
+          if (isBuy) {
+            toast.success(notif.title, {
+              description: `Entry: $${meta.entry_price?.toFixed(8) || '?'} | $${meta.amount_usd || '?'} position`,
+              duration: 10000,
+            });
+          } else {
+            const isProfit = (meta.pnl_sol || 0) >= 0;
+            const toastFn = isProfit ? toast.success : toast.error;
+            toastFn(notif.title, {
+              description: `${(meta.pnl_sol || 0) >= 0 ? '+' : ''}${meta.pnl_sol?.toFixed(4) || '?'} SOL (${meta.pnl_pct?.toFixed(1) || '?'}%) | ${meta.exit_reason || ''}`,
+              duration: 15000,
+            });
+          }
+          // Also refresh fantasy data
+          fetchFantasyData();
+        }
+      })
       .subscribe();
 
     return () => {
