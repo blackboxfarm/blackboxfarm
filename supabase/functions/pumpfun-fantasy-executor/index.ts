@@ -116,8 +116,38 @@ async function getSolPrice(): Promise<number> {
   throw new Error('CRITICAL: Cannot fetch SOL price from any source');
 }
 
-// Get token price from Jupiter
+// Get token price - Pump.fun bonding curve FIRST (these are all bonding curve tokens!)
 async function getTokenPrice(mint: string, solPrice: number): Promise<{ priceUsd: number; priceSol: number } | null> {
+  // PRIMARY: Pump.fun bonding curve API — deterministic, real-time, best source
+  try {
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.virtual_sol_reserves && data?.virtual_token_reserves) {
+        const solReserves = data.virtual_sol_reserves / 1e9;
+        const tokenReserves = data.virtual_token_reserves / 1e6;
+        const priceSol = solReserves / tokenReserves;
+        const priceUsd = priceSol * solPrice;
+        if (priceUsd > 0) {
+          console.log(`✅ Pump.fun bonding curve price for ${mint}: $${priceUsd.toFixed(10)} (${priceSol.toFixed(12)} SOL)`);
+          return { priceUsd, priceSol };
+        }
+      }
+      // Fallback within pump.fun: usd_market_cap / total_supply
+      if (data?.usd_market_cap && data?.total_supply) {
+        const priceUsd = data.usd_market_cap / (data.total_supply / 1e6);
+        if (priceUsd > 0) {
+          return { priceUsd, priceSol: priceUsd / solPrice };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`Pump.fun API failed for ${mint}:`, e);
+  }
+
+  // FALLBACK: Jupiter (only for graduated tokens, shouldn't normally reach here)
   const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   try {
     const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`, {
@@ -125,31 +155,14 @@ async function getTokenPrice(mint: string, solPrice: number): Promise<{ priceUsd
     });
     const data = await response.json();
     const priceUsd = data?.data?.[mint]?.price;
-    
     if (priceUsd) {
-      return {
-        priceUsd,
-        priceSol: priceUsd / solPrice,
-      };
+      return { priceUsd, priceSol: priceUsd / solPrice };
     }
-
-    // Fallback to DexScreener
-    const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-    const dexData = await dexResponse.json();
-    const pair = dexData?.pairs?.[0];
-    
-    if (pair?.priceUsd) {
-      return {
-        priceUsd: parseFloat(pair.priceUsd),
-        priceSol: parseFloat(pair.priceUsd) / solPrice,
-      };
-    }
-
-    return null;
   } catch (error) {
-    console.error(`Error fetching price for ${mint}:`, error);
-    return null;
+    console.error(`Jupiter price fetch failed for ${mint}:`, error);
   }
+
+  return null;
 }
 
 // Calculate token age in minutes from blockchain timestamp

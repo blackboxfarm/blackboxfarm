@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Bell, X, Check, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,9 +67,9 @@ export function AdminNotificationsBadge() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchNotifications = useCallback(async () => {
-    // Type assertion needed until types.ts regenerates with new table
     const { data, error } = await (supabase
       .from('admin_notifications' as any)
       .select('*')
@@ -82,42 +82,48 @@ export function AdminNotificationsBadge() {
     }
   }, []);
 
+  // Debounced version to prevent rapid-fire refetches from realtime events
+  const debouncedFetch = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(fetchNotifications, 2000);
+  }, [fetchNotifications]);
+
   useEffect(() => {
     // Request notification permission on mount
     requestNotificationPermission().then(setHasPermission);
     
     fetchNotifications();
 
-    // Subscribe to realtime updates
+    // Subscribe to realtime updates (debounced to prevent CPU spikes)
     const channel = supabase
       .channel('admin_notifications_changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'admin_notifications' },
         (payload) => {
-          // New notification received - show browser notification
           const newNotification = payload.new as AdminNotification;
           showBrowserNotification(
             newNotification.title,
             newNotification.message,
             newNotification.notification_type
           );
-          fetchNotifications();
+          debouncedFetch();
         }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'admin_notifications' },
         () => {
-          fetchNotifications();
+          debouncedFetch();
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
-  }, [fetchNotifications]);
+  }, [fetchNotifications, debouncedFetch]);
 
   const markAsRead = async (id: string) => {
     await (supabase
