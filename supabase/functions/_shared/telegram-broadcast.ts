@@ -115,6 +115,10 @@ export async function broadcastToTelegram(
   labels?: string[],
   delayMs: number = DEFAULT_MESSAGE_DELAY_MS
 ): Promise<BroadcastResult[]> {
+  // Initial delay to prevent rapid-fire spam when called in loops
+  console.log(`[telegram-broadcast] Initial 2s cooldown before sending...`);
+  await sleep(2000);
+
   const targets = await getTelegramTargets(supabase, labels);
 
   if (targets.length === 0) {
