@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
       if ((token.volume_sol ?? 0) < minVolume) reasons.push(`volume_below_${minVolume}sol`);
       if (token.market_cap_usd != null && token.market_cap_usd < minMcap) reasons.push(`mcap_below_${minMcap}`);
       if (token.rugcheck_score != null && token.rugcheck_score > maxRugcheck) reasons.push(`rugcheck_above_${maxRugcheck}`);
-      if (token.dust_holder_pct != null && token.dust_holder_pct > maxDust) reasons.push(`dust_above_${maxDust}pct`);
+      // Dust filter: only enforce for tokens above $15k mcap (meaningless on cheap pump.fun tokens)
+      if (token.dust_holder_pct != null && token.dust_holder_pct > maxDust && (token.market_cap_usd ?? 0) >= 15000) reasons.push(`dust_above_${maxDust}pct`);
 
       if (reasons.length > 0) {
         await supabase

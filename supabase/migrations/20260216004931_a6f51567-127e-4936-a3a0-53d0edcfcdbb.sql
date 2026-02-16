@@ -1,0 +1,1 @@
+UPDATE pumpfun_monitor_config SET max_market_cap_usd = 14000;
