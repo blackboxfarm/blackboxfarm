@@ -346,7 +346,7 @@ export function TokenCandidatesDashboard() {
   const [polling, setPolling] = useState(false);
   const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'analysis' | 'logs' | 'debugger'>('watchlist');
   const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('watching');
-  const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'dead' | 'all'>('open');
+  const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'profit' | 'loss'>('open');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted'>('all');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
@@ -499,13 +499,15 @@ export function TokenCandidatesDashboard() {
       if (fantasyFilter === 'open') {
         query = query.eq('status', 'open');
       } else if (fantasyFilter === 'closed') {
-        // "Closed" = only winning exits (target_hit)
+        // "Closed" = all completed trades regardless of outcome
+        query = query.eq('status', 'closed');
+      } else if (fantasyFilter === 'profit') {
+        // "Profit" = closed trades with positive PnL (target_hit or any profitable exit)
         query = query.eq('status', 'closed').eq('exit_reason', 'target_hit');
-      } else if (fantasyFilter === 'dead') {
-        // "Dead" = all losing closed positions (stop_loss, dead_no_price, stale, lp_removed, drawdown, etc.)
+      } else if (fantasyFilter === 'loss') {
+        // "Loss" = closed trades with negative PnL
         query = query.eq('status', 'closed').neq('exit_reason', 'target_hit');
       }
-      // 'all' = no filter
 
       const { data: positions, error: posError } = await query;
 
@@ -1832,22 +1834,22 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                       Open
                     </button>
                     <button
-                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'closed' ? 'bg-green-600 text-white' : 'bg-muted hover:bg-muted/80'}`}
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'closed' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
                       onClick={() => setFantasyFilter('closed')}
                     >
                       Closed
                     </button>
                     <button
-                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'dead' ? 'bg-red-600 text-white' : 'bg-muted hover:bg-muted/80'}`}
-                      onClick={() => setFantasyFilter('dead')}
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'profit' ? 'bg-green-600 text-white' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={() => setFantasyFilter('profit')}
                     >
-                      Dead
+                      Profit
                     </button>
                     <button
-                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
-                      onClick={() => setFantasyFilter('all')}
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'loss' ? 'bg-red-600 text-white' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={() => setFantasyFilter('loss')}
                     >
-                      All
+                      Loss
                     </button>
                   </div>
                   <Button variant="outline" size="sm" onClick={fetchFantasyData} disabled={loadingFantasy}>
@@ -1954,7 +1956,7 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                       <TableHead compact>Entry</TableHead>
                       <TableHead compact>{fantasyFilter === 'open' ? 'Current' : 'Exit'}</TableHead>
                       <TableHead compact>ATH</TableHead>
-                      <TableHead compact>Exit X</TableHead>
+                      <TableHead compact>{fantasyFilter === 'open' ? 'Current X' : 'Exit X'}</TableHead>
                       <TableHead compact>Target</TableHead>
                       <TableHead compact>Status</TableHead>
                       <TableHead compact>P&L</TableHead>
@@ -2011,9 +2013,9 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                             <TableCell compact className={`text-xs font-medium ${currentGain >= targetMultiplier ? 'text-green-500' : currentGain < 1 ? 'text-red-500' : 'text-yellow-500'}`}>
                               {currentGain.toFixed(2)}x
                             </TableCell>
-                            <TableCell compact className={`text-xs font-medium ${targetHit ? 'text-green-500' : 'text-muted-foreground'}`}>
+                            <TableCell compact className={`text-xs font-medium ${athMultiplier >= targetMultiplier ? 'text-green-500' : 'text-muted-foreground'}`}>
                               {targetMultiplier.toFixed(2)}x
-                              {targetHit && <span className="ml-1">✓</span>}
+                              {athMultiplier >= targetMultiplier && <span className="ml-1">✓</span>}
                             </TableCell>
                             <TableCell compact>
                               <Badge variant="outline" className={
