@@ -2080,21 +2080,24 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground font-mono">
                               {(() => {
+                                const toTorontoTime = (date: Date) => date.toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                const toTorontoDate = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });
+                                
                                 // Fantasy buy execution time (when we actually bought)
                                 const buyDate = new Date(pos.created_at);
-                                const buyTimeStr = buyDate.toISOString().slice(11, 19);
-                                const buyDateStr = buyDate.toISOString().slice(0, 10);
-                                const fullTimestamp = `${buyDateStr} ${buyTimeStr} UTC`;
+                                const buyTimeStr = toTorontoTime(buyDate);
+                                const buyDateStr = toTorontoDate(buyDate);
+                                const fullTimestamp = `${buyDateStr} ${buyTimeStr} ET`;
                                 
                                 // Discovery time from watchlist (when token was first detected on Pump.fun)
                                 const discoveryTime = pos.pumpfun_watchlist?.first_seen_at;
                                 const discoveryDate = discoveryTime ? new Date(discoveryTime) : null;
-                                const discoveryTimeStr = discoveryDate?.toISOString().slice(11, 19);
+                                const discoveryTimeStr = discoveryDate ? toTorontoTime(discoveryDate) : undefined;
                                 
                                 // Qualified time (when promoted to watching)
                                 const qualifiedTime = pos.pumpfun_watchlist?.qualified_at;
                                 const qualifiedDate = qualifiedTime ? new Date(qualifiedTime) : null;
-                                const qualifiedTimeStr = qualifiedDate?.toISOString().slice(11, 19);
+                                const qualifiedTimeStr = qualifiedDate ? toTorontoTime(qualifiedDate) : undefined;
                                 
                                 const copyTimestamp = () => {
                                   navigator.clipboard.writeText(fullTimestamp);
@@ -2130,7 +2133,7 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                                         <Copy className="h-3 w-3" />
                                       </button>
                                     </div>
-                                    <span className="text-[10px] text-muted-foreground/70">{buyDateStr} UTC</span>
+                                    <span className="text-[10px] text-muted-foreground/70">{buyDateStr} ET</span>
                                   </div>
                                 );
                               })()}
