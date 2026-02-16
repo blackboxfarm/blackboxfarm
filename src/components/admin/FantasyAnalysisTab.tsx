@@ -4,9 +4,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Shield } from 'lucide-react';
+import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Shield, Clock } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from 'recharts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AnalysisPosition {
   id: string;
@@ -62,6 +63,7 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [data, setData] = useState<AnalysisData[]>([]);
+  const [timeRange, setTimeRange] = useState<string>('24h');
 
   const fetchAnalysis = async () => {
     setLoading(true);
@@ -107,12 +109,25 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
 
   useEffect(() => { setInitialLoad(true); fetchAnalysis(); }, []);
 
-  const { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets } = useMemo(() => {
-    // Winners = sold at a profit (positive PnL)
-    // Losers = sold at a loss OR dead/stale (negative PnL)
-    // Open = still active (status === 'open')
-    const openPositions = data.filter(d => d.position.status === 'open');
-    const closedPositions = data.filter(d => d.position.status === 'closed');
+  const { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets, filteredCount } = useMemo(() => {
+    // Apply time range filter
+    const cutoff = (() => {
+      const now = new Date();
+      switch (timeRange) {
+        case '1h': return new Date(now.getTime() - 1 * 60 * 60 * 1000);
+        case '6h': return new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        case '24h': return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        case '48h': return new Date(now.getTime() - 48 * 60 * 60 * 1000);
+        case '7d': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        case 'all': return new Date(0);
+        default: return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      }
+    })();
+
+    const filtered = data.filter(d => new Date(d.position.created_at) >= cutoff);
+
+    const openPositions = filtered.filter(d => d.position.status === 'open');
+    const closedPositions = filtered.filter(d => d.position.status === 'closed');
     
     const winners = closedPositions.filter(d => {
       const pnl = d.position.total_pnl_percent;
@@ -230,8 +245,8 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
       return { bucket: b.label, winners: w, losers: l, winRate: total > 0 ? ((w / total) * 100) : 0 };
     });
 
-    return { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets };
-  }, [data, thresholds]);
+    return { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets, filteredCount: filtered.length };
+  }, [data, thresholds, timeRange]);
 
   if (initialLoad && loading) {
     return (
@@ -248,6 +263,27 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
 
   return (
     <div className="space-y-4">
+      {/* Time Range Filter */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1h">Last 1 Hour</SelectItem>
+              <SelectItem value="6h">Last 6 Hours</SelectItem>
+              <SelectItem value="24h">Last 24 Hours</SelectItem>
+              <SelectItem value="48h">Last 48 Hours</SelectItem>
+              <SelectItem value="7d">Last 7 Days</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">({filteredCount} positions)</span>
+        </div>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="bg-green-500/5 border-green-500/20">
@@ -277,7 +313,7 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
         <Card>
           <CardContent className="p-3">
             <div className="text-xs text-muted-foreground">Total Positions</div>
-            <div className="text-2xl font-bold">{data.length}</div>
+            <div className="text-2xl font-bold">{filteredCount}</div>
           </CardContent>
         </Card>
       </div>
