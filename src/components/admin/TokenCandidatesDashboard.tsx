@@ -369,6 +369,8 @@ export function TokenCandidatesDashboard() {
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isTogglingMonitor, setIsTogglingMonitor] = useState(false);
+  const [refreshingWatchlist, setRefreshingWatchlist] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   
   // Phase 5: Safeguard status
   const [safeguardStatus, setSafeguardStatus] = useState<SafeguardStatus | null>(null);
@@ -403,6 +405,7 @@ export function TokenCandidatesDashboard() {
 
       if (error) throw error;
       setWatchlist((data || []) as WatchlistItem[]);
+      setLastRefreshedAt(new Date());
     } catch (error) {
       console.error('Error fetching watchlist:', error);
     }
@@ -1236,8 +1239,13 @@ export function TokenCandidatesDashboard() {
           
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" onClick={() => { fetchWatchlist(); fetchCandidates(); }}>
-                <RefreshCw className="h-4 w-4" />
+              <Button variant="ghost" size="sm" onClick={async () => { 
+                setRefreshingWatchlist(true);
+                await Promise.all([fetchWatchlist(), fetchCandidates()]);
+                setRefreshingWatchlist(false);
+                toast.success('Watchlist refreshed');
+              }} disabled={refreshingWatchlist}>
+                <RefreshCw className={`h-4 w-4 ${refreshingWatchlist ? 'animate-spin' : ''}`} />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Refresh watchlist data from database</TooltipContent>
