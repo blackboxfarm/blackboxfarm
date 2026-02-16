@@ -516,7 +516,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
         console.log(`🚨 RUG EXIT: ${position.token_symbol} | Reason: ${rugReason} | ${multiplier.toFixed(3)}x`);
 
-        await supabase.from('pumpfun_fantasy_positions').update({
+        // Atomic: only update if still open (prevents duplicate from concurrent invocations)
+        const { data: rugUpdated } = await supabase.from('pumpfun_fantasy_positions').update({
           status: 'closed', current_price_usd: currentPriceUsd, current_price_sol: currentPriceSol,
           main_sold_at: now, main_sold_price_usd: currentPriceUsd, main_sold_amount_sol: fullSellValueSol,
           main_realized_pnl_sol: realizedPnlSol, sell_percentage: 100, moonbag_percentage: 0,
@@ -525,7 +526,13 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           exit_at: now, exit_price_usd: currentPriceUsd, exit_reason: rugReason,
           peak_price_usd: position.peak_price_usd, peak_multiplier: position.peak_multiplier,
           outcome: 'rug', outcome_classified_at: now, updated_at: now,
-        }).eq('id', position.id);
+        }).eq('id', position.id).eq('status', 'open').select('id');
+
+        // Skip if another invocation already closed it
+        if (!rugUpdated || rugUpdated.length === 0) {
+          console.log(`⏭️ SKIP duplicate RUG EXIT for ${position.token_symbol}`);
+          continue;
+        }
 
         stats.targetsSold++;
 
@@ -596,7 +603,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           const realizedPnlSol = position.entry_amount_sol * (multiplier - 1);
           const fullSellValueSol = position.entry_amount_sol * multiplier;
 
-          await supabase
+          const { data: slUpdated } = await supabase
             .from('pumpfun_fantasy_positions')
             .update({
               status: 'closed',
@@ -625,7 +632,9 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
               outcome_classified_at: now,
               updated_at: now,
             })
-            .eq('id', position.id);
+            .eq('id', position.id).eq('status', 'open').select('id');
+
+          if (!slUpdated || slUpdated.length === 0) { console.log(`⏭️ SKIP duplicate SL for ${position.token_symbol}`); continue; }
 
           stats.targetsSold++;
           console.log(`🛑 STOP-LOSS SOLD: ${position.token_symbol} | ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
@@ -661,7 +670,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           const realizedPnlSol = position.entry_amount_sol * (multiplier - 1);
           const fullSellValueSol = position.entry_amount_sol * multiplier;
 
-          await supabase.from('pumpfun_fantasy_positions').update({
+          const { data: staleUpdated } = await supabase.from('pumpfun_fantasy_positions').update({
             status: 'closed', current_price_usd: currentPriceUsd, current_price_sol: currentPriceSol,
             main_sold_at: now, main_sold_price_usd: currentPriceUsd, main_sold_amount_sol: fullSellValueSol,
             main_realized_pnl_sol: realizedPnlSol, sell_percentage: 100, moonbag_percentage: 0,
@@ -671,7 +680,9 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
             peak_price_usd: isNewPeak ? currentPriceUsd : position.peak_price_usd,
             peak_multiplier: isNewPeak ? multiplier : position.peak_multiplier,
             outcome: multiplier >= 1 ? 'breakeven' : 'loss', outcome_classified_at: now, updated_at: now,
-          }).eq('id', position.id);
+          }).eq('id', position.id).eq('status', 'open').select('id');
+
+          if (!staleUpdated || staleUpdated.length === 0) { console.log(`⏭️ SKIP duplicate stale close for ${position.token_symbol}`); continue; }
 
           stats.targetsSold++;
           await createLearningRecord(supabase, position, currentPriceUsd, multiplier);
@@ -707,7 +718,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           const outcome = multiplier > 1 ? 'success' : 'loss';
 
           // Update position to closed (100% sell, no moonbag)
-          await supabase
+          const { data: targetUpdated } = await supabase
             .from('pumpfun_fantasy_positions')
             .update({
               status: 'closed',
@@ -736,7 +747,9 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
               outcome_classified_at: now,
               updated_at: now,
             })
-            .eq('id', position.id);
+            .eq('id', position.id).eq('status', 'open').select('id');
+
+          if (!targetUpdated || targetUpdated.length === 0) { console.log(`⏭️ SKIP duplicate target sell for ${position.token_symbol}`); continue; }
 
           stats.targetsSold++;
           
