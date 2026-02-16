@@ -458,12 +458,83 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
   const mints = [...new Set(positions.map((p: any) => p.token_mint))];
   const priceMap = await batchFetchPrices(mints, supabase);
 
+  // Cross-reference watchlist for rug detection (dev_sold, bombed, etc.)
+  const openMints = positions.filter((p: any) => p.status === 'open').map((p: any) => p.token_mint);
+  const ruggedMints = new Set<string>();
+  const rugReasons = new Map<string, string>();
+
+  if (openMints.length > 0) {
+    const { data: watchlistStatus } = await supabase
+      .from('pumpfun_watchlist')
+      .select('token_mint, token_symbol, status, dev_sold')
+      .in('token_mint', openMints);
+
+    if (watchlistStatus) {
+      for (const w of watchlistStatus) {
+        if (w.dev_sold === true) {
+          ruggedMints.add(w.token_mint);
+          rugReasons.set(w.token_mint, 'dev_sold');
+        } else if (['bombed', 'rejected', 'dead'].includes(w.status)) {
+          ruggedMints.add(w.token_mint);
+          rugReasons.set(w.token_mint, `watchlist_${w.status}`);
+        }
+      }
+    }
+
+    if (ruggedMints.size > 0) {
+      console.log(`🚨 RUG DETECTED: ${ruggedMints.size} position(s) flagged for immediate exit`);
+    }
+  }
+
   const now = new Date().toISOString();
 
   for (const position of positions) {
     stats.positionsChecked++;
 
     try {
+      // RUG DETECTION: Immediately close if watchlist flagged dev_sold or bombed
+      if (position.status === 'open' && ruggedMints.has(position.token_mint)) {
+        const rugReason = rugReasons.get(position.token_mint) || 'rug_detected';
+        const currentPriceUsd = priceMap.get(position.token_mint) || position.current_price_usd || position.entry_price_usd * 0.5;
+        const currentPriceSol = currentPriceUsd / solPrice;
+        const multiplier = currentPriceUsd / position.entry_price_usd;
+        const realizedPnlPercent = (multiplier - 1) * 100;
+        const realizedPnlSol = position.entry_amount_sol * (multiplier - 1);
+        const fullSellValueSol = position.entry_amount_sol * multiplier;
+
+        console.log(`🚨 RUG EXIT: ${position.token_symbol} | Reason: ${rugReason} | ${multiplier.toFixed(3)}x`);
+
+        await supabase.from('pumpfun_fantasy_positions').update({
+          status: 'closed', current_price_usd: currentPriceUsd, current_price_sol: currentPriceSol,
+          main_sold_at: now, main_sold_price_usd: currentPriceUsd, main_sold_amount_sol: fullSellValueSol,
+          main_realized_pnl_sol: realizedPnlSol, sell_percentage: 100, moonbag_percentage: 0,
+          moonbag_active: false, moonbag_token_amount: 0, moonbag_entry_value_sol: 0, moonbag_current_value_sol: 0,
+          total_realized_pnl_sol: realizedPnlSol, total_pnl_percent: realizedPnlPercent,
+          exit_at: now, exit_price_usd: currentPriceUsd, exit_reason: rugReason,
+          peak_price_usd: position.peak_price_usd, peak_multiplier: position.peak_multiplier,
+          outcome: 'rug', outcome_classified_at: now, updated_at: now,
+        }).eq('id', position.id);
+
+        stats.targetsSold++;
+
+        const rugMsg = `🚨 Fantasy RUG EXIT: $${position.token_symbol}\n` +
+          `📉 Exit: $${currentPriceUsd.toFixed(8)} (${multiplier.toFixed(3)}x)\n` +
+          `💸 P&L: ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)\n` +
+          `📊 Entry was: $${position.entry_price_usd.toFixed(8)}\n` +
+          `❌ Reason: ${rugReason} — token is dead\n` +
+          `🔗 https://pump.fun/coin/${position.token_mint}`;
+
+        await supabase.from('admin_notifications').insert({
+          notification_type: 'fantasy_sell',
+          title: `🚨 Fantasy RUG EXIT: $${position.token_symbol}`,
+          message: rugMsg,
+          metadata: { mint: position.token_mint, symbol: position.token_symbol, exit_reason: rugReason, pnl_sol: realizedPnlSol, pnl_pct: realizedPnlPercent, multiplier },
+        }).then(() => {}).catch(() => {});
+
+        broadcastToBlackBox(supabase, rugMsg).catch(e => console.error('TG broadcast error:', e));
+        continue;
+      }
+
       const currentPriceUsd = priceMap.get(position.token_mint);
       
       if (!currentPriceUsd) {
