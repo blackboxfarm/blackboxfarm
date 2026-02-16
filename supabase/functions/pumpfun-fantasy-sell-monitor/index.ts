@@ -554,7 +554,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           metadata: { mint: position.token_mint, symbol: position.token_symbol, exit_reason: rugReason, pnl_sol: realizedPnlSol, pnl_pct: realizedPnlPercent, multiplier },
         }).then(() => {}).catch(() => {});
 
-        broadcastToBlackBox(supabase, rugMsg).catch(e => console.error('TG broadcast error:', e));
+        // DISABLED: Only broadcast profitable sells to BlackBox
+        // broadcastToBlackBox(supabase, rugMsg).catch(e => console.error('TG broadcast error:', e));
         continue;
       }
 
@@ -658,7 +659,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
             metadata: { mint: position.token_mint, symbol: position.token_symbol, exit_reason: 'stop_loss', pnl_sol: realizedPnlSol, pnl_pct: realizedPnlPercent, multiplier },
           }).then(() => {}).catch(() => {});
 
-          broadcastToBlackBox(supabase, slMsg).catch(e => console.error('TG broadcast error:', e));
+           // DISABLED: Only broadcast profitable sells to BlackBox
+           // broadcastToBlackBox(supabase, slMsg).catch(e => console.error('TG broadcast error:', e));
         }
         // AUTO-CLOSE STALE: >12h old with >65% loss, or >24h old regardless
         else if ((() => {
@@ -706,7 +708,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
             metadata: { mint: position.token_mint, symbol: position.token_symbol, exit_reason: reason, pnl_sol: realizedPnlSol, pnl_pct: realizedPnlPercent, multiplier },
           }).then(() => {}).catch(() => {});
 
-          broadcastToBlackBox(supabase, staleMsg).catch(e => console.error('TG broadcast error:', e));
+           // DISABLED: Only broadcast profitable sells to BlackBox
+           // broadcastToBlackBox(supabase, staleMsg).catch(e => console.error('TG broadcast error:', e));
         }
         // Check if target hit
         else if (multiplier >= position.target_multiplier) {

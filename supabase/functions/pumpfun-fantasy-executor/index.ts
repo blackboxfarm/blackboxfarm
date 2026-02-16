@@ -444,7 +444,8 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
         metadata: { mint: token.token_mint, symbol: token.token_symbol, entry_price: entryPriceUsd, amount_usd: buyAmountUsd, target: dynamicTarget },
       }).then(() => {}).catch(() => {});
 
-      broadcastToBlackBox(supabase, buyMsg).catch(e => console.error('TG broadcast error:', e));
+      // DISABLED: Only broadcast profitable sells to BlackBox
+      // broadcastToBlackBox(supabase, buyMsg).catch(e => console.error('TG broadcast error:', e));
 
     } catch (error) {
       console.error(`Error processing ${token.token_symbol}:`, error);
@@ -663,7 +664,8 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
     metadata: { mint: tokenMint, symbol: tokenSymbol, entry_price: price.priceUsd, amount_usd: buyAmountUsd, manual: true },
   }).then(() => {}).catch(() => {});
 
-  broadcastToBlackBox(supabase, manualBuyMsg).catch(e => console.error('TG broadcast error:', e));
+  // DISABLED: Only broadcast profitable sells to BlackBox
+  // broadcastToBlackBox(supabase, manualBuyMsg).catch(e => console.error('TG broadcast error:', e));
 
   return { 
     success: true, 
