@@ -12,6 +12,8 @@ interface AnalysisPosition {
   id: string;
   token_symbol: string | null;
   status: string;
+  exit_reason: string | null;
+  total_pnl_percent: number | null;
   entry_price_usd: number;
   current_price_usd: number | null;
   main_sold_price_usd: number | null;
@@ -67,7 +69,7 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
       // Fetch all fantasy positions with their watchlist metrics
       const { data: positions, error } = await supabase
         .from('pumpfun_fantasy_positions')
-        .select('id, token_symbol, status, entry_price_usd, current_price_usd, main_sold_price_usd, token_amount, target_multiplier, created_at, watchlist_id')
+        .select('id, token_symbol, status, exit_reason, total_pnl_percent, entry_price_usd, current_price_usd, main_sold_price_usd, token_amount, target_multiplier, created_at, watchlist_id')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -105,9 +107,28 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
 
   useEffect(() => { setInitialLoad(true); fetchAnalysis(); }, []);
 
-  const { winners, losers, comparisons, mcapBuckets, rugcheckBuckets } = useMemo(() => {
-    const winners = data.filter(d => d.position.status === 'closed');
-    const losers = data.filter(d => d.position.status === 'open');
+  const { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets } = useMemo(() => {
+    // Winners = sold at a profit (positive PnL)
+    // Losers = sold at a loss OR dead/stale (negative PnL)
+    // Open = still active (status === 'open')
+    const openPositions = data.filter(d => d.position.status === 'open');
+    const closedPositions = data.filter(d => d.position.status === 'closed');
+    
+    const winners = closedPositions.filter(d => {
+      const pnl = d.position.total_pnl_percent;
+      // If we have PnL data, use it; otherwise classify by exit_reason
+      if (pnl !== null && pnl !== undefined) return pnl > 0;
+      // Fallback: target_hit/drawdown with sold price > entry = winner
+      const exitReason = d.position.exit_reason || '';
+      return exitReason === 'target_hit' || exitReason === 'drawdown' || exitReason === 'moonbag_disabled';
+    });
+    
+    const losers = closedPositions.filter(d => {
+      const pnl = d.position.total_pnl_percent;
+      if (pnl !== null && pnl !== undefined) return pnl <= 0;
+      const exitReason = d.position.exit_reason || '';
+      return exitReason !== 'target_hit' && exitReason !== 'drawdown' && exitReason !== 'moonbag_disabled';
+    });
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
     const countAbove = (arr: (number | null)[], threshold: number) => arr.filter(v => v !== null && v > threshold).length;
@@ -209,7 +230,7 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
       return { bucket: b.label, winners: w, losers: l, winRate: total > 0 ? ((w / total) * 100) : 0 };
     });
 
-    return { winners, losers, comparisons, mcapBuckets, rugcheckBuckets };
+    return { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets };
   }, [data, thresholds]);
 
   if (initialLoad && loading) {
@@ -228,23 +249,29 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="bg-green-500/5 border-green-500/20">
           <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground">Winners (Closed)</div>
+            <div className="text-xs text-muted-foreground">Winners (Profit)</div>
             <div className="text-2xl font-bold text-green-500">{winners.length}</div>
           </CardContent>
         </Card>
         <Card className="bg-red-500/5 border-red-500/20">
           <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground">Losers (Open/Stalled)</div>
+            <div className="text-xs text-muted-foreground">Losers (Loss)</div>
             <div className="text-2xl font-bold text-red-500">{losers.length}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-blue-500/5 border-blue-500/20">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground">Open (Live)</div>
+            <div className="text-2xl font-bold text-blue-500">{openPositions.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3">
             <div className="text-xs text-muted-foreground">Win Rate</div>
-            <div className="text-2xl font-bold">{data.length > 0 ? ((winners.length / data.length) * 100).toFixed(1) : 0}%</div>
+            <div className="text-2xl font-bold">{(winners.length + losers.length) > 0 ? ((winners.length / (winners.length + losers.length)) * 100).toFixed(1) : 0}%</div>
           </CardContent>
         </Card>
         <Card>
