@@ -1995,7 +1995,6 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                                 </Button>
                               </div>
                             </TableCell>
-                            <TableCell compact className="text-xs font-mono">${pos.entry_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
                             <TableCell compact className="text-xs font-mono text-muted-foreground">
                               {formatPrice((pos as any).pumpfun_watchlist?.price_at_discovery_usd)}
                             </TableCell>

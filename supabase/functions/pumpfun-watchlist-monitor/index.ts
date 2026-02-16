@@ -51,7 +51,7 @@ const TOKENS_PER_RUN = 50;
 const SKIP_RECENTLY_CHECKED_MINUTES = 3;
 
 // MINIMUM SCORE THRESHOLD for fantasy qualification
-const MIN_QUALIFICATION_SCORE = 65;
+const MIN_QUALIFICATION_SCORE = 50;
 
 interface MonitorStats {
   tokensChecked: number;
@@ -514,26 +514,25 @@ async function getConfig(supabase: any) {
 // ═══════════════════════════════════════════════════════════════════
 
 function calculateHolderScore(holders: number): number {
-  // Data: 500+ = 39% win, 200-500 = 16%, 100-200 = 14%, 50-100 = 8.5%, <50 = 18%
-  // Steep exponential curve: reward high holder counts heavily
-  if (holders >= 500) return 25;
-  if (holders >= 300) return 20;
-  if (holders >= 200) return 16;
-  if (holders >= 150) return 13;
-  if (holders >= 100) return 10;
-  if (holders >= 50) return 5;
+  // Rescaled for bonding curve tokens (pre-Raydium, typically <200 holders)
+  if (holders >= 100) return 25;
+  if (holders >= 75) return 20;
+  if (holders >= 60) return 16;
+  if (holders >= 49) return 12;
+  if (holders >= 30) return 7;
   return 2;
 }
 
 function calculateVolumeScore(volumeSol: number, buys: number, sells: number): number {
   // Data: 200+ SOL = 33% win, 50-200 = 28%, 10-50 = 18%, <10 = 5.6%
   // Buy/sell ratio bonus: more buys than sells = accumulation phase
+  // Rescaled for bonding curve volumes (pre-Raydium, typically <50 SOL)
   let base = 0;
-  if (volumeSol >= 200) base = 20;
-  else if (volumeSol >= 100) base = 16;
-  else if (volumeSol >= 50) base = 13;
-  else if (volumeSol >= 20) base = 9;
-  else if (volumeSol >= 10) base = 5;
+  if (volumeSol >= 50) base = 25;
+  else if (volumeSol >= 30) base = 20;
+  else if (volumeSol >= 20) base = 16;
+  else if (volumeSol >= 10) base = 12;
+  else if (volumeSol >= 5) base = 7;
   else base = 2;
 
   // Buy pressure bonus: if buys significantly outpace sells
@@ -622,7 +621,7 @@ function calculateMomentumScore(
   token: any,
   metrics: TokenMetrics,
 ): number {
-  let score = 5; // Base
+  let score = 12; // Neutral base so first-time evaluations aren't penalized
 
   // Holder growth: compare current to previous
   const prevHolders = token.holder_count_prev || token.holder_count || 0;
