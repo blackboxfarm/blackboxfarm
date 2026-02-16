@@ -94,19 +94,62 @@ async function getSolPrice(): Promise<number> {
   }
 }
 
-// Batch fetch prices - DexScreener first (most reliable), then Jupiter, then PumpFun API, then watchlist cache
+// Batch fetch prices - Pump.fun bonding curve FIRST (these are all bonding curve tokens!), then DexScreener/Jupiter as fallback for graduated
 async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<string, number>> {
   const priceMap = new Map<string, number>();
   
   if (mints.length === 0) return priceMap;
 
+  let pumpfunCount = 0;
   let dexscreenerCount = 0;
   let jupiterCount = 0;
-  let pumpfunCount = 0;
   let watchlistCount = 0;
 
-  // 1. FIRST: DexScreener (most reliable, not Cloudflare blocked)
+  // 1. PRIMARY: Pump.fun bonding curve API — deterministic, real-time, best source for pre-graduation tokens
   for (const mint of mints) {
+    try {
+      const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Use virtualSolReserves / virtualTokenReserves for deterministic bonding curve price
+        if (data?.virtual_sol_reserves && data?.virtual_token_reserves) {
+          const solReserves = data.virtual_sol_reserves / 1e9; // lamports to SOL
+          const tokenReserves = data.virtual_token_reserves / 1e6; // raw to tokens (6 decimals)
+          const priceInSol = solReserves / tokenReserves;
+          // We need USD price - get SOL price from the data if available, or we'll convert later
+          if (data.usd_market_cap && data.total_supply) {
+            const priceUsd = data.usd_market_cap / (data.total_supply / 1e6);
+            if (priceUsd > 0) {
+              priceMap.set(mint, priceUsd);
+              pumpfunCount++;
+            }
+          }
+        } else if (data?.usd_market_cap && data?.total_supply) {
+          // Fallback: derive from mcap
+          const priceUsd = data.usd_market_cap / (data.total_supply / 1e6);
+          if (priceUsd > 0) {
+            priceMap.set(mint, priceUsd);
+            pumpfunCount++;
+          }
+        }
+      }
+      // Small delay between pump.fun requests
+      if (mints.length > 1) await new Promise(r => setTimeout(r, 150));
+    } catch (e) {
+      // Continue - pump.fun API can be flaky
+    }
+  }
+
+  let missingMints = mints.filter(m => !priceMap.has(m));
+  if (missingMints.length === 0) {
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}) ✅ bonding curve`);
+    return priceMap;
+  }
+
+  // 2. FALLBACK: DexScreener (for graduated tokens that left the bonding curve)
+  for (const mint of missingMints) {
     try {
       const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
       if (response.ok) {
@@ -122,13 +165,13 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
     }
   }
 
-  let missingMints = mints.filter(m => !priceMap.has(m));
+  missingMints = mints.filter(m => !priceMap.has(m));
   if (missingMints.length === 0) {
-    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount})`);
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}, dex: ${dexscreenerCount})`);
     return priceMap;
   }
 
-  // 2. SECOND: Jupiter API (great for graduated tokens)
+  // 3. FALLBACK: Jupiter (for graduated tokens)
   if (missingMints.length > 0) {
     try {
       const batchSize = 100;
@@ -143,10 +186,6 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
             jupiterCount++;
           }
         }
-        
-        if (i + batchSize < missingMints.length) {
-          await new Promise(r => setTimeout(r, 200));
-        }
       }
     } catch (e) {
       // Ignore
@@ -155,38 +194,11 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
 
   missingMints = mints.filter(m => !priceMap.has(m));
   if (missingMints.length === 0) {
-    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount}, jupiter: ${jupiterCount})`);
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}, dex: ${dexscreenerCount}, jupiter: ${jupiterCount})`);
     return priceMap;
   }
 
-  // 3. THIRD: PumpFun API (often Cloudflare blocked, but try anyway for bonding curve tokens)
-  for (const mint of missingMints) {
-    try {
-      const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
-        headers: { 'Accept': 'application/json' }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.usd_market_cap && data?.total_supply) {
-          // total_supply is in raw units with 6 decimals
-          const priceUsd = data.usd_market_cap / (data.total_supply / 1e6);
-          priceMap.set(mint, priceUsd);
-          pumpfunCount++;
-        }
-      }
-      await new Promise(r => setTimeout(r, 100));
-    } catch (e) {
-      // Continue - PumpFun API is often Cloudflare blocked
-    }
-  }
-
-  missingMints = mints.filter(m => !priceMap.has(m));
-  if (missingMints.length === 0) {
-    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount}, jupiter: ${jupiterCount}, pumpfun: ${pumpfunCount})`);
-    return priceMap;
-  }
-
-  // 4. LAST: Watchlist cache (stale but better than nothing)
+  // 4. LAST RESORT: Watchlist cache (stale but better than nothing)
   try {
     const { data: watchlistPrices } = await supabase
       .from('pumpfun_watchlist')
@@ -206,7 +218,7 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
     console.error('Error fetching watchlist prices:', error);
   }
 
-  console.log(`📈 Prices: ${priceMap.size}/${mints.length} (dex: ${dexscreenerCount}, jupiter: ${jupiterCount}, pumpfun: ${pumpfunCount}, watchlist: ${watchlistCount})`);
+  console.log(`📈 Prices: ${priceMap.size}/${mints.length} (pumpfun: ${pumpfunCount}, dex: ${dexscreenerCount}, jupiter: ${jupiterCount}, watchlist: ${watchlistCount})`);
   
   const stillMissing = mints.filter(m => !priceMap.has(m));
   if (stillMissing.length > 0) {
