@@ -1101,9 +1101,16 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           }
           // QUALIFIED!
           else {
-            // MAX MCAP GATE: Reject if market cap exceeds max threshold
             const currentMcapUsd = metrics.marketCapUsd || 0;
-            if (currentMcapUsd > config.max_market_cap_usd * 2) {
+
+            // MIN MCAP GATE: Don't promote if market cap hasn't reached minimum threshold
+            if (currentMcapUsd > 0 && currentMcapUsd < config.min_market_cap_usd) {
+              console.log(`   🚫 MCAP TOO LOW: ${token.token_symbol} — $${currentMcapUsd.toFixed(0)} < $${config.min_market_cap_usd} min — keep watching`);
+              updates.priority_score = score.total;
+              // Don't promote yet — keep watching until mcap rises
+            }
+            // MAX MCAP GATE: Reject if market cap exceeds max threshold
+            else if (currentMcapUsd > config.max_market_cap_usd * 2) {
               // Way over cap — reject permanently, it's not coming back
               console.log(`   🚫 MCAP WAY OVER: ${token.token_symbol} — $${currentMcapUsd.toFixed(0)} > $${(config.max_market_cap_usd * 2).toFixed(0)} — REJECTED`);
               updates.status = 'rejected';
