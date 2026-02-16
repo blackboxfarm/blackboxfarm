@@ -1000,6 +1000,50 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           // === MOMENTUM SCORING ENGINE v2 ===
           // Instead of binary red flag gates, compute a weighted score
           
+          // === LARP CHECK — verify socials reference the token ===
+          // Only check once (first time token reaches scoring phase)
+          if (!token.larp_checked && (token.website || token.twitter || token.telegram)) {
+            try {
+              console.log(`   🎭 Running LARP check for ${token.token_symbol}...`);
+              const larpResponse = await supabase.functions.invoke('social-larp-detector', {
+                body: {
+                  token_mint: token.token_mint,
+                  token_name: token.token_name,
+                  token_symbol: token.token_symbol,
+                  website: token.website,
+                  twitter: token.twitter,
+                  telegram: token.telegram,
+                  creator_wallet: token.creator_wallet,
+                  triggered_by: 'watchlist-monitor-v2',
+                },
+              });
+
+              if (larpResponse.data?.result?.isLarp) {
+                const larpResult = larpResponse.data.result;
+                console.log(`   🎭 LARP DETECTED: ${token.token_symbol} — ${larpResult.verdict} (${larpResult.confidence}%)`);
+                updates.status = 'rejected';
+                updates.rejection_type = 'permanent';
+                updates.rejection_reason = 'larp_detected';
+                updates.rejection_reasons = ['larp_detected', ...larpResult.flags];
+                updates.removed_at = now.toISOString();
+                updates.removal_reason = `LARP: ${larpResult.verdict} — socials don't reference token. Flags: ${larpResult.flags.join(', ')}`;
+                updates.larp_checked = true;
+                updates.larp_result = larpResult;
+                updates.last_processor = 'watchlist-monitor-v2';
+                await supabase.from('pumpfun_watchlist').update(updates).eq('id', token.id);
+                stats.errors++; // Count as rejected
+                continue;
+              }
+
+              updates.larp_checked = true;
+              updates.larp_result = larpResponse.data?.result || null;
+              console.log(`   ✅ LARP check passed: ${token.token_symbol} — ${larpResponse.data?.result?.verdict || 'ok'}`);
+            } catch (e) {
+              console.warn(`   ⚠️ LARP check failed for ${token.token_symbol}:`, e);
+              updates.larp_checked = true; // Don't retry on error
+            }
+          }
+
           // Re-verify RugCheck if stale
           const rugcheckAge = token.rugcheck_checked_at 
             ? (now.getTime() - new Date(token.rugcheck_checked_at).getTime()) / 60000 
