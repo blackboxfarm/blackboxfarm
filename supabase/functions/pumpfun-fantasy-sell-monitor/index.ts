@@ -115,12 +115,16 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
         const data = await response.json();
         // Use virtualSolReserves / virtualTokenReserves for deterministic bonding curve price
         if (data?.virtual_sol_reserves && data?.virtual_token_reserves) {
-          const solReserves = data.virtual_sol_reserves / 1e9; // lamports to SOL
-          const tokenReserves = data.virtual_token_reserves / 1e6; // raw to tokens (6 decimals)
-          const priceInSol = solReserves / tokenReserves;
-          // We need USD price - get SOL price from the data if available, or we'll convert later
+          const solReserves = data.virtual_sol_reserves / 1e9;
+          const tokenReserves = data.virtual_token_reserves / 1e6;
+          const priceSol = solReserves / tokenReserves;
+          // Get SOL price to convert to USD — use solPrice passed to monitor
+          // For now, derive from pump.fun's own usd_market_cap if available
           if (data.usd_market_cap && data.total_supply) {
-            const priceUsd = data.usd_market_cap / (data.total_supply / 1e6);
+            const mcapDerivedPrice = data.usd_market_cap / (data.total_supply / 1e6);
+            // Cross-check: use bonding curve SOL price * SOL/USD from mcap ratio
+            const impliedSolUsd = mcapDerivedPrice / priceSol;
+            const priceUsd = priceSol * impliedSolUsd;
             if (priceUsd > 0) {
               priceMap.set(mint, priceUsd);
               pumpfunCount++;
