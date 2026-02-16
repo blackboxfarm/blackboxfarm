@@ -380,6 +380,10 @@ export function TokenCandidatesDashboard() {
   const [fantasyStats, setFantasyStats] = useState<FantasyStats | null>(null);
   const [loadingFantasy, setLoadingFantasy] = useState(false);
 
+  // Loss filter: entry price range
+  const [lossEntryPriceMin, setLossEntryPriceMin] = useState<string>('');
+  const [lossEntryPriceMax, setLossEntryPriceMax] = useState<string>('');
+
   // System Reset state
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState('');
@@ -387,6 +391,18 @@ export function TokenCandidatesDashboard() {
   const [resetCounts, setResetCounts] = useState<Record<string, number>>({});
   const [keepLearnings, setKeepLearnings] = useState(true);
   const keepLearningsRef = useRef(keepLearnings);
+
+  // Client-side filtered fantasy positions (for entry price range on Loss view)
+  const filteredFantasyPositions = useMemo(() => {
+    if (fantasyFilter !== 'loss' || (!lossEntryPriceMin && !lossEntryPriceMax)) return fantasyPositions;
+    const min = lossEntryPriceMin ? parseFloat(lossEntryPriceMin) : 0;
+    const max = lossEntryPriceMax ? parseFloat(lossEntryPriceMax) : Infinity;
+    return fantasyPositions.filter(pos => {
+      const ep = pos.entry_price_usd;
+      if (ep === null || ep === undefined) return false;
+      return ep >= min && ep <= max;
+    });
+  }, [fantasyPositions, fantasyFilter, lossEntryPriceMin, lossEntryPriceMax]);
   
   // Keep ref in sync with state to avoid stale closure in handleSystemReset
   useEffect(() => {
@@ -1886,6 +1902,33 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                       Loss
                     </button>
                   </div>
+                  {fantasyFilter === 'loss' && (
+                    <div className="flex items-center gap-2 ml-2">
+                      <span className="text-xs text-muted-foreground">Entry $:</span>
+                      <Input
+                        type="number"
+                        placeholder="Min"
+                        value={lossEntryPriceMin}
+                        onChange={e => setLossEntryPriceMin(e.target.value)}
+                        className="h-7 w-24 text-xs"
+                        step="0.000001"
+                      />
+                      <span className="text-xs text-muted-foreground">–</span>
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        value={lossEntryPriceMax}
+                        onChange={e => setLossEntryPriceMax(e.target.value)}
+                        className="h-7 w-24 text-xs"
+                        step="0.000001"
+                      />
+                      {(lossEntryPriceMin || lossEntryPriceMax) && (
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => { setLossEntryPriceMin(''); setLossEntryPriceMax(''); }}>
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   <Button variant="outline" size="sm" onClick={fetchFantasyData} disabled={loadingFantasy}>
                     {loadingFantasy ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   </Button>
@@ -2001,14 +2044,14 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {fantasyPositions.length === 0 ? (
+                    {filteredFantasyPositions.length === 0 ? (
                       <TableRow>
                        <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
                           No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      fantasyPositions.map((pos) => {
+                      filteredFantasyPositions.map((pos) => {
                         // For closed positions, use exit price; for open, use live price
                         const displayPrice = pos.status === 'closed' && pos.main_sold_price_usd 
                           ? pos.main_sold_price_usd 
@@ -2185,13 +2228,13 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                         );
                       })
                     )}
-                    {fantasyPositions.length > 0 && (
+                    {filteredFantasyPositions.length > 0 && (
                       <TableRow className="border-t-2 border-primary/30 bg-muted/30">
                         <TableCell compact colSpan={8} className="text-right text-xs font-semibold text-muted-foreground">
                           Total $$$
                         </TableCell>
                         <TableCell compact className={`text-xs font-bold ${(() => {
-                          const total = fantasyPositions.reduce((sum, pos) => {
+                          const total = filteredFantasyPositions.reduce((sum, pos) => {
                             const usdPnl = pos.status === 'closed' && pos.main_sold_price_usd && pos.entry_price_usd && pos.token_amount
                               ? (pos.main_sold_price_usd - pos.entry_price_usd) * pos.token_amount
                               : pos.current_price_usd && pos.entry_price_usd && pos.token_amount
@@ -2202,7 +2245,7 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                           return total >= 0 ? 'text-green-500' : 'text-red-500';
                         })()}`}>
                           {(() => {
-                            const total = fantasyPositions.reduce((sum, pos) => {
+                            const total = filteredFantasyPositions.reduce((sum, pos) => {
                               const usdPnl = pos.status === 'closed' && pos.main_sold_price_usd && pos.entry_price_usd && pos.token_amount
                                 ? (pos.main_sold_price_usd - pos.entry_price_usd) * pos.token_amount
                                 : pos.current_price_usd && pos.entry_price_usd && pos.token_amount
