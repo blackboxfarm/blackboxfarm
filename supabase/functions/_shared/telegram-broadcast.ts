@@ -92,7 +92,7 @@ async function sendToTarget(
  * @returns Array of results for each target
  */
 // Default delay between messages to avoid rate limiting (in milliseconds)
-const DEFAULT_MESSAGE_DELAY_MS = 2000;
+const DEFAULT_MESSAGE_DELAY_MS = 3000;
 
 /**
  * Sleep utility for rate limiting
