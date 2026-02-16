@@ -813,6 +813,17 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
               removed_at: now.toISOString(), removal_reason: `Dev fully exited (${devHoldingPct?.toFixed(2)}%) at ${tokenAgeMinutes.toFixed(0)}m`,
               last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
             }).eq('id', token.id);
+            // TRIGGER RUG EVENT PROCESSOR
+            try {
+              await supabase.functions.invoke('rug-event-processor', {
+                body: {
+                  token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
+                  creator_wallet: token.creator_wallet, rug_type: 'dev_full_exit',
+                  evidence: { dev_holding_pct: devHoldingPct, price_at_rug: metrics.priceUsd, price_ath: token.price_ath_usd, market_cap_at_rug: metrics.marketCapUsd, holder_count: metrics.holders, volume_sol: metrics.volume24hSol },
+                  triggered_by: 'watchlist-monitor-v2',
+                },
+              });
+            } catch (e) { console.warn('Rug event processor failed:', e); }
             stats.devSellRejected++;
             stats.devSellTokens.push(`${token.token_symbol} (dev exit ${devHoldingPct?.toFixed(1)}% @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
@@ -826,6 +837,17 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
               removed_at: now.toISOString(), removal_reason: `Dev dumped to ${devHoldingPct?.toFixed(1)}% + token crashed to $${currentMcap.toFixed(0)}`,
               last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
             }).eq('id', token.id);
+            // TRIGGER RUG EVENT PROCESSOR
+            try {
+              await supabase.functions.invoke('rug-event-processor', {
+                body: {
+                  token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
+                  creator_wallet: token.creator_wallet, rug_type: 'dev_sold_crashed',
+                  evidence: { dev_holding_pct: devHoldingPct, price_at_rug: metrics.priceUsd, price_ath: token.price_ath_usd, market_cap_at_rug: currentMcap, holder_count: metrics.holders, volume_sol: metrics.volume24hSol },
+                  triggered_by: 'watchlist-monitor-v2',
+                },
+              });
+            } catch (e) { console.warn('Rug event processor failed:', e); }
             stats.devSellRejected++;
             stats.devSellTokens.push(`${token.token_symbol} (crashed $${currentMcap.toFixed(0)})`);
             continue;
@@ -844,6 +866,17 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
               removal_reason: `Dev fully exited (${devHoldingPct?.toFixed(2)}%) after ${tokenAgeMinutes.toFixed(0)}m`,
               last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
             }).eq('id', token.id);
+            // TRIGGER RUG EVENT PROCESSOR
+            try {
+              await supabase.functions.invoke('rug-event-processor', {
+                body: {
+                  token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
+                  creator_wallet: token.creator_wallet, rug_type: 'dev_full_exit',
+                  evidence: { dev_holding_pct: devHoldingPct, price_at_rug: metrics.priceUsd, price_ath: token.price_ath_usd, market_cap_at_rug: token.market_cap_usd, holder_count: metrics.holders, volume_sol: metrics.volume24hSol },
+                  triggered_by: 'watchlist-monitor-v2',
+                },
+              });
+            } catch (e) { console.warn('Rug event processor failed:', e); }
             stats.devSellRejected++;
             stats.devSellTokens.push(`${token.token_symbol} (dev exit @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
