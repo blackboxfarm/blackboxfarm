@@ -508,8 +508,8 @@ export function TokenCandidatesDashboard() {
         // "Profit" = closed trades with positive PnL (target_hit or any profitable exit)
         query = query.eq('status', 'closed').eq('exit_reason', 'target_hit');
       } else if (fantasyFilter === 'loss') {
-        // "Loss" = closed trades with negative PnL
-        query = query.eq('status', 'closed').neq('exit_reason', 'target_hit');
+        // "Loss" = closed trades with negative PnL only
+        query = query.eq('status', 'closed').lt('realized_pnl_usd', 0);
       }
 
       const { data: positions, error: posError } = await query;
