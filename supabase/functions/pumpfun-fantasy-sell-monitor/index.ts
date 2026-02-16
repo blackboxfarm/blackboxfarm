@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { broadcastToBlackBox } from '../_shared/telegram-broadcast.ts';
 enableHeliusTracking('pumpfun-fantasy-sell-monitor');
 
 /**
@@ -546,6 +547,22 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           stats.targetsSold++;
           console.log(`🛑 STOP-LOSS SOLD: ${position.token_symbol} | ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
 
+          // Notify: admin_notifications + Telegram
+          const slMsg = `🛑 Fantasy STOP-LOSS: $${position.token_symbol}\n` +
+            `📉 Exit: $${currentPriceUsd.toFixed(8)} (${multiplier.toFixed(2)}x)\n` +
+            `💸 P&L: ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)\n` +
+            `📊 Entry was: $${position.entry_price_usd.toFixed(8)}\n` +
+            `❌ Reason: Stop-loss hit at -${config.fantasy_stop_loss_pct}%\n` +
+            `🔗 https://pump.fun/coin/${position.token_mint}`;
+
+          await supabase.from('admin_notifications').insert({
+            notification_type: 'fantasy_sell',
+            title: `🛑 Fantasy STOP-LOSS: $${position.token_symbol}`,
+            message: slMsg,
+            metadata: { mint: position.token_mint, symbol: position.token_symbol, exit_reason: 'stop_loss', pnl_sol: realizedPnlSol, pnl_pct: realizedPnlPercent, multiplier },
+          }).then(() => {}).catch(() => {});
+
+          broadcastToBlackBox(supabase, slMsg).catch(e => console.error('TG broadcast error:', e));
         }
         // AUTO-CLOSE STALE: >12h old with >65% loss, or >24h old regardless
         else if ((() => {
@@ -576,6 +593,22 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           stats.targetsSold++;
           await createLearningRecord(supabase, position, currentPriceUsd, multiplier);
           stats.learningsCreated++;
+
+          // Notify: admin_notifications + Telegram for stale/dead
+          const staleMsg = `💀 Fantasy AUTO-CLOSE: $${position.token_symbol}\n` +
+            `📉 Exit: $${currentPriceUsd.toFixed(8)} (${multiplier.toFixed(3)}x)\n` +
+            `💸 P&L: ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)\n` +
+            `❌ Reason: ${reason}\n` +
+            `🔗 https://pump.fun/coin/${position.token_mint}`;
+
+          await supabase.from('admin_notifications').insert({
+            notification_type: 'fantasy_sell',
+            title: `💀 Fantasy AUTO-CLOSE: $${position.token_symbol}`,
+            message: staleMsg,
+            metadata: { mint: position.token_mint, symbol: position.token_symbol, exit_reason: reason, pnl_sol: realizedPnlSol, pnl_pct: realizedPnlPercent, multiplier },
+          }).then(() => {}).catch(() => {});
+
+          broadcastToBlackBox(supabase, staleMsg).catch(e => console.error('TG broadcast error:', e));
         }
         // Check if target hit
         else if (multiplier >= position.target_multiplier) {
@@ -625,6 +658,23 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           stats.targetsSold++;
           
           console.log(`💰 SOLD 100%: ${position.token_symbol} | +${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
+
+          // Notify: admin_notifications + Telegram
+          const targetMsg = `🎯 Fantasy TARGET HIT: $${position.token_symbol}\n` +
+            `🚀 Exit: $${currentPriceUsd.toFixed(8)} (${multiplier.toFixed(2)}x)\n` +
+            `💰 P&L: +${realizedPnlSol.toFixed(4)} SOL (+${realizedPnlPercent.toFixed(1)}%)\n` +
+            `📊 Entry was: $${position.entry_price_usd.toFixed(8)}\n` +
+            `✅ Reason: Target ${position.target_multiplier}x reached!\n` +
+            `🔗 https://pump.fun/coin/${position.token_mint}`;
+
+          await supabase.from('admin_notifications').insert({
+            notification_type: 'fantasy_sell',
+            title: `🎯 Fantasy TARGET HIT: $${position.token_symbol}`,
+            message: targetMsg,
+            metadata: { mint: position.token_mint, symbol: position.token_symbol, exit_reason: 'target_hit', pnl_sol: realizedPnlSol, pnl_pct: realizedPnlPercent, multiplier },
+          }).then(() => {}).catch(() => {});
+
+          broadcastToBlackBox(supabase, targetMsg).catch(e => console.error('TG broadcast error:', e));
 
         } else {
           // Just update current price and P&L

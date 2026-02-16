@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { broadcastToBlackBox } from '../_shared/telegram-broadcast.ts';
 enableHeliusTracking('pumpfun-fantasy-executor');
 
 /**
@@ -415,6 +416,23 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
 
       console.log(`🎮 FANTASY BUY: ${token.token_symbol} @ $${entryPriceUsd.toFixed(8)} ($${buyAmountUsd} = ${buyAmountSol.toFixed(4)} SOL = ${tokenAmount.toFixed(2)} tokens)`);
 
+      // Notify: admin_notifications + Telegram
+      const buyMsg = `🎮 Fantasy BUY: $${token.token_symbol}\n` +
+        `💰 Entry: $${entryPriceUsd.toFixed(8)}\n` +
+        `📊 Position: $${buyAmountUsd} (${buyAmountSol.toFixed(4)} SOL)\n` +
+        `🎯 Target: ${dynamicTarget}x\n` +
+        `👥 Holders: ${entryHolderCount || '?'} | MCap: $${(entryMarketCapUsd || 0).toFixed(0)}\n` +
+        `🔗 https://pump.fun/coin/${token.token_mint}`;
+      
+      await supabase.from('admin_notifications').insert({
+        notification_type: 'fantasy_buy',
+        title: `🎮 Fantasy BUY: $${token.token_symbol}`,
+        message: buyMsg,
+        metadata: { mint: token.token_mint, symbol: token.token_symbol, entry_price: entryPriceUsd, amount_usd: buyAmountUsd, target: dynamicTarget },
+      }).then(() => {}).catch(() => {});
+
+      broadcastToBlackBox(supabase, buyMsg).catch(e => console.error('TG broadcast error:', e));
+
     } catch (error) {
       console.error(`Error processing ${token.token_symbol}:`, error);
       stats.errors.push(`${token.token_symbol}: ${String(error)}`);
@@ -618,6 +636,21 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
   }
 
   console.log(`🎮 MANUAL FANTASY BUY SUCCESS: ${tokenSymbol} @ $${price.priceUsd.toFixed(8)} ($${buyAmountUsd} = ${buyAmountSol.toFixed(4)} SOL = ${tokenAmount.toFixed(2)} tokens)`);
+
+  // Notify: admin_notifications + Telegram
+  const manualBuyMsg = `🎮 Manual Fantasy BUY: $${tokenSymbol}\n` +
+    `💰 Entry: $${price.priceUsd.toFixed(8)}\n` +
+    `📊 Position: $${buyAmountUsd} (${buyAmountSol.toFixed(4)} SOL)\n` +
+    `🔗 https://pump.fun/coin/${tokenMint}`;
+
+  await supabase.from('admin_notifications').insert({
+    notification_type: 'fantasy_buy',
+    title: `🎮 Manual Fantasy BUY: $${tokenSymbol}`,
+    message: manualBuyMsg,
+    metadata: { mint: tokenMint, symbol: tokenSymbol, entry_price: price.priceUsd, amount_usd: buyAmountUsd, manual: true },
+  }).then(() => {}).catch(() => {});
+
+  broadcastToBlackBox(supabase, manualBuyMsg).catch(e => console.error('TG broadcast error:', e));
 
   return { 
     success: true, 
