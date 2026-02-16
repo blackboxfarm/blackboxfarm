@@ -1237,19 +1237,8 @@ export function TokenCandidatesDashboard() {
             {config?.last_poll_at ? formatDistanceToNow(new Date(config.last_poll_at), { addSuffix: true }) : 'Never'}
           </span>
           
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" onClick={async () => { 
-                setRefreshingWatchlist(true);
-                await Promise.all([fetchWatchlist(), fetchCandidates()]);
-                setRefreshingWatchlist(false);
-                toast.success('Watchlist refreshed');
-              }} disabled={refreshingWatchlist}>
-                <RefreshCw className={`h-4 w-4 ${refreshingWatchlist ? 'animate-spin' : ''}`} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Refresh watchlist data from database</TooltipContent>
-          </Tooltip>
+
+
           
           {/* System Reset */}
           <Tooltip>
@@ -1591,7 +1580,22 @@ export function TokenCandidatesDashboard() {
           <Card>
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Token Watchlist</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Token Watchlist</CardTitle>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="sm" onClick={async () => { 
+                        setRefreshingWatchlist(true);
+                        await Promise.all([fetchWatchlist(), fetchCandidates()]);
+                        setRefreshingWatchlist(false);
+                        toast.success('Watchlist refreshed');
+                      }} disabled={refreshingWatchlist}>
+                        <RefreshCw className={`h-4 w-4 ${refreshingWatchlist ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Refresh watchlist data from database</TooltipContent>
+                  </Tooltip>
+                </div>
                 <div className="flex gap-1">
                   {(['all', 'watching', 'qualified', 'rejected', 'dead'] as const).map((f) => (
                     <Button key={f} variant={watchlistFilter === f ? 'default' : 'ghost'} size="sm"
