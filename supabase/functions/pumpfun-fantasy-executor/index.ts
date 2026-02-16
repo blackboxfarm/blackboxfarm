@@ -319,6 +319,12 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const minMcap = gateConfig?.min_market_cap_usd ?? 5000;
       const maxMcap = gateConfig?.max_market_cap_usd ?? 12000;
       
+      if (entryMcap > 0 && entryMcap < minMcap) {
+        console.log(`🚫 MCAP TOO LOW at entry: ${token.token_symbol} $${entryMcap.toFixed(0)} < $${minMcap} min`);
+        stats.errors.push(`${token.token_symbol}: MCap $${entryMcap.toFixed(0)} below min $${minMcap}`);
+        continue;
+      }
+
       if (entryMcap > 0 && entryMcap > maxMcap) {
         console.log(`🚫 MCAP TOO HIGH at entry: ${token.token_symbol} $${entryMcap.toFixed(0)} > $${maxMcap}`);
         stats.errors.push(`${token.token_symbol}: MCap $${entryMcap.toFixed(0)} exceeds max $${maxMcap}`);
