@@ -296,7 +296,154 @@ Deno.serve(async (req) => {
       results.alert_sent = true;
     }
 
-    // 7. Trigger rug-investigator for deep bundle analysis
+    // 7. ORACLE INTEGRATION — Feed wallets, tokens & socials into Oracle reputation system
+    try {
+      console.log(`   🔮 Feeding data into Oracle...`);
+
+      // 7a. Enrich dev_wallet_reputation with full Oracle fields
+      const devRepData: Record<string, any> = {
+        wallet_address: creator_wallet,
+        reputation_score: 0,
+        trust_level: 'scammer',
+        tokens_rugged: (devProfile?.rug_pull_count || 0) + 1,
+        total_tokens_launched: devProfile?.total_tokens_created || 1,
+        dev_pattern: rug_type === 'bundle_dump' ? 'wash_bundler' : 'spike_kill',
+        last_activity_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        notes: `Auto-flagged by rug-event-processor: ${rug_type} on $${token_symbol || token_mint.slice(0, 8)}`,
+      };
+
+      // Set pattern scores based on rug type
+      if (rug_type === 'bundle_dump') {
+        devRepData.pattern_wash_bundler = 100;
+        devRepData.pattern_spike_kill = 80;
+      } else if (rug_type === 'dev_full_exit' || rug_type === 'dev_sold_crashed') {
+        devRepData.pattern_spike_kill = 100;
+      } else if (rug_type === 'liquidity_pull') {
+        devRepData.pattern_hidden_whale = 90;
+        devRepData.pattern_spike_kill = 80;
+      }
+
+      // Pull socials from developer_profiles if available
+      if (devProfile) {
+        if (devProfile.twitter_handle) {
+          devRepData.twitter_accounts = [devProfile.twitter_handle];
+        }
+        if (devProfile.telegram_handle) {
+          devRepData.telegram_groups = [devProfile.telegram_handle];
+        }
+        // Collect linked wallets
+        const { data: linkedWallets } = await supabase
+          .from('developer_wallets')
+          .select('wallet_address')
+          .eq('developer_id', devProfile.id);
+        if (linkedWallets && linkedWallets.length > 0) {
+          devRepData.linked_wallets = linkedWallets.map((w: any) => w.wallet_address);
+        }
+      }
+
+      await supabase.from('dev_wallet_reputation').upsert(devRepData, { onConflict: 'wallet_address' });
+      console.log(`   ✅ Oracle dev_wallet_reputation updated`);
+
+      // 7b. Push relationships into reputation_mesh
+      const meshEntries: any[] = [];
+
+      // Wallet → Token relationship
+      meshEntries.push({
+        source_type: 'wallet',
+        source_id: creator_wallet,
+        linked_type: 'token',
+        linked_id: token_mint,
+        relationship: 'created',
+        confidence: 100,
+        evidence: `Rug pull confirmed: ${rug_type}`,
+        discovered_by: 'rug_event_processor',
+      });
+
+      // If we have socials from dev profile, link them
+      if (devProfile?.twitter_handle) {
+        meshEntries.push({
+          source_type: 'wallet',
+          source_id: creator_wallet,
+          linked_type: 'x_account',
+          linked_id: devProfile.twitter_handle.replace('@', ''),
+          relationship: 'owned_by',
+          confidence: 85,
+          evidence: `Linked via developer profile (rug actor)`,
+          discovered_by: 'rug_event_processor',
+        });
+      }
+
+      // Link associated wallets in the mesh
+      if (devProfile) {
+        const { data: assocWallets } = await supabase
+          .from('developer_wallets')
+          .select('wallet_address, wallet_type')
+          .eq('developer_id', devProfile.id);
+
+        if (assocWallets) {
+          for (const aw of assocWallets) {
+            if (aw.wallet_address !== creator_wallet) {
+              meshEntries.push({
+                source_type: 'wallet',
+                source_id: creator_wallet,
+                linked_type: 'wallet',
+                linked_id: aw.wallet_address,
+                relationship: 'funded_by',
+                confidence: 75,
+                evidence: `Associated wallet (${aw.wallet_type}) of rug actor`,
+                discovered_by: 'rug_event_processor',
+              });
+
+              // Also update their dev_wallet_reputation
+              await supabase.from('dev_wallet_reputation').upsert({
+                wallet_address: aw.wallet_address,
+                reputation_score: 10,
+                trust_level: 'suspicious',
+                linked_wallets: [creator_wallet],
+                notes: `Linked to rug actor ${creator_wallet.slice(0, 8)}`,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'wallet_address' });
+            }
+          }
+        }
+      }
+
+      // Batch insert mesh entries
+      if (meshEntries.length > 0) {
+        const { error: meshError } = await supabase.from('reputation_mesh').insert(meshEntries);
+        if (meshError) {
+          console.warn(`   Mesh insert partial failure:`, meshError.message);
+        } else {
+          console.log(`   ✅ ${meshEntries.length} reputation_mesh entries created`);
+        }
+      }
+
+      // 7c. Create developer_alert for the Oracle dashboard
+      await supabase.from('developer_alerts').insert({
+        alert_type: rug_type,
+        creator_wallet,
+        token_mint,
+        risk_level: 'critical',
+        developer_id: devProfile?.id || null,
+        metadata: {
+          token_symbol,
+          token_name,
+          evidence,
+          mesh_entries_created: meshEntries.length,
+          auto_fed_to_oracle: true,
+        },
+      });
+      console.log(`   ✅ developer_alert created for Oracle dashboard`);
+
+      results.oracle_fed = true;
+      results.mesh_entries = meshEntries.length;
+    } catch (oracleErr: any) {
+      console.error(`   ❌ Oracle integration error:`, oracleErr.message);
+      results.oracle_fed = false;
+    }
+
+    // 8. Trigger rug-investigator for deep bundle analysis
     try {
       await supabase.functions.invoke('rug-investigator', {
         body: { tokenMint: token_mint, maxSellers: 20, traceDepth: 3 },
@@ -307,7 +454,7 @@ Deno.serve(async (req) => {
       console.warn('   Rug investigator trigger failed:', e);
     }
 
-    // 8. Trigger Telegram alert
+    // 9. Trigger Telegram alert
     try {
       await supabase.functions.invoke('telegram-bot-webhook', {
         body: {
