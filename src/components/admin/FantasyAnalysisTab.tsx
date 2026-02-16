@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Shield, Clock } from 'lucide-react';
+import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Shield, Clock, DollarSign } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,6 +22,9 @@ interface AnalysisPosition {
   target_multiplier: number;
   created_at: string;
   watchlist_id: string | null;
+  entry_amount_sol: number | null;
+  total_realized_pnl_sol: number | null;
+  main_realized_pnl_sol: number | null;
 }
 
 interface WatchlistMetrics {
@@ -71,7 +74,7 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
       // Fetch all fantasy positions with their watchlist metrics
       const { data: positions, error } = await supabase
         .from('pumpfun_fantasy_positions')
-        .select('id, token_symbol, status, exit_reason, total_pnl_percent, entry_price_usd, current_price_usd, main_sold_price_usd, token_amount, target_multiplier, created_at, watchlist_id')
+        .select('id, token_symbol, status, exit_reason, total_pnl_percent, entry_price_usd, current_price_usd, main_sold_price_usd, token_amount, target_multiplier, created_at, watchlist_id, entry_amount_sol, total_realized_pnl_sol, main_realized_pnl_sol')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -109,19 +112,18 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
 
   useEffect(() => { setInitialLoad(true); fetchAnalysis(); }, []);
 
-  const { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets, filteredCount } = useMemo(() => {
+  const { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets, filteredCount, totalGainsUsd, totalLossesUsd, netPnlUsd, totalInvestedUsd } = useMemo(() => {
     // Apply time range filter
     const cutoff = (() => {
       const now = new Date();
-      switch (timeRange) {
-        case '1h': return new Date(now.getTime() - 1 * 60 * 60 * 1000);
-        case '6h': return new Date(now.getTime() - 6 * 60 * 60 * 1000);
-        case '24h': return new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        case '48h': return new Date(now.getTime() - 48 * 60 * 60 * 1000);
-        case '7d': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        case 'all': return new Date(0);
-        default: return new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      }
+      const hours: Record<string, number> = {
+        '1h': 1, '2h': 2, '3h': 3, '4h': 4, '5h': 5, '6h': 6,
+        '12h': 12, '24h': 24, '48h': 48,
+      };
+      if (timeRange === '7d') return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      if (timeRange === 'all') return new Date(0);
+      const h = hours[timeRange] || 24;
+      return new Date(now.getTime() - h * 60 * 60 * 1000);
     })();
 
     const filtered = data.filter(d => new Date(d.position.created_at) >= cutoff);
@@ -245,7 +247,27 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
       return { bucket: b.label, winners: w, losers: l, winRate: total > 0 ? ((w / total) * 100) : 0 };
     });
 
-    return { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets, filteredCount: filtered.length };
+    // USD PnL calculations
+    const totalGainsUsd = winners.reduce((sum, d) => {
+      const p = d.position;
+      if (p.main_sold_price_usd && p.entry_price_usd && p.token_amount) {
+        return sum + (p.main_sold_price_usd - p.entry_price_usd) * p.token_amount;
+      }
+      return sum;
+    }, 0);
+    const totalLossesUsd = losers.reduce((sum, d) => {
+      const p = d.position;
+      if (p.main_sold_price_usd && p.entry_price_usd && p.token_amount) {
+        return sum + (p.main_sold_price_usd - p.entry_price_usd) * p.token_amount;
+      }
+      return sum;
+    }, 0);
+    const netPnlUsd = totalGainsUsd + totalLossesUsd;
+    const totalInvestedUsd = [...winners, ...losers].reduce((sum, d) => {
+      return sum + (d.position.entry_price_usd * d.position.token_amount);
+    }, 0);
+
+    return { winners, losers, openPositions, comparisons, mcapBuckets, rugcheckBuckets, filteredCount: filtered.length, totalGainsUsd, totalLossesUsd, netPnlUsd, totalInvestedUsd };
   }, [data, thresholds, timeRange]);
 
   if (initialLoad && loading) {
@@ -271,9 +293,14 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
             <SelectTrigger className="w-[140px] h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+             <SelectContent>
               <SelectItem value="1h">Last 1 Hour</SelectItem>
+              <SelectItem value="2h">Last 2 Hours</SelectItem>
+              <SelectItem value="3h">Last 3 Hours</SelectItem>
+              <SelectItem value="4h">Last 4 Hours</SelectItem>
+              <SelectItem value="5h">Last 5 Hours</SelectItem>
               <SelectItem value="6h">Last 6 Hours</SelectItem>
+              <SelectItem value="12h">Last 12 Hours</SelectItem>
               <SelectItem value="24h">Last 24 Hours</SelectItem>
               <SelectItem value="48h">Last 48 Hours</SelectItem>
               <SelectItem value="7d">Last 7 Days</SelectItem>
@@ -314,6 +341,34 @@ export default function FantasyAnalysisTab({ configThresholds }: FantasyAnalysis
           <CardContent className="p-3">
             <div className="text-xs text-muted-foreground">Total Positions</div>
             <div className="text-2xl font-bold">{filteredCount}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* USD PnL Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="bg-green-500/5 border-green-500/20">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" /> Total Gains</div>
+            <div className="text-2xl font-bold text-green-500">${totalGainsUsd.toFixed(2)}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-red-500/5 border-red-500/20">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" /> Total Losses</div>
+            <div className="text-2xl font-bold text-red-500">${totalLossesUsd.toFixed(2)}</div>
+          </CardContent>
+        </Card>
+        <Card className={netPnlUsd >= 0 ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}>
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" /> Net P&L</div>
+            <div className={`text-2xl font-bold ${netPnlUsd >= 0 ? 'text-green-500' : 'text-red-500'}`}>${netPnlUsd.toFixed(2)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" /> Total Invested</div>
+            <div className="text-2xl font-bold">${totalInvestedUsd.toFixed(2)}</div>
           </CardContent>
         </Card>
       </div>
