@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**
@@ -825,6 +826,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
                 },
               });
             } catch (e) { console.warn('Rug event processor failed:', e); }
+            feedRejectionToMesh(supabase, {
+              token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
+              creator_wallet: token.creator_wallet, rejection_reasons: ['dev_full_exit', 'young_token_abandon'],
+              source: 'watchlist-monitor',
+            }).catch(e => console.warn('[wm] mesh feed failed:', e));
             stats.devSellRejected++;
             stats.devSellTokens.push(`${token.token_symbol} (dev exit ${devHoldingPct?.toFixed(1)}% @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
@@ -849,6 +855,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
                 },
               });
             } catch (e) { console.warn('Rug event processor failed:', e); }
+            feedRejectionToMesh(supabase, {
+              token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
+              creator_wallet: token.creator_wallet, rejection_reasons: ['dev_sold', 'token_crashed'],
+              market_cap_usd: currentMcap, source: 'watchlist-monitor',
+            }).catch(e => console.warn('[wm] mesh feed failed:', e));
             stats.devSellRejected++;
             stats.devSellTokens.push(`${token.token_symbol} (crashed $${currentMcap.toFixed(0)})`);
             continue;
@@ -878,6 +889,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
                 },
               });
             } catch (e) { console.warn('Rug event processor failed:', e); }
+            feedRejectionToMesh(supabase, {
+              token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
+              creator_wallet: token.creator_wallet, rejection_reasons: ['dev_full_exit'],
+              source: 'watchlist-monitor',
+            }).catch(e => console.warn('[wm] mesh feed failed:', e));
             stats.devSellRejected++;
             stats.devSellTokens.push(`${token.token_symbol} (dev exit @ ${tokenAgeMinutes.toFixed(0)}m)`);
             continue;
@@ -894,6 +910,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             removal_reason: 'Developer launched new token', last_checked_at: now.toISOString(),
             last_processor: 'watchlist-monitor-v2',
           }).eq('id', token.id);
+          feedRejectionToMesh(supabase, {
+            token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
+            creator_wallet: token.creator_wallet, rejection_reasons: ['dev_launched_new', 'serial_launcher'],
+            source: 'watchlist-monitor',
+          }).catch(e => console.warn('[wm] mesh feed failed:', e));
           stats.devSellRejected++;
           stats.devSellTokens.push(`${token.token_symbol} (dev launched new)`);
           continue;

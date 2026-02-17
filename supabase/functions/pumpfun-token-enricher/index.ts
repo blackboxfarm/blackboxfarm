@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { heliusFetch, canMakeHeliusCall } from "../_shared/helius-rate-limiter.ts";
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1113,6 +1114,20 @@ async function enrichTokenBatch(
         
       if (isPermanentReject) {
         rejected++;
+        // Feed bad-actor rejections into the mesh
+        feedRejectionToMesh(supabase, {
+          token_mint: token.token_mint,
+          token_symbol: token.token_symbol,
+          token_name: token.token_name,
+          creator_wallet: token.creator_wallet,
+          rejection_reasons: rejectionReasons,
+          bundle_score: holderAnalysis.bundleScore,
+          rugcheck_score: rugCheckResult.normalised,
+          holder_count: holderCount,
+          market_cap_usd: marketCapUsd,
+          bump_bot_detected: bumpBotResult.detected,
+          source: 'enricher',
+        }).catch(e => console.warn('[enricher] mesh feed failed:', e));
       } else {
         softRejected++;
       }
