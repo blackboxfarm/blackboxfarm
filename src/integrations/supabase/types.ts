@@ -6271,6 +6271,7 @@ export type Database = {
           entry_amount_sol: number
           entry_at: string | null
           entry_bonding_curve_pct: number | null
+          entry_flags: Json | null
           entry_holder_count: number | null
           entry_market_cap_usd: number | null
           entry_price_sol: number | null
@@ -6329,6 +6330,7 @@ export type Database = {
           entry_amount_sol: number
           entry_at?: string | null
           entry_bonding_curve_pct?: number | null
+          entry_flags?: Json | null
           entry_holder_count?: number | null
           entry_market_cap_usd?: number | null
           entry_price_sol?: number | null
@@ -6387,6 +6389,7 @@ export type Database = {
           entry_amount_sol?: number
           entry_at?: string | null
           entry_bonding_curve_pct?: number | null
+          entry_flags?: Json | null
           entry_holder_count?: number | null
           entry_market_cap_usd?: number | null
           entry_price_sol?: number | null

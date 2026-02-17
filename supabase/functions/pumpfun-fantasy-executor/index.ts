@@ -308,6 +308,56 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const entryPriceUsd = price?.priceUsd || token.price_usd || 0;
       const entryPriceSol = price?.priceSol || (token.price_usd / solPrice) || 0;
 
+      // ============================================
+      // SOFT FLAG 1: Are we entering below ATH?
+      // ============================================
+      let entryBelowAth = false;
+      let athPriceUsd: number | null = null;
+      try {
+        const athResp = await fetch(`https://frontend-api.pump.fun/coins/${token.token_mint}`, {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (athResp.ok) {
+          const athData = await athResp.json();
+          // pump.fun exposes usd_market_cap; derive ATH from highest known mcap
+          // The watchlist also tracks ath_price_usd from monitor sweeps
+          const storedAth = token.ath_price_usd || 0;
+          // Current bonding curve price we just fetched IS live, compare to stored ATH
+          if (storedAth > 0 && entryPriceUsd < storedAth * 0.95) {
+            entryBelowAth = true;
+            athPriceUsd = storedAth;
+            const pctBelowAth = ((storedAth - entryPriceUsd) / storedAth * 100).toFixed(1);
+            console.log(`⚠️ SOFT FLAG — BELOW ATH: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowAth}% below ATH $${storedAth.toFixed(10)}`);
+          }
+        }
+      } catch (e) {
+        console.warn(`ATH check failed for ${token.token_symbol}:`, e);
+      }
+
+      // ============================================
+      // SOFT FLAG 2: Are we entering on a downward trend?
+      // ============================================
+      let entryOnDowntrend = false;
+      let priceOneMinAgo: number | null = null;
+      try {
+        // Wait ~10 seconds then re-fetch price to detect direction
+        // Instead of waiting, compare current live price to the price stored at qualification
+        // (price_at_qualified_usd was captured when token was promoted, typically 1-5 mins ago)
+        const qualifiedPrice = token.price_at_qualified_usd || token.price_at_buy_now_usd || 0;
+        if (qualifiedPrice > 0 && entryPriceUsd > 0) {
+          const priceDelta = ((entryPriceUsd - qualifiedPrice) / qualifiedPrice) * 100;
+          if (priceDelta < -3) {
+            // Price has dropped more than 3% since qualification
+            entryOnDowntrend = true;
+            priceOneMinAgo = qualifiedPrice;
+            console.log(`⚠️ SOFT FLAG — DOWNTREND: ${token.token_symbol} dropped ${priceDelta.toFixed(1)}% since qualification ($${qualifiedPrice.toFixed(10)} → $${entryPriceUsd.toFixed(10)})`);
+          }
+        }
+      } catch (e) {
+        console.warn(`Trend check failed for ${token.token_symbol}:`, e);
+      }
+
       if (entryPriceUsd <= 0) {
         stats.errors.push(`${token.token_symbol}: Invalid price`);
         continue;
@@ -403,12 +453,18 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
           entry_volume_24h_sol: entryVolume24hSol,
           entry_token_age_mins: entryTokenAgeMins,
           entry_bonding_curve_pct: entryBondingCurvePct,
-          entry_rugcheck_score: entryRugcheckScore,
-          entry_signal_strength_raw: entrySignalStrengthRaw,
-          entry_socials_count: entrySocialsCount,
-        })
-        .select()
-        .single();
+           entry_rugcheck_score: entryRugcheckScore,
+           entry_signal_strength_raw: entrySignalStrengthRaw,
+           entry_socials_count: entrySocialsCount,
+           entry_flags: JSON.stringify({
+             below_ath: entryBelowAth,
+             ath_price_usd: athPriceUsd,
+             downtrend: entryOnDowntrend,
+             qualified_price_usd: priceOneMinAgo,
+           }),
+         })
+         .select()
+         .single();
 
       if (insertError) {
         console.error(`Error creating fantasy position for ${token.token_symbol}:`, insertError);
