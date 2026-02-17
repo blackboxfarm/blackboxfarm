@@ -1,8 +1,9 @@
 import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Twitter, Users } from "lucide-react";
+import { Twitter, Users, Bot } from "lucide-react";
 import { MentionsTab } from "./twitter/MentionsTab";
 import { KOLsTab } from "./twitter/KOLsTab";
+import { CommentBotScanner } from "./CommentBotScanner";
 
 export function TwitterScrapesView() {
   return (
@@ -14,7 +15,7 @@ export function TwitterScrapesView() {
           Twitter Scrapes
         </h2>
         <p className="text-muted-foreground text-sm mt-1">
-          Monitor token mentions and KOL activity on Twitter
+          Monitor token mentions, KOL activity, and comment bots
         </p>
       </div>
 
@@ -29,6 +30,10 @@ export function TwitterScrapesView() {
             <Users className="h-4 w-4" />
             KOLs
           </TabsTrigger>
+          <TabsTrigger value="comment-bots" className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            Comment Bots
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="mentions">
@@ -37,6 +42,10 @@ export function TwitterScrapesView() {
 
         <TabsContent value="kols">
           <KOLsTab />
+        </TabsContent>
+
+        <TabsContent value="comment-bots">
+          <CommentBotScanner />
         </TabsContent>
       </Tabs>
     </div>

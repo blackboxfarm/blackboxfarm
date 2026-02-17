@@ -6039,6 +6039,57 @@ export type Database = {
           },
         ]
       }
+      pumpfun_comment_accounts: {
+        Row: {
+          bot_confidence_score: number | null
+          created_at: string
+          duplicate_message_count: number
+          first_seen_at: string
+          flagged_reasons: string[] | null
+          id: string
+          is_flagged_bot: boolean
+          last_seen_at: string
+          linked_creator_wallets: string[] | null
+          tokens_commented_on: number
+          total_comments: number
+          updated_at: string
+          username: string
+          username_entropy_score: number | null
+        }
+        Insert: {
+          bot_confidence_score?: number | null
+          created_at?: string
+          duplicate_message_count?: number
+          first_seen_at?: string
+          flagged_reasons?: string[] | null
+          id?: string
+          is_flagged_bot?: boolean
+          last_seen_at?: string
+          linked_creator_wallets?: string[] | null
+          tokens_commented_on?: number
+          total_comments?: number
+          updated_at?: string
+          username: string
+          username_entropy_score?: number | null
+        }
+        Update: {
+          bot_confidence_score?: number | null
+          created_at?: string
+          duplicate_message_count?: number
+          first_seen_at?: string
+          flagged_reasons?: string[] | null
+          id?: string
+          is_flagged_bot?: boolean
+          last_seen_at?: string
+          linked_creator_wallets?: string[] | null
+          tokens_commented_on?: number
+          total_comments?: number
+          updated_at?: string
+          username?: string
+          username_entropy_score?: number | null
+        }
+        Relationships: []
+      }
       pumpfun_daily_stats: {
         Row: {
           created_at: string | null
@@ -7003,6 +7054,8 @@ export type Database = {
           auto_scalp_enabled: boolean
           block_below_ath_enabled: boolean | null
           block_below_ath_pct: number | null
+          block_below_discovery_enabled: boolean | null
+          block_below_discovery_pct: number | null
           block_downtrend_enabled: boolean | null
           block_downtrend_pct: number | null
           buy_amount_sol: number | null
@@ -7084,6 +7137,8 @@ export type Database = {
           auto_scalp_enabled?: boolean
           block_below_ath_enabled?: boolean | null
           block_below_ath_pct?: number | null
+          block_below_discovery_enabled?: boolean | null
+          block_below_discovery_pct?: number | null
           block_downtrend_enabled?: boolean | null
           block_downtrend_pct?: number | null
           buy_amount_sol?: number | null
@@ -7165,6 +7220,8 @@ export type Database = {
           auto_scalp_enabled?: boolean
           block_below_ath_enabled?: boolean | null
           block_below_ath_pct?: number | null
+          block_below_discovery_enabled?: boolean | null
+          block_below_discovery_pct?: number | null
           block_downtrend_enabled?: boolean | null
           block_downtrend_pct?: number | null
           buy_amount_sol?: number | null
@@ -7530,6 +7587,69 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_token_comments: {
+        Row: {
+          account_id: string | null
+          bot_signals: string[] | null
+          comment_age: string | null
+          duplicate_of_id: string | null
+          hearts: number | null
+          id: string
+          is_duplicate: boolean
+          message: string
+          message_hash: string
+          scraped_at: string
+          token_mint: string
+          token_symbol: string | null
+          username: string
+        }
+        Insert: {
+          account_id?: string | null
+          bot_signals?: string[] | null
+          comment_age?: string | null
+          duplicate_of_id?: string | null
+          hearts?: number | null
+          id?: string
+          is_duplicate?: boolean
+          message: string
+          message_hash: string
+          scraped_at?: string
+          token_mint: string
+          token_symbol?: string | null
+          username: string
+        }
+        Update: {
+          account_id?: string | null
+          bot_signals?: string[] | null
+          comment_age?: string | null
+          duplicate_of_id?: string | null
+          hearts?: number | null
+          id?: string
+          is_duplicate?: boolean
+          message?: string
+          message_hash?: string
+          scraped_at?: string
+          token_mint?: string
+          token_symbol?: string | null
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_token_comments_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_comment_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pumpfun_token_comments_duplicate_of_id_fkey"
+            columns: ["duplicate_of_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_token_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pumpfun_token_retraces: {
         Row: {
           analysis_completed_at: string | null
@@ -7803,6 +7923,8 @@ export type Database = {
           buy_pressure_3m: number | null
           buy_tx_signature: string | null
           check_count: number
+          comment_bot_score: number | null
+          comment_scan_at: string | null
           consecutive_stale_checks: number | null
           crash_detected_at: string | null
           created_at: string
@@ -7925,6 +8047,8 @@ export type Database = {
           buy_pressure_3m?: number | null
           buy_tx_signature?: string | null
           check_count?: number
+          comment_bot_score?: number | null
+          comment_scan_at?: string | null
           consecutive_stale_checks?: number | null
           crash_detected_at?: string | null
           created_at?: string
@@ -8047,6 +8171,8 @@ export type Database = {
           buy_pressure_3m?: number | null
           buy_tx_signature?: string | null
           check_count?: number
+          comment_bot_score?: number | null
+          comment_scan_at?: string | null
           consecutive_stale_checks?: number | null
           crash_detected_at?: string | null
           created_at?: string
