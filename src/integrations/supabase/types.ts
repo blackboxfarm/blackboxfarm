@@ -6326,6 +6326,12 @@ export type Database = {
           peak_at: string | null
           peak_multiplier: number | null
           peak_price_usd: number | null
+          post_exit_checked_at: string | null
+          post_exit_graduated: boolean | null
+          post_exit_mcap: number | null
+          post_exit_multiplier_vs_entry: number | null
+          post_exit_price_usd: number | null
+          post_exit_recovered: boolean | null
           sell_percentage: number | null
           signal_strength: number | null
           status: string
@@ -6387,6 +6393,12 @@ export type Database = {
           peak_at?: string | null
           peak_multiplier?: number | null
           peak_price_usd?: number | null
+          post_exit_checked_at?: string | null
+          post_exit_graduated?: boolean | null
+          post_exit_mcap?: number | null
+          post_exit_multiplier_vs_entry?: number | null
+          post_exit_price_usd?: number | null
+          post_exit_recovered?: boolean | null
           sell_percentage?: number | null
           signal_strength?: number | null
           status?: string
@@ -6448,6 +6460,12 @@ export type Database = {
           peak_at?: string | null
           peak_multiplier?: number | null
           peak_price_usd?: number | null
+          post_exit_checked_at?: string | null
+          post_exit_graduated?: boolean | null
+          post_exit_mcap?: number | null
+          post_exit_multiplier_vs_entry?: number | null
+          post_exit_price_usd?: number | null
+          post_exit_recovered?: boolean | null
           sell_percentage?: number | null
           signal_strength?: number | null
           status?: string

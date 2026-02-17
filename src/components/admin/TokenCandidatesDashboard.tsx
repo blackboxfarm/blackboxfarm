@@ -48,7 +48,8 @@ import {
   SearchCheck,
   Binoculars,
   RotateCcw,
-  Users
+  Users,
+  Undo2
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -392,6 +393,10 @@ export function TokenCandidatesDashboard() {
   const [resetCounts, setResetCounts] = useState<Record<string, number>>({});
   const [keepLearnings, setKeepLearnings] = useState(true);
   const keepLearningsRef = useRef(keepLearnings);
+
+  // Stop-loss backcheck state
+  const [backcheckRunning, setBackcheckRunning] = useState(false);
+  const [backcheckResults, setBackcheckResults] = useState<any>(null);
 
   // Client-side filtered fantasy positions (for entry price range on Loss view)
   const filteredFantasyPositions = useMemo(() => {
@@ -1956,6 +1961,32 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                   <Button variant="outline" size="sm" onClick={fetchFantasyData} disabled={loadingFantasy}>
                     {loadingFantasy ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   </Button>
+                  {/* Stop-Loss Backcheck Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+                    disabled={backcheckRunning}
+                    onClick={async () => {
+                      setBackcheckRunning(true);
+                      setBackcheckResults(null);
+                      try {
+                        const { data, error } = await supabase.functions.invoke('backcheck-stop-loss-exits', {
+                          body: { batch_size: 50 }
+                        });
+                        if (error) throw error;
+                        setBackcheckResults(data);
+                        toast.success(`Backchecked ${data?.summary?.total_checked || 0} tokens`);
+                      } catch (err: any) {
+                        toast.error(err.message || 'Backcheck failed');
+                      } finally {
+                        setBackcheckRunning(false);
+                      }
+                    }}
+                  >
+                    {backcheckRunning ? <RefreshCw className="h-3 w-3 animate-spin mr-1" /> : <Undo2 className="h-3 w-3 mr-1" />}
+                    Backcheck SL
+                  </Button>
                   {/* Bulk close stale positions */}
                   <Button 
                     variant="destructive" 
@@ -1991,6 +2022,67 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
               </div>
             </CardHeader>
             <CardContent>
+
+              {/* Backcheck Results Panel */}
+              {backcheckResults && (
+                <div className="mb-4 p-3 border border-amber-500/30 rounded-lg bg-amber-500/5">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2 text-amber-400">
+                      <Undo2 className="h-4 w-4" />
+                      Stop-Loss Recovery Report
+                    </h4>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setBackcheckResults(null)}>
+                      <XCircle className="h-3 w-3 mr-1" /> Dismiss
+                    </Button>
+                  </div>
+                  {backcheckResults.summary && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 text-xs">
+                      <div className="bg-muted/30 rounded p-2 text-center">
+                        <span className="text-muted-foreground">Checked</span>
+                        <div className="font-bold text-lg">{backcheckResults.summary.total_checked}</div>
+                      </div>
+                      <div className="bg-green-500/10 rounded p-2 text-center">
+                        <span className="text-muted-foreground">Recovered</span>
+                        <div className="font-bold text-lg text-green-500">{backcheckResults.summary.recovered}</div>
+                      </div>
+                      <div className="bg-purple-500/10 rounded p-2 text-center">
+                        <span className="text-muted-foreground">Graduated</span>
+                        <div className="font-bold text-lg text-purple-500">{backcheckResults.summary.graduated}</div>
+                      </div>
+                      <div className="bg-red-500/10 rounded p-2 text-center">
+                        <span className="text-muted-foreground">Still Dead</span>
+                        <div className="font-bold text-lg text-red-500">{backcheckResults.summary.still_down}</div>
+                      </div>
+                      <div className="bg-amber-500/10 rounded p-2 text-center">
+                        <span className="text-muted-foreground">Recovery %</span>
+                        <div className="font-bold text-lg text-amber-400">{backcheckResults.summary.recovery_rate_pct}%</div>
+                      </div>
+                    </div>
+                  )}
+                  {backcheckResults.summary?.insight && (
+                    <p className="text-xs text-amber-300 mb-2">{backcheckResults.summary.insight}</p>
+                  )}
+                  {backcheckResults.results && backcheckResults.results.filter((r: any) => r.recovered).length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-green-400">Tokens that recovered after stop-loss:</p>
+                      {backcheckResults.results.filter((r: any) => r.recovered).map((r: any) => (
+                        <div key={r.id} className="flex items-center gap-2 text-xs bg-green-500/5 rounded p-1.5">
+                          <span className="font-medium text-green-400">{r.token_symbol || r.token_mint?.slice(0, 8)}</span>
+                          <span className="text-muted-foreground">Entry: ${Number(r.entry_price_usd).toFixed(8)}</span>
+                          <span className="text-red-400">Exit: ${Number(r.exit_price_usd).toFixed(8)}</span>
+                          <span className="text-green-400">Now: ${Number(r.current_price_usd).toFixed(8)}</span>
+                          <span className="font-bold text-green-500">{r.post_exit_multiplier?.toFixed(2)}x entry</span>
+                          {r.graduated && <Badge variant="outline" className="text-purple-400 border-purple-500/30 text-[10px] py-0">Graduated</Badge>}
+                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0 ml-auto"
+                            onClick={() => window.open(`https://pump.fun/coin/${r.token_mint}`, '_blank')}>
+                            <img src="/launchpad-logos/pumpfun.png" alt="PF" className="h-3.5 w-3.5 rounded-sm" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Stats Summary */}
               {fantasyStats && (
