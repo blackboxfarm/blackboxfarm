@@ -275,9 +275,11 @@ Deno.serve(async (req) => {
 
         for (const comment of comments) {
           const msgHash = await hashMessage(comment.message)
-          const usernameAnalysis = isRandomUsername(comment.username)
+        const usernameAnalysis = isRandomUsername(comment.username)
           const shillSignals = detectShillSignals(comment.message)
-          const allBotSignals = [...usernameAnalysis.reasons, ...shillSignals]
+          // NOTE: Username entropy is NOT a bot signal — pump.fun assigns random names by default
+          // We still collect entropy as metadata but don't use it for detection
+          const allBotSignals = [...shillSignals]
 
           // Check for duplicate messages across ALL tokens
           const { data: existingDuplicates } = await supabase
