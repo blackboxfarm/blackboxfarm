@@ -148,6 +148,9 @@ serve(async (req) => {
           const wasFalsePositive = isGraduated || fpScore >= 40;
           if (wasFalsePositive) falsePositivesFound++;
 
+          // Determine rehabilitation status
+          const rehabStatus = wasFalsePositive ? 'pending_review' : 'none';
+
           // Upsert into backcheck table
           const { error: upsertErr } = await supabase
             .from('pumpfun_rejected_backcheck')
@@ -171,8 +174,9 @@ serve(async (req) => {
               peak_market_cap_usd: peakMarketCapUsd,
               was_false_positive: wasFalsePositive,
               false_positive_score: fpScore,
+              rehabilitation_status: rehabStatus,
               checked_at: new Date().toISOString(),
-              check_count: 1, // Will be incremented by SQL on conflict
+              check_count: 1,
             }, { onConflict: 'token_mint' });
 
           if (upsertErr) {
@@ -180,6 +184,32 @@ serve(async (req) => {
             errors++;
           } else {
             processed++;
+
+            // If false positive and has a creator wallet, add rehabilitation_candidate to mesh
+            if (wasFalsePositive && token.creator_wallet) {
+              const { error: meshErr } = await supabase
+                .from('reputation_mesh')
+                .upsert({
+                  source_id: token.creator_wallet,
+                  source_type: 'wallet',
+                  linked_id: token.token_mint,
+                  linked_type: 'token',
+                  relationship: 'rehabilitation_candidate',
+                  confidence: fpScore / 100,
+                  discovered_via: 'backcheck-rejected-tokens',
+                  evidence: {
+                    false_positive_score: fpScore,
+                    is_graduated: isGraduated,
+                    ath_bonding_curve_pct: athBondingCurvePct,
+                    peak_market_cap_usd: peakMarketCapUsd,
+                    rejection_reason: token.rejection_reason,
+                  },
+                }, { onConflict: 'source_id,source_type,linked_id,linked_type,relationship' });
+
+              if (meshErr) {
+                console.log(`[backcheck] Mesh entry warning for ${token.creator_wallet}:`, meshErr.message);
+              }
+            }
           }
         } catch (tokenErr) {
           console.error(`[backcheck] Token error ${token.token_mint}:`, (tokenErr as Error).message);
