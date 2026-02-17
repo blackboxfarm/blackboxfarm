@@ -2389,6 +2389,8 @@ export type Database = {
       }
       dev_wallet_reputation: {
         Row: {
+          auto_blacklisted: boolean | null
+          auto_blacklisted_at: string | null
           avg_dump_then_pump_pct: number | null
           avg_insider_pct: number | null
           avg_peak_mcap_usd: number | null
@@ -2398,6 +2400,8 @@ export type Database = {
           dev_pattern: string | null
           discord_servers: string[] | null
           downstream_wallets: string[] | null
+          fantasy_loss_count: number | null
+          fantasy_win_count: number | null
           first_seen_at: string | null
           id: string
           is_legitimate_builder: boolean | null
@@ -2406,6 +2410,8 @@ export type Database = {
           known_aliases: string[] | null
           last_activity_at: string | null
           last_analyzed_at: string | null
+          last_fantasy_loss_at: string | null
+          last_fantasy_win_at: string | null
           launches_new_while_active: boolean | null
           linked_wallets: string[] | null
           metadata: Json | null
@@ -2435,6 +2441,8 @@ export type Database = {
           wallet_address: string
         }
         Insert: {
+          auto_blacklisted?: boolean | null
+          auto_blacklisted_at?: string | null
           avg_dump_then_pump_pct?: number | null
           avg_insider_pct?: number | null
           avg_peak_mcap_usd?: number | null
@@ -2444,6 +2452,8 @@ export type Database = {
           dev_pattern?: string | null
           discord_servers?: string[] | null
           downstream_wallets?: string[] | null
+          fantasy_loss_count?: number | null
+          fantasy_win_count?: number | null
           first_seen_at?: string | null
           id?: string
           is_legitimate_builder?: boolean | null
@@ -2452,6 +2462,8 @@ export type Database = {
           known_aliases?: string[] | null
           last_activity_at?: string | null
           last_analyzed_at?: string | null
+          last_fantasy_loss_at?: string | null
+          last_fantasy_win_at?: string | null
           launches_new_while_active?: boolean | null
           linked_wallets?: string[] | null
           metadata?: Json | null
@@ -2481,6 +2493,8 @@ export type Database = {
           wallet_address: string
         }
         Update: {
+          auto_blacklisted?: boolean | null
+          auto_blacklisted_at?: string | null
           avg_dump_then_pump_pct?: number | null
           avg_insider_pct?: number | null
           avg_peak_mcap_usd?: number | null
@@ -2490,6 +2504,8 @@ export type Database = {
           dev_pattern?: string | null
           discord_servers?: string[] | null
           downstream_wallets?: string[] | null
+          fantasy_loss_count?: number | null
+          fantasy_win_count?: number | null
           first_seen_at?: string | null
           id?: string
           is_legitimate_builder?: boolean | null
@@ -2498,6 +2514,8 @@ export type Database = {
           known_aliases?: string[] | null
           last_activity_at?: string | null
           last_analyzed_at?: string | null
+          last_fantasy_loss_at?: string | null
+          last_fantasy_win_at?: string | null
           launches_new_while_active?: boolean | null
           linked_wallets?: string[] | null
           metadata?: Json | null
@@ -6944,6 +6962,10 @@ export type Database = {
           active_watchdog_count: number | null
           auto_buy_enabled: boolean | null
           auto_scalp_enabled: boolean
+          block_below_ath_enabled: boolean | null
+          block_below_ath_pct: number | null
+          block_downtrend_enabled: boolean | null
+          block_downtrend_pct: number | null
           buy_amount_sol: number | null
           buy_priority_fee_sol: number | null
           buy_slippage_bps: number | null
@@ -6991,6 +7013,7 @@ export type Database = {
           max_watchdog_count: number | null
           min_holder_count_fantasy: number | null
           min_market_cap_usd: number | null
+          min_qualification_score: number | null
           min_rolling_win_rate: number | null
           min_rugcheck_score: number | null
           min_socials_count: number | null
@@ -7020,6 +7043,10 @@ export type Database = {
           active_watchdog_count?: number | null
           auto_buy_enabled?: boolean | null
           auto_scalp_enabled?: boolean
+          block_below_ath_enabled?: boolean | null
+          block_below_ath_pct?: number | null
+          block_downtrend_enabled?: boolean | null
+          block_downtrend_pct?: number | null
           buy_amount_sol?: number | null
           buy_priority_fee_sol?: number | null
           buy_slippage_bps?: number | null
@@ -7067,6 +7094,7 @@ export type Database = {
           max_watchdog_count?: number | null
           min_holder_count_fantasy?: number | null
           min_market_cap_usd?: number | null
+          min_qualification_score?: number | null
           min_rolling_win_rate?: number | null
           min_rugcheck_score?: number | null
           min_socials_count?: number | null
@@ -7096,6 +7124,10 @@ export type Database = {
           active_watchdog_count?: number | null
           auto_buy_enabled?: boolean | null
           auto_scalp_enabled?: boolean
+          block_below_ath_enabled?: boolean | null
+          block_below_ath_pct?: number | null
+          block_downtrend_enabled?: boolean | null
+          block_downtrend_pct?: number | null
           buy_amount_sol?: number | null
           buy_priority_fee_sol?: number | null
           buy_slippage_bps?: number | null
@@ -7143,6 +7175,7 @@ export type Database = {
           max_watchdog_count?: number | null
           min_holder_count_fantasy?: number | null
           min_market_cap_usd?: number | null
+          min_qualification_score?: number | null
           min_rolling_win_rate?: number | null
           min_rugcheck_score?: number | null
           min_socials_count?: number | null

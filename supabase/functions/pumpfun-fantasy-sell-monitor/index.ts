@@ -425,6 +425,182 @@ async function createLearningRecord(
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ████ PHASE 1: LOSS FEEDBACK LOOP ████
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * When a fantasy position closes as a loss or rug:
+ * 1. Upsert the creator wallet into dev_wallet_reputation with incremented loss counters
+ * 2. If dev has 3+ fantasy losses or 2+ rugs, auto-blacklist in pumpfun_blacklist
+ * 3. Create reputation_mesh links for the Oracle
+ */
+async function feedbackLossToReputation(
+  supabase: any,
+  position: any,
+  outcome: string,
+  exitReason: string
+): Promise<void> {
+  try {
+    // Get creator_wallet from the linked watchlist entry
+    let creatorWallet: string | null = null;
+    let tokenSymbol = position.token_symbol || 'unknown';
+    let tokenMint = position.token_mint;
+
+    if (position.watchlist_id) {
+      const { data: watchlistEntry } = await supabase
+        .from('pumpfun_watchlist')
+        .select('creator_wallet, token_symbol, token_mint')
+        .eq('id', position.watchlist_id)
+        .maybeSingle();
+
+      creatorWallet = watchlistEntry?.creator_wallet || null;
+      tokenSymbol = watchlistEntry?.token_symbol || tokenSymbol;
+      tokenMint = watchlistEntry?.token_mint || tokenMint;
+    }
+
+    if (!creatorWallet) {
+      console.log(`⚠️ FEEDBACK: No creator_wallet for ${tokenSymbol}, skipping reputation update`);
+      return;
+    }
+
+    const isLoss = outcome === 'loss' || outcome === 'slow_bleed';
+    const isRug = outcome === 'rug';
+    const isWin = outcome === 'success' || outcome === 'partial_win';
+    const now = new Date().toISOString();
+
+    // 1. Upsert into dev_wallet_reputation
+    const { data: existing } = await supabase
+      .from('dev_wallet_reputation')
+      .select('id, fantasy_loss_count, fantasy_win_count, tokens_rugged, trust_level, auto_blacklisted')
+      .eq('wallet_address', creatorWallet)
+      .maybeSingle();
+
+    if (existing) {
+      const updates: any = { updated_at: now, last_activity_at: now };
+      
+      if (isLoss || isRug) {
+        updates.fantasy_loss_count = (existing.fantasy_loss_count || 0) + 1;
+        updates.last_fantasy_loss_at = now;
+        if (isRug) {
+          updates.tokens_rugged = (existing.tokens_rugged || 0) + 1;
+        }
+      } else if (isWin) {
+        updates.fantasy_win_count = (existing.fantasy_win_count || 0) + 1;
+        updates.last_fantasy_win_at = now;
+      }
+
+      // Auto-classify trust level based on accumulated data
+      const newLossCount = updates.fantasy_loss_count ?? existing.fantasy_loss_count ?? 0;
+      const newRugCount = updates.tokens_rugged ?? existing.tokens_rugged ?? 0;
+      const newWinCount = updates.fantasy_win_count ?? existing.fantasy_win_count ?? 0;
+
+      if (newRugCount >= 3 || (newLossCount >= 5 && newWinCount === 0)) {
+        updates.trust_level = 'serial_rugger';
+      } else if (newRugCount >= 2 || (newLossCount >= 3 && newWinCount === 0)) {
+        updates.trust_level = 'repeat_loser';
+      }
+
+      await supabase.from('dev_wallet_reputation').update(updates).eq('id', existing.id);
+      console.log(`📊 FEEDBACK: Updated dev reputation for ${creatorWallet.slice(0, 8)}... | Losses: ${newLossCount}, Rugs: ${newRugCount}, Wins: ${newWinCount}`);
+
+      // 2. Auto-blacklist if thresholds met
+      const shouldBlacklist = !existing.auto_blacklisted && (
+        newRugCount >= 2 || 
+        (newLossCount >= 3 && newWinCount === 0) ||
+        newLossCount >= 5
+      );
+
+      if (shouldBlacklist) {
+        // Check if already in blacklist
+        const { data: existingBlacklist } = await supabase
+          .from('pumpfun_blacklist')
+          .select('id')
+          .eq('identifier', creatorWallet)
+          .maybeSingle();
+
+        if (!existingBlacklist) {
+          await supabase.from('pumpfun_blacklist').insert({
+            entry_type: 'wallet',
+            identifier: creatorWallet,
+            risk_level: newRugCount >= 2 ? 'critical' : 'high',
+            blacklist_reason: `Auto-blacklisted: ${newLossCount} fantasy losses, ${newRugCount} rugs, ${newWinCount} wins`,
+            tags: ['auto_classified', 'fantasy_feedback', isRug ? 'rugger' : 'serial_loser'],
+            evidence_notes: `Tokens: ${tokenSymbol} (${tokenMint}). Last exit: ${exitReason}`,
+            source: 'fantasy-sell-monitor',
+            added_by: 'system_auto',
+            is_active: true,
+            auto_classified: true,
+            linked_wallets: [creatorWallet],
+            linked_token_mints: [tokenMint],
+          });
+
+          // Mark as auto-blacklisted in dev_wallet_reputation
+          await supabase.from('dev_wallet_reputation')
+            .update({ auto_blacklisted: true, auto_blacklisted_at: now })
+            .eq('id', existing.id);
+
+          console.log(`🚫 AUTO-BLACKLISTED: ${creatorWallet.slice(0, 8)}... | Losses: ${newLossCount}, Rugs: ${newRugCount}`);
+        }
+      }
+    } else {
+      // Create new reputation entry
+      await supabase.from('dev_wallet_reputation').insert({
+        wallet_address: creatorWallet,
+        total_tokens_launched: 1,
+        tokens_rugged: isRug ? 1 : 0,
+        fantasy_loss_count: (isLoss || isRug) ? 1 : 0,
+        fantasy_win_count: isWin ? 1 : 0,
+        last_fantasy_loss_at: (isLoss || isRug) ? now : null,
+        last_fantasy_win_at: isWin ? now : null,
+        trust_level: isRug ? 'suspicious' : 'unknown',
+        reputation_score: isRug ? 20 : (isLoss ? 35 : 50),
+        first_seen_at: now,
+        last_activity_at: now,
+      });
+      console.log(`📊 FEEDBACK: Created dev reputation for ${creatorWallet.slice(0, 8)}... | Outcome: ${outcome}`);
+    }
+
+    // 3. Feed into reputation_mesh
+    if (isLoss || isRug) {
+      const meshRelationship = isRug ? 'created_rug_token' : 'created_loss_token';
+      
+      // Check if link already exists
+      const { data: existingMesh } = await supabase
+        .from('reputation_mesh')
+        .select('id')
+        .eq('source_type', 'wallet')
+        .eq('source_id', creatorWallet)
+        .eq('linked_type', 'token_mint')
+        .eq('linked_id', tokenMint)
+        .maybeSingle();
+
+      if (!existingMesh) {
+        await supabase.from('reputation_mesh').insert({
+          source_type: 'wallet',
+          source_id: creatorWallet,
+          linked_type: 'token_mint',
+          linked_id: tokenMint,
+          relationship: meshRelationship,
+          confidence: isRug ? 95 : 75,
+          evidence: {
+            outcome,
+            exit_reason: exitReason,
+            pnl_percent: position.total_pnl_percent,
+            token_symbol: tokenSymbol,
+            recorded_at: now,
+          },
+          discovered_via: 'fantasy-sell-monitor-feedback',
+        });
+        console.log(`🕸️ MESH: Linked ${creatorWallet.slice(0, 8)}... → ${tokenSymbol} (${meshRelationship})`);
+      }
+    }
+
+  } catch (error) {
+    console.error('Error in feedbackLossToReputation:', error);
+  }
+}
+
 // Main monitoring logic
 async function monitorPositions(supabase: any): Promise<MonitorStats> {
   const startTime = Date.now();
@@ -538,6 +714,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           continue;
         }
 
+        // PHASE 1: Feed loss back into reputation system
+        await feedbackLossToReputation(supabase, position, 'rug', rugReason);
         stats.targetsSold++;
 
         const rugMsg = `🚨 Fantasy RUG EXIT: $${position.token_symbol}\n` +
@@ -580,8 +758,11 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
             exit_at: now, exit_price_usd: lastKnownPriceUsd, exit_reason: 'dead_no_price',
             outcome: 'loss', outcome_classified_at: now, updated_at: now,
           }).eq('id', position.id);
+          // PHASE 1: Feed loss back into reputation system
+          await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, 'loss', 'dead_no_price');
+          // PHASE 1: Feed win back into reputation system
+          await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, outcome, 'target_hit');
           stats.targetsSold++;
-          continue;
         }
         console.log(`⚠️ No price for ${position.token_symbol}, skipping`);
         continue;
@@ -641,6 +822,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
           if (!slUpdated || slUpdated.length === 0) { console.log(`⏭️ SKIP duplicate SL for ${position.token_symbol}`); continue; }
 
+          // PHASE 1: Feed loss back into reputation system
+          await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, 'loss', 'stop_loss');
           stats.targetsSold++;
           console.log(`🛑 STOP-LOSS SOLD: ${position.token_symbol} | ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
 
@@ -690,8 +873,10 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
           if (!staleUpdated || staleUpdated.length === 0) { console.log(`⏭️ SKIP duplicate stale close for ${position.token_symbol}`); continue; }
 
+          // PHASE 1: Feed loss/win back into reputation system
+          const staleOutcome = multiplier >= 1 ? 'breakeven' : 'loss';
+          await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, staleOutcome, reason);
           stats.targetsSold++;
-          await createLearningRecord(supabase, position, currentPriceUsd, multiplier);
           stats.learningsCreated++;
 
           // Notify: admin_notifications + Telegram for stale/dead
@@ -892,6 +1077,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
             stats.learningsCreated++;
           }
 
+          // PHASE 1: Feed outcome back into reputation system
+          await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: totalPnlPercent }, classification.outcome, exitReason);
           stats.moonbagsClosed++;
           
           console.log(`🏁 MOONBAG CLOSED: ${position.token_symbol} | Outcome: ${classification.outcome.toUpperCase()} | ${exitReason} | Final P&L: ${totalRealizedPnlSol >= 0 ? '+' : ''}${totalRealizedPnlSol.toFixed(4)} SOL (${totalPnlPercent.toFixed(1)}%)`);
