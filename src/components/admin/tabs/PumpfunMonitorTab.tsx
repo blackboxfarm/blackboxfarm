@@ -6,6 +6,7 @@ import { LazyLoader } from '@/components/ui/lazy-loader';
 const TokenCandidatesDashboard = lazy(() => import("@/components/admin/TokenCandidatesDashboard").then(m => ({ default: m.TokenCandidatesDashboard })));
 const PumpfunTokenRetrace = lazy(() => import("@/components/admin/PumpfunTokenRetrace"));
 const RejectedTokensBackcheck = lazy(() => import("@/components/admin/RejectedTokensBackcheck"));
+const StopLossRehabReview = lazy(() => import("@/components/admin/StopLossRehabReview"));
 
 export default function PumpfunMonitorTab() {
   const [activeSubTab, setActiveSubTab] = useState("candidates");
@@ -16,6 +17,7 @@ export default function PumpfunMonitorTab() {
         <TabsTrigger value="candidates">📊 Candidates</TabsTrigger>
         <TabsTrigger value="retrace">🔍 Retrace</TabsTrigger>
         <TabsTrigger value="rejected">🚫 Rejected</TabsTrigger>
+        <TabsTrigger value="recovery">🔄 Recovery</TabsTrigger>
       </TabsList>
 
       <TabsContent value="candidates">
@@ -26,6 +28,9 @@ export default function PumpfunMonitorTab() {
       </TabsContent>
       <TabsContent value="rejected">
         {activeSubTab === "rejected" && <Suspense fallback={<LazyLoader />}><RejectedTokensBackcheck /></Suspense>}
+      </TabsContent>
+      <TabsContent value="recovery">
+        {activeSubTab === "recovery" && <Suspense fallback={<LazyLoader />}><StopLossRehabReview /></Suspense>}
       </TabsContent>
     </Tabs>
   );
