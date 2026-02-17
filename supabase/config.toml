@@ -435,3 +435,6 @@ verify_jwt = false
 
 [functions.banker-pool-engine]
 verify_jwt = false
+
+[functions.backcheck-stop-loss-exits]
+verify_jwt = false
