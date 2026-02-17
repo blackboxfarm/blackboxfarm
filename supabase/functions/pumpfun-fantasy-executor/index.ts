@@ -317,7 +317,7 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       
       // Read gate config
       const { data: gateConfigData } = await supabase.from('pumpfun_monitor_config')
-        .select('block_below_ath_enabled, block_below_ath_pct, block_downtrend_enabled, block_downtrend_pct')
+        .select('block_below_ath_enabled, block_below_ath_pct, block_downtrend_enabled, block_downtrend_pct, block_below_discovery_enabled, block_below_discovery_pct')
         .limit(1).single();
       const blockBelowAthEnabled = gateConfigData?.block_below_ath_enabled ?? false;
       const blockBelowAthPct = gateConfigData?.block_below_ath_pct ?? 10;
@@ -360,6 +360,31 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
             continue;
           } else {
             console.log(`⚠️ SOFT FLAG — DOWNTREND: ${token.token_symbol} dropped ${priceDelta.toFixed(1)}% since qualification ($${qualifiedPrice.toFixed(10)} → $${entryPriceUsd.toFixed(10)})`);
+          }
+        }
+      }
+
+      // ============================================
+      // PHASE 2B: DISCOVERY PRICE GATE
+      // Block buys if price has dropped below discovery price
+      // ============================================
+      let entryBelowDiscovery = false;
+      const discoveryPrice = token.price_at_discovery_usd || 0;
+      const blockBelowDiscoveryEnabled = gateConfigData?.block_below_discovery_enabled ?? true;
+      const blockBelowDiscoveryPct = gateConfigData?.block_below_discovery_pct ?? 0;
+      
+      if (discoveryPrice > 0 && entryPriceUsd > 0) {
+        const threshold = discoveryPrice * (1 - blockBelowDiscoveryPct / 100);
+        if (entryPriceUsd < threshold) {
+          entryBelowDiscovery = true;
+          const pctBelowDisc = ((discoveryPrice - entryPriceUsd) / discoveryPrice * 100).toFixed(1);
+          
+          if (blockBelowDiscoveryEnabled) {
+            console.log(`🚫 HARD GATE — BELOW DISCOVERY: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowDisc}% below discovery $${discoveryPrice.toFixed(10)} — BLOCKED`);
+            stats.errors.push(`${token.token_symbol}: Below discovery price by ${pctBelowDisc}% (gate enabled)`);
+            continue;
+          } else {
+            console.log(`⚠️ SOFT FLAG — BELOW DISCOVERY: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowDisc}% below discovery $${discoveryPrice.toFixed(10)}`);
           }
         }
       }
@@ -502,14 +527,17 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
            entry_signal_strength_raw: entrySignalStrengthRaw,
            entry_socials_count: entrySocialsCount,
            entry_flags: JSON.stringify({
-             below_ath: entryBelowAth,
-             ath_price_usd: athPriceUsd,
-             downtrend: entryOnDowntrend,
-             qualified_price_usd: priceOneMinAgo,
-             learnings_flag: learningsFlag,
-             block_below_ath_enabled: blockBelowAthEnabled,
-             block_downtrend_enabled: blockDowntrendEnabled,
-           }),
+              below_ath: entryBelowAth,
+              ath_price_usd: athPriceUsd,
+              downtrend: entryOnDowntrend,
+              qualified_price_usd: priceOneMinAgo,
+              below_discovery: entryBelowDiscovery,
+              discovery_price_usd: discoveryPrice || null,
+              learnings_flag: learningsFlag,
+              block_below_ath_enabled: blockBelowAthEnabled,
+              block_downtrend_enabled: blockDowntrendEnabled,
+              block_below_discovery_enabled: blockBelowDiscoveryEnabled,
+            }),
          })
          .select()
          .single();
