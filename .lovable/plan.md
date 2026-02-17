@@ -1,99 +1,66 @@
 
+# Stop-Loss Recovery Rehabilitation
 
-# Rejected Tokens Backcheck & Dashboard
+## Problem
 
-## Overview
+When the Fantasy sell monitor closes a position via stop-loss or drawdown, the loss feedback loop immediately:
+- Increments `fantasy_loss_count` on the dev's `dev_wallet_reputation`
+- May increment `tokens_rugged`
+- Auto-blacklists the dev wallet if thresholds are met (2+ rugs, 3+ losses with 0 wins, or 5+ total losses)
+- Inserts `created_loss_token` or `created_rug_token` into `reputation_mesh`
 
-Build a system to backcheck all rejected tokens (excluding mayhem) to determine if any were actually good -- tracking their ATH, bonding curve progress, graduation status, and current price. This creates a feedback loop to identify false-positive rejections and improve filtering criteria.
+The `backcheck-stop-loss-exits` cron (every 4 hours) already discovers that **130 tokens graduated** after we exited and 1 did a 19.6x. But it only writes `post_exit_recovered` and `post_exit_graduated` -- it does NOT trigger any rehabilitation review or adjust the dev's reputation.
 
-Currently there are ~17,300 rejected/dead/bombed tokens in the watchlist (0 mayhem). The top rejection reasons are `dev_full_exit` (3,100+), `known_abused_ticker` (1,367), `ticker_too_long` (~1,063), `ticker_bad_emoji` (368+), `name_bad_emoji` (209), `bump_bot_detected` (~227), `non_standard_supply` (72), and various `duplicate_ticker` entries.
+## Solution
 
----
+Reuse the same manual review rehabilitation pattern from the rejected tokens backcheck:
 
-## What Gets Built
+### 1. Update `backcheck-stop-loss-exits` Edge Function
 
-### 1. New Database Table: `pumpfun_rejected_backcheck`
+When the backcheck finds `post_exit_recovered = true` OR `post_exit_graduated = true`:
+- Set `rehabilitation_status = 'pending_review'` on the position (column already exists)
+- Insert a `rehabilitation_candidate` entry into `reputation_mesh` linking the dev wallet to the token, with evidence like "Token graduated after stop-loss exit, 19.6x from entry"
+- This mirrors exactly what `backcheck-rejected-tokens` does
 
-Stores the backcheck results for each rejected token:
+### 2. Add Recovery Review UI to the Loss Tab
 
-- `token_mint`, `token_symbol`, `token_name`, `image_url`
-- `rejection_reason`, `rejection_type`, `rejected_at` (from watchlist)
-- `creator_wallet`
-- `ath_price_usd`, `ath_bonding_curve_pct` (how far it got on the bonding curve at peak)
-- `current_price_usd`, `current_market_cap_usd`
-- `is_graduated` (did it graduate to Raydium?)
-- `graduated_at`
-- `current_holders`, `current_volume_24h_usd`
-- `peak_market_cap_usd`
-- `was_false_positive` (boolean -- true if the token graduated or hit significant ATH)
-- `false_positive_score` (0-100, weighted score of how "good" the token actually was)
-- `checked_at`, `check_count`
+In the existing Loss/Retrace area of the Pump.fun Monitor (the stop-loss backcheck section), add:
+- A filter/view for positions where `rehabilitation_status = 'pending_review'`
+- Per-row Rehabilitate / Confirm Bad buttons (same pattern as `RejectedTokensBackcheck.tsx`)
+- **Rehabilitate**: Decrements `fantasy_loss_count` (and `tokens_rugged` if applicable) on `dev_wallet_reputation`, adds `false_positive_rehabilitated` mesh entry, removes auto-blacklist if counts drop below thresholds
+- **Confirm Bad**: Sets `rehabilitation_status = 'confirmed_bad'`, adds `confirmed_bad_actor` mesh entry, no reputation changes
+- Summary stats: "X positions pending review", "Y rehabilitated", "Z confirmed bad"
 
-### 2. New Edge Function: `backcheck-rejected-tokens`
+### 3. Files Changed
 
-- Fetches rejected tokens from `pumpfun_watchlist` (excluding mayhem reasons)
-- For each token, calls Solana Tracker / DexScreener to get current metrics, ATH, graduation status
-- Calculates `ath_bonding_curve_pct` using the bonding curve formula
-- Marks tokens as `was_false_positive = true` if they graduated or reached significant milestones
-- Processes in batches of 25 with rate limiting (300ms delays)
-- Supports `batch_size`, `offset`, and `max_batches` params for bulk backfill
-- Cron-scheduled every 6 hours to continuously recheck
+1. **Edit** `supabase/functions/backcheck-stop-loss-exits/index.ts` -- add rehabilitation flagging logic when recovered/graduated tokens are found
+2. **New** `src/components/admin/StopLossRehabReview.tsx` -- manual review component with approve/deny buttons and dev reputation adjustment (mirrors `RejectedTokensBackcheck.tsx` pattern)
+3. **Edit** `src/components/admin/tabs/PumpfunMonitorTab.tsx` or `TokenCandidatesDashboard.tsx` -- integrate the review component into the existing Loss/Retrace tab area
 
-### 3. New UI Tab: "Rejected" in Pump.fun Monitor
+### 4. No Migration Needed
 
-Added as a third sub-tab alongside "Candidates" and "Retrace":
-
-```
-[Candidates] [Retrace] [Rejected]
-```
-
-The Rejected tab shows:
-- Table of all rejected tokens (no mayhem) with columns:
-  - Token (symbol + name + image)
-  - Rejection Reason
-  - Rejected At
-  - Holders (at rejection vs current)
-  - Market Cap (at rejection vs current)
-  - ATH % Bonding Curve (color-coded: green if > 50%, gold if graduated)
-  - Current Price
-  - Graduated? (checkmark/x badge)
-  - False Positive Score (0-100 bar)
-- Filters: rejection reason dropdown, false-positive-only toggle, graduated-only toggle
-- Sort by: false positive score, ATH bonding curve %, rejection date
-- Summary stats cards at top: Total Rejected, False Positives Found, Graduated Count, Avg ATH %
-- "Backcheck All" button to trigger the edge function manually
-- Auto-refresh every 60 seconds
-
-### 4. Cron Schedule
-
-Add a cron job via migration to run `backcheck-rejected-tokens` every 6 hours, processing up to 500 tokens per run with appropriate rate limiting.
-
----
+The `rehabilitation_status`, `rehabilitated_at`, and `rehabilitated_by` columns already exist on `pumpfun_fantasy_positions`. The `reputation_mesh` and `dev_wallet_reputation` tables already have all required columns.
 
 ## Technical Details
 
-### False Positive Scoring (0-100)
+### Rehabilitation Logic (on Approve)
 
-Weighted formula:
-- Graduated to Raydium: +40 points
-- ATH bonding curve > 80%: +20 points
-- ATH bonding curve > 50%: +10 points
-- Current holders > 100: +15 points
-- Current holders > 50: +8 points
-- Peak market cap > $50k: +15 points
-- Peak market cap > $10k: +8 points
-- Still trading (price > 0): +10 points
+```text
+1. Fetch dev_wallet_reputation for position.creator_wallet
+2. Decrement fantasy_loss_count by 1 (min 0)
+3. If exit_reason was 'rug' related, decrement tokens_rugged by 1 (min 0)
+4. Recalculate trust_level based on new counts
+5. If new loss/rug counts drop below blacklist thresholds:
+   - Remove from pumpfun_blacklist (or deactivate)
+   - Set auto_blacklisted = false on dev_wallet_reputation
+6. Add reputation_mesh entry: relationship = 'false_positive_rehabilitated'
+7. Set rehabilitation_status = 'rehabilitated' on the position
+```
 
-### Exclusion Filters (not backchecked)
+### Confirm Bad Logic (on Deny)
 
-Tokens with these rejection reasons are skipped:
-- Any containing "mayhem"
-- `was_spiked_and_killed = true`
-
-### Files Changed
-
-1. **New migration SQL** -- creates `pumpfun_rejected_backcheck` table + cron job
-2. **New edge function** -- `supabase/functions/backcheck-rejected-tokens/index.ts`
-3. **New UI component** -- `src/components/admin/RejectedTokensBackcheck.tsx`
-4. **Edit** `src/components/admin/tabs/PumpfunMonitorTab.tsx` -- add "Rejected" sub-tab
-
+```text
+1. Set rehabilitation_status = 'confirmed_bad' on the position
+2. Add reputation_mesh entry: relationship = 'confirmed_bad_actor'
+3. No changes to dev_wallet_reputation (penalty stands)
+```
