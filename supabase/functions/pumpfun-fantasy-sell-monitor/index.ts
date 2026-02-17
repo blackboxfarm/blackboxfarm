@@ -1074,7 +1074,24 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           if (!targetUpdated || targetUpdated.length === 0) { console.log(`⏭️ SKIP duplicate target sell for ${position.token_symbol}`); continue; }
 
           stats.targetsSold++;
-          
+
+          // PHASE 1: Feed win back into reputation system for post-exit tracking
+          await feedbackLossToReputation(supabase, position, 'success', 'target_hit');
+
+          // Save creator_wallet to position if available
+          if (position.watchlist_id) {
+            const { data: wlEntry } = await supabase
+              .from('pumpfun_watchlist')
+              .select('creator_wallet')
+              .eq('id', position.watchlist_id)
+              .maybeSingle();
+            if (wlEntry?.creator_wallet) {
+              await supabase.from('pumpfun_fantasy_positions')
+                .update({ creator_wallet: wlEntry.creator_wallet })
+                .eq('id', position.id);
+            }
+          }
+
           console.log(`💰 SOLD 100%: ${position.token_symbol} | +${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
 
           // Notify: admin_notifications + Telegram
