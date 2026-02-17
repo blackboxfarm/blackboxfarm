@@ -309,53 +309,98 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const entryPriceSol = price?.priceSol || (token.price_usd / solPrice) || 0;
 
       // ============================================
-      // SOFT FLAG 1: Are we entering below ATH?
+      // PHASE 2: ATH CHECK (FIX: use price_ath_usd, not ath_price_usd)
+      // Configurable: soft flag OR hard gate
       // ============================================
       let entryBelowAth = false;
       let athPriceUsd: number | null = null;
-      try {
-        const athResp = await fetch(`https://frontend-api.pump.fun/coins/${token.token_mint}`, {
-          headers: { 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(5000),
-        });
-        if (athResp.ok) {
-          const athData = await athResp.json();
-          // pump.fun exposes usd_market_cap; derive ATH from highest known mcap
-          // The watchlist also tracks ath_price_usd from monitor sweeps
-          const storedAth = token.ath_price_usd || 0;
-          // Current bonding curve price we just fetched IS live, compare to stored ATH
-          if (storedAth > 0 && entryPriceUsd < storedAth * 0.95) {
-            entryBelowAth = true;
-            athPriceUsd = storedAth;
-            const pctBelowAth = ((storedAth - entryPriceUsd) / storedAth * 100).toFixed(1);
-            console.log(`⚠️ SOFT FLAG — BELOW ATH: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowAth}% below ATH $${storedAth.toFixed(10)}`);
-          }
+      
+      // Read gate config
+      const { data: gateConfigData } = await supabase.from('pumpfun_monitor_config')
+        .select('block_below_ath_enabled, block_below_ath_pct, block_downtrend_enabled, block_downtrend_pct')
+        .limit(1).single();
+      const blockBelowAthEnabled = gateConfigData?.block_below_ath_enabled ?? false;
+      const blockBelowAthPct = gateConfigData?.block_below_ath_pct ?? 10;
+      const blockDowntrendEnabled = gateConfigData?.block_downtrend_enabled ?? false;
+      const blockDowntrendPct = gateConfigData?.block_downtrend_pct ?? 5;
+      
+      // FIX: Use price_ath_usd (the correct field stored by watchlist-monitor)
+      const storedAth = token.price_ath_usd || 0;
+      if (storedAth > 0 && entryPriceUsd < storedAth * (1 - blockBelowAthPct / 100)) {
+        entryBelowAth = true;
+        athPriceUsd = storedAth;
+        const pctBelowAth = ((storedAth - entryPriceUsd) / storedAth * 100).toFixed(1);
+        
+        if (blockBelowAthEnabled) {
+          console.log(`🚫 HARD GATE — BELOW ATH: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowAth}% below ATH $${storedAth.toFixed(10)} — BLOCKED`);
+          stats.errors.push(`${token.token_symbol}: Below ATH by ${pctBelowAth}% (gate enabled)`);
+          continue;
+        } else {
+          console.log(`⚠️ SOFT FLAG — BELOW ATH: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowAth}% below ATH $${storedAth.toFixed(10)}`);
         }
-      } catch (e) {
-        console.warn(`ATH check failed for ${token.token_symbol}:`, e);
       }
 
       // ============================================
-      // SOFT FLAG 2: Are we entering on a downward trend?
+      // PHASE 2: DOWNTREND CHECK (configurable hard gate)
       // ============================================
       let entryOnDowntrend = false;
       let priceOneMinAgo: number | null = null;
-      try {
-        // Wait ~10 seconds then re-fetch price to detect direction
-        // Instead of waiting, compare current live price to the price stored at qualification
-        // (price_at_qualified_usd was captured when token was promoted, typically 1-5 mins ago)
-        const qualifiedPrice = token.price_at_qualified_usd || token.price_at_buy_now_usd || 0;
-        if (qualifiedPrice > 0 && entryPriceUsd > 0) {
-          const priceDelta = ((entryPriceUsd - qualifiedPrice) / qualifiedPrice) * 100;
-          if (priceDelta < -3) {
-            // Price has dropped more than 3% since qualification
-            entryOnDowntrend = true;
-            priceOneMinAgo = qualifiedPrice;
+      const qualifiedPrice = token.price_at_qualified_usd || token.price_at_buy_now_usd || 0;
+      if (qualifiedPrice > 0 && entryPriceUsd > 0) {
+        const priceDelta = ((entryPriceUsd - qualifiedPrice) / qualifiedPrice) * 100;
+        const trendThreshold = blockDowntrendPct > 0 ? -blockDowntrendPct : -5;
+        
+        if (priceDelta < trendThreshold) {
+          entryOnDowntrend = true;
+          priceOneMinAgo = qualifiedPrice;
+          
+          if (blockDowntrendEnabled) {
+            console.log(`🚫 HARD GATE — DOWNTREND: ${token.token_symbol} dropped ${priceDelta.toFixed(1)}% since qualification — BLOCKED`);
+            stats.errors.push(`${token.token_symbol}: Downtrend ${priceDelta.toFixed(1)}% (gate enabled)`);
+            continue;
+          } else {
             console.log(`⚠️ SOFT FLAG — DOWNTREND: ${token.token_symbol} dropped ${priceDelta.toFixed(1)}% since qualification ($${qualifiedPrice.toFixed(10)} → $${entryPriceUsd.toFixed(10)})`);
           }
         }
+      }
+
+      // ============================================
+      // PHASE 3: TRADE LEARNINGS PROFILE CHECK
+      // Compare this token's metrics against recent losing profile
+      // ============================================
+      let learningsFlag = false;
+      try {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: recentLearnings } = await supabase
+          .from('pumpfun_trade_learnings')
+          .select('outcome, entry_rugcheck_score, entry_market_cap_usd, entry_holder_count, entry_volume_sol')
+          .gte('created_at', sevenDaysAgo)
+          .not('outcome', 'is', null);
+
+        if (recentLearnings && recentLearnings.length >= 10) {
+          const losses = recentLearnings.filter((l: any) => l.outcome === 'loss' || l.outcome === 'rug' || l.outcome === 'slow_bleed');
+          const wins = recentLearnings.filter((l: any) => l.outcome === 'success' || l.outcome === 'partial_win');
+
+          if (losses.length >= 5 && wins.length >= 3) {
+            const avgLossRugcheck = losses.reduce((s: number, l: any) => s + (l.entry_rugcheck_score || 0), 0) / losses.length;
+            const avgWinRugcheck = wins.reduce((s: number, l: any) => s + (l.entry_rugcheck_score || 0), 0) / wins.length;
+            
+            const currentRugcheck = token.rugcheck_score || 0;
+            
+            // If this token's rugcheck is closer to the losing profile than winning
+            if (avgLossRugcheck > 0 && avgWinRugcheck > 0 && currentRugcheck > 0) {
+              const distToLoss = Math.abs(currentRugcheck - avgLossRugcheck);
+              const distToWin = Math.abs(currentRugcheck - avgWinRugcheck);
+              
+              if (distToLoss < distToWin && currentRugcheck > avgWinRugcheck * 1.5) {
+                learningsFlag = true;
+                console.log(`⚠️ LEARNINGS FLAG: ${token.token_symbol} rugcheck ${currentRugcheck} matches losing profile (avg loss: ${avgLossRugcheck.toFixed(0)}, avg win: ${avgWinRugcheck.toFixed(0)})`);
+              }
+            }
+          }
+        }
       } catch (e) {
-        console.warn(`Trend check failed for ${token.token_symbol}:`, e);
+        console.warn(`Learnings check failed for ${token.token_symbol}:`, e);
       }
 
       if (entryPriceUsd <= 0) {
@@ -461,6 +506,9 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
              ath_price_usd: athPriceUsd,
              downtrend: entryOnDowntrend,
              qualified_price_usd: priceOneMinAgo,
+             learnings_flag: learningsFlag,
+             block_below_ath_enabled: blockBelowAthEnabled,
+             block_downtrend_enabled: blockDowntrendEnabled,
            }),
          })
          .select()

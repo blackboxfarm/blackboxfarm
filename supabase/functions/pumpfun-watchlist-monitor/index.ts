@@ -561,14 +561,16 @@ function calculateSafetyScore(
   // Start with base safety
   let score = 12;
 
-  // RugCheck scoring — DATA: 2001-4000 best (24% win), 6001-10000 DEATH (5.6%)
+  // PHASE 4: Reweighted RugCheck scoring
+  // DATA: winners avg rugcheck 40, losers avg 182
+  // New curve: heavily reward low scores, heavily penalize high scores
   if (rugcheckScore !== null) {
-    if (rugcheckScore <= 2000) score += 5;
-    else if (rugcheckScore <= 4000) score += 7; // Sweet spot
-    else if (rugcheckScore <= 5000) score += 3;
-    else if (rugcheckScore <= 6000) score += 0;
-    else if (rugcheckScore <= 10000) score -= 8; // DEATH ZONE
-    else score -= 12; // Extremely risky
+    if (rugcheckScore <= 100) score += 10;        // Very safe — strong winner signal
+    else if (rugcheckScore <= 500) score += 5;     // Safe
+    else if (rugcheckScore <= 2000) score += 2;    // Acceptable
+    else if (rugcheckScore <= 5000) score += 0;    // Neutral
+    else if (rugcheckScore <= 10000) score -= 10;  // DEATH ZONE — strong loser signal
+    else score -= 15;                              // Extremely risky — near instant reject
   }
 
   // Critical risk = instant penalty
