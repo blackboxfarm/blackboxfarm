@@ -6303,12 +6303,14 @@ export type Database = {
           exit_price_usd: number | null
           exit_reason: string | null
           id: string
+          loss_tags: string[] | null
           lp_checked_at: string | null
           lp_liquidity_usd: number | null
           main_realized_pnl_sol: number | null
           main_sold_amount_sol: number | null
           main_sold_at: string | null
           main_sold_price_usd: number | null
+          manual_loss_reason: string | null
           moonbag_active: boolean | null
           moonbag_current_value_sol: number | null
           moonbag_drawdown_pct: number | null
@@ -6362,12 +6364,14 @@ export type Database = {
           exit_price_usd?: number | null
           exit_reason?: string | null
           id?: string
+          loss_tags?: string[] | null
           lp_checked_at?: string | null
           lp_liquidity_usd?: number | null
           main_realized_pnl_sol?: number | null
           main_sold_amount_sol?: number | null
           main_sold_at?: string | null
           main_sold_price_usd?: number | null
+          manual_loss_reason?: string | null
           moonbag_active?: boolean | null
           moonbag_current_value_sol?: number | null
           moonbag_drawdown_pct?: number | null
@@ -6421,12 +6425,14 @@ export type Database = {
           exit_price_usd?: number | null
           exit_reason?: string | null
           id?: string
+          loss_tags?: string[] | null
           lp_checked_at?: string | null
           lp_liquidity_usd?: number | null
           main_realized_pnl_sol?: number | null
           main_sold_amount_sol?: number | null
           main_sold_at?: string | null
           main_sold_price_usd?: number | null
+          manual_loss_reason?: string | null
           moonbag_active?: boolean | null
           moonbag_current_value_sol?: number | null
           moonbag_drawdown_pct?: number | null

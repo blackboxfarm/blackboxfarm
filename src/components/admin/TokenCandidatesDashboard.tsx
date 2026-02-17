@@ -65,6 +65,7 @@ import { formatDistanceToNow } from 'date-fns';
 // Lazy load the pipeline debugger and analysis tab
 const PipelineDebugger = lazy(() => import('./PipelineDebugger'));
 const FantasyAnalysisTab = lazy(() => import('./FantasyAnalysisTab'));
+import { LossReviewCell } from './LossReviewCell';
 
 interface WatchlistItem {
   id: string;
@@ -2042,13 +2043,14 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                       <TableHead compact>$$$</TableHead>
                       <TableHead compact>Buy Time (Toronto)</TableHead>
                       <TableHead compact>Links</TableHead>
+                      {fantasyFilter === 'loss' && <TableHead compact>Review</TableHead>}
                       <TableHead compact>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredFantasyPositions.length === 0 ? (
                       <TableRow>
-                       <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
+                       <TableCell colSpan={fantasyFilter === 'loss' ? 16 : 15} className="text-center text-muted-foreground py-8">
                           No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
                         </TableCell>
                       </TableRow>
@@ -2197,6 +2199,16 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                                 </Button>
                               </div>
                             </TableCell>
+                            {fantasyFilter === 'loss' && (
+                              <TableCell compact>
+                                <LossReviewCell
+                                  positionId={pos.id}
+                                  currentTags={(pos as any).loss_tags || []}
+                                  currentReason={(pos as any).manual_loss_reason || null}
+                                  onUpdated={fetchFantasyData}
+                                />
+                              </TableCell>
+                            )}
                             <TableCell compact>
                               {pos.status === 'open' && (
                                 <Button 
