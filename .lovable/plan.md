@@ -1,66 +1,112 @@
 
-# Stop-Loss Recovery Rehabilitation
 
-## Problem
+# Post-Exit Win Analysis + Dev Reputation for Profit Trades
 
-When the Fantasy sell monitor closes a position via stop-loss or drawdown, the loss feedback loop immediately:
-- Increments `fantasy_loss_count` on the dev's `dev_wallet_reputation`
-- May increment `tokens_rugged`
-- Auto-blacklists the dev wallet if thresholds are met (2+ rugs, 3+ losses with 0 wins, or 5+ total losses)
-- Inserts `created_loss_token` or `created_rug_token` into `reputation_mesh`
+## What This Solves
 
-The `backcheck-stop-loss-exits` cron (every 4 hours) already discovers that **130 tokens graduated** after we exited and 1 did a 19.6x. But it only writes `post_exit_recovered` and `post_exit_graduated` -- it does NOT trigger any rehabilitation review or adjust the dev's reputation.
+Two critical gaps in the current system:
 
-## Solution
+**Gap 1 -- No post-exit tracking for wins.** When we sell at 1.5x or 2x, we have no idea what happened next. Did the token go to $150K (EMCC)? Did it die 6 minutes later after the dev rugged (POLYCLAW)? This data is essential for developing smarter exit strategies (moonbags, hold-to-graduate, etc.).
 
-Reuse the same manual review rehabilitation pattern from the rejected tokens backcheck:
+**Gap 2 -- Winning trades never update dev reputation.** The `target_hit` code path never calls `feedbackLossToReputation` (which also handles wins). More critically, a dev whose token gave us 1.5x but then rugged 6 minutes later currently gets zero negative marks. They should still be flagged as a rugger -- getting lucky on timing does not redeem a bad actor.
 
-### 1. Update `backcheck-stop-loss-exits` Edge Function
+Additionally, **none of the 179 winning positions have `creator_wallet` populated**, so we need to backfill that first.
 
-When the backcheck finds `post_exit_recovered = true` OR `post_exit_graduated = true`:
-- Set `rehabilitation_status = 'pending_review'` on the position (column already exists)
-- Insert a `rehabilitation_candidate` entry into `reputation_mesh` linking the dev wallet to the token, with evidence like "Token graduated after stop-loss exit, 19.6x from entry"
-- This mirrors exactly what `backcheck-rejected-tokens` does
+---
 
-### 2. Add Recovery Review UI to the Loss Tab
+## The Build
 
-In the existing Loss/Retrace area of the Pump.fun Monitor (the stop-loss backcheck section), add:
-- A filter/view for positions where `rehabilitation_status = 'pending_review'`
-- Per-row Rehabilitate / Confirm Bad buttons (same pattern as `RejectedTokensBackcheck.tsx`)
-- **Rehabilitate**: Decrements `fantasy_loss_count` (and `tokens_rugged` if applicable) on `dev_wallet_reputation`, adds `false_positive_rehabilitated` mesh entry, removes auto-blacklist if counts drop below thresholds
-- **Confirm Bad**: Sets `rehabilitation_status = 'confirmed_bad'`, adds `confirmed_bad_actor` mesh entry, no reputation changes
-- Summary stats: "X positions pending review", "Y rehabilitated", "Z confirmed bad"
+### 1. New Edge Function: `backcheck-profit-exits`
 
-### 3. Files Changed
+A cron-based function (runs every 4 hours, same pattern as `backcheck-stop-loss-exits`) that:
 
-1. **Edit** `supabase/functions/backcheck-stop-loss-exits/index.ts` -- add rehabilitation flagging logic when recovered/graduated tokens are found
-2. **New** `src/components/admin/StopLossRehabReview.tsx` -- manual review component with approve/deny buttons and dev reputation adjustment (mirrors `RejectedTokensBackcheck.tsx` pattern)
-3. **Edit** `src/components/admin/tabs/PumpfunMonitorTab.tsx` or `TokenCandidatesDashboard.tsx` -- integrate the review component into the existing Loss/Retrace tab area
+- Fetches closed positions where `total_pnl_percent > 0` and `post_exit_checked_at IS NULL`
+- For each, fetches current price from Pump.fun API (primary) and DexScreener (fallback)
+- Backfills `creator_wallet` from `pumpfun_watchlist` if missing
+- Writes to the position:
+  - `post_exit_price_usd`, `post_exit_mcap`, `post_exit_graduated`
+  - `post_exit_multiplier_vs_entry` (current price vs our entry)
+  - `post_exit_checked_at`
+  - `creator_wallet` (backfilled)
+- Classifies each into a post-exit outcome category:
+  - "Continued Runner" -- went 3x+ beyond our exit
+  - "Graduated" -- completed bonding curve to Raydium
+  - "Stable" -- stayed roughly where we sold (0.8x-1.5x of exit)
+  - "Died" -- dropped below 50% of our exit price
+  - "Dev Rugged Post-Exit" -- died AND dev wallet shows exit pattern
 
-### 4. No Migration Needed
+### 2. Dev Reputation Feedback for Wins
 
-The `rehabilitation_status`, `rehabilitated_at`, and `rehabilitated_by` columns already exist on `pumpfun_fantasy_positions`. The `reputation_mesh` and `dev_wallet_reputation` tables already have all required columns.
+The backcheck function also handles Step 2 of your request -- dev accountability on wins:
+
+- If a token **died or dev rugged after our profitable exit**, the dev still gets negative reputation marks:
+  - Insert `created_rug_token` or `created_loss_token` into `reputation_mesh`
+  - Increment `tokens_rugged` on `dev_wallet_reputation`
+  - Can trigger auto-blacklisting if thresholds are met
+  - The fact that we profited is irrelevant to the dev's character
+
+- If a token **continued running or graduated**, the dev gets positive marks:
+  - Increment `fantasy_win_count` and `tokens_successful`
+  - Insert `created_successful_token` into `reputation_mesh`
+  - Reputation score boost proportional to post-exit performance
+
+### 3. Win Backcheck Review UI
+
+A new component `ProfitExitBackcheck.tsx` integrated as a new "Profit Exits" tab in the Pump.fun Monitor, showing:
+
+- Summary stats: Total checked, Continued Runners, Graduated, Died Post-Exit, Dev Rugged
+- Table with: Token, Exit Price, Exit Multiplier, Current Price, Post-Exit Multiplier, MCap Now, Graduated, Post-Exit Outcome, Dev Status
+- Filter by post-exit outcome category
+- Manual "Flag Dev" button for cases where the system didn't auto-detect a post-exit rug
+- Links to Pump.fun for each token
+
+### 4. Cron Schedule
+
+Add a new cron job `backcheck-profit-exits-4h` running every 4 hours (matching the stop-loss backcheck cadence).
+
+### 5. Backfill `creator_wallet` on Existing Wins
+
+The first run of the backcheck will automatically backfill `creator_wallet` from `pumpfun_watchlist` for all 179 existing winning positions that are missing it. Also patch the sell monitor's `target_hit` code path to call `feedbackLossToReputation` going forward so wins get reputation feedback in real-time.
+
+---
 
 ## Technical Details
 
-### Rehabilitation Logic (on Approve)
+### Files to Create
+1. `supabase/functions/backcheck-profit-exits/index.ts` -- New edge function
+2. `src/components/admin/ProfitExitBackcheck.tsx` -- New review UI component
+3. `supabase/migrations/[timestamp]_add_profit_backcheck_cron.sql` -- Cron job setup
+
+### Files to Edit
+1. `supabase/functions/pumpfun-fantasy-sell-monitor/index.ts` -- Add `feedbackLossToReputation` call at line ~1076 (after target_hit close) and save `creator_wallet` to the position
+2. `src/components/admin/tabs/PumpfunMonitorTab.tsx` -- Add "Profit Exits" tab
+3. `src/integrations/supabase/types.ts` -- Update types if needed
+
+### Post-Exit Outcome Classification Logic
 
 ```text
-1. Fetch dev_wallet_reputation for position.creator_wallet
-2. Decrement fantasy_loss_count by 1 (min 0)
-3. If exit_reason was 'rug' related, decrement tokens_rugged by 1 (min 0)
-4. Recalculate trust_level based on new counts
-5. If new loss/rug counts drop below blacklist thresholds:
-   - Remove from pumpfun_blacklist (or deactivate)
-   - Set auto_blacklisted = false on dev_wallet_reputation
-6. Add reputation_mesh entry: relationship = 'false_positive_rehabilitated'
-7. Set rehabilitation_status = 'rehabilitated' on the position
+Given: exit_price, post_exit_price, post_exit_graduated, dev_exited
+
+IF dev sold out post-exit AND price crashed > 80%:
+  -> "dev_rugged_post_exit" (dev gets blacklisted)
+  
+IF post_exit_price < exit_price * 0.5:
+  -> "died_after_profit" (dev gets negative marks)
+
+IF post_exit_graduated:
+  -> "graduated" (dev gets positive marks, moonbag opportunity)
+
+IF post_exit_price > exit_price * 3:
+  -> "continued_runner" (dev gets positive marks, missed gains data)
+
+ELSE:
+  -> "stable" (no reputation change)
 ```
 
-### Confirm Bad Logic (on Deny)
+### Dev Rug Detection Post-Exit
 
-```text
-1. Set rehabilitation_status = 'confirmed_bad' on the position
-2. Add reputation_mesh entry: relationship = 'confirmed_bad_actor'
-3. No changes to dev_wallet_reputation (penalty stands)
-```
+For tokens that died after our profitable exit, the function checks:
+- Pump.fun API: Did `complete` stay false and mcap crash?
+- Dev wallet: Did creator's token balance go to 0? (via existing watchlist `dev_sold` flag)
+- This ensures a dev who gave us a quick 1.5x then pulled the rug still gets flagged
+
