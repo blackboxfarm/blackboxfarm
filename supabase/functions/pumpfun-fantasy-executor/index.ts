@@ -373,28 +373,26 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const blockBelowDiscoveryEnabled = gateConfigData?.block_below_discovery_enabled ?? true;
       const blockBelowDiscoveryPct = gateConfigData?.block_below_discovery_pct ?? 0;
       
-      // FAIL-SAFE: If discovery price is missing and gate is enabled, block the trade
-      // We cannot validate price direction without a discovery price reference
-      if (blockBelowDiscoveryEnabled && discoveryPrice <= 0) {
-        console.log(`🚫 HARD GATE — NO DISCOVERY PRICE: ${token.token_symbol} has no price_at_discovery_usd — cannot validate, BLOCKED`);
-        stats.errors.push(`${token.token_symbol}: Missing discovery price (fail-safe block)`);
+      // Use discovery price, fall back to price_start_usd — every token MUST have one
+      const effectiveDiscoveryPrice = discoveryPrice > 0 ? discoveryPrice : (token.price_start_usd || 0);
+      const discoverySource = discoveryPrice > 0 ? 'discovery' : 'price_start';
+      
+      if (effectiveDiscoveryPrice <= 0) {
+        // This should literally never happen — but if it does, block it
+        console.log(`🚫 HARD GATE — NO PRICE DATA AT ALL: ${token.token_symbol} has no discovery or start price — BLOCKED`);
+        stats.errors.push(`${token.token_symbol}: No price data at all (impossible state)`);
         continue;
       }
       
-      if (discoveryPrice > 0 && entryPriceUsd > 0) {
-        const threshold = discoveryPrice * (1 - blockBelowDiscoveryPct / 100);
-        if (entryPriceUsd < threshold) {
-          entryBelowDiscovery = true;
-          const pctBelowDisc = ((discoveryPrice - entryPriceUsd) / discoveryPrice * 100).toFixed(1);
-          
-          if (blockBelowDiscoveryEnabled) {
-            console.log(`🚫 HARD GATE — BELOW DISCOVERY: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowDisc}% below discovery $${discoveryPrice.toFixed(10)} — BLOCKED`);
-            stats.errors.push(`${token.token_symbol}: Below discovery price by ${pctBelowDisc}% (gate enabled)`);
-            continue;
-          } else {
-            console.log(`⚠️ SOFT FLAG — BELOW DISCOVERY: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowDisc}% below discovery $${discoveryPrice.toFixed(10)}`);
-          }
-        }
+      // ABSOLUTE RULE: Never buy below discovery price
+      const threshold = effectiveDiscoveryPrice * (1 - blockBelowDiscoveryPct / 100);
+      if (entryPriceUsd < threshold) {
+        entryBelowDiscovery = true;
+        const pctBelowDisc = ((effectiveDiscoveryPrice - entryPriceUsd) / effectiveDiscoveryPrice * 100).toFixed(1);
+        
+        console.log(`🚫 HARD GATE — BELOW DISCOVERY: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowDisc}% below ${discoverySource} $${effectiveDiscoveryPrice.toFixed(10)} — BLOCKED`);
+        stats.errors.push(`${token.token_symbol}: Below ${discoverySource} price by ${pctBelowDisc}% — BLOCKED`);
+        continue;
       }
 
       // ============================================
