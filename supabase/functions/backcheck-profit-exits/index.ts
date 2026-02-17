@@ -76,15 +76,20 @@ async function feedbackWinReputation(
       updates.last_fantasy_win_at = now;
     }
 
-    // Re-classify trust level
-    const newRugCount = updates.tokens_rugged ?? existing.tokens_rugged ?? 0;
-    const newLossCount = updates.fantasy_loss_count ?? existing.fantasy_loss_count ?? 0;
-    const newWinCount = updates.fantasy_win_count ?? existing.fantasy_win_count ?? 0;
+    // Re-classify trust level — but NEVER downgrade from scammer/blacklisted
+    const preservedLevels = ['scammer', 'blacklisted', 'serial_rugger'];
+    if (!preservedLevels.includes(existing.trust_level)) {
+      const newRugCount = updates.tokens_rugged ?? existing.tokens_rugged ?? 0;
+      const newLossCount = updates.fantasy_loss_count ?? existing.fantasy_loss_count ?? 0;
+      const newWinCount = updates.fantasy_win_count ?? existing.fantasy_win_count ?? 0;
 
-    if (newRugCount >= 3 || (newLossCount >= 5 && newWinCount === 0)) {
-      updates.trust_level = 'serial_rugger';
-    } else if (newRugCount >= 2 || (newLossCount >= 3 && newWinCount === 0)) {
-      updates.trust_level = 'repeat_loser';
+      if (newRugCount >= 3 || (newLossCount >= 5 && newWinCount === 0)) {
+        updates.trust_level = 'serial_rugger';
+      } else if (newRugCount >= 2 || (newLossCount >= 3 && newWinCount === 0)) {
+        updates.trust_level = 'repeat_loser';
+      } else if (outcome === 'dev_rugged_post_exit') {
+        updates.trust_level = 'suspicious';
+      }
     }
 
     await supabase.from('dev_wallet_reputation').update(updates).eq('id', existing.id);

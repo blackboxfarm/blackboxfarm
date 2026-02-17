@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
           display_name: `Dev ${creator_wallet.slice(0, 8)}`,
           reputation_score: 0,
           integrity_score: 0,
-          trust_level: 'blacklisted',
+          trust_level: 'scammer',
           rug_pull_count: 1,
           total_tokens_created: 1,
           failed_tokens: 1,
@@ -230,14 +230,32 @@ Deno.serve(async (req) => {
       console.error(`   Blacklist insert failed:`, JSON.stringify(blacklistError));
     }
 
-    // 4. Also add to dev_wallet_reputation
-    await supabase.from('dev_wallet_reputation').upsert({
-      wallet_address: creator_wallet,
-      reputation_score: 0,
-      rug_count: devProfile ? (devProfile.rug_pull_count || 0) + 1 : 1,
-      trust_level: 'scammer',
-      last_updated: new Date().toISOString(),
-    }, { onConflict: 'wallet_address' });
+    // 4. Also add to dev_wallet_reputation — use explicit select+update to avoid silent upsert failures
+    const { data: existingDevRep } = await supabase.from('dev_wallet_reputation')
+      .select('id, tokens_rugged, trust_level')
+      .eq('wallet_address', creator_wallet)
+      .maybeSingle();
+
+    if (existingDevRep) {
+      const { error: devRepErr } = await supabase.from('dev_wallet_reputation').update({
+        reputation_score: 0,
+        tokens_rugged: (existingDevRep.tokens_rugged || 0) + 1,
+        trust_level: 'scammer',
+        updated_at: new Date().toISOString(),
+      }).eq('id', existingDevRep.id);
+      if (devRepErr) console.error(`   dev_wallet_reputation update failed:`, devRepErr);
+      else console.log(`   ✅ dev_wallet_reputation updated to scammer (rugs=${(existingDevRep.tokens_rugged || 0) + 1})`);
+    } else {
+      const { error: devRepErr } = await supabase.from('dev_wallet_reputation').insert({
+        wallet_address: creator_wallet,
+        reputation_score: 0,
+        tokens_rugged: 1,
+        trust_level: 'scammer',
+        updated_at: new Date().toISOString(),
+      });
+      if (devRepErr) console.error(`   dev_wallet_reputation insert failed:`, devRepErr);
+      else console.log(`   ✅ dev_wallet_reputation created as scammer`);
+    }
 
     // 5. Collect associated wallets
     if (devProfile) {
@@ -300,6 +318,21 @@ Deno.serve(async (req) => {
     try {
       console.log(`   🔮 Feeding data into Oracle...`);
 
+      // Pull Twitter from watchlist if devProfile doesn't have it
+      let twitterHandle: string | null = devProfile?.twitter_handle || null;
+      if (!twitterHandle) {
+        const { data: watchlistData } = await supabase
+          .from('pumpfun_watchlist')
+          .select('twitter_url')
+          .eq('token_mint', token_mint)
+          .single();
+        if (watchlistData?.twitter_url) {
+          // Extract handle from URL like "https://x.com/PixelCatPump"
+          const match = watchlistData.twitter_url.match(/(?:x\.com|twitter\.com)\/(@?[\w]+)/i);
+          twitterHandle = match ? match[1].replace('@', '') : null;
+        }
+      }
+
       // 7a. Enrich dev_wallet_reputation with full Oracle fields
       const devRepData: Record<string, any> = {
         wallet_address: creator_wallet,
@@ -312,6 +345,11 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
         notes: `Auto-flagged by rug-event-processor: ${rug_type} on $${token_symbol || token_mint.slice(0, 8)}`,
       };
+
+      // Add Twitter to dev reputation if found
+      if (twitterHandle) {
+        devRepData.twitter_accounts = [twitterHandle];
+      }
 
       // Set pattern scores based on rug type
       if (rug_type === 'bundle_dump') {
@@ -326,8 +364,9 @@ Deno.serve(async (req) => {
 
       // Pull socials from developer_profiles if available
       if (devProfile) {
-        if (devProfile.twitter_handle) {
+        if (devProfile.twitter_handle && !twitterHandle) {
           devRepData.twitter_accounts = [devProfile.twitter_handle];
+          twitterHandle = devProfile.twitter_handle;
         }
         if (devProfile.telegram_handle) {
           devRepData.telegram_groups = [devProfile.telegram_handle];
@@ -342,8 +381,29 @@ Deno.serve(async (req) => {
         }
       }
 
-      await supabase.from('dev_wallet_reputation').upsert(devRepData, { onConflict: 'wallet_address' });
-      console.log(`   ✅ Oracle dev_wallet_reputation updated`);
+      // Use explicit update instead of upsert to ensure values are written
+      const { data: oracleExisting } = await supabase.from('dev_wallet_reputation')
+        .select('id').eq('wallet_address', creator_wallet).maybeSingle();
+      if (oracleExisting) {
+        const { error: oracleErr } = await supabase.from('dev_wallet_reputation')
+          .update(devRepData).eq('id', oracleExisting.id);
+        if (oracleErr) console.error(`   Oracle dev_wallet_reputation update failed:`, oracleErr);
+        else console.log(`   ✅ Oracle dev_wallet_reputation updated (trust_level=scammer, twitter=${twitterHandle || 'none'})`);
+      } else {
+        devRepData.wallet_address = creator_wallet;
+        const { error: oracleErr } = await supabase.from('dev_wallet_reputation').insert(devRepData);
+        if (oracleErr) console.error(`   Oracle dev_wallet_reputation insert failed:`, oracleErr);
+        else console.log(`   ✅ Oracle dev_wallet_reputation created (trust_level=scammer, twitter=${twitterHandle || 'none'})`);
+      }
+
+      // 7a.1 Update blacklist with Twitter if found
+      if (twitterHandle) {
+        await supabase.from('pumpfun_blacklist')
+          .update({ linked_twitter: [twitterHandle] })
+          .eq('identifier', creator_wallet)
+          .eq('entry_type', 'dev_wallet');
+        console.log(`   ✅ Blacklist updated with Twitter: @${twitterHandle}`);
+      }
 
       // 7b. Push relationships into reputation_mesh
       const meshEntries: any[] = [];
@@ -360,16 +420,16 @@ Deno.serve(async (req) => {
         discovered_by: 'rug_event_processor',
       });
 
-      // If we have socials from dev profile, link them
-      if (devProfile?.twitter_handle) {
+      // If we have socials (from dev profile OR watchlist fallback), link them
+      if (twitterHandle) {
         meshEntries.push({
           source_type: 'wallet',
           source_id: creator_wallet,
           linked_type: 'x_account',
-          linked_id: devProfile.twitter_handle.replace('@', ''),
+          linked_id: twitterHandle,
           relationship: 'owned_by',
           confidence: 85,
-          evidence: `Linked via developer profile (rug actor)`,
+          evidence: `Linked via ${devProfile?.twitter_handle ? 'developer profile' : 'watchlist twitter_url'} (rug actor)`,
           discovered_by: 'rug_event_processor',
         });
       }
