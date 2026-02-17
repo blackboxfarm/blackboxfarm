@@ -68,6 +68,7 @@ serve(async (req) => {
           market_cap_usd: token.market_cap_usd,
           bump_bot_detected: token.bump_bot_detected,
           source: 'backfill',
+          skip_genealogy: true, // Save Helius credits during backfill
         });
         meshed++;
       } catch (e) {
