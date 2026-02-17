@@ -409,6 +409,42 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
           continue;
         }
 
+        // === BLACKLIST MESH EARLY CHECK — reject known bad devs at discovery ===
+        const creatorWallet = tokenData.creator;
+        if (creatorWallet) {
+          const { data: blEntry } = await supabase
+            .from('pumpfun_blacklist')
+            .select('id, risk_level, blacklist_reason')
+            .eq('identifier', creatorWallet)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (blEntry) {
+            console.log(`🚫 BLACKLIST MESH MATCH at discovery: ${tokenData.token?.symbol} — dev ${creatorWallet.slice(0, 8)}... (${blEntry.risk_level})`);
+            // Insert as rejected directly
+            await supabase.from('pumpfun_watchlist').insert({
+              token_mint: mint,
+              token_symbol: tokenData.token?.symbol,
+              token_name: tokenData.token?.name,
+              creator_wallet: creatorWallet,
+              first_seen_at: now.toISOString(),
+              last_checked_at: now.toISOString(),
+              status: 'rejected',
+              rejection_reason: 'blacklist_mesh_match',
+              rejection_type: 'permanent',
+              rejection_reasons: ['blacklist_mesh_match', `risk:${blEntry.risk_level}`],
+              removed_at: now.toISOString(),
+              check_count: 0,
+              holder_count: holderCount,
+              holder_count_prev: 0,
+              volume_sol: volumeSol,
+              volume_sol_prev: 0,
+              metadata: { image: tokenData.token?.image, mesh_match: blEntry.blacklist_reason },
+            });
+            continue;
+          }
+        }
+
         // Get bundle score for new tokens
         let bundleScore = null;
         try {

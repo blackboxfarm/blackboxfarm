@@ -21,6 +21,7 @@ const MESH_WORTHY_REASONS = new Set([
   'mint_authority_active', 'freeze_authority_active',
   'known_abused_ticker', 'known_scammer', 'blacklisted_dev', 'serial_launcher',
   'larp_detected', 'larp_confirmed', 'fake_socials',
+  'blacklist_mesh_match', 'mesh_flagged_dev', 'mesh_flagged_parent',
 ]);
 
 interface RejectionMeshParams {
@@ -63,6 +64,8 @@ function classifyRejectionTags(reasons: string[]): string[] {
     if (lower.includes('larp') || lower.includes('fake')) tags.add('larp_fraud');
     if (lower.includes('serial') || lower.includes('launched_new')) tags.add('serial_launcher');
     if (lower.includes('crashed')) tags.add('pump_and_dump');
+    if (lower.includes('blacklist_mesh_match') || lower.includes('mesh_flagged')) tags.add('mesh_recidivist');
+    if (lower.includes('blacklisted_dev')) tags.add('known_bad_actor');
   }
   return Array.from(tags);
 }
