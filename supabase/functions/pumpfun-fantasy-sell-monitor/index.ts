@@ -601,6 +601,130 @@ async function feedbackLossToReputation(
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ████ AUTO LOSS TAGGER ████
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Deterministic auto-tagger: assigns loss_tags based on exit reason,
+ * watchlist flags, entry metrics, and cross-references with blacklist/mesh.
+ * Runs on every loss/rug close to reduce manual review overhead.
+ */
+async function autoTagLoss(
+  supabase: any,
+  position: any,
+  exitReason: string,
+  outcome: string,
+  multiplier: number
+): Promise<string[]> {
+  const tags: Set<string> = new Set();
+
+  try {
+    // ── 1. Exit-reason-based tags (deterministic) ──
+    if (exitReason === 'lp_removed') tags.add('rug_pull');
+    if (exitReason === 'dev_sold' || exitReason === 'watchlist_bombed') tags.add('dev_dump');
+    if (exitReason === 'watchlist_dead' || exitReason === 'dead_no_price') tags.add('stale_dead');
+    if (exitReason === 'stop_loss' && multiplier < 0.5) tags.add('pump_and_dump');
+    if (exitReason.startsWith('stale_')) tags.add('stale_dead');
+    if (exitReason.startsWith('dead_dump_')) tags.add('slow_bleed');
+
+    // ── 2. Price-pattern-based tags ──
+    const peakMult = position.peak_multiplier || 1.0;
+    if (peakMult < 1.1 && outcome === 'loss') tags.add('no_volume');
+    if (peakMult >= 1.5 && multiplier < 0.5) tags.add('pump_and_dump');
+    if (peakMult < 1.2 && multiplier < 0.7) tags.add('slow_bleed');
+
+    // ── 3. Entry-metric-based tags ──
+    if (position.entry_rugcheck_score && position.entry_rugcheck_score > 5000) tags.add('honeypot');
+    if (position.entry_holder_count && position.entry_holder_count < 15) tags.add('bundled_wallets');
+
+    // ── 4. Cross-reference watchlist for deeper context ──
+    if (position.watchlist_id) {
+      const { data: watchlist } = await supabase
+        .from('pumpfun_watchlist')
+        .select('creator_wallet, dev_sold, bundle_analysis_score, has_bump_bot, linked_twitter, linked_telegram, linked_website, socials_verified, status')
+        .eq('id', position.watchlist_id)
+        .maybeSingle();
+
+      if (watchlist) {
+        if (watchlist.dev_sold) tags.add('dev_dump');
+        if (watchlist.has_bump_bot) tags.add('bump_bot');
+        if (watchlist.bundle_analysis_score && watchlist.bundle_analysis_score > 50) tags.add('bundled_wallets');
+
+        // Fake socials: has links but not verified, or no links at all
+        const hasAnySocial = watchlist.linked_twitter || watchlist.linked_telegram || watchlist.linked_website;
+        if (hasAnySocial && watchlist.socials_verified === false) tags.add('fake_socials');
+
+        // ── 5. Cross-reference blacklist & reputation mesh ──
+        if (watchlist.creator_wallet) {
+          // Check if dev is in blacklist
+          const { data: blacklisted } = await supabase
+            .from('pumpfun_blacklist')
+            .select('id, reason')
+            .eq('identifier', watchlist.creator_wallet)
+            .maybeSingle();
+
+          if (blacklisted) {
+            tags.add('dev_dump');
+            // If reason mentions specific patterns, add those tags
+            const reason = (blacklisted.reason || '').toLowerCase();
+            if (reason.includes('rug')) tags.add('rug_pull');
+            if (reason.includes('serial')) tags.add('dev_dump');
+          }
+
+          // Check reputation mesh for connected bad actors
+          const { data: meshLinks } = await supabase
+            .from('reputation_mesh')
+            .select('relationship, linked_type, linked_id, confidence')
+            .eq('source_id', watchlist.creator_wallet)
+            .in('relationship', ['created_rug_token', 'created_loss_token', 'co_mod', 'funded_by', 'same_team'])
+            .gte('confidence', 60)
+            .limit(10);
+
+          if (meshLinks && meshLinks.length > 0) {
+            const rugLinks = meshLinks.filter((m: any) => m.relationship === 'created_rug_token');
+            const lossLinks = meshLinks.filter((m: any) => m.relationship === 'created_loss_token');
+            const teamLinks = meshLinks.filter((m: any) => ['co_mod', 'funded_by', 'same_team'].includes(m.relationship));
+
+            if (rugLinks.length >= 2) tags.add('rug_pull');
+            if (lossLinks.length >= 3) tags.add('dev_dump');
+            if (teamLinks.length >= 2) tags.add('bundled_wallets');
+          }
+
+          // Check dev_wallet_reputation for repeat offender
+          const { data: devRep } = await supabase
+            .from('dev_wallet_reputation')
+            .select('fantasy_loss_count, tokens_rugged, trust_level, auto_blacklisted')
+            .eq('wallet_address', watchlist.creator_wallet)
+            .maybeSingle();
+
+          if (devRep) {
+            if (devRep.auto_blacklisted) tags.add('dev_dump');
+            if ((devRep.tokens_rugged || 0) >= 2) tags.add('rug_pull');
+            if (devRep.trust_level === 'serial_rugger') tags.add('rug_pull');
+          }
+        }
+      }
+    }
+
+    // ── 6. Write tags to position ──
+    const tagArray = Array.from(tags);
+    if (tagArray.length > 0) {
+      await supabase
+        .from('pumpfun_fantasy_positions')
+        .update({ loss_tags: tagArray })
+        .eq('id', position.id);
+      
+      console.log(`🏷️ AUTO-TAGGED: ${position.token_symbol} → [${tagArray.join(', ')}]`);
+    }
+
+    return tagArray;
+  } catch (error) {
+    console.error(`Error in autoTagLoss for ${position.token_symbol}:`, error);
+    return [];
+  }
+}
+
 // Main monitoring logic
 async function monitorPositions(supabase: any): Promise<MonitorStats> {
   const startTime = Date.now();
@@ -716,6 +840,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
         // PHASE 1: Feed loss back into reputation system
         await feedbackLossToReputation(supabase, position, 'rug', rugReason);
+        // AUTO-TAG: Deterministic loss tagging + blacklist/mesh cross-ref
+        await autoTagLoss(supabase, position, rugReason, 'rug', multiplier);
         stats.targetsSold++;
 
         const rugMsg = `🚨 Fantasy RUG EXIT: $${position.token_symbol}\n` +
@@ -760,8 +886,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           }).eq('id', position.id);
           // PHASE 1: Feed loss back into reputation system
           await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, 'loss', 'dead_no_price');
-          // PHASE 1: Feed win back into reputation system
-          await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, outcome, 'target_hit');
+          // AUTO-TAG: Deterministic loss tagging + blacklist/mesh cross-ref
+          await autoTagLoss(supabase, position, 'dead_no_price', 'loss', 0.01);
           stats.targetsSold++;
         }
         console.log(`⚠️ No price for ${position.token_symbol}, skipping`);
@@ -824,6 +950,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
           // PHASE 1: Feed loss back into reputation system
           await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, 'loss', 'stop_loss');
+          // AUTO-TAG: Deterministic loss tagging + blacklist/mesh cross-ref
+          await autoTagLoss(supabase, position, 'stop_loss', 'loss', multiplier);
           stats.targetsSold++;
           console.log(`🛑 STOP-LOSS SOLD: ${position.token_symbol} | ${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
 
@@ -876,6 +1004,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           // PHASE 1: Feed loss/win back into reputation system
           const staleOutcome = multiplier >= 1 ? 'breakeven' : 'loss';
           await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: realizedPnlPercent }, staleOutcome, reason);
+          // AUTO-TAG: Deterministic loss tagging + blacklist/mesh cross-ref (only for losses)
+          if (staleOutcome === 'loss') await autoTagLoss(supabase, position, reason, staleOutcome, multiplier);
           stats.targetsSold++;
           stats.learningsCreated++;
 
@@ -1079,6 +1209,11 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
           // PHASE 1: Feed outcome back into reputation system
           await feedbackLossToReputation(supabase, { ...position, total_pnl_percent: totalPnlPercent }, classification.outcome, exitReason);
+          // AUTO-TAG: For loss/rug moonbag exits
+          if (['loss', 'rug', 'slow_bleed'].includes(classification.outcome)) {
+            const moonbagMultiplier = currentPriceUsd / position.entry_price_usd;
+            await autoTagLoss(supabase, position, exitReason, classification.outcome, moonbagMultiplier);
+          }
           stats.moonbagsClosed++;
           
           console.log(`🏁 MOONBAG CLOSED: ${position.token_symbol} | Outcome: ${classification.outcome.toUpperCase()} | ${exitReason} | Final P&L: ${totalRealizedPnlSol >= 0 ? '+' : ''}${totalRealizedPnlSol.toFixed(4)} SOL (${totalPnlPercent.toFixed(1)}%)`);
