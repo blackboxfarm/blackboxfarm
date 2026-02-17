@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LazyLoader } from '@/components/ui/lazy-loader';
 
 // Lazy load each component
+const DailyOpeningWizard = lazy(() => import("@/components/admin/DailyOpeningWizard"));
 const TokenCandidatesDashboard = lazy(() => import("@/components/admin/TokenCandidatesDashboard").then(m => ({ default: m.TokenCandidatesDashboard })));
 const PumpfunTokenRetrace = lazy(() => import("@/components/admin/PumpfunTokenRetrace"));
 const RejectedTokensBackcheck = lazy(() => import("@/components/admin/RejectedTokensBackcheck"));
@@ -10,11 +11,12 @@ const StopLossRehabReview = lazy(() => import("@/components/admin/StopLossRehabR
 const ProfitExitBackcheck = lazy(() => import("@/components/admin/ProfitExitBackcheck"));
 
 export default function PumpfunMonitorTab() {
-  const [activeSubTab, setActiveSubTab] = useState("candidates");
+  const [activeSubTab, setActiveSubTab] = useState("wizard");
 
   return (
     <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList>
+        <TabsTrigger value="wizard">🧙 Daily Wizard</TabsTrigger>
         <TabsTrigger value="candidates">📊 Candidates</TabsTrigger>
         <TabsTrigger value="retrace">🔍 Retrace</TabsTrigger>
         <TabsTrigger value="rejected">🚫 Rejected</TabsTrigger>
@@ -22,6 +24,9 @@ export default function PumpfunMonitorTab() {
         <TabsTrigger value="profit-exits">💰 Profit Exits</TabsTrigger>
       </TabsList>
 
+      <TabsContent value="wizard">
+        {activeSubTab === "wizard" && <Suspense fallback={<LazyLoader />}><DailyOpeningWizard /></Suspense>}
+      </TabsContent>
       <TabsContent value="candidates">
         {activeSubTab === "candidates" && <Suspense fallback={<LazyLoader />}><TokenCandidatesDashboard /></Suspense>}
       </TabsContent>
