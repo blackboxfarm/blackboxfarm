@@ -6284,6 +6284,7 @@ export type Database = {
       pumpfun_fantasy_positions: {
         Row: {
           created_at: string | null
+          creator_wallet: string | null
           current_price_sol: number | null
           current_price_usd: number | null
           entry_amount_sol: number
@@ -6332,6 +6333,9 @@ export type Database = {
           post_exit_multiplier_vs_entry: number | null
           post_exit_price_usd: number | null
           post_exit_recovered: boolean | null
+          rehabilitated_at: string | null
+          rehabilitated_by: string | null
+          rehabilitation_status: string | null
           sell_percentage: number | null
           signal_strength: number | null
           status: string
@@ -6351,6 +6355,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          creator_wallet?: string | null
           current_price_sol?: number | null
           current_price_usd?: number | null
           entry_amount_sol: number
@@ -6399,6 +6404,9 @@ export type Database = {
           post_exit_multiplier_vs_entry?: number | null
           post_exit_price_usd?: number | null
           post_exit_recovered?: boolean | null
+          rehabilitated_at?: string | null
+          rehabilitated_by?: string | null
+          rehabilitation_status?: string | null
           sell_percentage?: number | null
           signal_strength?: number | null
           status?: string
@@ -6418,6 +6426,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          creator_wallet?: string | null
           current_price_sol?: number | null
           current_price_usd?: number | null
           entry_amount_sol?: number
@@ -6466,6 +6475,9 @@ export type Database = {
           post_exit_multiplier_vs_entry?: number | null
           post_exit_price_usd?: number | null
           post_exit_recovered?: boolean | null
+          rehabilitated_at?: string | null
+          rehabilitated_by?: string | null
+          rehabilitation_status?: string | null
           sell_percentage?: number | null
           signal_strength?: number | null
           status?: string

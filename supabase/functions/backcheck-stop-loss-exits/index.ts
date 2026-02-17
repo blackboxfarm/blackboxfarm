@@ -26,20 +26,20 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const forceRecheck = body.force_recheck === true;
     const batchSize = body.batch_size || 25;
-    const maxBatches = body.max_batches || 20; // Process up to 20 batches (500 tokens) per invocation
+    const maxBatches = body.max_batches || 20;
 
     const results: any[] = [];
     let recoveredCount = 0;
     let graduatedCount = 0;
+    let rehabFlaggedCount = 0;
     let totalProcessed = 0;
     let batchesRun = 0;
     let hasMore = true;
 
-    // Loop through all unchecked tokens in batches
     while (hasMore && batchesRun < maxBatches) {
       let query = supabase
         .from('pumpfun_fantasy_positions')
-        .select('id, token_mint, token_symbol, entry_price_usd, entry_price_sol, exit_price_usd, exit_at, peak_multiplier, total_pnl_percent, entry_market_cap_usd, exit_reason')
+        .select('id, token_mint, token_symbol, entry_price_usd, entry_price_sol, exit_price_usd, exit_at, peak_multiplier, total_pnl_percent, entry_market_cap_usd, exit_reason, creator_wallet, rehabilitation_status')
         .eq('status', 'closed')
         .in('exit_reason', ['stop_loss', 'drawdown'])
         .order('exit_at', { ascending: false })
@@ -106,7 +106,6 @@ serve(async (req) => {
           }
 
           const entryPrice = pos.entry_price_usd || 0;
-          const exitPrice = pos.exit_price_usd || 0;
           const postExitMultiplier = entryPrice > 0 && currentPriceUsd
             ? currentPriceUsd / entryPrice
             : null;
@@ -115,16 +114,60 @@ serve(async (req) => {
           if (recovered) recoveredCount++;
           if (graduated) graduatedCount++;
 
+          // Build update payload
+          const updatePayload: any = {
+            post_exit_price_usd: currentPriceUsd,
+            post_exit_mcap: currentMcap,
+            post_exit_graduated: graduated,
+            post_exit_recovered: recovered,
+            post_exit_multiplier_vs_entry: postExitMultiplier,
+            post_exit_checked_at: new Date().toISOString(),
+          };
+
+          // Flag for rehabilitation review if recovered or graduated
+          const shouldFlagForRehab = (recovered || graduated) &&
+            (!pos.rehabilitation_status || pos.rehabilitation_status === 'none');
+
+          if (shouldFlagForRehab) {
+            updatePayload.rehabilitation_status = 'pending_review';
+            rehabFlaggedCount++;
+
+            // Insert rehabilitation_candidate into reputation_mesh
+            if (pos.creator_wallet) {
+              const evidence: Record<string, any> = {
+                source: 'backcheck-stop-loss-exits',
+                exit_reason: pos.exit_reason,
+                post_exit_multiplier: postExitMultiplier,
+                graduated,
+                recovered,
+                post_exit_mcap: currentMcap,
+                checked_at: new Date().toISOString(),
+              };
+
+              if (postExitMultiplier) {
+                evidence.summary = graduated
+                  ? `Token graduated after ${pos.exit_reason} exit, ${postExitMultiplier.toFixed(1)}x from entry`
+                  : `Token recovered to ${postExitMultiplier.toFixed(1)}x after ${pos.exit_reason} exit`;
+              }
+
+              await supabase.from('reputation_mesh').upsert({
+                source_id: pos.creator_wallet,
+                source_type: 'wallet',
+                linked_id: pos.token_mint,
+                linked_type: 'token',
+                relationship: 'rehabilitation_candidate',
+                confidence: Math.min(1.0, (postExitMultiplier || 0) / 5),
+                discovered_via: 'backcheck_stop_loss',
+                evidence,
+              }, { onConflict: 'source_id,source_type,linked_id,linked_type,relationship' });
+
+              console.log(`[backcheck] Flagged ${pos.token_symbol} for rehab review (${postExitMultiplier?.toFixed(1)}x, graduated=${graduated})`);
+            }
+          }
+
           await supabase
             .from('pumpfun_fantasy_positions')
-            .update({
-              post_exit_price_usd: currentPriceUsd,
-              post_exit_mcap: currentMcap,
-              post_exit_graduated: graduated,
-              post_exit_recovered: recovered,
-              post_exit_multiplier_vs_entry: postExitMultiplier,
-              post_exit_checked_at: new Date().toISOString(),
-            })
+            .update(updatePayload)
             .eq('id', pos.id);
 
           results.push({
@@ -133,6 +176,7 @@ serve(async (req) => {
             post_exit_multiplier: postExitMultiplier,
             recovered,
             graduated,
+            rehab_flagged: shouldFlagForRehab,
             verdict: recovered
               ? graduated
                 ? '🚀 GRADUATED & RECOVERED'
@@ -156,7 +200,6 @@ serve(async (req) => {
       batchesRun++;
       hasMore = positions.length === batchSize;
 
-      // Pause between batches to avoid rate limits
       if (hasMore) {
         await new Promise(r => setTimeout(r, 1000));
       }
@@ -167,6 +210,7 @@ serve(async (req) => {
       batches_run: batchesRun,
       recovered: recoveredCount,
       graduated: graduatedCount,
+      rehab_flagged: rehabFlaggedCount,
       still_down: totalProcessed - recoveredCount - results.filter(r => r.verdict?.includes('Failed')).length,
       has_more: hasMore,
       recovery_rate_pct: totalProcessed > 0 ? ((recoveredCount / totalProcessed) * 100).toFixed(1) : '0',
