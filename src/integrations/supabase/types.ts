@@ -6331,6 +6331,7 @@ export type Database = {
           post_exit_graduated: boolean | null
           post_exit_mcap: number | null
           post_exit_multiplier_vs_entry: number | null
+          post_exit_outcome: string | null
           post_exit_price_usd: number | null
           post_exit_recovered: boolean | null
           rehabilitated_at: string | null
@@ -6402,6 +6403,7 @@ export type Database = {
           post_exit_graduated?: boolean | null
           post_exit_mcap?: number | null
           post_exit_multiplier_vs_entry?: number | null
+          post_exit_outcome?: string | null
           post_exit_price_usd?: number | null
           post_exit_recovered?: boolean | null
           rehabilitated_at?: string | null
@@ -6473,6 +6475,7 @@ export type Database = {
           post_exit_graduated?: boolean | null
           post_exit_mcap?: number | null
           post_exit_multiplier_vs_entry?: number | null
+          post_exit_outcome?: string | null
           post_exit_price_usd?: number | null
           post_exit_recovered?: boolean | null
           rehabilitated_at?: string | null
