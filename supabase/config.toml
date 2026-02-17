@@ -438,3 +438,6 @@ verify_jwt = false
 
 [functions.backcheck-stop-loss-exits]
 verify_jwt = false
+
+[functions.backfill-rejection-mesh]
+verify_jwt = false
