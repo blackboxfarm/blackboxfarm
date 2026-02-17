@@ -373,6 +373,14 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const blockBelowDiscoveryEnabled = gateConfigData?.block_below_discovery_enabled ?? true;
       const blockBelowDiscoveryPct = gateConfigData?.block_below_discovery_pct ?? 0;
       
+      // FAIL-SAFE: If discovery price is missing and gate is enabled, block the trade
+      // We cannot validate price direction without a discovery price reference
+      if (blockBelowDiscoveryEnabled && discoveryPrice <= 0) {
+        console.log(`🚫 HARD GATE — NO DISCOVERY PRICE: ${token.token_symbol} has no price_at_discovery_usd — cannot validate, BLOCKED`);
+        stats.errors.push(`${token.token_symbol}: Missing discovery price (fail-safe block)`);
+        continue;
+      }
+      
       if (discoveryPrice > 0 && entryPriceUsd > 0) {
         const threshold = discoveryPrice * (1 - blockBelowDiscoveryPct / 100);
         if (entryPriceUsd < threshold) {
