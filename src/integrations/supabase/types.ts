@@ -7329,6 +7329,87 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_rejected_backcheck: {
+        Row: {
+          ath_bonding_curve_pct: number | null
+          ath_price_usd: number | null
+          check_count: number | null
+          checked_at: string | null
+          created_at: string
+          creator_wallet: string | null
+          current_holders: number | null
+          current_market_cap_usd: number | null
+          current_price_usd: number | null
+          current_volume_24h_usd: number | null
+          false_positive_score: number | null
+          graduated_at: string | null
+          id: string
+          image_url: string | null
+          is_graduated: boolean | null
+          peak_market_cap_usd: number | null
+          rejected_at: string | null
+          rejection_reason: string | null
+          rejection_type: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          updated_at: string
+          was_false_positive: boolean | null
+        }
+        Insert: {
+          ath_bonding_curve_pct?: number | null
+          ath_price_usd?: number | null
+          check_count?: number | null
+          checked_at?: string | null
+          created_at?: string
+          creator_wallet?: string | null
+          current_holders?: number | null
+          current_market_cap_usd?: number | null
+          current_price_usd?: number | null
+          current_volume_24h_usd?: number | null
+          false_positive_score?: number | null
+          graduated_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_graduated?: boolean | null
+          peak_market_cap_usd?: number | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          rejection_type?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string
+          was_false_positive?: boolean | null
+        }
+        Update: {
+          ath_bonding_curve_pct?: number | null
+          ath_price_usd?: number | null
+          check_count?: number | null
+          checked_at?: string | null
+          created_at?: string
+          creator_wallet?: string | null
+          current_holders?: number | null
+          current_market_cap_usd?: number | null
+          current_price_usd?: number | null
+          current_volume_24h_usd?: number | null
+          false_positive_score?: number | null
+          graduated_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_graduated?: boolean | null
+          peak_market_cap_usd?: number | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          rejection_type?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string
+          was_false_positive?: boolean | null
+        }
+        Relationships: []
+      }
       pumpfun_rejection_events: {
         Row: {
           batch_id: string | null
