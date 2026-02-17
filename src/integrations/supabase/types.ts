@@ -7347,6 +7347,9 @@ export type Database = {
           image_url: string | null
           is_graduated: boolean | null
           peak_market_cap_usd: number | null
+          rehabilitated_at: string | null
+          rehabilitated_by: string | null
+          rehabilitation_status: string | null
           rejected_at: string | null
           rejection_reason: string | null
           rejection_type: string | null
@@ -7373,6 +7376,9 @@ export type Database = {
           image_url?: string | null
           is_graduated?: boolean | null
           peak_market_cap_usd?: number | null
+          rehabilitated_at?: string | null
+          rehabilitated_by?: string | null
+          rehabilitation_status?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           rejection_type?: string | null
@@ -7399,6 +7405,9 @@ export type Database = {
           image_url?: string | null
           is_graduated?: boolean | null
           peak_market_cap_usd?: number | null
+          rehabilitated_at?: string | null
+          rehabilitated_by?: string | null
+          rehabilitation_status?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           rejection_type?: string | null
