@@ -780,6 +780,58 @@ function isValidImage(imageUrl: string | null | undefined): boolean {
   return true;
 }
 
+// Check creator wallet against blacklist mesh
+async function checkBlacklistMesh(supabase: any, creatorWallet: string | null): Promise<{
+  isBlacklisted: boolean;
+  reasons: string[];
+  details: any;
+}> {
+  if (!creatorWallet) return { isBlacklisted: false, reasons: [], details: null };
+
+  try {
+    // Check pumpfun_blacklist
+    const { data: blacklistEntry } = await supabase
+      .from('pumpfun_blacklist')
+      .select('id, entry_type, risk_level, blacklist_reason, tags')
+      .or(`identifier.eq.${creatorWallet}`)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (blacklistEntry) {
+      return {
+        isBlacklisted: true,
+        reasons: [`blacklist_mesh_match:${blacklistEntry.risk_level || 'high'}`, 'blacklisted_dev'],
+        details: { source: 'pumpfun_blacklist', entry_type: blacklistEntry.entry_type, reason: blacklistEntry.blacklist_reason, tags: blacklistEntry.tags },
+      };
+    }
+
+    // Check dev_wallet_reputation for known bad actors
+    const { data: devRep } = await supabase
+      .from('dev_wallet_reputation')
+      .select('id, trust_level, tokens_rugged, tokens_abandoned, is_serial_spammer')
+      .eq('wallet_address', creatorWallet)
+      .maybeSingle();
+
+    if (devRep) {
+      const totalBad = (devRep.tokens_rugged || 0) + (devRep.tokens_abandoned || 0);
+      if (devRep.is_serial_spammer || totalBad >= 3 || devRep.trust_level === 'serial_rugger' || devRep.trust_level === 'scammer') {
+        const reasons = [`mesh_flagged_dev:${devRep.trust_level}`, 'blacklist_mesh_match'];
+        if (devRep.is_serial_spammer) reasons.push('serial_launcher');
+        return {
+          isBlacklisted: true,
+          reasons,
+          details: { source: 'dev_wallet_reputation', trust_level: devRep.trust_level, rugged: devRep.tokens_rugged, abandoned: devRep.tokens_abandoned },
+        };
+      }
+    }
+
+    return { isBlacklisted: false, reasons: [], details: null };
+  } catch (err) {
+    console.warn(`[enricher] Blacklist mesh check error: ${err}`);
+    return { isBlacklisted: false, reasons: [], details: null };
+  }
+}
+
 // Process a batch of pending tokens
 async function enrichTokenBatch(
   supabase: any,
@@ -794,6 +846,37 @@ async function enrichTokenBatch(
   for (const token of tokens) {
     console.log(`\n📊 Enriching: ${token.token_symbol} (${token.token_mint.slice(0, 8)}...)`);
     
+    // === BLACKLIST MESH CHECK — reject immediately if creator wallet is flagged ===
+    const meshCheck = await checkBlacklistMesh(supabase, (token as any).creator_wallet);
+    if (meshCheck.isBlacklisted) {
+      console.log(`   🚫 BLACKLIST MESH MATCH: ${meshCheck.reasons.join(', ')}`);
+      await supabase
+        .from('pumpfun_watchlist')
+        .update({
+          status: 'rejected',
+          rejection_reason: 'blacklist_mesh_match',
+          rejection_type: 'permanent',
+          rejection_reasons: meshCheck.reasons,
+          removed_at: new Date().toISOString(),
+          last_checked_at: new Date().toISOString(),
+          metadata: { ...(token as any).metadata, mesh_match: meshCheck.details },
+        })
+        .eq('id', token.id);
+      
+      // Feed back into mesh to strengthen links
+      feedRejectionToMesh(supabase, {
+        token_mint: token.token_mint,
+        token_symbol: token.token_symbol,
+        token_name: (token as any).token_name,
+        creator_wallet: (token as any).creator_wallet,
+        rejection_reasons: meshCheck.reasons,
+        source: 'enricher_mesh_match',
+      }).catch(e => console.warn('[enricher] mesh feedback failed:', e));
+      
+      rejected++;
+      enriched++;
+      continue;
+    }
     // Fetch current token data from both APIs + authority check (with caching)
     const [tokenData, pumpData, authorityCheck] = await Promise.all([
       fetchTokenData(token.token_mint),
@@ -1114,23 +1197,23 @@ async function enrichTokenBatch(
         
       if (isPermanentReject) {
         rejected++;
-        // Feed bad-actor rejections into the mesh
-        feedRejectionToMesh(supabase, {
-          token_mint: token.token_mint,
-          token_symbol: token.token_symbol,
-          token_name: token.token_name,
-          creator_wallet: token.creator_wallet,
-          rejection_reasons: rejectionReasons,
-          bundle_score: holderAnalysis.bundleScore,
-          rugcheck_score: rugCheckResult.normalised,
-          holder_count: holderCount,
-          market_cap_usd: marketCapUsd,
-          bump_bot_detected: bumpBotResult.detected,
-          source: 'enricher',
-        }).catch(e => console.warn('[enricher] mesh feed failed:', e));
       } else {
         softRejected++;
       }
+      // Feed ALL rejections with mesh-worthy reasons into the mesh (not just permanent)
+      feedRejectionToMesh(supabase, {
+        token_mint: token.token_mint,
+        token_symbol: token.token_symbol,
+        token_name: (token as any).token_name,
+        creator_wallet: (token as any).creator_wallet,
+        rejection_reasons: rejectionReasons,
+        bundle_score: holderAnalysis.bundleScore,
+        rugcheck_score: rugCheckResult.normalised,
+        holder_count: holderCount,
+        market_cap_usd: marketCapUsd,
+        bump_bot_detected: bumpBotResult.detected,
+        source: 'enricher',
+      }).catch(e => console.warn('[enricher] mesh feed failed:', e));
     } else {
       // Promote to watching with reason (include Phase 4 metrics + RugCheck)
       const promotionReason = `bundle:${holderAnalysis.bundleScore}/${config.max_bundle_score}, gini:${holderAnalysis.giniCoefficient.toFixed(2)}, linked:${holderAnalysis.linkedWalletCount}, bundled:${holderAnalysis.bundledBuyCount}, holders:${holderCount}, maxWallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%, rugcheck:${rugCheckResult.normalised.toFixed(0)}`;
@@ -1230,7 +1313,7 @@ serve(async (req) => {
       // Get pending_triage tokens
       const { data: pendingTokens, error } = await supabase
         .from('pumpfun_watchlist')
-        .select('id, token_mint, token_symbol, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol, has_image, socials_count, image_url, twitter_url, telegram_url, website_url, mint_authority_revoked, freeze_authority_revoked, authority_checked_at, bundled_buy_count, bundle_checked_at')
+        .select('id, token_mint, token_symbol, token_name, creator_wallet, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol, has_image, socials_count, image_url, twitter_url, telegram_url, website_url, mint_authority_revoked, freeze_authority_revoked, authority_checked_at, bundled_buy_count, bundle_checked_at, metadata')
         .eq('status', 'pending_triage')
         .order('created_at', { ascending: true })
         .limit(BATCH_SIZE);
