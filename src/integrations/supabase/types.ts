@@ -3263,6 +3263,39 @@ export type Database = {
           },
         ]
       }
+      fantasy_tweet_templates: {
+        Row: {
+          created_at: string
+          id: string
+          is_enabled: boolean
+          post_to_community: boolean
+          post_to_main_feed: boolean
+          template_text: string
+          template_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          post_to_community?: boolean
+          post_to_main_feed?: boolean
+          template_text: string
+          template_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          post_to_community?: boolean
+          post_to_main_feed?: boolean
+          template_text?: string
+          template_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fantasy_wallets: {
         Row: {
           balance_usd: number
