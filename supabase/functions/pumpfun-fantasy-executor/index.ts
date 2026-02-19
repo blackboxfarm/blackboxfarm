@@ -587,6 +587,24 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
         metadata: { mint: token.token_mint, symbol: token.token_symbol, entry_price: entryPriceUsd, amount_usd: buyAmountUsd, target: dynamicTarget },
       }).then(() => {}).catch(() => {});
 
+      // Post to X Community (fantasy buy alert)
+      EdgeRuntime.waitUntil(
+        supabase.functions.invoke('fantasy-tweet', {
+          body: {
+            type: 'buy',
+            tokenMint: token.token_mint,
+            tokenSymbol: token.token_symbol,
+            tokenName: token.token_name,
+            entryPrice: entryPriceUsd,
+            targetMultiplier: dynamicTarget,
+            amountSol: buyAmountSol,
+            amountUsd: buyAmountUsd,
+            holders: entryHolderCount || undefined,
+            mcap: entryMarketCapUsd || undefined,
+          }
+        }).catch(e => console.error('Fantasy tweet error:', e))
+      );
+
       // DISABLED: Only broadcast profitable sells to BlackBox
       // broadcastToBlackBox(supabase, buyMsg).catch(e => console.error('TG broadcast error:', e));
 

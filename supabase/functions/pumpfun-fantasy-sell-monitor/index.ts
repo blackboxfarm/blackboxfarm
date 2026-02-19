@@ -1111,6 +1111,26 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
           broadcastToBlackBox(supabase, targetMsg).catch(e => console.error('TG broadcast error:', e));
 
+          // Post profitable sell to X Community
+          const holdMins = (Date.now() - new Date(position.entry_at || position.created_at).getTime()) / (1000 * 60);
+          EdgeRuntime.waitUntil(
+            supabase.functions.invoke('fantasy-tweet', {
+              body: {
+                type: 'sell',
+                tokenMint: position.token_mint,
+                tokenSymbol: position.token_symbol,
+                tokenName: position.token_name,
+                entryPrice: position.entry_price_usd,
+                exitPrice: currentPriceUsd,
+                multiplier: multiplier,
+                profitSol: realizedPnlSol,
+                profitPercent: realizedPnlPercent,
+                exitReason: `Target ${position.target_multiplier}x reached`,
+                holdDurationMins: holdMins,
+              }
+            }).catch(e => console.error('Fantasy tweet error:', e))
+          );
+
         } else {
           // Just update current price and P&L
           await supabase

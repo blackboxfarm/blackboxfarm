@@ -66,6 +66,7 @@ import { formatDistanceToNow } from 'date-fns';
 // Lazy load the pipeline debugger and analysis tab
 const PipelineDebugger = lazy(() => import('./PipelineDebugger'));
 const FantasyAnalysisTab = lazy(() => import('./FantasyAnalysisTab'));
+const FantasyTweetTemplateEditor = lazy(() => import('./FantasyTweetTemplateEditor'));
 import { LossReviewCell } from './LossReviewCell';
 
 interface WatchlistItem {
@@ -1609,6 +1610,10 @@ export function TokenCandidatesDashboard() {
             <TrendingUp className="h-3 w-3" />
             📊 Analysis
           </TabsTrigger>
+          <TabsTrigger value="x-templates" className="flex items-center gap-1">
+            <Zap className="h-3 w-3" />
+            𝕏 Posts
+          </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-1">
             <FileText className="h-3 w-3" />
             Logs ({totalLogsCount})
@@ -2383,6 +2388,13 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                 minMcap: configEdits.min_market_cap_usd ?? 5000,
               }}
             />
+          </Suspense>
+        </TabsContent>
+
+        {/* X Post Templates Tab */}
+        <TabsContent value="x-templates" className="mt-4">
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><RefreshCw className="h-6 w-6 animate-spin" /></div>}>
+            <FantasyTweetTemplateEditor />
           </Suspense>
         </TabsContent>
 
