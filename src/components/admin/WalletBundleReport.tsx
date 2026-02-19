@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -119,11 +119,51 @@ function WalletAddress({ pubkey, nickname }: { pubkey: string; nickname?: string
   );
 }
 
+interface ReportHistoryItem {
+  id: string;
+  report_number: number;
+  wallet_count: number;
+  risk_score: number;
+  verdict: string;
+  risk_factors: string[];
+  created_at: string;
+}
+
 export function WalletBundleReport() {
   const [report, setReport] = useState<BundleReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [reportHistory, setReportHistory] = useState<ReportHistoryItem[]>([]);
+  const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  const [activeReportNumber, setActiveReportNumber] = useState<number | null>(null);
+
+  const fetchHistory = useCallback(async () => {
+    const { data } = await supabase
+      .from('bundle_reports')
+      .select('id, report_number, wallet_count, risk_score, verdict, risk_factors, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (data) setReportHistory(data as any);
+  }, []);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const loadReport = useCallback(async (id: string) => {
+    const { data } = await supabase
+      .from('bundle_reports')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (data) {
+      const reportData = (data as any).report_data as BundleReport;
+      setReport(reportData);
+      setActiveReportId(id);
+      setActiveReportNumber((data as any).report_number);
+    }
+  }, []);
 
   const runAnalysis = useCallback(async () => {
     setIsLoading(true);
@@ -138,7 +178,10 @@ export function WalletBundleReport() {
       if (data?.error) throw new Error(data.error);
       
       setReport(data);
-      toast({ title: "Bundle Analysis Complete", description: `Verdict: ${data.verdict} (Score: ${data.riskScore})` });
+      setActiveReportId(data.reportId || null);
+      setActiveReportNumber(data.reportNumber || null);
+      await fetchHistory();
+      toast({ title: "Bundle Analysis Complete", description: `Report #${data.reportNumber || '?'} — Verdict: ${data.verdict} (Score: ${data.riskScore})` });
     } catch (e: any) {
       console.error('Bundle analysis failed:', e);
       setError(e.message || 'Analysis failed');
@@ -146,7 +189,7 @@ export function WalletBundleReport() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [fetchHistory]);
 
   const toggleWallet = (pubkey: string) => {
     setExpandedWallets(prev => {
@@ -174,6 +217,9 @@ export function WalletBundleReport() {
                 <p className="text-sm text-muted-foreground mt-1">
                   On-chain forensic analysis of all managed wallets for bundle detection risk
                 </p>
+                {activeReportNumber && (
+                  <p className="text-xs text-primary mt-1 font-mono">Viewing Report #{activeReportNumber}</p>
+                )}
               </div>
             </div>
             <Button onClick={runAnalysis} disabled={isLoading} size="lg">
@@ -185,13 +231,49 @@ export function WalletBundleReport() {
               ) : (
                 <>
                   <Shield className="w-4 h-4 mr-2" />
-                  Run Full Analysis
+                  Run New Analysis
                 </>
               )}
             </Button>
           </div>
         </CardHeader>
       </Card>
+
+      {/* Report History */}
+      {reportHistory.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Clock className="w-4 h-4" /> Report History ({reportHistory.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {reportHistory.map((h) => {
+                const vc = VERDICT_CONFIG[h.verdict];
+                const isActive = h.id === activeReportId;
+                return (
+                  <Button
+                    key={h.id}
+                    variant={isActive ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => loadReport(h.id)}
+                    className={`text-xs gap-1.5 ${isActive ? '' : 'opacity-70 hover:opacity-100'}`}
+                  >
+                    <span className="font-mono">#{h.report_number}</span>
+                    <Badge variant="outline" className={`text-[10px] ${vc?.color || ''}`}>
+                      {h.risk_score}
+                    </Badge>
+                    <span className="text-muted-foreground">
+                      {new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  </Button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <Card className="border-destructive/50 bg-destructive/10">

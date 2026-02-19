@@ -1871,6 +1871,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bundle_reports: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          report_data: Json
+          report_number: number
+          risk_factors: Json
+          risk_score: number
+          verdict: string
+          wallet_count: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          report_data?: Json
+          report_number?: number
+          risk_factors?: Json
+          risk_score?: number
+          verdict?: string
+          wallet_count?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          report_data?: Json
+          report_number?: number
+          risk_factors?: Json
+          risk_score?: number
+          verdict?: string
+          wallet_count?: number
+        }
+        Relationships: []
+      }
       campaign_notifications: {
         Row: {
           campaign_id: string

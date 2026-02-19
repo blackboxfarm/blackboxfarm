@@ -547,7 +547,30 @@ Deno.serve(async (req) => {
 
     console.log(`Bundle analysis complete: ${verdict} (score: ${riskScore})`);
 
-    return new Response(JSON.stringify(report, null, 2), {
+    // Save report to database
+    const { data: savedReport, error: saveError } = await supabase
+      .from('bundle_reports')
+      .insert({
+        wallet_count: walletAnalyses.length,
+        risk_score: riskScore,
+        verdict,
+        risk_factors: riskFactors,
+        report_data: report,
+      })
+      .select('id, report_number')
+      .single();
+
+    if (saveError) {
+      console.error('Failed to save report:', saveError);
+    } else {
+      console.log(`Report saved as #${savedReport.report_number}`);
+    }
+
+    return new Response(JSON.stringify({
+      ...report,
+      reportId: savedReport?.id,
+      reportNumber: savedReport?.report_number,
+    }, null, 2), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
