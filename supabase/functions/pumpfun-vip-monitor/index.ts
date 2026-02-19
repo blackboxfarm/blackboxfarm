@@ -39,11 +39,81 @@ interface VIPStats {
   expiredQualified: number;
   expiredBuyNow: number;
   socialsUpdated: number;
+  duplicateTickerBlocked: number;
   errors: number;
   durationMs: number;
   promotedTokens: string[];
   bombedTokens: string[];
   expiredTokens: string[];
+  duplicateBlockedTokens: string[];
+}
+
+// Cross-platform duplicate ticker check via DexScreener
+// Returns true if a RECENT duplicate exists on another platform (should block)
+// "Recent" = created within `maxAgeDays` (default 7 days). Older tickers are considered stale/reusable.
+async function checkCrossPlatformDuplicate(
+  symbol: string,
+  ownMint: string,
+  maxAgeDays: number = 7
+): Promise<{ isDuplicate: boolean; existingMint?: string; existingName?: string; ageHours?: number; platform?: string }> {
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(symbol)}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return { isDuplicate: false };
+
+    const data = await response.json();
+    const pairs = data.pairs || [];
+
+    // Filter to Solana pairs with matching symbol (case-insensitive), excluding our own mint
+    const matchingPairs = pairs.filter((p: any) =>
+      p.chainId === 'solana' &&
+      p.baseToken?.symbol?.toLowerCase() === symbol.toLowerCase() &&
+      p.baseToken?.address !== ownMint
+    );
+
+    if (matchingPairs.length === 0) return { isDuplicate: false };
+
+    // Find the oldest matching pair (the "original")
+    let oldestPair: any = null;
+    let oldestCreatedAt = Infinity;
+    for (const pair of matchingPairs) {
+      const created = pair.pairCreatedAt || 0;
+      if (created > 0 && created < oldestCreatedAt) {
+        oldestCreatedAt = created;
+        oldestPair = pair;
+      }
+    }
+
+    if (!oldestPair) return { isDuplicate: false };
+
+    const ageMs = Date.now() - oldestCreatedAt;
+    const ageHours = ageMs / (1000 * 60 * 60);
+    const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+
+    // If the existing token is OLDER than maxAgeDays, it's stale — allow ticker reuse
+    if (ageMs > maxAgeMs) {
+      console.log(`   ✅ CROSS-PLATFORM: $${symbol} exists on DexScreener but is ${(ageHours / 24).toFixed(0)} days old (>${maxAgeDays}d) — STALE, allowing`);
+      return { isDuplicate: false };
+    }
+
+    // Recent duplicate found — block it
+    const platform = oldestPair.labels?.includes('pump.fun') ? 'pump.fun' :
+                     oldestPair.url?.includes('pump.fun') ? 'pump.fun' :
+                     oldestPair.dexId || 'unknown';
+
+    return {
+      isDuplicate: true,
+      existingMint: oldestPair.baseToken?.address,
+      existingName: oldestPair.baseToken?.name,
+      ageHours: Math.round(ageHours * 10) / 10,
+      platform,
+    };
+  } catch (error) {
+    console.warn(`   ⚠️ CROSS-PLATFORM check failed for $${symbol}: ${error}`);
+    return { isDuplicate: false }; // Fail-open: don't block on API errors
+  }
 }
 
 interface TokenMetrics {
@@ -227,11 +297,13 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
     expiredQualified: 0,
     expiredBuyNow: 0,
     socialsUpdated: 0,
+    duplicateTickerBlocked: 0,
     errors: 0,
     durationMs: 0,
     promotedTokens: [],
     bombedTokens: [],
     expiredTokens: [],
+    duplicateBlockedTokens: [],
   };
 
   console.log('⭐ VIP MONITOR: Starting VIP monitoring cycle...');
@@ -411,14 +483,32 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
         const volumeOk = volumeSol >= buyNowVolumeThreshold;
         
         if (holdersOk && volumeOk) {
-          updates.status = 'buy_now';
-          updates.promoted_to_buy_now_at = nowIso;
-          updates.price_at_buy_now_usd = metrics.priceUsd || token.price_usd;
-          updates.qualification_reason = `PROMOTED: ${metrics.holders || token.holder_count} holders, ${volumeSol.toFixed(2)} SOL volume`;
+          // === CROSS-PLATFORM DUPLICATE TICKER GATE ===
+          // Check DexScreener for same-symbol tokens on other launchpads (bags.fm, bonk.fun, etc.)
+          // Only block if the existing token was created within 7 days (recent = likely same hype cycle)
+          const dupCheck = await checkCrossPlatformDuplicate(token.token_symbol, token.token_mint, 7);
           
-          stats.promotedToBuyNow++;
-          stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders || token.holder_count} holders, ${volumeSol.toFixed(2)} SOL)`);
-          console.log(`🚀 BUY_NOW PROMOTION: ${token.token_symbol} - ${updates.qualification_reason}`);
+          if (dupCheck.isDuplicate) {
+            console.log(`🚫 CROSS-PLATFORM DUPLICATE BLOCKED: $${token.token_symbol} — already exists as ${dupCheck.existingMint?.slice(0,8)}... on ${dupCheck.platform} (${dupCheck.ageHours}h ago, name: "${dupCheck.existingName}")`);
+            
+            // Don't promote — mark as rejected
+            updates.status = 'rejected';
+            updates.rejection_reason = `cross_platform_duplicate:${dupCheck.existingMint?.slice(0,8)}`;
+            updates.rejection_type = 'permanent';
+            updates.removal_reason = `Cross-platform duplicate ticker — $${token.token_symbol} already exists on ${dupCheck.platform} (${dupCheck.ageHours}h old, mint: ${dupCheck.existingMint})`;
+            
+            stats.duplicateTickerBlocked++;
+            stats.duplicateBlockedTokens.push(`${token.token_symbol} (${dupCheck.platform}, ${dupCheck.ageHours}h)`);
+          } else {
+            updates.status = 'buy_now';
+            updates.promoted_to_buy_now_at = nowIso;
+            updates.price_at_buy_now_usd = metrics.priceUsd || token.price_usd;
+            updates.qualification_reason = `PROMOTED: ${metrics.holders || token.holder_count} holders, ${volumeSol.toFixed(2)} SOL volume`;
+            
+            stats.promotedToBuyNow++;
+            stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders || token.holder_count} holders, ${volumeSol.toFixed(2)} SOL)`);
+            console.log(`🚀 BUY_NOW PROMOTION: ${token.token_symbol} - ${updates.qualification_reason}`);
+          }
         }
       }
 
