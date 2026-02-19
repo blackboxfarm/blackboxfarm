@@ -440,13 +440,15 @@ async function processNewToken(
     }
   }
   
-  // === DUPLICATE TICKER CHECK (active tokens only) - case-insensitive ===
+  // === DUPLICATE TICKER CHECK (active tokens within 6h window) - case-insensitive ===
   if (symbol) {
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const { data: duplicateTickers, error: dupError } = await supabase
       .from('pumpfun_watchlist')
       .select('id, token_mint, token_symbol, status, first_seen_at, holder_count')
       .ilike('token_symbol', symbol) // Case-insensitive match
       .in('status', ['pending_triage', 'watching', 'qualified', 'buy_now', 'new', 'passed', 'active'])
+      .gte('first_seen_at', sixHoursAgo) // Only block if duplicate within last 6 hours
       .order('first_seen_at', { ascending: true })
       .limit(5);
     
