@@ -373,26 +373,25 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const blockBelowDiscoveryEnabled = gateConfigData?.block_below_discovery_enabled ?? true;
       const blockBelowDiscoveryPct = gateConfigData?.block_below_discovery_pct ?? 0;
       
-      // Use discovery price, fall back to price_start_usd — every token MUST have one
+      // Use discovery price, fall back to price_start_usd
       const effectiveDiscoveryPrice = discoveryPrice > 0 ? discoveryPrice : (token.price_start_usd || 0);
       const discoverySource = discoveryPrice > 0 ? 'discovery' : 'price_start';
       
       if (effectiveDiscoveryPrice <= 0) {
-        // This should literally never happen — but if it does, block it
-        console.log(`🚫 HARD GATE — NO PRICE DATA AT ALL: ${token.token_symbol} has no discovery or start price — BLOCKED`);
-        stats.errors.push(`${token.token_symbol}: No price data at all (impossible state)`);
-        continue;
-      }
-      
-      // ABSOLUTE RULE: Never buy below discovery price
-      const threshold = effectiveDiscoveryPrice * (1 - blockBelowDiscoveryPct / 100);
-      if (entryPriceUsd < threshold) {
-        entryBelowDiscovery = true;
-        const pctBelowDisc = ((effectiveDiscoveryPrice - entryPriceUsd) / effectiveDiscoveryPrice * 100).toFixed(1);
-        
-        console.log(`🚫 HARD GATE — BELOW DISCOVERY: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowDisc}% below ${discoverySource} $${effectiveDiscoveryPrice.toFixed(10)} — BLOCKED`);
-        stats.errors.push(`${token.token_symbol}: Below ${discoverySource} price by ${pctBelowDisc}% — BLOCKED`);
-        continue;
+        // No price reference available — skip the discovery gate entirely
+        // This is normal for tokens where price_at_discovery_usd wasn't captured
+        console.log(`⚠️ SKIP DISCOVERY GATE: ${token.token_symbol} has no discovery or start price — allowing through`);
+      } else if (blockBelowDiscoveryEnabled) {
+        // Only enforce when we have a valid reference price AND gate is enabled
+        const threshold = effectiveDiscoveryPrice * (1 - blockBelowDiscoveryPct / 100);
+        if (entryPriceUsd < threshold) {
+          entryBelowDiscovery = true;
+          const pctBelowDisc = ((effectiveDiscoveryPrice - entryPriceUsd) / effectiveDiscoveryPrice * 100).toFixed(1);
+          
+          console.log(`🚫 HARD GATE — BELOW DISCOVERY: ${token.token_symbol} entry $${entryPriceUsd.toFixed(10)} is ${pctBelowDisc}% below ${discoverySource} $${effectiveDiscoveryPrice.toFixed(10)} — BLOCKED`);
+          stats.errors.push(`${token.token_symbol}: Below ${discoverySource} price by ${pctBelowDisc}% — BLOCKED`);
+          continue;
+        }
       }
 
       // ============================================
