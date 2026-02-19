@@ -440,58 +440,14 @@ async function processNewToken(
     }
   }
   
-  // === DUPLICATE TICKER CHECK (active tokens within 6h window) - case-insensitive ===
-  if (symbol) {
-    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-    const { data: duplicateTickers, error: dupError } = await supabase
-      .from('pumpfun_watchlist')
-      .select('id, token_mint, token_symbol, status, first_seen_at, holder_count')
-      .ilike('token_symbol', symbol) // Case-insensitive match
-      .in('status', ['pending_triage', 'watching', 'qualified', 'buy_now', 'new', 'passed', 'active'])
-      .gte('first_seen_at', sixHoursAgo) // Only block if duplicate within last 6 hours
-      .order('first_seen_at', { ascending: true })
-      .limit(5);
-    
-    if (!dupError && duplicateTickers && duplicateTickers.length > 0) {
-      const originalToken = duplicateTickers[0];
-      console.log(`   🚫 DUPLICATE TICKER REJECTED: ${symbol} - already exists as ${originalToken.token_mint.slice(0,8)}... (${originalToken.status}, ${originalToken.holder_count || 0} holders)`);
-      
-      // Fetch metadata for social links and image
-      let metadata: TokenMetadata | null = null;
-      if (uri) {
-        metadata = await fetchTokenMetadata(uri);
-      }
-      
-      const socialsCount = [metadata?.twitter, metadata?.telegram, metadata?.website]
-        .filter(s => s && s.trim() !== '').length;
-      const hasImage = !!(metadata?.image && metadata.image !== '' && !metadata.image.includes('placeholder'));
-      
-      // Insert as rejected (permanent - scam/copycat)
-      await supabase.from('pumpfun_watchlist').insert({
-        token_mint: mint,
-        token_name: name,
-        token_symbol: symbol,
-        creator_wallet: traderPublicKey,
-        status: 'rejected',
-        rejection_reason: `duplicate_ticker:${originalToken.token_mint.slice(0,8)}`,
-        rejection_type: 'permanent',
-        rejection_reasons: ['duplicate_ticker', 'copycat_scam'],
-        source: 'websocket',
-        created_at_blockchain: new Date().toISOString(),
-        bonding_curve_pct: (vSolInBondingCurve / 85) * 100,
-        market_cap_sol: marketCapSol,
-        has_image: hasImage,
-        socials_count: socialsCount,
-        image_url: metadata?.image || null,
-        twitter_url: metadata?.twitter || null,
-        telegram_url: metadata?.telegram || null,
-        website_url: metadata?.website || null,
-        removal_reason: `Duplicate ticker - original: ${originalToken.token_mint}`,
-      });
-      
-      return { success: false, reason: 'duplicate_ticker' };
-    }
-  }
+  // === DUPLICATE TICKER CHECK - DISABLED ===
+  // Previously rejected tokens with the same ticker name as any existing token.
+  // This was far too aggressive - on pump.fun, hundreds of independent tokens share
+  // common names (PEPE, DOGE, TRUMP, etc). The filter was killing ~30% of all tokens
+  // when they weren't actual copycats. Other quality gates (holders, volume, momentum,
+  // market cap) are sufficient to filter low-quality tokens.
+  // TODO: Revisit with a smarter approach (e.g., same-creator detection, or only
+  // block if original token is still actively trading with significant volume).
   
   // === DEV WALLET HISTORY CHECK - reject serial scammers ===
   if (traderPublicKey) {
@@ -615,42 +571,12 @@ async function processNewToken(
     const code = (error as any)?.code;
     const msg = (error as any)?.message || '';
 
-    // If our DB-level uniqueness rule fired, it means another same-ticker token won the race.
-    if (code === '23505' && msg.includes('pumpfun_watchlist_unique_live_symbol')) {
-      const { data: original } = await supabase
-        .from('pumpfun_watchlist')
-        .select('token_mint, status')
-        .ilike('token_symbol', symbol)
-        .in('status', ['pending_triage', 'watching', 'qualified', 'buy_now', 'new', 'passed', 'active'])
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      await supabase.from('pumpfun_watchlist').insert({
-        token_mint: mint,
-        token_name: name,
-        token_symbol: symbol,
-        creator_wallet: traderPublicKey,
-        status: 'rejected',
-        rejection_reason: `duplicate_ticker:${(original?.token_mint || 'unknown').slice(0, 8)}`,
-        rejection_type: 'permanent',
-        rejection_reasons: ['duplicate_ticker', 'race_condition'],
-        source: 'websocket',
-        created_at_blockchain: new Date().toISOString(),
-        bonding_curve_pct: bondingCurvePercent,
-        market_cap_sol: marketCapSol,
-        twitter_url: metadata?.twitter || null,
-        telegram_url: metadata?.telegram || null,
-        website_url: metadata?.website || null,
-        image_url: metadata?.image || null,
-        has_image: hasImage,
-        socials_count: socialsCount,
-        holder_count: 1,
-        volume_5m: event.initialBuy || 0,
-        removal_reason: 'Duplicate ticker blocked (DB unique)',
-      });
-
-      return { success: false, reason: 'duplicate_ticker' };
+    // Note: pumpfun_watchlist_unique_live_symbol constraint was dropped.
+    // Duplicate tickers are now allowed - quality gates handle filtering.
+    if (code === '23505') {
+      // Handle other unique constraint violations (e.g., token_mint)
+      console.log(`   ⚠️ Unique constraint violation for ${symbol} (${mint.slice(0,8)}): ${msg}`);
+      return { success: false, reason: 'duplicate_mint' };
     }
 
     console.error(`   ❌ Failed to insert:`, error);
@@ -910,8 +836,8 @@ serve(async (req) => {
         const code = (error as any)?.code;
         const msg = (error as any)?.message || '';
 
-        if (code === '23505' && msg.includes('pumpfun_watchlist_unique_live_symbol')) {
-          return new Response(JSON.stringify({ error: 'Duplicate ticker already exists (live queue)' }), {
+        if (code === '23505') {
+          return new Response(JSON.stringify({ error: 'Token already exists in watchlist' }), {
             status: 409,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
