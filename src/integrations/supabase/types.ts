@@ -1846,6 +1846,7 @@ export type Database = {
           created_at: string | null
           id: string
           is_active: boolean | null
+          nickname: string | null
           pubkey: string
           secret_key_encrypted: string
           sol_balance: number | null
@@ -1855,6 +1856,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          nickname?: string | null
           pubkey: string
           secret_key_encrypted: string
           sol_balance?: number | null
@@ -1864,6 +1866,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          nickname?: string | null
           pubkey?: string
           secret_key_encrypted?: string
           sol_balance?: number | null
@@ -12527,6 +12530,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           last_balance_check: string | null
+          nickname: string | null
           pubkey: string
           secret_key: string
           secret_key_encrypted: string | null
@@ -12539,6 +12543,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_balance_check?: string | null
+          nickname?: string | null
           pubkey: string
           secret_key: string
           secret_key_encrypted?: string | null
@@ -12551,6 +12556,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_balance_check?: string | null
+          nickname?: string | null
           pubkey?: string
           secret_key?: string
           secret_key_encrypted?: string | null

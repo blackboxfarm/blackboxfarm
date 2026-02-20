@@ -294,8 +294,8 @@ export function MasterWalletsDashboard() {
     try {
       // Fetch all wallet sources in parallel (including custom imported wallets)
       const [poolWallets, blackboxWallets, superAdminWallets, airdropWallets, customWallets, campaignLinks] = await Promise.all([
-        supabase.from('wallet_pools').select('id, pubkey, sol_balance, is_active'),
-        supabase.from('blackbox_wallets').select('id, pubkey, sol_balance, is_active, updated_at'),
+        supabase.from('wallet_pools').select('id, pubkey, sol_balance, is_active, nickname'),
+        supabase.from('blackbox_wallets').select('id, pubkey, sol_balance, is_active, updated_at, nickname'),
         supabase.from('super_admin_wallets').select('id, pubkey, label, wallet_type, is_active, created_at'),
         supabase.from('airdrop_wallets').select('id, pubkey, nickname, sol_balance, is_active, updated_at'),
         supabase.functions.invoke('rent-reclaimer-wallets', { body: { action: 'list' } }),
@@ -326,6 +326,7 @@ export function MasterWalletsDashboard() {
           sourceLabel: cfg.label,
           purpose: 'trading',
           purposeEmoji: WALLET_PURPOSE_EMOJIS.trading.emoji,
+          label: (w as any).nickname || undefined,
           isActive: w.is_active ?? true,
           solBalance: w.sol_balance || 0,
           tokens: [],
@@ -347,6 +348,7 @@ export function MasterWalletsDashboard() {
           sourceLabel: cfg.label,
           purpose: campaigns.length > 0 ? 'volume' : 'bump',
           purposeEmoji: campaigns.length > 0 ? WALLET_PURPOSE_EMOJIS.volume.emoji : WALLET_PURPOSE_EMOJIS.bump.emoji,
+          label: (w as any).nickname || undefined,
           isActive: w.is_active ?? true,
           solBalance: w.sol_balance || 0,
           tokens: [],
@@ -538,6 +540,67 @@ export function MasterWalletsDashboard() {
       console.error('[MasterWallets] Toggle active failed:', error);
       toast({
         title: "Toggle Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Edit wallet label/nickname
+  const handleEditLabel = async (wallet: MasterWallet, newLabel: string) => {
+    const oldLabel = wallet.label;
+    
+    // Optimistically update UI
+    setWallets(prev => prev.map(w => 
+      w.id === wallet.id ? { ...w, label: newLabel || undefined } : w
+    ));
+
+    try {
+      if (wallet.source === 'custom') {
+        // Use edge function for rent_reclaimer_wallets
+        const { data, error } = await supabase.functions.invoke('rent-reclaimer-wallets', {
+          body: { action: 'update', id: wallet.id, nickname: newLabel || null }
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Update failed');
+      } else if (wallet.source === 'super_admin') {
+        const { error } = await supabase
+          .from('super_admin_wallets')
+          .update({ label: newLabel || null })
+          .eq('id', wallet.id);
+        if (error) throw error;
+      } else if (wallet.source === 'airdrop') {
+        const { error } = await supabase
+          .from('airdrop_wallets')
+          .update({ nickname: newLabel || null })
+          .eq('id', wallet.id);
+        if (error) throw error;
+      } else if (wallet.source === 'wallet_pool') {
+        const { error } = await supabase
+          .from('wallet_pools' as any)
+          .update({ nickname: newLabel || null })
+          .eq('id', wallet.id);
+        if (error) throw error;
+      } else if (wallet.source === 'blackbox') {
+        const { error } = await supabase
+          .from('blackbox_wallets' as any)
+          .update({ nickname: newLabel || null })
+          .eq('id', wallet.id);
+        if (error) throw error;
+      }
+
+      toast({
+        title: "✏️ Label Updated",
+        description: `Wallet ${wallet.pubkey.slice(0, 8)}... renamed to "${newLabel || '(no label)'}"`,
+      });
+    } catch (error: any) {
+      // Revert on failure
+      setWallets(prev => prev.map(w => 
+        w.id === wallet.id ? { ...w, label: oldLabel } : w
+      ));
+      console.error('[MasterWallets] Edit label failed:', error);
+      toast({
+        title: "Label Update Failed",
         description: error.message,
         variant: "destructive"
       });
@@ -802,6 +865,7 @@ export function MasterWalletsDashboard() {
                       onExportKey={exportPrivateKey}
                       onCopy={copyToClipboard}
                       onOpenSolscan={openInSolscan}
+                      onEditLabel={handleEditLabel}
                     />
                   ))}
                 </SortableContext>
