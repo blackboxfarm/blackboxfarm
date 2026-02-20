@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { 
-  RefreshCw, Copy, ExternalLink, ChevronDown, ChevronUp, Key, GripVertical
+  RefreshCw, Copy, ExternalLink, ChevronDown, ChevronUp, Key, GripVertical, Pencil, Check, X
 } from 'lucide-react';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 
@@ -54,6 +55,7 @@ interface SortableWalletCardProps {
   onExportKey: (wallet: MasterWallet) => void;
   onCopy: (text: string) => void;
   onOpenSolscan: (pubkey: string) => void;
+  onEditLabel?: (wallet: MasterWallet, newLabel: string) => void;
 }
 
 export function SortableWalletCard({
@@ -69,7 +71,10 @@ export function SortableWalletCard({
   onExportKey,
   onCopy,
   onOpenSolscan,
+  onEditLabel,
 }: SortableWalletCardProps) {
+  const [isEditingLabel, setIsEditingLabel] = useState(false);
+  const [editLabelValue, setEditLabelValue] = useState(wallet.label || '');
   const {
     attributes,
     listeners,
@@ -130,9 +135,50 @@ export function SortableWalletCard({
               </span>
             </div>
             
-            {/* Label if exists */}
-            {wallet.label && (
-              <span className="text-sm font-medium">{wallet.label}</span>
+            {/* Editable Label */}
+            {isEditingLabel ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  value={editLabelValue}
+                  onChange={(e) => setEditLabelValue(e.target.value)}
+                  className="h-7 w-40 text-sm"
+                  placeholder="Enter label..."
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      onEditLabel?.(wallet, editLabelValue);
+                      setIsEditingLabel(false);
+                    } else if (e.key === 'Escape') {
+                      setEditLabelValue(wallet.label || '');
+                      setIsEditingLabel(false);
+                    }
+                  }}
+                />
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => {
+                  onEditLabel?.(wallet, editLabelValue);
+                  setIsEditingLabel(false);
+                }}>
+                  <Check className="h-3 w-3 text-green-600" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => {
+                  setEditLabelValue(wallet.label || '');
+                  setIsEditingLabel(false);
+                }}>
+                  <X className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                {wallet.label && (
+                  <span className="text-sm font-medium">{wallet.label}</span>
+                )}
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => {
+                  setEditLabelValue(wallet.label || '');
+                  setIsEditingLabel(true);
+                }}>
+                  <Pencil className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              </div>
             )}
             
             {/* Linked campaigns */}
