@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS pumpfun_watchlist_unique_live_symbol;
