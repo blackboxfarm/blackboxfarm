@@ -1103,7 +1103,7 @@ serve(async (req) => {
         }
         
         // FINAL SAFETY: If we still have no decimals info and the value looks like raw base units,
-        // apply default decimals based on token type. Pump.fun tokens are ALWAYS 6 decimals.
+        // apply default decimals based on token type.
         if (tokenDecimals === null && quantityTokens !== null) {
           const rawValue = Number(quantityTokens);
           
@@ -1111,14 +1111,22 @@ serve(async (req) => {
           const isPumpToken = tokenMint.endsWith('pump');
           const defaultDecimals = isPumpToken ? 6 : 9;
           
-          // Heuristic: if quantityTokens is extremely large (>1e12), it's likely raw base units
-          // Normal human-readable amounts are rarely > 1 trillion tokens
-          if (rawValue > 1e12) {
+          // Cross-check: compare derived price vs preflight/market price
+          // If the raw quantity gives a price wildly different from market, it's raw base units
+          const derivedPrice = (solPrice * buyAmountSol) / rawValue;
+          const priceRatio = currentPrice > 0 && derivedPrice > 0 
+            ? Math.max(currentPrice / derivedPrice, derivedPrice / currentPrice) 
+            : Infinity;
+          
+          // If derived price is off by >100x from market price, or value > 1e9, it's raw base units
+          const looksLikeRawUnits = rawValue > 1e9 || priceRatio > 100;
+          
+          if (looksLikeRawUnits) {
             tokenDecimals = defaultDecimals;
             quantityTokensRaw = String(quantityTokens);
             const humanAmount = rawValue / Math.pow(10, tokenDecimals);
             quantityTokens = String(humanAmount);
-            console.log(`DECIMALS_APPLIED: Raw ${rawValue} / 10^${tokenDecimals} = ${humanAmount} tokens (isPumpToken=${isPumpToken})`);
+            console.log(`DECIMALS_APPLIED: Raw ${rawValue} / 10^${tokenDecimals} = ${humanAmount} tokens (isPumpToken=${isPumpToken}, priceRatio=${priceRatio.toFixed(1)})`);
           } else if (isPumpToken) {
             // For pump.fun tokens, always set decimals even if value looks reasonable
             tokenDecimals = 6;
