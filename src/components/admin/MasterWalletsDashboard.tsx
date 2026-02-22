@@ -768,7 +768,7 @@ export function MasterWalletsDashboard() {
               <AlertDialogHeader>
                 <AlertDialogTitle>🔥 Reclaim Rent from All Wallets?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will scan ALL {wallets.length} wallets for empty token accounts, close them to reclaim ~0.002 SOL each, and send the recovered SOL to the FlipIt treasury wallet. ⚠️ This creates on-chain links between wallets (bundling risk).
+                  This will scan ALL {wallets.length} wallets for empty token accounts and close them to reclaim ~0.002 SOL each. Recovered SOL stays in each wallet (no cross-wallet transfers — bundle-safe).
                   <br /><br />
                   <strong>This action cannot be undone.</strong>
                 </AlertDialogDescription>
