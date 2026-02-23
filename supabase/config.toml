@@ -441,3 +441,6 @@ verify_jwt = false
 
 [functions.backfill-rejection-mesh]
 verify_jwt = false
+
+[functions.token-flow-tracer]
+verify_jwt = false
