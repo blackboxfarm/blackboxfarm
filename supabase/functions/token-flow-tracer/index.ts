@@ -101,14 +101,160 @@ Deno.serve(async (req) => {
     const tokenFlows: TokenTransfer[] = [];
     const buybacks: TokenTransfer[] = [];
     const outflows: TokenTransfer[] = [];
+    const burns: TokenTransfer[] = [];
     const destinationWallets: Record<string, { totalAmount: number; txCount: number; isBurn: boolean }> = {};
 
     let totalBought = 0;
     let totalSent = 0;
     let totalBurned = 0;
+    let feesClaimTxs = 0;
+    let debuggedUnknown = false;
+    
+    // Debug: collect unique tx types to understand Helius format
+    const txTypeCounts: Record<string, number> = {};
 
     for (const tx of allTransactions) {
-      // Check tokenTransfers (SPL token transfers)
+      const txType = tx.type || '';
+      const txSource = tx.source || '';
+      txTypeCounts[`${txType}|${txSource}`] = (txTypeCounts[`${txType}|${txSource}`] || 0) + 1;
+
+      // Detect "Fees: Claim" / withdraw transactions
+      if (txType === 'WITHDRAW' && txSource === 'PUMP_FUN') {
+        feesClaimTxs++;
+      }
+
+      // BURN DETECTION: scan ALL transactions for burn activity
+      let burnDetectedInTx = false;
+
+      // Method A: Check Helius tx type
+      if (txType === 'BURN' || txType === 'BURN_CHECKED') {
+        if (tx.tokenTransfers) {
+          for (const transfer of tx.tokenTransfers) {
+            if (transfer.mint !== tokenMint) continue;
+            const amount = transfer.tokenAmount || 0;
+            if (amount > 0) {
+              burns.push({ signature: tx.signature, timestamp: tx.timestamp || 0, fromWallet: walletAddress, toWallet: 'BURNED', amount, isBurn: true, destinationType: 'burn' });
+              totalBurned += amount;
+              burnDetectedInTx = true;
+            }
+          }
+        }
+      }
+
+      // Method B: Check all instructions for burn/burnChecked (parsed or raw)
+      if (!burnDetectedInTx) {
+        const allIxs: any[] = [];
+        if (tx.instructions) allIxs.push(...tx.instructions);
+        if (tx.innerInstructions) {
+          for (const inner of tx.innerInstructions) {
+            if (inner.instructions) allIxs.push(...inner.instructions);
+          }
+        }
+
+        for (const ix of allIxs) {
+          const programId = ix.programId || '';
+          const ixType = (ix.parsed?.type || '').toLowerCase();
+          const ixData = ix.data || '';
+          
+          const isSplToken = programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
+                             programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+          
+          if (!isSplToken) continue;
+
+          // Parsed burn detection
+          if (ixType === 'burn' || ixType === 'burnchecked' || ixType === 'burn_checked') {
+            const burnInfo = ix.parsed?.info || {};
+            const mint = burnInfo.mint || '';
+            if (mint === tokenMint || mint === '') {
+              const rawAmount = burnInfo.amount || burnInfo.tokenAmount || '0';
+              const decimals = burnInfo.decimals || 6;
+              const amount = typeof rawAmount === 'string' ? Number(rawAmount) / Math.pow(10, decimals) : rawAmount;
+              if (amount > 0 && !burns.find(b => b.signature === tx.signature)) {
+                burns.push({ signature: tx.signature, timestamp: tx.timestamp || 0, fromWallet: burnInfo.authority || walletAddress, toWallet: 'BURNED', amount, isBurn: true, destinationType: 'burn' });
+                totalBurned += amount;
+                burnDetectedInTx = true;
+              }
+            }
+          }
+          
+          // Raw data burn detection: decode base58 instruction data
+          // SPL Token burn = instruction 8, burnChecked = instruction 15
+          if (!burnDetectedInTx && ixData && !ix.parsed?.type) {
+            try {
+              // Decode base58 data
+              const BS58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+              let num = BigInt(0);
+              for (const char of ixData) {
+                const idx = BS58_ALPHABET.indexOf(char);
+                if (idx < 0) break;
+                num = num * 58n + BigInt(idx);
+              }
+              const hex = num.toString(16).padStart(2, '0');
+              const bytes: number[] = [];
+              for (let i = 0; i < hex.length; i += 2) {
+                bytes.push(parseInt(hex.substring(i, i + 2), 16));
+              }
+              
+              // Check instruction discriminator
+              const discriminator = bytes[0];
+              // 8 = burn (amount as u64 LE), 15 = burnChecked (amount as u64 LE + decimals as u8)
+              if (discriminator === 8 || discriminator === 15) {
+                // Extract u64 amount (little-endian, bytes 1-8)
+                if (bytes.length >= 9) {
+                  let rawAmount = BigInt(0);
+                  for (let i = 8; i >= 1; i--) {
+                    rawAmount = rawAmount * 256n + BigInt(bytes[i]);
+                  }
+                  
+                  // For burnChecked, decimals is at byte 9
+                  const decimals = discriminator === 15 && bytes.length > 9 ? bytes[9] : 6;
+                  const amount = Number(rawAmount) / Math.pow(10, decimals);
+                  
+                  if (amount > 0 && !burns.find(b => b.signature === tx.signature)) {
+                    console.log(`[token-flow-tracer] RAW BURN DETECTED: sig=${tx.signature.slice(0, 16)}, amount=${amount}, decimals=${decimals}, discriminator=${discriminator}`);
+                    burns.push({ signature: tx.signature, timestamp: tx.timestamp || 0, fromWallet: walletAddress, toWallet: 'BURNED', amount, isBurn: true, destinationType: 'burn' });
+                    totalBurned += amount;
+                    burnDetectedInTx = true;
+                  }
+                }
+              }
+            } catch {
+              // Ignore decode errors
+            }
+          }
+        }
+      }
+
+      // Method C: For UNKNOWN txs, check if accountData shows a token balance decrease
+      // and no corresponding transfer (implies burn)
+      if (!burnDetectedInTx && txType === 'UNKNOWN') {
+        // Log first UNKNOWN tx structure for debugging
+        if (burns.length === 0 && !debuggedUnknown) {
+          debuggedUnknown = true;
+          // Log a compact summary of the tx structure
+          const ixSummary = (tx.instructions || []).map((ix: any) => ({
+            programId: ix.programId?.slice(0, 8),
+            type: ix.parsed?.type || ix.type || 'raw',
+            accounts: ix.accounts?.length || 0,
+            data: ix.data?.slice(0, 20) || null,
+          }));
+          console.log(`[token-flow-tracer] UNKNOWN tx sample: sig=${tx.signature?.slice(0, 16)}, instructions=${JSON.stringify(ixSummary)}`);
+          
+          // Also log inner instructions
+          if (tx.innerInstructions?.length) {
+            const innerSummary = tx.innerInstructions.flatMap((inner: any) => 
+              (inner.instructions || []).map((ix: any) => ({
+                programId: ix.programId?.slice(0, 8),
+                type: ix.parsed?.type || 'raw',
+                data: ix.data?.slice(0, 20) || null,
+              }))
+            );
+            console.log(`[token-flow-tracer] UNKNOWN tx inner: ${JSON.stringify(innerSummary)}`);
+          }
+        }
+      }
+
+      // Check tokenTransfers for buys and outflows
       if (tx.tokenTransfers && Array.isArray(tx.tokenTransfers)) {
         for (const transfer of tx.tokenTransfers) {
           if (transfer.mint !== tokenMint) continue;
@@ -133,8 +279,8 @@ Deno.serve(async (req) => {
           }
 
           // Is this an outflow (tokens going OUT from the dev wallet)?
-          if (from === walletAddress && to !== walletAddress) {
-            const isBurn = BURN_ADDRESSES.has(to) || to === '';
+          if (from === walletAddress && to !== walletAddress && to !== '') {
+            const isBurn = BURN_ADDRESSES.has(to);
             const flow: TokenTransfer = {
               signature: tx.signature,
               timestamp: tx.timestamp || 0,
@@ -220,11 +366,15 @@ Deno.serve(async (req) => {
     // Sort by total received
     destinationAnalysis.sort((a, b) => b.totalReceived - a.totalReceived);
 
+    console.log(`[token-flow-tracer] TX TYPE BREAKDOWN:`, JSON.stringify(txTypeCounts));
+
     // Determine verdict
     let verdict = 'unknown';
-    if (totalBurned > 0 && totalBurned > totalSent) {
+    if (totalBurned > 0 && totalSent > 0) {
+      verdict = 'BURN_AND_DISTRIBUTE';
+    } else if (totalBurned > 0 && totalSent === 0) {
       verdict = 'BURNING_TOKENS';
-    } else if (totalSent > 0 && totalSent > totalBurned) {
+    } else if (totalSent > 0 && totalBurned === 0) {
       verdict = 'DISTRIBUTING_TO_WALLETS';
     } else if (totalBought > 0 && totalSent === 0 && totalBurned === 0) {
       verdict = 'HOLDING_IN_WALLET';
@@ -239,12 +389,20 @@ Deno.serve(async (req) => {
       tokenMint,
       totalTransactionsScanned: allTransactions.length,
       totalBuybackTxs: buybacks.length,
+      totalBurnTxs: burns.length,
       totalOutflowTxs: outflows.length,
+      feesClaimTxs,
       totalTokensBought: totalBought,
       totalTokensSentOut: totalSent,
       totalTokensBurned: totalBurned,
+      netTokensHeld: totalBought - totalSent - totalBurned,
       verdict,
       destinations: destinationAnalysis,
+      recentBurns: burns.slice(0, 10).map(b => ({
+        signature: b.signature,
+        amount: b.amount,
+        timestamp: b.timestamp ? new Date(b.timestamp * 1000).toISOString() : null,
+      })),
       recentBuybacks: buybacks.slice(0, 10).map(b => ({
         signature: b.signature,
         amount: b.amount,
