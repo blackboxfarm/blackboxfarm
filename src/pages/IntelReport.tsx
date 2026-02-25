@@ -98,7 +98,9 @@ export default function IntelReport() {
       let wallet = input.trim();
       const originalInput = wallet;
 
-      // Resolve token -> creator wallet (3-stage fallback)
+      // Resolve token -> creator wallet (multi-stage fallback)
+      let resolvedCreator: string | null = null;
+
       const { data: watchlistHit } = await supabase
         .from("pumpfun_watchlist")
         .select("creator_wallet")
@@ -107,7 +109,7 @@ export default function IntelReport() {
         .maybeSingle();
 
       if (watchlistHit?.creator_wallet) {
-        wallet = watchlistHit.creator_wallet;
+        resolvedCreator = watchlistHit.creator_wallet;
       } else {
         const { data: lifecycleHit } = await supabase
           .from("token_lifecycle")
@@ -115,28 +117,52 @@ export default function IntelReport() {
           .eq("token_mint", originalInput)
           .limit(1)
           .maybeSingle();
+
         if (lifecycleHit?.creator_wallet) {
-          wallet = lifecycleHit.creator_wallet;
+          resolvedCreator = lifecycleHit.creator_wallet;
         } else {
-          // Fallback: use token-creator-linker to resolve on-chain
-          try {
-            const { data: linkerData } = await supabase.functions.invoke("token-creator-linker", {
-              body: { tokenMints: [originalInput] },
-            });
-            if (linkerData?.results?.[0]?.creatorWallet) {
-              wallet = linkerData.results[0].creatorWallet;
-            } else if (linkerData?.results?.[0]?.creator_wallet) {
-              wallet = linkerData.results[0].creator_wallet;
-            }
-          } catch (e) {
-            console.warn("token-creator-linker fallback failed:", e);
+          const { data: devTokenHit } = await supabase
+            .from("developer_tokens")
+            .select("creator_wallet")
+            .eq("token_mint", originalInput)
+            .limit(1)
+            .maybeSingle();
+
+          if (devTokenHit?.creator_wallet) {
+            resolvedCreator = devTokenHit.creator_wallet;
           }
         }
       }
 
+      if (!resolvedCreator && originalInput.toLowerCase().endsWith("pump")) {
+        // Last fallback for token-looking input: trigger linker, then re-read indexed creator
+        try {
+          await supabase.functions.invoke("token-creator-linker", {
+            body: { tokenMints: [originalInput] },
+          });
+
+          const { data: linkedDevTokenHit } = await supabase
+            .from("developer_tokens")
+            .select("creator_wallet")
+            .eq("token_mint", originalInput)
+            .limit(1)
+            .maybeSingle();
+
+          if (linkedDevTokenHit?.creator_wallet) {
+            resolvedCreator = linkedDevTokenHit.creator_wallet;
+          }
+        } catch (e) {
+          console.warn("token-creator-linker fallback failed:", e);
+        }
+      }
+
+      if (resolvedCreator) {
+        wallet = resolvedCreator;
+      }
+
       setCreatorWallet(wallet);
 
-      const [scanResponse, repResponse, blResponse, meshResponse] = await Promise.all([
+      const [scanResponse, repResponse, blResponse, meshResponse, devTokensResponse] = await Promise.all([
         supabase.functions.invoke("offspring-mint-scanner", {
           body: { parentWallet: wallet, maxDepth: 0 },
         }),
@@ -155,9 +181,45 @@ export default function IntelReport() {
           .select("source_id, linked_id, relationship, confidence")
           .or(`source_id.eq.${wallet},linked_id.eq.${wallet}`)
           .limit(50),
+        supabase
+          .from("developer_tokens")
+          .select("token_mint, creator_wallet, launch_date, created_at")
+          .eq("creator_wallet", wallet)
+          .limit(250),
       ]);
 
-      if (scanResponse.data) setScanResult(scanResponse.data as ScanResult);
+      const dbMintedTokens: MintedToken[] = (devTokensResponse.data ?? []).map((token: any) => ({
+        tokenMint: token.token_mint,
+        creatorWallet: token.creator_wallet,
+        createdAt: token.launch_date || token.created_at || undefined,
+        depth: 0,
+        fundingPath: [wallet],
+      }));
+
+      if (scanResponse.data) {
+        const scanData = scanResponse.data as ScanResult;
+        const mergedScan: ScanResult =
+          scanData.totalTokensMinted === 0 && dbMintedTokens.length > 0
+            ? {
+                ...scanData,
+                allMintedTokens: dbMintedTokens,
+                totalTokensMinted: dbMintedTokens.length,
+                totalMinters: Math.max(scanData.totalMinters, 1),
+              }
+            : scanData;
+        setScanResult(mergedScan);
+      } else if (dbMintedTokens.length > 0) {
+        setScanResult({
+          parentWallet: wallet,
+          totalOffspring: 0,
+          totalMinters: 1,
+          totalTokensMinted: dbMintedTokens.length,
+          allMintedTokens: dbMintedTokens,
+          scanDepth: 0,
+          scanDuration: 0,
+        });
+      }
+
       if (repResponse.data) setDevRep(repResponse.data as unknown as DevReputation);
       if (blResponse.data) setBlacklistEntries(blResponse.data as unknown as BlacklistEntry[]);
       if (meshResponse.data) setMeshLinks(meshResponse.data as unknown as MeshLink[]);
