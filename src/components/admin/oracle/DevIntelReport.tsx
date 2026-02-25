@@ -17,12 +17,23 @@ interface MintedToken {
   fundingPath: string[];
 }
 
+interface OffspringWallet {
+  wallet: string;
+  depth: number;
+  amountReceived: number;
+  timestamp?: string;
+  hasMinted: boolean;
+  mintedTokens: MintedToken[];
+  children: OffspringWallet[];
+}
+
 interface ScanResult {
   parentWallet: string;
   totalOffspring: number;
   totalMinters: number;
   totalTokensMinted: number;
   allMintedTokens: MintedToken[];
+  offspringTree?: OffspringWallet;
   scanDepth: number;
   scanDuration: number;
 }
@@ -78,6 +89,17 @@ function WalletAddress({ address, label }: { address: string; label?: string }) 
       <CopyButton text={address} />
     </span>
   );
+}
+
+function flattenOffspringWallets(node?: OffspringWallet): Array<{ wallet: string; depth: number; minted: number }> {
+  if (!node) return [];
+
+  const wallets = [{ wallet: node.wallet, depth: node.depth, minted: node.mintedTokens?.length ?? 0 }];
+  for (const child of node.children ?? []) {
+    wallets.push(...flattenOffspringWallets(child));
+  }
+
+  return wallets;
 }
 
 export default function DevIntelReport() {
@@ -166,11 +188,12 @@ export default function DevIntelReport() {
 
       setCreatorWallet(wallet);
 
-      // Step 2: Run offspring scanner + DB lookups in parallel
-      const [scanResponse, repResponse, blResponse, meshResponse, devTokensResponse] = await Promise.all([
-        supabase.functions.invoke("offspring-mint-scanner", {
-          body: { parentWallet: wallet, maxDepth: 0 },
-        }),
+      // Step 2: Run DB lookups immediately and deep-scan in background
+      const scannerPromise = supabase.functions.invoke("offspring-mint-scanner", {
+        body: { parentWallet: wallet, maxDepth: 3 },
+      });
+
+      const [repResponse, blResponse, meshResponse, devTokensResponse] = await Promise.all([
         supabase
           .from("dev_wallet_reputation")
           .select("*")
@@ -201,19 +224,7 @@ export default function DevIntelReport() {
         fundingPath: [wallet],
       }));
 
-      if (scanResponse.data) {
-        const scanData = scanResponse.data as ScanResult;
-        const mergedScan: ScanResult =
-          scanData.totalTokensMinted === 0 && dbMintedTokens.length > 0
-            ? {
-                ...scanData,
-                allMintedTokens: dbMintedTokens,
-                totalTokensMinted: dbMintedTokens.length,
-                totalMinters: Math.max(scanData.totalMinters, 1),
-              }
-            : scanData;
-        setScanResult(mergedScan);
-      } else if (dbMintedTokens.length > 0) {
+      if (dbMintedTokens.length > 0) {
         setScanResult({
           parentWallet: wallet,
           totalOffspring: 0,
@@ -224,6 +235,7 @@ export default function DevIntelReport() {
           scanDuration: 0,
         });
       }
+
       if (repResponse.data) {
         setDevRep(repResponse.data as unknown as DevReputation);
       }
@@ -234,8 +246,37 @@ export default function DevIntelReport() {
         setMeshLinks(meshResponse.data as unknown as MeshLink[]);
       }
 
-      const totalFound = (scanResponse.data as ScanResult | null)?.totalTokensMinted || dbMintedTokens.length;
-      toast({ title: "Report loaded", description: `Found ${totalFound} minted tokens` });
+      toast({ title: "Report loaded", description: `Found ${dbMintedTokens.length} indexed minted tokens` });
+
+      void scannerPromise
+        .then((scanResponse) => {
+          const scanData = (scanResponse.data as ScanResult | null) ?? null;
+          if (!scanData) return;
+
+          const mergedTokensMap = new Map<string, MintedToken>();
+          for (const token of scanData.allMintedTokens ?? []) {
+            mergedTokensMap.set(token.tokenMint, token);
+          }
+          for (const token of dbMintedTokens) {
+            if (!mergedTokensMap.has(token.tokenMint)) {
+              mergedTokensMap.set(token.tokenMint, token);
+            }
+          }
+
+          const mergedTokens = Array.from(mergedTokensMap.values()).sort((a, b) =>
+            (b.createdAt || "").localeCompare(a.createdAt || "")
+          );
+
+          setScanResult({
+            ...scanData,
+            allMintedTokens: mergedTokens,
+            totalTokensMinted: mergedTokens.length,
+            totalMinters: Math.max(scanData.totalMinters, mergedTokens.length > 0 ? 1 : 0),
+          });
+        })
+        .catch((scanError) => {
+          console.warn("offspring-mint-scanner background scan failed:", scanError);
+        });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -260,6 +301,9 @@ export default function DevIntelReport() {
       default: return "bg-muted text-muted-foreground";
     }
   };
+
+  const familyWallets = flattenOffspringWallets(scanResult?.offspringTree);
+  const relatedWalletCount = Math.max(familyWallets.length - 1, 0);
 
   return (
     <div className="space-y-4">
@@ -374,6 +418,52 @@ export default function DevIntelReport() {
                       <span className="text-muted-foreground ml-auto">({link.confidence}%)</span>
                     </div>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Wallet Family Tree */}
+          {familyWallets.length > 0 && (
+            <Card className="border-violet-500/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">
+                  🌳 Wallet Family Tree ({relatedWalletCount} related wallets)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto max-h-72">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 px-2 text-muted-foreground font-medium w-14">Depth</th>
+                        <th className="text-left py-2 px-2 text-muted-foreground font-medium">Wallet</th>
+                        <th className="text-left py-2 px-2 text-muted-foreground font-medium w-20">Mints</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {familyWallets.map((node, i) => (
+                        <tr key={`${node.wallet}-${i}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                          <td className="py-2 px-2 text-muted-foreground">{node.depth}</td>
+                          <td className="py-2 px-2">
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono text-foreground break-all">{node.wallet}</span>
+                              <CopyButton text={node.wallet} />
+                              <a
+                                href={`https://solscan.io/account/${node.wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+                              >
+                                solscan <ExternalLink className="h-3 w-3" />
+                              </a>
+                            </div>
+                          </td>
+                          <td className="py-2 px-2 text-muted-foreground">{node.minted}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
