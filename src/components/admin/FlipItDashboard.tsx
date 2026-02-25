@@ -1280,8 +1280,8 @@ export function FlipItDashboard() {
               } else {
                 // Truly unresolved — show aggressive warning
                 setBlacklistWarning({
-                  level: 'high',
-                  reason: '🚨 STAY AWAY — Creator wallet unresolved. We checked pump.fun, internal DB, and on-chain mint authority, and still cannot verify this token is safe.',
+                  level: 'low',
+                  reason: '⚠️ Creator wallet unresolved — proceed with caution',
                   source: 'creator_wallet',
                   entryType: 'unresolved_creator'
                 });
@@ -3673,7 +3673,7 @@ export function FlipItDashboard() {
                       </span>
                     ) : blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked' || blacklistWarning.level === 'medium' ? (
                       <div className="flex items-center gap-2">
-                        <span className="text-red-500 font-bold text-sm uppercase">FAIL</span>
+                        <span className="text-amber-400 font-bold text-sm uppercase">⚠ WARNING</span>
                         <span className="text-zinc-400 text-xs max-w-[300px] truncate" title={blacklistWarning.reason || ''}>
                           {blacklistWarning.reason}
                         </span>
@@ -3681,7 +3681,7 @@ export function FlipItDashboard() {
                           href={`/super-admin?tab=oracle`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-red-400 hover:text-red-300 text-xs underline flex-shrink-0"
+                          className="text-amber-400 hover:text-amber-300 text-xs underline flex-shrink-0"
                         >
                           View Mesh ↗
                         </a>
