@@ -43,9 +43,16 @@ Deno.serve(async (req) => {
         .not('creator_wallet', 'is', null)
         .like('token_mint', '%pump')
         .range(offset, offset + batchSize - 1);
+    } else if (table === 'pumpfun_watchlist') {
+      query = supabase
+        .from('pumpfun_watchlist')
+        .select('token_mint, creator_wallet')
+        .not('creator_wallet', 'is', null)
+        .like('token_mint', '%pump')
+        .range(offset, offset + batchSize - 1);
     } else {
       return new Response(
-        JSON.stringify({ error: 'Invalid table. Use: scraped_tokens, token_lifecycle, developer_tokens' }),
+        JSON.stringify({ error: 'Invalid table. Use: scraped_tokens, token_lifecycle, developer_tokens, pumpfun_watchlist' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
