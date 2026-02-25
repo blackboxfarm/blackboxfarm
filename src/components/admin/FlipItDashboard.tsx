@@ -847,7 +847,7 @@ export function FlipItDashboard() {
         setBlacklistWarning({
           level: normalizedLevel,
           reason: isCreatorBlacklisted
-            ? `🚨 STAY THE FUCK AWAY — This dev wallet is blacklisted (${entry.risk_level.toUpperCase()}). ${entry.blacklist_reason || `We've seen this shit before.`}`
+            ? `🚨 BLACKLISTED DEV — Risk: ${entry.risk_level.toUpperCase()}. ${entry.blacklist_reason || 'Previously flagged for malicious activity'}. Creator wallet on kill list.`
             : (entry.blacklist_reason || `Blacklisted ${entry.entry_type}`),
           source: source as any,
           entryType: entry.entry_type
@@ -886,7 +886,20 @@ export function FlipItDashboard() {
             if (rep.trust_level === 'scammer' || rep.trust_level === 'serial_rugger') {
               setBlacklistWarning({
                 level: 'high',
-                reason: `🚨 STAY THE FUCK AWAY — This dev is a known ${rep.trust_level === 'serial_rugger' ? 'SERIAL RUGGER' : 'SCAMMER'}. ${rep.tokens_rugged || 0} rugs on record, reputation score: ${rep.reputation_score || 0}. We've seen this shit before.`,
+                reason: `🚨 ${rep.trust_level === 'serial_rugger' ? 'SERIAL RUGGER' : 'KNOWN SCAMMER'} — ${rep.tokens_rugged || 0} rugged tokens on record. Reputation score: ${rep.reputation_score || 0}/100. Dev wallet flagged across mesh network.`,
+                source: 'creator_wallet',
+                entryType: 'dev_wallet_reputation'
+              });
+              setIsCheckingBlacklist(false);
+              return;
+            }
+            
+            // Check for POSITIVE performer — green-light known good devs
+            if (rep.trust_level === 'trusted' || rep.trust_level === 'legitimate_builder' || rep.trust_level === 'success') {
+              const successTokens = (rep as any).tokens_graduated || 0;
+              setBlacklistWarning({
+                level: 'trusted',
+                reason: `✅ KNOWN GOOD DEV — Trust: ${rep.trust_level.replace(/_/g, ' ').toUpperCase()}. ${successTokens > 0 ? `${successTokens} graduated token${successTokens > 1 ? 's' : ''}. ` : ''}Reputation: ${rep.reputation_score || 0}/100. Previous positive performer.`,
                 source: 'creator_wallet',
                 entryType: 'dev_wallet_reputation'
               });
@@ -924,7 +937,7 @@ export function FlipItDashboard() {
                 const blEntry = linkedBlacklist[0];
                 setBlacklistWarning({
                   level: 'mesh_linked',
-                  reason: `🕸️ STAY AWAY — This dev is funded by a BLACKLISTED scammer network (${link.relationship.replace(/_/g, ' ')}). Root wallet: ${blEntry.identifier.slice(0, 8)}... — ${blEntry.blacklist_reason || 'known bad actor'}. Same shit, different token.`,
+                  reason: `🕸️ MESH LINKED — Dev wallet connected to blacklisted entity via ${link.relationship.replace(/_/g, ' ')}. Root: ${blEntry.identifier.slice(0, 8)}... (${blEntry.blacklist_reason || 'flagged bad actor'}). ${dangerousLinks.length} chain link${dangerousLinks.length > 1 ? 's' : ''} detected.`,
                   source: 'mesh',
                   entryType: 'reputation_mesh'
                 });
@@ -3672,6 +3685,13 @@ export function FlipItDashboard() {
                         >
                           View Mesh ↗
                         </a>
+                      </div>
+                    ) : blacklistWarning.level === 'trusted' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-400 font-bold text-sm uppercase">✅ GREEN LIGHT</span>
+                        <span className="text-zinc-400 text-xs max-w-[300px] truncate" title={blacklistWarning.reason || ''}>
+                          {blacklistWarning.reason}
+                        </span>
                       </div>
                     ) : (
                       <span className="text-green-500 font-bold text-sm uppercase">PASS</span>
