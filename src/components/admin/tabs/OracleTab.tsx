@@ -7,6 +7,8 @@ import OracleClassificationsFeed from "@/components/admin/oracle/OracleClassific
 import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus";
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 
+const DevIntelReport = lazy(() => import("@/components/admin/oracle/DevIntelReport"));
+
 const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 const XCommunityManager = lazy(() => import("@/components/admin/oracle/XCommunityManager"));
 const TeamIntelDashboard = lazy(() => import("@/components/admin/oracle/TeamIntelDashboard"));
@@ -50,6 +52,9 @@ const OracleTab = () => {
           <TabsTrigger value="mesh" className="data-[state=active]:bg-primary/20">
             🗺️ Mesh Viewer
           </TabsTrigger>
+          <TabsTrigger value="dev-intel" className="data-[state=active]:bg-primary/20">
+            🌳 Dev Intel Report
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="lookup" className="space-y-4">
@@ -84,6 +89,12 @@ const OracleTab = () => {
 
         <TabsContent value="mesh" className="space-y-4">
           <OracleMeshViewer />
+        </TabsContent>
+
+        <TabsContent value="dev-intel" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <DevIntelReport />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </div>
