@@ -193,6 +193,10 @@ export default function DevIntelReport() {
         body: { parentWallet: wallet, maxDepth: 3 },
       });
 
+      const genealogyPromise = supabase.functions.invoke("wallet-genealogy-scanner", {
+        body: { wallets: [wallet], maxDepth: 3, minAmountSol: 0.05 },
+      });
+
       const [repResponse, blResponse, meshResponse, devTokensResponse] = await Promise.all([
         supabase
           .from("dev_wallet_reputation")
@@ -248,6 +252,39 @@ export default function DevIntelReport() {
 
       toast({ title: "Report loaded", description: `Found ${dbMintedTokens.length} indexed minted tokens` });
 
+      void genealogyPromise
+        .then((genealogyResponse) => {
+          const genealogyTree = (genealogyResponse.data as any)?.results?.[0]?.funding_tree;
+          if (!genealogyTree) return;
+
+          const mapGenealogyToOffspring = (node: any): OffspringWallet => ({
+            wallet: node?.wallet,
+            depth: node?.depth ?? 0,
+            amountReceived: node?.amount_sol ?? 0,
+            timestamp: node?.timestamp ?? undefined,
+            hasMinted: false,
+            mintedTokens: [],
+            children: Array.isArray(node?.children) ? node.children.map(mapGenealogyToOffspring) : [],
+          });
+
+          setScanResult((prev) => {
+            const fallback: ScanResult = {
+              parentWallet: wallet,
+              totalOffspring: 0,
+              totalMinters: 1,
+              totalTokensMinted: dbMintedTokens.length,
+              allMintedTokens: dbMintedTokens,
+              scanDepth: 0,
+              scanDuration: 0,
+            };
+            return {
+              ...(prev ?? fallback),
+              offspringTree: mapGenealogyToOffspring(genealogyTree),
+            };
+          });
+        })
+        .catch((err) => console.warn("wallet-genealogy-scanner failed:", err));
+
       void scannerPromise
         .then((scanResponse) => {
           const scanData = (scanResponse.data as ScanResult | null) ?? null;
@@ -267,12 +304,14 @@ export default function DevIntelReport() {
             (b.createdAt || "").localeCompare(a.createdAt || "")
           );
 
-          setScanResult({
+          setScanResult((prev) => ({
+            ...((prev as ScanResult) ?? scanData),
             ...scanData,
             allMintedTokens: mergedTokens,
             totalTokensMinted: mergedTokens.length,
             totalMinters: Math.max(scanData.totalMinters, mergedTokens.length > 0 ? 1 : 0),
-          });
+            offspringTree: (prev as ScanResult)?.offspringTree ?? scanData.offspringTree,
+          }));
         })
         .catch((scanError) => {
           console.warn("offspring-mint-scanner background scan failed:", scanError);
