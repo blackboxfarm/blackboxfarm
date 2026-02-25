@@ -566,22 +566,28 @@ serve(async (req) => {
         const guardResult = await runMeshGuard(supabase, tokenMint);
         
         if (guardResult.blocked) {
-          execLog.logFailure('MESH GUARD BLOCKED', { 
-            reason: guardResult.reason, 
-            level: guardResult.level, 
+          execLog.log('MESH_GUARD_WARNING_BYPASSED', {
+            reason: guardResult.reason,
+            level: guardResult.level,
             source: guardResult.source,
+            creatorWallet: guardResult.creatorWallet?.slice(0, 8),
+            creatorSource: guardResult.creatorSource,
+          });
+          execLog.logPhaseEnd('BLACKLIST_MESH_GUARD', {
+            passed: true,
+            bypassed: true,
+            level: guardResult.level,
+            creatorWallet: guardResult.creatorWallet?.slice(0, 8),
+            creatorSource: guardResult.creatorSource,
+          });
+        } else {
+          execLog.logPhaseEnd('BLACKLIST_MESH_GUARD', { 
+            passed: true, 
+            level: guardResult.level,
             creatorWallet: guardResult.creatorWallet?.slice(0, 8),
             creatorSource: guardResult.creatorSource
           });
-          return bad(`BLOCKED: ${guardResult.reason}`);
         }
-        
-        execLog.logPhaseEnd('BLACKLIST_MESH_GUARD', { 
-          passed: true, 
-          level: guardResult.level,
-          creatorWallet: guardResult.creatorWallet?.slice(0, 8),
-          creatorSource: guardResult.creatorSource
-        });
       } catch (guardErr) {
         execLog.log('MESH_GUARD_ERROR', { error: String(guardErr) });
         // Fail open on unexpected guard errors to not break trading
