@@ -236,6 +236,37 @@ async function fetchMetaplexMetadata(mintAddress: string, rpcUrl: string) {
   return null;
 }
 
+// Resolve creator-like authority directly from on-chain mint account (Solscan-equivalent source)
+async function fetchMintAuthorityFallback(mintAddress: string, rpcUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getAccountInfo',
+        params: [mintAddress, { encoding: 'jsonParsed' }]
+      })
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    const info = data?.result?.value?.data?.parsed?.info;
+
+    const mintAuthority = typeof info?.mintAuthority === 'string' ? info.mintAuthority : null;
+    if (mintAuthority) return mintAuthority;
+
+    const freezeAuthority = typeof info?.freezeAuthority === 'string' ? info.freezeAuthority : null;
+    if (freezeAuthority) return freezeAuthority;
+
+    return null;
+  } catch (error) {
+    console.warn('Mint authority fallback failed:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
 // Extract social links from DexScreener pair data
 function extractSocialLinks(dexData: any): { twitter?: string; website?: string; telegram?: string } {
   const socials: { twitter?: string; website?: string; telegram?: string } = {};
@@ -674,45 +705,64 @@ serve(async (req) => {
     }
 
     // ===========================================
-    // CREATOR WALLET FALLBACK: If launchpad API failed to return creator,
-    // resolve from internal DB (pumpfun_watchlist, token_lifecycle)
+    // CREATOR WALLET FALLBACK CHAIN:
+    // 1) Internal DB (pumpfun_watchlist, token_lifecycle)
+    // 2) On-chain mint authority (Solscan-equivalent source)
     // ===========================================
     if (!creatorWallet && (launchpad.name === 'pump.fun' || launchpad.name === 'bags.fm') && launchpad.detected) {
-      console.log(`[token-metadata] Creator wallet missing from ${launchpad.name} API — trying DB fallback`);
+      console.log(`[token-metadata] Creator wallet missing from ${launchpad.name} API for ${tokenMint} — trying fallback chain`);
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const dbClient = createClient(supabaseUrl, supabaseServiceKey);
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
 
-        // Try pumpfun_watchlist first
-        const { data: watchlistRow } = await dbClient
-          .from('pumpfun_watchlist')
-          .select('creator_wallet')
-          .eq('token_mint', tokenMint)
-          .limit(1)
-          .maybeSingle();
+        if (supabaseUrl && (anonKey || serviceRoleKey)) {
+          const dbClient = createClient(supabaseUrl, anonKey || serviceRoleKey!, {
+            global: {
+              headers: authHeader ? { Authorization: authHeader } : {}
+            }
+          });
 
-        if (watchlistRow?.creator_wallet) {
-          creatorWallet = watchlistRow.creator_wallet;
-          console.log(`[token-metadata] ✅ Creator resolved from pumpfun_watchlist: ${creatorWallet!.slice(0, 8)}...`);
-        } else {
-          // Try token_lifecycle
-          const { data: lifecycleRow } = await dbClient
-            .from('token_lifecycle')
+          // Try pumpfun_watchlist first
+          const { data: watchlistRow } = await dbClient
+            .from('pumpfun_watchlist')
             .select('creator_wallet')
             .eq('token_mint', tokenMint)
             .limit(1)
             .maybeSingle();
 
-          if (lifecycleRow?.creator_wallet) {
-            creatorWallet = lifecycleRow.creator_wallet;
-            console.log(`[token-metadata] ✅ Creator resolved from token_lifecycle: ${creatorWallet!.slice(0, 8)}...`);
+          if (watchlistRow?.creator_wallet) {
+            creatorWallet = watchlistRow.creator_wallet;
+            console.log(`[token-metadata] ✅ Creator resolved from pumpfun_watchlist: ${creatorWallet.slice(0, 8)}...`);
           } else {
-            console.log(`[token-metadata] ⚠️ Creator wallet not found in any fallback table`);
+            // Try token_lifecycle
+            const { data: lifecycleRow } = await dbClient
+              .from('token_lifecycle')
+              .select('creator_wallet')
+              .eq('token_mint', tokenMint)
+              .limit(1)
+              .maybeSingle();
+
+            if (lifecycleRow?.creator_wallet) {
+              creatorWallet = lifecycleRow.creator_wallet;
+              console.log(`[token-metadata] ✅ Creator resolved from token_lifecycle: ${creatorWallet.slice(0, 8)}...`);
+            }
+          }
+        }
+
+        // Last fallback: resolve authority directly from mint account
+        if (!creatorWallet) {
+          const onChainAuthority = await fetchMintAuthorityFallback(tokenMint, rpcUrl);
+          if (onChainAuthority) {
+            creatorWallet = onChainAuthority;
+            console.log(`[token-metadata] ✅ Creator resolved from on-chain mint authority: ${creatorWallet.slice(0, 8)}...`);
+          } else {
+            console.log(`[token-metadata] ⚠️ Creator wallet unresolved after DB + on-chain fallbacks`);
           }
         }
       } catch (fallbackErr) {
-        console.warn('[token-metadata] Creator fallback DB query failed:', fallbackErr);
+        console.warn('[token-metadata] Creator fallback chain failed:', fallbackErr);
       }
     }
     

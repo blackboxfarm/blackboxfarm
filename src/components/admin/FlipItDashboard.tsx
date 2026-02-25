@@ -841,10 +841,14 @@ export function FlipItDashboard() {
         const source = entry.identifier === tokenMint ? 'token_mint' 
           : entry.identifier === creatorWallet ? 'creator_wallet'
           : 'twitter';
+        const normalizedLevel = (entry.risk_level === 'high' || entry.risk_level === 'critical') ? 'high' : 'medium';
+        const isCreatorBlacklisted = source === 'creator_wallet' && normalizedLevel === 'high';
         
         setBlacklistWarning({
-          level: entry.risk_level === 'high' ? 'high' : 'medium',
-          reason: entry.blacklist_reason || `Blacklisted ${entry.entry_type}`,
+          level: normalizedLevel,
+          reason: isCreatorBlacklisted
+            ? `🚨 STAY THE FUCK AWAY — This dev wallet is blacklisted (${entry.risk_level.toUpperCase()}). ${entry.blacklist_reason || `We've seen this shit before.`}`
+            : (entry.blacklist_reason || `Blacklisted ${entry.entry_type}`),
           source: source as any,
           entryType: entry.entry_type
         });
@@ -1032,8 +1036,9 @@ export function FlipItDashboard() {
           if (blData && blData.length > 0) {
             const entry = blData[0];
             console.log(`[fetchInputTokenData] 🚨 FAST BLACKLIST HIT: ${entry.blacklist_reason}`);
+            const normalizedLevel = (entry.risk_level === 'high' || entry.risk_level === 'critical') ? 'high' : 'medium';
             setBlacklistWarning({
-              level: entry.risk_level === 'high' ? 'high' : 'medium',
+              level: normalizedLevel,
               reason: entry.blacklist_reason || `Blacklisted ${entry.entry_type}`,
               source: 'token_mint',
               entryType: entry.entry_type
@@ -1263,7 +1268,7 @@ export function FlipItDashboard() {
                 // Truly unresolved — show aggressive warning
                 setBlacklistWarning({
                   level: 'high',
-                  reason: '🚨 STAY AWAY — Creator wallet unresolved. We cannot verify this token is safe. Pump.fun API failed and no records found in our database.',
+                  reason: '🚨 STAY AWAY — Creator wallet unresolved. We checked pump.fun, internal DB, and on-chain mint authority, and still cannot verify this token is safe.',
                   source: 'creator_wallet',
                   entryType: 'unresolved_creator'
                 });
