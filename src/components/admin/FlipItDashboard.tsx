@@ -168,9 +168,9 @@ interface InputTokenData {
 }
 
 interface BlacklistWarning {
-  level: 'high' | 'medium' | 'low' | 'trusted' | 'review' | 'team_blacklisted' | null;
+  level: 'high' | 'medium' | 'low' | 'trusted' | 'review' | 'team_blacklisted' | 'mesh_linked' | null;
   reason: string | null;
-  source: 'token_mint' | 'creator_wallet' | 'twitter' | 'team' | 'x_community' | null;
+  source: 'token_mint' | 'creator_wallet' | 'twitter' | 'team' | 'x_community' | 'mesh' | null;
   entryType: string | null;
   teamId?: string | null;
 }
@@ -783,7 +783,11 @@ export function FlipItDashboard() {
   // Check blacklist/whitelist status for token, creator wallet, or twitter
   const checkBlacklistStatus = useCallback(async (tokenMint: string, creatorWallet: string | null, twitterUrl: string | null) => {
     setIsCheckingBlacklist(true);
-    setBlacklistWarning({ level: null, reason: null, source: null, entryType: null });
+    // Don't clear warning if fast check already set one
+    const currentWarning = blacklistWarning;
+    if (!currentWarning.level) {
+      setBlacklistWarning({ level: null, reason: null, source: null, entryType: null });
+    }
     
     try {
       // Extract twitter handle from URL
@@ -817,12 +821,13 @@ export function FlipItDashboard() {
               entryType: 'dev_team',
               teamId: team.id
             });
+            setIsCheckingBlacklist(false);
             return;
           }
         }
       }
       
-      // Check blacklist first (higher priority)
+      // Check blacklist (higher priority)
       const { data: blacklistData } = await supabase
         .from('pumpfun_blacklist')
         .select('*')
@@ -842,7 +847,90 @@ export function FlipItDashboard() {
           source: source as any,
           entryType: entry.entry_type
         });
+        setIsCheckingBlacklist(false);
         return;
+      }
+      
+      // ===========================================
+      // REPUTATION MESH CHECK - catch funding chain links
+      // ===========================================
+      if (creatorWallet) {
+        try {
+          console.log(`[checkBlacklist] 🕸️ MESH CHECK: ${creatorWallet.slice(0, 8)}...`);
+          
+          // Run mesh + reputation queries in parallel
+          const [meshResult, reputationResult] = await Promise.all([
+            // Check reputation_mesh for links FROM this creator wallet
+            supabase
+              .from('reputation_mesh')
+              .select('*')
+              .or(`source_id.eq.${creatorWallet},linked_id.eq.${creatorWallet}`)
+              .in('relationship', ['directly_funded', 'indirectly_funded', 'funded_by', 'same_kyc_root', 'satellite_of'])
+              .limit(10),
+            // Check dev_wallet_reputation for scammer status
+            supabase
+              .from('dev_wallet_reputation')
+              .select('wallet_address, trust_level, tokens_rugged, reputation_score')
+              .eq('wallet_address', creatorWallet)
+              .limit(1)
+          ]);
+          
+          // Check if creator is a known scammer via reputation
+          if (reputationResult.data && reputationResult.data.length > 0) {
+            const rep = reputationResult.data[0];
+            if (rep.trust_level === 'scammer' || rep.trust_level === 'serial_rugger') {
+              setBlacklistWarning({
+                level: 'high',
+                reason: `🚨 Dev wallet flagged as ${rep.trust_level} (${rep.tokens_rugged || 0} rugs, score: ${rep.reputation_score || 0})`,
+                source: 'creator_wallet',
+                entryType: 'dev_wallet_reputation'
+              });
+              setIsCheckingBlacklist(false);
+              return;
+            }
+          }
+          
+          // Check mesh links for scammer connections
+          if (meshResult.data && meshResult.data.length > 0) {
+            // Find links where creator is funded by a blacklisted entity
+            const dangerousLinks = meshResult.data.filter(link => 
+              link.relationship === 'directly_funded' || 
+              link.relationship === 'indirectly_funded' || 
+              link.relationship === 'funded_by' ||
+              link.relationship === 'same_kyc_root' ||
+              link.relationship === 'satellite_of'
+            );
+            
+            if (dangerousLinks.length > 0) {
+              // Check if any linked entity is blacklisted
+              const linkedIds = dangerousLinks.map(l => 
+                l.source_id === creatorWallet ? l.linked_id : l.source_id
+              );
+              
+              const { data: linkedBlacklist } = await supabase
+                .from('pumpfun_blacklist')
+                .select('identifier, blacklist_reason, risk_level')
+                .in('identifier', linkedIds)
+                .eq('is_active', true)
+                .limit(1);
+              
+              if (linkedBlacklist && linkedBlacklist.length > 0) {
+                const link = dangerousLinks[0];
+                const blEntry = linkedBlacklist[0];
+                setBlacklistWarning({
+                  level: 'mesh_linked',
+                  reason: `🕸️ Dev wallet linked to blacklisted entity via ${link.relationship.replace(/_/g, ' ')} chain. Root: ${blEntry.identifier.slice(0, 8)}... (${blEntry.blacklist_reason || 'blacklisted'})`,
+                  source: 'mesh',
+                  entryType: 'reputation_mesh'
+                });
+                setIsCheckingBlacklist(false);
+                return;
+              }
+            }
+          }
+        } catch (meshErr) {
+          console.warn('[checkBlacklist] Mesh check failed:', meshErr);
+        }
       }
       
       // Check whitelist
@@ -865,6 +953,7 @@ export function FlipItDashboard() {
           source: source as any,
           entryType: entry.entry_type
         });
+        setIsCheckingBlacklist(false);
         return;
       }
       
@@ -894,7 +983,7 @@ export function FlipItDashboard() {
     } finally {
       setIsCheckingBlacklist(false);
     }
-  }, []);
+  }, [blacklistWarning]);
   
   // Unified token data fetch function - single source of truth
   // CRITICAL: Helius getAsset is called FIRST for instant price display
@@ -920,13 +1009,55 @@ export function FlipItDashboard() {
       let quickName: string | null = null;
       let quickImage: string | null = null;
 
+      // ===========================================
+      // STEP 1B: FAST BLACKLIST CHECK - runs in PARALLEL with price
+      // Catches directly blacklisted token mints instantly
+      // ===========================================
+      setIsCheckingBlacklist(true);
+      setBlacklistWarning({ level: null, reason: null, source: null, entryType: null });
+      
+      const fastBlacklistPromise = (async () => {
+        try {
+          console.log(`[fetchInputTokenData] 🛡️ FAST BLACKLIST: Checking mint ${mint.slice(0, 8)}...`);
+          const { data: blData } = await supabase
+            .from('pumpfun_blacklist')
+            .select('*')
+            .eq('identifier', mint)
+            .eq('is_active', true)
+            .limit(1);
+          
+          if (blData && blData.length > 0) {
+            const entry = blData[0];
+            console.log(`[fetchInputTokenData] 🚨 FAST BLACKLIST HIT: ${entry.blacklist_reason}`);
+            setBlacklistWarning({
+              level: entry.risk_level === 'high' ? 'high' : 'medium',
+              reason: entry.blacklist_reason || `Blacklisted ${entry.entry_type}`,
+              source: 'token_mint',
+              entryType: entry.entry_type
+            });
+            setIsCheckingBlacklist(false);
+            return true; // blacklisted
+          }
+          return false; // not blacklisted (deep check will run later)
+        } catch (err) {
+          console.warn('[fetchInputTokenData] Fast blacklist check failed:', err);
+          return false;
+        }
+      })();
+
       try {
         console.log(`[fetchInputTokenData] 🚀 HELIUS FIRST: Fetching price for ${mint.slice(0, 8)}...`);
         const heliusStart = Date.now();
         
-        const { data: heliusData, error: heliusError } = await supabase.functions.invoke('helius-fast-price', {
-          body: { tokenMint: mint }
-        });
+        // Run Helius price + fast blacklist in parallel
+        const [heliusResult, fastBlacklistHit] = await Promise.all([
+          supabase.functions.invoke('helius-fast-price', {
+            body: { tokenMint: mint }
+          }),
+          fastBlacklistPromise
+        ]);
+        
+        const { data: heliusData, error: heliusError } = heliusResult;
 
         const heliusLatency = Date.now() - heliusStart;
         console.log(`[fetchInputTokenData] Helius responded in ${heliusLatency}ms`);
@@ -962,6 +1093,11 @@ export function FlipItDashboard() {
           // Show success toast with price
           const displaySymbol = quickSymbol || 'Token';
           toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (Helius)`);
+          
+          // If fast blacklist hit, warn user immediately
+          if (fastBlacklistHit) {
+            toast.error('🚨 BLACKLISTED TOKEN - Do NOT buy!', { duration: 10000 });
+          }
         } else {
           console.log(`[fetchInputTokenData] Helius no price: ${heliusData?.error || 'unknown'}`);
         }
@@ -3446,10 +3582,23 @@ export function FlipItDashboard() {
               )}
               
               {/* Blacklist/Whitelist Warning Banner */}
+              {/* Blacklist Scanning Indicator */}
+              {isCheckingBlacklist && tokenAddress.trim().length >= 32 && !blacklistWarning.level && (
+                <div className="p-3 rounded-lg border border-blue-500/50 bg-blue-500/10 text-blue-200 flex items-center gap-3">
+                  <Shield className="h-5 w-5 text-blue-400 animate-pulse flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm">🛡️ Scanning Blacklist & Mesh...</div>
+                    <div className="text-xs opacity-80">Checking token mint, dev wallet reputation, and funding chain</div>
+                  </div>
+                </div>
+              )}
+              
               {blacklistWarning.level && tokenAddress.trim().length >= 32 && (
                 <div className={`p-3 rounded-lg border flex items-center gap-3 ${
-                  blacklistWarning.level === 'high' 
+                  blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted'
                     ? 'bg-red-500/20 border-red-500 text-red-200' 
+                    : blacklistWarning.level === 'mesh_linked'
+                    ? 'bg-orange-500/20 border-orange-500 text-orange-200 animate-pulse'
                     : blacklistWarning.level === 'medium'
                     ? 'bg-orange-500/20 border-orange-500 text-orange-200'
                     : blacklistWarning.level === 'trusted'
@@ -3468,10 +3617,13 @@ export function FlipItDashboard() {
                   <div className="flex-1">
                     <div className="font-semibold text-sm">
                       {blacklistWarning.level === 'high' ? '🚨 DANGER: Blacklisted' 
+                        : blacklistWarning.level === 'team_blacklisted' ? '🚨 DANGER: Rug Team'
+                        : blacklistWarning.level === 'mesh_linked' ? '🕸️ MESH WARNING: Linked to Scammer'
                         : blacklistWarning.level === 'medium' ? '⚠️ CONCERN: Flagged'
                         : blacklistWarning.level === 'trusted' ? '✅ TRUSTED: Whitelisted'
                         : '❓ Under Review'}
                       {blacklistWarning.source === 'creator_wallet' && ' (Dev Wallet)'}
+                      {blacklistWarning.source === 'mesh' && ' (Funding Chain)'}
                       {blacklistWarning.source === 'twitter' && ' (Twitter)'}
                     </div>
                     <div className="text-xs opacity-80">
@@ -3533,15 +3685,29 @@ export function FlipItDashboard() {
             ) : (
               <Button
                 onClick={handleFlip}
-                disabled={isFlipping || !tokenAddress.trim() || !selectedWallet}
-                className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                disabled={isFlipping || isCheckingBlacklist || !tokenAddress.trim() || !selectedWallet || blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked'}
+                className={`bg-gradient-to-r ${
+                  blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked'
+                    ? 'from-red-800 to-red-900 cursor-not-allowed opacity-60'
+                    : 'from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600'
+                }`}
               >
-                {isFlipping ? (
+                {isCheckingBlacklist ? (
+                  <>
+                    <Shield className="h-4 w-4 mr-2 animate-pulse" />
+                    Scanning...
+                  </>
+                ) : isFlipping ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked' ? (
+                  <>
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    BLOCKED
+                  </>
                 ) : (
                   <Flame className="h-4 w-4 mr-2" />
                 )}
-                FLIP IT
+                {!isCheckingBlacklist && !(blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked') && 'FLIP IT'}
               </Button>
             )}
 
