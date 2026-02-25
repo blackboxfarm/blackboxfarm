@@ -58,6 +58,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard, WhaleLeaderboard } from './telegram';
 import type { TelegramTarget } from './telegram';
+import { TelegramBroadcastToggle } from './TelegramBroadcastToggle';
 
 interface ChannelConfig {
   id: string;
@@ -802,7 +803,8 @@ export default function TelegramChannelMonitor() {
             Monitor Telegram channels for token calls with AI interpretation
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <TelegramBroadcastToggle />
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm" disabled={isResettingStats}>
