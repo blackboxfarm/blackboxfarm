@@ -45,18 +45,24 @@ serve(async (req) => {
       detectVenue(tokenMint, heliusApiKey)
     ]);
 
-    if (guardResult.blocked) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'BLOCKED',
-          message: guardResult.reason,
+    const meshGuardWarning = guardResult.blocked
+      ? {
+          blocked: true,
+          reason: guardResult.reason,
           level: guardResult.level,
           source: guardResult.source,
-          creatorWallet: guardResult.creatorWallet
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+          creatorWallet: guardResult.creatorWallet,
+          creatorSource: guardResult.creatorSource,
+        }
+      : null;
+
+    if (guardResult.blocked) {
+      console.warn('[flipit-preflight] Mesh guard warning bypassed for buy preflight:', {
+        tokenMint,
+        level: guardResult.level,
+        source: guardResult.source,
+        reason: guardResult.reason,
+      });
     }
 
     const { venue, isOnCurve } = venueResult;
@@ -79,7 +85,8 @@ serve(async (req) => {
           error: 'QUOTE_UNAVAILABLE',
           message: 'Could not fetch executable quote for this token',
           venue,
-          isOnCurve
+          isOnCurve,
+          meshGuardWarning
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -96,6 +103,7 @@ serve(async (req) => {
         priceImpactPct: quote.priceImpactPct,
         confidence: quote.confidence,
         source: quote.source,
+        meshGuardWarning,
         timestamp: new Date().toISOString()
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
