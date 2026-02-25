@@ -144,7 +144,7 @@ const TokenBadge = ({ token }: { token: { mint: string; name: string; symbol: st
     <div className="flex-1">
       <div className="flex items-center gap-2">
         <a 
-          href={`https://padre.gg/${token.mint}`}
+          href={`https://trade.padre.gg/trade/solana/${token.mint}`}
           target="_blank"
           rel="noopener noreferrer"
           className={`font-bold hover:underline ${

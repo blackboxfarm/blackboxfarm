@@ -356,7 +356,7 @@ export default function IntelReport() {
                       </td>
                       <td className="py-2 px-3">
                         <div className="flex items-center gap-3 whitespace-nowrap">
-                          <a href={`https://padre.gg/token/${token.tokenMint}`} target="_blank" rel="noopener noreferrer"
+                          <a href={`https://trade.padre.gg/trade/solana/${token.tokenMint}`} target="_blank" rel="noopener noreferrer"
                             className="text-violet-400 hover:text-violet-300 inline-flex items-center gap-1">
                             padre.gg <ExternalLink className="h-3 w-3" />
                           </a>
