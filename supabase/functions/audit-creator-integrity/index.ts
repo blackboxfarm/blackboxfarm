@@ -121,6 +121,8 @@ Deno.serve(async (req) => {
       ? ((mismatches / (matches + mismatches)) * 100).toFixed(2)
       : '0';
 
+    const contaminationNum = isNaN(parseFloat(contamination_rate)) ? null : parseFloat(contamination_rate);
+    
     const report = {
       table,
       offset,
@@ -133,6 +135,26 @@ Deno.serve(async (req) => {
       contamination_rate: `${contamination_rate}%`,
       sample_mismatches: mismatchDetails.slice(0, 20),
     };
+
+    // Save results to creator_audit_results table
+    const { error: insertError } = await supabase
+      .from('creator_audit_results')
+      .insert({
+        table_name: table,
+        batch_offset: offset,
+        batch_size: batchSize,
+        total_checked: tokens.length,
+        matches,
+        mismatches,
+        unreachable,
+        errors,
+        contamination_rate: contaminationNum,
+        sample_mismatches: mismatchDetails.slice(0, 20),
+      });
+
+    if (insertError) {
+      console.error('Failed to save audit results:', insertError);
+    }
 
     console.log(`Audit complete: ${matches} correct, ${mismatches} wrong (${contamination_rate}% contaminated), ${unreachable} unreachable`);
 

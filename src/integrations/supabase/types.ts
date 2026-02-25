@@ -2318,6 +2318,51 @@ export type Database = {
           },
         ]
       }
+      creator_audit_results: {
+        Row: {
+          batch_offset: number
+          batch_size: number
+          contamination_rate: number | null
+          created_at: string
+          errors: number
+          id: string
+          matches: number
+          mismatches: number
+          sample_mismatches: Json | null
+          table_name: string
+          total_checked: number
+          unreachable: number
+        }
+        Insert: {
+          batch_offset?: number
+          batch_size?: number
+          contamination_rate?: number | null
+          created_at?: string
+          errors?: number
+          id?: string
+          matches?: number
+          mismatches?: number
+          sample_mismatches?: Json | null
+          table_name: string
+          total_checked?: number
+          unreachable?: number
+        }
+        Update: {
+          batch_offset?: number
+          batch_size?: number
+          contamination_rate?: number | null
+          created_at?: string
+          errors?: number
+          id?: string
+          matches?: number
+          mismatches?: number
+          sample_mismatches?: Json | null
+          table_name?: string
+          total_checked?: number
+          unreachable?: number
+        }
+        Relationships: []
+      }
       dailies_manual_comments: {
         Row: {
           comment_date: string
