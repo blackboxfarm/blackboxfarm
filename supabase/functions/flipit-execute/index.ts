@@ -11,6 +11,7 @@ import { verifyBuyTransaction, updatePositionWithVerifiedBuy } from "../_shared/
 import { getHeliusRpcUrl, getHeliusApiKey } from "../_shared/helius-client.ts";
 import { createExecutionLogger, type ExecutionLogger } from "../_shared/execution-logger.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { runMeshGuard } from '../_shared/blacklist-mesh-guard.ts';
 enableHeliusTracking('flipit-execute');
 
 const corsHeaders = {
@@ -557,28 +558,33 @@ serve(async (req) => {
       });
 
       // ============================================
-      // BLACKLIST CHECK: Block buys for blacklisted tokens/devs
+      // BLACKLIST MESH GUARD: Authoritative check for blacklisted tokens/devs/mesh
+      // Checks: token mint, creator wallet (with DB fallback), dev reputation, funding chain
       // ============================================
-      execLog.logPhaseStart('BLACKLIST_CHECK');
+      execLog.logPhaseStart('BLACKLIST_MESH_GUARD');
       try {
-        const { data: blacklisted } = await supabase
-          .from("pumpfun_blacklist")
-          .select("identifier, entry_type, risk_level, blacklist_reason")
-          .eq("identifier", tokenMint)
-          .eq("is_active", true)
-          .maybeSingle();
+        const guardResult = await runMeshGuard(supabase, tokenMint);
         
-        if (blacklisted && blacklisted.risk_level === "high") {
-          execLog.logFailure('Token blacklisted', { reason: blacklisted.blacklist_reason });
-          return bad(`BLOCKED: This token is blacklisted (${blacklisted.blacklist_reason || 'DANGER rating'})`);
+        if (guardResult.blocked) {
+          execLog.logFailure('MESH GUARD BLOCKED', { 
+            reason: guardResult.reason, 
+            level: guardResult.level, 
+            source: guardResult.source,
+            creatorWallet: guardResult.creatorWallet?.slice(0, 8),
+            creatorSource: guardResult.creatorSource
+          });
+          return bad(`BLOCKED: ${guardResult.reason}`);
         }
         
-        if (blacklisted) {
-          execLog.log('BLACKLIST_WARNING', { riskLevel: blacklisted.risk_level });
-        }
-        execLog.logPhaseEnd('BLACKLIST_CHECK', { passed: true });
-      } catch (blErr) {
-        execLog.log('BLACKLIST_CHECK_FAILED', { error: String(blErr) });
+        execLog.logPhaseEnd('BLACKLIST_MESH_GUARD', { 
+          passed: true, 
+          level: guardResult.level,
+          creatorWallet: guardResult.creatorWallet?.slice(0, 8),
+          creatorSource: guardResult.creatorSource
+        });
+      } catch (guardErr) {
+        execLog.log('MESH_GUARD_ERROR', { error: String(guardErr) });
+        // Fail open on unexpected guard errors to not break trading
       }
 
       // Get wallet details

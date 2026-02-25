@@ -1218,7 +1218,23 @@ export function FlipItDashboard() {
             // Check blacklist/whitelist with creator info
             const creatorWallet = meta.creatorWallet || metaData.launchpadInfo?.creatorWallet || null;
             const twitterUrl = meta.socialLinks?.twitter ?? null;
-            checkBlacklistStatus(mint, creatorWallet, twitterUrl);
+            
+            // FAIL-CLOSED: If this is a pump.fun token and creator is STILL null after
+            // all fallbacks (API + watchlist + lifecycle), block as unresolved
+            const isPumpToken = mint.endsWith('pump');
+            if (isPumpToken && !creatorWallet) {
+              console.warn(`[fetchInputTokenData] ⚠️ Pump token with unresolved creator — FAIL-CLOSED`);
+              setBlacklistWarning({
+                level: 'high',
+                reason: '⚠️ Creator wallet unresolved — pump.fun API failed and no DB fallback found. Cannot verify safety.',
+                source: 'creator_wallet',
+                entryType: 'unresolved_creator'
+              });
+              setIsCheckingBlacklist(false);
+              setBlacklistCheckDone(true);
+            } else {
+              checkBlacklistStatus(mint, creatorWallet, twitterUrl);
+            }
           }
         } catch (metaErr) {
           console.warn('Background metadata fetch failed:', metaErr);

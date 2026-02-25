@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getVenueAwareQuote, detectVenue } from "../_shared/venue-aware-quote.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
+import { runMeshGuard } from '../_shared/blacklist-mesh-guard.ts';
 enableHeliusTracking('flipit-preflight');
 
 const corsHeaders = {
@@ -33,10 +35,33 @@ serve(async (req) => {
 
     const heliusApiKey = requireHeliusApiKey();
 
+    // Run mesh guard check in parallel with venue detection
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const [guardResult, venueResult] = await Promise.all([
+      runMeshGuard(supabase, tokenMint),
+      detectVenue(tokenMint, heliusApiKey)
+    ]);
+
+    if (guardResult.blocked) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'BLOCKED',
+          message: guardResult.reason,
+          level: guardResult.level,
+          source: guardResult.source,
+          creatorWallet: guardResult.creatorWallet
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { venue, isOnCurve } = venueResult;
     const solAmountLamports = Math.floor(solAmount * 1e9);
-    
-    const { venue, isOnCurve } = await detectVenue(tokenMint, heliusApiKey);
-    
+
     const quote = await getVenueAwareQuote(
       tokenMint,
       solAmountLamports,

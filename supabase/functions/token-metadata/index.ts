@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PublicKey } from 'npm:@solana/web3.js@1.95.3';
 import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
@@ -669,6 +670,49 @@ serve(async (req) => {
         };
         
         console.log('Pump.fun metadata merged:', { twitter: metadata.twitter, website: metadata.website, creator: creatorWallet });
+      }
+    }
+
+    // ===========================================
+    // CREATOR WALLET FALLBACK: If launchpad API failed to return creator,
+    // resolve from internal DB (pumpfun_watchlist, token_lifecycle)
+    // ===========================================
+    if (!creatorWallet && (launchpad.name === 'pump.fun' || launchpad.name === 'bags.fm') && launchpad.detected) {
+      console.log(`[token-metadata] Creator wallet missing from ${launchpad.name} API — trying DB fallback`);
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const dbClient = createClient(supabaseUrl, supabaseServiceKey);
+
+        // Try pumpfun_watchlist first
+        const { data: watchlistRow } = await dbClient
+          .from('pumpfun_watchlist')
+          .select('creator_wallet')
+          .eq('token_mint', tokenMint)
+          .limit(1)
+          .maybeSingle();
+
+        if (watchlistRow?.creator_wallet) {
+          creatorWallet = watchlistRow.creator_wallet;
+          console.log(`[token-metadata] ✅ Creator resolved from pumpfun_watchlist: ${creatorWallet!.slice(0, 8)}...`);
+        } else {
+          // Try token_lifecycle
+          const { data: lifecycleRow } = await dbClient
+            .from('token_lifecycle')
+            .select('creator_wallet')
+            .eq('token_mint', tokenMint)
+            .limit(1)
+            .maybeSingle();
+
+          if (lifecycleRow?.creator_wallet) {
+            creatorWallet = lifecycleRow.creator_wallet;
+            console.log(`[token-metadata] ✅ Creator resolved from token_lifecycle: ${creatorWallet!.slice(0, 8)}...`);
+          } else {
+            console.log(`[token-metadata] ⚠️ Creator wallet not found in any fallback table`);
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('[token-metadata] Creator fallback DB query failed:', fallbackErr);
       }
     }
     
