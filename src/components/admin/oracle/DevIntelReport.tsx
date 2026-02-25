@@ -353,7 +353,7 @@ export default function DevIntelReport() {
                           <td className="py-2 px-2">
                             <div className="flex items-center gap-2">
                               <a
-                                href={`https://padre.gg/token/${token.tokenMint}`}
+                                href={`https://trade.padre.gg/trade/solana/${token.tokenMint}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-violet-400 hover:text-violet-300 transition-colors"

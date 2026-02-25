@@ -307,7 +307,7 @@ export function FrenzyActivityFeed({
                   {/* Token ticker - linked */}
                   <div className="min-w-0">
                     <a 
-                      href={`https://trade.padre.gg/${activity.token_mint}`}
+                      href={`https://trade.padre.gg/trade/solana/${activity.token_mint}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm font-medium text-primary hover:underline truncate block"
