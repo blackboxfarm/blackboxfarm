@@ -132,44 +132,63 @@ export default function IntelReport() {
       let wallet = input.trim();
       const originalInput = wallet;
 
-      // Resolve token -> creator wallet (multi-stage fallback)
+      // Resolve token -> creator wallet
+      // PRIMARY: For pump.fun tokens, call pump.fun API directly (authoritative source)
       let resolvedCreator: string | null = null;
 
-      const { data: watchlistHit } = await supabase
-        .from("pumpfun_watchlist")
-        .select("creator_wallet")
-        .eq("token_mint", wallet)
-        .limit(1)
-        .maybeSingle();
+      if (originalInput.toLowerCase().endsWith("pump")) {
+        try {
+          const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${originalInput}`);
+          if (pumpRes.ok) {
+            const pumpData = await pumpRes.json();
+            if (pumpData?.creator && typeof pumpData.creator === "string" && pumpData.creator.length >= 32) {
+              resolvedCreator = pumpData.creator;
+              console.log("pump.fun API resolved creator:", resolvedCreator);
+            }
+          }
+        } catch (e) {
+          console.warn("pump.fun API lookup failed:", e);
+        }
+      }
 
-      if (watchlistHit?.creator_wallet) {
-        resolvedCreator = watchlistHit.creator_wallet;
-      } else {
-        const { data: lifecycleHit } = await supabase
-          .from("token_lifecycle")
+      // FALLBACK: DB lookups
+      if (!resolvedCreator) {
+        const { data: watchlistHit } = await supabase
+          .from("pumpfun_watchlist")
           .select("creator_wallet")
-          .eq("token_mint", originalInput)
+          .eq("token_mint", wallet)
           .limit(1)
           .maybeSingle();
 
-        if (lifecycleHit?.creator_wallet) {
-          resolvedCreator = lifecycleHit.creator_wallet;
+        if (watchlistHit?.creator_wallet) {
+          resolvedCreator = watchlistHit.creator_wallet;
         } else {
-          const { data: devTokenHit } = await supabase
-            .from("developer_tokens")
+          const { data: lifecycleHit } = await supabase
+            .from("token_lifecycle")
             .select("creator_wallet")
             .eq("token_mint", originalInput)
             .limit(1)
             .maybeSingle();
 
-          if (devTokenHit?.creator_wallet) {
-            resolvedCreator = devTokenHit.creator_wallet;
+          if (lifecycleHit?.creator_wallet) {
+            resolvedCreator = lifecycleHit.creator_wallet;
+          } else {
+            const { data: devTokenHit } = await supabase
+              .from("developer_tokens")
+              .select("creator_wallet")
+              .eq("token_mint", originalInput)
+              .limit(1)
+              .maybeSingle();
+
+            if (devTokenHit?.creator_wallet) {
+              resolvedCreator = devTokenHit.creator_wallet;
+            }
           }
         }
       }
 
+      // LAST RESORT: trigger token-creator-linker
       if (!resolvedCreator && originalInput.toLowerCase().endsWith("pump")) {
-        // Last fallback for token-looking input: trigger linker, then re-read indexed creator
         try {
           await supabase.functions.invoke("token-creator-linker", {
             body: { tokenMints: [originalInput] },
