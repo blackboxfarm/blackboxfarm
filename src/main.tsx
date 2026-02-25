@@ -14,43 +14,17 @@ import './index.css'
   if (isLocalhost) return;
 
   const url = new URL(window.location.href);
-  const path = window.location.pathname || '';
 
   // Allow manual ?purge-sw=1 trigger anytime
   const forceManual = url.searchParams.get('purge-sw') === '1';
 
   /**
-   * HARD GUARANTEE (Super Admin only):
-   * Even if there is NO service worker anymore, users can still be pinned to an
-   * old build via CDN/HTTP-cached HTML.
-   *
-   * So when entering /super-admin, we force a ONE-TIME per-tab cache-busted reload.
+   * IMPORTANT:
+   * Do NOT force a reload on every /super-admin visit.
+   * That behavior caused a visible stale-UI flash before the fresh build loaded.
+   * We now only reload when a real SW is present (or manually requested).
    */
-  const isSuperAdminRoute = path.startsWith('/super-admin');
   const hasCb = url.searchParams.has('__cb');
-
-  if (isSuperAdminRoute && !hasCb) {
-    sessionStorage.setItem('__BB_SW_PURGED__', '1');
-
-    // Best-effort SW + CacheStorage purge BEFORE reload (safe even if none exist)
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all([
-        ...regs.map((r) => r.unregister()),
-        typeof caches !== 'undefined'
-          ? caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-          : Promise.resolve(),
-      ]);
-    } catch {
-      // ignore
-    }
-
-    if (forceManual) url.searchParams.delete('purge-sw');
-
-    url.searchParams.set('__cb', Date.now().toString(36));
-    window.location.replace(url.toString());
-    return;
-  }
 
   // Clean up our one-time cache-buster param (no reload)
   if (hasCb) {
