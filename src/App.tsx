@@ -47,6 +47,7 @@ const BannerPreview = lazy(() => import("./pages/BannerPreview"));
 const MyBanners = lazy(() => import("./pages/MyBanners"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
 const ShareCardDemoPage = lazy(() => import("./pages/ShareCardDemo"));
+const IntelReport = lazy(() => import("./pages/IntelReport"));
 const BumpBotLanding = lazy(() => import("./pages/BumpBotLanding"));
 const VolumeBotLanding = lazy(() => import("./pages/VolumeBotLanding"));
 const HoldersLanding = lazy(() => import("./pages/HoldersLanding"));
@@ -123,6 +124,7 @@ const App = () => {
                       <Route path="/socials" element={<SuperAdminRoute><Socials /></SuperAdminRoute>} />
                       <Route path="/oracle" element={<SuperAdminRoute><Oracle /></SuperAdminRoute>} />
                       <Route path="/banker-pool" element={<SuperAdminRoute><BankerPool /></SuperAdminRoute>} />
+                      <Route path="/intel/:address" element={<IntelReport />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
