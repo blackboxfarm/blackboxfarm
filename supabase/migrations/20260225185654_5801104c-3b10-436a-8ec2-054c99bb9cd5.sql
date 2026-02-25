@@ -1,0 +1,1 @@
+UPDATE holders_intel_post_queue SET status = 'expired', error_message = 'Stuck in processing during credit depletion' WHERE status = 'processing' AND created_at < '2026-02-25T00:00:00Z'

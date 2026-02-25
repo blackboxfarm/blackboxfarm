@@ -1,0 +1,3 @@
+ALTER TABLE holders_intel_post_queue DROP CONSTRAINT holders_intel_post_queue_status_check;
+ALTER TABLE holders_intel_post_queue ADD CONSTRAINT holders_intel_post_queue_status_check CHECK (status = ANY (ARRAY['pending','processing','posted','failed','skipped','expired']));
+UPDATE holders_intel_post_queue SET status = 'expired', error_message = 'X API credits depleted Feb 20-25, expired on restart' WHERE status IN ('skipped', 'failed');

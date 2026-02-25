@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, serviceKey);
     
-    // First, re-queue any skipped items back to pending
+    // Re-queue any skipped items back to pending (but NOT expired ones)
     const { data: requeuedItems, error: requeueError } = await supabase
       .from('holders_intel_post_queue')
       .update({ status: 'pending', error_message: null })
