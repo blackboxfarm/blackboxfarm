@@ -3581,60 +3581,38 @@ export function FlipItDashboard() {
                 />
               )}
               
-              {/* Blacklist/Whitelist Warning Banner */}
-              {/* Blacklist Scanning Indicator */}
-              {isCheckingBlacklist && tokenAddress.trim().length >= 32 && !blacklistWarning.level && (
-                <div className="p-3 rounded-lg border border-blue-500/50 bg-blue-500/10 text-blue-200 flex items-center gap-3">
-                  <Shield className="h-5 w-5 text-blue-400 animate-pulse flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="font-semibold text-sm">🛡️ Scanning Blacklist & Mesh...</div>
-                    <div className="text-xs opacity-80">Checking token mint, dev wallet reputation, and funding chain</div>
+              {/* Blacklist Mesh Result Box */}
+              {tokenAddress.trim().length >= 32 && (isCheckingBlacklist || blacklistWarning.level !== null) && (
+                <div className="p-3 rounded-lg bg-black border border-zinc-700 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-semibold text-sm">Blacklist Mesh</span>
+                    <span className="text-zinc-500 text-sm">:</span>
                   </div>
-                </div>
-              )}
-              
-              {blacklistWarning.level && tokenAddress.trim().length >= 32 && (
-                <div className={`p-3 rounded-lg border flex items-center gap-3 ${
-                  blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted'
-                    ? 'bg-red-500/20 border-red-500 text-red-200' 
-                    : blacklistWarning.level === 'mesh_linked'
-                    ? 'bg-orange-500/20 border-orange-500 text-orange-200 animate-pulse'
-                    : blacklistWarning.level === 'medium'
-                    ? 'bg-orange-500/20 border-orange-500 text-orange-200'
-                    : blacklistWarning.level === 'trusted'
-                    ? 'bg-green-500/20 border-green-500 text-green-200'
-                    : 'bg-yellow-500/20 border-yellow-500 text-yellow-200'
-                }`}>
-                  {blacklistWarning.level === 'high' ? (
-                    <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0" />
-                  ) : blacklistWarning.level === 'medium' ? (
-                    <AlertTriangle className="h-5 w-5 text-orange-400 flex-shrink-0" />
-                  ) : blacklistWarning.level === 'trusted' ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-yellow-400 flex-shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    <div className="font-semibold text-sm">
-                      {blacklistWarning.level === 'high' ? '🚨 DANGER: Blacklisted' 
-                        : blacklistWarning.level === 'team_blacklisted' ? '🚨 DANGER: Rug Team'
-                        : blacklistWarning.level === 'mesh_linked' ? '🕸️ MESH WARNING: Linked to Scammer'
-                        : blacklistWarning.level === 'medium' ? '⚠️ CONCERN: Flagged'
-                        : blacklistWarning.level === 'trusted' ? '✅ TRUSTED: Whitelisted'
-                        : '❓ Under Review'}
-                      {blacklistWarning.source === 'creator_wallet' && ' (Dev Wallet)'}
-                      {blacklistWarning.source === 'mesh' && ' (Funding Chain)'}
-                      {blacklistWarning.source === 'twitter' && ' (Twitter)'}
-                    </div>
-                    <div className="text-xs opacity-80">
-                      {blacklistWarning.reason}
-                    </div>
+                  <div className="flex items-center gap-3">
+                    {isCheckingBlacklist && !blacklistWarning.level ? (
+                      <span className="text-blue-400 text-sm flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Scanning...
+                      </span>
+                    ) : blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked' || blacklistWarning.level === 'medium' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-500 font-bold text-sm uppercase">FAIL</span>
+                        <span className="text-zinc-400 text-xs max-w-[300px] truncate" title={blacklistWarning.reason || ''}>
+                          {blacklistWarning.reason}
+                        </span>
+                        <a 
+                          href={`/super-admin?tab=oracle`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-red-400 hover:text-red-300 text-xs underline flex-shrink-0"
+                        >
+                          View Mesh ↗
+                        </a>
+                      </div>
+                    ) : (
+                      <span className="text-green-500 font-bold text-sm uppercase">PASS</span>
+                    )}
                   </div>
-                  {inputToken.creatorWallet && (
-                    <div className="text-xs opacity-60 font-mono">
-                      Dev: {inputToken.creatorWallet.slice(0, 6)}...{inputToken.creatorWallet.slice(-4)}
-                    </div>
-                  )}
                 </div>
               )}
               
