@@ -5198,11 +5198,29 @@ export function FlipItDashboard() {
                                     onError={(e) => (e.currentTarget.style.display = 'none')}
                                   />
                                 )}
-                                <div className="flex flex-col">
+                                <div className="flex flex-col gap-0.5">
                                   <span className="font-medium text-xs">{position.token_symbol || 'Unknown'}</span>
-                                  <code className="text-[9px] text-muted-foreground font-mono">
-                                    {position.token_mint.slice(0, 6)}...
-                                  </code>
+                                  <div className="flex items-center gap-1">
+                                    <code className="text-[9px] text-muted-foreground font-mono select-all break-all">
+                                      {position.token_mint}
+                                    </code>
+                                    <button
+                                      onClick={() => { navigator.clipboard.writeText(position.token_mint); }}
+                                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                                      title="Copy address"
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                    </button>
+                                    <a
+                                      href={`https://solscan.io/token/${position.token_mint}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                                      title="View on Solscan"
+                                    >
+                                      <ArrowUpRight className="h-3 w-3" />
+                                    </a>
+                                  </div>
                                 </div>
                               </div>
                             </TableCell>
