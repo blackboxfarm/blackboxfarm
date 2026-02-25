@@ -752,13 +752,18 @@ serve(async (req) => {
         }
 
         // Last fallback: resolve authority directly from mint account
+        // GUARD: Do NOT use mint authority for pump.fun tokens — it returns a program address, not the human creator
         if (!creatorWallet) {
-          const onChainAuthority = await fetchMintAuthorityFallback(tokenMint, rpcUrl);
-          if (onChainAuthority) {
-            creatorWallet = onChainAuthority;
-            console.log(`[token-metadata] ✅ Creator resolved from on-chain mint authority: ${creatorWallet.slice(0, 8)}...`);
+          if (launchpad.name === 'pump.fun') {
+            console.log(`[token-metadata] ⚠️ Creator wallet unresolved for pump.fun token — skipping mint authority fallback (would return program address)`);
           } else {
-            console.log(`[token-metadata] ⚠️ Creator wallet unresolved after DB + on-chain fallbacks`);
+            const onChainAuthority = await fetchMintAuthorityFallback(tokenMint, rpcUrl);
+            if (onChainAuthority) {
+              creatorWallet = onChainAuthority;
+              console.log(`[token-metadata] ✅ Creator resolved from on-chain mint authority: ${creatorWallet.slice(0, 8)}...`);
+            } else {
+              console.log(`[token-metadata] ⚠️ Creator wallet unresolved after DB + on-chain fallbacks`);
+            }
           }
         }
       } catch (fallbackErr) {

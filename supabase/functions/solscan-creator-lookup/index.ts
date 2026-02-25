@@ -5,6 +5,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Detect if a token is likely a pump.fun token
+function isPumpFunToken(tokenMint: string): boolean {
+  return tokenMint.endsWith('pump');
+}
+
+// Fetch creator directly from pump.fun API
+async function fetchPumpFunCreator(tokenMint: string): Promise<string | null> {
+  try {
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      console.log(`Pump.fun API returned ${response.status} for ${tokenMint}`);
+      return null;
+    }
+    const data = await response.json();
+    return data.creator || null;
+  } catch (error) {
+    console.error(`Pump.fun API error for ${tokenMint}:`, error);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -22,39 +46,49 @@ Deno.serve(async (req) => {
 
     console.log(`Fetching creator for token: ${tokenMint}`);
 
-    // Call Solscan API to get token metadata
-    const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY');
-    
-    if (!solscanApiKey) {
-      console.error('SOLSCAN_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ error: 'API key not configured', creatorWallet: null }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    }
+    let creatorWallet: string | null = null;
+    let metadata: any = {};
 
-    const solscanResponse = await fetch(
-      `https://pro-api.solscan.io/v1.0/token/meta?tokenAddress=${tokenMint}`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'token': solscanApiKey,
-        }
+    // For pump.fun tokens, use pump.fun API as the PRIMARY and AUTHORITATIVE source
+    if (isPumpFunToken(tokenMint)) {
+      console.log(`[pump.fun token detected] Using pump.fun API as primary source`);
+      creatorWallet = await fetchPumpFunCreator(tokenMint);
+      
+      if (creatorWallet) {
+        console.log(`[pump.fun] Creator resolved: ${creatorWallet}`);
+      } else {
+        console.log(`[pump.fun] Creator not found via pump.fun API — NOT falling back to mint authority`);
       }
-    );
+    } else {
+      // For non-pump tokens, use Solscan as before
+      const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY');
+      
+      if (!solscanApiKey) {
+        console.error('SOLSCAN_API_KEY not configured');
+        return new Response(
+          JSON.stringify({ error: 'API key not configured', creatorWallet: null }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
 
-    if (!solscanResponse.ok) {
-      console.error(`Solscan API error: ${solscanResponse.status}`);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch from Solscan', creatorWallet: null }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      const solscanResponse = await fetch(
+        `https://pro-api.solscan.io/v1.0/token/meta?tokenAddress=${tokenMint}`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'token': solscanApiKey,
+          }
+        }
       );
-    }
 
-    const data = await solscanResponse.json();
-    
-    // Extract creator wallet from various possible fields
-    const creatorWallet = data.creator || data.mint_authority || data.owner || null;
+      if (solscanResponse.ok) {
+        metadata = await solscanResponse.json();
+        // For non-pump tokens, mint_authority fallback is acceptable
+        creatorWallet = metadata.creator || metadata.mint_authority || metadata.owner || null;
+      } else {
+        console.error(`Solscan API error: ${solscanResponse.status}`);
+      }
+    }
 
     console.log(`Creator wallet found: ${creatorWallet}`);
 
@@ -80,7 +114,7 @@ Deno.serve(async (req) => {
         creatorWallet,
         tokenMint,
         profileExists,
-        metadata: data
+        metadata
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );

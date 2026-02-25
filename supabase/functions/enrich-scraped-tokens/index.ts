@@ -125,24 +125,47 @@ Deno.serve(async (req) => {
         // Fetch creator wallet if missing
         if (!token.creator_wallet) {
           try {
-            const creatorResponse = await fetch(
-              `${Deno.env.get('SUPABASE_URL')}/functions/v1/solscan-creator-lookup`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
-                },
-                body: JSON.stringify({ tokenMint: token.token_mint })
-              }
-            );
+            // For pump.fun tokens, call pump.fun API directly (authoritative source)
+            const isPumpToken = token.token_mint?.endsWith('pump') || token.launchpad === 'pump.fun';
+            
+            if (isPumpToken) {
+              const pumpResponse = await fetch(
+                `https://frontend-api.pump.fun/coins/${token.token_mint}`,
+                {
+                  headers: { 'Accept': 'application/json' },
+                  signal: AbortSignal.timeout(5000),
+                }
+              );
 
-            if (creatorResponse.ok) {
-              const creatorData = await creatorResponse.json();
-              if (creatorData.creatorWallet) {
-                updates.creator_wallet = creatorData.creatorWallet;
-                updates.creator_fetched_at = new Date().toISOString();
-                needsUpdate = true;
+              if (pumpResponse.ok) {
+                const pumpData = await pumpResponse.json();
+                if (pumpData.creator) {
+                  updates.creator_wallet = pumpData.creator;
+                  updates.creator_fetched_at = new Date().toISOString();
+                  needsUpdate = true;
+                }
+              }
+            } else {
+              // For non-pump tokens, use solscan-creator-lookup
+              const creatorResponse = await fetch(
+                `${Deno.env.get('SUPABASE_URL')}/functions/v1/solscan-creator-lookup`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
+                  },
+                  body: JSON.stringify({ tokenMint: token.token_mint })
+                }
+              );
+
+              if (creatorResponse.ok) {
+                const creatorData = await creatorResponse.json();
+                if (creatorData.creatorWallet) {
+                  updates.creator_wallet = creatorData.creatorWallet;
+                  updates.creator_fetched_at = new Date().toISOString();
+                  needsUpdate = true;
+                }
               }
             }
           } catch (error) {
