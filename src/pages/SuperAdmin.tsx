@@ -8,7 +8,7 @@ import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBadge";
 import { LazyLoader } from "@/components/ui/lazy-loader";
-import { TelegramBroadcastToggle } from "@/components/admin/TelegramBroadcastToggle";
+import { PumpFunApiStatus } from "@/components/admin/PumpFunApiStatus";
 
 // Lazy load entire tab content sections - they ONLY load when their tab is clicked
 const UtilitiesTab = lazy(() => import("@/components/admin/tabs/UtilitiesTab"));
@@ -96,7 +96,7 @@ export default function SuperAdmin() {
             </p>
           </div>
           <div className="flex items-start gap-4">
-            <TelegramBroadcastToggle />
+            <PumpFunApiStatus />
             <AdminNotificationsBadge />
           </div>
         </div>
