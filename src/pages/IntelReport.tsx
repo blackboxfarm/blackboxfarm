@@ -96,8 +96,9 @@ export default function IntelReport() {
 
     try {
       let wallet = input.trim();
+      const originalInput = wallet;
 
-      // Resolve token -> creator wallet
+      // Resolve token -> creator wallet (3-stage fallback)
       const { data: watchlistHit } = await supabase
         .from("pumpfun_watchlist")
         .select("creator_wallet")
@@ -111,11 +112,25 @@ export default function IntelReport() {
         const { data: lifecycleHit } = await supabase
           .from("token_lifecycle")
           .select("creator_wallet")
-          .eq("token_mint", input.trim())
+          .eq("token_mint", originalInput)
           .limit(1)
           .maybeSingle();
         if (lifecycleHit?.creator_wallet) {
           wallet = lifecycleHit.creator_wallet;
+        } else {
+          // Fallback: use token-creator-linker to resolve on-chain
+          try {
+            const { data: linkerData } = await supabase.functions.invoke("token-creator-linker", {
+              body: { tokenMints: [originalInput] },
+            });
+            if (linkerData?.results?.[0]?.creatorWallet) {
+              wallet = linkerData.results[0].creatorWallet;
+            } else if (linkerData?.results?.[0]?.creator_wallet) {
+              wallet = linkerData.results[0].creator_wallet;
+            }
+          } catch (e) {
+            console.warn("token-creator-linker fallback failed:", e);
+          }
         }
       }
 

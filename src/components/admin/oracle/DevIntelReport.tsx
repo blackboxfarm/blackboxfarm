@@ -100,10 +100,10 @@ export default function DevIntelReport() {
     setCreatorWallet(null);
 
     try {
-      // Step 1: Resolve creator wallet if input looks like a token
+      // Step 1: Resolve creator wallet if input looks like a token (3-stage fallback)
       let wallet = input.trim();
+      const originalInput = wallet;
       
-      // Check if it's a token by looking it up in watchlist
       const { data: watchlistHit } = await supabase
         .from("pumpfun_watchlist")
         .select("creator_wallet")
@@ -114,15 +114,28 @@ export default function DevIntelReport() {
       if (watchlistHit?.creator_wallet) {
         wallet = watchlistHit.creator_wallet;
       } else {
-        // Try token_lifecycle
         const { data: lifecycleHit } = await supabase
           .from("token_lifecycle")
           .select("creator_wallet")
-          .eq("token_mint", input.trim())
+          .eq("token_mint", originalInput)
           .limit(1)
           .maybeSingle();
         if (lifecycleHit?.creator_wallet) {
           wallet = lifecycleHit.creator_wallet;
+        } else {
+          // Fallback: resolve creator on-chain via token-creator-linker
+          try {
+            const { data: linkerData } = await supabase.functions.invoke("token-creator-linker", {
+              body: { tokenMints: [originalInput] },
+            });
+            if (linkerData?.results?.[0]?.creatorWallet) {
+              wallet = linkerData.results[0].creatorWallet;
+            } else if (linkerData?.results?.[0]?.creator_wallet) {
+              wallet = linkerData.results[0].creator_wallet;
+            }
+          } catch (e) {
+            console.warn("token-creator-linker fallback failed:", e);
+          }
         }
       }
 
