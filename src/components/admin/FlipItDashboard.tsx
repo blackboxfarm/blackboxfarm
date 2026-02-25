@@ -279,6 +279,7 @@ export function FlipItDashboard() {
     entryType: null
   });
   const [isCheckingBlacklist, setIsCheckingBlacklist] = useState(false);
+  const [blacklistCheckDone, setBlacklistCheckDone] = useState(false);
   
   // Helper for empty input token state
   const getEmptyInputToken = (): InputTokenData => ({
@@ -982,6 +983,7 @@ export function FlipItDashboard() {
       console.error('Failed to check blacklist status:', err);
     } finally {
       setIsCheckingBlacklist(false);
+      setBlacklistCheckDone(true);
     }
   }, [blacklistWarning]);
   
@@ -1014,6 +1016,7 @@ export function FlipItDashboard() {
       // Catches directly blacklisted token mints instantly
       // ===========================================
       setIsCheckingBlacklist(true);
+      setBlacklistCheckDone(false);
       setBlacklistWarning({ level: null, reason: null, source: null, entryType: null });
       
       const fastBlacklistPromise = (async () => {
@@ -3494,6 +3497,8 @@ export function FlipItDashboard() {
                     onClick={() => {
                       setTokenAddress('');
                       setInputToken(getEmptyInputToken());
+                      setBlacklistCheckDone(false);
+                      setBlacklistWarning({ level: null, reason: null, source: null, entryType: null });
                       holderQuality.reset();
                       toast.info('Cleared');
                     }}
@@ -3582,7 +3587,7 @@ export function FlipItDashboard() {
               )}
               
               {/* Blacklist Mesh Result Box */}
-              {tokenAddress.trim().length >= 32 && (isCheckingBlacklist || blacklistWarning.level !== null) && (
+              {tokenAddress.trim().length >= 32 && (isCheckingBlacklist || blacklistCheckDone) && (
                 <div className="p-3 rounded-lg bg-black border border-zinc-700 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="text-white font-semibold text-sm">Blacklist Mesh</span>
