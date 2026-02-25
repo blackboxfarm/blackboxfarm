@@ -36,12 +36,23 @@ interface MintedToken {
   fundingPath: string[];
 }
 
+interface OffspringWallet {
+  wallet: string;
+  depth: number;
+  amountReceived: number;
+  timestamp?: string;
+  hasMinted: boolean;
+  mintedTokens: MintedToken[];
+  children: OffspringWallet[];
+}
+
 interface ScanResult {
   parentWallet: string;
   totalOffspring: number;
   totalMinters: number;
   totalTokensMinted: number;
   allMintedTokens: MintedToken[];
+  offspringTree?: OffspringWallet;
   scanDepth: number;
   scanDuration: number;
 }
@@ -74,6 +85,29 @@ interface MeshLink {
   linked_id: string;
   relationship: string;
   confidence: number;
+}
+
+function flattenOffspringWallets(node?: OffspringWallet): Array<{ wallet: string; depth: number; minted: number }> {
+  if (!node) return [];
+
+  const wallets = [{ wallet: node.wallet, depth: node.depth, minted: node.mintedTokens?.length ?? 0 }];
+  for (const child of node.children ?? []) {
+    wallets.push(...flattenOffspringWallets(child));
+  }
+
+  return wallets;
+}
+
+function mapGenealogyToOffspring(node: any): OffspringWallet {
+  return {
+    wallet: node?.wallet,
+    depth: node?.depth ?? 0,
+    amountReceived: node?.amount_sol ?? 0,
+    timestamp: node?.timestamp ?? undefined,
+    hasMinted: false,
+    mintedTokens: [],
+    children: Array.isArray(node?.children) ? node.children.map(mapGenealogyToOffspring) : [],
+  };
 }
 
 export default function IntelReport() {
@@ -162,10 +196,15 @@ export default function IntelReport() {
 
       setCreatorWallet(wallet);
 
-      const [scanResponse, repResponse, blResponse, meshResponse, devTokensResponse] = await Promise.all([
-        supabase.functions.invoke("offspring-mint-scanner", {
-          body: { parentWallet: wallet, maxDepth: 0 },
-        }),
+      const scannerPromise = supabase.functions.invoke("offspring-mint-scanner", {
+        body: { parentWallet: wallet, maxDepth: 3 },
+      });
+
+      const genealogyPromise = supabase.functions.invoke("wallet-genealogy-scanner", {
+        body: { wallets: [wallet], maxDepth: 3, minAmountSol: 0.05 },
+      });
+
+      const [repResponse, blResponse, meshResponse, devTokensResponse] = await Promise.all([
         supabase
           .from("dev_wallet_reputation")
           .select("*")
@@ -196,19 +235,7 @@ export default function IntelReport() {
         fundingPath: [wallet],
       }));
 
-      if (scanResponse.data) {
-        const scanData = scanResponse.data as ScanResult;
-        const mergedScan: ScanResult =
-          scanData.totalTokensMinted === 0 && dbMintedTokens.length > 0
-            ? {
-                ...scanData,
-                allMintedTokens: dbMintedTokens,
-                totalTokensMinted: dbMintedTokens.length,
-                totalMinters: Math.max(scanData.totalMinters, 1),
-              }
-            : scanData;
-        setScanResult(mergedScan);
-      } else if (dbMintedTokens.length > 0) {
+      if (dbMintedTokens.length > 0) {
         setScanResult({
           parentWallet: wallet,
           totalOffspring: 0,
@@ -223,6 +250,62 @@ export default function IntelReport() {
       if (repResponse.data) setDevRep(repResponse.data as unknown as DevReputation);
       if (blResponse.data) setBlacklistEntries(blResponse.data as unknown as BlacklistEntry[]);
       if (meshResponse.data) setMeshLinks(meshResponse.data as unknown as MeshLink[]);
+
+      void genealogyPromise
+        .then((genealogyResponse) => {
+          const genealogyTree = (genealogyResponse.data as any)?.results?.[0]?.funding_tree;
+          if (!genealogyTree) return;
+
+          setScanResult((prev) => {
+            const fallback: ScanResult = {
+              parentWallet: wallet,
+              totalOffspring: 0,
+              totalMinters: 1,
+              totalTokensMinted: dbMintedTokens.length,
+              allMintedTokens: dbMintedTokens,
+              scanDepth: 0,
+              scanDuration: 0,
+            };
+
+            return {
+              ...(prev ?? fallback),
+              offspringTree: mapGenealogyToOffspring(genealogyTree),
+            };
+          });
+        })
+        .catch((genealogyError) => {
+          console.warn("wallet-genealogy-scanner background scan failed:", genealogyError);
+        });
+
+      void scannerPromise
+        .then((scanResponse) => {
+          const scanData = (scanResponse.data as ScanResult | null) ?? null;
+          if (!scanData) return;
+
+          const mergedTokensMap = new Map<string, MintedToken>();
+          for (const token of scanData.allMintedTokens ?? []) {
+            mergedTokensMap.set(token.tokenMint, token);
+          }
+          for (const token of dbMintedTokens) {
+            if (!mergedTokensMap.has(token.tokenMint)) {
+              mergedTokensMap.set(token.tokenMint, token);
+            }
+          }
+
+          const mergedTokens = Array.from(mergedTokensMap.values()).sort((a, b) =>
+            (b.createdAt || "").localeCompare(a.createdAt || "")
+          );
+
+          setScanResult({
+            ...scanData,
+            allMintedTokens: mergedTokens,
+            totalTokensMinted: mergedTokens.length,
+            totalMinters: Math.max(scanData.totalMinters, mergedTokens.length > 0 ? 1 : 0),
+          });
+        })
+        .catch((scanError) => {
+          console.warn("offspring-mint-scanner background scan failed:", scanError);
+        });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -266,6 +349,8 @@ export default function IntelReport() {
     ? "text-green-400" : "text-yellow-400";
 
   const gradRate = devRep ? (devRep.total_tokens_launched > 0 ? ((devRep.tokens_graduated / devRep.total_tokens_launched) * 100).toFixed(0) : "0") : "—";
+  const familyWallets = flattenOffspringWallets(scanResult?.offspringTree);
+  const relatedWalletCount = Math.max(familyWallets.length - 1, 0);
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-gray-200">
@@ -380,6 +465,41 @@ export default function IntelReport() {
                         {link.linked_id} <CopyBtn text={link.linked_id} />
                       </td>
                       <td className="py-2 px-3 text-right text-gray-400">{link.confidence}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* Wallet Family Tree */}
+        {familyWallets.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-white">
+              🌳 Wallet Family Tree ({relatedWalletCount} related wallets)
+            </h2>
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg overflow-x-auto max-h-80">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-800 text-gray-500">
+                    <th className="text-left py-2 px-3 w-16">Depth</th>
+                    <th className="text-left py-2 px-3">Wallet</th>
+                    <th className="text-left py-2 px-3 w-28">Mints</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {familyWallets.map((node, i) => (
+                    <tr key={`${node.wallet}-${i}`} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                      <td className="py-2 px-3 text-gray-400">{node.depth}</td>
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-white break-all">{node.wallet}</span>
+                          <CopyBtn text={node.wallet} />
+                          <ExtLink href={`https://solscan.io/account/${node.wallet}`} label="solscan" color="text-blue-400" />
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 text-gray-300">{node.minted}</td>
                     </tr>
                   ))}
                 </tbody>
