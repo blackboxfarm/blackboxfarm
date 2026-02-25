@@ -1396,40 +1396,109 @@ serve(async (req) => {
           /^\d+$/.test(position.quantity_tokens_raw) &&
           position.quantity_tokens_raw !== "0";
         
-        // FIX: For legacy positions without quantity_tokens_raw, fetch actual balance from chain
+        // POSITION-ISOLATED SELL: Only sell THIS position's tokens, not the whole wallet balance
         let effectiveRawAmount = position.quantity_tokens_raw;
-        if (!hasRawQuantity && position.wallet_id && position.token_mint) {
-          execLog.log('LEGACY_POSITION_DETECTED', { 
-            reason: 'quantity_tokens_raw missing, fetching from chain' 
-          });
-          
-          try {
-            // Get wallet info including token balance for this specific mint
-            const { data: walletData, error: walletErr } = await supabase.functions.invoke("trader-wallet", {
-              body: { 
-                tokenMint: position.token_mint,
-                walletId: position.wallet_id 
-              }
+        let useSellAll = false;
+        
+        if (!hasRawQuantity) {
+          // Try to compute raw amount from human-readable quantity + decimals
+          if (hasRecordedQuantity && position.token_decimals != null) {
+            const rawFromHuman = BigInt(Math.round(Number(position.quantity_tokens) * Math.pow(10, position.token_decimals)));
+            effectiveRawAmount = rawFromHuman.toString();
+            hasRawQuantity = true;
+            execLog.log('RAW_AMOUNT_COMPUTED', { 
+              quantityTokens: String(position.quantity_tokens).slice(0, 12),
+              tokenDecimals: position.token_decimals,
+              computedRaw: effectiveRawAmount.slice(0, 15)
+            });
+          } else {
+            // Last resort: check if this is the ONLY holding position for this token in this wallet
+            // Only then is sellAll safe (no other chunks to protect)
+            execLog.log('LEGACY_POSITION_DETECTED', { 
+              reason: 'quantity_tokens_raw missing, checking sibling positions' 
             });
             
-            if (!walletErr && walletData?.tokenBalanceRaw && walletData.tokenBalanceRaw !== "0") {
-              effectiveRawAmount = walletData.tokenBalanceRaw;
-              hasRawQuantity = true;
-              execLog.log('CHAIN_BALANCE_FETCHED', {
-                tokenBalanceRaw: String(walletData.tokenBalanceRaw).slice(0, 15),
-                tokenDecimals: walletData.tokenDecimals,
-                tokenUiAmount: walletData.tokenUiAmount
+            const { data: siblingPositions } = await supabase
+              .from("flip_positions")
+              .select("id")
+              .eq("token_mint", position.token_mint)
+              .eq("wallet_id", position.wallet_id)
+              .in("status", ["holding", "pending_sell"])
+              .neq("id", positionId);
+            
+            const siblingCount = siblingPositions?.length || 0;
+            
+            if (siblingCount === 0) {
+              // Only position for this token — safe to sell all
+              useSellAll = true;
+              execLog.log('SELL_ALL_SAFE', { 
+                reason: 'Only holding position for this token in wallet',
+                siblingCount: 0
               });
             } else {
-              execLog.log('CHAIN_BALANCE_ZERO_OR_ERROR', { 
-                error: walletErr?.message,
-                tokenBalanceRaw: walletData?.tokenBalanceRaw 
+              // Multiple positions exist! Fetch chain balance and divide proportionally
+              execLog.log('MULTI_POSITION_DETECTED', { 
+                siblingCount,
+                reason: 'Cannot sellAll — other positions hold same token'
               });
+              
+              try {
+                const { data: walletData, error: walletErr } = await supabase.functions.invoke("trader-wallet", {
+                  body: { 
+                    tokenMint: position.token_mint,
+                    walletId: position.wallet_id 
+                  }
+                });
+                
+                if (!walletErr && walletData?.tokenBalanceRaw && walletData.tokenBalanceRaw !== "0") {
+                  // Get all holding positions for proportional split
+                  const { data: allHolding } = await supabase
+                    .from("flip_positions")
+                    .select("id, quantity_tokens, buy_amount_usd")
+                    .eq("token_mint", position.token_mint)
+                    .eq("wallet_id", position.wallet_id)
+                    .in("status", ["holding", "pending_sell"]);
+                  
+                  const totalInvested = (allHolding || []).reduce((s, p) => s + Number(p.buy_amount_usd || 0), 0);
+                  const thisInvested = Number(position.buy_amount_usd || 0);
+                  
+                  if (totalInvested > 0 && thisInvested > 0) {
+                    const proportion = thisInvested / totalInvested;
+                    const totalRaw = BigInt(walletData.tokenBalanceRaw);
+                    const positionRaw = (totalRaw * BigInt(Math.round(proportion * 10000))) / BigInt(10000);
+                    effectiveRawAmount = positionRaw.toString();
+                    hasRawQuantity = true;
+                    execLog.log('PROPORTIONAL_SELL', {
+                      proportion: proportion.toFixed(4),
+                      totalRaw: walletData.tokenBalanceRaw.slice(0, 15),
+                      positionRaw: effectiveRawAmount.slice(0, 15),
+                      thisInvested: thisInvested.toFixed(2),
+                      totalInvested: totalInvested.toFixed(2)
+                    });
+                  } else {
+                    // Fallback: divide evenly
+                    const totalPositions = (allHolding?.length || 1);
+                    const totalRaw = BigInt(walletData.tokenBalanceRaw);
+                    const positionRaw = totalRaw / BigInt(totalPositions);
+                    effectiveRawAmount = positionRaw.toString();
+                    hasRawQuantity = true;
+                    execLog.log('EVEN_SPLIT_SELL', {
+                      totalPositions,
+                      positionRaw: effectiveRawAmount.slice(0, 15)
+                    });
+                  }
+                } else {
+                  execLog.log('CHAIN_BALANCE_ZERO_OR_ERROR', { 
+                    error: walletErr?.message,
+                    tokenBalanceRaw: walletData?.tokenBalanceRaw 
+                  });
+                }
+              } catch (chainErr) {
+                execLog.log('CHAIN_BALANCE_FETCH_FAILED', { 
+                  error: String((chainErr as Error)?.message || chainErr) 
+                });
+              }
             }
-          } catch (chainErr) {
-            execLog.log('CHAIN_BALANCE_FETCH_FAILED', { 
-              error: String((chainErr as Error)?.message || chainErr) 
-            });
           }
         }
         
@@ -1440,7 +1509,7 @@ serve(async (req) => {
           quantityTokensRaw: position.quantity_tokens_raw?.slice(0, 15),
           effectiveRawAmount: effectiveRawAmount?.slice(0, 15),
           tokenDecimals: position.token_decimals,
-          willSellAll: !hasRawQuantity
+          willSellAll: useSellAll
         });
 
         // Execute sell via raydium-swap using wallet ID for direct lookup
@@ -1449,8 +1518,8 @@ serve(async (req) => {
           body: {
             side: "sell",
             tokenMint: position.token_mint,
-            // Use effective raw amount (from DB or fetched from chain), fall back to sellAll
-            ...(hasRawQuantity ? { amount: effectiveRawAmount } : { sellAll: true }),
+            // POSITION-ISOLATED: sell only this position's chunk, not entire balance
+            ...(hasRawQuantity ? { amount: effectiveRawAmount } : useSellAll ? { sellAll: true } : { sellAll: true }),
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
