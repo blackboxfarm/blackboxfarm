@@ -3685,29 +3685,15 @@ export function FlipItDashboard() {
             ) : (
               <Button
                 onClick={handleFlip}
-                disabled={isFlipping || isCheckingBlacklist || !tokenAddress.trim() || !selectedWallet || blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked'}
-                className={`bg-gradient-to-r ${
-                  blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked'
-                    ? 'from-red-800 to-red-900 cursor-not-allowed opacity-60'
-                    : 'from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600'
-                }`}
+                disabled={isFlipping || !tokenAddress.trim() || !selectedWallet}
+                className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
               >
-                {isCheckingBlacklist ? (
-                  <>
-                    <Shield className="h-4 w-4 mr-2 animate-pulse" />
-                    Scanning...
-                  </>
-                ) : isFlipping ? (
+                {isFlipping ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked' ? (
-                  <>
-                    <AlertTriangle className="h-4 w-4 mr-2" />
-                    BLOCKED
-                  </>
                 ) : (
                   <Flame className="h-4 w-4 mr-2" />
                 )}
-                {!isCheckingBlacklist && !(blacklistWarning.level === 'high' || blacklistWarning.level === 'team_blacklisted' || blacklistWarning.level === 'mesh_linked') && 'FLIP IT'}
+                FLIP IT
               </Button>
             )}
 
