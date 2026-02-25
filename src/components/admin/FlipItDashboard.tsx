@@ -882,7 +882,7 @@ export function FlipItDashboard() {
             if (rep.trust_level === 'scammer' || rep.trust_level === 'serial_rugger') {
               setBlacklistWarning({
                 level: 'high',
-                reason: `🚨 Dev wallet flagged as ${rep.trust_level} (${rep.tokens_rugged || 0} rugs, score: ${rep.reputation_score || 0})`,
+                reason: `🚨 STAY THE FUCK AWAY — This dev is a known ${rep.trust_level === 'serial_rugger' ? 'SERIAL RUGGER' : 'SCAMMER'}. ${rep.tokens_rugged || 0} rugs on record, reputation score: ${rep.reputation_score || 0}. We've seen this shit before.`,
                 source: 'creator_wallet',
                 entryType: 'dev_wallet_reputation'
               });
@@ -920,7 +920,7 @@ export function FlipItDashboard() {
                 const blEntry = linkedBlacklist[0];
                 setBlacklistWarning({
                   level: 'mesh_linked',
-                  reason: `🕸️ Dev wallet linked to blacklisted entity via ${link.relationship.replace(/_/g, ' ')} chain. Root: ${blEntry.identifier.slice(0, 8)}... (${blEntry.blacklist_reason || 'blacklisted'})`,
+                  reason: `🕸️ STAY AWAY — This dev is funded by a BLACKLISTED scammer network (${link.relationship.replace(/_/g, ' ')}). Root wallet: ${blEntry.identifier.slice(0, 8)}... — ${blEntry.blacklist_reason || 'known bad actor'}. Same shit, different token.`,
                   source: 'mesh',
                   entryType: 'reputation_mesh'
                 });
@@ -1220,18 +1220,56 @@ export function FlipItDashboard() {
             const twitterUrl = meta.socialLinks?.twitter ?? null;
             
             // FAIL-CLOSED: If this is a pump.fun token and creator is STILL null after
-            // all fallbacks (API + watchlist + lifecycle), block as unresolved
+            // token-metadata fallbacks, try direct DB lookup before giving up
             const isPumpToken = mint.endsWith('pump');
             if (isPumpToken && !creatorWallet) {
-              console.warn(`[fetchInputTokenData] ⚠️ Pump token with unresolved creator — FAIL-CLOSED`);
-              setBlacklistWarning({
-                level: 'high',
-                reason: '⚠️ Creator wallet unresolved — pump.fun API failed and no DB fallback found. Cannot verify safety.',
-                source: 'creator_wallet',
-                entryType: 'unresolved_creator'
-              });
-              setIsCheckingBlacklist(false);
-              setBlacklistCheckDone(true);
+              console.warn(`[fetchInputTokenData] ⚠️ Pump token with unresolved creator — trying direct DB lookup`);
+              
+              // Direct DB fallback: check pumpfun_watchlist and token_lifecycle
+              let resolvedCreator: string | null = null;
+              try {
+                const { data: watchlistRow } = await supabase
+                  .from('pumpfun_watchlist')
+                  .select('creator_wallet')
+                  .eq('token_mint', mint)
+                  .limit(1)
+                  .maybeSingle();
+                
+                if (watchlistRow?.creator_wallet) {
+                  resolvedCreator = watchlistRow.creator_wallet;
+                  console.log(`[fetchInputTokenData] ✅ Creator found in watchlist: ${resolvedCreator!.slice(0, 8)}...`);
+                } else {
+                  const { data: lifecycleRow } = await supabase
+                    .from('token_lifecycle')
+                    .select('creator_wallet')
+                    .eq('token_mint', mint)
+                    .limit(1)
+                    .maybeSingle();
+                  
+                  if (lifecycleRow?.creator_wallet) {
+                    resolvedCreator = lifecycleRow.creator_wallet;
+                    console.log(`[fetchInputTokenData] ✅ Creator found in lifecycle: ${resolvedCreator!.slice(0, 8)}...`);
+                  }
+                }
+              } catch (dbErr) {
+                console.warn('[fetchInputTokenData] Direct DB creator lookup failed:', dbErr);
+              }
+              
+              if (resolvedCreator) {
+                // Found creator in DB — update state and run full blacklist check
+                setInputToken(prev => prev.mint === mint ? { ...prev, creatorWallet: resolvedCreator } : prev);
+                checkBlacklistStatus(mint, resolvedCreator, twitterUrl);
+              } else {
+                // Truly unresolved — show aggressive warning
+                setBlacklistWarning({
+                  level: 'high',
+                  reason: '🚨 STAY AWAY — Creator wallet unresolved. We cannot verify this token is safe. Pump.fun API failed and no records found in our database.',
+                  source: 'creator_wallet',
+                  entryType: 'unresolved_creator'
+                });
+                setIsCheckingBlacklist(false);
+                setBlacklistCheckDone(true);
+              }
             } else {
               checkBlacklistStatus(mint, creatorWallet, twitterUrl);
             }
