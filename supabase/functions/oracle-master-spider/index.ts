@@ -609,11 +609,24 @@ Deno.serve(async (req) => {
           if (!funder) break;
 
           // Check if funder is a known CEX
-          const knownCEXes = [
-            '5tzFkiKscjHsFKrxv2aNJchkHR', // Binance hot wallets prefix
-            'AC5RDfQFmDS1deWZos9', // Coinbase
-          ];
-          const isCEX = knownCEXes.some(prefix => funder!.startsWith(prefix));
+          // Real known Solana CEX hot wallets
+          const knownCEXWallets = new Set([
+            // Binance hot wallets (Solana)
+            '5tzFkiKscjHs7ryqBUBSA4tbbPqCkUF8dC2yFGpaN1tE',
+            '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+            'BmFdpraQhkiDQE6SNjJVKELfbEo6jAPs6daMoZbrjhbP',
+            '2ojv9BAiHUrvsm9gxDe7fJSzbNZSJcxZvf8dqmWGHG8S',
+            // Coinbase hot wallets (Solana)
+            'H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS',
+            'GJRs4FwHtemZ5ZE9x3FNvJ8TMwitKTh21yxdRPqn7npE',
+            '2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm',
+            // Kraken
+            'FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5',
+            // OKX
+            '5VCwKtCXgCDuQosrgXsVtBUGdcYbqPghvxVbrGGQnuHe',
+          ]);
+          const isCEX = knownCEXWallets.has(funder!);
+          
 
           genealogy.parents.push(funder);
           genealogy.depth = depth + 1;

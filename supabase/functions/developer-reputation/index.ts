@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -6,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -26,37 +25,74 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Fetching reputation for wallet: ${walletAddress}`);
+    console.log(`[dev-rep] Fetching reputation for wallet: ${walletAddress}`);
 
-    // Check if this wallet is a known developer master wallet
-    const { data: developerProfile, error: profileError } = await supabase
-      .from('developer_profiles')
-      .select('*')
-      .eq('master_wallet_address', walletAddress)
-      .single();
+    // Query ALL reputation sources in parallel
+    const [
+      devWalletRepResult,
+      blacklistResult,
+      whitelistResult,
+      meshLinksResult,
+      developerProfileResult,
+      developerTokensResult,
+    ] = await Promise.all([
+      // Primary: dev_wallet_reputation (16k+ entries)
+      supabase
+        .from('dev_wallet_reputation')
+        .select('*')
+        .eq('wallet_address', walletAddress)
+        .maybeSingle(),
 
-    if (profileError && profileError.code !== 'PGRST116') {
-      console.error('Error fetching developer profile:', profileError);
-    }
+      // Blacklist: check by identifier AND linked_wallets
+      supabase
+        .from('pumpfun_blacklist')
+        .select('*')
+        .or(`identifier.eq.${walletAddress},linked_wallets.cs.{${walletAddress}}`)
+        .eq('is_active', true)
+        .limit(5),
 
-    // Check if this wallet is in developer_wallets (could be a sub-wallet)
-    const { data: developerWallet, error: walletError } = await supabase
-      .from('developer_wallets')
-      .select(`
-        *,
-        developer_profiles!inner(*)
-      `)
-      .eq('wallet_address', walletAddress)
-      .single();
+      // Whitelist: check by identifier AND linked_wallets
+      supabase
+        .from('pumpfun_whitelist')
+        .select('*')
+        .or(`identifier.eq.${walletAddress},linked_wallets.cs.{${walletAddress}}`)
+        .eq('is_active', true)
+        .limit(5),
 
-    if (walletError && walletError.code !== 'PGRST116') {
-      console.error('Error fetching developer wallet:', walletError);
-    }
+      // Reputation mesh: find all connections
+      supabase
+        .from('reputation_mesh')
+        .select('source_id, linked_id, source_type, linked_type, relationship, confidence')
+        .or(`source_id.eq.${walletAddress},linked_id.eq.${walletAddress}`)
+        .limit(50),
 
-    // Use whichever we found
-    const profile = developerProfile || developerWallet?.developer_profiles;
+      // Legacy: developer_profiles
+      supabase
+        .from('developer_profiles')
+        .select('*')
+        .eq('master_wallet_address', walletAddress)
+        .maybeSingle(),
 
-    if (!profile) {
+      // Developer tokens for stats
+      supabase
+        .from('developer_tokens')
+        .select('token_mint, token_symbol, outcome, is_active')
+        .eq('creator_wallet', walletAddress)
+        .limit(200),
+    ]);
+
+    const devWalletRep = devWalletRepResult.data;
+    const blacklistEntries = blacklistResult.data || [];
+    const whitelistEntries = whitelistResult.data || [];
+    const meshLinks = meshLinksResult.data || [];
+    const developerProfile = developerProfileResult.data;
+    const developerTokens = developerTokensResult.data || [];
+
+    const isBlacklisted = blacklistEntries.length > 0;
+    const isWhitelisted = whitelistEntries.length > 0;
+    const hasAnyData = !!(devWalletRep || isBlacklisted || isWhitelisted || developerProfile || developerTokens.length > 0 || meshLinks.length > 0);
+
+    if (!hasAnyData) {
       return new Response(
         JSON.stringify({
           found: false,
@@ -68,33 +104,65 @@ serve(async (req) => {
       );
     }
 
-    // Calculate risk level based on reputation score and trust level
+    // Build unified stats from best available source
+    const stats = {
+      totalTokens: devWalletRep?.total_tokens_launched || developerProfile?.total_tokens_created || developerTokens.length || 0,
+      successfulTokens: devWalletRep?.tokens_successful || developerProfile?.successful_tokens || developerTokens.filter(t => t.outcome === 'success' || t.outcome === 'graduated').length || 0,
+      failedTokens: devWalletRep?.tokens_rugged || developerProfile?.failed_tokens || developerTokens.filter(t => t.outcome === 'failed').length || 0,
+      rugPulls: developerProfile?.rug_pull_count || devWalletRep?.tokens_rugged || 0,
+      slowDrains: developerProfile?.slow_drain_count || 0,
+      reputationScore: devWalletRep?.reputation_score || developerProfile?.reputation_score || 50,
+      trustLevel: devWalletRep?.trust_level || developerProfile?.trust_level || 'neutral',
+      devPattern: devWalletRep?.dev_pattern || null,
+      successRate: devWalletRep?.success_rate_pct || 0,
+    };
+
+    // Determine risk level — blacklist ALWAYS overrides everything
     let riskLevel = 'unknown';
     let riskColor = 'gray';
     let canTrade = true;
     let warning = '';
 
-    if (profile.trust_level === 'blacklisted') {
+    if (isBlacklisted) {
+      // Hard block: blacklisted by Master Spider or manual submission
       riskLevel = 'critical';
       riskColor = 'red';
       canTrade = false;
-      warning = 'This developer is blacklisted due to confirmed malicious activity';
-    } else if (profile.trust_level === 'untrusted') {
+      const reasons = blacklistEntries.map(e => e.blacklist_reason).filter(Boolean);
+      warning = `BLACKLISTED: ${reasons[0] || 'Known bad actor'}`;
+    } else if (['scammer', 'serial_rugger', 'blacklisted'].includes(stats.trustLevel)) {
+      // dev_wallet_reputation flagged as bad
+      riskLevel = 'critical';
+      riskColor = 'red';
+      canTrade = false;
+      warning = `Flagged as ${stats.trustLevel} in reputation database (${stats.rugPulls} rugs, score: ${stats.reputationScore})`;
+    } else if (['serial_spammer', 'fee_farmer'].includes(stats.devPattern || '')) {
       riskLevel = 'high';
       riskColor = 'orange';
       canTrade = true;
-      warning = 'This developer has a history of failed or suspicious tokens';
-    } else if (profile.reputation_score < 30) {
+      warning = `Dev pattern: ${stats.devPattern} — ${stats.totalTokens} tokens, ${stats.successRate?.toFixed(1)}% success rate`;
+    } else if (stats.reputationScore < 30) {
       riskLevel = 'high';
       riskColor = 'orange';
       canTrade = true;
       warning = 'Low reputation score indicates high risk';
-    } else if (profile.reputation_score < 50) {
+    } else if (isWhitelisted) {
+      riskLevel = 'verified';
+      riskColor = 'blue';
+      canTrade = true;
+      const reasons = whitelistEntries.map(e => e.whitelist_reason).filter(Boolean);
+      warning = reasons[0] || '';
+    } else if (['trusted', 'legitimate_builder', 'success'].includes(stats.trustLevel)) {
+      riskLevel = 'verified';
+      riskColor = 'blue';
+      canTrade = true;
+      warning = '';
+    } else if (stats.reputationScore < 50) {
       riskLevel = 'medium';
       riskColor = 'yellow';
       canTrade = true;
-      warning = 'Moderate risk - proceed with caution';
-    } else if (profile.reputation_score < 70) {
+      warning = 'Moderate risk — proceed with caution';
+    } else if (stats.reputationScore < 70) {
       riskLevel = 'low';
       riskColor = 'green';
       canTrade = true;
@@ -106,53 +174,66 @@ serve(async (req) => {
       warning = '';
     }
 
-    // Get token statistics
-    const { data: tokens, error: tokensError } = await supabase
-      .from('developer_tokens')
-      .select('outcome')
-      .eq('developer_id', profile.id);
-
-    if (tokensError) {
-      console.error('Error fetching tokens:', tokensError);
+    // Extract network from mesh
+    const linkedWallets = new Set<string>();
+    const linkedXAccounts = new Set<string>();
+    for (const link of meshLinks) {
+      const isSource = link.source_id === walletAddress;
+      const otherId = isSource ? link.linked_id : link.source_id;
+      const otherType = isSource ? link.linked_type : link.source_type;
+      if (otherType === 'wallet') linkedWallets.add(otherId);
+      if (otherType === 'x_account') linkedXAccounts.add(otherId);
     }
-
-    const stats = {
-      totalTokens: profile.total_tokens_created || 0,
-      successfulTokens: profile.successful_tokens || 0,
-      failedTokens: profile.failed_tokens || 0,
-      rugPulls: profile.rug_pull_count || 0,
-      slowDrains: profile.slow_drain_count || 0,
-      reputationScore: profile.reputation_score || 50,
-      trustLevel: profile.trust_level || 'neutral'
-    };
 
     return new Response(
       JSON.stringify({
         found: true,
         walletAddress,
-        profile: {
-          id: profile.id,
-          displayName: profile.display_name,
-          masterWallet: profile.master_wallet_address,
-          kycVerified: profile.kyc_verified,
-          tags: profile.tags || []
-        },
+        profile: developerProfile ? {
+          id: developerProfile.id,
+          displayName: developerProfile.display_name,
+          masterWallet: developerProfile.master_wallet_address,
+          kycVerified: developerProfile.kyc_verified,
+          tags: developerProfile.tags || []
+        } : undefined,
         risk: {
           level: riskLevel,
           color: riskColor,
-          score: profile.reputation_score,
-          trustLevel: profile.trust_level,
+          score: stats.reputationScore,
+          trustLevel: stats.trustLevel,
+          devPattern: stats.devPattern,
           canTrade,
           warning
         },
         stats,
-        lastAnalyzed: profile.last_analysis_at
+        blacklist: isBlacklisted ? {
+          entries: blacklistEntries.map(e => ({
+            identifier: e.identifier,
+            reason: e.blacklist_reason,
+            riskLevel: e.risk_level,
+            entryType: e.entry_type,
+            tags: e.tags,
+          }))
+        } : null,
+        whitelist: isWhitelisted ? {
+          entries: whitelistEntries.map(e => ({
+            identifier: e.identifier,
+            reason: e.whitelist_reason,
+            trustLevel: e.trust_level,
+          }))
+        } : null,
+        network: {
+          linkedWallets: [...linkedWallets].slice(0, 20),
+          linkedXAccounts: [...linkedXAccounts].slice(0, 10),
+          meshLinksCount: meshLinks.length,
+        },
+        lastAnalyzed: devWalletRep?.last_analyzed_at || developerProfile?.last_analysis_at
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error in developer-reputation function:', error);
+    console.error('[dev-rep] Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

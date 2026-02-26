@@ -64,8 +64,20 @@ function isBase58(str: string): boolean {
   return base58Regex.test(str) && str.length >= 32 && str.length <= 44;
 }
 
+function parseXUrl(input: string): string | null {
+  const xUrlPattern = /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/(@?[\w]+)\/?(?:\?.*)?$/i;
+  const match = input.match(xUrlPattern);
+  if (match) return match[1].replace('@', '');
+  return null;
+}
+
 function detectInputType(input: string): 'token' | 'wallet' | 'x_account' | 'unknown' {
   const cleaned = input.trim();
+  
+  // Check for X/Twitter URLs first
+  if (parseXUrl(cleaned)) {
+    return 'x_account';
+  }
   
   if (cleaned.startsWith('@')) {
     return 'x_account';
@@ -591,7 +603,9 @@ Deno.serve(async (req) => {
       throw new Error('Input string required (token address, wallet, or @X handle)');
     }
 
-    const cleanedInput = input.trim().replace(/^@/, '');
+    // Parse X URLs before cleaning
+    const xHandle = parseXUrl(input.trim());
+    const cleanedInput = xHandle ? xHandle : input.trim().replace(/^@/, '');
     const inputType = detectInputType(input);
     console.log(`[Oracle] Processing input: ${cleanedInput}, type: ${inputType}, scanMode: ${scanMode || 'none'}`);
 
@@ -610,29 +624,77 @@ Deno.serve(async (req) => {
         xAccountData = xData;
       }
     } else if (inputType === 'token') {
-      // Try to find creator wallet for this token
+      // Full fallback chain: token_lifecycle -> pumpfun_watchlist -> developer_tokens -> pump.fun API
+      
+      // 1. token_lifecycle
       const { data: lifecycle } = await supabase
         .from('token_lifecycle')
         .select('creator_wallet, developer_id')
         .eq('token_mint', cleanedInput)
-        .single();
+        .maybeSingle();
       
       if (lifecycle?.creator_wallet) {
         resolvedWallet = lifecycle.creator_wallet;
-      } else {
-        // Try token-creator-linker to find creator
+        console.log(`[Oracle] Resolved via token_lifecycle: ${resolvedWallet?.slice(0, 8)}`);
+      }
+      
+      // 2. pumpfun_watchlist
+      if (!resolvedWallet) {
+        const { data: watchlistToken } = await supabase
+          .from('pumpfun_watchlist')
+          .select('creator_wallet, token_name, token_symbol')
+          .eq('token_mint', cleanedInput)
+          .maybeSingle();
+        
+        if (watchlistToken?.creator_wallet) {
+          resolvedWallet = watchlistToken.creator_wallet;
+          console.log(`[Oracle] Resolved via pumpfun_watchlist: ${resolvedWallet?.slice(0, 8)}`);
+        }
+      }
+      
+      // 3. developer_tokens
+      if (!resolvedWallet) {
+        const { data: devToken } = await supabase
+          .from('developer_tokens')
+          .select('creator_wallet')
+          .eq('token_mint', cleanedInput)
+          .maybeSingle();
+        
+        if (devToken?.creator_wallet) {
+          resolvedWallet = devToken.creator_wallet;
+          console.log(`[Oracle] Resolved via developer_tokens: ${resolvedWallet?.slice(0, 8)}`);
+        }
+      }
+      
+      // 4. pump.fun API
+      if (!resolvedWallet) {
         try {
-          const { data: linkerData } = await supabase.functions.invoke('token-creator-linker', {
+          const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${cleanedInput}`, {
+            headers: { 'Accept': 'application/json' }
+          });
+          if (pfRes.ok) {
+            const pfData = await pfRes.json();
+            if (pfData?.creator) {
+              resolvedWallet = pfData.creator;
+              console.log(`[Oracle] Resolved via pump.fun API: ${resolvedWallet?.slice(0, 8)}`);
+            }
+          }
+        } catch (e) {
+          console.log('[Oracle] Pump.fun API failed:', e);
+        }
+      }
+      
+      // 5. Try token-creator-linker as last resort
+      if (!resolvedWallet) {
+        try {
+          await supabase.functions.invoke('token-creator-linker', {
             body: { tokenMints: [cleanedInput] }
           });
-          
-          // Re-query after linking
           const { data: updatedLifecycle } = await supabase
             .from('token_lifecycle')
             .select('creator_wallet')
             .eq('token_mint', cleanedInput)
-            .single();
-          
+            .maybeSingle();
           resolvedWallet = updatedLifecycle?.creator_wallet;
         } catch (e) {
           console.log('[Oracle] Token creator linker failed:', e);
@@ -673,18 +735,19 @@ Deno.serve(async (req) => {
         .maybeSingle(),
       
       // Blacklist check - query by identifier (wallet/token/handle) and linked_wallets
+      // Also check original token mint if input was a token
       supabase
         .from('pumpfun_blacklist')
         .select('*')
-        .or(`identifier.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}`)
-        .limit(1),
+        .or(`identifier.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}${inputType === 'token' && cleanedInput !== resolvedWallet ? `,identifier.eq.${cleanedInput}` : ''}`)
+        .limit(5),
       
       // Whitelist check - query by identifier and linked_wallets
       supabase
         .from('pumpfun_whitelist')
         .select('*')
-        .or(`identifier.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}`)
-        .limit(1),
+        .or(`identifier.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}${inputType === 'token' && cleanedInput !== resolvedWallet ? `,identifier.eq.${cleanedInput}` : ''}`)
+        .limit(5),
       
       // Dev teams
       supabase
@@ -759,8 +822,8 @@ Deno.serve(async (req) => {
         
         console.log(`[Oracle] Updated dev_wallet_reputation for ${resolvedWallet.slice(0, 8)}...`);
         
-        // Write individual tokens to developer_tokens (first 50)
-        const tokenUpserts = liveTokens.slice(0, 50).map((token: any) => ({
+        // Write individual tokens to developer_tokens (first 200)
+        const tokenUpserts = liveTokens.slice(0, 200).map((token: any) => ({
           token_mint: token.mint,
           creator_wallet: resolvedWallet,
           developer_id: resolvedWallet, // Use wallet as developer ID
