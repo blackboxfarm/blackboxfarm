@@ -1487,6 +1487,61 @@ serve(async (req) => {
           const minChunkLamports = 1; // allow deep shrink for pathological pump overflow states
           const maxChunkShrinkAttempts = 26;
 
+          const tryTokenDenominatedBuyFallback = async (
+            chunkLamports: number,
+            pool: 'pump' | 'bonk' | 'auto',
+            candidateSlippageBps: number
+          ): Promise<{ signature?: string; error?: string }> => {
+            const estimatedTokenAmount = await estimatePumpTokenAmountFromLamports(String(tokenMint), chunkLamports);
+            if (!estimatedTokenAmount) {
+              return { error: `Could not estimate token amount for ${chunkLamports} lamports` };
+            }
+
+            console.log(
+              `PumpPortal overflow fallback: retrying token-denominated buy (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${chunkLamports}, tokenAmount=${estimatedTokenAmount})`
+            );
+
+            const tokenModeResult = await tryPumpPortalTrade({
+              mint: String(tokenMint),
+              userPublicKey: owner.publicKey.toBase58(),
+              action: 'buy',
+              amount: estimatedTokenAmount,
+              slippageBps: candidateSlippageBps,
+              pool,
+              denominatedInSol: false,
+            });
+
+            if (!("tx" in tokenModeResult)) {
+              return { error: `Token-denominated build failed: ${tokenModeResult.error}` };
+            }
+
+            const vtx = VersionedTransaction.deserialize(tokenModeResult.tx);
+
+            const _heliusKeyTokenMode = getHeliusApiKey();
+            const txRpc = _heliusKeyTokenMode
+              ? new Connection(getHeliusRpcUrl(_heliusKeyTokenMode), { commitment: "confirmed" })
+              : connection;
+
+            const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+            (vtx as any).message.recentBlockhash = blockhash;
+            vtx.sign([owner]);
+
+            let sig: string;
+            try {
+              sig = await txRpc.sendTransaction(vtx, { skipPreflight: false, maxRetries: 3 });
+            } catch (sendErr) {
+              const msg = (sendErr as Error)?.message || String(sendErr);
+              return { error: `Token-denominated send failed: ${msg}` };
+            }
+
+            const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+            if (!confirmResult.confirmed) {
+              return { error: `Token-denominated tx failed: ${confirmResult.error || "Unknown confirmation failure"}` };
+            }
+
+            return { signature: sig };
+          };
+
           for (const candidateSlippageBps of slippageCandidates) {
             console.log(`PumpPortal buy attempt with ${candidateSlippageBps} bps slippage`);
 
@@ -1497,6 +1552,7 @@ serve(async (req) => {
                 let attemptLamports = remainingLamports;
                 let chunkSent = false;
                 let overflowExhausted = false;
+                let attemptedTokenModeFallback = false;
 
                 for (let shrinkAttempt = 0; shrinkAttempt < maxChunkShrinkAttempts; shrinkAttempt++) {
                   if (!Number.isFinite(attemptLamports) || attemptLamports <= 0) break;
@@ -1536,6 +1592,29 @@ serve(async (req) => {
 
                       const isOverflow = msg.includes('6024') || msg.includes('Overflow') || msg.includes('0x1788');
                       if (isOverflow) {
+                        if (!attemptedTokenModeFallback) {
+                          attemptedTokenModeFallback = true;
+                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(
+                            attemptLamports,
+                            pool,
+                            candidateSlippageBps
+                          );
+
+                          if (tokenModeFallback.signature) {
+                            console.log(
+                              `PumpPortal token-denominated buy chunk successful (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${attemptLamports}): ${tokenModeFallback.signature}`
+                            );
+                            pumpExecutedSignatures.push(tokenModeFallback.signature);
+                            pumpExecutedLamports += attemptLamports;
+                            chunkSent = true;
+                            break;
+                          }
+
+                          console.log(
+                            `PumpPortal token-denominated fallback failed on send overflow: ${tokenModeFallback.error}`
+                          );
+                        }
+
                         const reduced = Math.floor(attemptLamports / 2);
                         if (reduced >= minChunkLamports) {
                           console.log(`PumpPortal overflow on send; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
@@ -1560,6 +1639,29 @@ serve(async (req) => {
 
                       const isOverflow = txError.includes('6024') || txError.includes('Overflow') || txError.includes('0x1788');
                       if (isOverflow) {
+                        if (!attemptedTokenModeFallback) {
+                          attemptedTokenModeFallback = true;
+                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(
+                            attemptLamports,
+                            pool,
+                            candidateSlippageBps
+                          );
+
+                          if (tokenModeFallback.signature) {
+                            console.log(
+                              `PumpPortal token-denominated buy chunk successful after on-chain overflow (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${attemptLamports}): ${tokenModeFallback.signature}`
+                            );
+                            pumpExecutedSignatures.push(tokenModeFallback.signature);
+                            pumpExecutedLamports += attemptLamports;
+                            chunkSent = true;
+                            break;
+                          }
+
+                          console.log(
+                            `PumpPortal token-denominated fallback failed on on-chain overflow: ${tokenModeFallback.error}`
+                          );
+                        }
+
                         const reduced = Math.floor(attemptLamports / 2);
                         if (reduced >= minChunkLamports) {
                           console.log(`PumpPortal overflow on-chain; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
@@ -1598,6 +1700,29 @@ serve(async (req) => {
 
                     const isOverflow = pumpResult.error.includes('6024') || pumpResult.error.includes('Overflow') || pumpResult.error.includes('0x1788');
                     if (isOverflow) {
+                      if (!attemptedTokenModeFallback) {
+                        attemptedTokenModeFallback = true;
+                        const tokenModeFallback = await tryTokenDenominatedBuyFallback(
+                          attemptLamports,
+                          pool,
+                          candidateSlippageBps
+                        );
+
+                        if (tokenModeFallback.signature) {
+                          console.log(
+                            `PumpPortal token-denominated buy chunk successful after build overflow (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${attemptLamports}): ${tokenModeFallback.signature}`
+                          );
+                          pumpExecutedSignatures.push(tokenModeFallback.signature);
+                          pumpExecutedLamports += attemptLamports;
+                          chunkSent = true;
+                          break;
+                        }
+
+                        console.log(
+                          `PumpPortal token-denominated fallback failed on build overflow: ${tokenModeFallback.error}`
+                        );
+                      }
+
                       const reduced = Math.floor(attemptLamports / 2);
                       if (reduced >= minChunkLamports) {
                         console.log(`PumpPortal build overflow; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
