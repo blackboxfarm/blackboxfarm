@@ -1478,7 +1478,12 @@ serve(async (req) => {
 
       try {
         // First try with specific pool, then with 'auto' if it fails
-        const poolsRaw: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(), 'auto'];
+        // For pumpswap tokens or tokens with .pump suffix, always try 'auto' first
+        // because they may have graduated from bonding curve to PumpSwap AMM
+        const suffixHint = String(tokenMint).endsWith('pump');
+        const poolsRaw: Array<'pump' | 'bonk' | 'auto'> = suffixHint
+          ? ['auto', getBondingCurvePool(), 'pump']
+          : [getBondingCurvePool(), 'auto'];
         const pools = Array.from(new Set(poolsRaw));
 
         // BUY path: execute full requested amount via automatic chunking on overflow.
@@ -1553,6 +1558,7 @@ serve(async (req) => {
                 let chunkSent = false;
                 let overflowExhausted = false;
                 let attemptedTokenModeFallback = false;
+                let fullAmountOverflowed = false;
 
                 for (let shrinkAttempt = 0; shrinkAttempt < maxChunkShrinkAttempts; shrinkAttempt++) {
                   if (!Number.isFinite(attemptLamports) || attemptLamports <= 0) break;
@@ -1592,32 +1598,48 @@ serve(async (req) => {
 
                       const isOverflow = msg.includes('6024') || msg.includes('Overflow') || msg.includes('0x1788');
                       if (isOverflow) {
+                        // If the FIRST attempt at full amount overflows, the bonding curve is likely
+                        // complete/graduated. Try token-denominated once, then skip to next pool immediately.
+                        if (attemptLamports === remainingLamports && !fullAmountOverflowed) {
+                          fullAmountOverflowed = true;
+                          console.log(`PumpPortal full-amount overflow on pool=${pool} — curve likely graduated, trying token-denominated then next pool`);
+                          
+                          if (!attemptedTokenModeFallback) {
+                            attemptedTokenModeFallback = true;
+                            const tokenModeFallback = await tryTokenDenominatedBuyFallback(
+                              attemptLamports, pool, candidateSlippageBps
+                            );
+                            if (tokenModeFallback.signature) {
+                              console.log(`PumpPortal token-denominated buy successful (pool=${pool}): ${tokenModeFallback.signature}`);
+                              pumpExecutedSignatures.push(tokenModeFallback.signature);
+                              pumpExecutedLamports += attemptLamports;
+                              chunkSent = true;
+                              break;
+                            }
+                            console.log(`Token-denominated fallback failed: ${tokenModeFallback.error}`);
+                          }
+                          // Skip chunk shrinking entirely for this pool — curve is complete
+                          overflowExhausted = true;
+                          break;
+                        }
+
                         if (!attemptedTokenModeFallback) {
                           attemptedTokenModeFallback = true;
                           const tokenModeFallback = await tryTokenDenominatedBuyFallback(
-                            attemptLamports,
-                            pool,
-                            candidateSlippageBps
+                            attemptLamports, pool, candidateSlippageBps
                           );
-
                           if (tokenModeFallback.signature) {
-                            console.log(
-                              `PumpPortal token-denominated buy chunk successful (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${attemptLamports}): ${tokenModeFallback.signature}`
-                            );
                             pumpExecutedSignatures.push(tokenModeFallback.signature);
                             pumpExecutedLamports += attemptLamports;
                             chunkSent = true;
                             break;
                           }
-
-                          console.log(
-                            `PumpPortal token-denominated fallback failed on send overflow: ${tokenModeFallback.error}`
-                          );
+                          console.log(`Token-denominated fallback failed on send overflow: ${tokenModeFallback.error}`);
                         }
 
                         const reduced = Math.floor(attemptLamports / 2);
                         if (reduced >= minChunkLamports) {
-                          console.log(`PumpPortal overflow on send; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
+                          console.log(`PumpPortal overflow on send; reducing ${attemptLamports} → ${reduced} lamports`);
                           attemptLamports = reduced;
                           continue;
                         }
@@ -1639,32 +1661,39 @@ serve(async (req) => {
 
                       const isOverflow = txError.includes('6024') || txError.includes('Overflow') || txError.includes('0x1788');
                       if (isOverflow) {
+                        if (attemptLamports === remainingLamports && !fullAmountOverflowed) {
+                          fullAmountOverflowed = true;
+                          console.log(`PumpPortal full-amount overflow on-chain (pool=${pool}) — curve likely graduated, skipping to next pool`);
+                          if (!attemptedTokenModeFallback) {
+                            attemptedTokenModeFallback = true;
+                            const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
+                            if (tokenModeFallback.signature) {
+                              pumpExecutedSignatures.push(tokenModeFallback.signature);
+                              pumpExecutedLamports += attemptLamports;
+                              chunkSent = true;
+                              break;
+                            }
+                            console.log(`Token-denominated fallback failed: ${tokenModeFallback.error}`);
+                          }
+                          overflowExhausted = true;
+                          break;
+                        }
+
                         if (!attemptedTokenModeFallback) {
                           attemptedTokenModeFallback = true;
-                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(
-                            attemptLamports,
-                            pool,
-                            candidateSlippageBps
-                          );
-
+                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
                           if (tokenModeFallback.signature) {
-                            console.log(
-                              `PumpPortal token-denominated buy chunk successful after on-chain overflow (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${attemptLamports}): ${tokenModeFallback.signature}`
-                            );
                             pumpExecutedSignatures.push(tokenModeFallback.signature);
                             pumpExecutedLamports += attemptLamports;
                             chunkSent = true;
                             break;
                           }
-
-                          console.log(
-                            `PumpPortal token-denominated fallback failed on on-chain overflow: ${tokenModeFallback.error}`
-                          );
+                          console.log(`Token-denominated fallback failed on on-chain overflow: ${tokenModeFallback.error}`);
                         }
 
                         const reduced = Math.floor(attemptLamports / 2);
                         if (reduced >= minChunkLamports) {
-                          console.log(`PumpPortal overflow on-chain; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
+                          console.log(`PumpPortal overflow on-chain; reducing ${attemptLamports} → ${reduced} lamports`);
                           attemptLamports = reduced;
                           continue;
                         }
@@ -1700,34 +1729,43 @@ serve(async (req) => {
 
                     const isOverflow = pumpResult.error.includes('6024') || pumpResult.error.includes('Overflow') || pumpResult.error.includes('0x1788');
                     if (isOverflow) {
-                      if (!attemptedTokenModeFallback) {
-                        attemptedTokenModeFallback = true;
-                        const tokenModeFallback = await tryTokenDenominatedBuyFallback(
-                          attemptLamports,
-                          pool,
-                          candidateSlippageBps
-                        );
+                      if (attemptLamports === remainingLamports && !fullAmountOverflowed) {
+                        fullAmountOverflowed = true;
+                        console.log(`PumpPortal full-amount build overflow (pool=${pool}) — curve likely graduated, skipping to next pool`);
+                        if (!attemptedTokenModeFallback) {
+                          attemptedTokenModeFallback = true;
+                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
+                          if (tokenModeFallback.signature) {
+                            pumpExecutedSignatures.push(tokenModeFallback.signature);
+                            pumpExecutedLamports += attemptLamports;
+                            chunkSent = true;
+                            break;
+                          }
+                          console.log(`Token-denominated fallback failed: ${tokenModeFallback.error}`);
+                        }
+                        overflowExhausted = true;
+                      }
 
+                      if (!overflowExhausted && !attemptedTokenModeFallback) {
+                        attemptedTokenModeFallback = true;
+                        const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
                         if (tokenModeFallback.signature) {
-                          console.log(
-                            `PumpPortal token-denominated buy chunk successful after build overflow (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${attemptLamports}): ${tokenModeFallback.signature}`
-                          );
                           pumpExecutedSignatures.push(tokenModeFallback.signature);
                           pumpExecutedLamports += attemptLamports;
                           chunkSent = true;
                           break;
                         }
-
-                        console.log(
-                          `PumpPortal token-denominated fallback failed on build overflow: ${tokenModeFallback.error}`
-                        );
+                        console.log(`Token-denominated fallback failed on build overflow: ${tokenModeFallback.error}`);
                       }
 
-                      const reduced = Math.floor(attemptLamports / 2);
-                      if (reduced >= minChunkLamports) {
-                        console.log(`PumpPortal build overflow; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
-                        attemptLamports = reduced;
-                        continue;
+                      if (!overflowExhausted) {
+                        const reduced = Math.floor(attemptLamports / 2);
+                        if (reduced >= minChunkLamports) {
+                          console.log(`PumpPortal build overflow; reducing ${attemptLamports} → ${reduced} lamports`);
+                          attemptLamports = reduced;
+                          continue;
+                        }
+                        overflowExhausted = true;
                       }
                       overflowExhausted = true;
                     }
