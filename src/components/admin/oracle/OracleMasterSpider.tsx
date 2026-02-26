@@ -95,7 +95,9 @@ const VERDICT_CONFIG = {
 };
 
 const OracleMasterSpider = () => {
-  const [query, setQuery] = useState("");
+  const [devWallet, setDevWallet] = useState("");
+  const [tokenMint, setTokenMint] = useState("");
+  const [xAccount, setXAccount] = useState("");
   const [actorType, setActorType] = useState<'auto' | 'bad' | 'good'>('auto');
   const [reason, setReason] = useState("");
   const [result, setResult] = useState<SpiderResult | null>(null);
@@ -104,15 +106,32 @@ const OracleMasterSpider = () => {
   const [socialsOpen, setSocialsOpen] = useState(false);
   const [genealogyOpen, setGenealogyOpen] = useState(false);
 
+  const hasInput = devWallet.trim() || tokenMint.trim() || xAccount.trim();
+
+  const isValidSolanaAddress = (addr: string) => {
+    if (!addr.trim()) return true; // empty is ok (optional)
+    return addr.trim().length >= 32 && addr.trim().length <= 44 && /^[A-HJ-NP-Za-km-z1-9]+$/.test(addr.trim());
+  };
+
   const spiderMutation = useMutation({
-    mutationFn: async (q: string) => {
-      const { data, error } = await supabase.functions.invoke('oracle-master-spider', {
-        body: { 
-          query: q,
-          forceVerdict: actorType !== 'auto' ? (actorType === 'bad' ? 'red' : 'green') : undefined,
-          reason: reason.trim() || undefined
-        }
-      });
+    mutationFn: async () => {
+      const body: Record<string, any> = {
+        forceVerdict: actorType !== 'auto' ? (actorType === 'bad' ? 'red' : 'green') : undefined,
+        reason: reason.trim() || undefined,
+      };
+
+      // Send structured multi-input
+      if (devWallet.trim()) body.devWallet = devWallet.trim();
+      if (tokenMint.trim()) body.tokenMint = tokenMint.trim();
+      if (xAccount.trim()) body.xAccount = xAccount.trim();
+
+      // Backward compat: if only one field, also send as query
+      const filledFields = [devWallet.trim(), tokenMint.trim(), xAccount.trim()].filter(Boolean);
+      if (filledFields.length === 1) {
+        body.query = filledFields[0];
+      }
+
+      const { data, error } = await supabase.functions.invoke('oracle-master-spider', { body });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data as SpiderResult;
@@ -131,9 +150,9 @@ const OracleMasterSpider = () => {
   });
 
   const handleSpider = () => {
-    if (!query.trim()) return;
+    if (!hasInput) return;
     setResult(null);
-    spiderMutation.mutate(query.trim());
+    spiderMutation.mutate();
   };
 
   const truncate = (s: string, len = 16) => s.length > len ? `${s.slice(0, 8)}...${s.slice(-4)}` : s;
@@ -169,33 +188,65 @@ const OracleMasterSpider = () => {
             Oracle Master Spider
           </CardTitle>
           <CardDescription>
-            Submit a token mint, wallet address, or @X handle. Choose AUTO to let Spider decide, or force BAD/GOOD ACTOR with a reason.
+            Submit a dev wallet, token mint, and/or X handle. At least one field required. Choose AUTO, BAD ACTOR, or GOOD ACTOR.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-3">
-            <Input
-              placeholder="Token mint, wallet address, or @XHandle..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSpider()}
-              className="flex-1 font-mono text-sm"
-              disabled={spiderMutation.isPending}
-            />
-            <Select value={actorType} onValueChange={(v: 'auto' | 'bad' | 'good') => setActorType(v)}>
-              <SelectTrigger className={`w-[180px] font-bold ${
-                actorType === 'bad' ? 'border-destructive text-destructive' : 
-                actorType === 'good' ? 'border-green-500 text-green-400' : ''
-              }`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">🔍 AUTO DETECT</SelectItem>
-                <SelectItem value="bad">🔴 BAD ACTOR</SelectItem>
-                <SelectItem value="good">🟢 GOOD ACTOR</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Three dedicated inputs */}
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <Wallet className="h-3 w-3" /> Dev Wallet Address
+              </label>
+              <Input
+                placeholder="Solana wallet address (32-44 chars)..."
+                value={devWallet}
+                onChange={(e) => setDevWallet(e.target.value)}
+                className={`font-mono text-sm ${devWallet.trim() && !isValidSolanaAddress(devWallet) ? 'border-destructive' : ''}`}
+                disabled={spiderMutation.isPending}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <Coins className="h-3 w-3" /> Minted Token Address
+              </label>
+              <Input
+                placeholder="Token mint address (32-44 chars)..."
+                value={tokenMint}
+                onChange={(e) => setTokenMint(e.target.value)}
+                className={`font-mono text-sm ${tokenMint.trim() && !isValidSolanaAddress(tokenMint) ? 'border-destructive' : ''}`}
+                disabled={spiderMutation.isPending}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <Twitter className="h-3 w-3" /> X Account
+              </label>
+              <Input
+                placeholder="@handle or https://x.com/handle..."
+                value={xAccount}
+                onChange={(e) => setXAccount(e.target.value)}
+                className="text-sm"
+                disabled={spiderMutation.isPending}
+              />
+            </div>
           </div>
+
+          {/* Actor type selector */}
+          <Select value={actorType} onValueChange={(v: 'auto' | 'bad' | 'good') => setActorType(v)}>
+            <SelectTrigger className={`w-full font-bold ${
+              actorType === 'bad' ? 'border-destructive text-destructive' : 
+              actorType === 'good' ? 'border-green-500 text-green-400' : ''
+            }`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">🔍 AUTO DETECT</SelectItem>
+              <SelectItem value="bad">🔴 BAD ACTOR</SelectItem>
+              <SelectItem value="good">🟢 GOOD ACTOR</SelectItem>
+            </SelectContent>
+          </Select>
+
           {actorType !== 'auto' && (
             <Textarea
               placeholder={actorType === 'bad' 
@@ -211,7 +262,7 @@ const OracleMasterSpider = () => {
           )}
           <Button
             onClick={handleSpider}
-            disabled={!query.trim() || spiderMutation.isPending || (actorType !== 'auto' && !reason.trim())}
+            disabled={!hasInput || spiderMutation.isPending || (actorType !== 'auto' && !reason.trim())}
             className={`w-full ${
               actorType === 'bad' ? 'bg-destructive hover:bg-destructive/80' :
               actorType === 'good' ? 'bg-green-600 hover:bg-green-700' :

@@ -90,21 +90,29 @@ function detectInputType(query: string): 'token' | 'wallet' | 'handle' {
   return 'handle';
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { query, forceVerdict, reason, autoUpdate = true } = await req.json();
+    const body = await req.json();
+    const { query, devWallet, tokenMint, xAccount, forceVerdict, reason, autoUpdate = true } = body;
 
-    if (!query || typeof query !== 'string' || query.trim().length < 2) {
-      return new Response(JSON.stringify({ error: 'Query required (token mint, wallet, or @handle)' }), {
+    // Multi-input: at least one of devWallet, tokenMint, xAccount, or legacy query
+    const hasMultiInput = devWallet || tokenMint || xAccount;
+    const hasLegacyQuery = query && typeof query === 'string' && query.trim().length >= 2;
+
+    if (!hasMultiInput && !hasLegacyQuery) {
+      return new Response(JSON.stringify({ error: 'At least one input required (devWallet, tokenMint, xAccount, or query)' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const { cleaned: cleanQuery, originalUrl } = normalizeQuery(query.trim());
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
@@ -115,32 +123,130 @@ Deno.serve(async (req) => {
       steps.push({ name, status, detail, timestamp: new Date().toISOString() });
     };
 
-    const inputType = detectInputType(cleanQuery);
-    addStep('Input Detection', 'done', 
-      `Detected as: ${inputType}${originalUrl ? ` (parsed from URL: ${originalUrl.slice(0, 30)}...)` : ''} → ${cleanQuery}`);
+    // ── Parse & normalize all inputs ──
+    let resolvedDevWallet: string | null = devWallet?.trim() || null;
+    let resolvedTokenMint: string | null = tokenMint?.trim() || null;
+    let resolvedXHandle: string | null = null;
 
-    // ── STEP 1: Resolve creator wallet ──
-    let creatorWallet: string | null = null;
-    let creatorSource: string | null = null;
+    // Parse X account input (URL or @handle)
+    if (xAccount) {
+      const parsed = parseXUrl(xAccount.trim());
+      if (parsed) {
+        resolvedXHandle = parsed;
+      } else {
+        resolvedXHandle = xAccount.trim().replace(/^@/, '');
+      }
+    }
+
+    // Legacy single-query mode fallback
+    let cleanQuery: string | null = null;
+    let originalUrl: string | null = null;
+    let inputType: 'token' | 'wallet' | 'handle' = 'wallet';
+
+    if (hasMultiInput) {
+      // Multi-input mode
+      const parts: string[] = [];
+      if (resolvedDevWallet) parts.push(`wallet:${resolvedDevWallet.slice(0, 8)}...`);
+      if (resolvedTokenMint) parts.push(`token:${resolvedTokenMint.slice(0, 8)}...`);
+      if (resolvedXHandle) parts.push(`@${resolvedXHandle}`);
+      addStep('Input Detection', 'done', `Multi-input: ${parts.join(', ')}`);
+      inputType = resolvedDevWallet ? 'wallet' : resolvedTokenMint ? 'token' : 'handle';
+      cleanQuery = resolvedDevWallet || resolvedTokenMint || `@${resolvedXHandle}`;
+    } else {
+      // Legacy single query
+      const normalized = normalizeQuery(query.trim());
+      cleanQuery = normalized.cleaned;
+      originalUrl = normalized.originalUrl;
+      inputType = detectInputType(cleanQuery);
+      addStep('Input Detection', 'done', 
+        `Detected as: ${inputType}${originalUrl ? ` (parsed from URL: ${originalUrl.slice(0, 30)}...)` : ''} → ${cleanQuery}`);
+    }
+
+    // ── STEP 1: Resolve creator wallet from all inputs ──
+    let creatorWallet: string | null = resolvedDevWallet;
+    let creatorSource: string | null = resolvedDevWallet ? 'direct_wallet_input' : null;
     let tokenInfo: SpiderResult['tokenInfo'] = null;
     let inputIsToken = false;
 
-    if (inputType === 'handle') {
-      addStep('Handle Resolution', 'running', `Looking up ${cleanQuery}`);
-      const handle = cleanQuery.replace('@', '');
+    // If we have a token mint, resolve its creator
+    if (resolvedTokenMint) {
+      addStep('Token Resolution', 'running', `Looking up token ${resolvedTokenMint.slice(0, 8)}...`);
+      await delay(200);
+
+      const { data: watchlistToken } = await supabase
+        .from('pumpfun_watchlist')
+        .select('token_mint, creator_wallet, token_name, token_symbol, image_uri')
+        .eq('token_mint', resolvedTokenMint)
+        .maybeSingle();
+
+      if (watchlistToken) {
+        inputIsToken = true;
+        tokenInfo = { mint: watchlistToken.token_mint, name: watchlistToken.token_name, symbol: watchlistToken.token_symbol, imageUri: watchlistToken.image_uri };
+        if (!creatorWallet && watchlistToken.creator_wallet) {
+          creatorWallet = watchlistToken.creator_wallet;
+          creatorSource = 'pumpfun_watchlist';
+        }
+        addStep('Token Resolution', 'done', `Token: ${watchlistToken.token_symbol || 'Unknown'} → Creator: ${watchlistToken.creator_wallet?.slice(0, 8) || 'N/A'}`);
+      } else {
+        // Check token_lifecycle
+        const { data: lifecycle } = await supabase
+          .from('token_lifecycle')
+          .select('token_mint, creator_wallet, token_name, token_symbol')
+          .eq('token_mint', resolvedTokenMint)
+          .maybeSingle();
+
+        if (lifecycle) {
+          inputIsToken = true;
+          tokenInfo = { mint: lifecycle.token_mint, name: lifecycle.token_name, symbol: lifecycle.token_symbol };
+          if (!creatorWallet && lifecycle.creator_wallet) {
+            creatorWallet = lifecycle.creator_wallet;
+            creatorSource = 'token_lifecycle';
+          }
+          addStep('Token Resolution', 'done', `Token in lifecycle → Creator: ${lifecycle.creator_wallet?.slice(0, 8) || 'N/A'}`);
+        } else {
+          // Try pump.fun API
+          try {
+            await delay(200);
+            const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${resolvedTokenMint}`, {
+              headers: { 'Accept': 'application/json' }
+            });
+            if (pfRes.ok) {
+              const pfData = await pfRes.json();
+              if (pfData.creator) {
+                inputIsToken = true;
+                tokenInfo = { mint: resolvedTokenMint, name: pfData.name, symbol: pfData.symbol, imageUri: pfData.image_uri };
+                if (!creatorWallet) {
+                  creatorWallet = pfData.creator;
+                  creatorSource = 'pump.fun_api';
+                }
+                addStep('Token Resolution', 'done', `Pump.fun: ${pfData.symbol} → Creator: ${pfData.creator?.slice(0, 8)}`);
+              }
+            }
+          } catch (e) {
+            console.warn('[spider] Pump.fun API failed:', e);
+          }
+          if (!tokenInfo) addStep('Token Resolution', 'error', 'Token not found in any source');
+        }
+      }
+    }
+
+    // If we have an X handle, try to resolve wallet from it
+    if (resolvedXHandle) {
+      addStep('Handle Resolution', 'running', `Looking up @${resolvedXHandle}`);
+      await delay(200);
 
       // Check reputation_mesh for linked wallets
       const { data: meshLinks } = await supabase
         .from('reputation_mesh')
         .select('source_id, linked_id, source_type, linked_type, relationship')
-        .or(`source_id.eq.${handle},linked_id.eq.${handle}`)
+        .or(`source_id.eq.${resolvedXHandle},linked_id.eq.${resolvedXHandle}`)
         .limit(20);
 
       if (meshLinks && meshLinks.length > 0) {
         const walletLink = meshLinks.find((l: any) =>
           (l.source_type === 'wallet' || l.linked_type === 'wallet')
         );
-        if (walletLink) {
+        if (walletLink && !creatorWallet) {
           creatorWallet = walletLink.source_type === 'wallet' ? walletLink.source_id : walletLink.linked_id;
           creatorSource = 'reputation_mesh';
         }
@@ -151,12 +257,12 @@ Deno.serve(async (req) => {
         const { data: communities } = await supabase
           .from('x_communities')
           .select('admin_handles, mod_handles, linked_wallets')
-          .or(`admin_handles.cs.{${handle}},mod_handles.cs.{${handle}}`)
+          .or(`admin_handles.cs.{${resolvedXHandle}},mod_handles.cs.{${resolvedXHandle}}`)
           .limit(5);
 
         if (communities && communities.length > 0) {
           for (const comm of communities) {
-            if (comm.linked_wallets && comm.linked_wallets.length > 0) {
+            if (comm.linked_wallets && comm.linked_wallets.length > 0 && !creatorWallet) {
               creatorWallet = comm.linked_wallets[0];
               creatorSource = 'x_community';
               break;
@@ -165,74 +271,112 @@ Deno.serve(async (req) => {
         }
       }
 
-      addStep('Handle Resolution', creatorWallet ? 'done' : 'error',
-        creatorWallet ? `Resolved to wallet: ${creatorWallet.slice(0, 8)}...` : 'No wallet found for this handle');
+      addStep('Handle Resolution', creatorWallet ? 'done' : 'done',
+        creatorWallet ? `Resolved @${resolvedXHandle} → wallet: ${creatorWallet.slice(0, 8)}...` : `@${resolvedXHandle} stored (no wallet link yet)`);
+    }
 
-    } else {
-      // Token or Wallet input
-      addStep('Entity Resolution', 'running', 'Resolving entity type...');
+    // Legacy single-query fallback (no multi-input provided)
+    if (!hasMultiInput && cleanQuery) {
+      if (inputType === 'handle') {
+        resolvedXHandle = cleanQuery.replace('@', '');
+        addStep('Handle Resolution', 'running', `Looking up ${cleanQuery}`);
+        const handle = resolvedXHandle;
 
-      // First check if it's a known token
-      const { data: watchlistToken } = await supabase
-        .from('pumpfun_watchlist')
-        .select('token_mint, creator_wallet, token_name, token_symbol, image_uri')
-        .eq('token_mint', cleanQuery)
-        .maybeSingle();
+        const { data: meshLinks } = await supabase
+          .from('reputation_mesh')
+          .select('source_id, linked_id, source_type, linked_type, relationship')
+          .or(`source_id.eq.${handle},linked_id.eq.${handle}`)
+          .limit(20);
 
-      if (watchlistToken) {
-        inputIsToken = true;
-        creatorWallet = watchlistToken.creator_wallet;
-        creatorSource = 'pumpfun_watchlist';
-        tokenInfo = {
-          mint: watchlistToken.token_mint,
-          name: watchlistToken.token_name,
-          symbol: watchlistToken.token_symbol,
-          imageUri: watchlistToken.image_uri,
-        };
-        addStep('Entity Resolution', 'done', `Token: ${watchlistToken.token_symbol || 'Unknown'} → Creator: ${creatorWallet?.slice(0, 8)}...`);
+        if (meshLinks && meshLinks.length > 0) {
+          const walletLink = meshLinks.find((l: any) =>
+            (l.source_type === 'wallet' || l.linked_type === 'wallet')
+          );
+          if (walletLink) {
+            creatorWallet = walletLink.source_type === 'wallet' ? walletLink.source_id : walletLink.linked_id;
+            creatorSource = 'reputation_mesh';
+          }
+        }
+
+        if (!creatorWallet) {
+          const { data: communities } = await supabase
+            .from('x_communities')
+            .select('admin_handles, mod_handles, linked_wallets')
+            .or(`admin_handles.cs.{${handle}},mod_handles.cs.{${handle}}`)
+            .limit(5);
+
+          if (communities && communities.length > 0) {
+            for (const comm of communities) {
+              if (comm.linked_wallets && comm.linked_wallets.length > 0) {
+                creatorWallet = comm.linked_wallets[0];
+                creatorSource = 'x_community';
+                break;
+              }
+            }
+          }
+        }
+
+        addStep('Handle Resolution', creatorWallet ? 'done' : 'error',
+          creatorWallet ? `Resolved to wallet: ${creatorWallet.slice(0, 8)}...` : 'No wallet found for this handle');
+
       } else {
-        // Check token_lifecycle
-        const { data: lifecycle } = await supabase
-          .from('token_lifecycle')
-          .select('token_mint, creator_wallet, token_name, token_symbol')
+        // Token or Wallet input (legacy)
+        addStep('Entity Resolution', 'running', 'Resolving entity type...');
+
+        const { data: watchlistToken } = await supabase
+          .from('pumpfun_watchlist')
+          .select('token_mint, creator_wallet, token_name, token_symbol, image_uri')
           .eq('token_mint', cleanQuery)
           .maybeSingle();
 
-        if (lifecycle) {
+        if (watchlistToken) {
           inputIsToken = true;
-          creatorWallet = lifecycle.creator_wallet;
-          creatorSource = 'token_lifecycle';
-          tokenInfo = { mint: lifecycle.token_mint, name: lifecycle.token_name, symbol: lifecycle.token_symbol };
-          addStep('Entity Resolution', 'done', `Token found in lifecycle → Creator: ${creatorWallet?.slice(0, 8)}...`);
+          creatorWallet = watchlistToken.creator_wallet;
+          creatorSource = 'pumpfun_watchlist';
+          tokenInfo = { mint: watchlistToken.token_mint, name: watchlistToken.token_name, symbol: watchlistToken.token_symbol, imageUri: watchlistToken.image_uri };
+          addStep('Entity Resolution', 'done', `Token: ${watchlistToken.token_symbol || 'Unknown'} → Creator: ${creatorWallet?.slice(0, 8)}...`);
         } else {
-          // Try pump.fun API for token creator
-          try {
-            const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${cleanQuery}`, {
-              headers: { 'Accept': 'application/json' }
-            });
-            if (pfRes.ok) {
-              const pfData = await pfRes.json();
-              if (pfData.creator) {
-                inputIsToken = true;
-                creatorWallet = pfData.creator;
-                creatorSource = 'pump.fun_api';
-                tokenInfo = { mint: cleanQuery, name: pfData.name, symbol: pfData.symbol, imageUri: pfData.image_uri };
-                addStep('Entity Resolution', 'done', `Pump.fun token: ${pfData.symbol} → Creator: ${creatorWallet?.slice(0, 8)}...`);
-              }
-            }
-          } catch (e) {
-            console.warn('[spider] Pump.fun API failed:', e);
-          }
+          const { data: lifecycle } = await supabase
+            .from('token_lifecycle')
+            .select('token_mint, creator_wallet, token_name, token_symbol')
+            .eq('token_mint', cleanQuery)
+            .maybeSingle();
 
-          // If still not found, treat as wallet address
-          if (!creatorWallet) {
-            creatorWallet = cleanQuery;
-            creatorSource = 'direct_wallet_input';
-            addStep('Entity Resolution', 'done', `Treating as wallet address: ${cleanQuery.slice(0, 8)}...`);
+          if (lifecycle) {
+            inputIsToken = true;
+            creatorWallet = lifecycle.creator_wallet;
+            creatorSource = 'token_lifecycle';
+            tokenInfo = { mint: lifecycle.token_mint, name: lifecycle.token_name, symbol: lifecycle.token_symbol };
+            addStep('Entity Resolution', 'done', `Token found in lifecycle → Creator: ${creatorWallet?.slice(0, 8)}...`);
+          } else {
+            try {
+              const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${cleanQuery}`, {
+                headers: { 'Accept': 'application/json' }
+              });
+              if (pfRes.ok) {
+                const pfData = await pfRes.json();
+                if (pfData.creator) {
+                  inputIsToken = true;
+                  creatorWallet = pfData.creator;
+                  creatorSource = 'pump.fun_api';
+                  tokenInfo = { mint: cleanQuery, name: pfData.name, symbol: pfData.symbol, imageUri: pfData.image_uri };
+                  addStep('Entity Resolution', 'done', `Pump.fun token: ${pfData.symbol} → Creator: ${creatorWallet?.slice(0, 8)}...`);
+                }
+              }
+            } catch (e) {
+              console.warn('[spider] Pump.fun API failed:', e);
+            }
+
+            if (!creatorWallet) {
+              creatorWallet = cleanQuery;
+              creatorSource = 'direct_wallet_input';
+              addStep('Entity Resolution', 'done', `Treating as wallet address: ${cleanQuery.slice(0, 8)}...`);
+            }
           }
         }
       }
     }
+
 
     if (!creatorWallet && !forceVerdict) {
       return new Response(JSON.stringify({
@@ -411,6 +555,7 @@ Deno.serve(async (req) => {
         let currentWallet = creatorWallet;
 
         for (let depth = 0; depth < 3; depth++) {
+          await delay(200); // Rate limit between RPC calls
           const sigRes = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -430,6 +575,7 @@ Deno.serve(async (req) => {
           const oldestSig = signatures[signatures.length - 1]?.signature;
           if (!oldestSig) break;
 
+          await delay(200); // Rate limit between RPC calls
           const txRes = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -620,7 +766,16 @@ Deno.serve(async (req) => {
     addStep('Social Discovery', 'running', 'Finding linked social accounts...');
     const discoveredSocials: SpiderResult['discoveredSocials'] = [];
 
-    // From reputation_mesh
+    // Add the submitted X handle to socials if provided
+    if (resolvedXHandle) {
+      discoveredSocials.push({
+        type: 'x_account',
+        identifier: `@${resolvedXHandle}`,
+        relationship: 'submitted_handle',
+        source: 'multi_input',
+      });
+    }
+
     const { data: socialMesh } = await supabase
       .from('reputation_mesh')
       .select('source_id, linked_id, source_type, linked_type, relationship')
@@ -841,6 +996,60 @@ Deno.serve(async (req) => {
             confidence: 90,
             discovered_by: 'oracle_spider',
           });
+        }
+
+        // ── Multi-input cross-linking ──
+        // wallet --[created]--> token (explicit from input)
+        if (creatorWallet && resolvedTokenMint) {
+          meshInserts.push({
+            source_type: 'wallet', source_id: creatorWallet,
+            linked_type: 'token', linked_id: resolvedTokenMint,
+            relationship: 'created', confidence: 100, discovered_by: 'oracle_spider_multi',
+          });
+        }
+
+        // wallet --[operates]--> @handle
+        if (creatorWallet && resolvedXHandle) {
+          meshInserts.push({
+            source_type: 'wallet', source_id: creatorWallet,
+            linked_type: 'x_account', linked_id: resolvedXHandle,
+            relationship: 'operates', confidence: 100, discovered_by: 'oracle_spider_multi',
+          });
+        }
+
+        // @handle --[token_social]--> token
+        if (resolvedXHandle && resolvedTokenMint) {
+          meshInserts.push({
+            source_type: 'x_account', source_id: resolvedXHandle,
+            linked_type: 'token', linked_id: resolvedTokenMint,
+            relationship: 'token_social', confidence: 100, discovered_by: 'oracle_spider_multi',
+          });
+        }
+
+        // Also blacklist/whitelist the X handle itself when multi-input
+        if (resolvedXHandle && verdict === 'red') {
+          const { data: existingXBl } = await supabase.from('pumpfun_blacklist')
+            .select('id').eq('identifier', resolvedXHandle).maybeSingle();
+          if (!existingXBl) {
+            await supabase.from('pumpfun_blacklist').insert({
+              entry_type: 'x_account', identifier: resolvedXHandle,
+              risk_level: 'critical', blacklist_reason: verdictReason,
+              tags: ['spider_multi_input', 'x_handle'], source: 'oracle_spider',
+              enrichment_status: 'complete',
+            });
+            meshUpdates.blacklistAdded++;
+          }
+        } else if (resolvedXHandle && verdict === 'green') {
+          const { data: existingXWl } = await supabase.from('pumpfun_whitelist')
+            .select('id').eq('identifier', resolvedXHandle).maybeSingle();
+          if (!existingXWl) {
+            await supabase.from('pumpfun_whitelist').insert({
+              entry_type: 'x_account', identifier: resolvedXHandle,
+              trust_level: 'high', whitelist_reason: verdictReason,
+              tags: ['spider_multi_input', 'x_handle'], source: 'oracle_spider',
+            });
+            meshUpdates.whitelistAdded++;
+          }
         }
 
         if (meshInserts.length > 0) {
