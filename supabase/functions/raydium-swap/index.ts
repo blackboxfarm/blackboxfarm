@@ -86,6 +86,16 @@ function softError(code: string, message: string) {
   return ok({ error: message, error_code: code }, 200);
 }
 
+function isTickArray6023(err?: string) {
+  const s = String(err || "");
+  return (
+    s.includes('"Custom":6023') ||
+    s.includes("Custom:6023") ||
+    s.includes("InvalidTickArraySequence") ||
+    s.includes("6023")
+  );
+}
+
 // HARD CONFIRMATION: Ensures transaction actually landed on-chain
 // Returns { confirmed: true, signature } or { confirmed: false, error }
 async function hardConfirmTransaction(
@@ -1915,16 +1925,20 @@ serve(async (req) => {
             const confirmResult = await hardConfirmTransaction(connection, sig, blockhash, lastValidBlockHeight, 30000);
             
             if (!confirmResult.confirmed) {
-              // Check if it's a retryable error that needs a fresh quote (slippage, stale tick arrays, etc.)
-              const isSlippageError = confirmResult.error?.includes('"Custom":1') || confirmResult.error?.includes('SlippageToleranceExceeded');
-              const isTickArrayError = confirmResult.error?.includes('"Custom":6023') || confirmResult.error?.includes('InvalidTickArraySequence');
-              const isRetryableQuoteError = isSlippageError || isTickArrayError;
-              const retrySlippage = isRetryableQuoteError ? Math.min(effectiveSlippage * 2, maxRetrySlippage) : effectiveSlippage;
-              
-              console.log(`Jupiter Legacy tx failed (${confirmResult.error}), retrying with ${retrySlippage} bps slippage...`);
-              
-              // Re-fetch quote with higher slippage if needed
-                if (isRetryableQuoteError) {
+              const confirmError = confirmResult.error || "Unknown confirmation failure";
+              const isSlippageError = confirmError.includes('"Custom":1') || confirmError.includes('SlippageToleranceExceeded');
+              const isTickArrayError = isTickArray6023(confirmError);
+              const shouldRefreshQuote = isSlippageError || isTickArrayError;
+              const retrySlippage = isSlippageError
+                ? Math.min(effectiveSlippage * 2, maxRetrySlippage)
+                : effectiveSlippage;
+
+              console.log(
+                `Jupiter Legacy tx failed (${confirmError}), retry strategy=${isTickArrayError ? "fresh-quote-same-slippage" : isSlippageError ? "fresh-quote-higher-slippage" : "direct-resend"}, slippage=${retrySlippage}bps`
+              );
+
+              // Re-fetch quote for slippage errors and CLMM tick-array sequencing errors
+              if (shouldRefreshQuote) {
                 const retryJ = await tryJupiterSwap({
                   inputMint: String(inputMint),
                   outputMint: String(outputMint),
@@ -1985,15 +1999,18 @@ serve(async (req) => {
             
             if (!confirmResult.confirmed) {
               {
-              // Check if it's slippage error - retry with higher slippage
-              const isSlippageError = confirmResult.error?.includes('"Custom":1') || confirmResult.error?.includes('SlippageToleranceExceeded');
-              const isTickArrayError = confirmResult.error?.includes('"Custom":6023') || confirmResult.error?.includes('InvalidTickArraySequence');
-              const isRetryableQuoteError = isSlippageError || isTickArrayError;
-              const retrySlippage = isRetryableQuoteError ? Math.min(effectiveSlippage * 2, maxRetrySlippage) : effectiveSlippage;
+              // For Jupiter: 6023 means stale tick-array sequencing, not slippage.
+              const confirmError = confirmResult.error || "Unknown confirmation failure";
+              const isSlippageError = confirmError.includes('"Custom":1') || confirmError.includes('SlippageToleranceExceeded');
+              const isTickArrayError = isTickArray6023(confirmError);
+              const shouldRefreshQuote = isSlippageError || isTickArrayError;
+              const retrySlippage = isSlippageError
+                ? Math.min(effectiveSlippage * 2, maxRetrySlippage)
+                : effectiveSlippage;
               
-              console.log(`Jupiter V0 tx failed (${confirmResult.error}), retrying with ${retrySlippage} bps slippage...`);
+              console.log(`Jupiter V0 tx failed (${confirmError}), retry strategy=${isTickArrayError ? "fresh-quote-same-slippage" : isSlippageError ? "fresh-quote-higher-slippage" : "direct-resend"}, slippage=${retrySlippage}bps`);
               
-              if (isRetryableQuoteError) {
+              if (shouldRefreshQuote) {
                 const retryJ = await tryJupiterSwap({
                   inputMint: String(inputMint),
                   outputMint: String(outputMint),
@@ -2230,176 +2247,282 @@ serve(async (req) => {
       }
     }
 
+    const normalizeRaydiumTxList = (builderJson: any): { transaction: string }[] => {
+      let txPayloads: any[] = [];
+      if (Array.isArray(builderJson?.data)) txPayloads = builderJson.data;
+      else if (builderJson?.data?.transaction) txPayloads = [builderJson.data.transaction];
+      else if (typeof builderJson?.data === "string") txPayloads = [builderJson.data];
+      else if (Array.isArray(builderJson?.transactions)) txPayloads = builderJson.transactions;
+      else if (builderJson?.transaction) txPayloads = [builderJson.transaction];
+
+      return txPayloads
+        .map((d: any) => ({ transaction: (d?.transaction ?? d) }))
+        .filter((d) => typeof d.transaction === "string" && d.transaction.length > 0);
+    };
+
+    async function buildRaydiumTxList(txVersionToUse: string): Promise<{
+      swapResponse: any;
+      txList: { transaction: string }[];
+    }> {
+      const normalizedTxVersion = String(txVersionToUse).toUpperCase() === "LEGACY" ? "LEGACY" : "V0";
+
+      const computeUrl = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${normalizedTxVersion}`;
+      const computeRes = await fetch(computeUrl);
+      if (!computeRes.ok) {
+        const t = await computeRes.text();
+        throw new Error(`Raydium compute failed: ${computeRes.status} ${t}`);
+      }
+
+      const freshSwapResponse = await computeRes.json();
+      if (freshSwapResponse?.success === false) {
+        throw new Error(`Raydium compute error: ${freshSwapResponse?.msg ?? "unknown"}`);
+      }
+
+      const txRes = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          computeUnitPriceMicroLamports: String(computeUnitPriceMicroLamports),
+          swapResponse: freshSwapResponse,
+          txVersion: normalizedTxVersion,
+          wallet: owner.publicKey.toBase58(),
+          wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
+          unwrapSol: Boolean(unwrapSol && isOutputSol),
+          inputAccount,
+          outputAccount,
+        }),
+      });
+
+      if (!txRes.ok) {
+        const t = await txRes.text();
+        throw new Error(`Raydium transaction build failed: ${txRes.status} ${t}`);
+      }
+
+      const txJson = await txRes.json();
+      if (txJson && txJson.success === false && txJson.msg) {
+        throw new Error(`Raydium transaction builder error: ${txJson.msg}`);
+      }
+
+      const txList = normalizeRaydiumTxList(txJson);
+      if (!txList.length) {
+        throw new Error("Raydium transaction build returned no transactions");
+      }
+
+      return { swapResponse: freshSwapResponse, txList };
+    }
+
     // Build transactions (first try)
     let signVersion = txVersion as string;
     let lastBuilderErrorMessage: string | undefined;
-    const txRes = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        computeUnitPriceMicroLamports: String(computeUnitPriceMicroLamports),
-        swapResponse,
-        txVersion,
-        wallet: owner.publicKey.toBase58(),
-        wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
-        unwrapSol: Boolean(unwrapSol && isOutputSol),
-        inputAccount,
-        outputAccount,
-      }),
-    });
+    let txList: { transaction: string }[] = [];
 
-    if (!txRes.ok) {
-      const t = await txRes.text();
-      return softError("RAYDIUM_BUILD_FAILED", `Raydium transaction build failed: ${txRes.status} ${t}`);
+    try {
+      const built = await buildRaydiumTxList(signVersion);
+      swapResponse = built.swapResponse;
+      txList = built.txList;
+    } catch (e) {
+      lastBuilderErrorMessage = (e as Error).message;
     }
 
-    const txJson = await txRes.json();
-    if (txJson && txJson.success === false && txJson.msg) {
-      try { console.error("raydium-swap builder error", txJson); } catch {}
-      lastBuilderErrorMessage = txJson.msg;
+    if ((!Array.isArray(txList) || txList.length === 0) && String(signVersion).toUpperCase() !== "LEGACY") {
+      try {
+        const builtLegacy = await buildRaydiumTxList("LEGACY");
+        swapResponse = builtLegacy.swapResponse;
+        txList = builtLegacy.txList;
+        signVersion = "LEGACY";
+        lastBuilderErrorMessage = undefined;
+      } catch (e) {
+        lastBuilderErrorMessage = `${lastBuilderErrorMessage ?? "Raydium build failed"}; LEGACY fallback: ${(e as Error).message}`;
+      }
     }
-    let txPayloads: any[] = [];
-    if (Array.isArray(txJson?.data)) txPayloads = txJson.data;
-    else if (txJson?.data?.transaction) txPayloads = [txJson.data.transaction];
-    else if (typeof txJson?.data === "string") txPayloads = [txJson.data];
-    else if (Array.isArray(txJson?.transactions)) txPayloads = txJson.transactions;
-    else if (txJson?.transaction) txPayloads = [txJson.transaction];
-
-    let txList: { transaction: string }[] = txPayloads.map((d: any) => ({ transaction: (d?.transaction ?? d) }));
 
     if (!Array.isArray(txList) || txList.length === 0) {
-      // Try LEGACY as a fallback
-      try {
-        const computeUrl2 = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=LEGACY`;
-        const computeRes2 = await fetch(computeUrl2);
-        if (computeRes2.ok) {
-          const swapResponse2 = await computeRes2.json();
-            const txRes2 = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                computeUnitPriceMicroLamports: String(computeUnitPriceMicroLamports),
-                swapResponse: swapResponse2,
-                txVersion: "LEGACY",
-                wallet: owner.publicKey.toBase58(),
-                wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
-                unwrapSol: Boolean(unwrapSol && isOutputSol),
-                inputAccount,
-                outputAccount,
-              }),
-            });
-          if (txRes2.ok) {
-            const txJson2 = await txRes2.json();
-            if (txJson2 && txJson2.success === false && txJson2.msg) {
-              try { console.error("raydium-swap builder error (LEGACY)", txJson2); } catch {}
-              lastBuilderErrorMessage = txJson2.msg;
-            }
-            let txPayloads2: any[] = [];
-            if (Array.isArray(txJson2?.data)) txPayloads2 = txJson2.data;
-            else if (txJson2?.data?.transaction) txPayloads2 = [txJson2.data.transaction];
-            else if (typeof txJson2?.data === "string") txPayloads2 = [txJson2.data];
-            else if (Array.isArray(txJson2?.transactions)) txPayloads2 = txJson2.transactions;
-            else if (txJson2?.transaction) txPayloads2 = [txJson2.transaction];
-            const tmpList = txPayloads2.map((d: any) => ({ transaction: (d?.transaction ?? d) }));
-            if (Array.isArray(tmpList) && tmpList.length > 0) {
-              txList = tmpList;
-              signVersion = "LEGACY";
-            }
-          }
-        }
-      } catch {}
-
-      if (!Array.isArray(txList) || txList.length === 0) {
-        try {
-          console.error("raydium-swap empty tx list", {
-            keys: Object.keys(txJson || {}),
-            preview: typeof txJson === "object" ? JSON.stringify(txJson).slice(0, 200) : String(txJson).slice(0, 200),
-            lastBuilderErrorMessage,
-          });
-        } catch {}
-        // Fallback to Jupiter when Raydium builder returns no transactions
-        const j = await tryJupiterSwap({
-          inputMint: String(inputMint),
-          outputMint: String(outputMint),
-          amount: amount as any,
-          slippageBps: Number(slippageBps),
-          userPublicKey: owner.publicKey.toBase58(),
-          computeUnitPriceMicroLamports,
-          asLegacy: String(txVersion).toUpperCase() === "LEGACY",
-        });
-        if ("txs" in j) {
-          txList = j.txs.map((b64) => ({ transaction: b64 }));
-          signVersion = String(txVersion).toUpperCase() === "LEGACY" ? "LEGACY" : "V0";
-        } else {
-          return softError(
-            "SWAP_FAILED",
-            `No transactions returned from Raydium${lastBuilderErrorMessage ? `: ${lastBuilderErrorMessage}` : ""}; Jupiter fallback: ${j.error}`
-          );
-        }
+      // Fallback to Jupiter when Raydium builder returns no transactions
+      const j = await tryJupiterSwap({
+        inputMint: String(inputMint),
+        outputMint: String(outputMint),
+        amount: amount as any,
+        slippageBps: Number(slippageBps),
+        userPublicKey: owner.publicKey.toBase58(),
+        computeUnitPriceMicroLamports,
+        asLegacy: String(txVersion).toUpperCase() === "LEGACY",
+      });
+      if ("txs" in j) {
+        txList = j.txs.map((b64) => ({ transaction: b64 }));
+        signVersion = String(txVersion).toUpperCase() === "LEGACY" ? "LEGACY" : "V0";
+      } else {
+        return softError(
+          "SWAP_FAILED",
+          `No transactions returned from Raydium${lastBuilderErrorMessage ? `: ${lastBuilderErrorMessage}` : ""}; Jupiter fallback: ${j.error}`
+        );
       }
     }
 
     const sigs: string[] = [];
 
     if (signVersion === "V0") {
-      for (const item of txList) {
-        const u8 = b64ToU8(item.transaction);
-        const vtx = VersionedTransaction.deserialize(u8);
-        // Fresh blockhash before signing
-        const fresh = await connection.getLatestBlockhash("confirmed");
-        // @ts-ignore
-        (vtx as any).message.recentBlockhash = fresh.blockhash;
-        vtx.sign([owner]);
-        let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-        
-        // ALWAYS use hard confirmation (ignore confirmPolicy for reliability)
-        const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
-        
-        if (!confirmResult.confirmed) {
-          // Retry once with fresh blockhash
-          console.log(`V0 tx failed (${confirmResult.error}), retrying with fresh blockhash...`);
-          const newer = await connection.getLatestBlockhash("confirmed");
-          (vtx as any).message.recentBlockhash = newer.blockhash;
+      for (let txIndex = 0; txIndex < txList.length; txIndex++) {
+        let txItem = txList[txIndex];
+        let rebuiltAfter6023 = false;
+        let finalSig: string | null = null;
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          const u8 = b64ToU8(txItem.transaction);
+          const vtx = VersionedTransaction.deserialize(u8);
+          const fresh = await connection.getLatestBlockhash("confirmed");
+          // @ts-ignore
+          (vtx as any).message.recentBlockhash = fresh.blockhash;
           vtx.sign([owner]);
-          sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-          
-          const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
-          if (!retryResult.confirmed) {
-            return softError("SWAP_FAILED", `Raydium swap failed after retry: ${retryResult.error}`);
+
+          let sig: string;
+          try {
+            // CLMM safety: always preflight at least once (and keep it enabled on retry).
+            sig = await connection.sendTransaction(vtx, { skipPreflight: false, maxRetries: 2 });
+          } catch (sendErr) {
+            const sendMsg = (sendErr as Error).message || String(sendErr);
+            if (!rebuiltAfter6023 && isTickArray6023(sendMsg)) {
+              console.log("Raydium V0 hit 6023 on send, rebuilding compute+transaction payload...");
+              try {
+                const rebuilt = await buildRaydiumTxList(signVersion);
+                swapResponse = rebuilt.swapResponse;
+                txList = rebuilt.txList;
+                if (!txList[txIndex]) {
+                  return softError("SWAP_FAILED", "Raydium rebuild returned incomplete tx list");
+                }
+                txItem = txList[txIndex];
+                rebuiltAfter6023 = true;
+                continue;
+              } catch (rebuildErr) {
+                return softError("SWAP_FAILED", `Raydium 6023 rebuild failed: ${(rebuildErr as Error).message}`);
+              }
+            }
+
+            if (attempt === 1) {
+              console.log(`Raydium V0 send failed (${sendMsg}), retrying once with fresh blockhash...`);
+              continue;
+            }
+            return softError("SWAP_FAILED", `Raydium swap send failed after retry: ${sendMsg}`);
           }
+
+          const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+          if (confirmResult.confirmed) {
+            finalSig = sig;
+            break;
+          }
+
+          const confirmError = confirmResult.error || "Unknown confirmation failure";
+          if (!rebuiltAfter6023 && isTickArray6023(confirmError)) {
+            console.log("Raydium V0 hit 6023 on confirm, rebuilding compute+transaction payload...");
+            try {
+              const rebuilt = await buildRaydiumTxList(signVersion);
+              swapResponse = rebuilt.swapResponse;
+              txList = rebuilt.txList;
+              if (!txList[txIndex]) {
+                return softError("SWAP_FAILED", "Raydium rebuild returned incomplete tx list");
+              }
+              txItem = txList[txIndex];
+              rebuiltAfter6023 = true;
+              continue;
+            } catch (rebuildErr) {
+              return softError("SWAP_FAILED", `Raydium 6023 rebuild failed: ${(rebuildErr as Error).message}`);
+            }
+          }
+
+          if (attempt === 1) {
+            console.log(`Raydium V0 tx failed (${confirmError}), retrying once with fresh blockhash...`);
+            continue;
+          }
+
+          return softError("SWAP_FAILED", `Raydium swap failed after retry: ${confirmError}`);
         }
-        
-        sigs.push(sig);
+
+        if (!finalSig) {
+          return softError("SWAP_FAILED", "Raydium swap failed with no signature returned");
+        }
+
+        sigs.push(finalSig);
       }
     } else {
-      for (const item of txList) {
-        const u8 = b64ToU8(item.transaction);
-        const tx = Transaction.from(u8 as any);
-        // Fresh blockhash before signing
-        const fresh = await connection.getLatestBlockhash("confirmed");
-        tx.recentBlockhash = fresh.blockhash;
-        if (!tx.feePayer) tx.feePayer = owner.publicKey;
-        tx.sign(owner);
-        let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-        
-        // ALWAYS use hard confirmation (ignore confirmPolicy for reliability)
-        const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
-        
-        if (!confirmResult.confirmed) {
-          // Retry once with fresh blockhash
-          console.log(`Legacy tx failed (${confirmResult.error}), retrying with fresh blockhash...`);
-          const newer = await connection.getLatestBlockhash("confirmed");
-          tx.recentBlockhash = newer.blockhash;
+      for (let txIndex = 0; txIndex < txList.length; txIndex++) {
+        let txItem = txList[txIndex];
+        let rebuiltAfter6023 = false;
+        let finalSig: string | null = null;
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          const u8 = b64ToU8(txItem.transaction);
+          const tx = Transaction.from(u8 as any);
+          const fresh = await connection.getLatestBlockhash("confirmed");
+          tx.recentBlockhash = fresh.blockhash;
+          if (!tx.feePayer) tx.feePayer = owner.publicKey;
           tx.sign(owner);
-          sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-          
-          const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
-          if (!retryResult.confirmed) {
-            return softError("SWAP_FAILED", `Raydium swap failed after retry: ${retryResult.error}`);
+
+          let sig: string;
+          try {
+            // CLMM safety: always preflight at least once (and keep it enabled on retry).
+            sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 2 });
+          } catch (sendErr) {
+            const sendMsg = (sendErr as Error).message || String(sendErr);
+            if (!rebuiltAfter6023 && isTickArray6023(sendMsg)) {
+              console.log("Raydium Legacy hit 6023 on send, rebuilding compute+transaction payload...");
+              try {
+                const rebuilt = await buildRaydiumTxList(signVersion);
+                swapResponse = rebuilt.swapResponse;
+                txList = rebuilt.txList;
+                if (!txList[txIndex]) {
+                  return softError("SWAP_FAILED", "Raydium rebuild returned incomplete tx list");
+                }
+                txItem = txList[txIndex];
+                rebuiltAfter6023 = true;
+                continue;
+              } catch (rebuildErr) {
+                return softError("SWAP_FAILED", `Raydium 6023 rebuild failed: ${(rebuildErr as Error).message}`);
+              }
+            }
+
+            if (attempt === 1) {
+              console.log(`Raydium Legacy send failed (${sendMsg}), retrying once with fresh blockhash...`);
+              continue;
+            }
+            return softError("SWAP_FAILED", `Raydium swap send failed after retry: ${sendMsg}`);
           }
+
+          const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+          if (confirmResult.confirmed) {
+            finalSig = sig;
+            break;
+          }
+
+          const confirmError = confirmResult.error || "Unknown confirmation failure";
+          if (!rebuiltAfter6023 && isTickArray6023(confirmError)) {
+            console.log("Raydium Legacy hit 6023 on confirm, rebuilding compute+transaction payload...");
+            try {
+              const rebuilt = await buildRaydiumTxList(signVersion);
+              swapResponse = rebuilt.swapResponse;
+              txList = rebuilt.txList;
+              if (!txList[txIndex]) {
+                return softError("SWAP_FAILED", "Raydium rebuild returned incomplete tx list");
+              }
+              txItem = txList[txIndex];
+              rebuiltAfter6023 = true;
+              continue;
+            } catch (rebuildErr) {
+              return softError("SWAP_FAILED", `Raydium 6023 rebuild failed: ${(rebuildErr as Error).message}`);
+            }
+          }
+
+          if (attempt === 1) {
+            console.log(`Raydium Legacy tx failed (${confirmError}), retrying once with fresh blockhash...`);
+            continue;
+          }
+
+          return softError("SWAP_FAILED", `Raydium swap failed after retry: ${confirmError}`);
         }
-        
-        sigs.push(sig);
+
+        if (!finalSig) {
+          return softError("SWAP_FAILED", "Raydium swap failed with no signature returned");
+        }
+
+        sigs.push(finalSig);
       }
     }
 
