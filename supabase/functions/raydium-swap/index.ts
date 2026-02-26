@@ -296,57 +296,139 @@ function b64ToU8(b64: string): Uint8Array {
   return bytes;
 }
 
+// Pump.fun curve helpers (used to retry buy in token-denominated mode when SOL-denominated buys overflow)
+const pumpCoinSnapshotCache = new Map<string, {
+  virtualSolReserves: bigint;
+  virtualTokenReserves: bigint;
+  baseDecimals: number;
+}>();
+
+async function getPumpCoinSnapshot(mint: string): Promise<{
+  virtualSolReserves: bigint;
+  virtualTokenReserves: bigint;
+  baseDecimals: number;
+} | null> {
+  if (pumpCoinSnapshotCache.has(mint)) return pumpCoinSnapshotCache.get(mint)!;
+
+  try {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const virtualSolReserves = BigInt(String(data?.virtual_sol_reserves ?? 0));
+    const virtualTokenReserves = BigInt(String(data?.virtual_token_reserves ?? 0));
+    const baseDecimals = Number(data?.base_decimals ?? 6);
+
+    if (virtualSolReserves <= 0n || virtualTokenReserves <= 0n || !Number.isFinite(baseDecimals) || baseDecimals < 0) {
+      return null;
+    }
+
+    const snapshot = {
+      virtualSolReserves,
+      virtualTokenReserves,
+      baseDecimals: Math.floor(baseDecimals),
+    };
+
+    pumpCoinSnapshotCache.set(mint, snapshot);
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+function formatTokenAmountFromRaw(rawAmount: bigint, decimals: number): string {
+  if (rawAmount <= 0n) return "0";
+  if (decimals <= 0) return rawAmount.toString();
+
+  const base = 10n ** BigInt(decimals);
+  const whole = rawAmount / base;
+  const frac = rawAmount % base;
+
+  if (frac === 0n) return whole.toString();
+
+  const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/, "");
+  return `${whole.toString()}.${fracStr}`;
+}
+
+async function estimatePumpTokenAmountFromLamports(mint: string, solLamports: number): Promise<string | null> {
+  if (!Number.isFinite(solLamports) || solLamports <= 0) return null;
+
+  const snapshot = await getPumpCoinSnapshot(mint);
+  if (!snapshot) return null;
+
+  const inLamports = BigInt(Math.floor(solLamports));
+  if (inLamports <= 0n) return null;
+
+  // Constant product estimate using Pump reserves
+  const numerator = inLamports * snapshot.virtualTokenReserves;
+  const denominator = snapshot.virtualSolReserves + inLamports;
+  if (denominator <= 0n) return null;
+
+  const estimatedTokenOutRaw = numerator / denominator;
+  if (estimatedTokenOutRaw <= 0n) return null;
+
+  return formatTokenAmountFromRaw(estimatedTokenOutRaw, snapshot.baseDecimals);
+}
+
 // Try PumpPortal API for pump.fun/bonk.fun bonding curve tokens
 async function tryPumpPortalTrade(params: {
   mint: string;
   userPublicKey: string;
   action: 'buy' | 'sell';
-  amount: string; // For buy: SOL amount like "0.01", for sell: "100%" or token amount
+  amount: string; // For buy: SOL amount OR token amount depending on denominatedInSol
   slippageBps: number;
   pool?: 'pump' | 'bonk' | 'auto'; // Which launchpad pool to use
+  denominatedInSol?: boolean; // Buy mode only
+  priorityFeeSol?: number;
 }): Promise<{ tx: Uint8Array } | { error: string }> {
   try {
-    const { mint, userPublicKey, action, amount, slippageBps, pool = 'auto' } = params;
-    
+    const {
+      mint,
+      userPublicKey,
+      action,
+      amount,
+      slippageBps,
+      pool = 'auto',
+      denominatedInSol = true,
+      priorityFeeSol = 0.0005,
+    } = params;
+
     const slippagePercent = Math.min(50, Math.max(1, Math.floor(slippageBps / 100)));
-    
+
     const requestBody: Record<string, unknown> = {
       publicKey: userPublicKey,
-      action: action,
-      mint: mint,
-      priorityFee: 0.0005, // 0.0005 SOL priority fee
+      action,
+      mint,
+      priorityFee: Math.max(0, Number(priorityFeeSol) || 0),
       slippage: slippagePercent,
-      pool: pool // 'pump' for pump.fun, 'bonk' for bonk.fun, 'auto' to detect
+      pool,
     };
-    
+
     if (action === 'buy') {
-      // For buys, amount is in SOL - must be a number, not a string
-      requestBody.denominatedInSol = "true";
+      requestBody.denominatedInSol = denominatedInSol ? "true" : "false";
       requestBody.amount = parseFloat(amount);
     } else {
-      // For sells, use percentage string or token amount as number
       requestBody.denominatedInSol = "false";
-      // If it's a percentage like "100%", keep as string; otherwise convert to number
       requestBody.amount = amount.includes('%') ? amount : parseFloat(amount);
     }
-    
+
     console.log("PumpPortal request:", JSON.stringify(requestBody));
-    
+
     const response = await fetch("https://pumpportal.fun/api/trade-local", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
     });
-    
+
     if (response.status === 200) {
       const data = await response.arrayBuffer();
       console.log("PumpPortal transaction generated, size:", data.byteLength);
       return { tx: new Uint8Array(data) };
-    } else {
-      const errorText = await response.text();
-      console.log("PumpPortal error:", response.status, errorText);
-      return { error: `PumpPortal: ${response.status} - ${errorText}` };
     }
+
+    const errorText = await response.text();
+    console.log("PumpPortal error:", response.status, errorText);
+    return { error: `PumpPortal: ${response.status} - ${errorText}` };
   } catch (e) {
     console.log("PumpPortal exception:", (e as Error).message);
     return { error: `PumpPortal error: ${(e as Error).message}` };
@@ -1386,8 +1468,8 @@ serve(async (req) => {
         // BUY path: execute full requested amount via automatic chunking on overflow.
         if (side === "buy" && Number.isFinite(totalBuyLamports) && (totalBuyLamports ?? 0) > 0) {
           const requestedLamports = totalBuyLamports as number;
-          const minChunkLamports = 100_000; // 0.0001 SOL
-          const maxChunkShrinkAttempts = 10;
+          const minChunkLamports = 1; // allow deep shrink for pathological pump overflow states
+          const maxChunkShrinkAttempts = 26;
 
           for (const candidateSlippageBps of slippageCandidates) {
             console.log(`PumpPortal buy attempt with ${candidateSlippageBps} bps slippage`);
