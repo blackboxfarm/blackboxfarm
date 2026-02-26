@@ -672,18 +672,18 @@ Deno.serve(async (req) => {
         .eq('wallet_address', resolvedWallet || '')
         .maybeSingle(),
       
-      // Blacklist check
+      // Blacklist check - query by identifier (wallet/token/handle) and linked_wallets
       supabase
         .from('pumpfun_blacklist')
         .select('*')
-        .or(`wallet_address.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}`)
+        .or(`identifier.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}`)
         .limit(1),
       
-      // Whitelist check
+      // Whitelist check - query by identifier and linked_wallets
       supabase
         .from('pumpfun_whitelist')
         .select('*')
-        .or(`wallet_address.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}`)
+        .or(`identifier.eq.${resolvedWallet},linked_wallets.cs.{${resolvedWallet}}`)
         .limit(1),
       
       // Dev teams
@@ -852,13 +852,19 @@ Deno.serve(async (req) => {
               recommendation = generateRecommendation(score, stats);
           }
           
+          // Check blacklist/whitelist status for scan-mode results too
+          const isBlacklistedScan = !!blacklistEntry;
+          const isWhitelistedScan = !!whitelistEntry;
+          const finalScore = isBlacklistedScan ? Math.min(score, 10) : score;
+          const finalTrafficLight = isBlacklistedScan ? 'RED' : getTrafficLight(finalScore);
+
           return new Response(
             JSON.stringify({
               found: true,
               inputType,
               resolvedWallet,
-              score,
-              trafficLight,
+              score: finalScore,
+              trafficLight: finalTrafficLight,
               stats,
               network: {
                 linkedWallets: [],
@@ -866,9 +872,18 @@ Deno.serve(async (req) => {
                 sharedMods: [],
                 relatedTokens: (analysis.tokens || []).slice(0, 10).map((t: any) => t.symbol || t.name || t.mint?.slice(0, 8))
               },
-              blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
-              whitelistStatus: { isWhitelisted: false },
-              recommendation,
+              blacklistStatus: { 
+                isBlacklisted: isBlacklistedScan, 
+                reason: blacklistEntry?.blacklist_reason,
+                linkedEntities: blacklistEntry?.linked_wallets || [] 
+              },
+              whitelistStatus: { 
+                isWhitelisted: isWhitelistedScan,
+                reason: whitelistEntry?.whitelist_reason 
+              },
+              recommendation: isBlacklistedScan 
+                ? `🚫 BLACKLISTED - ${blacklistEntry?.blacklist_reason || 'Known bad actor'}. ${recommendation}`
+                : recommendation,
               meshLinksAdded: 0,
               scanMode,
               liveAnalysis: {
@@ -966,12 +981,12 @@ Deno.serve(async (req) => {
       network,
       blacklistStatus: {
         isBlacklisted,
-        reason: blacklistEntry?.reason,
+        reason: blacklistEntry?.blacklist_reason,
         linkedEntities: blacklistEntry?.linked_wallets || []
       },
       whitelistStatus: {
         isWhitelisted,
-        reason: whitelistEntry?.notes
+        reason: whitelistEntry?.whitelist_reason
       },
       recommendation,
       meshLinksAdded,
