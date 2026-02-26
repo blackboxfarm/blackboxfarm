@@ -1360,13 +1360,19 @@ serve(async (req) => {
     const isBonkToken = Boolean(venueHint?.hasBonkFun) || suffixBonk;
     const isBagsToken = Boolean(venueHint?.hasBagsFm);
 
-    // Bonding-curve tokens are only those WITHOUT AMM liquidity (Raydium/Meteora/Orca).
+    // Bonding-curve tokens are only those WITHOUT AMM liquidity (Raydium/Meteora/Orca),
+    // but pumpswap best-dex tokens should still attempt PumpPortal first (pool=auto) because
+    // they are frequently unresolved by aggregator routes at execution time.
     const hasAmmLiquidity = isRaydiumToken || isMeteoraToken || isOrcaToken;
-    const isBondingCurveToken = !hasAmmLiquidity && (isPumpToken || isBonkToken || isBagsToken);
+    const isPumpSwapBestDex = String(venueHint?.bestDex || "").toLowerCase().includes("pumpswap");
+    const isBondingCurveToken = isPumpSwapBestDex || (!hasAmmLiquidity && (isPumpToken || isBonkToken || isBagsToken));
 
     // Determine which pool to use for PumpPortal
     // bags.fm uses 'pump' pool via PumpPortal API
     const getBondingCurvePool = (): 'pump' | 'bonk' | 'auto' => {
+      const bestDex = String(venueHint?.bestDex || "").toLowerCase();
+      if (bestDex.includes("pumpswap")) return 'auto';
+      if (hasAmmLiquidity && venueHint?.hasPumpFun) return 'auto';
       if (venueHint?.hasPumpFun) return 'pump';
       if (venueHint?.hasBonkFun) return 'bonk';
       if (venueHint?.hasBagsFm) return 'pump'; // bags.fm uses pump pool
@@ -2152,74 +2158,75 @@ serve(async (req) => {
           pumpAmount = sellAll ? "100%" : String(amount);
         }
         
-        try {
-          const pumpResult = await tryPumpPortalTrade({
-            mint: String(tokenMint),
-            userPublicKey: owner.publicKey.toBase58(),
-            action: side as 'buy' | 'sell',
-            amount: pumpAmount,
-            slippageBps: Number(slippageBps),
-            pool: getBondingCurvePool(),
-          });
-          
-          if ("tx" in pumpResult) {
-            try {
-              const vtx = VersionedTransaction.deserialize(pumpResult.tx);
-              vtx.sign([owner]);
-              
-              // Use Helius RPC for better transaction submission
-              const _heliusKey4 = getHeliusApiKey();
-              const txRpc = _heliusKey4 
-                ? new Connection(getHeliusRpcUrl(_heliusKey4), { commitment: "confirmed" })
-                : new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
-              
-              const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
-              
-              // Update blockhash before sending
-              (vtx as any).message.recentBlockhash = blockhash;
-              vtx.sign([owner]); // Re-sign with new blockhash
-              
-              const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
-              
-              // CRITICAL: Use hardConfirmTransaction for reliable confirmation
-              const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
-              
-              if (!confirmResult.confirmed) {
-                console.error("PumpPortal fallback tx failed:", confirmResult.error);
-                return softError(
-                  "SWAP_FAILED",
-                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'tx failed'}; bags.fm: ${bagsFmResult.error || 'tx failed'}; PumpPortal: ${confirmResult.error}`
-                );
+        const poolsToTry: Array<'pump' | 'bonk' | 'auto'> = Array.from(
+          new Set([getBondingCurvePool(), 'auto'])
+        );
+        let lastPumpPortalError: string | null = null;
+
+        for (const pool of poolsToTry) {
+          try {
+            const pumpResult = await tryPumpPortalTrade({
+              mint: String(tokenMint),
+              userPublicKey: owner.publicKey.toBase58(),
+              action: side as 'buy' | 'sell',
+              amount: pumpAmount,
+              slippageBps: Number(slippageBps),
+              pool,
+            });
+
+            if ("tx" in pumpResult) {
+              try {
+                const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+                vtx.sign([owner]);
+
+                // Use Helius RPC for better transaction submission
+                const _heliusKey4 = getHeliusApiKey();
+                const txRpc = _heliusKey4
+                  ? new Connection(getHeliusRpcUrl(_heliusKey4), { commitment: "confirmed" })
+                  : new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
+
+                const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+
+                // Update blockhash before sending
+                (vtx as any).message.recentBlockhash = blockhash;
+                vtx.sign([owner]); // Re-sign with new blockhash
+
+                const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+
+                // CRITICAL: Use hardConfirmTransaction for reliable confirmation
+                const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+
+                if (!confirmResult.confirmed) {
+                  lastPumpPortalError = confirmResult.error || 'PumpPortal tx failed';
+                  console.error(`PumpPortal fallback tx failed (pool=${pool}):`, lastPumpPortalError);
+                  continue;
+                }
+
+                console.log(`PumpPortal ${side} successful (pool=${pool}):`, sig);
+                const solInputLamports =
+                  side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+                    ? Number(amount)
+                    : null;
+                return ok({ signatures: [sig], source: "pumpportal", pool, outAmount: null, solInputLamports });
+              } catch (sendError) {
+                lastPumpPortalError = `PumpPortal send failed (pool=${pool}): ${(sendError as Error).message}`;
+                console.error(lastPumpPortalError);
+                continue;
               }
-              
-              console.log(`PumpPortal ${side} successful:`, sig);
-              const solInputLamports =
-                side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
-                  ? Number(amount)
-                  : null;
-              return ok({ signatures: [sig], source: "pumpportal", outAmount: null, solInputLamports });
-            } catch (sendError) {
-              console.error("PumpPortal transaction send failed:", (sendError as Error).message);
-              return softError(
-                "SWAP_FAILED",
-                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal send: ${(sendError as Error).message}`
-              );
             }
-          } else {
-            // PumpPortal returned an error - token probably not on pump.fun bonding curve
-            console.log("PumpPortal also failed:", pumpResult.error);
-            return softError(
-              "SWAP_FAILED",
-              `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal: ${pumpResult.error}`
-            );
+
+            lastPumpPortalError = pumpResult.error;
+            console.log(`PumpPortal failed (pool=${pool}):`, pumpResult.error);
+          } catch (pumpError) {
+            lastPumpPortalError = `PumpPortal error (pool=${pool}): ${(pumpError as Error).message}`;
+            console.error(lastPumpPortalError);
           }
-        } catch (pumpError) {
-          console.error("PumpPortal attempt failed:", (pumpError as Error).message);
-          return softError(
-            "SWAP_FAILED",
-            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal error: ${(pumpError as Error).message}`
-          );
         }
+
+        return softError(
+          "SWAP_FAILED",
+          `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal: ${lastPumpPortalError || 'n/a'}`
+        );
       }
     }
 
