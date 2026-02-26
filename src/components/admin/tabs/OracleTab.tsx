@@ -12,6 +12,8 @@ const DevIntelReport = lazy(() => import("@/components/admin/oracle/DevIntelRepo
 const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 const XCommunityManager = lazy(() => import("@/components/admin/oracle/XCommunityManager"));
 const TeamIntelDashboard = lazy(() => import("@/components/admin/oracle/TeamIntelDashboard"));
+const PumpfunBlacklist = lazy(() => import("@/components/admin/PumpfunBlacklist").then(m => ({ default: m.PumpfunBlacklist })));
+const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist").then(m => ({ default: m.PumpfunWhitelist })));
 
 const OracleTab = () => {
   const [activeSubTab, setActiveSubTab] = useState("lookup");
@@ -55,6 +57,12 @@ const OracleTab = () => {
           <TabsTrigger value="dev-intel" className="data-[state=active]:bg-primary/20">
             🌳 Dev Intel Report
           </TabsTrigger>
+          <TabsTrigger value="blacklist" className="data-[state=active]:bg-destructive/20">
+            🚫 Blacklist Mesh
+          </TabsTrigger>
+          <TabsTrigger value="whitelist" className="data-[state=active]:bg-green-500/20">
+            ✅ Whitelist Mesh
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="lookup" className="space-y-4">
@@ -94,6 +102,18 @@ const OracleTab = () => {
         <TabsContent value="dev-intel" className="space-y-4">
           <Suspense fallback={<LazyLoader />}>
             <DevIntelReport />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="blacklist" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <PumpfunBlacklist />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="whitelist" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <PumpfunWhitelist />
           </Suspense>
         </TabsContent>
       </Tabs>
