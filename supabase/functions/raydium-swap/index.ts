@@ -1891,6 +1891,7 @@ serve(async (req) => {
         computeUnitPriceMicroLamports,
         asLegacy: String(txVersion).toUpperCase() === "LEGACY",
       });
+      let jupiterFailureForFallback: string | null = null;
       if ("txs" in j) {
         const sigs: string[] = [];
         if (String(txVersion).toUpperCase() === "LEGACY") {
@@ -1939,10 +1940,12 @@ serve(async (req) => {
                   
                   const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
                   if (!retryResult.confirmed) {
-                    return softError("SWAP_FAILED", `Jupiter swap failed after slippage retry: ${retryResult.error}`);
+                    jupiterFailureForFallback = `Jupiter swap failed after slippage retry: ${retryResult.error}`;
+                    break;
                   }
                 } else {
-                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${confirmResult.error}`);
+                  jupiterFailureForFallback = `Jupiter swap failed after retry quote build: ${confirmResult.error}`;
+                  break;
                 }
               } else {
                 const fresh = await connection.getLatestBlockhash("confirmed");
@@ -1952,7 +1955,8 @@ serve(async (req) => {
                 
                 const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
                 if (!retryResult.confirmed) {
-                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
+                  jupiterFailureForFallback = `Jupiter swap failed after direct resend: ${retryResult.error}`;
+                  break;
                 }
               }
             }
@@ -2004,10 +2008,12 @@ serve(async (req) => {
                   
                   const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
                   if (!retryResult.confirmed) {
-                    return softError("SWAP_FAILED", `Jupiter swap failed after slippage retry: ${retryResult.error}`);
+                    jupiterFailureForFallback = `Jupiter swap failed after slippage retry: ${retryResult.error}`;
+                    break;
                   }
                 } else {
-                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${confirmResult.error}`);
+                  jupiterFailureForFallback = `Jupiter swap failed after retry quote build: ${confirmResult.error}`;
+                  break;
                 }
               } else {
                 const newer = await connection.getLatestBlockhash("confirmed");
@@ -2017,7 +2023,8 @@ serve(async (req) => {
                 
                 const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
                 if (!retryResult.confirmed) {
-                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
+                  jupiterFailureForFallback = `Jupiter swap failed after direct resend: ${retryResult.error}`;
+                  break;
                 }
               }
               }
@@ -2027,14 +2034,21 @@ serve(async (req) => {
           }
         }
         // Jupiter fallback - no outAmount available, caller should verify on-chain
-        const solInputLamports =
-          side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
-            ? Number(amount)
-            : null;
-        return ok({ signatures: sigs, source: "jupiter", outAmount: null, solInputLamports });
-      } else {
+        if (!jupiterFailureForFallback) {
+          const solInputLamports =
+            side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+              ? Number(amount)
+              : null;
+          return ok({ signatures: sigs, source: "jupiter", outAmount: null, solInputLamports });
+        }
+      }
+
+      const jupiterFailureMessage =
+        jupiterFailureForFallback ?? (("txs" in j) ? "Jupiter transaction failed after retries" : j.error);
+
+      if (!("txs" in j) || jupiterFailureForFallback) {
         // Jupiter also failed - try Meteora direct API for DLMM pools (graduated tokens)
-        console.log(`Jupiter failed (${j.error}), trying Meteora direct API...`);
+        console.log(`Jupiter failed (${jupiterFailureMessage}), trying Meteora direct API...`);
         
         const meteoraResult = await tryMeteoraSwap({
           inputMint: String(inputMint),
@@ -2174,7 +2188,7 @@ serve(async (req) => {
                 console.error("PumpPortal fallback tx failed:", confirmResult.error);
                 return softError(
                   "SWAP_FAILED",
-                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'tx failed'}; bags.fm: ${bagsFmResult.error || 'tx failed'}; PumpPortal: ${confirmResult.error}`
+                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'tx failed'}; bags.fm: ${bagsFmResult.error || 'tx failed'}; PumpPortal: ${confirmResult.error}`
                 );
               }
               
@@ -2188,7 +2202,7 @@ serve(async (req) => {
               console.error("PumpPortal transaction send failed:", (sendError as Error).message);
               return softError(
                 "SWAP_FAILED",
-                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal send: ${(sendError as Error).message}`
+                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal send: ${(sendError as Error).message}`
               );
             }
           } else {
@@ -2196,14 +2210,14 @@ serve(async (req) => {
             console.log("PumpPortal also failed:", pumpResult.error);
             return softError(
               "SWAP_FAILED",
-              `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal: ${pumpResult.error}`
+              `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal: ${pumpResult.error}`
             );
           }
         } catch (pumpError) {
           console.error("PumpPortal attempt failed:", (pumpError as Error).message);
           return softError(
             "SWAP_FAILED",
-            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal error: ${(pumpError as Error).message}`
+            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal error: ${(pumpError as Error).message}`
           );
         }
       }
