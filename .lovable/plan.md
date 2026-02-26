@@ -1,52 +1,66 @@
 
 
-# Creator Wallet Data Integrity: Full Audit and Remediation Plan
+# Master Spider: Multi-Input Actor Submission
 
-## Decisions Made
-1. **Audit first** before bulk re-link
-2. **Small batches over time** (100 tokens every 5 minutes via cron)
-3. **Delete ghost profiles entirely**
-4. **Auto-remove blacklist entries** if proven wrong
+## Problem
+Currently there's a single text input that tries to guess what you typed. You want to submit everything you know about an actor at once -- their dev wallet, their token mint, AND their X handle -- and have the spider connect all three as one entity, then spider the entire family tree.
 
-## Phase 1: Stop the Bleeding ✅ DONE
+## Changes
 
-### 1a. `solscan-creator-lookup` — FIXED
-- Pump.fun tokens now use pump.fun API as primary source
-- Mint authority fallback only used for non-pump tokens
-- No more program addresses stored as creator wallets
+### 1. UI Overhaul (OracleMasterSpider.tsx)
 
-### 1b. `token-metadata` fallback — FIXED
-- `fetchMintAuthorityFallback` now skipped for pump.fun tokens
-- Only non-pump tokens (Raydium direct launches, etc.) use mint authority fallback
+Replace the single input field with 3 dedicated labeled inputs:
 
-### 1c. `enrich-scraped-tokens` — FIXED
-- Pump.fun tokens now call pump.fun API directly
-- Non-pump tokens still route through `solscan-creator-lookup`
+- **Dev Wallet Address** -- optional, Solana wallet (monospace, validated 32-44 chars)
+- **Minted Token Address** -- optional, token mint address (monospace, validated 32-44 chars)  
+- **X Account** -- optional, accepts `@handle` or full `https://x.com/handle` URL (auto-extracts handle)
 
-## Phase 2: Audit the Damage ✅ FUNCTION BUILT — NEEDS RUNNING
+At least ONE field must be filled. The BAD ACTOR / GOOD ACTOR selector and reason textarea stay as they are.
 
-### `audit-creator-integrity` edge function
-- Queries pump.fun tokens from `scraped_tokens`, `token_lifecycle`, or `developer_tokens`
-- Calls pump.fun API for each and compares stored vs real creator
-- Reports contamination rate and sample mismatches
-- Call with: `{ "table": "scraped_tokens", "batchSize": 100, "offset": 0 }`
+The submit button label stays dynamic: SPIDER / SPIDER & BLACKLIST / SPIDER & WHITELIST.
 
-**Next step**: Run the audit function and review results before proceeding to Phase 3.
+### 2. Edge Function Update (oracle-master-spider/index.ts)
 
-## Phase 3: Bulk Re-link — TODO (After Audit)
+Update the function to accept a structured multi-input payload:
 
-### `bulk-creator-relinker` edge function — NOT YET BUILT
-- Process pump.fun tokens in batches of 100
-- Update `scraped_tokens`, `token_lifecycle`, `developer_tokens`
-- Delete ghost `developer_profiles`
-- Auto-remove wrongly blacklisted wallets from `pumpfun_blacklist`
-- Cron: 100 tokens every 5 minutes
+```text
+{
+  devWallet?: string,
+  tokenMint?: string,  
+  xAccount?: string,
+  forceVerdict?: 'red' | 'green',
+  reason?: string,
+  // Keep backward compat with single 'query' field
+  query?: string
+}
+```
 
-## Phase 4: Verify — TODO (After Phase 3)
-- Re-run audit function to confirm contamination drops to ~0%
+Processing logic:
 
-## Files Modified
-- `supabase/functions/solscan-creator-lookup/index.ts` — Pump.fun API as primary source
-- `supabase/functions/token-metadata/index.ts` — Guarded mint authority fallback
-- `supabase/functions/enrich-scraped-tokens/index.ts` — Direct pump.fun API for pump tokens
-- **NEW**: `supabase/functions/audit-creator-integrity/index.ts` — Diagnostic function
+- **Parse X input**: Extract handle from URL or `@handle` format
+- **Resolve all three simultaneously**: Look up token mint for creator wallet, validate dev wallet, resolve X handle
+- **Cross-link all inputs**: If you provide a wallet + token + handle, all three get linked in `reputation_mesh` as a single actor entity
+- **Spider from the wallet**: Use the dev wallet (or resolved wallet from token) as the anchor for genealogy tracing, token discovery, and social discovery
+- **Store the X handle**: Always store the X handle in both `reputation_mesh` (linked to the wallet) and in the blacklist/whitelist entry
+- **Rate limiting**: Add 200ms delays between Helius RPC calls and batch DB operations to avoid hammering APIs
+
+### 3. Mesh Linking Logic
+
+When all 3 inputs are provided, the function creates these mesh relationships:
+
+```text
+wallet --[created]--> token
+wallet --[operates]--> @handle
+@handle --[token_social]--> token
+```
+
+Plus all the existing genealogy, satellite, community admin/mod links. This ensures that querying ANY of the three in future returns the full connected entity.
+
+## Technical Details
+
+**Files to modify:**
+- `src/components/admin/oracle/OracleMasterSpider.tsx` -- Replace single input with 3 fields, update mutation payload
+- `supabase/functions/oracle-master-spider/index.ts` -- Accept multi-input, cross-link all inputs, add rate limiting delays
+
+**Backward compatibility:** The `query` field still works for single-input lookups (auto-detect mode). The new fields take priority when provided.
+
