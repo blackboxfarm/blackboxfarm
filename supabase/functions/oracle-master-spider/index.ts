@@ -653,20 +653,24 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Blacklist the token too
-          if (inputIsToken && tokenInfo?.mint) {
+          // Blacklist ALL discovered tokens by this actor
+          const allTokenMints = new Set<string>();
+          if (inputIsToken && tokenInfo?.mint) allTokenMints.add(tokenInfo.mint);
+          for (const dt of discoveredTokens) allTokenMints.add(dt.mint);
+
+          for (const mint of allTokenMints) {
             const { data: existingToken } = await supabase
               .from('pumpfun_blacklist')
               .select('id')
-              .eq('identifier', tokenInfo.mint)
+              .eq('identifier', mint)
               .maybeSingle();
 
             if (!existingToken) {
               await supabase.from('pumpfun_blacklist').insert({
                 entry_type: 'token_address',
-                identifier: tokenInfo.mint,
+                identifier: mint,
                 risk_level: 'critical',
-                blacklist_reason: `Token by ${verdict} actor: ${creatorWallet.slice(0, 8)}...`,
+                blacklist_reason: reason || `Token by blacklisted actor: ${creatorWallet.slice(0, 8)}...`,
                 tags: ['spider_discovered'],
                 linked_wallets: [creatorWallet],
                 source: 'oracle_spider',
