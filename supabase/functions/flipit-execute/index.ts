@@ -1262,6 +1262,95 @@ serve(async (req) => {
           verifyEntry();
         }
 
+        // FINAL FAILSAFE: After all verification attempts, check on-chain balance
+        // This catches cases where Helius parsing AND Solscan verification both fail
+        // and we're left with bad quantity_tokens data
+        const positionIdForVerify = position.id;
+        const tokenMintForVerify = tokenMint;
+        const walletPubkeyForVerify = wallet.pubkey;
+        const buyAmountSolForVerify = buyAmountSol;
+        const solPriceForVerify = solPrice;
+        const multForVerify = mult;
+        
+        setTimeout(async () => {
+          try {
+            // Re-read the position to see current state after all other verifications
+            const { data: currentPos } = await supabase
+              .from("flip_positions")
+              .select("id, quantity_tokens, buy_price_usd, buy_amount_usd, entry_verified, status")
+              .eq("id", positionIdForVerify)
+              .single();
+            
+            if (!currentPos || currentPos.status !== "holding") return;
+            
+            // If already verified by Solscan, trust that data
+            if (currentPos.entry_verified) {
+              console.log(`[FAILSAFE] Position ${positionIdForVerify.slice(0, 8)} already verified, skipping`);
+              return;
+            }
+            
+            // Fetch actual on-chain balance for this token
+            const fsHeliusKey = getHeliusApiKey();
+            const fsRpcUrl = fsHeliusKey 
+              ? getHeliusRpcUrl(fsHeliusKey)
+              : "https://api.mainnet-beta.solana.com";
+            
+            const fsRes = await fetch(fsRpcUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method: "getTokenAccountsByOwner",
+                params: [walletPubkeyForVerify, { mint: tokenMintForVerify }, { encoding: "jsonParsed" }]
+              }),
+            });
+            
+            if (!fsRes.ok) return;
+            const fsData = await fsRes.json();
+            const fsAccounts = fsData?.result?.value || [];
+            if (fsAccounts.length === 0) return;
+            
+            const tokenAmount = fsAccounts[0]?.account?.data?.parsed?.info?.tokenAmount;
+            if (!tokenAmount) return;
+            
+            const onChainBalance = tokenAmount.uiAmount ?? (Number(tokenAmount.amount) / Math.pow(10, tokenAmount.decimals || 6));
+            if (!onChainBalance || onChainBalance <= 0) return;
+            
+            const currentQty = Number(currentPos.quantity_tokens || 0);
+            
+            // Check if stored quantity is wildly off from on-chain balance
+            // (off by >10x in either direction means decimal bug)
+            const ratio = currentQty > 0 && onChainBalance > 0
+              ? Math.max(currentQty / onChainBalance, onChainBalance / currentQty)
+              : Infinity;
+            
+            if (ratio > 10 || currentQty <= 0) {
+              const correctedBuyPrice = (currentPos.buy_amount_usd && currentPos.buy_amount_usd > 0)
+                ? currentPos.buy_amount_usd / onChainBalance
+                : null;
+              
+              const updateFields: Record<string, any> = {
+                quantity_tokens: onChainBalance,
+                token_decimals: tokenAmount.decimals,
+              };
+              if (correctedBuyPrice !== null) {
+                updateFields.buy_price_usd = correctedBuyPrice;
+                if (multForVerify > 0) {
+                  updateFields.target_price_usd = correctedBuyPrice * multForVerify;
+                }
+              }
+              
+              await supabase.from("flip_positions").update(updateFields).eq("id", positionIdForVerify);
+              console.log(`[FAILSAFE] CORRECTED position ${positionIdForVerify.slice(0, 8)}: qty ${currentQty} → ${onChainBalance}, price $${correctedBuyPrice?.toFixed(10)}`);
+            } else {
+              console.log(`[FAILSAFE] Position ${positionIdForVerify.slice(0, 8)} looks correct (ratio ${ratio.toFixed(2)})`);
+            }
+          } catch (fsErr) {
+            console.error(`[FAILSAFE] Error:`, fsErr);
+          }
+        }, 45000); // Run 45s after buy - after Solscan retries finish
+
         // Calculate SOL amount from USD (reuse solPrice from above)
         const amountSol = (buyAmountUsd || 10) / solPrice;
 
