@@ -1908,14 +1908,16 @@ serve(async (req) => {
             const confirmResult = await hardConfirmTransaction(connection, sig, blockhash, lastValidBlockHeight, 30000);
             
             if (!confirmResult.confirmed) {
-              // Check if it's slippage error - retry with higher slippage
+              // Check if it's a retryable error that needs a fresh quote (slippage, stale tick arrays, etc.)
               const isSlippageError = confirmResult.error?.includes('"Custom":1') || confirmResult.error?.includes('SlippageToleranceExceeded');
-              const retrySlippage = isSlippageError ? Math.min(effectiveSlippage * 2, 2500) : effectiveSlippage; // Double slippage, max 25%
+              const isTickArrayError = confirmResult.error?.includes('"Custom":6023') || confirmResult.error?.includes('InvalidTickArraySequence');
+              const isRetryableQuoteError = isSlippageError || isTickArrayError;
+              const retrySlippage = isRetryableQuoteError ? Math.min(effectiveSlippage * 2, maxRetrySlippage) : effectiveSlippage;
               
               console.log(`Jupiter Legacy tx failed (${confirmResult.error}), retrying with ${retrySlippage} bps slippage...`);
               
               // Re-fetch quote with higher slippage if needed
-              if (isSlippageError && retrySlippage > effectiveSlippage) {
+                if (isRetryableQuoteError) {
                 const retryJ = await tryJupiterSwap({
                   inputMint: String(inputMint),
                   outputMint: String(outputMint),
@@ -1975,11 +1977,13 @@ serve(async (req) => {
               {
               // Check if it's slippage error - retry with higher slippage
               const isSlippageError = confirmResult.error?.includes('"Custom":1') || confirmResult.error?.includes('SlippageToleranceExceeded');
-              const retrySlippage = isSlippageError ? Math.min(effectiveSlippage * 2, 2500) : effectiveSlippage;
+              const isTickArrayError = confirmResult.error?.includes('"Custom":6023') || confirmResult.error?.includes('InvalidTickArraySequence');
+              const isRetryableQuoteError = isSlippageError || isTickArrayError;
+              const retrySlippage = isRetryableQuoteError ? Math.min(effectiveSlippage * 2, maxRetrySlippage) : effectiveSlippage;
               
               console.log(`Jupiter V0 tx failed (${confirmResult.error}), retrying with ${retrySlippage} bps slippage...`);
               
-              if (isSlippageError && retrySlippage > effectiveSlippage) {
+              if (isRetryableQuoteError) {
                 const retryJ = await tryJupiterSwap({
                   inputMint: String(inputMint),
                   outputMint: String(outputMint),
