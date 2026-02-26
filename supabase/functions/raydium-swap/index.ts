@@ -1414,6 +1414,21 @@ serve(async (req) => {
                 const msg = (sendErr as Error)?.message || String(sendErr);
                 lastPumpError = `PumpPortal send failed (pool=${pool}, slippage=${candidateSlippageBps}): ${msg}`;
                 console.error(lastPumpError);
+                
+                // Detect 6024 Overflow from simulation/preflight
+                const isOverflow = msg.includes('6024') || msg.includes('Overflow') || msg.includes('0x1788');
+                if (isOverflow && side === 'buy') {
+                  console.log('PumpPortal 6024 Overflow detected — buy amount too large for bonding curve. Halving amount...');
+                  const currentSol = parseFloat(pumpAmount);
+                  if (currentSol > 0.005) {
+                    pumpAmount = (currentSol / 2).toString();
+                    // Also halve the lamport amount for Jupiter fallback
+                    amount = Math.floor(Number(amount) / 2) as any;
+                    console.log(`Reduced buy to ${pumpAmount} SOL (${amount} lamports), retrying...`);
+                    continue;
+                  }
+                }
+                
                 continue;
               }
 
@@ -1430,6 +1445,19 @@ serve(async (req) => {
                   // Treat Custom:1 as slippage/price-move for bonding curve tokens; retry with higher slippage.
                   sawSlippageError = true;
                   continue;
+                }
+
+                // 6024 Overflow: bonding curve can't handle this buy size
+                const isOverflow = txError.includes('6024') || txError.includes('Overflow') || txError.includes('0x1788');
+                if (isOverflow && side === 'buy') {
+                  console.log('PumpPortal 6024 Overflow on-chain — halving buy amount...');
+                  const currentSol = parseFloat(pumpAmount);
+                  if (currentSol > 0.005) {
+                    pumpAmount = (currentSol / 2).toString();
+                    amount = Math.floor(Number(amount) / 2) as any;
+                    console.log(`Reduced buy to ${pumpAmount} SOL, retrying PumpPortal...`);
+                    continue;
+                  }
                 }
 
                 // 6005 is a common PumpPortal on-chain failure code (often seen after migration)
@@ -1699,13 +1727,44 @@ serve(async (req) => {
             const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
             
             if (!confirmResult.confirmed) {
+              // Check for 6024 Overflow - retry with halved amount
+              const isOverflow = confirmResult.error?.includes('6024') || confirmResult.error?.includes('Overflow') || confirmResult.error?.includes('0x1788');
+              if (isOverflow && side === 'buy' && Number(amount) > 5_000_000) {
+                console.log(`Jupiter 6024 Overflow — halving buy amount from ${amount} to ${Math.floor(Number(amount) / 2)} lamports...`);
+                amount = Math.floor(Number(amount) / 2) as any;
+                
+                const retryJ = await tryJupiterSwap({
+                  inputMint: String(inputMint),
+                  outputMint: String(outputMint),
+                  amount: amount as any,
+                  slippageBps: effectiveSlippage,
+                  userPublicKey: owner.publicKey.toBase58(),
+                  computeUnitPriceMicroLamports,
+                  asLegacy: false,
+                });
+                
+                if ("txs" in retryJ && retryJ.txs.length > 0) {
+                  const retryU8 = b64ToU8(retryJ.txs[0]);
+                  const retryVtx = VersionedTransaction.deserialize(retryU8);
+                  const newer = await connection.getLatestBlockhash("confirmed");
+                  (retryVtx as any).message.recentBlockhash = newer.blockhash;
+                  retryVtx.sign([owner]);
+                  sig = await connection.sendTransaction(retryVtx, { skipPreflight: true, maxRetries: 2 });
+                  
+                  const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
+                  if (!retryResult.confirmed) {
+                    return softError("SWAP_FAILED", `Jupiter swap failed after overflow retry (halved amount): ${retryResult.error}`);
+                  }
+                } else {
+                  return softError("SWAP_FAILED", `Jupiter re-quote failed after overflow: ${(retryJ as any).error || 'no txs'}`);
+                }
+              } else {
               // Check if it's slippage error - retry with higher slippage
               const isSlippageError = confirmResult.error?.includes('"Custom":1') || confirmResult.error?.includes('SlippageToleranceExceeded');
-              const retrySlippage = isSlippageError ? Math.min(effectiveSlippage * 2, 2500) : effectiveSlippage; // Double slippage, max 25%
+              const retrySlippage = isSlippageError ? Math.min(effectiveSlippage * 2, 2500) : effectiveSlippage;
               
               console.log(`Jupiter V0 tx failed (${confirmResult.error}), retrying with ${retrySlippage} bps slippage...`);
               
-              // Re-fetch quote with higher slippage if needed
               if (isSlippageError && retrySlippage > effectiveSlippage) {
                 const retryJ = await tryJupiterSwap({
                   inputMint: String(inputMint),
@@ -1742,6 +1801,7 @@ serve(async (req) => {
                 if (!retryResult.confirmed) {
                   return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
                 }
+              }
               }
             }
             
