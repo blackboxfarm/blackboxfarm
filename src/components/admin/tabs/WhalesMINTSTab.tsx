@@ -16,8 +16,6 @@ const DeveloperProfiles = lazy(() => import("@/components/admin/DeveloperProfile
 const AnalysisJobs = lazy(() => import("@/components/admin/AnalysisJobs").then(m => ({ default: m.AnalysisJobs })));
 const TokenWatchdog = lazy(() => import("@/components/admin/TokenWatchdog").then(m => ({ default: m.TokenWatchdog })));
 const RugInvestigator = lazy(() => import("@/components/admin/RugInvestigator"));
-const PumpfunBlacklist = lazy(() => import("@/components/admin/PumpfunBlacklist").then(m => ({ default: m.PumpfunBlacklist })));
-const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist").then(m => ({ default: m.PumpfunWhitelist })));
 const PumpfunKOLRegistry = lazy(() => import("@/components/admin/PumpfunKOLRegistry"));
 const PumpfunKOLActivity = lazy(() => import("@/components/admin/PumpfunKOLActivity"));
 const PumpfunKOLTwitter = lazy(() => import("@/components/admin/PumpfunKOLTwitter"));
@@ -44,8 +42,6 @@ export default function WhalesMINTSTab() {
         <TabsTrigger value="analysis">📈 Analysis Jobs</TabsTrigger>
         <TabsTrigger value="watchdog">🐕 Token Watchdog</TabsTrigger>
         <TabsTrigger value="rug-investigator">🔍 Rug Investigator</TabsTrigger>
-        <TabsTrigger value="blacklist">🚫 Blacklist Mesh</TabsTrigger>
-        <TabsTrigger value="whitelist">✅ Whitelist Mesh</TabsTrigger>
         <TabsTrigger value="kol-tracker">👑 KOL Tracker</TabsTrigger>
         <TabsTrigger value="dev-teams">👥 Dev Teams</TabsTrigger>
       </TabsList>
@@ -88,12 +84,6 @@ export default function WhalesMINTSTab() {
       </TabsContent>
       <TabsContent value="rug-investigator">
         {activeSubTab === "rug-investigator" && <Suspense fallback={<LazyLoader />}><RugInvestigator /></Suspense>}
-      </TabsContent>
-      <TabsContent value="blacklist">
-        {activeSubTab === "blacklist" && <Suspense fallback={<LazyLoader />}><PumpfunBlacklist /></Suspense>}
-      </TabsContent>
-      <TabsContent value="whitelist">
-        {activeSubTab === "whitelist" && <Suspense fallback={<LazyLoader />}><PumpfunWhitelist /></Suspense>}
       </TabsContent>
       <TabsContent value="kol-tracker">
         {activeSubTab === "kol-tracker" && (
