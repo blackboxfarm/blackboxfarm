@@ -629,7 +629,7 @@ async function fetchTokenMetadata(supabase: any, mint: string): Promise<{ symbol
     // Source 3: Try pump.fun API for .pump tokens
     if (!metadata?.symbol && mint.endsWith('pump')) {
       try {
-        const pumpResponse = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+        const pumpResponse = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
         if (pumpResponse.ok) {
           const pumpData = await pumpResponse.json();
           if (pumpData?.symbol) {
@@ -667,7 +667,7 @@ async function fetchTokenMetadata(supabase: any, mint: string): Promise<{ symbol
 async function getTokenCreationTime(mint: string): Promise<string | null> {
   try {
     // For pump.fun tokens, get creation time from API
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
     if (response.ok) {
       const data = await response.json();
       // pump.fun returns created_timestamp as unix ms or ISO string
@@ -688,7 +688,7 @@ async function getTokenCreationTime(mint: string): Promise<string | null> {
 // Fetch token market data for buyability assessment
 async function getTokenMarketData(mint: string): Promise<{ marketCap: number; bondingProgress: number; price: number } | null> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
     if (response.ok) {
       const data = await response.json();
       return {

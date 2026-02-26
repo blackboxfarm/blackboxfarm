@@ -41,7 +41,7 @@ serve(async (req) => {
         if (position.token_mint.endsWith('pump')) {
           try {
             console.log(`Trying pump.fun API for ${position.token_mint}`);
-            const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${position.token_mint}`);
+            const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${position.token_mint}`);
             if (pumpRes.ok) {
               const pumpData = await pumpRes.json();
               tokenImage = pumpData.image_uri || pumpData.metadata?.image || null;

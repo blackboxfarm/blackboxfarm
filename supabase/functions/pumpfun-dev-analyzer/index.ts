@@ -33,7 +33,7 @@ interface DevAnalysis {
 async function fetchDevTokenHistory(walletAddress: string): Promise<any[]> {
   // Try pump.fun endpoints first with proper headers
   const pumpEndpoints = [
-    `https://frontend-api.pump.fun/coins/user-created-coins/${walletAddress}?limit=200&offset=0`,
+    `https://frontend-api-v3.pump.fun/coins/user-created-coins/${walletAddress}?limit=200&offset=0`,
     `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}?limit=200&offset=0`
   ];
   

@@ -80,7 +80,7 @@ async function getConfig(supabase: any): Promise<BuyConfig> {
 // Check if token is still on bonding curve (pump.fun)
 async function checkBondingCurve(mint: string): Promise<{ onBondingCurve: boolean; bondingCurvePct: number | null }> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
     if (!response.ok) {
       return { onBondingCurve: false, bondingCurvePct: null };
     }

@@ -81,7 +81,7 @@ async function getPriceUSDFromDexScreener(mint: string): Promise<number | null> 
 // For pump.fun tokens, try pump.fun API first
 async function getPriceUSDFromPumpFun(mint: string): Promise<number | null> {
   try {
-    const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000)
     });

@@ -72,7 +72,7 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
     // PRIMARY: Use pump.fun API directly (source of truth)
     console.log('Fetching latest tokens from pump.fun API...');
     const pumpResponse = await fetch(
-      `https://frontend-api.pump.fun/coins?sort=created_timestamp&order=DESC&limit=${limit}`,
+      `https://frontend-api-v3.pump.fun/coins?sort=created_timestamp&order=DESC&limit=${limit}`,
       {
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(10000)
@@ -162,7 +162,7 @@ async function getSolPrice(supabase: any): Promise<number> {
 // Check for Mayhem Mode (hard reject) - ONE TIME ONLY
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
     if (!response.ok) return false;
     
     const data = await response.json();

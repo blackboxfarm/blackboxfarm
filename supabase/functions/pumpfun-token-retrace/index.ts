@@ -43,7 +43,7 @@ interface RetraceResult {
 async function fetchPumpfunToken(mint: string): Promise<PumpfunCoin | null> {
   try {
     const response = await fetch(
-      `https://frontend-api.pump.fun/coins/${mint}`,
+      `https://frontend-api-v3.pump.fun/coins/${mint}`,
       {
         headers: {
           'Accept': 'application/json',
@@ -69,7 +69,7 @@ async function fetchTokenReplies(mint: string, limit = 50): Promise<any[]> {
   try {
     // Pump.fun stores replies by mint address
     const response = await fetch(
-      `https://frontend-api.pump.fun/replies/${mint}?limit=${limit}&offset=0`,
+      `https://frontend-api-v3.pump.fun/replies/${mint}?limit=${limit}&offset=0`,
       {
         headers: {
           'Accept': 'application/json',
@@ -90,7 +90,7 @@ async function fetchTokenReplies(mint: string, limit = 50): Promise<any[]> {
 async function checkLivestream(mint: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://frontend-api.pump.fun/clips/${mint}`,
+      `https://frontend-api-v3.pump.fun/clips/${mint}`,
       {
         headers: {
           'Accept': 'application/json',

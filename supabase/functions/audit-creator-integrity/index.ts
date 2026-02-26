@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     for (const token of tokens) {
       try {
         const pumpResponse = await fetch(
-          `https://frontend-api.pump.fun/coins/${token.token_mint}`,
+          `https://frontend-api-v3.pump.fun/coins/${token.token_mint}`,
           {
             headers: { 'Accept': 'application/json' },
             signal: AbortSignal.timeout(5000),

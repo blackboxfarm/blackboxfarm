@@ -144,7 +144,7 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
 // === MAYHEM MODE CHECK ===
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!response.ok) return false;
@@ -352,7 +352,7 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   // Try pump.fun first
   try {
     const response = await fetchWithBackoff(
-      `https://frontend-api.pump.fun/coins/${mint}`,
+      `https://frontend-api-v3.pump.fun/coins/${mint}`,
       { headers: { 'Accept': 'application/json' } }
     );
 

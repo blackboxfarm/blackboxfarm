@@ -120,7 +120,7 @@ async function getSolPrice(): Promise<number> {
 async function getTokenPrice(mint: string, solPrice: number): Promise<{ priceUsd: number; priceSol: number } | null> {
   // PRIMARY: Pump.fun bonding curve API — deterministic, real-time, best source
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
       headers: { 'Accept': 'application/json' }
     });
     if (response.ok) {
@@ -698,7 +698,7 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
   
   // Try to get token info from pump.fun
   try {
-    const pumpResponse = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+    const pumpResponse = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' }
     });
     if (pumpResponse.ok) {

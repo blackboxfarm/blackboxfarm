@@ -146,7 +146,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
   // STEP 1: Try to get username first via profile API
   try {
     console.log('[Oracle] Fetching user profile to get username...');
-    const profileUrl = `https://frontend-api.pump.fun/users/${walletAddress}`;
+    const profileUrl = `https://frontend-api-v3.pump.fun/users/${walletAddress}`;
     const profileRes = await fetch(profileUrl, { headers });
     
     if (profileRes.ok) {
@@ -164,7 +164,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
   
   // STEP 2: Try direct API with wallet address (paginated)
   const baseEndpoints = [
-    `https://frontend-api.pump.fun/coins/user-created-coins/${walletAddress}`,
+    `https://frontend-api-v3.pump.fun/coins/user-created-coins/${walletAddress}`,
     `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}`
   ];
   

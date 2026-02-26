@@ -19,7 +19,7 @@ interface TokenMetadata {
 
 async function fetchPumpFunData(mint: string): Promise<TokenMetadata | null> {
   try {
-    const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!res.ok) return null;

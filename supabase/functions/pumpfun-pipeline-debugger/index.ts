@@ -914,7 +914,7 @@ async function runDiscoveryAndIntake(supabase: any): Promise<any> {
 // Fetch token metrics from pump.fun for real-time updates
 async function fetchPumpFunMetrics(mint: string): Promise<any | null> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
       headers: { 'Accept': 'application/json' },
     });
     

@@ -35,7 +35,7 @@ interface TokenMint {
 async function fetchPumpFunData(mint: string): Promise<Partial<TokenMint> & { pumpFunGraduated?: boolean }> {
   try {
     // Try pump.fun API for bonding curve and trading data
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
     if (!response.ok) {
       // If pump.fun returns 404, token might have graduated or doesn't exist on pump
       return { pumpFunGraduated: response.status === 404 ? undefined : undefined };

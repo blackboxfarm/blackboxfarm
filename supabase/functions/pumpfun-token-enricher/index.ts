@@ -647,7 +647,7 @@ async function checkTokenAuthorities(
 // Fetch token data from pump.fun API for price/volume
 async function fetchPumpFunData(mint: string): Promise<any> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
     if (!response.ok) return null;
     return await response.json();
   } catch (error) {

@@ -26,7 +26,7 @@ export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: 
         requestType: 'creator_lookup',
       });
       
-      const pumpResp = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+      const pumpResp = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(5000)
       });
