@@ -1598,52 +1598,10 @@ serve(async (req) => {
 
                       const isOverflow = msg.includes('6024') || msg.includes('Overflow') || msg.includes('0x1788');
                       if (isOverflow) {
-                        // If the FIRST attempt at full amount overflows, the bonding curve is likely
-                        // complete/graduated. Try token-denominated once, then skip to next pool immediately.
-                        if (attemptLamports === remainingLamports && !fullAmountOverflowed) {
-                          fullAmountOverflowed = true;
-                          console.log(`PumpPortal full-amount overflow on pool=${pool} — curve likely graduated, trying token-denominated then next pool`);
-                          
-                          if (!attemptedTokenModeFallback) {
-                            attemptedTokenModeFallback = true;
-                            const tokenModeFallback = await tryTokenDenominatedBuyFallback(
-                              attemptLamports, pool, candidateSlippageBps
-                            );
-                            if (tokenModeFallback.signature) {
-                              console.log(`PumpPortal token-denominated buy successful (pool=${pool}): ${tokenModeFallback.signature}`);
-                              pumpExecutedSignatures.push(tokenModeFallback.signature);
-                              pumpExecutedLamports += attemptLamports;
-                              chunkSent = true;
-                              break;
-                            }
-                            console.log(`Token-denominated fallback failed: ${tokenModeFallback.error}`);
-                          }
-                          // Skip chunk shrinking entirely for this pool — curve is complete
-                          overflowExhausted = true;
-                          break;
-                        }
-
-                        if (!attemptedTokenModeFallback) {
-                          attemptedTokenModeFallback = true;
-                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(
-                            attemptLamports, pool, candidateSlippageBps
-                          );
-                          if (tokenModeFallback.signature) {
-                            pumpExecutedSignatures.push(tokenModeFallback.signature);
-                            pumpExecutedLamports += attemptLamports;
-                            chunkSent = true;
-                            break;
-                          }
-                          console.log(`Token-denominated fallback failed on send overflow: ${tokenModeFallback.error}`);
-                        }
-
-                        const reduced = Math.floor(attemptLamports / 2);
-                        if (reduced >= minChunkLamports) {
-                          console.log(`PumpPortal overflow on send; reducing ${attemptLamports} → ${reduced} lamports`);
-                          attemptLamports = reduced;
-                          continue;
-                        }
-                        overflowExhausted = true;
+                        // 6024 = bonding curve math overflow. Curve is DONE. Exit immediately to DEX routing.
+                        console.log(`PumpPortal 6024 overflow (pool=${pool}) — bonding curve complete, exiting to DEX routing`);
+                        needJupiter = true;
+                        jupReason = `PumpPortal 6024 overflow — bonding curve complete`;
                         break;
                       }
 
@@ -1661,43 +1619,10 @@ serve(async (req) => {
 
                       const isOverflow = txError.includes('6024') || txError.includes('Overflow') || txError.includes('0x1788');
                       if (isOverflow) {
-                        if (attemptLamports === remainingLamports && !fullAmountOverflowed) {
-                          fullAmountOverflowed = true;
-                          console.log(`PumpPortal full-amount overflow on-chain (pool=${pool}) — curve likely graduated, skipping to next pool`);
-                          if (!attemptedTokenModeFallback) {
-                            attemptedTokenModeFallback = true;
-                            const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
-                            if (tokenModeFallback.signature) {
-                              pumpExecutedSignatures.push(tokenModeFallback.signature);
-                              pumpExecutedLamports += attemptLamports;
-                              chunkSent = true;
-                              break;
-                            }
-                            console.log(`Token-denominated fallback failed: ${tokenModeFallback.error}`);
-                          }
-                          overflowExhausted = true;
-                          break;
-                        }
-
-                        if (!attemptedTokenModeFallback) {
-                          attemptedTokenModeFallback = true;
-                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
-                          if (tokenModeFallback.signature) {
-                            pumpExecutedSignatures.push(tokenModeFallback.signature);
-                            pumpExecutedLamports += attemptLamports;
-                            chunkSent = true;
-                            break;
-                          }
-                          console.log(`Token-denominated fallback failed on on-chain overflow: ${tokenModeFallback.error}`);
-                        }
-
-                        const reduced = Math.floor(attemptLamports / 2);
-                        if (reduced >= minChunkLamports) {
-                          console.log(`PumpPortal overflow on-chain; reducing ${attemptLamports} → ${reduced} lamports`);
-                          attemptLamports = reduced;
-                          continue;
-                        }
-                        overflowExhausted = true;
+                        // 6024 on-chain = bonding curve complete. Exit immediately.
+                        console.log(`PumpPortal 6024 on-chain overflow (pool=${pool}) — bonding curve complete, exiting to DEX routing`);
+                        needJupiter = true;
+                        jupReason = `PumpPortal 6024 overflow on-chain — bonding curve complete`;
                         break;
                       }
 
@@ -1729,45 +1654,10 @@ serve(async (req) => {
 
                     const isOverflow = pumpResult.error.includes('6024') || pumpResult.error.includes('Overflow') || pumpResult.error.includes('0x1788');
                     if (isOverflow) {
-                      if (attemptLamports === remainingLamports && !fullAmountOverflowed) {
-                        fullAmountOverflowed = true;
-                        console.log(`PumpPortal full-amount build overflow (pool=${pool}) — curve likely graduated, skipping to next pool`);
-                        if (!attemptedTokenModeFallback) {
-                          attemptedTokenModeFallback = true;
-                          const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
-                          if (tokenModeFallback.signature) {
-                            pumpExecutedSignatures.push(tokenModeFallback.signature);
-                            pumpExecutedLamports += attemptLamports;
-                            chunkSent = true;
-                            break;
-                          }
-                          console.log(`Token-denominated fallback failed: ${tokenModeFallback.error}`);
-                        }
-                        overflowExhausted = true;
-                      }
-
-                      if (!overflowExhausted && !attemptedTokenModeFallback) {
-                        attemptedTokenModeFallback = true;
-                        const tokenModeFallback = await tryTokenDenominatedBuyFallback(attemptLamports, pool, candidateSlippageBps);
-                        if (tokenModeFallback.signature) {
-                          pumpExecutedSignatures.push(tokenModeFallback.signature);
-                          pumpExecutedLamports += attemptLamports;
-                          chunkSent = true;
-                          break;
-                        }
-                        console.log(`Token-denominated fallback failed on build overflow: ${tokenModeFallback.error}`);
-                      }
-
-                      if (!overflowExhausted) {
-                        const reduced = Math.floor(attemptLamports / 2);
-                        if (reduced >= minChunkLamports) {
-                          console.log(`PumpPortal build overflow; reducing ${attemptLamports} → ${reduced} lamports`);
-                          attemptLamports = reduced;
-                          continue;
-                        }
-                        overflowExhausted = true;
-                      }
-                      overflowExhausted = true;
+                      // 6024 build overflow = bonding curve complete. Exit immediately.
+                      console.log(`PumpPortal 6024 build overflow (pool=${pool}) — bonding curve complete, exiting to DEX routing`);
+                      needJupiter = true;
+                      jupReason = `PumpPortal 6024 overflow — bonding curve complete`;
                     }
                     break;
                   }
@@ -2060,7 +1950,15 @@ serve(async (req) => {
       const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 1000) : baseSlippage; // 10% min for pump tokens
       const maxRetrySlippage = isPumpToken ? 5000 : 2500; // up to 50% for pump tokens
       
-      console.log(`Jupiter fallback with slippage: ${effectiveSlippage} bps (pump token: ${isPumpToken})`);
+      console.log(`Jupiter fallback with slippage: ${effectiveSlippage} bps (pump token: ${isPumpToken}), reason: ${jupReason}`);
+
+      // If falling through from 6024 overflow (graduated token), wait briefly for DEX aggregator indexing
+      const is6024Fallthrough = jupReason?.includes('6024') || jupReason?.includes('overflow');
+      if (is6024Fallthrough) {
+        console.log('Graduated token detected — waiting 2s for DEX aggregator indexing...');
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
       const j = await tryJupiterSwap({
         inputMint: String(inputMint),
         outputMint: String(outputMint),
@@ -2233,6 +2131,39 @@ serve(async (req) => {
         jupiterFailureForFallback ?? (("txs" in j) ? "Jupiter transaction failed after retries" : j.error);
 
       if (!("txs" in j) || jupiterFailureForFallback) {
+        // If this is a 6024 graduated token and Jupiter said NOT_TRADABLE, retry once after another delay
+        const jupFailed = jupiterFailureForFallback ?? j?.error ?? '';
+        if (is6024Fallthrough && (jupFailed.includes('NOT_TRADABLE') || jupFailed.includes('Route not found'))) {
+          console.log('Jupiter not tradable for graduated token — retrying after 3s delay...');
+          await new Promise(r => setTimeout(r, 3000));
+          const j2 = await tryJupiterSwap({
+            inputMint: String(inputMint),
+            outputMint: String(outputMint),
+            amount: amount as any,
+            slippageBps: effectiveSlippage,
+            userPublicKey: owner.publicKey.toBase58(),
+            computeUnitPriceMicroLamports,
+            asLegacy: String(txVersion).toUpperCase() === "LEGACY",
+          });
+          if ("txs" in j2 && j2.txs.length > 0) {
+            const u8 = b64ToU8(j2.txs[0]);
+            const vtx2 = VersionedTransaction.deserialize(u8);
+            const fresh2 = await connection.getLatestBlockhash("confirmed");
+            (vtx2 as any).message.recentBlockhash = fresh2.blockhash;
+            vtx2.sign([owner]);
+            const sig2 = await connection.sendTransaction(vtx2, { skipPreflight: false, maxRetries: 3 });
+            const confirm2 = await hardConfirmTransaction(connection, sig2, fresh2.blockhash, fresh2.lastValidBlockHeight, 30000);
+            if (confirm2.confirmed) {
+              console.log('Jupiter retry succeeded for graduated token:', sig2);
+              const solInputLamports = side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() ? Number(amount) : null;
+              return ok({ signatures: [sig2], source: "jupiter", outAmount: null, solInputLamports });
+            }
+            console.log('Jupiter retry also failed:', confirm2.error);
+          } else {
+            console.log('Jupiter retry quote also failed:', ("error" in j2) ? j2.error : 'no txs');
+          }
+        }
+
         // Jupiter also failed - try Meteora direct API for DLMM pools (graduated tokens)
         console.log(`Jupiter failed (${jupiterFailureMessage}), trying Meteora direct API...`);
         
