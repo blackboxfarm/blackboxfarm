@@ -14,7 +14,7 @@ const corsHeaders = {
  */
 async function resolvePumpFunCreator(tokenMint: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
     if (!res.ok) {
       console.log(`[CreatorLinker] pump.fun API returned ${res.status} for ${tokenMint}`);
       return null;

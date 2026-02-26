@@ -108,7 +108,7 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
   // 1. PRIMARY: Pump.fun bonding curve API — deterministic, real-time, best source for pre-graduation tokens
   for (const mint of mints) {
     try {
-      const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+      const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
         headers: { 'Accept': 'application/json' }
       });
       if (response.ok) {

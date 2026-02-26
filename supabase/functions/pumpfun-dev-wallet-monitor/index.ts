@@ -209,7 +209,7 @@ async function checkDevLaunchedNew(devWallet: string, tokenMint: string, tokenCr
   try {
     // Query pump.fun for tokens created by this wallet after the current token
     const response = await fetchWithBackoff(
-      `https://frontend-api.pump.fun/coins/user-created-coins/${devWallet}?limit=10`
+      `https://frontend-api-v3.pump.fun/coins/user-created-coins/${devWallet}?limit=10`
     );
     
     if (!response.ok) {

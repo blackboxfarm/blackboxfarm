@@ -39,7 +39,7 @@ async function fetchDexScreenerData(tokenMint: string) {
 // Fetch from pump.fun for minted_at
 async function fetchPumpFunData(tokenMint: string) {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { "Accept": "application/json" },
     });
     

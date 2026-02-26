@@ -32,7 +32,7 @@ interface PlatformAdapter {
 
 const platformAdapters: PlatformAdapter[] = [
   { key: 'onchain', type: 'rpc', priority: 100 },
-  { key: 'pumpfun', type: 'api', priority: 95, apiEndpoint: 'https://frontend-api.pump.fun/coins/{MINT}' },
+  { key: 'pumpfun', type: 'api', priority: 95, apiEndpoint: 'https://frontend-api-v3.pump.fun/coins/{MINT}' },
   { key: 'bagsfm', type: 'api', priority: 95, apiEndpoint: 'https://bags.fm/{MINT}' }, // Will scrape public page
   { key: 'coingecko', type: 'api', priority: 90, apiEndpoint: 'https://api.coingecko.com/api/v3/coins/solana/contract/{MINT}' },
   { key: 'dexscreener', type: 'api', priority: 85, apiEndpoint: 'https://api.dexscreener.com/latest/dex/tokens/{MINT}' },

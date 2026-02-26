@@ -87,7 +87,7 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
   if (tokenMint.endsWith('pump')) {
     try {
       console.log(`Fetching metadata from pump.fun API for ${tokenMint}`);
-      const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
+      const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
       if (pumpRes.ok) {
         const pumpData = await pumpRes.json();
         if (pumpData?.symbol) {

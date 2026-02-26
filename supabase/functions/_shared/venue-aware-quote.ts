@@ -164,7 +164,7 @@ export async function detectVenue(
     
     // First try pump.fun API
     try {
-      const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+      const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(3000)
       });
@@ -233,7 +233,7 @@ export async function detectVenue(
   // STEP 1: Check pump.fun via HTTP API (fastest for pump.fun tokens)
   // ============================================
   try {
-    const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+    const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(3000)
     });
@@ -754,7 +754,7 @@ export async function getVenueAwareQuote(
   if (venue === 'pumpfun' && isOnCurve) {
     // 1) Try pump.fun HTTP API reserves (fast)
     try {
-      const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+      const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(5000)
       });

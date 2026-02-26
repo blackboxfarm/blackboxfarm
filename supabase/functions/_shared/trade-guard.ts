@@ -362,7 +362,7 @@ async function getBondingCurveQuote(
   try {
     console.log(`[TradeGuard] Fetching pump.fun bonding curve quote for ${tokenMint}`);
     
-    const res = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000)
     });

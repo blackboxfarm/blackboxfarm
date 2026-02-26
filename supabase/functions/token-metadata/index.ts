@@ -123,7 +123,7 @@ async function fetchPumpFunMetadata(mintAddress: string): Promise<{
 } | null> {
   try {
     console.log(`Fetching pump.fun metadata for ${mintAddress}`);
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mintAddress}`, {
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mintAddress}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000)
     });

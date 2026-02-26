@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
 async function checkBuyability(tokenMint: string, config: SmartBuyConfig, creatorWallet?: string): Promise<BuyabilityResult> {
   try {
     // 1. Fetch current token data from pump.fun
-    const pumpResponse = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
+    const pumpResponse = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
     
     if (!pumpResponse.ok) {
       return {
@@ -340,7 +340,7 @@ async function checkBuyability(tokenMint: string, config: SmartBuyConfig, creato
     const devWallet = creatorWallet || tokenData.creator;
     
     try {
-      const tradesResponse = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}/trades?limit=50&offset=0`);
+      const tradesResponse = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}/trades?limit=50&offset=0`);
       if (tradesResponse.ok) {
         const trades = await tradesResponse.json();
         const buyers = new Set<string>();

@@ -13,7 +13,7 @@ function isPumpFunToken(tokenMint: string): boolean {
 // Fetch creator directly from pump.fun API
 async function fetchPumpFunCreator(tokenMint: string): Promise<string | null> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000),
     });

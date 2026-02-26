@@ -546,7 +546,7 @@ async function fetchPumpFunApiPrice(tokenMint: string, solPriceUsd: number): Pro
   const start = Date.now();
   
   try {
-    const res = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000)
     });

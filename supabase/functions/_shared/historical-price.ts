@@ -102,7 +102,7 @@ async function tryPumpFunTradeHistory(
   try {
     // pump.fun API returns recent trades for a token
     const response = await fetch(
-      `https://frontend-api.pump.fun/trades/latest/${tokenMint}?limit=100`,
+      `https://frontend-api-v3.pump.fun/trades/latest/${tokenMint}?limit=100`,
       { signal: AbortSignal.timeout(5000) }
     );
     

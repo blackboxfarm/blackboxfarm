@@ -201,7 +201,7 @@ async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: 
 async function checkDevWalletHistory(creatorWallet: string): Promise<{ isSerialScammer: boolean; tokenCount: number; reason?: string }> {
   try {
     // Query pump.fun API for creator's token history
-    const response = await fetch(`https://frontend-api.pump.fun/coins/user-created-coins/${creatorWallet}?limit=50&offset=0`);
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/user-created-coins/${creatorWallet}?limit=50&offset=0`);
     
     if (!response.ok) {
       console.log(`   ⚠️ Could not fetch dev history for ${creatorWallet.slice(0,8)}...`);

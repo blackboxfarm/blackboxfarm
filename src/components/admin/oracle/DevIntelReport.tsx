@@ -130,7 +130,7 @@ export default function DevIntelReport() {
       // PRIMARY: For pump.fun tokens, call pump.fun API directly (authoritative source)
       if (originalInput.toLowerCase().endsWith("pump")) {
         try {
-          const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${originalInput}`);
+          const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${originalInput}`);
           if (pumpRes.ok) {
             const pumpData = await pumpRes.json();
             if (pumpData?.creator && typeof pumpData.creator === "string" && pumpData.creator.length >= 32) {

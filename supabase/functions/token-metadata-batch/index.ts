@@ -18,7 +18,7 @@ interface TokenInfo {
 
 async function fetchPumpFunData(mint: string): Promise<Partial<TokenInfo>> {
   try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!response.ok) return {};
