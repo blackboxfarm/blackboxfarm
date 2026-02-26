@@ -8,6 +8,7 @@ import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 
 const DevIntelReport = lazy(() => import("@/components/admin/oracle/DevIntelReport"));
+const OracleMasterSpider = lazy(() => import("@/components/admin/oracle/OracleMasterSpider"));
 
 const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 const XCommunityManager = lazy(() => import("@/components/admin/oracle/XCommunityManager"));
@@ -16,7 +17,7 @@ const PumpfunBlacklist = lazy(() => import("@/components/admin/PumpfunBlacklist"
 const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist").then(m => ({ default: m.PumpfunWhitelist })));
 
 const OracleTab = () => {
-  const [activeSubTab, setActiveSubTab] = useState("lookup");
+  const [activeSubTab, setActiveSubTab] = useState("spider");
 
   return (
     <div className="space-y-6">
@@ -33,6 +34,9 @@ const OracleTab = () => {
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
         <TabsList className="flex flex-wrap gap-1">
+          <TabsTrigger value="spider" className="data-[state=active]:bg-violet-500/20">
+            🕷️ Master Spider
+          </TabsTrigger>
           <TabsTrigger value="lookup" className="data-[state=active]:bg-primary/20">
             🔍 Intel Lookup
           </TabsTrigger>
@@ -64,6 +68,12 @@ const OracleTab = () => {
             ✅ Whitelist Mesh
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="spider" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <OracleMasterSpider />
+          </Suspense>
+        </TabsContent>
 
         <TabsContent value="lookup" className="space-y-4">
           <OracleIntelLookup />

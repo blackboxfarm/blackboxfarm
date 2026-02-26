@@ -444,3 +444,6 @@ verify_jwt = false
 
 [functions.token-flow-tracer]
 verify_jwt = false
+
+[functions.oracle-master-spider]
+verify_jwt = false
