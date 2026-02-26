@@ -42,7 +42,7 @@ serve(async (req) => {
     // Get all holding positions
     const { data: holdingPositions, error: posErr } = await supabase
       .from("flip_positions")
-      .select("id, wallet_id, token_mint, token_symbol, status, buy_signature, buy_executed_at, created_at")
+      .select("id, wallet_id, token_mint, token_symbol, status, buy_signature, buy_executed_at, created_at, quantity_tokens, buy_amount_usd, buy_price_usd")
       .eq("status", "holding")
       .order("created_at", { ascending: false });
 
@@ -161,6 +161,42 @@ serve(async (req) => {
               console.log(`PHANTOM: ${pos.token_symbol} (${tokenMint}) - no on-chain balance at all`);
             } else {
               console.log(`VALID: ${pos.token_symbol} (${tokenMint}) - balance: ${actualBalance} (${tokenPositions.length} positions)`);
+              
+              // Backfill quantity_tokens from on-chain data if missing or significantly wrong
+              // For multiple positions of same token, split proportionally by buy_amount_usd
+              const totalInvested = tokenPositions.reduce((s, p) => s + (p.buy_amount_usd || 0), 0);
+              const posShare = totalInvested > 0 && tokenPositions.length > 1
+                ? (pos.buy_amount_usd || 0) / totalInvested
+                : 1;
+              const expectedQuantity = actualBalance * posShare;
+              
+              const currentQty = pos.quantity_tokens;
+              const needsBackfill = !currentQty || 
+                (currentQty > 0 && expectedQuantity > 0 && (currentQty / expectedQuantity < 0.01 || currentQty / expectedQuantity > 100));
+              
+              if (needsBackfill && !dryRun && expectedQuantity > 0) {
+                const correctedBuyPrice = (pos.buy_amount_usd && pos.buy_amount_usd > 0)
+                  ? pos.buy_amount_usd / expectedQuantity
+                  : null;
+                
+                const updateFields: Record<string, any> = { quantity_tokens: expectedQuantity };
+                if (correctedBuyPrice !== null) {
+                  updateFields.buy_price_usd = correctedBuyPrice;
+                }
+                
+                const { error: backfillErr } = await supabase
+                  .from("flip_positions")
+                  .update(updateFields)
+                  .eq("id", pos.id);
+                
+                if (!backfillErr) {
+                  console.log(`BACKFILLED: ${pos.token_symbol} quantity_tokens=${expectedQuantity}, buy_price_usd=${correctedBuyPrice}`);
+                } else {
+                  console.error(`Failed to backfill ${pos.id}:`, backfillErr);
+                }
+              } else if (needsBackfill && dryRun) {
+                console.log(`WOULD BACKFILL: ${pos.token_symbol} from ${currentQty} → ${expectedQuantity} tokens`);
+              }
             }
           }
         }
@@ -200,11 +236,14 @@ serve(async (req) => {
       }
     }
 
+    const backfilledCount = results.filter(r => !r.isPhantom && r.hasOnChainBalance).length;
+    
     return ok({
       totalHolding: holdingPositions.length,
       phantomCount: phantomPositions.length,
       validCount: holdingPositions.length - phantomPositions.length,
       cleanedCount,
+      backfilledCount,
       dryRun,
       results,
       phantomPositionIds: phantomPositions,
