@@ -100,6 +100,7 @@ const OracleMasterSpider = () => {
   const [xAccount, setXAccount] = useState("");
   const [actorType, setActorType] = useState<'auto' | 'bad' | 'good'>('auto');
   const [reason, setReason] = useState("");
+  const [commentLog, setCommentLog] = useState<string[]>([]);
   const [result, setResult] = useState<SpiderResult | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
@@ -115,9 +116,14 @@ const OracleMasterSpider = () => {
 
   const spiderMutation = useMutation({
     mutationFn: async () => {
+      // Build cumulative reason from comment log + current reason
+      const allComments = [...commentLog];
+      if (reason.trim()) allComments.push(reason.trim());
+      const fullReason = allComments.join(' | ');
+
       const body: Record<string, any> = {
         forceVerdict: actorType !== 'auto' ? (actorType === 'bad' ? 'red' : 'green') : undefined,
-        reason: reason.trim() || undefined,
+        reason: fullReason || undefined,
       };
 
       // Send structured multi-input
@@ -139,6 +145,13 @@ const OracleMasterSpider = () => {
     onSuccess: (data) => {
       setResult(data);
       setStepsOpen(true);
+      // Archive current comment into the log
+      if (reason.trim()) {
+        const timestamp = new Date().toLocaleTimeString();
+        const prefix = actorType === 'bad' ? '🔴' : actorType === 'good' ? '🟢' : '🔍';
+        setCommentLog(prev => [...prev, `[${timestamp}] ${prefix} ${reason.trim()}`]);
+        setReason("");
+      }
       const v = VERDICT_CONFIG[data.verdict];
       toast[data.verdict === 'red' ? 'error' : data.verdict === 'green' ? 'success' : 'info'](
         `${v.label}: ${data.verdictReason.slice(0, 80)}`
@@ -188,7 +201,10 @@ const OracleMasterSpider = () => {
             Oracle Master Spider
           </CardTitle>
           <CardDescription>
-            Submit a dev wallet, token mint, and/or X handle. At least one field required. Choose AUTO, BAD ACTOR, or GOOD ACTOR.
+            Submit a dev wallet, token mint, and/or X handle. At least one field required. QUERY to spider without verdict, or force BAD/GOOD ACTOR.
+          </CardDescription>
+          <CardDescription className="text-xs text-muted-foreground/70">
+            Comments are additive — each submission appends to the comment history for this session.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -241,28 +257,43 @@ const OracleMasterSpider = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="auto">🔍 AUTO DETECT</SelectItem>
+              <SelectItem value="auto">🔍 QUERY</SelectItem>
               <SelectItem value="bad">🔴 BAD ACTOR</SelectItem>
               <SelectItem value="good">🟢 GOOD ACTOR</SelectItem>
             </SelectContent>
           </Select>
 
-          {actorType !== 'auto' && (
-            <Textarea
-              placeholder={actorType === 'bad' 
-                ? "Why is this a bad actor? e.g. Serial rugger, scam token, coordinated pump & dump..." 
-                : "Why is this a good actor? e.g. Trusted builder, graduated multiple tokens, KOL verified..."}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className={`text-sm min-h-[60px] ${
-                actorType === 'bad' ? 'border-destructive/50' : 'border-green-500/50'
-              }`}
-              disabled={spiderMutation.isPending}
-            />
+          {/* Comment log (previous submissions) */}
+          {commentLog.length > 0 && (
+            <div className="rounded-md border border-muted bg-muted/20 p-2 space-y-1 max-h-[120px] overflow-y-auto">
+              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Comment History</div>
+              {commentLog.map((c, i) => (
+                <div key={i} className="text-xs text-muted-foreground font-mono leading-tight">{c}</div>
+              ))}
+            </div>
           )}
+
+          {/* Always-visible comment field */}
+          <Textarea
+            placeholder={
+              actorType === 'bad' 
+                ? "Why is this a bad actor? e.g. Serial rugger, scam token, coordinated pump & dump..." 
+                : actorType === 'good'
+                ? "Why is this a good actor? e.g. Trusted builder, graduated multiple tokens, KOL verified..."
+                : "Notes for this query... e.g. Investigating connections, checking prior launches..."
+            }
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className={`text-sm min-h-[60px] ${
+              actorType === 'bad' ? 'border-destructive/50' : 
+              actorType === 'good' ? 'border-green-500/50' : 
+              'border-violet-500/30'
+            }`}
+            disabled={spiderMutation.isPending}
+          />
           <Button
             onClick={handleSpider}
-            disabled={!hasInput || spiderMutation.isPending || (actorType !== 'auto' && !reason.trim())}
+            disabled={!hasInput || spiderMutation.isPending}
             className={`w-full ${
               actorType === 'bad' ? 'bg-destructive hover:bg-destructive/80' :
               actorType === 'good' ? 'bg-green-600 hover:bg-green-700' :
@@ -281,7 +312,7 @@ const OracleMasterSpider = () => {
                  <Search className="h-4 w-4 mr-2" />}
                 {actorType === 'bad' ? '🕷️ SPIDER & BLACKLIST' :
                  actorType === 'good' ? '🕷️ SPIDER & WHITELIST' :
-                 '🕷️ SPIDER'}
+                 '🕷️ QUERY & SPIDER'}
               </>
             )}
           </Button>
