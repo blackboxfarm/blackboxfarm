@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { query, forceVerdict, autoUpdate = true } = await req.json();
+    const { query, forceVerdict, reason, autoUpdate = true } = await req.json();
 
     if (!query || typeof query !== 'string' || query.trim().length < 2) {
       return new Response(JSON.stringify({ error: 'Query required (token mint, wallet, or @handle)' }), {
@@ -284,7 +284,9 @@ Deno.serve(async (req) => {
 
     if (forceVerdict) {
       verdict = forceVerdict;
-      verdictReason = `Manually classified as ${forceVerdict}`;
+      verdictReason = reason 
+        ? `Manual submission: ${reason}` 
+        : `Manually classified as ${forceVerdict === 'red' ? 'BAD ACTOR' : 'GOOD ACTOR'}`;
     } else if (isBlacklisted || isRepBad) {
       verdict = 'red';
       verdictReason = isBlacklisted

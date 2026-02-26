@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Search, Bug, Shield, ShieldAlert, ShieldCheck, Network, Wallet,
   ChevronDown, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
-  AlertTriangle, Twitter, Globe, MessageCircle, Coins
+  AlertTriangle, Twitter, Globe, MessageCircle, Coins, Gavel
 } from "lucide-react";
 
 interface SpiderStep {
@@ -94,6 +96,8 @@ const VERDICT_CONFIG = {
 
 const OracleMasterSpider = () => {
   const [query, setQuery] = useState("");
+  const [actorType, setActorType] = useState<'auto' | 'bad' | 'good'>('auto');
+  const [reason, setReason] = useState("");
   const [result, setResult] = useState<SpiderResult | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
@@ -103,7 +107,11 @@ const OracleMasterSpider = () => {
   const spiderMutation = useMutation({
     mutationFn: async (q: string) => {
       const { data, error } = await supabase.functions.invoke('oracle-master-spider', {
-        body: { query: q }
+        body: { 
+          query: q,
+          forceVerdict: actorType !== 'auto' ? (actorType === 'bad' ? 'red' : 'green') : undefined,
+          reason: reason.trim() || undefined
+        }
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -161,10 +169,10 @@ const OracleMasterSpider = () => {
             Oracle Master Spider
           </CardTitle>
           <CardDescription>
-            Paste a token mint, wallet address, or @X handle — Spider will resolve the creator, trace the funding chain, find all tokens, scrape socials, and classify as RED/GREEN/YELLOW.
+            Submit a token mint, wallet address, or @X handle. Choose AUTO to let Spider decide, or force BAD/GOOD ACTOR with a reason.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="flex gap-3">
             <Input
               placeholder="Token mint, wallet address, or @XHandle..."
@@ -174,24 +182,58 @@ const OracleMasterSpider = () => {
               className="flex-1 font-mono text-sm"
               disabled={spiderMutation.isPending}
             />
-            <Button
-              onClick={handleSpider}
-              disabled={!query.trim() || spiderMutation.isPending}
-              className="bg-violet-600 hover:bg-violet-700 min-w-[140px]"
-            >
-              {spiderMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Spidering...
-                </>
-              ) : (
-                <>
-                  <Search className="h-4 w-4 mr-2" />
-                  🕷️ SPIDER
-                </>
-              )}
-            </Button>
+            <Select value={actorType} onValueChange={(v: 'auto' | 'bad' | 'good') => setActorType(v)}>
+              <SelectTrigger className={`w-[180px] font-bold ${
+                actorType === 'bad' ? 'border-destructive text-destructive' : 
+                actorType === 'good' ? 'border-green-500 text-green-400' : ''
+              }`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">🔍 AUTO DETECT</SelectItem>
+                <SelectItem value="bad">🔴 BAD ACTOR</SelectItem>
+                <SelectItem value="good">🟢 GOOD ACTOR</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+          {actorType !== 'auto' && (
+            <Textarea
+              placeholder={actorType === 'bad' 
+                ? "Why is this a bad actor? e.g. Serial rugger, scam token, coordinated pump & dump..." 
+                : "Why is this a good actor? e.g. Trusted builder, graduated multiple tokens, KOL verified..."}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className={`text-sm min-h-[60px] ${
+                actorType === 'bad' ? 'border-destructive/50' : 'border-green-500/50'
+              }`}
+              disabled={spiderMutation.isPending}
+            />
+          )}
+          <Button
+            onClick={handleSpider}
+            disabled={!query.trim() || spiderMutation.isPending || (actorType !== 'auto' && !reason.trim())}
+            className={`w-full ${
+              actorType === 'bad' ? 'bg-destructive hover:bg-destructive/80' :
+              actorType === 'good' ? 'bg-green-600 hover:bg-green-700' :
+              'bg-violet-600 hover:bg-violet-700'
+            }`}
+          >
+            {spiderMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Spidering...
+              </>
+            ) : (
+              <>
+                {actorType === 'bad' ? <ShieldAlert className="h-4 w-4 mr-2" /> :
+                 actorType === 'good' ? <ShieldCheck className="h-4 w-4 mr-2" /> :
+                 <Search className="h-4 w-4 mr-2" />}
+                {actorType === 'bad' ? '🕷️ SPIDER & BLACKLIST' :
+                 actorType === 'good' ? '🕷️ SPIDER & WHITELIST' :
+                 '🕷️ SPIDER'}
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 
