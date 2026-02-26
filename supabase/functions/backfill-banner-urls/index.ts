@@ -1,5 +1,6 @@
 // Backfill banner_url for tokens with Paid DEX boost only
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { createApiLogger } from "../_shared/api-logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,13 +11,23 @@ const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 // Check if token has Paid DEX (boosted) and get banner
 async function checkTokenDexStatus(tokenMint: string): Promise<{ hasPaidDex: boolean; bannerUrl: string | null; imageUrl: string | null }> {
+  const logger = createApiLogger({
+    serviceName: 'dexscreener',
+    endpoint: `/tokens/v1/solana/${tokenMint}`,
+    tokenMint,
+    functionName: 'backfill-banner-urls',
+    requestType: 'market_data',
+  });
   try {
     const response = await fetch(
       `https://api.dexscreener.com/tokens/v1/solana/${tokenMint}`,
       { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0 (compatible; BlackBox/1.0)" } }
     );
 
-    if (!response.ok) return { hasPaidDex: false, bannerUrl: null, imageUrl: null };
+    if (!response.ok) {
+      await logger.complete(response.status);
+      return { hasPaidDex: false, bannerUrl: null, imageUrl: null };
+    }
 
     const data = await response.json();
     const pairs = Array.isArray(data) ? data : [];
@@ -38,8 +49,10 @@ async function checkTokenDexStatus(tokenMint: string): Promise<{ hasPaidDex: boo
       }
     }
 
+    await logger.complete(200);
     return { hasPaidDex, bannerUrl, imageUrl };
   } catch (err) {
+    await logger.fail(err instanceof Error ? err.message : String(err));
     console.error(`[checkTokenDexStatus] Error for ${tokenMint}:`, err);
     return { hasPaidDex: false, bannerUrl: null, imageUrl: null };
   }

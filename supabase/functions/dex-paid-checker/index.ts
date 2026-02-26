@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import { createApiLogger } from "../_shared/api-logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,6 +40,13 @@ interface DexScreenerPair {
 }
 
 async function fetchDexScreenerOrders(tokenMint: string): Promise<DexScreenerOrder[]> {
+  const logger = createApiLogger({
+    serviceName: 'dexscreener',
+    endpoint: `/orders/v1/solana/${tokenMint}`,
+    tokenMint,
+    functionName: 'dex-paid-checker',
+    requestType: 'market_data',
+  });
   try {
     const response = await fetch(`https://api.dexscreener.com/orders/v1/solana/${tokenMint}`, {
       headers: {
@@ -49,19 +57,29 @@ async function fetchDexScreenerOrders(tokenMint: string): Promise<DexScreenerOrd
     
     if (!response.ok) {
       console.log(`DexScreener orders API returned ${response.status} for ${tokenMint}`);
+      await logger.complete(response.status);
       return [];
     }
     
     const data = await response.json();
+    await logger.complete(200);
     // API returns { orders: [...], boosts: [...] } - extract orders array
     return data?.orders || (Array.isArray(data) ? data : []);
   } catch (error) {
+    await logger.fail(error instanceof Error ? error.message : String(error));
     console.error(`Error fetching DexScreener orders for ${tokenMint}:`, error);
     return [];
   }
 }
 
 async function fetchDexScreenerData(tokenMint: string): Promise<{ boosts: number; socials?: { twitter?: string; website?: string; telegram?: string } }> {
+  const logger = createApiLogger({
+    serviceName: 'dexscreener',
+    endpoint: `/latest/dex/tokens/${tokenMint}`,
+    tokenMint,
+    functionName: 'dex-paid-checker',
+    requestType: 'market_data',
+  });
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, {
       headers: {
@@ -72,6 +90,7 @@ async function fetchDexScreenerData(tokenMint: string): Promise<{ boosts: number
     
     if (!response.ok) {
       console.log(`DexScreener tokens API returned ${response.status} for ${tokenMint}`);
+      await logger.complete(response.status);
       return { boosts: 0 };
     }
     
@@ -107,8 +126,10 @@ async function fetchDexScreenerData(tokenMint: string): Promise<{ boosts: number
       }
     }
     
+    await logger.complete(200);
     return { boosts: maxBoosts, socials };
   } catch (error) {
+    await logger.fail(error instanceof Error ? error.message : String(error));
     console.error(`Error fetching DexScreener data for ${tokenMint}:`, error);
     return { boosts: 0 };
   }
