@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (!creatorWallet) {
+    if (!creatorWallet && !forceVerdict) {
       return new Response(JSON.stringify({
         verdict: 'yellow',
         verdictReason: 'Could not resolve any wallet from this input',
@@ -248,6 +248,79 @@ Deno.serve(async (req) => {
         discoveredTokens: [],
         discoveredSocials: [],
         meshUpdates: { blacklistAdded: 0, whitelistAdded: 0, meshLinksAdded: 0, reputationUpdated: false },
+        steps,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // If forced verdict with a handle but no wallet, still store the handle
+    if (!creatorWallet && forceVerdict && inputType === 'handle') {
+      addStep('Force Label', 'running', `No wallet found, but labeling handle ${cleanQuery} as ${forceVerdict}...`);
+      const handle = cleanQuery.replace('@', '');
+      
+      const supabaseUrl2 = Deno.env.get('SUPABASE_URL')!;
+      const serviceKey2 = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const sb = createClient(supabaseUrl2, serviceKey2);
+
+      const meshUpdates = { blacklistAdded: 0, whitelistAdded: 0, meshLinksAdded: 0, reputationUpdated: false };
+      const verdictReason = reason ? `Manual submission: ${reason}` : `Manually classified as ${forceVerdict === 'red' ? 'BAD ACTOR' : 'GOOD ACTOR'}`;
+
+      if (forceVerdict === 'red') {
+        const { data: existing } = await sb.from('pumpfun_blacklist')
+          .select('id').eq('identifier', handle).maybeSingle();
+        if (!existing) {
+          await sb.from('pumpfun_blacklist').insert({
+            entry_type: 'x_account',
+            identifier: handle,
+            risk_level: 'critical',
+            blacklist_reason: verdictReason,
+            tags: ['spider_manual', 'x_handle'],
+            source: 'oracle_spider',
+            enrichment_status: 'pending',
+          });
+          meshUpdates.blacklistAdded++;
+        }
+      } else if (forceVerdict === 'green') {
+        const { data: existing } = await sb.from('pumpfun_whitelist')
+          .select('id').eq('identifier', handle).maybeSingle();
+        if (!existing) {
+          await sb.from('pumpfun_whitelist').insert({
+            entry_type: 'x_account',
+            identifier: handle,
+            trust_level: 'high',
+            whitelist_reason: verdictReason,
+            tags: ['spider_manual', 'x_handle'],
+            source: 'oracle_spider',
+          });
+          meshUpdates.whitelistAdded++;
+        }
+      }
+
+      // Store in reputation_mesh as a social entity
+      await sb.from('reputation_mesh').insert({
+        source_type: 'x_account',
+        source_id: handle,
+        linked_type: 'x_account',
+        linked_id: handle,
+        relationship: forceVerdict === 'red' ? 'blacklisted_actor' : 'whitelisted_actor',
+        confidence: 100,
+        discovered_by: 'oracle_spider_manual',
+      }).catch(() => {});
+
+      addStep('Force Label', 'done', `${forceVerdict === 'red' ? 'Blacklisted' : 'Whitelisted'} handle @${handle}`);
+
+      return new Response(JSON.stringify({
+        verdict: forceVerdict,
+        verdictReason,
+        inputType,
+        inputQuery: cleanQuery,
+        resolvedCreator: null,
+        creatorSource: 'manual_x_handle',
+        tokenInfo: null,
+        existingReputation: { blacklisted: forceVerdict === 'red', whitelisted: forceVerdict === 'green', trustLevel: null, reputationScore: null, tokensRugged: 0, blacklistReason: forceVerdict === 'red' ? verdictReason : null, whitelistReason: forceVerdict === 'green' ? verdictReason : null },
+        genealogy: { kycRoot: null, parents: [], satellites: [], depth: 0 },
+        discoveredTokens: [],
+        discoveredSocials: [{ type: 'x_account', identifier: `@${handle}`, relationship: forceVerdict === 'red' ? 'blacklisted' : 'whitelisted', source: 'manual_submission' }],
+        meshUpdates,
         steps,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
