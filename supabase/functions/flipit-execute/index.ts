@@ -545,6 +545,8 @@ serve(async (req) => {
       return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     };
 
+    const safeSourceChannelId = isValidUuid(sourceChannelId) ? sourceChannelId : null;
+
     if (action === "buy") {
       // Initialize execution logger for comprehensive tracking
       const execLog = createExecutionLogger('buy', tokenMint || 'unknown');
@@ -762,7 +764,7 @@ serve(async (req) => {
         target_price_usd: targetPrice,
         status: "pending_buy",
         source: source || "manual",
-        source_channel_id: sourceChannelId || null,
+        source_channel_id: safeSourceChannelId,
         // New price tracking fields
         price_source: priceMetadata.source,
         price_fetched_at: priceMetadata.fetchedAt,
@@ -1403,7 +1405,7 @@ serve(async (req) => {
           txSignature: signature,
           venue: priceMetadata?.source || 'unknown',
           source: source || 'manual',
-          sourceChannel: sourceChannelId,
+          sourceChannel: safeSourceChannelId,
           priceImpact: quoteValidation?.priceImpact,
           slippageBps: effectiveSlippage,
           solPrice: solPrice,
