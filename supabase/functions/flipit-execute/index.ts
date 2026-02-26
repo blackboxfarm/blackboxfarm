@@ -30,16 +30,28 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
+function allSignatures(swapResult: any): string[] {
+  if (!swapResult) return [];
+
+  const sigs: string[] = [];
+  if (typeof swapResult.signature === "string" && swapResult.signature.length > 0) sigs.push(swapResult.signature);
+  if (Array.isArray(swapResult.signatures)) {
+    for (const s of swapResult.signatures) {
+      if (typeof s === "string" && s.length > 0) sigs.push(s);
+    }
+  }
+  if (Array.isArray(swapResult.data?.signatures)) {
+    for (const s of swapResult.data.signatures) {
+      if (typeof s === "string" && s.length > 0) sigs.push(s);
+    }
+  }
+
+  return Array.from(new Set(sigs));
+}
+
 function firstSignature(swapResult: any): string | null {
-  if (!swapResult) return null;
-  if (typeof swapResult.signature === "string" && swapResult.signature.length > 0) return swapResult.signature;
-  if (Array.isArray(swapResult.signatures) && typeof swapResult.signatures[0] === "string" && swapResult.signatures[0].length > 0) {
-    return swapResult.signatures[0];
-  }
-  if (Array.isArray(swapResult.data?.signatures) && typeof swapResult.data.signatures?.[0] === "string") {
-    return swapResult.data.signatures[0];
-  }
-  return null;
+  const sigs = allSignatures(swapResult);
+  return sigs.length > 0 ? sigs[0] : null;
 }
 
 /**
@@ -955,7 +967,8 @@ serve(async (req) => {
           throw new Error(swapResult.error);
         }
         
-        const signature = firstSignature(swapResult);
+        const swapSignatures = allSignatures(swapResult);
+        const signature = swapSignatures[0] ?? null;
         if (!signature) {
           execLog.logFailure('No signature returned', { durationMs: swapDuration });
           throw new Error("Swap returned no signature (buy did not confirm)");
@@ -963,6 +976,7 @@ serve(async (req) => {
 
         execLog.log('SWAP_SUCCESS', { 
           signature: signature.slice(0, 20),
+          signatureCount: swapSignatures.length,
           source: (swapResult as any)?.source,
           venue: (swapResult as any)?.venue,
           durationMs: swapDuration
@@ -974,14 +988,15 @@ serve(async (req) => {
         let tokenDecimals: number | null = null;
         execLog.log('SWAP_RESULT', { 
           outAmount: quantityTokens,
-          solInputLamports: (swapResult as any)?.solInputLamports
+          solInputLamports: (swapResult as any)?.solInputLamports,
+          signatureCount: swapSignatures.length
         });
 
         // CRITICAL: Use Helius Parse Transaction API to get EXACT tokens received from THIS swap
         // This is the only reliable way to know exactly how many tokens this specific buy received
         const heliusKey = getHeliusApiKey();
         
-        if (heliusKey && signature) {
+        if (heliusKey && signature && swapSignatures.length === 1) {
           try {
             // Wait for transaction to be indexed by Helius
             await new Promise(resolve => setTimeout(resolve, 3000));
@@ -1063,6 +1078,8 @@ serve(async (req) => {
           } catch (parseErr) {
             console.error("Error parsing transaction with Helius:", parseErr);
           }
+        } else if (swapSignatures.length > 1) {
+          console.log(`Skipping single-signature parse for ${swapSignatures.length} swap signatures; using pre/post balance delta for total buy quantity.`);
         }
         
         // Final fallback: use delta calculation if Helius parsing didn't work
