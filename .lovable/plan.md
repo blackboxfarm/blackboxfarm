@@ -1,66 +1,71 @@
 
+# Oracle Cross-Reference Audit: Fix All Disconnected Data Paths
 
-# Master Spider: Multi-Input Actor Submission
+## Critical Issues Found
 
-## Problem
-Currently there's a single text input that tries to guess what you typed. You want to submit everything you know about an actor at once -- their dev wallet, their token mint, AND their X handle -- and have the spider connect all three as one entity, then spider the entire family tree.
+### 1. `developer-reputation` function is BLIND to 99% of the database
+The `developer-reputation` edge function (used by FlipIt and other trading tools) ONLY queries `developer_profiles` -- a nearly empty table. It completely ignores:
+- `dev_wallet_reputation` (16,000+ profiled wallets)
+- `pumpfun_blacklist` (25+ blacklisted entities)
+- `pumpfun_whitelist` (2+ whitelisted entities)
+- `reputation_mesh` (55,000+ links)
 
-## Changes
+**Result**: When Master Spider labels a wallet as BAD ACTOR, the trading system can't see it via this function.
 
-### 1. UI Overhaul (OracleMasterSpider.tsx)
+### 2. `oracle-unified-lookup` (Intel Lookup) misses token-mint blacklist entries
+When you submit a token mint, it resolves to a wallet, then only checks the blacklist by that wallet address. It never checks the original token mint against the blacklist. Master Spider blacklists tokens by their mint address -- but Intel Lookup won't find them because it only queries `identifier.eq.{resolvedWallet}`.
 
-Replace the single input field with 3 dedicated labeled inputs:
+### 3. `oracle-unified-lookup` skips key tables for token resolution
+It only tries `token_lifecycle` to resolve a token to a creator wallet. It skips:
+- `pumpfun_watchlist` (1,900+ tokens tracked)
+- `developer_tokens` (the main token-creator mapping table)
 
-- **Dev Wallet Address** -- optional, Solana wallet (monospace, validated 32-44 chars)
-- **Minted Token Address** -- optional, token mint address (monospace, validated 32-44 chars)  
-- **X Account** -- optional, accepts `@handle` or full `https://x.com/handle` URL (auto-extracts handle)
+Master Spider and DevIntelReport both check these tables, but Intel Lookup doesn't.
 
-At least ONE field must be filled. The BAD ACTOR / GOOD ACTOR selector and reason textarea stay as they are.
+### 4. `oracle-unified-lookup` can't parse X/Twitter URLs
+Master Spider parses `https://x.com/handle` into `@handle`. Intel Lookup does NOT -- if you paste an X URL, it treats it as an unknown input type and fails.
 
-The submit button label stays dynamic: SPIDER / SPIDER & BLACKLIST / SPIDER & WHITELIST.
+### 5. CEX wallet detection uses fake/truncated prefixes
+The `knownCEXes` array in Master Spider contains obviously truncated strings like `'5tzFkiKscjHsFKrxv2aNJchkHR'` and `'AC5RDfQFmDS1deWZos9'` that will never match real Binance/Coinbase hot wallets. These are placeholder strings.
 
-### 2. Edge Function Update (oracle-master-spider/index.ts)
+### 6. Token upsert capped at 50 in unified lookup
+`liveTokens.slice(0, 50)` in the auto-spider section means prolific devs with 200+ tokens lose 75% of their data.
 
-Update the function to accept a structured multi-input payload:
+## Fix Plan
 
-```text
-{
-  devWallet?: string,
-  tokenMint?: string,  
-  xAccount?: string,
-  forceVerdict?: 'red' | 'green',
-  reason?: string,
-  // Keep backward compat with single 'query' field
-  query?: string
-}
-```
+### Fix 1: Rebuild `developer-reputation` to query ALL reputation tables
+Make this function check `dev_wallet_reputation`, `pumpfun_blacklist`, `pumpfun_whitelist`, and `reputation_mesh` -- same tables that Master Spider and Intel Lookup use. Return a unified result that shows the complete picture.
 
-Processing logic:
+### Fix 2: Add token-mint blacklist check in `oracle-unified-lookup`
+When input is a token, also check the blacklist for the original token mint (not just the resolved wallet). Add an OR clause: `identifier.eq.{resolvedWallet},identifier.eq.{cleanedInput}`.
 
-- **Parse X input**: Extract handle from URL or `@handle` format
-- **Resolve all three simultaneously**: Look up token mint for creator wallet, validate dev wallet, resolve X handle
-- **Cross-link all inputs**: If you provide a wallet + token + handle, all three get linked in `reputation_mesh` as a single actor entity
-- **Spider from the wallet**: Use the dev wallet (or resolved wallet from token) as the anchor for genealogy tracing, token discovery, and social discovery
-- **Store the X handle**: Always store the X handle in both `reputation_mesh` (linked to the wallet) and in the blacklist/whitelist entry
-- **Rate limiting**: Add 200ms delays between Helius RPC calls and batch DB operations to avoid hammering APIs
+### Fix 3: Add `pumpfun_watchlist` and `developer_tokens` fallbacks for token resolution
+In `oracle-unified-lookup`, add the same fallback chain that DevIntelReport uses: `token_lifecycle` -> `pumpfun_watchlist` -> `developer_tokens` -> pump.fun API.
 
-### 3. Mesh Linking Logic
+### Fix 4: Add X URL parsing to `oracle-unified-lookup`
+Port the `parseXUrl()` function from Master Spider into the unified lookup so X URLs are handled consistently.
 
-When all 3 inputs are provided, the function creates these mesh relationships:
+### Fix 5: Replace fake CEX prefixes with real known addresses
+Replace the truncated CEX strings with the actual known Binance and Coinbase hot wallet addresses used on Solana.
 
-```text
-wallet --[created]--> token
-wallet --[operates]--> @handle
-@handle --[token_social]--> token
-```
-
-Plus all the existing genealogy, satellite, community admin/mod links. This ensures that querying ANY of the three in future returns the full connected entity.
+### Fix 6: Increase token upsert limit
+Raise from 50 to 200 tokens in the auto-spider section of `oracle-unified-lookup`.
 
 ## Technical Details
 
 **Files to modify:**
-- `src/components/admin/oracle/OracleMasterSpider.tsx` -- Replace single input with 3 fields, update mutation payload
-- `supabase/functions/oracle-master-spider/index.ts` -- Accept multi-input, cross-link all inputs, add rate limiting delays
+- `supabase/functions/developer-reputation/index.ts` -- Complete rewrite to query all reputation tables
+- `supabase/functions/oracle-unified-lookup/index.ts` -- Fix token resolution, blacklist check, X URL parsing, token limit
+- `supabase/functions/oracle-master-spider/index.ts` -- Fix CEX wallet addresses
 
-**Backward compatibility:** The `query` field still works for single-input lookups (auto-detect mode). The new fields take priority when provided.
+**Database tables involved (all reads/writes unified):**
+- `dev_wallet_reputation` -- Core wallet scoring (16k+ entries)
+- `pumpfun_blacklist` -- Kill list (25+ entries)
+- `pumpfun_whitelist` -- Trusted list (2+ entries)
+- `reputation_mesh` -- Relationship graph (55k+ links)
+- `developer_profiles` -- Legacy profiles
+- `developer_tokens` -- Token-creator mappings
+- `pumpfun_watchlist` -- Trending token tracker (1,900+ tokens)
+- `token_lifecycle` -- Token status tracking
 
+All three functions will be redeployed after changes.
