@@ -1353,6 +1353,7 @@ serve(async (req) => {
       const platform = isBagsToken ? "bags.fm" : (isBonkToken ? "bonk.fun" : "pump.fun");
       console.log(`Bonding curve token detected (${platform}), trying PumpPortal first...`);
 
+      const totalBuyLamports = side === "buy" ? Math.floor(Number(amount)) : null;
       let pumpAmount: string;
       if (side === "buy") {
         const solAmount = Number(amount) / 1_000_000_000;
@@ -1374,110 +1375,281 @@ serve(async (req) => {
 
       let lastPumpError: string | null = null;
       let sawSlippageError = false;
+      let pumpExecutedSignatures: string[] = [];
+      let pumpExecutedLamports = 0;
 
       try {
         // First try with specific pool, then with 'auto' if it fails
         const poolsRaw: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(), 'auto'];
         const pools = Array.from(new Set(poolsRaw));
 
-        pump_attempts:
-        for (const candidateSlippageBps of slippageCandidates) {
-          console.log(`PumpPortal attempt with ${candidateSlippageBps} bps slippage`);
+        // BUY path: execute full requested amount via automatic chunking on overflow.
+        if (side === "buy" && Number.isFinite(totalBuyLamports) && (totalBuyLamports ?? 0) > 0) {
+          const requestedLamports = totalBuyLamports as number;
+          const minChunkLamports = 100_000; // 0.0001 SOL
+          const maxChunkShrinkAttempts = 10;
 
-          for (const pool of pools) {
-            const pumpResult = await tryPumpPortalTrade({
-              mint: String(tokenMint),
-              userPublicKey: owner.publicKey.toBase58(),
-              action: side as 'buy' | 'sell',
-              amount: pumpAmount,
-              slippageBps: candidateSlippageBps,
-              pool,
-            });
+          for (const candidateSlippageBps of slippageCandidates) {
+            console.log(`PumpPortal buy attempt with ${candidateSlippageBps} bps slippage`);
 
-            if ("tx" in pumpResult) {
-              const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+            for (const pool of pools) {
+              let remainingLamports = requestedLamports - pumpExecutedLamports;
 
-              const _heliusKey1 = getHeliusApiKey();
-              const txRpc = _heliusKey1
-                ? new Connection(getHeliusRpcUrl(_heliusKey1), { commitment: "confirmed" })
-                : connection;
+              while (remainingLamports > 0) {
+                let attemptLamports = remainingLamports;
+                let chunkSent = false;
+                let overflowExhausted = false;
 
-              const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
-              (vtx as any).message.recentBlockhash = blockhash;
-              vtx.sign([owner]);
+                for (let shrinkAttempt = 0; shrinkAttempt < maxChunkShrinkAttempts; shrinkAttempt++) {
+                  if (!Number.isFinite(attemptLamports) || attemptLamports <= 0) break;
 
-              let sig: string;
-              try {
-                // Use preflight so we can fail fast without paying fees for doomed txs.
-                sig = await txRpc.sendTransaction(vtx, { skipPreflight: false, maxRetries: 3 });
-              } catch (sendErr) {
-                const msg = (sendErr as Error)?.message || String(sendErr);
-                lastPumpError = `PumpPortal send failed (pool=${pool}, slippage=${candidateSlippageBps}): ${msg}`;
-                console.error(lastPumpError);
-                
-                // Detect 6024 Overflow — fall through to Jupiter/DEX routing instead
-                const isOverflow = msg.includes('6024') || msg.includes('Overflow') || msg.includes('0x1788');
-                if (isOverflow) {
-                  console.log('PumpPortal 6024 Overflow — falling through to Jupiter/DEX routing with full amount...');
-                  needJupiter = true;
-                  jupReason = `PumpPortal overflow: ${msg}`;
-                  break pump_attempts;
+                  const attemptSol = attemptLamports / 1_000_000_000;
+                  const attemptAmount = attemptSol.toString();
+
+                  const pumpResult = await tryPumpPortalTrade({
+                    mint: String(tokenMint),
+                    userPublicKey: owner.publicKey.toBase58(),
+                    action: 'buy',
+                    amount: attemptAmount,
+                    slippageBps: candidateSlippageBps,
+                    pool,
+                  });
+
+                  if ("tx" in pumpResult) {
+                    const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+
+                    const _heliusKey1 = getHeliusApiKey();
+                    const txRpc = _heliusKey1
+                      ? new Connection(getHeliusRpcUrl(_heliusKey1), { commitment: "confirmed" })
+                      : connection;
+
+                    const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+                    (vtx as any).message.recentBlockhash = blockhash;
+                    vtx.sign([owner]);
+
+                    let sig: string;
+                    try {
+                      // Use preflight so we can fail fast without paying fees for doomed txs.
+                      sig = await txRpc.sendTransaction(vtx, { skipPreflight: false, maxRetries: 3 });
+                    } catch (sendErr) {
+                      const msg = (sendErr as Error)?.message || String(sendErr);
+                      lastPumpError = `PumpPortal send failed (pool=${pool}, slippage=${candidateSlippageBps}, chunkLamports=${attemptLamports}): ${msg}`;
+                      console.error(lastPumpError);
+
+                      const isOverflow = msg.includes('6024') || msg.includes('Overflow') || msg.includes('0x1788');
+                      if (isOverflow) {
+                        const reduced = Math.floor(attemptLamports / 2);
+                        if (reduced >= minChunkLamports) {
+                          console.log(`PumpPortal overflow on send; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
+                          attemptLamports = reduced;
+                          continue;
+                        }
+                        overflowExhausted = true;
+                        break;
+                      }
+
+                      needJupiter = true;
+                      jupReason = `PumpPortal send failed: ${msg}`;
+                      break;
+                    }
+
+                    const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+
+                    if (!confirmResult.confirmed) {
+                      const txError = confirmResult.error || "Unknown confirmation failure";
+                      lastPumpError = `PumpPortal tx failed (pool=${pool}, slippage=${candidateSlippageBps}, chunkLamports=${attemptLamports}): ${txError}`;
+                      console.error(lastPumpError);
+
+                      const isOverflow = txError.includes('6024') || txError.includes('Overflow') || txError.includes('0x1788');
+                      if (isOverflow) {
+                        const reduced = Math.floor(attemptLamports / 2);
+                        if (reduced >= minChunkLamports) {
+                          console.log(`PumpPortal overflow on-chain; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
+                          attemptLamports = reduced;
+                          continue;
+                        }
+                        overflowExhausted = true;
+                        break;
+                      }
+
+                      const isCustom1 = txError.includes('"Custom":1');
+                      if (isCustom1) {
+                        sawSlippageError = true;
+                        break;
+                      }
+
+                      if (txError.includes("6005") || txError.includes("TX_FAILED_ON_CHAIN") || txError.includes("TX_EXPIRED") || txError.includes("TX_NOT_CONFIRMED")) {
+                        needJupiter = true;
+                        jupReason = `PumpPortal tx failed: ${txError}`;
+                        break;
+                      }
+
+                      needJupiter = true;
+                      jupReason = `PumpPortal tx failed: ${txError}`;
+                      break;
+                    }
+
+                    console.log(`PumpPortal buy chunk successful (pool=${pool}, slippage=${candidateSlippageBps}, lamports=${attemptLamports}): ${sig}`);
+                    pumpExecutedSignatures.push(sig);
+                    pumpExecutedLamports += attemptLamports;
+                    chunkSent = true;
+                    break;
+                  } else {
+                    lastPumpError = `PumpPortal build failed (pool=${pool}, slippage=${candidateSlippageBps}, chunkLamports=${attemptLamports}): ${pumpResult.error}`;
+                    console.log(lastPumpError);
+
+                    const isOverflow = pumpResult.error.includes('6024') || pumpResult.error.includes('Overflow') || pumpResult.error.includes('0x1788');
+                    if (isOverflow) {
+                      const reduced = Math.floor(attemptLamports / 2);
+                      if (reduced >= minChunkLamports) {
+                        console.log(`PumpPortal build overflow; reducing buy chunk ${attemptLamports} → ${reduced} lamports`);
+                        attemptLamports = reduced;
+                        continue;
+                      }
+                      overflowExhausted = true;
+                    }
+                    break;
+                  }
                 }
-                
-                continue;
-              }
 
-              // CRITICAL: Use hardConfirmTransaction for reliable confirmation
-              const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+                if (needJupiter) break;
 
-              if (!confirmResult.confirmed) {
-                const txError = confirmResult.error || "Unknown confirmation failure";
-                lastPumpError = `PumpPortal tx failed (pool=${pool}, slippage=${candidateSlippageBps}): ${txError}`;
-                console.error(lastPumpError);
+                remainingLamports = requestedLamports - pumpExecutedLamports;
+                if (remainingLamports <= 0) {
+                  return ok({
+                    signatures: pumpExecutedSignatures,
+                    source: "pumpportal",
+                    pool,
+                    outAmount: null,
+                    slippageBps: candidateSlippageBps,
+                    solInputLamports: requestedLamports,
+                  });
+                }
 
-                const isCustom1 = txError.includes('"Custom":1');
-                if (isCustom1) {
-                  // Treat Custom:1 as slippage/price-move for bonding curve tokens; retry with higher slippage.
-                  sawSlippageError = true;
+                if (chunkSent) {
+                  // Try to fill the remaining amount in next iteration.
                   continue;
                 }
 
-                // 6024 Overflow: bonding curve can't handle this buy size — fall through to Jupiter
-                const isOverflow = txError.includes('6024') || txError.includes('Overflow') || txError.includes('0x1788');
-                if (isOverflow) {
-                  console.log('PumpPortal 6024 Overflow on-chain — falling through to Jupiter with full amount...');
-                  needJupiter = true;
-                  jupReason = `PumpPortal overflow on-chain: ${txError}`;
-                  break pump_attempts;
+                if (overflowExhausted) {
+                  console.log(`PumpPortal chunking reached minimum chunk on pool=${pool}, remainingLamports=${remainingLamports}`);
+                }
+                // Try next pool/slippage.
+                break;
+              }
+
+              if (needJupiter) break;
+            }
+
+            if (needJupiter) break;
+          }
+
+          const remainingLamports = requestedLamports - pumpExecutedLamports;
+          if (pumpExecutedSignatures.length > 0 && remainingLamports > 0) {
+            console.log(`PumpPortal partial buy filled: spent=${pumpExecutedLamports}, remaining=${remainingLamports}`);
+            return ok({
+              signatures: pumpExecutedSignatures,
+              source: "pumpportal-partial",
+              outAmount: null,
+              partialFill: true,
+              solInputLamports: pumpExecutedLamports,
+              requestedSolInputLamports: requestedLamports,
+              remainingSolInputLamports: remainingLamports,
+            });
+          }
+        } else {
+          // SELL path: preserve existing single-shot PumpPortal behavior.
+          pump_attempts:
+          for (const candidateSlippageBps of slippageCandidates) {
+            console.log(`PumpPortal attempt with ${candidateSlippageBps} bps slippage`);
+
+            for (const pool of pools) {
+              const pumpResult = await tryPumpPortalTrade({
+                mint: String(tokenMint),
+                userPublicKey: owner.publicKey.toBase58(),
+                action: side as 'buy' | 'sell',
+                amount: pumpAmount,
+                slippageBps: candidateSlippageBps,
+                pool,
+              });
+
+              if ("tx" in pumpResult) {
+                const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+
+                const _heliusKey1 = getHeliusApiKey();
+                const txRpc = _heliusKey1
+                  ? new Connection(getHeliusRpcUrl(_heliusKey1), { commitment: "confirmed" })
+                  : connection;
+
+                const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+                (vtx as any).message.recentBlockhash = blockhash;
+                vtx.sign([owner]);
+
+                let sig: string;
+                try {
+                  sig = await txRpc.sendTransaction(vtx, { skipPreflight: false, maxRetries: 3 });
+                } catch (sendErr) {
+                  const msg = (sendErr as Error)?.message || String(sendErr);
+                  lastPumpError = `PumpPortal send failed (pool=${pool}, slippage=${candidateSlippageBps}): ${msg}`;
+                  console.error(lastPumpError);
+
+                  const isOverflow = msg.includes('6024') || msg.includes('Overflow') || msg.includes('0x1788');
+                  if (isOverflow) {
+                    console.log('PumpPortal 6024 Overflow — falling through to Jupiter/DEX routing with full amount...');
+                    needJupiter = true;
+                    jupReason = `PumpPortal overflow: ${msg}`;
+                    break pump_attempts;
+                  }
+
+                  continue;
                 }
 
-                // 6005 is a common PumpPortal on-chain failure code (often seen after migration)
-                if (txError.includes("6005") || txError.includes("TX_FAILED_ON_CHAIN")) {
-                  console.log("PumpPortal tx failed, switching to DEX routing (Raydium/Jupiter)...");
+                const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+
+                if (!confirmResult.confirmed) {
+                  const txError = confirmResult.error || "Unknown confirmation failure";
+                  lastPumpError = `PumpPortal tx failed (pool=${pool}, slippage=${candidateSlippageBps}): ${txError}`;
+                  console.error(lastPumpError);
+
+                  const isCustom1 = txError.includes('"Custom":1');
+                  if (isCustom1) {
+                    sawSlippageError = true;
+                    continue;
+                  }
+
+                  const isOverflow = txError.includes('6024') || txError.includes('Overflow') || txError.includes('0x1788');
+                  if (isOverflow) {
+                    console.log('PumpPortal 6024 Overflow on-chain — falling through to Jupiter with full amount...');
+                    needJupiter = true;
+                    jupReason = `PumpPortal overflow on-chain: ${txError}`;
+                    break pump_attempts;
+                  }
+
+                  if (txError.includes("6005") || txError.includes("TX_FAILED_ON_CHAIN")) {
+                    console.log("PumpPortal tx failed, switching to DEX routing (Raydium/Jupiter)...");
+                    needJupiter = true;
+                    jupReason = `PumpPortal tx failed: ${txError}`;
+                    break pump_attempts;
+                  }
+
+                  if (txError.includes("TX_EXPIRED") || txError.includes("TX_NOT_CONFIRMED")) {
+                    console.log("PumpPortal tx dropped/expired, switching to DEX routing...");
+                    needJupiter = true;
+                    jupReason = txError;
+                    break pump_attempts;
+                  }
+
                   needJupiter = true;
                   jupReason = `PumpPortal tx failed: ${txError}`;
                   break pump_attempts;
                 }
 
-                if (txError.includes("TX_EXPIRED") || txError.includes("TX_NOT_CONFIRMED")) {
-                  console.log("PumpPortal tx dropped/expired, switching to DEX routing...");
-                  needJupiter = true;
-                  jupReason = txError;
-                  break pump_attempts;
-                }
-
-                // Unknown failure → fallback
-                needJupiter = true;
-                jupReason = `PumpPortal tx failed: ${txError}`;
-                break pump_attempts;
+                console.log(`PumpPortal ${side} successful with pool=${pool} slippage=${candidateSlippageBps}:`, sig);
+                return ok({ signatures: [sig], source: "pumpportal", pool, outAmount: null, slippageBps: candidateSlippageBps });
+              } else {
+                lastPumpError = `PumpPortal build failed (pool=${pool}, slippage=${candidateSlippageBps}): ${pumpResult.error}`;
+                console.log(lastPumpError);
               }
-
-              console.log(`PumpPortal ${side} successful with pool=${pool} slippage=${candidateSlippageBps}:`, sig);
-              // For PumpPortal, we don't have expected outAmount - caller should verify on-chain
-              return ok({ signatures: [sig], source: "pumpportal", pool, outAmount: null, slippageBps: candidateSlippageBps });
-            } else {
-              lastPumpError = `PumpPortal build failed (pool=${pool}, slippage=${candidateSlippageBps}): ${pumpResult.error}`;
-              console.log(lastPumpError);
             }
           }
         }
