@@ -57,10 +57,35 @@ interface SpiderResult {
   steps: SpiderStep[];
 }
 
+function parseXUrl(input: string): string | null {
+  // Match https://x.com/handle, https://twitter.com/handle, x.com/handle etc
+  const xUrlPattern = /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/(@?[\w]+)\/?(?:\?.*)?$/i;
+  const match = input.match(xUrlPattern);
+  if (match) return match[1].replace('@', '');
+  return null;
+}
+
+function normalizeQuery(raw: string): { cleaned: string; originalUrl: string | null } {
+  const trimmed = raw.trim();
+  
+  // Check if it's an X/Twitter URL
+  const xHandle = parseXUrl(trimmed);
+  if (xHandle) {
+    return { cleaned: `@${xHandle}`, originalUrl: trimmed };
+  }
+  
+  // Already an @handle
+  if (trimmed.startsWith('@')) {
+    return { cleaned: trimmed, originalUrl: null };
+  }
+  
+  return { cleaned: trimmed, originalUrl: null };
+}
+
 function detectInputType(query: string): 'token' | 'wallet' | 'handle' {
   if (query.startsWith('@')) return 'handle';
   if (query.length >= 32 && query.length <= 44 && /^[A-HJ-NP-Za-km-z1-9]+$/.test(query)) {
-    return 'token'; // Could be token or wallet - we'll resolve later
+    return 'token';
   }
   return 'handle';
 }
@@ -79,7 +104,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const cleanQuery = query.trim();
+    const { cleaned: cleanQuery, originalUrl } = normalizeQuery(query.trim());
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
@@ -91,7 +116,8 @@ Deno.serve(async (req) => {
     };
 
     const inputType = detectInputType(cleanQuery);
-    addStep('Input Detection', 'done', `Detected as: ${inputType} (${cleanQuery.slice(0, 12)}...)`);
+    addStep('Input Detection', 'done', 
+      `Detected as: ${inputType}${originalUrl ? ` (parsed from URL: ${originalUrl.slice(0, 30)}...)` : ''} → ${cleanQuery}`);
 
     // ── STEP 1: Resolve creator wallet ──
     let creatorWallet: string | null = null;
