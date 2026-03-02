@@ -34,8 +34,14 @@ TabLoader.displayName = 'TabLoader';
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("utilities");
+  const [hydrated, setHydrated] = useState(false);
   const { isSuperAdmin, isLoading } = useUserRoles();
   const { isAuthenticated, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    // Mark as hydrated so the static boot snapshot shows a loading screen
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -50,12 +56,13 @@ export default function SuperAdmin() {
     return <Navigate to="/auth" replace />;
   }
 
-  if (isLoading || authLoading) {
+  // Show loading during boot so the static snapshot never shows stale UI
+  if (!hydrated || isLoading || authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Verifying permissions...</p>
+          <p className="mt-2 text-muted-foreground">Loading Super Admin...</p>
         </div>
       </div>
     );
