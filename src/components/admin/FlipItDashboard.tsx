@@ -1982,8 +1982,9 @@ export function FlipItDashboard() {
 
       const DEVIATION_THRESHOLD = 15; // 15% threshold for confirmation
 
-      // If deviation > threshold, show confirmation dialog
-      if (Math.abs(deviationPct) > DEVIATION_THRESHOLD && displayedPrice) {
+      // Only show confirmation when executable price is HIGHER (you'd pay more).
+      // When executable is LOWER, the displayed price was stale — just use the real price and go.
+      if (deviationPct > DEVIATION_THRESHOLD && displayedPrice) {
         setIsFetchingPreflight(false);
         setPriceConfirmation({
           show: true,
