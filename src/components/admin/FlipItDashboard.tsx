@@ -1941,73 +1941,12 @@ export function FlipItDashboard() {
       return;
     }
 
-    setIsFetchingPreflight(true);
-
+    // Use the already-fetched Helius price directly — no redundant preflight re-fetch
+    // that uses a different price source and causes false deviation alerts.
     const tokenSymbol = inputToken.symbol;
     const displayedPrice = inputToken.price;
 
-    // SOL amount for preflight - direct passthrough, no conversion needed
-    const solAmountForPreflight = parsedAmount;
-
-    try {
-      // Call flipit-preflight to get venue-aware executable quote
-      toast.info('Checking executable price...', { duration: 2000 });
-
-      const preflightRes = await supabase.functions.invoke('flipit-preflight', {
-        body: {
-          tokenMint: tokenAddress.trim(),
-          solAmount: solAmountForPreflight,
-          walletPubkey: wallets.find(w => w.id === selectedWallet)?.pubkey,
-          slippageBps: slippageBps
-        }
-      });
-
-      const preflightData = preflightRes.data;
-
-      if (preflightRes.error || !preflightData?.success) {
-        // Preflight failed - fail-closed, don't proceed
-        const errMsg = preflightData?.error || preflightRes.error?.message || 'Failed to get executable quote';
-        toast.error(`Price check failed: ${errMsg}`);
-        setIsFetchingPreflight(false);
-        return;
-      }
-
-      const executablePrice = preflightData.executablePriceUsd;
-
-      // Calculate deviation from displayed price
-      let deviationPct = 0;
-      if (displayedPrice && displayedPrice > 0 && executablePrice) {
-        deviationPct = ((executablePrice - displayedPrice) / displayedPrice) * 100;
-      }
-
-      const DEVIATION_THRESHOLD = 15; // 15% threshold for confirmation
-
-      // Only show confirmation when executable price is HIGHER (you'd pay more).
-      // When executable is LOWER, the displayed price was stale — just use the real price and go.
-      if (deviationPct > DEVIATION_THRESHOLD && displayedPrice) {
-        setIsFetchingPreflight(false);
-        setPriceConfirmation({
-          show: true,
-          displayedPrice,
-          executablePrice,
-          deviationPct,
-          venue: preflightData.venue || 'unknown',
-          confidence: preflightData.confidence || 'unknown',
-          source: preflightData.source || 'unknown',
-          onConfirm: () => executeFlip(executablePrice || displayedPrice, tokenSymbol)
-        });
-        return;
-      }
-
-      // Deviation acceptable - proceed with flip
-      setIsFetchingPreflight(false);
-      await executeFlip(executablePrice || displayedPrice, tokenSymbol);
-
-    } catch (err: any) {
-      console.error('Preflight error:', err);
-      toast.error('Failed to check price: ' + (err.message || 'Unknown error'));
-      setIsFetchingPreflight(false);
-    }
+    await executeFlip(displayedPrice, tokenSymbol);
   };
   
   // Execute the actual flip (separated for confirmation dialog flow)
