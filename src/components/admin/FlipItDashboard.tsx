@@ -1941,12 +1941,28 @@ export function FlipItDashboard() {
       return;
     }
 
-    // Use the already-fetched Helius price directly — no redundant preflight re-fetch
-    // that uses a different price source and causes false deviation alerts.
+    // Re-fetch price using the SAME method as paste (helius-fast-price), not a different source
     const tokenSymbol = inputToken.symbol;
-    const displayedPrice = inputToken.price;
+    
+    try {
+      toast.info('Fetching fresh price...', { duration: 2000 });
+      const { data: freshPrice, error: priceErr } = await supabase.functions.invoke('helius-fast-price', {
+        body: { tokenMint: tokenAddress.trim() }
+      });
 
-    await executeFlip(displayedPrice, tokenSymbol);
+      if (priceErr || !freshPrice?.priceUsd) {
+        toast.error('Failed to fetch fresh price: ' + (freshPrice?.error || priceErr?.message || 'Unknown'));
+        return;
+      }
+
+      const displayedPrice = freshPrice.priceUsd;
+      console.log(`[FlipIt] Fresh Helius price for execution: $${displayedPrice}`);
+
+      await executeFlip(displayedPrice, tokenSymbol);
+    } catch (err: any) {
+      console.error('Fresh price fetch error:', err);
+      toast.error('Failed to fetch price: ' + (err.message || 'Unknown error'));
+    }
   };
   
   // Execute the actual flip (separated for confirmation dialog flow)
