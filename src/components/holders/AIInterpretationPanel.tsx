@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, ChevronDown, ChevronUp, Sparkles, AlertTriangle, RefreshCw, Clock, Target, TrendingUp, Shield } from 'lucide-react';
+import { Brain, ChevronDown, ChevronUp, Sparkles, AlertTriangle, RefreshCw, Clock, Target, TrendingUp, Shield, Lock, Crown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,12 +7,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Switch } from '@/components/ui/switch';
 import { useTokenAIInterpretation, AIInterpretationResponse } from '@/hooks/useTokenAIInterpretation';
+import { useNavigate } from 'react-router-dom';
+import { WebTierKey } from '@/hooks/useUserTier';
 
 interface AIInterpretationPanelProps {
   reportData: Record<string, unknown>;
   tokenMint: string;
   isEnabled?: boolean;
   onToggle?: (enabled: boolean) => void;
+  userTier?: WebTierKey;
 }
 
 const lifecycleBadgeColors: Record<string, string> = {
@@ -35,12 +38,18 @@ export function AIInterpretationPanel({
   reportData, 
   tokenMint, 
   isEnabled = true,
-  onToggle 
+  onToggle,
+  userTier = 'auth',
 }: AIInterpretationPanelProps) {
   const { interpretation, isLoading, error, fetchInterpretation, reset } = useTokenAIInterpretation();
   const [showDrivers, setShowDrivers] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
   const [localEnabled, setLocalEnabled] = useState(isEnabled);
+  const navigate = useNavigate();
+
+  const TIER_ORDER: Record<string, number> = { free: 0, auth: 1, x_subscriber: 2, pro: 3, dev: 4, enterprise: 5 };
+  const canSeeDrivers = (TIER_ORDER[userTier] ?? 0) >= TIER_ORDER['pro'];
+  const canSeeReasoning = (TIER_ORDER[userTier] ?? 0) >= TIER_ORDER['pro'];
 
   // Fetch interpretation when component mounts or token changes
   useEffect(() => {
@@ -204,58 +213,82 @@ export function AIInterpretationPanel({
           </div>
         )}
 
-        {/* Key Drivers Collapsible */}
-        <Collapsible open={showDrivers} onOpenChange={setShowDrivers}>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="w-full justify-between p-2 h-auto">
-              <span className="flex items-center gap-2 text-sm">
-                <TrendingUp className="h-4 w-4 text-blue-400" />
-                Key Drivers ({data.key_drivers.length})
-              </span>
-              {showDrivers ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-2 pt-2">
-            {data.key_drivers.map((driver, i) => (
-              <div key={i} className="p-2 bg-muted/30 rounded-md border border-border/50">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium">{driver.label}</span>
-                  <Badge variant="outline" className="text-xs">
-                    {driver.metric_value} → {driver.bucket}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">{driver.implication}</p>
-              </div>
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
-
-        {/* Reasoning Trace Collapsible */}
-        <Collapsible open={showReasoning} onOpenChange={setShowReasoning}>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="w-full justify-between p-2 h-auto">
-              <span className="flex items-center gap-2 text-sm">
-                <Shield className="h-4 w-4 text-green-400" />
-                Why this interpretation?
-              </span>
-              {showReasoning ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-2">
-            <div className="space-y-1 text-xs font-mono bg-muted/20 p-3 rounded-md border border-border/30">
-              {data.reasoning_trace.map((step, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className="text-muted-foreground">{step.metric}:</span>
-                  <span className="text-blue-300">{step.value}</span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="text-yellow-300">{step.threshold_category}</span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="text-green-300">"{step.phrase_selected}"</span>
+        {/* Key Drivers - Pro tier only */}
+        {canSeeDrivers ? (
+          <Collapsible open={showDrivers} onOpenChange={setShowDrivers}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between p-2 h-auto">
+                <span className="flex items-center gap-2 text-sm">
+                  <TrendingUp className="h-4 w-4 text-blue-400" />
+                  Key Drivers ({data.key_drivers.length})
+                </span>
+                {showDrivers ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 pt-2">
+              {data.key_drivers.map((driver, i) => (
+                <div key={i} className="p-2 bg-muted/30 rounded-md border border-border/50">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium">{driver.label}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {driver.metric_value} → {driver.bucket}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{driver.implication}</p>
                 </div>
               ))}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : (
+          <div className="p-3 bg-muted/20 rounded-md border border-border/30 flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Lock className="h-4 w-4" />
+              Key Drivers ({data.key_drivers.length}) — Pro feature
+            </span>
+            <Button variant="outline" size="sm" onClick={() => navigate('/pricing')} className="text-xs h-7">
+              <Crown className="h-3 w-3 mr-1" /> Upgrade
+            </Button>
+          </div>
+        )}
+
+        {/* Reasoning Trace - Pro tier only */}
+        {canSeeReasoning ? (
+          <Collapsible open={showReasoning} onOpenChange={setShowReasoning}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between p-2 h-auto">
+                <span className="flex items-center gap-2 text-sm">
+                  <Shield className="h-4 w-4 text-green-400" />
+                  Why this interpretation?
+                </span>
+                {showReasoning ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <div className="space-y-1 text-xs font-mono bg-muted/20 p-3 rounded-md border border-border/30">
+                {data.reasoning_trace.map((step, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-muted-foreground">{step.metric}:</span>
+                    <span className="text-blue-300">{step.value}</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="text-yellow-300">{step.threshold_category}</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="text-green-300">"{step.phrase_selected}"</span>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : (
+          <div className="p-3 bg-muted/20 rounded-md border border-border/30 flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Lock className="h-4 w-4" />
+              Reasoning Trace — Pro feature
+            </span>
+            <Button variant="outline" size="sm" onClick={() => navigate('/pricing')} className="text-xs h-7">
+              <Crown className="h-3 w-3 mr-1" /> Upgrade
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
