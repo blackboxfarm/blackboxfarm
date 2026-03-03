@@ -90,7 +90,7 @@ async function fetchAISummary(
   tokenMint: string,
   supabaseUrl: string,
   anonKey: string
-): Promise<{ summary: string; lifecycle: string } | null> {
+): Promise<{ summary: string; overview: string; lifecycle: string } | null> {
   try {
     console.log(`[poster] Fetching AI interpretation for ${tokenMint}`);
     
@@ -116,6 +116,7 @@ async function fetchAISummary(
     if (data.interpretation?.abbreviated_summary && data.interpretation?.lifecycle?.stage) {
       return {
         summary: data.interpretation.abbreviated_summary,
+        overview: data.interpretation.status_overview || '',
         lifecycle: data.interpretation.lifecycle.stage,
       };
     }
@@ -138,6 +139,7 @@ function processTemplate(template: string, data: any): string {
   
   // AI summary defaults to empty if not provided or disabled
   const aiSummary = data.aiSummary || '';
+  const aiOverview = data.aiOverview || '';
   const lifecycle = data.lifecycle || '';
   
   return template
@@ -171,6 +173,8 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{ca\}/g, data.tokenMint || '')
     .replace(/\{ai_summary\}/g, aiSummary)
     .replace(/\{AI_SUMMARY\}/g, aiSummary)
+    .replace(/\{ai_overview\}/g, aiOverview)
+    .replace(/\{AI_OVERVIEW\}/g, aiOverview)
     .replace(/\{lifecycle\}/g, lifecycle)
     .replace(/\{LIFECYCLE\}/g, lifecycle);
 }
@@ -348,6 +352,7 @@ Deno.serve(async (req) => {
         healthScore: asCount(report?.stabilityScore ?? report?.healthScore?.score),
         // AI summary fields (populated below if enabled)
         aiSummary: '',
+        aiOverview: '',
         lifecycle: '',
       };
       
@@ -386,8 +391,9 @@ Deno.serve(async (req) => {
         );
       }
       
-      // Check if AI summary is enabled (via queue item flag or template contains {ai_summary})
+      // Check if AI summary is enabled (via queue item flag or template contains AI vars)
       const templateUsesAI = tweetTemplate.includes('{ai_summary}') || tweetTemplate.includes('{AI_SUMMARY}') ||
+                             tweetTemplate.includes('{ai_overview}') || tweetTemplate.includes('{AI_OVERVIEW}') ||
                              tweetTemplate.includes('{lifecycle}') || tweetTemplate.includes('{LIFECYCLE}');
       const aiEnabledForItem = item.include_ai_summary === true;
       
@@ -396,6 +402,7 @@ Deno.serve(async (req) => {
         const aiResult = await fetchAISummary(report, item.token_mint, supabaseUrl, anonKey);
         if (aiResult) {
           stats.aiSummary = aiResult.summary;
+          stats.aiOverview = aiResult.overview;
           stats.lifecycle = aiResult.lifecycle;
           console.log(`[poster] AI summary: ${stats.lifecycle} - ${stats.aiSummary.substring(0, 50)}...`);
         } else {

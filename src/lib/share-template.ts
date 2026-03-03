@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'subscription';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -90,6 +90,28 @@ Analyze any token 👉 blackbox.farm/holders`,
 🌱 Retail: {retail} | 💨 Dust: {dust}
 
 🔗 blackbox.farm/holders?token={ca}`,
+
+  subscription: `🔎 Holder Analysis: $\{ticker}
+
+CA: {ca}
+
+Health: {healthGrade} ({healthScore}/100)
+
+📊 {totalWallets} Total Wallets
+✅ {realHolders} Real Holders
+{dustPct}% are dust wallets
+
+🐋 {whales} Whales (>$1K)
+💼 {serious} Serious ($200-$1K)
+🌱 {retail} Retail ($1-$199)
+💨 {dust} Dust (<$1)
+
+🧠 AI Overview:
+{ai_overview}
+
+📈 Lifecycle: {lifecycle}
+
+Free report 👉 blackbox.farm/holders?token={ca}`,
 };
 
 // Legacy default for backwards compatibility
@@ -113,6 +135,7 @@ export const TEMPLATE_VARIABLES = [
   { var: '{timestamp}', desc: 'Current UTC timestamp' },
   { var: '{comment1}', desc: 'Milestone comment (Intel posts)' },
   { var: '{ai_summary}', desc: 'AI-generated 1-2 sentence interpretation (when enabled)' },
+  { var: '{ai_overview}', desc: 'AI-generated multi-paragraph overview (Subscription posts)' },
   { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
   // Telegram-specific variables
   { var: '{timesPosted}', desc: 'Number of times token was posted (TG Posted)' },
@@ -146,6 +169,7 @@ export interface TokenShareData {
   // Optional Intel/AI enhancements (used by Intel XBot + manual admin posting)
   comment1?: string;
   aiSummary?: string;
+  aiOverview?: string;
   lifecycle?: string;
 }
 
@@ -303,6 +327,7 @@ export function processTemplate(template: string, data: TokenShareData): string 
 
   const comment1 = data.comment1 ?? '';
   const aiSummary = data.aiSummary ?? '';
+  const aiOverview = data.aiOverview ?? '';
   const lifecycle = data.lifecycle ?? '';
   
   return template
@@ -326,6 +351,8 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{COMMENT1\}/g, comment1)
     .replace(/\{ai_summary\}/g, aiSummary)
     .replace(/\{AI_SUMMARY\}/g, aiSummary)
+    .replace(/\{ai_overview\}/g, aiOverview)
+    .replace(/\{AI_OVERVIEW\}/g, aiOverview)
     .replace(/\{lifecycle\}/g, lifecycle)
     .replace(/\{LIFECYCLE\}/g, lifecycle);
 }

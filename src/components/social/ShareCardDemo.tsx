@@ -79,6 +79,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     shares: false,
     tg_posted: false,
     tg_search: false,
+    subscription: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
@@ -86,7 +87,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [isPosting, setIsPosting] = useState(false);
   const [fetchedStats, setFetchedStats] = useState<TokenStats | null>(null);
   const [granularTiers, setGranularTiers] = useState<GranularTierCounts | null>(null);
-  const [aiMeta, setAiMeta] = useState<{ aiSummary: string; lifecycle: string } | null>(null);
+  const [aiMeta, setAiMeta] = useState<{ aiSummary: string; aiOverview: string; lifecycle: string } | null>(null);
 
   // Intel XBot status
   const [cronStatus, setCronStatus] = useState<CronStatus>({
@@ -270,6 +271,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     // Prevent raw {comment1} from leaking into manual/admin posts.
     comment1: '-On the Radar-',
     aiSummary: aiMeta?.aiSummary ?? '',
+    aiOverview: aiMeta?.aiOverview ?? '',
     lifecycle: aiMeta?.lifecycle ?? '',
   };
 
@@ -337,6 +339,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       const wantsAI =
         activeIntelText.includes('{ai_summary}') ||
         activeIntelText.includes('{AI_SUMMARY}') ||
+        activeIntelText.includes('{ai_overview}') ||
+        activeIntelText.includes('{AI_OVERVIEW}') ||
         activeIntelText.includes('{lifecycle}') ||
         activeIntelText.includes('{LIFECYCLE}');
 
@@ -348,16 +352,18 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
           if (aiError) throw aiError;
 
           const summary = aiData?.interpretation?.abbreviated_summary;
+          const overview = aiData?.interpretation?.status_overview;
           const lifecycle = aiData?.interpretation?.lifecycle?.stage;
 
           setAiMeta({
             aiSummary: typeof summary === 'string' ? summary : '',
+            aiOverview: typeof overview === 'string' ? overview : '',
             lifecycle: typeof lifecycle === 'string' ? lifecycle : '',
           });
         } catch (aiErr: any) {
           console.error('AI fetch error:', aiErr);
           // Don't fail the whole fetch; just omit AI fields.
-          setAiMeta({ aiSummary: '', lifecycle: '' });
+          setAiMeta({ aiSummary: '', aiOverview: '', lifecycle: '' });
         }
       }
 
@@ -538,7 +544,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </CardHeader>
         <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="small" className="relative text-xs">
               Small
               {activeIntelTemplate === 'small' && (
@@ -555,12 +561,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="subscription" className="text-xs">💎 Sub</TabsTrigger>
             <TabsTrigger value="shares" className="text-xs">Shares</TabsTrigger>
             <TabsTrigger value="tg_posted" className="text-xs">TG Posted</TabsTrigger>
             <TabsTrigger value="tg_search" className="text-xs">TG Report</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'shares', 'tg_posted', 'tg_search'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_search'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
@@ -577,6 +584,15 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     checked={activeIntelTemplate === name}
                     onCheckedChange={() => handleToggleActive(name)}
                   />
+                </div>
+              )}
+
+              {name === 'subscription' && (
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                  <Label className="font-medium text-purple-300">💎 Subscription Community</Label>
+                  <p className="text-xs text-muted-foreground">
+                    For paid X Subscription Community posts. Uses <code className="bg-muted px-1 rounded">{'{ai_overview}'}</code> for detailed multi-paragraph AI analysis.
+                  </p>
                 </div>
               )}
 
@@ -679,7 +695,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 v.var === '{timesPosted}' || v.var === '{tweetUrl}' ||
                 v.var === '{searchCount}' || v.var === '{timeWindow}' || 
                 v.var === '{uniqueIps}' || v.var === '{triggerType}';
-              const isAIVar = v.var.includes('ai_summary') || v.var.includes('lifecycle');
+              const isAIVar = v.var.includes('ai_summary') || v.var.includes('ai_overview') || v.var.includes('lifecycle');
               
               return (
                 <Badge 
@@ -705,8 +721,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
           <div className="mt-3 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
             <p className="text-xs font-medium text-purple-300 mb-1">🧠 AI-Powered Variables</p>
             <p className="text-xs text-muted-foreground">
-              Add <code className="bg-muted px-1 rounded">{'{ai_summary}'}</code> or <code className="bg-muted px-1 rounded">{'{lifecycle}'}</code> to your template to include AI-generated interpretation. 
-              The AI summary will only be fetched when these variables are present in the active template.
+              Add <code className="bg-muted px-1 rounded">{'{ai_summary}'}</code>, <code className="bg-muted px-1 rounded">{'{ai_overview}'}</code>, or <code className="bg-muted px-1 rounded">{'{lifecycle}'}</code> to your template to include AI-generated interpretation. 
+              <code className="bg-muted px-1 rounded">{'{ai_overview}'}</code> provides a detailed multi-paragraph analysis ideal for subscription community posts.
+              The AI data will only be fetched when these variables are present in the active template.
             </p>
           </div>
           
