@@ -12861,6 +12861,90 @@ export type Database = {
           },
         ]
       }
+      web_subscription_tiers: {
+        Row: {
+          ai_access_level: Database["public"]["Enums"]["ai_access_level"]
+          created_at: string | null
+          display_name: string
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          max_reports_per_day: number | null
+          price_usd: number | null
+          tier_key: Database["public"]["Enums"]["web_tier_key"]
+          updated_at: string | null
+          x_subscriber_price_usd: number | null
+        }
+        Insert: {
+          ai_access_level: Database["public"]["Enums"]["ai_access_level"]
+          created_at?: string | null
+          display_name: string
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_reports_per_day?: number | null
+          price_usd?: number | null
+          tier_key: Database["public"]["Enums"]["web_tier_key"]
+          updated_at?: string | null
+          x_subscriber_price_usd?: number | null
+        }
+        Update: {
+          ai_access_level?: Database["public"]["Enums"]["ai_access_level"]
+          created_at?: string | null
+          display_name?: string
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_reports_per_day?: number | null
+          price_usd?: number | null
+          tier_key?: Database["public"]["Enums"]["web_tier_key"]
+          updated_at?: string | null
+          x_subscriber_price_usd?: number | null
+        }
+        Relationships: []
+      }
+      web_user_subscriptions: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          starts_at: string | null
+          stripe_subscription_id: string | null
+          tier_key: Database["public"]["Enums"]["web_tier_key"]
+          updated_at: string | null
+          user_id: string
+          x_handle_linked: string | null
+          x_subscription_verified: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          starts_at?: string | null
+          stripe_subscription_id?: string | null
+          tier_key?: Database["public"]["Enums"]["web_tier_key"]
+          updated_at?: string | null
+          user_id: string
+          x_handle_linked?: string | null
+          x_subscription_verified?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          starts_at?: string | null
+          stripe_subscription_id?: string | null
+          tier_key?: Database["public"]["Enums"]["web_tier_key"]
+          updated_at?: string | null
+          user_id?: string
+          x_handle_linked?: string | null
+          x_subscription_verified?: boolean | null
+        }
+        Relationships: []
+      }
       whale_frenzy_config: {
         Row: {
           auto_buy_enabled: boolean
@@ -13484,6 +13568,10 @@ export type Database = {
           trades_used: number
         }[]
       }
+      get_user_tier: {
+        Args: { p_user_id: string }
+        Returns: Database["public"]["Enums"]["web_tier_key"]
+      }
       get_wallet_pool_secrets_decrypted: {
         Args: { user_id_param: string }
         Returns: {
@@ -13593,7 +13681,15 @@ export type Database = {
       }
     }
     Enums: {
+      ai_access_level: "summary" | "analysis" | "overview" | "full" | "api"
       app_role: "super_admin" | "admin" | "moderator" | "user"
+      web_tier_key:
+        | "free"
+        | "auth"
+        | "x_subscriber"
+        | "pro"
+        | "dev"
+        | "enterprise"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -13721,7 +13817,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ai_access_level: ["summary", "analysis", "overview", "full", "api"],
       app_role: ["super_admin", "admin", "moderator", "user"],
+      web_tier_key: [
+        "free",
+        "auth",
+        "x_subscriber",
+        "pro",
+        "dev",
+        "enterprise",
+      ],
     },
   },
 } as const

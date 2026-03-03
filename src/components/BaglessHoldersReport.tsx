@@ -29,6 +29,9 @@ import { StepIcon } from '@/components/ui/StepIcon';
 import { ExtendedAnalysisSection } from '@/components/holders/ExtendedAnalysisSection';
 import { AIInterpretationPanel } from '@/components/holders/AIInterpretationPanel';
 import { AIInterpretationLocked } from '@/components/holders/AIInterpretationLocked';
+import { AISummaryTeaser } from '@/components/premium/AISummaryTeaser';
+import { TierGate } from '@/components/premium/TierGate';
+import { useUserTier } from '@/hooks/useUserTier';
 
 interface TokenHolder {
   owner: string;
@@ -257,7 +260,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  
+  const { tierInfo, meetsMinimumTier, isAnonymous } = useUserTier();
   // Background data collection - builds historical data for premium features
   useTokenDataCollection(
     report?.tokenMint || null,
@@ -1244,11 +1247,19 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
           {/* Ad Banner #2 - Above Report Summary */}
           <AdBanner size="leaderboard" position={2} />
 
-          {/* AI Interpretation Panel - Logged in users only */}
-          {user ? (
+          {/* AI Section - Tier-aware rendering */}
+          {isAnonymous ? (
+            /* Anon visitors: AI Summary teaser */
+            <AISummaryTeaser 
+              summary={report.summary || null} 
+              onSignUpClick={() => setShowAuthModal(true)}
+            />
+          ) : meetsMinimumTier('auth') ? (
+            /* Logged-in users: Full AI panel, with pro sections gated */
             <AIInterpretationPanel 
               reportData={report as unknown as Record<string, unknown>}
               tokenMint={report.tokenMint}
+              userTier={tierInfo.tierKey}
             />
           ) : (
             <AIInterpretationLocked />

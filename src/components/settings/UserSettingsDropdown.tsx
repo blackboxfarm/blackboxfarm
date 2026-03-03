@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
-import { Settings, LogOut, Bell, Moon, Sun, Monitor, Megaphone } from 'lucide-react';
+import { Settings, LogOut, Bell, Moon, Sun, Monitor, Megaphone, Link2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from 'next-themes';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +33,9 @@ export const UserSettingsDropdown = () => {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [hasAdvertiserAccount, setHasAdvertiserAccount] = useState(false);
-
+  const [xHandle, setXHandle] = useState<string | null>(null);
+  const [xHandleInput, setXHandleInput] = useState('');
+  const [isLinkingX, setIsLinkingX] = useState(false);
   // Load settings from localStorage on mount
   useEffect(() => {
     const savedSettings = localStorage.getItem('userSettings');
@@ -58,7 +60,6 @@ export const UserSettingsDropdown = () => {
         .maybeSingle();
       
       if (account) {
-        // Check if they have any orders at all
         const { count } = await supabase
           .from('banner_orders')
           .select('id', { count: 'exact', head: true })
@@ -69,6 +70,25 @@ export const UserSettingsDropdown = () => {
     };
     
     checkAdvertiserAccount();
+  }, [user]);
+
+  // Load linked X handle
+  useEffect(() => {
+    if (!user) return;
+    const loadXHandle = async () => {
+      const { data } = await supabase
+        .from('web_user_subscriptions')
+        .select('x_handle_linked')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .not('x_handle_linked', 'is', null)
+        .maybeSingle();
+      if (data?.x_handle_linked) {
+        setXHandle(data.x_handle_linked);
+        setXHandleInput(data.x_handle_linked);
+      }
+    };
+    loadXHandle();
   }, [user]);
 
   // Save settings to localStorage whenever they change
@@ -172,6 +192,58 @@ export const UserSettingsDropdown = () => {
             <Monitor className="h-3 w-3 mr-1" />
             Auto
           </Button>
+        </div>
+
+        <DropdownMenuSeparator />
+
+        {/* X Handle Linking */}
+        <div className="px-2 py-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">Link X Handle</span>
+          </div>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              placeholder="@yourhandle"
+              value={xHandleInput}
+              onChange={(e) => setXHandleInput(e.target.value.replace(/^@/, ''))}
+              className="flex-1 text-xs h-7 px-2 rounded border border-border bg-background"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2"
+              disabled={isLinkingX || !xHandleInput.trim()}
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!user || !xHandleInput.trim()) return;
+                setIsLinkingX(true);
+                try {
+                  const handle = xHandleInput.trim().replace(/^@/, '');
+                  const { error } = await supabase
+                    .from('web_user_subscriptions')
+                    .upsert({
+                      user_id: user.id,
+                      tier_key: 'auth',
+                      x_handle_linked: handle,
+                      is_active: true,
+                    }, { onConflict: 'user_id,tier_key' });
+                  if (!error) {
+                    setXHandle(handle);
+                  }
+                } finally {
+                  setIsLinkingX(false);
+                }
+              }}
+            >
+              {xHandle ? 'Update' : 'Link'}
+            </Button>
+          </div>
+          {xHandle && (
+            <p className="text-[10px] text-muted-foreground">Linked: @{xHandle}</p>
+          )}
         </div>
 
         <DropdownMenuSeparator />
