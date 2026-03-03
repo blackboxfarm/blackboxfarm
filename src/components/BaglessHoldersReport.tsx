@@ -1271,7 +1271,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 <span className="text-base md:text-xl text-white font-bold flex items-center gap-2">
                   <StepIcon step={2} size="md" />
                   Report Summary
-                  Report Summary
                 </span>
                 <Button 
                   onClick={exportToCSV}
