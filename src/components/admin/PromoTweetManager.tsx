@@ -138,10 +138,6 @@ const PromoTweetManager: React.FC = () => {
       toast({ title: "Empty", description: "Template has no text to post", variant: "destructive" });
       return;
     }
-    if (text.length > 280) {
-      toast({ title: "Too long", description: "Tweet exceeds 280 characters", variant: "destructive" });
-      return;
-    }
     setPostingType(type);
     try {
       const { data, error } = await supabase.functions.invoke("post-share-card-twitter", {
