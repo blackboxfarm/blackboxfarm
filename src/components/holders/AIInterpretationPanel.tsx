@@ -50,6 +50,7 @@ export function AIInterpretationPanel({
   const TIER_ORDER: Record<string, number> = { free: 0, auth: 1, x_subscriber: 2, pro: 3, dev: 4, enterprise: 5 };
   const canSeeDrivers = (TIER_ORDER[userTier] ?? 0) >= TIER_ORDER['pro'];
   const canSeeReasoning = (TIER_ORDER[userTier] ?? 0) >= TIER_ORDER['pro'];
+  const canSeeOverview = (TIER_ORDER[userTier] ?? 0) >= TIER_ORDER['x_subscriber'];
 
   // Fetch interpretation when component mounts or token changes
   useEffect(() => {
@@ -210,6 +211,35 @@ export function AIInterpretationPanel({
                 <p key={i}>{note}</p>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* AI Overview - X Subscriber+ only */}
+        {canSeeOverview ? (
+          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-md space-y-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-blue-400" />
+              <span className="text-sm font-medium">Detailed AI Overview</span>
+              <Badge variant="outline" className="text-[10px] bg-blue-500/20 text-blue-300 border-blue-500/30">X Sub+</Badge>
+            </div>
+            <p className="text-sm leading-relaxed text-foreground/85">
+              {data.abbreviated_summary}
+            </p>
+            {data.key_drivers.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Primary signals: {data.key_drivers.slice(0, 3).map(d => `${d.label} (${d.bucket})`).join(' · ')}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="p-3 bg-muted/20 rounded-md border border-border/30 flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Lock className="h-4 w-4" />
+              Detailed AI Overview — X Subscriber feature
+            </span>
+            <Button variant="outline" size="sm" onClick={() => navigate('/pricing')} className="text-xs h-7">
+              <Sparkles className="h-3 w-3 mr-1" /> Subscribe
+            </Button>
           </div>
         )}
 

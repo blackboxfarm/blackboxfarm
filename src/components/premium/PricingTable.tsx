@@ -1,4 +1,4 @@
-import { Check, X, Crown, Sparkles, Zap, Users, ArrowRight, Loader2 } from 'lucide-react';
+import { Check, X, Crown, Sparkles, Zap, Users, ArrowRight, Loader2, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ interface PricingFeature {
   pro: boolean | string;
   dev: boolean | string;
   enterprise: boolean | string;
+  comingSoon?: boolean;
 }
 
 const features: PricingFeature[] = [
@@ -29,19 +30,27 @@ const features: PricingFeature[] = [
   { label: 'Full AI Panel', free: false, auth: true, xSub: true, pro: true, dev: true, enterprise: true },
   { label: 'Whale Warnings', free: false, auth: true, xSub: true, pro: true, dev: true, enterprise: true },
   { label: 'AI Overview (detailed)', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
-  { label: 'Wallet Clustering', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
   { label: 'First Buyer Intel', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
   { label: 'Key Drivers Analysis', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   { label: 'Reasoning Trace', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
-  { label: 'Comparison Charts', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   { label: 'CSV Export', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
-  { label: 'API Access', free: false, auth: false, xSub: false, pro: false, dev: true, enterprise: true },
-  { label: 'Webhooks', free: false, auth: false, xSub: false, pro: false, dev: true, enterprise: true },
-  { label: 'Team Seats', free: '1', auth: '1', xSub: '1', pro: '1', dev: '1', enterprise: '4' },
-  { label: 'Priority Support', free: false, auth: false, xSub: false, pro: false, dev: false, enterprise: true },
+  { label: 'Wallet Clustering', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true, comingSoon: true },
+  { label: 'Comparison Charts', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true, comingSoon: true },
+  { label: 'API Access', free: false, auth: false, xSub: false, pro: false, dev: true, enterprise: true, comingSoon: true },
+  { label: 'Webhooks', free: false, auth: false, xSub: false, pro: false, dev: true, enterprise: true, comingSoon: true },
+  { label: 'Team Seats', free: '1', auth: '1', xSub: '1', pro: '1', dev: '1', enterprise: '4', comingSoon: true },
+  { label: 'Priority Support', free: false, auth: false, xSub: false, pro: false, dev: false, enterprise: true, comingSoon: true },
 ];
 
-function FeatureValue({ value }: { value: boolean | string }) {
+function FeatureValue({ value, comingSoon }: { value: boolean | string; comingSoon?: boolean }) {
+  if (comingSoon && (value === true || (typeof value === 'string' && value !== '1'))) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Clock className="h-3 w-3" />
+        Soon
+      </span>
+    );
+  }
   if (typeof value === 'string') {
     return <span className="text-sm font-medium text-foreground">{value}</span>;
   }
@@ -274,13 +283,21 @@ export function PricingTable() {
           <tbody>
             {features.map((feature, i) => (
               <tr key={i} className="border-b border-border/30">
-                <td className="py-2.5 px-4 text-foreground/80">{feature.label}</td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.free} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.auth} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.xSub} /></td>
-                <td className="text-center py-2.5 bg-primary/5"><FeatureValue value={feature.pro} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.dev} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.enterprise} /></td>
+                <td className="py-2.5 px-4 text-foreground/80">
+                  {feature.label}
+                  {feature.comingSoon && (
+                    <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 border-muted-foreground/30 text-muted-foreground">
+                      <Clock className="h-2.5 w-2.5 mr-0.5" />
+                      Soon
+                    </Badge>
+                  )}
+                </td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.free} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.auth} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.xSub} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5 bg-primary/5"><FeatureValue value={feature.pro} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.dev} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.enterprise} comingSoon={feature.comingSoon} /></td>
               </tr>
             ))}
           </tbody>

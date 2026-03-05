@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, Sparkles } from 'lucide-react';
+import { Loader2, Download, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, Sparkles, Lock, Crown } from 'lucide-react';
 import { ShareToXButton } from '@/components/ShareToXButton';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
@@ -536,6 +536,21 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       return;
     }
 
+    // Enforce daily report limit based on tier
+    const today = new Date().toISOString().split('T')[0];
+    const storageKey = `report_count_${user?.id || 'anon'}_${today}`;
+    const currentCount = parseInt(localStorage.getItem(storageKey) || '0', 10);
+    const maxReports = tierInfo.maxReportsPerDay;
+    
+    if (currentCount >= maxReports) {
+      toast({
+        title: "Daily Report Limit Reached",
+        description: `You've used all ${maxReports} reports for today. ${meetsMinimumTier('pro') ? '' : 'Upgrade your plan for more reports.'}`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     const reportStartTime = performance.now();
     console.log('🚀 [PERF] ========== STARTING FULL REPORT GENERATION ==========');
     setIsLoading(true);
@@ -571,6 +586,10 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       console.log('⏱️ [PERF] Report data received, processing...');
       setReport(data);
       
+      // Increment daily report counter
+      const todayKey = new Date().toISOString().split('T')[0];
+      const countKey = `report_count_${user?.id || 'anon'}_${todayKey}`;
+      localStorage.setItem(countKey, String((parseInt(localStorage.getItem(countKey) || '0', 10)) + 1));
       // Track report generation for analytics
       if (onReportGenerated) {
         onReportGenerated(tokenMint.trim());
@@ -1272,16 +1291,32 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                   <StepIcon step={2} size="md" />
                   Report Summary
                 </span>
-                <Button 
-                  onClick={exportToCSV}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2 text-xs h-8 self-end sm:self-auto"
-                >
-                  <Download className="h-3 w-3" />
-                  <span className="hidden xs:inline">Export CSV</span>
-                  <span className="xs:hidden">CSV</span>
-                </Button>
+                {meetsMinimumTier('pro') ? (
+                  <Button 
+                    onClick={exportToCSV}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2 text-xs h-8 self-end sm:self-auto"
+                  >
+                    <Download className="h-3 w-3" />
+                    <span className="hidden xs:inline">Export CSV</span>
+                    <span className="xs:hidden">CSV</span>
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2 text-xs h-8 self-end sm:self-auto opacity-60"
+                    onClick={() => {
+                      toast({ title: 'CSV Export is a Pro feature', description: 'Upgrade to Pro to export reports.', variant: 'destructive' });
+                    }}
+                  >
+                    <Lock className="h-3 w-3" />
+                    <span className="hidden xs:inline">Export CSV</span>
+                    <span className="xs:hidden">CSV</span>
+                    <Crown className="h-3 w-3 text-yellow-400" />
+                  </Button>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3 md:p-6 pt-2 md:pt-0">
@@ -2010,27 +2045,78 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 </Card>
               </div>
 
-              {/* First 25 Historical Buyers - HIDDEN */}
-              <div className="hidden">
-                {false && report.firstBuyers && report.firstBuyers.length > 0 && (
+              {/* First 25 Historical Buyers - X Subscriber+ */}
+              <TierGate
+                requiredTier="x_subscriber"
+                currentTierMeetsRequirement={meetsMinimumTier('x_subscriber')}
+                featureLabel="First Buyer Intel"
+                featureDescription="See the earliest buyers of this token. Available for X Subscribers and above."
+                showTeaser={false}
+              >
+                {report.firstBuyers && report.firstBuyers.length > 0 ? (
+                  <div className="mb-4 md:mb-6">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          First 25 Historical Buyers 🥇
+                          <Badge variant="outline" className="text-xs bg-blue-500/20 text-blue-300 border-blue-500/30">
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            X Sub+
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left p-2">#</th>
+                                <th className="text-left p-2">Wallet</th>
+                                <th className="text-left p-2">First Bought</th>
+                                <th className="text-right p-2">Amount</th>
+                                <th className="text-right p-2">Still Holds</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {report.firstBuyers.map((buyer: any, idx: number) => (
+                                <tr key={buyer.wallet} className="border-b hover:bg-muted/20">
+                                  <td className="p-2 text-muted-foreground">{idx + 1}</td>
+                                  <td className="p-2 font-mono">
+                                    <a 
+                                      href={`https://solscan.io/account/${buyer.wallet}`} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="text-primary hover:underline"
+                                    >
+                                      {buyer.wallet.slice(0, 4)}...{buyer.wallet.slice(-4)}
+                                    </a>
+                                  </td>
+                                  <td className="p-2 text-muted-foreground">
+                                    {new Date(buyer.firstBoughtAt * 1000).toLocaleDateString()}
+                                  </td>
+                                  <td className="p-2 text-right">{buyer.amountBought?.toLocaleString() ?? '—'}</td>
+                                  <td className="p-2 text-right">{buyer.currentBalance?.toLocaleString() ?? '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
                   <div className="mb-4 md:mb-6">
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
                       </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground">No first buyer data available for this token.</p>
+                      </CardContent>
                     </Card>
                   </div>
                 )}
-                {report && (!report.firstBuyers || report.firstBuyers.length === 0) && (
-                  <div className="mb-4 md:mb-6">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
-                      </CardHeader>
-                    </Card>
-                  </div>
-                )}
-              </div>
+              </TierGate>
 
               {/* KOL Table - HIDDEN */}
               <div className="mb-4 md:mb-6 hidden">
