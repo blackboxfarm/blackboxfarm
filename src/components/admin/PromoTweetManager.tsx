@@ -48,11 +48,13 @@ const PromoTweetManager: React.FC = () => {
   const [postingType, setPostingType] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchAll();
+    setLoading(true);
+    fetchAll().finally(() => setLoading(false));
   }, []);
 
-  const fetchAll = async () => {
-    setLoading(true);
+  const fetchAll = async (preserveScroll = false) => {
+    const scrollY = preserveScroll ? window.scrollY : null;
+    setLoading(false); // Don't show loading on refetch
     const [tmplRes, cfgRes] = await Promise.all([
       supabase.from("promo_tweet_templates").select("*").order("template_type"),
       supabase.from("promo_tweet_config").select("*").limit(1).single(),
@@ -74,7 +76,10 @@ const PromoTweetManager: React.FC = () => {
       setConfig(cfgRes.data);
       setIntervalInput(cfgRes.data.interval_hours);
     }
-    setLoading(false);
+    
+    if (scrollY !== null) {
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    }
   };
 
   const handleSaveTemplate = async (type: string) => {
@@ -94,7 +99,7 @@ const PromoTweetManager: React.FC = () => {
       toast({ title: "Error", description: "Failed to save", variant: "destructive" });
     } else {
       toast({ title: "Saved", description: `${type} template updated` });
-      fetchAll();
+      fetchAll(true);
     }
     setSaving(false);
   };
@@ -110,7 +115,7 @@ const PromoTweetManager: React.FC = () => {
       toast({ title: "Error", description: "Failed to save config", variant: "destructive" });
     } else {
       toast({ title: "Saved", description: `Interval set to ${intervalInput}h` });
-      fetchAll();
+      fetchAll(true);
     }
   };
 
@@ -126,7 +131,7 @@ const PromoTweetManager: React.FC = () => {
       toast({ title: "Error", description: "Failed to toggle", variant: "destructive" });
     } else {
       toast({ title: newState ? "Started" : "Stopped", description: `Promo rotation ${newState ? "started" : "stopped"}` });
-      fetchAll();
+      fetchAll(true);
     }
   };
 
@@ -155,7 +160,7 @@ const PromoTweetManager: React.FC = () => {
       }
 
       toast({ title: "✅ Posted!", description: `${type} tweeted successfully (ID: ${data.tweetId})` });
-      fetchAll();
+      fetchAll(true);
     } catch (err: any) {
       console.error("Post now error:", err);
       toast({ title: "Failed", description: err.message || "Could not post tweet", variant: "destructive" });
@@ -219,13 +224,6 @@ const PromoTweetManager: React.FC = () => {
               <Button onClick={() => handleSaveTemplate(type)} disabled={saving || !hasChanges}>
                 <Save className="w-4 h-4 mr-2" />
                 Save
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setEditedTexts(prev => ({ ...prev, [type]: "" }))}
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Clear
               </Button>
               <Button
                 variant="secondary"
