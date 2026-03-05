@@ -1,71 +1,88 @@
 
 
-# Feature Audit: What's Real vs. What's Fantasy
+# HoldersIntel Bot — Full Command Suite with Tier Gating
 
-Here's the honest breakdown of every feature listed on the pricing table, whether it actually works, and what needs to be built.
+## What You Gave Me (BotFather Commands)
 
----
+Based on the conversation and your existing bot, here's the command list I'm building around:
 
-## REAL — Actually Working
+```text
+/start        — Welcome & setup
+/register     — Link BlackBox Farm account
+/status       — Check subscription tier
+/help         — Show commands
+/holders CA   — Holder distribution analysis
+/momentum CA  — Volume/price momentum score
+/verdict CA   — Quick Buy/Hold verdict
+/oracle CA    — Developer reputation lookup
+/wallet ADDR  — Wallet behavior analysis
+/alerts       — Manage alert preferences
+```
 
-| Feature | Tier Listed | Status |
-|---------|-------------|--------|
-| **Basic Holder Report** | All | Working. Core report with holder table, wallet types, LP detection |
-| **Health Grade & Score** | All | Working. Health grade component renders for all users |
-| **AI Quick Summary** | All | Working. `AISummaryTeaser` shows `{ai_summary}` for anon users |
-| **Reports per Day** | Varies | Partially working. Limits are defined in the tier config but enforcement is unclear — the rate limit may not actually block requests |
-| **Full AI Panel** | Auth+ | Working. `AIInterpretationPanel` renders for logged-in users with summary, lifecycle badge, status overview |
-| **Whale Warnings** | Auth+ | Working. Whale wallet detection and warnings exist in the report |
-| **Key Drivers Analysis** | Pro+ | Working AND gated. Shows lock icon + "Pro feature" CTA for non-Pro users. Pro users see the full collapsible section with driver labels, metrics, and implications |
-| **Reasoning Trace** | Pro+ | Working AND gated. Same pattern as Key Drivers — locked for sub-Pro, expandable for Pro+ |
-| **CSV Export** | Pro+ | Working but NOT gated. The export button is visible and functional for ALL users, including free/anon. Anyone can click it and download the CSV right now |
-| **X Subscriber Verification** | X Sub | Working. `XSubscriberVerification` component exists, community code redemption flow works |
-| **Stripe Checkout** | Pro/Dev/Ent | Working. `create-checkout` and `check-subscription` edge functions exist, pricing table triggers checkout |
-| **Manage Subscription** | Paid | Working. Customer portal integration exists |
+## Tier Gating Matrix
 
----
+```text
+Command       │ Free │ Auth │ X Sub │ Pro  │ Dev
+──────────────┼──────┼──────┼───────┼──────┼─────
+/start        │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/register     │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/status       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/help         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/holders CA   │  —   │ lite │ full  │ full+│ full+
+/momentum CA  │  —   │  —   │  ✓    │  ✓   │  ✓
+/verdict CA   │  —   │ lite │  ✓    │  ✓   │  ✓
+/oracle CA    │  —   │  —   │  —    │  ✓   │  ✓
+/wallet ADDR  │  —   │  —   │  —    │  ✓   │  ✓
+/alerts       │  —   │  —   │  ✓    │  ✓   │  ✓
+```
 
-## FANTASY — Listed But Not Built
+- **Free (unlinked)**: Only meta commands. Everything else says "link your account first."
+- **Auth (linked, free tier)**: `/holders` returns a lite summary (holder count, top 10% concentration, health score). `/verdict` returns just the color (🟢/🔴) with no detail.
+- **X Subscriber**: Full `/holders` with tier breakdown + distribution bars. `/momentum` unlocked. `/verdict` with sizing recommendation.
+- **Pro+**: `/oracle` dev reputation, `/wallet` behavior analysis, full detail on everything.
 
-| Feature | Tier Listed | What's Missing |
-|---------|-------------|----------------|
-| **AI Overview (detailed)** | X Sub+ | No distinct "overview" content level exists. X subscribers see the same AI panel as auth users. The `{ai_overview}` variable exists for X community posts but there's no separate web UI section that shows a richer "overview" vs. the standard "analysis" |
-| **Wallet Clustering** | X Sub+ | Does not exist. No clustering algorithm, no UI component, no data. The first buyer section is hidden (`className="hidden"`) and the wallet clustering concept has zero implementation |
-| **First Buyer Intel** | X Sub+ | Data is fetched (`firstBuyers` array) but the entire section is wrapped in `className="hidden"` and `{false && ...}` — literally hardcoded to never render. Not gated by tier, just completely hidden |
-| **Comparison Charts** | Pro+ | Does not exist. No token comparison UI, no multi-token chart component, no data fetching for cross-token comparisons |
-| **API Access** | Dev+ | Does not exist. The `/api` landing page explicitly says "Coming Soon". No API endpoints, no API keys, no documentation |
-| **Webhooks** | Dev+ | Does not exist as a user-facing feature. Helius webhooks exist internally for whale monitoring but there's no user-configurable webhook system |
-| **Team Seats** | Enterprise | Does not exist. No team/org model, no invite system, no multi-user account management |
-| **Priority Support** | Enterprise | No support system exists. No ticket system, no priority queue, nothing |
-| **White Label** | Enterprise | Does not exist. No customization, no branding options |
+## The `/verdict` System (Your Buy Signal)
 
----
+The verdict combines momentum score + holder health + dev reputation into a single actionable call:
 
-## PARTIALLY BROKEN — Exists But Has Gaps
+```text
+🟢 BUY DEEP LONG    — Strong chart, healthy holders, good dev. Full position, hold.
+🟢 BUY MEDIUM SHORT — Decent momentum, ride the wave. Medium position, 2x target.
+🟡 BUY SMALL SHORT  — Speculative. Small/disposable amount, quick 2x flip.
+🔴 HOLD / AVOID     — Weak signals, bad dev, or dump in progress. Skip.
+```
 
-| Feature | Issue |
-|---------|-------|
-| **CSV Export** | Works for everyone but is listed as Pro-only. No tier gate wrapping the button — any user can export |
-| **First Buyer Intel** | Data is fetched from the backend but the UI is force-hidden with `{false && ...}`. Could be unblocked quickly |
-| **Reports per Day limit** | Tier config defines `maxReportsPerDay` but I don't see enforcement logic that actually blocks a user after N reports |
+The logic:
+- Momentum score ≥ 70 + health score ≥ 60 + dev GREEN → **DEEP LONG**
+- Momentum score ≥ 55 + health score ≥ 40 → **MEDIUM SHORT**
+- Momentum score ≥ 40 OR fresh token with buying pressure → **SMALL SHORT**
+- Everything else → **HOLD/AVOID**
 
----
+## Technical Implementation
 
-## Summary Scorecard
+All new commands will be added to the existing `holdersintel-bot-webhook/index.ts` edge function. Each analytical command calls the existing edge functions internally via `supabase.functions.invoke()`:
 
-- **Real and properly gated:** 5 features (Basic Report, Health Grade, AI Summary, Key Drivers, Reasoning Trace)
-- **Real but not gated properly:** 2 features (CSV Export available to everyone, rate limits not enforced)
-- **Data exists but UI hidden:** 1 feature (First Buyer Intel)
-- **Pure fantasy on the pricing page:** 7 features (AI Overview differentiation, Wallet Clustering, Comparison Charts, API Access, Webhooks, Team Seats, Priority Support)
+| Bot Command | Calls | Data Source |
+|---|---|---|
+| `/holders CA` | `token-ai-interpreter` | Helius holder data + bucketing |
+| `/momentum CA` | `token-momentum-analyzer` | DexScreener live metrics |
+| `/verdict CA` | `token-momentum-analyzer` + `token-ai-interpreter` + `oracle-unified-lookup` | Combined score |
+| `/oracle CA` | `oracle-unified-lookup` | Dev reputation mesh |
+| `/wallet ADDR` | `wallet-behavior-analysis` | Helius transaction history |
+| `/alerts` | DB read/write on user preferences | `telegram_link_codes` or new prefs table |
 
----
+### Rate Limiting
+Each analytical command will be rate-limited per user (e.g., 5 lookups/hour for X Sub, 20/hour for Pro) to prevent API abuse. Tracked via a simple counter in the `telegram_link_codes` table or a lightweight `telegram_bot_usage` table.
 
-## Recommended Priority to Close the Gap
+### New DB Table
+`telegram_bot_usage` — tracks per-user command usage for rate limiting:
+- `id`, `telegram_user_id`, `command`, `token_mint`, `created_at`
 
-1. **Gate CSV Export** behind Pro tier — quick fix, currently giving away a "Pro" feature for free
-2. **Unhide First Buyer Intel** and gate it behind X Sub tier — data already flows, just needs the `hidden` removed and a `TierGate` wrapper
-3. **Enforce reports-per-day limits** — add actual counting/blocking logic
-4. **Build Comparison Charts** — this is the most visible Pro feature gap
-5. **Differentiate AI Overview for X Subs** — show a richer panel section for X subscribers vs auth users
-6. **Mark API, Webhooks, Team Seats, Priority Support as "Coming Soon"** on the pricing table rather than showing green checkmarks, so you're not advertising features that don't exist
+### Response Formatting
+All responses formatted as Telegram Markdown with ASCII bar charts for distributions (same style as the XBot channel posts), keeping messages under Telegram's 4096 char limit.
+
+## Files Changed
+1. **`supabase/functions/holdersintel-bot-webhook/index.ts`** — Add handlers for `/holders`, `/momentum`, `/verdict`, `/oracle`, `/wallet`, `/alerts`. Add tier gating middleware. Add rate limiting.
+2. **DB migration** — Create `telegram_bot_usage` table for rate limiting.
+3. **Update `/help`** — Show tier-appropriate command list per user.
 
