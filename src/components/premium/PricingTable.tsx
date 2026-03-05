@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { STRIPE_TIERS } from '@/config/stripeTiers';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { XSubscriberVerification } from './XSubscriberVerification';
 
 interface PricingFeature {
   label: string;
@@ -253,6 +254,9 @@ export function PricingTable() {
           );
         })}
       </div>
+
+      {/* X Subscriber Verification */}
+      {user && <XSubscriberVerification />}
 
       {/* Feature Comparison Table - Desktop */}
       <div className="hidden lg:block overflow-x-auto">
