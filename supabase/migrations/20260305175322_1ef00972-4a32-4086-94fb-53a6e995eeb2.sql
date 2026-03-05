@@ -1,0 +1,1 @@
+INSERT INTO public.x_community_codes (code, notes) VALUES ('HOLDERSVIP', 'First community verification code for X subscribers');
