@@ -60,6 +60,7 @@ const Socials = lazy(() => import("./pages/Socials"));
 const Oracle = lazy(() => import("./pages/Oracle"));
 const BankerPool = lazy(() => import("./pages/BankerPool"));
 const Pricing = lazy(() => import("./pages/Pricing"));
+const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 
 const queryClient = new QueryClient();
 
@@ -127,6 +128,7 @@ const App = () => {
                       <Route path="/banker-pool" element={<SuperAdminRoute><BankerPool /></SuperAdminRoute>} />
                       <Route path="/intel/:address" element={<IntelReport />} />
                       <Route path="/pricing" element={<Pricing />} />
+                      <Route path="/subscriptions" element={<Subscriptions />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
