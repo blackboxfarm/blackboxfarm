@@ -465,3 +465,6 @@ verify_jwt = false
 
 [functions.promo-poster]
 verify_jwt = false
+
+[functions.holdersintel-bot-webhook]
+verify_jwt = false
