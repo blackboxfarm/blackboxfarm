@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Save, RotateCcw, Eye, Play, Square, Clock, Megaphone } from "lucide-react";
+import { Save, RotateCcw, Eye, Play, Square, Clock, Megaphone, Send, Loader2 } from "lucide-react";
 
 interface PromoTemplate {
   id: string;
@@ -45,6 +45,7 @@ const PromoTweetManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("promo1");
+  const [postingType, setPostingType] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAll();
@@ -131,6 +132,42 @@ const PromoTweetManager: React.FC = () => {
 
   const enabledCount = Object.values(enabledStates).filter(Boolean).length;
 
+  const handlePostNow = async (type: string) => {
+    const text = editedTexts[type];
+    if (!text?.trim()) {
+      toast({ title: "Empty", description: "Template has no text to post", variant: "destructive" });
+      return;
+    }
+    if (text.length > 280) {
+      toast({ title: "Too long", description: "Tweet exceeds 280 characters", variant: "destructive" });
+      return;
+    }
+    setPostingType(type);
+    try {
+      const { data, error } = await supabase.functions.invoke("post-share-card-twitter", {
+        body: { tweetText: text, twitterHandle: "HoldersIntel" },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Tweet failed");
+
+      // Update config to reflect this manual post
+      if (config) {
+        await supabase
+          .from("promo_tweet_config")
+          .update({ last_posted_type: type, last_posted_at: new Date().toISOString() })
+          .eq("id", config.id);
+      }
+
+      toast({ title: "✅ Posted!", description: `${type} tweeted successfully (ID: ${data.tweetId})` });
+      fetchAll();
+    } catch (err: any) {
+      console.error("Post now error:", err);
+      toast({ title: "Failed", description: err.message || "Could not post tweet", variant: "destructive" });
+    } finally {
+      setPostingType(null);
+    }
+  };
+
   const renderTab = (type: string, label: string, icon: string) => {
     const template = templates.find(t => t.template_type === type);
     const hasChanges = template && (
@@ -193,6 +230,19 @@ const PromoTweetManager: React.FC = () => {
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Clear
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handlePostNow(type)}
+                disabled={postingType === type || !editedTexts[type]?.trim() || hasChanges === true}
+                title={hasChanges ? "Save changes before posting" : "Post this template now"}
+              >
+                {postingType === type ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
+                Post Now
               </Button>
             </div>
           </div>
