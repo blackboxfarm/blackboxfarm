@@ -31,6 +31,22 @@ export default function Pricing() {
         {/* Pricing Table */}
         <PricingTable />
 
+        {/* Billing notice */}
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/70">
+          <span>
+            Billing powered by Stripe under{' '}
+            <a
+              href="https://systemreset.ca"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-muted-foreground"
+            >
+              System Reset
+            </a>
+            , our parent company.
+          </span>
+        </div>
+
         {/* FAQ */}
         <div className="max-w-2xl mx-auto space-y-4 text-sm">
           <h2 className="text-xl font-semibold text-center">Frequently Asked Questions</h2>
