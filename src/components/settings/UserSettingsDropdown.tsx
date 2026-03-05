@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from 'next-themes';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 
 interface UserSettings {
   stayLoggedIn: boolean;
@@ -245,6 +246,11 @@ export const UserSettingsDropdown = () => {
             <p className="text-[10px] text-muted-foreground">Linked: @{xHandle}</p>
           )}
         </div>
+
+        <DropdownMenuSeparator />
+
+        {/* Telegram Link */}
+        <TelegramLinkCode compact />
 
         <DropdownMenuSeparator />
 

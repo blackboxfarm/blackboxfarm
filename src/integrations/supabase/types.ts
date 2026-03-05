@@ -10085,6 +10085,42 @@ export type Database = {
           },
         ]
       }
+      telegram_link_codes: {
+        Row: {
+          created_at: string
+          id: string
+          link_code: string
+          linked_at: string | null
+          telegram_user_id: string | null
+          telegram_username: string | null
+          tier_at_link: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          link_code: string
+          linked_at?: string | null
+          telegram_user_id?: string | null
+          telegram_username?: string | null
+          tier_at_link?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          link_code?: string
+          linked_at?: string | null
+          telegram_user_id?: string | null
+          telegram_username?: string | null
+          tier_at_link?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       telegram_message_interpretations: {
         Row: {
           ai_interpretation: string
@@ -13472,6 +13508,10 @@ export type Database = {
       }
       generate_referral_code: {
         Args: { user_id_param: string }
+        Returns: string
+      }
+      generate_telegram_link_code: {
+        Args: { p_user_id: string }
         Returns: string
       }
       get_active_positions_with_secrets: {

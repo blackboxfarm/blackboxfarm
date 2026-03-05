@@ -5,10 +5,13 @@ import { SocialIcon } from '@/components/token/SocialIcon';
 import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUserTier } from '@/hooks/useUserTier';
+import { useAuth } from '@/hooks/useAuth';
+import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 
 export default function Pricing() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { checkSubscription } = useUserTier();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
@@ -48,6 +51,13 @@ export default function Pricing() {
 
         {/* Pricing Table */}
         <PricingTable />
+
+        {/* Telegram Bot Link */}
+        {user && (
+          <div className="max-w-md mx-auto">
+            <TelegramLinkCode />
+          </div>
+        )}
 
         {/* Billing notice */}
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/70">
