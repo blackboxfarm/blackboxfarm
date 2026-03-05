@@ -462,3 +462,6 @@ verify_jwt = false
 
 [functions.verify-x-code]
 verify_jwt = false
+
+[functions.promo-poster]
+verify_jwt = false

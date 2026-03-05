@@ -5974,6 +5974,63 @@ export type Database = {
         }
         Relationships: []
       }
+      promo_tweet_config: {
+        Row: {
+          created_at: string
+          id: string
+          interval_hours: number
+          is_running: boolean
+          last_posted_at: string | null
+          last_posted_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          interval_hours?: number
+          is_running?: boolean
+          last_posted_at?: string | null
+          last_posted_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          interval_hours?: number
+          is_running?: boolean
+          last_posted_at?: string | null
+          last_posted_type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      promo_tweet_templates: {
+        Row: {
+          created_at: string
+          id: string
+          is_enabled: boolean
+          template_text: string
+          template_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          template_text?: string
+          template_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          template_text?: string
+          template_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pumpfun_blacklist: {
         Row: {
           added_by: string | null
