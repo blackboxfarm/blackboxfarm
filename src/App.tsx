@@ -61,6 +61,7 @@ const Oracle = lazy(() => import("./pages/Oracle"));
 const BankerPool = lazy(() => import("./pages/BankerPool"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
+const TelegramBot = lazy(() => import("./pages/TelegramBot"));
 
 const queryClient = new QueryClient();
 
@@ -129,6 +130,7 @@ const App = () => {
                       <Route path="/intel/:address" element={<IntelReport />} />
                       <Route path="/pricing" element={<Pricing />} />
                       <Route path="/subscriptions" element={<Subscriptions />} />
+                      <Route path="/tgbot" element={<TelegramBot />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>

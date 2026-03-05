@@ -40,6 +40,14 @@ const features: PricingFeature[] = [
   { label: 'Webhooks', free: false, auth: false, xSub: false, pro: false, dev: true, enterprise: true, comingSoon: true },
   { label: 'Team Seats', free: '1', auth: '1', xSub: '1', pro: '1', dev: '1', enterprise: '4', comingSoon: true },
   { label: 'Priority Support', free: false, auth: false, xSub: false, pro: false, dev: false, enterprise: true, comingSoon: true },
+  // Telegram Bot features
+  { label: '🤖 TG Bot: /holders', free: false, auth: 'Lite', xSub: 'Full', pro: 'Full+', dev: 'Full+', enterprise: 'Full+' },
+  { label: '🤖 TG Bot: /verdict', free: false, auth: '🟢/🔴', xSub: '✓ Sizing', pro: '✓ Sizing', dev: '✓ Sizing', enterprise: '✓ Sizing' },
+  { label: '🤖 TG Bot: /momentum', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
+  { label: '🤖 TG Bot: /oracle', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
+  { label: '🤖 TG Bot: /wallet', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
+  { label: '🤖 TG Bot: /alerts', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
+  { label: 'Bot Lookups / Hour', free: '0', auth: '3', xSub: '10', pro: '25', dev: '50', enterprise: '50' },
 ];
 
 function FeatureValue({ value, comingSoon }: { value: boolean | string; comingSoon?: boolean }) {
