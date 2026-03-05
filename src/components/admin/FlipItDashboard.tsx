@@ -26,7 +26,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import TweetTemplateEditor from './TweetTemplateEditor';
-import PromoTweetManager from './PromoTweetManager';
 import { FlipItNotificationSettings } from './FlipItNotificationSettings';
 import { EditLimitOrderDialog } from './flipit/EditLimitOrderDialog';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
@@ -5262,9 +5261,6 @@ export function FlipItDashboard() {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <TweetTemplateEditor />
-          <div className="mt-4">
-            <PromoTweetManager />
-          </div>
         </CollapsibleContent>
       </Collapsible>
 
