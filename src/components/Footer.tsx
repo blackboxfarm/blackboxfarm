@@ -102,6 +102,13 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link to="/tgbot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <MessageCircle className="h-3 w-3 text-blue-400" />
+                  Telegram Bot
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-400/30 text-blue-400">Soon</Badge>
+                </Link>
+              </li>
+              <li>
                 <Link to="/adverts" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <span>📢</span>
                   Marketing

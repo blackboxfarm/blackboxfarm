@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { PricingTable } from '@/components/premium/PricingTable';
 import { XSubscriberVerification } from '@/components/premium/XSubscriberVerification';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
@@ -16,6 +16,8 @@ import {
   Shield,
   Zap,
   ChevronRight,
+  MessageCircle,
+  ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -164,6 +166,32 @@ export default function Subscriptions() {
               <TelegramLinkCode />
             </div>
           )}
+        </section>
+
+        {/* Telegram Bot Promo */}
+        <section className="mx-auto max-w-4xl px-4 pb-12">
+          <Card className="border-blue-500/20 bg-gradient-to-r from-blue-500/5 via-transparent to-cyan-500/5">
+            <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-center gap-6">
+              <div className="shrink-0 w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                <MessageCircle className="w-8 h-8 text-blue-400" />
+              </div>
+              <div className="flex-1 text-center md:text-left space-y-2">
+                <div className="flex items-center justify-center md:justify-start gap-2">
+                  <h3 className="text-lg font-bold">Telegram Bot</h3>
+                  <Badge variant="outline" className="text-xs border-blue-400/30 text-blue-400">Coming Soon</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Get holder analysis, buy/hold verdicts, and momentum scores right in your Telegram DMs. 
+                  Your subscription tier carries over automatically.
+                </p>
+              </div>
+              <Button variant="outline" className="shrink-0 border-blue-400/30 text-blue-400 hover:bg-blue-500/10" asChild>
+                <Link to="/tgbot">
+                  Learn More <ArrowRight className="w-4 h-4 ml-1" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         </section>
 
         {/* Billing notice */}
