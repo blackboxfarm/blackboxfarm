@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -135,7 +136,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { tweetText, twitterHandle, tokenStats, communityId } = body;
+    const { tweetText, twitterHandle, tokenStats, communityId, skipTelegram } = body;
 
     // Determine tweet content
     let finalTweetText: string;
@@ -217,6 +218,23 @@ Free report 👉 blackbox.farm/holders`;
     const result = await sendTweet(finalTweetText, apiKey, apiSecret, accessToken, accessTokenSecret, communityId);
 
     console.log("Tweet posted successfully:", result.data?.id);
+
+    // Also broadcast to BlackBox Telegram channel (unless caller opts out)
+    if (!skipTelegram) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        
+        const tweetUrl = `https://x.com/i/status/${result.data?.id}`;
+        const tgMessage = `📢 *New X Post*\n\n${finalTweetText}\n\n🐦 ${tweetUrl}`;
+        
+        await broadcastToBlackBox(supabase, tgMessage);
+        console.log("TG broadcast sent for tweet:", result.data?.id);
+      } catch (tgErr) {
+        console.warn("TG broadcast failed (non-blocking):", tgErr);
+      }
+    }
 
     return new Response(
       JSON.stringify({ 

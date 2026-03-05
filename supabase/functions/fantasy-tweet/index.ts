@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -234,6 +235,20 @@ Deno.serve(async (req) => {
     }
 
     const success = !!(results.community?.data?.id || results.mainFeed?.data?.id);
+
+    // Also broadcast to BlackBox Telegram channel
+    if (success) {
+      try {
+        const tweetId = results.community?.data?.id || results.mainFeed?.data?.id;
+        const tweetUrl = `https://x.com/i/status/${tweetId}`;
+        const tgMessage = `📢 *Fantasy ${type === 'buy' ? 'Buy' : 'Sell'} Alert*\n\n${tweetText}\n\n🐦 ${tweetUrl}`;
+        
+        await broadcastToBlackBox(supabase, tgMessage);
+        console.log(`[fantasy-tweet] TG broadcast sent for ${type}`);
+      } catch (tgErr) {
+        console.warn('[fantasy-tweet] TG broadcast failed (non-blocking):', tgErr);
+      }
+    }
 
     return new Response(JSON.stringify({
       success,

@@ -238,6 +238,7 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
       body: JSON.stringify({
         tweetText,
         twitterHandle: TWITTER_HANDLE,
+        skipTelegram: true, // holders-intel-poster has its own custom TG formatting
       }),
     }
   );
