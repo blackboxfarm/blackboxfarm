@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 
-const OG_IMAGE_URL = 'https://blackboxfarm.lovable.app/images/holders-intel-og.png';
+const OG_IMAGE_URL = 'https://blackbox.farm/images/holders-intel-og.png';
 
 export default function Subscriptions() {
   const [searchParams, setSearchParams] = useSearchParams();
