@@ -248,31 +248,41 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   let tier = "free";
   if (linked) tier = await getUserTier(linked.user_id);
 
-  let cmds = `📖 *HoldersIntel Bot Commands*\n\n` +
-    `/start — Welcome & setup\n` +
-    `/register \`CODE\` — Link account\n` +
-    `/status — Check tier & usage\n` +
-    `/help — This message\n`;
+  const unlocked = "✅";
+  const locked = "🔒";
+  const check = (req: string) => hasTier(tier, req) ? unlocked : locked;
 
-  if (hasTier(tier, "auth")) {
-    cmds += `\n🔍 *Analysis (Auth+)*\n`;
-    cmds += `/holders \`CA\` — Holder distribution\n`;
-    cmds += `/verdict \`CA\` — Quick Buy/Hold signal\n`;
+  let cmds = `📖 *HoldersIntel Bot Commands*\n\n` +
+    `*General — All Users*\n` +
+    `${unlocked} /start — Welcome & setup\n` +
+    `${unlocked} /register \`CODE\` — Link account\n` +
+    `${unlocked} /status — Check tier & usage\n` +
+    `${unlocked} /help — This message\n\n`;
+
+  cmds += `*Analysis — Auth ★*\n` +
+    `${check("auth")} /holders \`CA\` — Holder distribution\n` +
+    `${check("auth")} /verdict \`CA\` — Quick Buy/Hold signal\n\n`;
+
+  cmds += `*Advanced — X Subscriber ★★*\n` +
+    `${check("x_subscriber")} /momentum \`CA\` — Volume & price momentum\n` +
+    `${check("x_subscriber")} /alerts — Manage alert prefs\n`;
+  if (!hasTier(tier, "x_subscriber")) {
+    cmds += `  _↑ Unlock with X Subscriber ($3.99/mo)_\n`;
   }
-  if (hasTier(tier, "x_subscriber")) {
-    cmds += `\n📊 *Advanced (X Sub+)*\n`;
-    cmds += `/momentum \`CA\` — Volume & price momentum\n`;
-    cmds += `/alerts — Manage alert preferences\n`;
-  }
-  if (hasTier(tier, "pro")) {
-    cmds += `\n🔬 *Pro Commands*\n`;
-    cmds += `/oracle \`CA\` — Developer reputation\n`;
-    cmds += `/wallet \`ADDR\` — Wallet behavior\n`;
+  cmds += `\n`;
+
+  cmds += `*Pro Intelligence — Pro ★★★*\n` +
+    `${check("pro")} /oracle \`CA\` — Developer reputation\n` +
+    `${check("pro")} /wallet \`ADDR\` — Wallet behavior\n`;
+  if (!hasTier(tier, "pro")) {
+    cmds += `  _↑ Unlock with Pro ($9.99/mo)_\n`;
   }
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
-    `📈 Rate: ${RATE_LIMITS[tier] ?? 3} lookups/hr\n` +
-    `Upgrade: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)`;
+    `★ = Tier required | ${unlocked} = Available | ${locked} = Locked\n\n` +
+    `📊 Your tier: *${tier.toUpperCase()}*\n` +
+    `📈 Rate limit: *${RATE_LIMITS[tier] ?? 3}* lookups/hr\n\n` +
+    `🚀 Upgrade: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)`;
 
   await sendMessage(chatId, cmds);
 }
