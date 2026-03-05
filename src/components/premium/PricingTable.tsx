@@ -1,10 +1,14 @@
-import { Check, X, Crown, Sparkles, Zap, Users, ArrowRight } from 'lucide-react';
+import { Check, X, Crown, Sparkles, Zap, Users, ArrowRight, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { STRIPE_TIERS } from '@/config/stripeTiers';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 interface PricingFeature {
   label: string;
@@ -51,6 +55,51 @@ export function PricingTable() {
   const { user } = useAuth();
   const { tierInfo } = useUserTier();
   const navigate = useNavigate();
+  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+
+  const handleCheckout = async (tierKey: 'pro' | 'dev' | 'enterprise') => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    setLoadingTier(tierKey);
+    try {
+      const isXSub = tierInfo.isXSubscriber;
+      const stripeConfig = STRIPE_TIERS[tierKey];
+      const priceId = isXSub ? stripeConfig.x_sub_price_id : stripeConfig.price_id;
+
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { priceId },
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      toast.error('Failed to start checkout. Please try again.');
+    } finally {
+      setLoadingTier(null);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    setLoadingTier('manage');
+    try {
+      const { data, error } = await supabase.functions.invoke('customer-portal');
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (err) {
+      console.error('Portal error:', err);
+      toast.error('Failed to open subscription management.');
+    } finally {
+      setLoadingTier(null);
+    }
+  };
 
   const tiers = [
     {
@@ -63,6 +112,7 @@ export function PricingTable() {
       highlight: false,
       cta: user ? 'Current' : 'Get Started',
       badge: null,
+      stripeKey: null as 'pro' | 'dev' | 'enterprise' | null,
     },
     {
       key: 'auth',
@@ -74,6 +124,7 @@ export function PricingTable() {
       highlight: false,
       cta: user ? (tierInfo.tierKey === 'auth' ? 'Current' : 'Included') : 'Sign Up Free',
       badge: null,
+      stripeKey: null as 'pro' | 'dev' | 'enterprise' | null,
     },
     {
       key: 'x_subscriber',
@@ -85,6 +136,7 @@ export function PricingTable() {
       highlight: false,
       cta: 'Subscribe on X',
       badge: null,
+      stripeKey: null as 'pro' | 'dev' | 'enterprise' | null,
     },
     {
       key: 'pro',
@@ -96,6 +148,7 @@ export function PricingTable() {
       highlight: true,
       cta: 'Upgrade to Pro',
       badge: 'Most Popular',
+      stripeKey: 'pro' as const,
     },
     {
       key: 'dev',
@@ -105,8 +158,9 @@ export function PricingTable() {
       description: 'API access & automation',
       icon: <Zap className="h-4 w-4" />,
       highlight: false,
-      cta: 'Coming Soon',
+      cta: 'Upgrade to Developer',
       badge: null,
+      stripeKey: 'dev' as const,
     },
     {
       key: 'enterprise',
@@ -116,17 +170,34 @@ export function PricingTable() {
       description: 'Team & white-label',
       icon: <Users className="h-4 w-4" />,
       highlight: false,
-      cta: 'Coming Soon',
+      cta: 'Upgrade to Enterprise',
       badge: null,
+      stripeKey: 'enterprise' as const,
     },
   ];
 
   return (
     <div className="space-y-8">
-      {/* Tier Cards - Mobile-friendly */}
+      {/* Manage existing subscription */}
+      {tierInfo.tierKey !== 'free' && tierInfo.tierKey !== 'auth' && tierInfo.tierKey !== 'x_subscriber' && (
+        <div className="text-center">
+          <Button variant="outline" onClick={handleManageSubscription} disabled={loadingTier === 'manage'}>
+            {loadingTier === 'manage' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Manage Subscription
+          </Button>
+          {tierInfo.subscriptionEnd && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Renews {new Date(tierInfo.subscriptionEnd).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Tier Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {tiers.map((tier) => {
           const isCurrent = tierInfo.tierKey === tier.key;
+          const isLoading = loadingTier === tier.key;
           return (
             <Card
               key={tier.key}
@@ -160,17 +231,22 @@ export function PricingTable() {
                 <Button
                   className="w-full"
                   variant={tier.highlight ? 'default' : 'outline'}
-                  disabled={isCurrent || tier.cta === 'Coming Soon'}
+                  disabled={isCurrent || isLoading}
                   onClick={() => {
                     if (tier.key === 'x_subscriber') {
                       window.open('https://x.com/holdersintel', '_blank');
+                    } else if (tier.stripeKey) {
+                      handleCheckout(tier.stripeKey);
                     } else if (!user) {
                       navigate('/auth');
                     }
                   }}
                 >
+                  {isLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  ) : null}
                   {isCurrent ? '✓ Current Plan' : tier.cta}
-                  {!isCurrent && tier.cta !== 'Coming Soon' && <ArrowRight className="h-3.5 w-3.5 ml-1" />}
+                  {!isCurrent && !isLoading && <ArrowRight className="h-3.5 w-3.5 ml-1" />}
                 </Button>
               </CardContent>
             </Card>
