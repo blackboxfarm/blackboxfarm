@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { IntelXBotActivityLog } from './IntelXBotActivityLog';
 import { SurgeAlertsPanel } from '@/components/admin/SurgeAlertsPanel';
+import PromoTweetManager from '@/components/admin/PromoTweetManager';
 import { OGImageManager } from '@/components/admin/OGImageManager';
 import {
   DEFAULT_TEMPLATES,
@@ -793,6 +794,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </div>
       </CardContent>
     </Card>
+    
+    {/* Promo Tweet Rotation - second row of tabs */}
+    <PromoTweetManager />
     </div>
   );
 }
