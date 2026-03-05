@@ -9352,6 +9352,30 @@ export type Database = {
           },
         ]
       }
+      telegram_bot_usage: {
+        Row: {
+          command: string
+          created_at: string
+          id: string
+          telegram_user_id: string
+          token_mint: string | null
+        }
+        Insert: {
+          command: string
+          created_at?: string
+          id?: string
+          telegram_user_id: string
+          token_mint?: string | null
+        }
+        Update: {
+          command?: string
+          created_at?: string
+          id?: string
+          telegram_user_id?: string
+          token_mint?: string | null
+        }
+        Relationships: []
+      }
       telegram_callers: {
         Row: {
           average_gain_percent: number | null
