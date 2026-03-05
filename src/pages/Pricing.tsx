@@ -1,8 +1,26 @@
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PricingTable } from '@/components/premium/PricingTable';
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
+import { useUserTier } from '@/hooks/useUserTier';
 
 export default function Pricing() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { checkSubscription } = useUserTier();
+
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Subscription activated! Welcome aboard 🎉');
+      checkSubscription();
+      setSearchParams({}, { replace: true });
+    } else if (searchParams.get('canceled') === 'true') {
+      toast.info('Checkout canceled. No charges were made.');
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]);
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-6xl px-4 py-12 space-y-8">
