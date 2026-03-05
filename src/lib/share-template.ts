@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'subscription';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -112,6 +112,92 @@ Health: {healthGrade} ({healthScore}/100)
 📈 Lifecycle: {lifecycle}
 
 Free report 👉 blackbox.farm/holders?token={ca}`,
+
+  bot_holders: `📊 *Holders Report*
+
+👥 Total: *{totalWallets}*
+❤️ Health: *{healthScore}*/100
+
+*Distribution:*
+\`Whales  {whaleBar} {whalePct}%\`
+\`Serious {seriousBar} {seriousPct}%\`
+\`Retail  {retailBar} {retailPct}%\`
+\`Dust    {dustBar} {dustPct}%\`
+
+💡 *AI Summary:*
+{ai_summary}`,
+
+  bot_holders_lite: `📊 *Holders Lite*
+
+👥 Holders: *{totalWallets}*
+❤️ Health: *{healthScore}/100*
+🏦 Top 10% hold: *{whalePct}%*
+
+_Upgrade to X Subscriber for full breakdown._`,
+
+  bot_momentum: `📈 *Momentum Analysis*
+
+{scoreEmoji} Score: *{momentumScore}/100* — {recommendation}
+🎯 Action: *{action}*
+
+💰 Price: {price}
+📊 MCap: {mcap}
+⏱ 5m: {change5m}
+🕐 1h: {change1h}
+📦 Vol 5m: {vol5m}
+⚖️ Buy/Sell: {buySellRatio}
+🕰 Age: {age}
+
+*Signals:*
+{signals}`,
+
+  bot_verdict: `{verdictEmoji} *{verdict}*
+
+{description}
+
+📈 Momentum: *{momentumScore}/100*
+❤️ Health: *{healthScore}/100*
+⏱ 5m: {change5m}
+⚖️ Buy/Sell: {buySellRatio}
+
+*Key signals:*
+{signals}`,
+
+  bot_verdict_lite: `{verdictEmoji} *{verdictLabel}*
+
+_Upgrade to X Subscriber for detailed sizing recommendations._`,
+
+  bot_oracle: `🔮 *Oracle Report*
+
+👤 Dev: \`{devAddress}\`
+📊 Rep Score: *{repScore}/100*
+🪙 Tokens Created: *{totalTokens}*
+🚩 Rugs: *{rugCount}*
+⏱ Avg Lifespan: *{avgLifespan}*
+🏷 Class: *{classification}*
+
+{riskEmoji} Risk: *{riskLevel}*
+
+🕸 *Mesh Connections:*
+{meshConnections}
+
+💡 {summary}`,
+
+  bot_wallet: `🔎 *Wallet Analysis*
+
+📍 \`{walletAddress}\`
+
+🏷 Type: *{classification}*
+📊 Total Txns: *{totalTxns}*
+🎯 Win Rate: *{winRate}*
+💰 PnL: *{pnl}*
+⏱ Avg Hold: *{avgHold}*
+🪙 Tokens: *{tokensTraded}*
+
+🚩 *Risk Flags:*
+{riskFlags}
+
+💡 {summary}`,
 };
 
 // Legacy default for backwards compatibility
