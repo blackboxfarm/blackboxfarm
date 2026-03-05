@@ -16,13 +16,15 @@ const TokenSearchAnalytics = lazy(() => import("@/components/admin/TokenSearchAn
 const TokenHistoryViewer = lazy(() => import("@/components/admin/TokenHistoryViewer").then(m => ({ default: m.TokenHistoryViewer })));
 const DailiesDashboard = lazy(() => import("@/components/admin/DailiesDashboard").then(m => ({ default: m.DailiesDashboard })));
 const TokenXDashboard = lazy(() => import("@/components/admin/TokenXDashboard").then(m => ({ default: m.TokenXDashboard })));
+const SubscribersDashboard = lazy(() => import("@/components/admin/SubscribersDashboard").then(m => ({ default: m.SubscribersDashboard })));
 
 export default function HoldersIntelTab() {
-  const [activeSubTab, setActiveSubTab] = useState("visitors");
+  const [activeSubTab, setActiveSubTab] = useState("subscribers");
 
   return (
     <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
+        <TabsTrigger value="subscribers">💳 Subscribers</TabsTrigger>
         <TabsTrigger value="token-holders">📊 Token Holders</TabsTrigger>
         <TabsTrigger value="accounts">👥 Accounts</TabsTrigger>
         <TabsTrigger value="intel-xbot">🤖 Intel XBot</TabsTrigger>
@@ -38,6 +40,9 @@ export default function HoldersIntelTab() {
         <TabsTrigger value="token-x">🐦 Token X</TabsTrigger>
       </TabsList>
 
+      <TabsContent value="subscribers">
+        {activeSubTab === "subscribers" && <Suspense fallback={<LazyLoader />}><SubscribersDashboard /></Suspense>}
+      </TabsContent>
       <TabsContent value="token-holders">
         {activeSubTab === "token-holders" && <Suspense fallback={<LazyLoader />}><BaglessHoldersReport /></Suspense>}
       </TabsContent>
