@@ -169,7 +169,7 @@ export function AccountManagementDashboard() {
       // Fetch active subscriptions
       const { data: subscriptions, error: subsError } = await supabase
         .from('web_user_subscriptions')
-        .select('user_id, tier_key, is_active')
+        .select('user_id, tier_key, is_active, stripe_subscription_id, x_handle_linked, x_subscription_verified, expires_at')
         .eq('is_active', true);
 
       if (subsError) console.warn('Failed to fetch subscriptions:', subsError);
