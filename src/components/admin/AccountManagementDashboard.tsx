@@ -42,7 +42,11 @@ import {
   UserX,
   Clock,
   ExternalLink,
-  Fingerprint
+  Fingerprint,
+  Copy,
+  Check,
+  MessageCircle,
+  Zap
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
