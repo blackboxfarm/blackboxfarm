@@ -320,54 +320,93 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   await sendMessage(chatId, `🔍 Analyzing holders for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/holders", ca);
 
-  const data = await invokeFunction("token-ai-interpreter", { tokenMint: ca });
-  if (!data) {
-    await sendMessage(chatId, `❌ Could not fetch holder data. Token may not be indexed yet.`);
+  // Fetch fresh holder data from the main analysis function (same as the web app)
+  const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+  if (!data || data.error) {
+    await sendMessage(chatId, `❌ Could not fetch holder data. Token may not be indexed yet.\n\n_Error: ${data?.error || 'No response from analysis engine'}_`);
     return;
   }
 
   const isLite = !hasTier(gate.tier, "x_subscriber");
 
+  // Extract key metrics from bagless-holders-report response
+  const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
+  const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
+  const top10Pct = data.distributionStats?.top10Percentage ?? "?";
+  const tokenSymbol = data.symbol || data.tokenSymbol || null;
+  const tokenName = data.name || data.tokenName || null;
+
+  // Fetch DexScreener for MCap + fallback metadata
+  let mcap: number | null = null;
+  let dexSymbol: string | null = null;
+  let dexName: string | null = null;
+  try {
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+    if (dexRes.ok) {
+      const dexJson = await dexRes.json();
+      const pair = dexJson?.pairs?.[0];
+      if (pair) {
+        mcap = pair.marketCap || pair.fdv || null;
+        dexSymbol = pair.baseToken?.symbol || null;
+        dexName = pair.baseToken?.name || null;
+      }
+    }
+  } catch (_) {}
+
+  const symbol = tokenSymbol || dexSymbol || null;
+  const name = tokenName || dexName || null;
+  const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
+
+  // Header with token info
+  let header = `\`${ca}\`\n` +
+    `🪙 *${tokenHeader}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}\n\n`;
+
   if (isLite) {
-    // Auth tier: lite summary
-    const holders = data.total_holders ?? data.holder_count ?? "?";
-    const health = data.health_score ?? data.score ?? "?";
-    const top10 = data.top10_concentration ?? data.top_10_pct ?? "?";
     await sendMessage(chatId,
+      header +
       `📊 *Holders Lite*\n\n` +
-      `👥 Holders: *${holders}*\n` +
-      `❤️ Health: *${health}/100*\n` +
-      `🏦 Top 10% hold: *${typeof top10 === 'number' ? top10.toFixed(1) + '%' : top10}*\n\n` +
+      `👥 Holders: *${totalHolders}*\n` +
+      `❤️ Health: *${healthScore}/100*\n` +
+      `🏦 Top 10% hold: *${typeof top10Pct === 'number' ? top10Pct.toFixed(1) + '%' : top10Pct}*\n\n` +
       `_Upgrade to X Subscriber for full breakdown._`
     );
     return;
   }
 
   // Full breakdown for X Sub+
-  let msg = `📊 *Holders Report*\n\n`;
-  msg += `👥 Total: *${data.total_holders ?? data.holder_count ?? "?"}*\n`;
-  msg += `❤️ Health: *${data.health_score ?? data.score ?? "?"}*/100\n\n`;
+  let msg = header;
+  msg += `📊 *Holders Report*\n\n`;
+  msg += `👥 Total: *${totalHolders}*\n`;
+  msg += `❤️ Health: *${healthScore}*/100\n`;
+  if (typeof top10Pct === 'number') msg += `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n`;
+  msg += `\n`;
 
-  // Distribution buckets if available
-  const buckets = data.distribution || data.buckets || data.tiers;
-  if (buckets && typeof buckets === 'object') {
+  // Simple tier distribution from bagless-holders-report
+  const tiers = data.simpleTiers;
+  if (tiers && typeof tiers === 'object') {
     msg += `*Distribution:*\n`;
-    const entries = Array.isArray(buckets) ? buckets : Object.entries(buckets);
-    for (const entry of entries) {
-      if (Array.isArray(entry) && entry.length >= 2) {
-        const [label, val] = entry;
-        const pct = typeof val === 'number' ? val : (val?.percentage ?? val?.pct ?? 0);
-        msg += `${bar(pct)} ${label}: ${typeof pct === 'number' ? pct.toFixed(1) : pct}%\n`;
-      } else if (entry && typeof entry === 'object') {
-        const label = entry.label || entry.tier || entry.name || "?";
-        const pct = entry.percentage || entry.pct || entry.value || 0;
-        msg += `${bar(pct)} ${label}: ${typeof pct === 'number' ? pct.toFixed(1) : pct}%\n`;
+    const tierOrder = ['whales', 'serious', 'retail', 'dust'];
+    const tierEmojis: Record<string, string> = { whales: '🐋', serious: '💼', retail: '👤', dust: '🌫' };
+    const tierLabels: Record<string, string> = { whales: 'Whales', serious: 'Serious', retail: 'Retail', dust: 'Dust' };
+    for (const key of tierOrder) {
+      const t = tiers[key];
+      if (t) {
+        const pct = t.percentage ?? 0;
+        const count = t.count ?? 0;
+        msg += `${tierEmojis[key] || '•'} ${bar(pct)} ${tierLabels[key] || key}: *${pct.toFixed(1)}%* (${count})\n`;
       }
     }
   }
 
-  if (data.ai_summary) {
-    msg += `\n💡 *AI Summary:*\n${data.ai_summary.slice(0, 500)}`;
+  // LP info
+  if (data.lpPercentageOfSupply != null) {
+    msg += `\n🔒 LP: *${data.lpPercentageOfSupply.toFixed(1)}%* of supply\n`;
+  }
+
+  // Circulating supply
+  if (data.circulatingSupply?.percentage != null) {
+    msg += `♻️ Circulating: *${data.circulatingSupply.percentage.toFixed(1)}%*\n`;
   }
 
   await sendMessage(chatId, msg);
