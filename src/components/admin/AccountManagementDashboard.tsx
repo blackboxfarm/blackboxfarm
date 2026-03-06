@@ -215,6 +215,7 @@ export function AccountManagementDashboard() {
         const advertiser = advertisers?.find(a => a.user_id === profile.user_id);
         const userVisits = visitsByUser?.[profile.user_id];
         const userLinkCode = linkCodes?.find(lc => lc.user_id === profile.user_id);
+        const userSub = subscriptions?.find(s => s.user_id === profile.user_id);
 
         return {
           id: profile.user_id,
@@ -250,6 +251,7 @@ export function AccountManagementDashboard() {
             telegram_username: userLinkCode.telegram_username,
             linked_at: userLinkCode.linked_at,
           } : null,
+          subscription_tier: userSub?.tier_key || null,
         };
       });
 
