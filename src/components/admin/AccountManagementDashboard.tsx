@@ -99,6 +99,12 @@ interface UserAccount {
     linked_at: string | null;
   } | null;
   subscription_tier?: string | null;
+  subscription_meta?: {
+    stripe_subscription_id: string | null;
+    x_handle_linked: string | null;
+    x_subscription_verified: boolean | null;
+    expires_at: string | null;
+  } | null;
 }
 
 interface VisitSession {
@@ -163,7 +169,7 @@ export function AccountManagementDashboard() {
       // Fetch active subscriptions
       const { data: subscriptions, error: subsError } = await supabase
         .from('web_user_subscriptions')
-        .select('user_id, tier_key, is_active')
+        .select('user_id, tier_key, is_active, stripe_subscription_id, x_handle_linked, x_subscription_verified, expires_at')
         .eq('is_active', true);
 
       if (subsError) console.warn('Failed to fetch subscriptions:', subsError);
@@ -252,6 +258,12 @@ export function AccountManagementDashboard() {
             linked_at: userLinkCode.linked_at,
           } : null,
           subscription_tier: userSub?.tier_key || null,
+          subscription_meta: userSub ? {
+            stripe_subscription_id: userSub.stripe_subscription_id,
+            x_handle_linked: userSub.x_handle_linked,
+            x_subscription_verified: userSub.x_subscription_verified,
+            expires_at: userSub.expires_at,
+          } : null,
         };
       });
 
@@ -345,6 +357,7 @@ export function AccountManagementDashboard() {
   };
 
   const handleTierChange = async (userId: string, newTier: string) => {
+    const account = accounts.find(a => a.id === userId);
     try {
       if (newTier === 'auth') {
         // Remove active subscription (downgrade to free authenticated)
@@ -355,15 +368,30 @@ export function AccountManagementDashboard() {
           .eq('is_active', true);
         if (error) throw error;
       } else {
-        // Upsert subscription with new tier
+        // Preserve existing X/Stripe metadata when changing tier
+        const upsertData: Record<string, any> = {
+          user_id: userId,
+          tier_key: newTier,
+          is_active: true,
+          starts_at: new Date().toISOString(),
+        };
+
+        // Preserve linked X handle and Stripe subscription from existing record
+        if (account?.subscription_meta) {
+          if (account.subscription_meta.x_handle_linked) {
+            upsertData.x_handle_linked = account.subscription_meta.x_handle_linked;
+          }
+          if (account.subscription_meta.x_subscription_verified) {
+            upsertData.x_subscription_verified = account.subscription_meta.x_subscription_verified;
+          }
+          if (account.subscription_meta.stripe_subscription_id) {
+            upsertData.stripe_subscription_id = account.subscription_meta.stripe_subscription_id;
+          }
+        }
+
         const { error } = await supabase
           .from('web_user_subscriptions')
-          .upsert({
-            user_id: userId,
-            tier_key: newTier,
-            is_active: true,
-            starts_at: new Date().toISOString(),
-          } as any, { onConflict: 'user_id,tier_key' });
+          .upsert(upsertData as any, { onConflict: 'user_id,tier_key' });
         if (error) throw error;
 
         // Deactivate other tiers for this user
@@ -374,7 +402,11 @@ export function AccountManagementDashboard() {
           .neq('tier_key', newTier as any);
       }
 
-      toast({ title: 'Tier Updated', description: `Set to ${newTier} successfully` });
+      const label = newTier === 'auth' ? 'Free (Auth)' : newTier;
+      const warning = account?.subscription_meta?.stripe_subscription_id
+        ? ' (Stripe billing unchanged)'
+        : '';
+      toast({ title: 'Tier Updated', description: `Set to ${label}${warning}` });
       // Optimistic update
       setAccounts(prev => prev.map(a => a.id === userId ? { ...a, subscription_tier: newTier === 'auth' ? null : newTier } : a));
     } catch (err: any) {
@@ -638,17 +670,31 @@ export function AccountManagementDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <select
-                        value={account.subscription_tier || 'auth'}
-                        onChange={(e) => handleTierChange(account.id, e.target.value)}
-                        className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
-                      >
-                        <option value="auth">Free (Auth)</option>
-                        <option value="x_subscriber">X Subscriber</option>
-                        <option value="pro">Pro</option>
-                        <option value="dev">Developer</option>
-                        <option value="enterprise">Enterprise</option>
-                      </select>
+                      <div className="flex flex-col gap-1">
+                        <select
+                          value={account.subscription_tier || 'auth'}
+                          onChange={(e) => handleTierChange(account.id, e.target.value)}
+                          className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+                        >
+                          <option value="auth">Free (Auth)</option>
+                          <option value="x_subscriber">X Subscriber</option>
+                          <option value="pro">Pro</option>
+                          <option value="dev">Developer</option>
+                          <option value="enterprise">Enterprise</option>
+                        </select>
+                        <div className="flex gap-1">
+                          {account.subscription_meta?.stripe_subscription_id && (
+                            <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">
+                              <DollarSign className="h-2.5 w-2.5 mr-0.5" />Stripe
+                            </Badge>
+                          )}
+                          {account.subscription_meta?.x_handle_linked && (
+                            <Badge variant="outline" className="text-[10px] h-4 border-blue-500/30 text-blue-400">
+                              <Twitter className="h-2.5 w-2.5 mr-0.5" />@{account.subscription_meta.x_handle_linked}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground">
