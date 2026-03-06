@@ -99,6 +99,12 @@ interface UserAccount {
     linked_at: string | null;
   } | null;
   subscription_tier?: string | null;
+  subscription_meta?: {
+    stripe_subscription_id: string | null;
+    x_handle_linked: string | null;
+    x_subscription_verified: boolean | null;
+    expires_at: string | null;
+  } | null;
 }
 
 interface VisitSession {
