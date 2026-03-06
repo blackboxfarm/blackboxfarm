@@ -504,8 +504,12 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     description = "Weak signals or dump in progress. Skip this one.";
   }
 
+  // Get mcap from momentum data or DexScreener
+  const mcap = momentumData?.metrics?.market_cap || (dexData?.marketCap) || (dexData?.fdv) || null;
+  const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
+
   let msg = `\`${ca}\`\n` +
-    `🪙 *${tokenHeader}*\n\n` +
+    `🪙 *${tokenHeader}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}\n\n` +
     `${emoji} *${verdict}*\n\n` +
     `${description}\n\n` +
     `📈 Momentum: *${momentumScore}/100*\n` +
