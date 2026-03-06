@@ -233,13 +233,15 @@ async function handleStatus(chatId: number, telegramUserId: string) {
   const emoji: Record<string, string> = {
     free: "🆓", auth: "🔓", x_subscriber: "𝕏", pro: "⭐", dev: "🛠", enterprise: "🏢",
   };
+  const tgUser = linked.telegram_username ? `@${linked.telegram_username}` : "unknown";
+  const linkedDate = linked.linked_at ? new Date(linked.linked_at).toLocaleDateString() : "Unknown";
   await sendMessage(chatId,
     `📊 *Your Status*\n\n` +
     `${emoji[tier] || "📊"} Tier: *${tier.toUpperCase()}*\n` +
-    `👤 Telegram: @${linked.telegram_username || "unknown"}\n` +
-    `🔗 Linked: ${linked.linked_at ? new Date(linked.linked_at).toLocaleDateString() : "Unknown"}\n` +
+    `👤 Telegram: ${tgUser}\n` +
+    `🔗 Linked: ${linkedDate}\n` +
     `📈 Rate limit: ${RATE_LIMITS[tier] ?? 3} lookups/hr\n\n` +
-    `🌐 Manage: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)`
+    `🌐 Manage: blackbox.farm/subscriptions`
   );
 }
 
