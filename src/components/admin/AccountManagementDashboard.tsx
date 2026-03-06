@@ -123,6 +123,8 @@ export function AccountManagementDashboard() {
   const [isLoadingVisits, setIsLoadingVisits] = useState(false);
   const [resetPasswordEmail, setResetPasswordEmail] = useState('');
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const { toast } = useToast();
 
   const fetchAccounts = async () => {
