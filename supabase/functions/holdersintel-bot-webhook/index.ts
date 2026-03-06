@@ -224,25 +224,38 @@ async function handleRegister(chatId: number, telegramUserId: string, username: 
 }
 
 async function handleStatus(chatId: number, telegramUserId: string) {
-  const linked = await getLinkedUser(telegramUserId);
-  if (!linked) {
-    await sendMessage(chatId, `🔒 *Not linked.* Use /register first.`);
-    return;
+  try {
+    const linked = await getLinkedUser(telegramUserId);
+    if (!linked) {
+      await sendMessage(chatId, `🔒 Not linked. Use /register first.`, "HTML");
+      return;
+    }
+    let tier = "auth";
+    try {
+      tier = await getUserTier(linked.user_id);
+    } catch (e) {
+      console.error("[bot] getUserTier failed:", e);
+    }
+    const emojiMap: Record<string, string> = {
+      free: "🆓", auth: "🔓", x_subscriber: "𝕏", pro: "⭐", dev: "🛠", enterprise: "🏢",
+    };
+    const tgUser = linked.telegram_username || "unknown";
+    const linkedDate = linked.linked_at ? new Date(linked.linked_at).toLocaleDateString() : "Unknown";
+    const tierEmoji = emojiMap[tier] || "📊";
+    const rateLimit = RATE_LIMITS[tier] ?? 3;
+
+    const msg = `📊 <b>Your Status</b>\n\n` +
+      `${tierEmoji} Tier: <b>${(tier || "auth").toUpperCase()}</b>\n` +
+      `👤 Telegram: ${tgUser}\n` +
+      `🔗 Linked: ${linkedDate}\n` +
+      `📈 Rate limit: ${rateLimit} lookups/hr\n\n` +
+      `🌐 Manage: blackbox.farm/subscriptions`;
+
+    await sendMessage(chatId, msg, "HTML");
+  } catch (err) {
+    console.error("[bot] handleStatus error:", err);
+    await sendMessage(chatId, "❌ Error fetching status. Please try again.", "HTML");
   }
-  const tier = await getUserTier(linked.user_id);
-  const emoji: Record<string, string> = {
-    free: "🆓", auth: "🔓", x_subscriber: "𝕏", pro: "⭐", dev: "🛠", enterprise: "🏢",
-  };
-  const tgUser = linked.telegram_username ? `@${linked.telegram_username}` : "unknown";
-  const linkedDate = linked.linked_at ? new Date(linked.linked_at).toLocaleDateString() : "Unknown";
-  await sendMessage(chatId,
-    `📊 *Your Status*\n\n` +
-    `${emoji[tier] || "📊"} Tier: *${tier.toUpperCase()}*\n` +
-    `👤 Telegram: ${tgUser}\n` +
-    `🔗 Linked: ${linkedDate}\n` +
-    `📈 Rate limit: ${RATE_LIMITS[tier] ?? 3} lookups/hr\n\n` +
-    `🌐 Manage: blackbox.farm/subscriptions`
-  );
 }
 
 async function handleHelp(chatId: number, telegramUserId: string) {
