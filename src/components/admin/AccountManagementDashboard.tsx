@@ -543,6 +543,35 @@ export function AccountManagementDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      {account.telegram_link ? (
+                        <div className="flex items-center gap-1">
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            {account.telegram_link.link_code}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => copyRegCode(account.telegram_link!.link_code)}
+                          >
+                            {copiedCode === account.telegram_link.link_code ? (
+                              <Check className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                          {account.telegram_link.telegram_username && (
+                            <Badge variant="outline" className="text-[10px] h-5 bg-green-500/10 text-green-500 border-green-500/30">
+                              <MessageCircle className="h-2.5 w-2.5 mr-0.5" />
+                              @{account.telegram_link.telegram_username}
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {account.roles?.map(role => (
                           <Badge key={role} className="bg-purple-500/20 text-purple-400">
