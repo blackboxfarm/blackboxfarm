@@ -739,12 +739,55 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
   await sendMessage(chatId, msg);
 }
 
-// ─── /ca CA — Default holder analysis (alias for /holders) ───
+// ─── /ca CA — Quick snapshot: holder count, health, top 10%, MCap ───
 async function handleCA(chatId: number, telegramUserId: string, args: string) {
-  await handleHolders(chatId, telegramUserId, args);
+  const ca = extractCA(args);
+  if (!ca) {
+    await sendMessage(chatId, `❌ Usage: \`/ca <token_address>\``);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "auth", "/ca");
+  if (!gate) return;
+
+  await sendMessage(chatId, `🔍 Quick snapshot for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await logUsage(telegramUserId, "/ca", ca);
+
+  // Fresh pull from bagless-holders-report + DexScreener in parallel
+  const [data, dexData] = await Promise.all([
+    invokeFunction("bagless-holders-report", { tokenMint: ca }),
+    fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d?.pairs?.[0] || null)
+      .catch(() => null),
+  ]);
+
+  if (!data || data.error) {
+    await sendMessage(chatId, `❌ Could not fetch data for this token.`);
+    return;
+  }
+
+  const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
+  const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
+  const top10Pct = data.distributionStats?.top10Percentage ?? null;
+  const symbol = data.symbol || data.tokenSymbol || dexData?.baseToken?.symbol || null;
+  const name = data.name || data.tokenName || dexData?.baseToken?.name || null;
+  const mcap = dexData?.marketCap || dexData?.fdv || null;
+  const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
+
+  await sendMessage(chatId,
+    `\`${ca}\`\n` +
+    `🪙 *${tokenHeader}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}\n\n` +
+    `📊 *Quick Snapshot*\n\n` +
+    `👥 Holders: *${totalHolders}*\n` +
+    `❤️ Health: *${healthScore}/100*\n` +
+    `${top10Pct != null ? `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n` : ''}` +
+    `\n_Use /holders for full breakdown or /ai for AI analysis._`
+  );
 }
 
-// ─── /quick (/q) CA — Fast holder count & key stats ───
+// ─── /quick (/q) CA — Fastest stats: holder count, health, top 10% ───
 async function handleQuick(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -758,26 +801,27 @@ async function handleQuick(chatId: number, telegramUserId: string, args: string)
   await sendMessage(chatId, `⚡ Quick lookup for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/quick", ca);
 
-  const data = await invokeFunction("token-ai-interpreter", { tokenMint: ca });
-  if (!data) {
+  // Fresh pull — minimal data needed
+  const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+  if (!data || data.error) {
     await sendMessage(chatId, `❌ Could not fetch data for this token.`);
     return;
   }
 
-  const holders = data.total_holders ?? data.holder_count ?? "?";
-  const health = data.health_score ?? data.score ?? "?";
-  const top10 = data.top10_concentration ?? data.top_10_pct ?? "?";
+  const holders = data.realHolders ?? data.totalHolders ?? "?";
+  const health = data.healthScore?.score ?? data.stabilityScore ?? "?";
+  const top10 = data.distributionStats?.top10Percentage ?? null;
 
   await sendMessage(chatId,
     `⚡ *Quick Stats*\n\n` +
     `👥 Holders: *${holders}*\n` +
     `❤️ Health: *${health}/100*\n` +
-    `🏦 Top 10% hold: *${typeof top10 === 'number' ? top10.toFixed(1) + '%' : top10}*\n\n` +
-    `_Use /holders for full breakdown or /ai for AI analysis._`
+    `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
+    `\n_Use /holders for full breakdown or /ai for AI analysis._`
   );
 }
 
-// ─── /ai CA — Descriptive AI analysis snapshot ───
+// ─── /ai CA — AI narrative summary only ───
 async function handleAI(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -791,13 +835,42 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
   await sendMessage(chatId, `🤖 Generating AI analysis for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/ai", ca);
 
-  const data = await invokeFunction("token-ai-interpreter", { tokenMint: ca });
+  // Step 1: Fresh holder data pull
+  const reportData = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+  if (!reportData || reportData.error) {
+    await sendMessage(chatId, `❌ Could not fetch holder data for AI analysis.`);
+    return;
+  }
+
+  // Step 2: Pass fresh data to AI interpreter
+  const data = await invokeFunction("token-ai-interpreter", { 
+    tokenMint: ca, 
+    reportData: reportData,
+    forceRefresh: true 
+  });
+
   if (!data) {
     await sendMessage(chatId, `❌ Could not generate AI analysis for this token.`);
     return;
   }
 
-  let msg = `🤖 *AI Analysis Snapshot*\n\n`;
+  // Get token metadata for header
+  let symbol = reportData.symbol || reportData.tokenSymbol || null;
+  let name = reportData.name || reportData.tokenName || null;
+  if (!symbol) {
+    try {
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+      if (dexRes.ok) {
+        const dexJson = await dexRes.json();
+        const pair = dexJson?.pairs?.[0];
+        symbol = pair?.baseToken?.symbol || null;
+        name = pair?.baseToken?.name || null;
+      }
+    } catch (_) {}
+  }
+  const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+
+  let msg = `\`${ca}\`\n🪙 *${tokenHeader}*\n\n🤖 *AI Analysis*\n\n`;
 
   if (data.interpretation?.status_overview) {
     msg += `${data.interpretation.status_overview}\n\n`;
