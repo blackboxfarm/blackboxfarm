@@ -302,6 +302,37 @@ export function AccountManagementDashboard() {
     }
   };
 
+  const copyRegCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    toast({ title: 'Copied!', description: `Registration code ${code} copied to clipboard` });
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const backfillAllLinkCodes = async () => {
+    setIsBackfilling(true);
+    try {
+      const accountsWithoutCodes = accounts.filter(a => !a.telegram_link);
+      let generated = 0;
+      for (const account of accountsWithoutCodes) {
+        const { error } = await supabase.rpc('generate_telegram_link_code', {
+          p_user_id: account.id,
+        });
+        if (!error) generated++;
+      }
+      toast({
+        title: 'Backfill Complete',
+        description: `Generated ${generated} new registration codes for ${accountsWithoutCodes.length} accounts`,
+      });
+      await fetchAccounts();
+    } catch (error) {
+      console.error('Backfill error:', error);
+      toast({ title: 'Error', description: 'Failed to backfill codes', variant: 'destructive' });
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   const openAccountDetails = (account: UserAccount) => {
     setSelectedAccount(account);
     fetchUserVisits(account.id);
