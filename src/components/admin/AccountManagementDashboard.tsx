@@ -466,6 +466,15 @@ export function AccountManagementDashboard() {
                   <TabsTrigger value="verified">Verified</TabsTrigger>
                 </TabsList>
               </Tabs>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={backfillAllLinkCodes} 
+                disabled={isBackfilling || accounts.every(a => a.telegram_link)}
+              >
+                {isBackfilling ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
+                Backfill Codes ({accounts.filter(a => !a.telegram_link).length})
+              </Button>
               <Button variant="outline" size="sm" onClick={fetchAccounts} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
