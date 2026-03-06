@@ -357,6 +357,7 @@ export function AccountManagementDashboard() {
   };
 
   const handleTierChange = async (userId: string, newTier: string) => {
+    const account = accounts.find(a => a.id === userId);
     try {
       if (newTier === 'auth') {
         // Remove active subscription (downgrade to free authenticated)
@@ -367,15 +368,30 @@ export function AccountManagementDashboard() {
           .eq('is_active', true);
         if (error) throw error;
       } else {
-        // Upsert subscription with new tier
+        // Preserve existing X/Stripe metadata when changing tier
+        const upsertData: Record<string, any> = {
+          user_id: userId,
+          tier_key: newTier,
+          is_active: true,
+          starts_at: new Date().toISOString(),
+        };
+
+        // Preserve linked X handle and Stripe subscription from existing record
+        if (account?.subscription_meta) {
+          if (account.subscription_meta.x_handle_linked) {
+            upsertData.x_handle_linked = account.subscription_meta.x_handle_linked;
+          }
+          if (account.subscription_meta.x_subscription_verified) {
+            upsertData.x_subscription_verified = account.subscription_meta.x_subscription_verified;
+          }
+          if (account.subscription_meta.stripe_subscription_id) {
+            upsertData.stripe_subscription_id = account.subscription_meta.stripe_subscription_id;
+          }
+        }
+
         const { error } = await supabase
           .from('web_user_subscriptions')
-          .upsert({
-            user_id: userId,
-            tier_key: newTier,
-            is_active: true,
-            starts_at: new Date().toISOString(),
-          } as any, { onConflict: 'user_id,tier_key' });
+          .upsert(upsertData as any, { onConflict: 'user_id,tier_key' });
         if (error) throw error;
 
         // Deactivate other tiers for this user
@@ -386,7 +402,11 @@ export function AccountManagementDashboard() {
           .neq('tier_key', newTier as any);
       }
 
-      toast({ title: 'Tier Updated', description: `Set to ${newTier} successfully` });
+      const label = newTier === 'auth' ? 'Free (Auth)' : newTier;
+      const warning = account?.subscription_meta?.stripe_subscription_id
+        ? ' (Stripe billing unchanged)'
+        : '';
+      toast({ title: 'Tier Updated', description: `Set to ${label}${warning}` });
       // Optimistic update
       setAccounts(prev => prev.map(a => a.id === userId ? { ...a, subscription_tier: newTier === 'auth' ? null : newTier } : a));
     } catch (err: any) {
