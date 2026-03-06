@@ -196,6 +196,43 @@ export function PricingTable() {
 
   return (
     <div className="space-y-8">
+      {/* Feature Comparison Table */}
+      <div className="overflow-x-auto -mx-4 px-4">
+        <table className="w-full text-sm min-w-[700px]">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left py-3 px-4 font-medium text-muted-foreground">Feature</th>
+              {tiers.map((t) => (
+                <th key={t.key} className={`text-center py-3 px-3 font-medium ${t.highlight ? 'text-primary' : ''}`}>
+                  {t.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((feature, i) => (
+              <tr key={i} className="border-b border-border/30">
+                <td className="py-2.5 px-4 text-foreground/80">
+                  {feature.label}
+                  {feature.comingSoon && (
+                    <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 border-muted-foreground/30 text-muted-foreground">
+                      <Clock className="h-2.5 w-2.5 mr-0.5" />
+                      Soon
+                    </Badge>
+                  )}
+                </td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.free} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.auth} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.xSub} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5 bg-primary/5"><FeatureValue value={feature.pro} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.dev} comingSoon={feature.comingSoon} /></td>
+                <td className="text-center py-2.5"><FeatureValue value={feature.enterprise} comingSoon={feature.comingSoon} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {/* Manage existing subscription */}
       {tierInfo.tierKey !== 'free' && tierInfo.tierKey !== 'auth' && tierInfo.tierKey !== 'x_subscriber' && (
         <div className="text-center">
@@ -274,43 +311,6 @@ export function PricingTable() {
 
       {/* X Subscriber Verification */}
       {user && <XSubscriberVerification />}
-
-      {/* Feature Comparison Table - Desktop */}
-      <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">Feature</th>
-              {tiers.map((t) => (
-                <th key={t.key} className={`text-center py-3 px-3 font-medium ${t.highlight ? 'text-primary' : ''}`}>
-                  {t.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {features.map((feature, i) => (
-              <tr key={i} className="border-b border-border/30">
-                <td className="py-2.5 px-4 text-foreground/80">
-                  {feature.label}
-                  {feature.comingSoon && (
-                    <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 border-muted-foreground/30 text-muted-foreground">
-                      <Clock className="h-2.5 w-2.5 mr-0.5" />
-                      Soon
-                    </Badge>
-                  )}
-                </td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.free} comingSoon={feature.comingSoon} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.auth} comingSoon={feature.comingSoon} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.xSub} comingSoon={feature.comingSoon} /></td>
-                <td className="text-center py-2.5 bg-primary/5"><FeatureValue value={feature.pro} comingSoon={feature.comingSoon} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.dev} comingSoon={feature.comingSoon} /></td>
-                <td className="text-center py-2.5"><FeatureValue value={feature.enterprise} comingSoon={feature.comingSoon} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
