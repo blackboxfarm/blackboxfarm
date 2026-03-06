@@ -670,17 +670,31 @@ export function AccountManagementDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <select
-                        value={account.subscription_tier || 'auth'}
-                        onChange={(e) => handleTierChange(account.id, e.target.value)}
-                        className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
-                      >
-                        <option value="auth">Free (Auth)</option>
-                        <option value="x_subscriber">X Subscriber</option>
-                        <option value="pro">Pro</option>
-                        <option value="dev">Developer</option>
-                        <option value="enterprise">Enterprise</option>
-                      </select>
+                      <div className="flex flex-col gap-1">
+                        <select
+                          value={account.subscription_tier || 'auth'}
+                          onChange={(e) => handleTierChange(account.id, e.target.value)}
+                          className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+                        >
+                          <option value="auth">Free (Auth)</option>
+                          <option value="x_subscriber">X Subscriber</option>
+                          <option value="pro">Pro</option>
+                          <option value="dev">Developer</option>
+                          <option value="enterprise">Enterprise</option>
+                        </select>
+                        <div className="flex gap-1">
+                          {account.subscription_meta?.stripe_subscription_id && (
+                            <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">
+                              <DollarSign className="h-2.5 w-2.5 mr-0.5" />Stripe
+                            </Badge>
+                          )}
+                          {account.subscription_meta?.x_handle_linked && (
+                            <Badge variant="outline" className="text-[10px] h-4 border-blue-500/30 text-blue-400">
+                              <Twitter className="h-2.5 w-2.5 mr-0.5" />@{account.subscription_meta.x_handle_linked}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground">
