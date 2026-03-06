@@ -258,6 +258,12 @@ export function AccountManagementDashboard() {
             linked_at: userLinkCode.linked_at,
           } : null,
           subscription_tier: userSub?.tier_key || null,
+          subscription_meta: userSub ? {
+            stripe_subscription_id: userSub.stripe_subscription_id,
+            x_handle_linked: userSub.x_handle_linked,
+            x_subscription_verified: userSub.x_subscription_verified,
+            expires_at: userSub.expires_at,
+          } : null,
         };
       });
 
