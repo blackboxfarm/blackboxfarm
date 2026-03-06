@@ -490,6 +490,7 @@ export function AccountManagementDashboard() {
                   <TableHead>User</TableHead>
                   <TableHead>Auth Provider</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Reg Code</TableHead>
                   <TableHead>Roles</TableHead>
                   <TableHead>Activity</TableHead>
                   <TableHead>Actions</TableHead>
