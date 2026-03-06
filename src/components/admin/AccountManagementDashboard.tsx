@@ -542,6 +542,7 @@ export function AccountManagementDashboard() {
                   <TableHead>Status</TableHead>
                   <TableHead>Reg Code</TableHead>
                   <TableHead>Roles</TableHead>
+                  <TableHead>Tier</TableHead>
                   <TableHead>Activity</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
