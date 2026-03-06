@@ -98,6 +98,7 @@ interface UserAccount {
     telegram_username: string | null;
     linked_at: string | null;
   } | null;
+  subscription_tier?: string | null;
 }
 
 interface VisitSession {
@@ -159,6 +160,14 @@ export function AccountManagementDashboard() {
 
       if (linkCodesError) console.warn('Failed to fetch link codes:', linkCodesError);
 
+      // Fetch active subscriptions
+      const { data: subscriptions, error: subsError } = await supabase
+        .from('web_user_subscriptions')
+        .select('user_id, tier_key, is_active')
+        .eq('is_active', true);
+
+      if (subsError) console.warn('Failed to fetch subscriptions:', subsError);
+
       // Fetch visit stats grouped by user
       const { data: visitStats, error: visitError } = await supabase
         .from('holders_page_visits')
@@ -206,6 +215,7 @@ export function AccountManagementDashboard() {
         const advertiser = advertisers?.find(a => a.user_id === profile.user_id);
         const userVisits = visitsByUser?.[profile.user_id];
         const userLinkCode = linkCodes?.find(lc => lc.user_id === profile.user_id);
+        const userSub = subscriptions?.find(s => s.user_id === profile.user_id);
 
         return {
           id: profile.user_id,
@@ -241,6 +251,7 @@ export function AccountManagementDashboard() {
             telegram_username: userLinkCode.telegram_username,
             linked_at: userLinkCode.linked_at,
           } : null,
+          subscription_tier: userSub?.tier_key || null,
         };
       });
 
@@ -330,6 +341,45 @@ export function AccountManagementDashboard() {
       toast({ title: 'Error', description: 'Failed to backfill codes', variant: 'destructive' });
     } finally {
       setIsBackfilling(false);
+    }
+  };
+
+  const handleTierChange = async (userId: string, newTier: string) => {
+    try {
+      if (newTier === 'auth') {
+        // Remove active subscription (downgrade to free authenticated)
+        const { error } = await supabase
+          .from('web_user_subscriptions')
+          .update({ is_active: false } as any)
+          .eq('user_id', userId)
+          .eq('is_active', true);
+        if (error) throw error;
+      } else {
+        // Upsert subscription with new tier
+        const { error } = await supabase
+          .from('web_user_subscriptions')
+          .upsert({
+            user_id: userId,
+            tier_key: newTier,
+            is_active: true,
+            starts_at: new Date().toISOString(),
+          } as any, { onConflict: 'user_id,tier_key' });
+        if (error) throw error;
+
+        // Deactivate other tiers for this user
+        await supabase
+          .from('web_user_subscriptions')
+          .update({ is_active: false } as any)
+          .eq('user_id', userId)
+          .neq('tier_key', newTier as any);
+      }
+
+      toast({ title: 'Tier Updated', description: `Set to ${newTier} successfully` });
+      // Optimistic update
+      setAccounts(prev => prev.map(a => a.id === userId ? { ...a, subscription_tier: newTier === 'auth' ? null : newTier } : a));
+    } catch (err: any) {
+      console.error('Tier change error:', err);
+      toast({ title: 'Error', description: err.message || 'Failed to update tier', variant: 'destructive' });
     }
   };
 
@@ -492,6 +542,7 @@ export function AccountManagementDashboard() {
                   <TableHead>Status</TableHead>
                   <TableHead>Reg Code</TableHead>
                   <TableHead>Roles</TableHead>
+                  <TableHead>Tier</TableHead>
                   <TableHead>Activity</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -585,6 +636,19 @@ export function AccountManagementDashboard() {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <select
+                        value={account.subscription_tier || 'auth'}
+                        onChange={(e) => handleTierChange(account.id, e.target.value)}
+                        className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+                      >
+                        <option value="auth">Free (Auth)</option>
+                        <option value="x_subscriber">X Subscriber</option>
+                        <option value="pro">Pro</option>
+                        <option value="dev">Developer</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground">
