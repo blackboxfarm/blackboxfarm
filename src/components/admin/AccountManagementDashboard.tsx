@@ -638,6 +638,19 @@ export function AccountManagementDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      <select
+                        value={account.subscription_tier || 'auth'}
+                        onChange={(e) => handleTierChange(account.id, e.target.value)}
+                        className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+                      >
+                        <option value="auth">Free (Auth)</option>
+                        <option value="x_subscriber">X Subscriber</option>
+                        <option value="pro">Pro</option>
+                        <option value="dev">Developer</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
+                    </TableCell>
+                    <TableCell>
                       <div className="text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
