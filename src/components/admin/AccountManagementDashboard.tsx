@@ -152,6 +152,13 @@ export function AccountManagementDashboard() {
 
       if (advertisersError) throw advertisersError;
 
+      // Fetch telegram link codes
+      const { data: linkCodes, error: linkCodesError } = await supabase
+        .from('telegram_link_codes')
+        .select('user_id, link_code, telegram_user_id, telegram_username, linked_at');
+
+      if (linkCodesError) console.warn('Failed to fetch link codes:', linkCodesError);
+
       // Fetch visit stats grouped by user
       const { data: visitStats, error: visitError } = await supabase
         .from('holders_page_visits')
