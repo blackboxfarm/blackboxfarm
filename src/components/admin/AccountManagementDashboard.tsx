@@ -98,6 +98,7 @@ interface UserAccount {
     telegram_username: string | null;
     linked_at: string | null;
   } | null;
+  subscription_tier?: string | null;
 }
 
 interface VisitSession {
