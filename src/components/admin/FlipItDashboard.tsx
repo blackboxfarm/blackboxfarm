@@ -1950,12 +1950,13 @@ export function FlipItDashboard() {
         body: { tokenMint: tokenAddress.trim() }
       });
 
-      if (priceErr || !freshPrice?.priceUsd) {
+      const resolvedPrice = freshPrice?.priceUsd || freshPrice?.price;
+      if (priceErr || !resolvedPrice) {
         toast.error('Failed to fetch fresh price: ' + (freshPrice?.error || priceErr?.message || 'Unknown'));
         return;
       }
 
-      const displayedPrice = freshPrice.priceUsd;
+      const displayedPrice = resolvedPrice;
       console.log(`[FlipIt] Fresh Helius price for execution: $${displayedPrice}`);
 
       await executeFlip(displayedPrice, tokenSymbol);
