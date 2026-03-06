@@ -434,19 +434,38 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   await sendMessage(chatId, `⚡ Generating verdict for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/verdict", ca);
 
-  // Fetch momentum + holders in parallel
-  const [momentumData, holdersData] = await Promise.all([
+  // Fetch momentum + holders + DexScreener metadata in parallel
+  const [momentumData, holdersData, dexData] = await Promise.all([
     invokeFunction("token-momentum-analyzer", { tokenMint: ca }),
     invokeFunction("token-ai-interpreter", { tokenMint: ca }),
+    fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d?.pairs?.[0] || null)
+      .catch(() => null),
   ]);
 
   const momentumScore = momentumData?.momentum_score ?? 0;
   const healthScore = holdersData?.health_score ?? holdersData?.score ?? 0;
 
-  // Extract token info for header
-  const tokenSymbol = momentumData?.metrics?.symbol || holdersData?.symbol || holdersData?.token_symbol || null;
-  const tokenName = momentumData?.metrics?.name || holdersData?.name || holdersData?.token_name || null;
-  const tokenLabel = tokenSymbol ? `$${tokenSymbol}` : (tokenName || "Unknown");
+  // Extract token info — try multiple sources
+  const tokenSymbol = momentumData?.metrics?.symbol 
+    || holdersData?.symbol || holdersData?.token_symbol 
+    || dexData?.baseToken?.symbol || null;
+  const tokenName = momentumData?.metrics?.name 
+    || holdersData?.name || holdersData?.token_name 
+    || dexData?.baseToken?.name || null;
+
+  // Format header: $TICKER (Name)
+  let tokenHeader: string;
+  if (tokenSymbol && tokenName) {
+    tokenHeader = `$${tokenSymbol} (${tokenName})`;
+  } else if (tokenSymbol) {
+    tokenHeader = `$${tokenSymbol}`;
+  } else if (tokenName) {
+    tokenHeader = tokenName;
+  } else {
+    tokenHeader = "Unknown Token";
+  }
 
   const isLite = !hasTier(gate.tier, "x_subscriber");
 
@@ -454,8 +473,8 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     const color = momentumScore >= 55 && healthScore >= 40 ? "🟢" : momentumScore >= 40 ? "🟡" : "🔴";
     const label = color === "🟢" ? "BULLISH" : color === "🟡" ? "CAUTION" : "BEARISH";
     await sendMessage(chatId,
-      `🪙 *${tokenLabel}*\n` +
-      `\`${ca}\`\n\n` +
+      `\`${ca}\`\n` +
+      `🪙 *${tokenHeader}*\n\n` +
       `${color} *${label}*\n\n` +
       `_Upgrade to X Subscriber for detailed sizing recommendations._`
     );
@@ -485,8 +504,8 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     description = "Weak signals or dump in progress. Skip this one.";
   }
 
-  let msg = `🪙 *${tokenLabel}*\n` +
-    `\`${ca}\`\n\n` +
+  let msg = `\`${ca}\`\n` +
+    `🪙 *${tokenHeader}*\n\n` +
     `${emoji} *${verdict}*\n\n` +
     `${description}\n\n` +
     `📈 Momentum: *${momentumScore}/100*\n` +
