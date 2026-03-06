@@ -260,26 +260,30 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${unlocked} /help — This message\n\n`;
 
   cmds += `*Analysis — Auth ★*\n` +
-    `${check("auth")} /holders \`CA\` — Holder distribution\n` +
-    `${check("auth")} /verdict \`CA\` — Quick Buy/Hold signal\n\n`;
+    `${check("auth")} /holders \`CA\` — Holder distribution analysis\n` +
+    `${check("auth")} /verdict (/v) \`CA\` — Buy/Hold signal with sizing\n` +
+    `${check("auth")} /ca \`CA\` — Default holder analysis for a token\n` +
+    `${check("auth")} /quick (/q) \`CA\` — Fast holder count & key stats\n` +
+    `${check("auth")} /ai \`CA\` — Descriptive AI analysis snapshot\n\n`;
 
   cmds += `*Advanced — X Subscriber ★★*\n` +
-    `${check("x_subscriber")} /momentum \`CA\` — Volume & price momentum\n` +
-    `${check("x_subscriber")} /alerts — Manage alert prefs\n`;
+    `${check("x_subscriber")} /momentum (/m) \`CA\` — Volume & price momentum scoring\n` +
+    `${check("x_subscriber")} /alerts — Manage alert preferences\n`;
   if (!hasTier(tier, "x_subscriber")) {
     cmds += `  _↑ Unlock with X Subscriber ($3.99/mo)_\n`;
   }
   cmds += `\n`;
 
   cmds += `*Pro Intelligence — Pro ★★★*\n` +
-    `${check("pro")} /oracle \`CA\` — Developer reputation\n` +
-    `${check("pro")} /wallet \`ADDR\` — Wallet behavior\n`;
+    `${check("pro")} /oracle (/o) \`CA\` — Developer reputation lookup\n` +
+    `${check("pro")} /wallet (/w) \`ADDR\` — Wallet behavior analysis\n`;
   if (!hasTier(tier, "pro")) {
     cmds += `  _↑ Unlock with Pro ($9.99/mo)_\n`;
   }
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
-    `★ = Tier required | ${unlocked} = Available | ${locked} = Locked\n\n` +
+    `★ = Tier required | ${unlocked} = Available | ${locked} = Locked\n` +
+    `_Shortforms shown in parentheses_\n\n` +
     `📊 Your tier: *${tier.toUpperCase()}*\n` +
     `📈 Rate limit: *${RATE_LIMITS[tier] ?? 3}* lookups/hr\n\n` +
     `🚀 Upgrade: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)`;
@@ -578,6 +582,92 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
   await sendMessage(chatId, msg);
 }
 
+// ─── /ca CA — Default holder analysis (alias for /holders) ───
+async function handleCA(chatId: number, telegramUserId: string, args: string) {
+  await handleHolders(chatId, telegramUserId, args);
+}
+
+// ─── /quick (/q) CA — Fast holder count & key stats ───
+async function handleQuick(chatId: number, telegramUserId: string, args: string) {
+  const ca = extractCA(args);
+  if (!ca) {
+    await sendMessage(chatId, `❌ Usage: \`/quick <token_address>\``);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "auth", "/quick");
+  if (!gate) return;
+
+  await sendMessage(chatId, `⚡ Quick lookup for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await logUsage(telegramUserId, "/quick", ca);
+
+  const data = await invokeFunction("token-ai-interpreter", { tokenMint: ca });
+  if (!data) {
+    await sendMessage(chatId, `❌ Could not fetch data for this token.`);
+    return;
+  }
+
+  const holders = data.total_holders ?? data.holder_count ?? "?";
+  const health = data.health_score ?? data.score ?? "?";
+  const top10 = data.top10_concentration ?? data.top_10_pct ?? "?";
+
+  await sendMessage(chatId,
+    `⚡ *Quick Stats*\n\n` +
+    `👥 Holders: *${holders}*\n` +
+    `❤️ Health: *${health}/100*\n` +
+    `🏦 Top 10% hold: *${typeof top10 === 'number' ? top10.toFixed(1) + '%' : top10}*\n\n` +
+    `_Use /holders for full breakdown or /ai for AI analysis._`
+  );
+}
+
+// ─── /ai CA — Descriptive AI analysis snapshot ───
+async function handleAI(chatId: number, telegramUserId: string, args: string) {
+  const ca = extractCA(args);
+  if (!ca) {
+    await sendMessage(chatId, `❌ Usage: \`/ai <token_address>\``);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "auth", "/ai");
+  if (!gate) return;
+
+  await sendMessage(chatId, `🤖 Generating AI analysis for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await logUsage(telegramUserId, "/ai", ca);
+
+  const data = await invokeFunction("token-ai-interpreter", { tokenMint: ca });
+  if (!data) {
+    await sendMessage(chatId, `❌ Could not generate AI analysis for this token.`);
+    return;
+  }
+
+  let msg = `🤖 *AI Analysis Snapshot*\n\n`;
+
+  if (data.interpretation?.status_overview) {
+    msg += `${data.interpretation.status_overview}\n\n`;
+  } else if (data.ai_summary) {
+    msg += `${data.ai_summary}\n\n`;
+  }
+
+  if (data.interpretation?.lifecycle) {
+    const lc = data.interpretation.lifecycle;
+    msg += `📍 Stage: *${lc.stage}* (${lc.confidence} confidence)\n`;
+    if (lc.explanation) msg += `${lc.explanation.slice(0, 300)}\n\n`;
+  }
+
+  if (data.interpretation?.abbreviated_summary) {
+    msg += `💡 *Summary:*\n${data.interpretation.abbreviated_summary.slice(0, 500)}\n`;
+  }
+
+  if (data.interpretation?.key_drivers?.length) {
+    msg += `\n*Key Drivers:*\n`;
+    for (const d of data.interpretation.key_drivers.slice(0, 4)) {
+      msg += `• ${d.label}: ${d.metric_value} — _${d.implication.slice(0, 80)}_\n`;
+    }
+  }
+
+  await sendMessage(chatId, msg);
+}
+
 // ─── /alerts ───
 async function handleAlerts(chatId: number, telegramUserId: string) {
   const gate = await gateCheck(chatId, telegramUserId, "x_subscriber", "/alerts");
@@ -654,7 +744,18 @@ serve(async (req) => {
       case "/holders":
         await handleHolders(chatId, telegramUserId, args);
         break;
+      case "/ca":
+        await handleCA(chatId, telegramUserId, args);
+        break;
+      case "/quick":
+      case "/q":
+        await handleQuick(chatId, telegramUserId, args);
+        break;
+      case "/ai":
+        await handleAI(chatId, telegramUserId, args);
+        break;
       case "/momentum":
+      case "/m":
         await handleMomentum(chatId, telegramUserId, args);
         break;
       case "/verdict":
@@ -662,9 +763,11 @@ serve(async (req) => {
         await handleVerdict(chatId, telegramUserId, args);
         break;
       case "/oracle":
+      case "/o":
         await handleOracle(chatId, telegramUserId, args);
         break;
       case "/wallet":
+      case "/w":
         await handleWallet(chatId, telegramUserId, args);
         break;
       case "/alerts":
