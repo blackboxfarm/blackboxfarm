@@ -92,6 +92,12 @@ interface UserAccount {
     tokens_analyzed: number;
     ip_addresses: string[];
   };
+  telegram_link?: {
+    link_code: string;
+    telegram_user_id: string | null;
+    telegram_username: string | null;
+    linked_at: string | null;
+  } | null;
 }
 
 interface VisitSession {
