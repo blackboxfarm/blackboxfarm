@@ -443,13 +443,19 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   const momentumScore = momentumData?.momentum_score ?? 0;
   const healthScore = holdersData?.health_score ?? holdersData?.score ?? 0;
 
+  // Extract token info for header
+  const tokenSymbol = momentumData?.metrics?.symbol || holdersData?.symbol || holdersData?.token_symbol || null;
+  const tokenName = momentumData?.metrics?.name || holdersData?.name || holdersData?.token_name || null;
+  const tokenLabel = tokenSymbol ? `$${tokenSymbol}` : (tokenName || "Unknown");
+
   const isLite = !hasTier(gate.tier, "x_subscriber");
 
   if (isLite) {
-    // Auth tier: just the color
     const color = momentumScore >= 55 && healthScore >= 40 ? "🟢" : momentumScore >= 40 ? "🟡" : "🔴";
     const label = color === "🟢" ? "BULLISH" : color === "🟡" ? "CAUTION" : "BEARISH";
     await sendMessage(chatId,
+      `🪙 *${tokenLabel}*\n` +
+      `\`${ca}\`\n\n` +
       `${color} *${label}*\n\n` +
       `_Upgrade to X Subscriber for detailed sizing recommendations._`
     );
@@ -479,7 +485,9 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     description = "Weak signals or dump in progress. Skip this one.";
   }
 
-  let msg = `${emoji} *${verdict}*\n\n` +
+  let msg = `🪙 *${tokenLabel}*\n` +
+    `\`${ca}\`\n\n` +
+    `${emoji} *${verdict}*\n\n` +
     `${description}\n\n` +
     `📈 Momentum: *${momentumScore}/100*\n` +
     `❤️ Health: *${healthScore}/100*\n`;
