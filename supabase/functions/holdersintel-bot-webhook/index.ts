@@ -540,28 +540,100 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
   await sendMessage(chatId, msg);
 }
 
-// ─── /wallet ADDR ───
+// ─── Detect if a Solana address is a token mint or a wallet ───
+async function resolveWalletAddress(
+  chatId: number,
+  addr: string
+): Promise<{ wallet: string; isToken: boolean; tokenLabel: string | null } | null> {
+  // Strategy: try to look up the address as a token mint first.
+  // Check our DB tables, then fall back to the token-creator-linker edge function.
+
+  // 1) Check developer_tokens table for a known creator
+  const { data: devToken } = await supabase
+    .from("developer_tokens")
+    .select("creator_wallet, token_symbol, token_name")
+    .eq("token_mint", addr)
+    .maybeSingle();
+
+  if (devToken?.creator_wallet) {
+    const label = devToken.token_symbol || devToken.token_name || addr.slice(0, 8);
+    await sendMessage(chatId,
+      `🔍 Detected *token mint* (${label})\n` +
+      `🏗 Creator: \`${devToken.creator_wallet.slice(0, 8)}...${devToken.creator_wallet.slice(-6)}\`\n` +
+      `Proceeding with dev wallet analysis...`
+    );
+    return { wallet: devToken.creator_wallet, isToken: true, tokenLabel: label };
+  }
+
+  // 2) Check token_lifecycle table
+  const { data: lifecycle } = await supabase
+    .from("token_lifecycle")
+    .select("creator_wallet, symbol, name")
+    .eq("mint", addr)
+    .maybeSingle();
+
+  if (lifecycle?.creator_wallet) {
+    const label = lifecycle.symbol || lifecycle.name || addr.slice(0, 8);
+    await sendMessage(chatId,
+      `🔍 Detected *token mint* (${label})\n` +
+      `🏗 Creator: \`${lifecycle.creator_wallet.slice(0, 8)}...${lifecycle.creator_wallet.slice(-6)}\`\n` +
+      `Proceeding with dev wallet analysis...`
+    );
+    return { wallet: lifecycle.creator_wallet, isToken: true, tokenLabel: label };
+  }
+
+  // 3) Try token-creator-linker edge function (on-chain resolution)
+  const linkerData = await invokeFunction("token-creator-linker", { tokenMint: addr });
+  if (linkerData?.creatorWallet) {
+    const label = linkerData.symbol || linkerData.name || addr.slice(0, 8);
+    await sendMessage(chatId,
+      `🔍 Resolved *token mint* on-chain (${label})\n` +
+      `🏗 Creator: \`${linkerData.creatorWallet.slice(0, 8)}...${linkerData.creatorWallet.slice(-6)}\`\n` +
+      `Proceeding with dev wallet analysis...`
+    );
+    return { wallet: linkerData.creatorWallet, isToken: true, tokenLabel: label };
+  }
+
+  // 4) Not found as a token — treat as a wallet address
+  return { wallet: addr, isToken: false, tokenLabel: null };
+}
+
+// ─── /wallet ADDR or TOKEN_MINT ───
 async function handleWallet(chatId: number, telegramUserId: string, args: string) {
   const addr = args.trim();
   if (!addr || addr.length < 30) {
-    await sendMessage(chatId, `❌ Usage: \`/wallet <solana_address>\``);
+    await sendMessage(chatId, `❌ Usage: \`/wallet <wallet_or_token_address>\`\n\nSupports both wallet addresses and token mints (auto-resolves dev wallet).`);
     return;
   }
 
   const gate = await gateCheck(chatId, telegramUserId, "pro", "/wallet");
   if (!gate) return;
 
-  await sendMessage(chatId, `🔎 Analyzing wallet \`${addr.slice(0, 8)}...${addr.slice(-6)}\`...`);
+  await sendMessage(chatId, `🔎 Resolving \`${addr.slice(0, 8)}...${addr.slice(-6)}\`...`);
+
+  // Resolve: if it's a token mint, find the creator wallet
+  const resolved = await resolveWalletAddress(chatId, addr);
+  if (!resolved) {
+    await sendMessage(chatId, `❌ Could not resolve this address. Please check it's a valid Solana address.`);
+    return;
+  }
+
+  const walletAddr = resolved.wallet;
   await logUsage(telegramUserId, "/wallet", addr);
 
-  const data = await invokeFunction("wallet-behavior-analysis", { walletAddress: addr });
+  const data = await invokeFunction("wallet-behavior-analysis", { walletAddress: walletAddr });
   if (!data) {
     await sendMessage(chatId, `❌ Could not analyze wallet. It may have no recent activity.`);
     return;
   }
 
   let msg = `🔎 *Wallet Analysis*\n\n`;
-  msg += `📍 \`${addr.slice(0, 8)}...${addr.slice(-6)}\`\n\n`;
+  if (resolved.isToken) {
+    msg += `🪙 Token: *${resolved.tokenLabel}*\n`;
+    msg += `🏗 Dev Wallet: \`${walletAddr.slice(0, 8)}...${walletAddr.slice(-6)}\`\n\n`;
+  } else {
+    msg += `📍 \`${walletAddr.slice(0, 8)}...${walletAddr.slice(-6)}\`\n\n`;
+  }
 
   if (data.classification) msg += `🏷 Type: *${data.classification}*\n`;
   if (data.total_transactions != null) msg += `📊 Total Txns: *${data.total_transactions}*\n`;
