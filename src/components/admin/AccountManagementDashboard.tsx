@@ -205,6 +205,7 @@ export function AccountManagementDashboard() {
         const userRoles = roles?.filter(r => r.user_id === profile.user_id).map(r => r.role) || [];
         const advertiser = advertisers?.find(a => a.user_id === profile.user_id);
         const userVisits = visitsByUser?.[profile.user_id];
+        const userLinkCode = linkCodes?.find(lc => lc.user_id === profile.user_id);
 
         return {
           id: profile.user_id,
@@ -233,7 +234,13 @@ export function AccountManagementDashboard() {
           visit_stats: userVisits ? {
             ...userVisits,
             ip_addresses: Array.from(userVisits.ip_addresses)
-          } : undefined
+          } : undefined,
+          telegram_link: userLinkCode ? {
+            link_code: userLinkCode.link_code,
+            telegram_user_id: userLinkCode.telegram_user_id,
+            telegram_username: userLinkCode.telegram_username,
+            linked_at: userLinkCode.linked_at,
+          } : null,
         };
       });
 
