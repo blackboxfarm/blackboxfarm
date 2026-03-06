@@ -160,6 +160,14 @@ export function AccountManagementDashboard() {
 
       if (linkCodesError) console.warn('Failed to fetch link codes:', linkCodesError);
 
+      // Fetch active subscriptions
+      const { data: subscriptions, error: subsError } = await supabase
+        .from('web_user_subscriptions')
+        .select('user_id, tier_key, is_active')
+        .eq('is_active', true);
+
+      if (subsError) console.warn('Failed to fetch subscriptions:', subsError);
+
       // Fetch visit stats grouped by user
       const { data: visitStats, error: visitError } = await supabase
         .from('holders_page_visits')
