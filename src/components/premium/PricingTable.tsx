@@ -275,8 +275,8 @@ export function PricingTable() {
       {/* X Subscriber Verification */}
       {user && <XSubscriberVerification />}
 
-      {/* Feature Comparison Table - Desktop */}
-      <div className="hidden lg:block overflow-x-auto">
+      {/* Feature Comparison Table */}
+      <div className="overflow-x-auto -mx-4 px-4">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">

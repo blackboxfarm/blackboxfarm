@@ -152,12 +152,12 @@ export default function Subscriptions() {
 
         {/* Plans */}
         <section id="plans" className="mx-auto max-w-6xl px-4 pb-12 space-y-8">
+          <PricingTable />
+
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold">Choose Your Plan</h2>
             <p className="text-sm text-muted-foreground">Monthly subscriptions. Cancel anytime.</p>
           </div>
-
-          <PricingTable />
 
           {/* X Verification + Telegram Link side by side */}
           {user && (
