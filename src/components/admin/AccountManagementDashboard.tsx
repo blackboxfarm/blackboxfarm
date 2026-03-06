@@ -42,7 +42,11 @@ import {
   UserX,
   Clock,
   ExternalLink,
-  Fingerprint
+  Fingerprint,
+  Copy,
+  Check,
+  MessageCircle,
+  Zap
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -88,6 +92,12 @@ interface UserAccount {
     tokens_analyzed: number;
     ip_addresses: string[];
   };
+  telegram_link?: {
+    link_code: string;
+    telegram_user_id: string | null;
+    telegram_username: string | null;
+    linked_at: string | null;
+  } | null;
 }
 
 interface VisitSession {
@@ -113,6 +123,8 @@ export function AccountManagementDashboard() {
   const [isLoadingVisits, setIsLoadingVisits] = useState(false);
   const [resetPasswordEmail, setResetPasswordEmail] = useState('');
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const { toast } = useToast();
 
   const fetchAccounts = async () => {
@@ -139,6 +151,13 @@ export function AccountManagementDashboard() {
         .select('user_id, twitter_handle, total_spent_sol, is_active');
 
       if (advertisersError) throw advertisersError;
+
+      // Fetch telegram link codes
+      const { data: linkCodes, error: linkCodesError } = await supabase
+        .from('telegram_link_codes')
+        .select('user_id, link_code, telegram_user_id, telegram_username, linked_at');
+
+      if (linkCodesError) console.warn('Failed to fetch link codes:', linkCodesError);
 
       // Fetch visit stats grouped by user
       const { data: visitStats, error: visitError } = await supabase
@@ -186,6 +205,7 @@ export function AccountManagementDashboard() {
         const userRoles = roles?.filter(r => r.user_id === profile.user_id).map(r => r.role) || [];
         const advertiser = advertisers?.find(a => a.user_id === profile.user_id);
         const userVisits = visitsByUser?.[profile.user_id];
+        const userLinkCode = linkCodes?.find(lc => lc.user_id === profile.user_id);
 
         return {
           id: profile.user_id,
@@ -214,7 +234,13 @@ export function AccountManagementDashboard() {
           visit_stats: userVisits ? {
             ...userVisits,
             ip_addresses: Array.from(userVisits.ip_addresses)
-          } : undefined
+          } : undefined,
+          telegram_link: userLinkCode ? {
+            link_code: userLinkCode.link_code,
+            telegram_user_id: userLinkCode.telegram_user_id,
+            telegram_username: userLinkCode.telegram_username,
+            linked_at: userLinkCode.linked_at,
+          } : null,
         };
       });
 
@@ -273,6 +299,37 @@ export function AccountManagementDashboard() {
         description: 'Failed to send password reset email',
         variant: 'destructive'
       });
+    }
+  };
+
+  const copyRegCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    toast({ title: 'Copied!', description: `Registration code ${code} copied to clipboard` });
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const backfillAllLinkCodes = async () => {
+    setIsBackfilling(true);
+    try {
+      const accountsWithoutCodes = accounts.filter(a => !a.telegram_link);
+      let generated = 0;
+      for (const account of accountsWithoutCodes) {
+        const { error } = await supabase.rpc('generate_telegram_link_code', {
+          p_user_id: account.id,
+        });
+        if (!error) generated++;
+      }
+      toast({
+        title: 'Backfill Complete',
+        description: `Generated ${generated} new registration codes for ${accountsWithoutCodes.length} accounts`,
+      });
+      await fetchAccounts();
+    } catch (error) {
+      console.error('Backfill error:', error);
+      toast({ title: 'Error', description: 'Failed to backfill codes', variant: 'destructive' });
+    } finally {
+      setIsBackfilling(false);
     }
   };
 
@@ -409,6 +466,15 @@ export function AccountManagementDashboard() {
                   <TabsTrigger value="verified">Verified</TabsTrigger>
                 </TabsList>
               </Tabs>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={backfillAllLinkCodes} 
+                disabled={isBackfilling || accounts.every(a => a.telegram_link)}
+              >
+                {isBackfilling ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
+                Backfill Codes ({accounts.filter(a => !a.telegram_link).length})
+              </Button>
               <Button variant="outline" size="sm" onClick={fetchAccounts} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
@@ -424,6 +490,7 @@ export function AccountManagementDashboard() {
                   <TableHead>User</TableHead>
                   <TableHead>Auth Provider</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Reg Code</TableHead>
                   <TableHead>Roles</TableHead>
                   <TableHead>Activity</TableHead>
                   <TableHead>Actions</TableHead>
@@ -474,6 +541,35 @@ export function AccountManagementDashboard() {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {account.telegram_link ? (
+                        <div className="flex items-center gap-1">
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                            {account.telegram_link.link_code}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => copyRegCode(account.telegram_link!.link_code)}
+                          >
+                            {copiedCode === account.telegram_link.link_code ? (
+                              <Check className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                          {account.telegram_link.telegram_username && (
+                            <Badge variant="outline" className="text-[10px] h-5 bg-green-500/10 text-green-500 border-green-500/30">
+                              <MessageCircle className="h-2.5 w-2.5 mr-0.5" />
+                              @{account.telegram_link.telegram_username}
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
