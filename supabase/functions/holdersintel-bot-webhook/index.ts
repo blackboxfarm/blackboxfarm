@@ -332,6 +332,8 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   // Extract key metrics from bagless-holders-report response
   const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
   const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
+  const healthPhase = data.healthScore?.phase || null;
+  const phaseLabel = healthPhase ? ` (${healthPhase.replace('_', ' ')})` : '';
   const top10Pct = data.distributionStats?.top10Percentage ?? "?";
   const tokenSymbol = data.symbol || data.tokenSymbol || null;
   const tokenName = data.name || data.tokenName || null;
@@ -367,7 +369,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
       header +
       `📊 *Holders Lite*\n\n` +
       `👥 Holders: *${totalHolders}*\n` +
-      `❤️ Health: *${healthScore}/100*\n` +
+      `❤️ Health: *${healthScore}/100*${phaseLabel}\n` +
       `🏦 Top 10% hold: *${typeof top10Pct === 'number' ? top10Pct.toFixed(1) + '%' : top10Pct}*\n\n` +
       `_Upgrade to X Subscriber for full breakdown._`
     );
@@ -378,7 +380,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   let msg = header;
   msg += `📊 *Holders Report*\n\n`;
   msg += `👥 Total: *${totalHolders}*\n`;
-  msg += `❤️ Health: *${healthScore}*/100\n`;
+  msg += `❤️ Health: *${healthScore}*/100${phaseLabel}\n`;
   if (typeof top10Pct === 'number') msg += `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n`;
   msg += `\n`;
 
@@ -476,7 +478,7 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   // Fetch momentum + holders + DexScreener metadata in parallel
   const [momentumData, holdersData, dexData] = await Promise.all([
     invokeFunction("token-momentum-analyzer", { tokenMint: ca }),
-    invokeFunction("token-ai-interpreter", { tokenMint: ca }),
+    invokeFunction("bagless-holders-report", { tokenMint: ca }),
     fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => d?.pairs?.[0] || null)
@@ -484,7 +486,9 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   ]);
 
   const momentumScore = momentumData?.momentum_score ?? 0;
-  const healthScore = holdersData?.health_score ?? holdersData?.score ?? 0;
+  const healthScore = holdersData?.healthScore?.score ?? holdersData?.stabilityScore ?? 0;
+  const verdictPhase = holdersData?.healthScore?.phase || null;
+  const verdictPhaseLabel = verdictPhase ? ` (${verdictPhase.replace('_', ' ')})` : '';
 
   // Extract token info — try multiple sources
   const tokenSymbol = momentumData?.metrics?.symbol 
@@ -552,7 +556,7 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     `${emoji} *${verdict}*\n\n` +
     `${description}\n\n` +
     `📈 Momentum: *${momentumScore}/100*\n` +
-    `❤️ Health: *${healthScore}/100*\n`;
+    `❤️ Health: *${healthScore}/100*${verdictPhaseLabel}\n`;
 
   if (momentumData?.metrics) {
     const m = momentumData.metrics;
@@ -769,6 +773,8 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
 
   const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
   const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
+  const healthPhase = data.healthScore?.phase || null;
+  const phaseLabel = healthPhase ? ` (${healthPhase.replace('_', ' ')})` : '';
   const top10Pct = data.distributionStats?.top10Percentage ?? null;
   const symbol = data.symbol || data.tokenSymbol || dexData?.baseToken?.symbol || null;
   const name = data.name || data.tokenName || dexData?.baseToken?.name || null;
@@ -781,7 +787,7 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
     `🪙 *${tokenHeader}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}\n\n` +
     `📊 *Quick Snapshot*\n\n` +
     `👥 Holders: *${totalHolders}*\n` +
-    `❤️ Health: *${healthScore}/100*\n` +
+    `❤️ Health: *${healthScore}/100*${phaseLabel}\n` +
     `${top10Pct != null ? `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n` : ''}` +
     `\n_Use /holders for full breakdown or /ai for AI analysis._`
   );
@@ -810,12 +816,14 @@ async function handleQuick(chatId: number, telegramUserId: string, args: string)
 
   const holders = data.realHolders ?? data.totalHolders ?? "?";
   const health = data.healthScore?.score ?? data.stabilityScore ?? "?";
+  const qPhase = data.healthScore?.phase || null;
+  const qPhaseLabel = qPhase ? ` (${qPhase.replace('_', ' ')})` : '';
   const top10 = data.distributionStats?.top10Percentage ?? null;
 
   await sendMessage(chatId,
     `⚡ *Quick Stats*\n\n` +
     `👥 Holders: *${holders}*\n` +
-    `❤️ Health: *${health}/100*\n` +
+    `❤️ Health: *${health}/100*${qPhaseLabel}\n` +
     `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
     `\n_Use /holders for full breakdown or /ai for AI analysis._`
   );

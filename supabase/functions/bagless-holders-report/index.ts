@@ -399,35 +399,89 @@ serve(async (req) => {
       riskFlags.push(`Bundled wallets: ${insidersResult.bundledPercentage.toFixed(1)}% supply`);
     }
     
-    // === HOLDER HEALTH SCORE (A-F) ===
-    let healthScore = 100;
+    // === LIFECYCLE-AWARE HEALTH SCORE ===
+    const vitality = dexResult.vitality;
+    const pairAgeMs = vitality.pairCreatedAt ? (Date.now() - vitality.pairCreatedAt) : null;
+    const pairAgeHours = pairAgeMs ? pairAgeMs / 3600000 : null;
+    
+    // Phase detection
+    type HealthPhase = 'on_curve' | 'fresh' | 'established' | 'mature';
+    let healthPhase: HealthPhase = 'on_curve';
+    if (vitality.pairCreatedAt && vitality.liquidityUsd > 50000) {
+      if (pairAgeHours! < 48) healthPhase = 'fresh';
+      else if (pairAgeHours! < 336) healthPhase = 'established'; // 14 days
+      else healthPhase = 'mature';
+    }
+    
+    // Helper: score a metric 0-100
+    const scoreMetric = (value: number, good: number, bad: number, invert = false): number => {
+      if (invert) { const t = good; good = bad; bad = t; }
+      if (good === bad) return 50;
+      const raw = ((value - bad) / (good - bad)) * 100;
+      return Math.max(0, Math.min(100, raw));
+    };
+    
+    // Compute individual metric scores
+    const holderCountScore = scoreMetric(nonLpHolders.length, 500, 20);
+    const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50, true); // lower is better
+    const lpScore = scoreMetric(lpPercentage, 30, 5);
+    const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25, true);
+    const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60, true);
+    
+    // Buy/sell ratio (h1 for fresh, h24 for established/mature)
+    const txWindow = healthPhase === 'on_curve' || healthPhase === 'fresh' ? vitality.txns.h1 : vitality.txns.h24;
+    const totalTxns = txWindow.buys + txWindow.sells;
+    const buySellRatio = totalTxns > 0 ? txWindow.buys / totalTxns : 0.5;
+    const buySellScore = scoreMetric(buySellRatio, 0.7, 0.2);
+    
+    // Volume trend score (relative to mcap for context)
+    const vol24 = vitality.volume.h24;
+    const volToMcap = inferredMarketCapUSD > 0 ? (vol24 / inferredMarketCapUSD) : 0;
+    const volumeScore = scoreMetric(volToMcap, 0.5, 0.01);
+    
+    // Price trend score
+    const priceH24 = vitality.priceChange.h24;
+    const priceTrendScore = scoreMetric(priceH24, 20, -50);
+    
+    // Dev holding score (lower % = healthier for mature, higher tolerance for fresh)
+    const devPct = potentialDevWallet?.percentageOfSupply ?? 0;
+    const devThresholdGood = healthPhase === 'on_curve' ? 15 : healthPhase === 'fresh' ? 10 : 5;
+    const devScore = scoreMetric(devPct, devThresholdGood, 40, true);
+    
+    // Phase-weighted scoring matrix
+    const weights: Record<HealthPhase, Record<string, number>> = {
+      on_curve:    { holders: 0.25, whales: 0.10, dev: 0.20, buySell: 0.15, bundled: 0.05, lp: 0, volume: 0, price: 0.05, dust: 0.20 },
+      fresh:       { holders: 0.15, whales: 0.20, dev: 0.15, buySell: 0.15, bundled: 0.10, lp: 0.15, volume: 0.10, price: 0, dust: 0 },
+      established: { holders: 0.10, whales: 0.20, dev: 0.10, buySell: 0.10, bundled: 0.15, lp: 0.15, volume: 0.10, price: 0.10, dust: 0 },
+      mature:      { holders: 0.10, whales: 0.20, dev: 0.05, buySell: 0.10, bundled: 0.15, lp: 0.15, volume: 0.10, price: 0.15, dust: 0 },
+    };
+    
+    const w = weights[healthPhase];
+    const healthBreakdown: Record<string, { score: number; weight: number; contribution: number }> = {};
+    const metrics: Record<string, number> = {
+      holders: holderCountScore, whales: whaleScore, dev: devScore, buySell: buySellScore,
+      bundled: bundledScore, lp: lpScore, volume: volumeScore, price: priceTrendScore, dust: dustScore,
+    };
+    
+    let healthScore = 0;
+    for (const [key, weight] of Object.entries(w)) {
+      const s = metrics[key] ?? 50;
+      const contribution = s * weight;
+      healthScore += contribution;
+      if (weight > 0) healthBreakdown[key] = { score: Math.round(s), weight, contribution: Math.round(contribution) };
+    }
+    
+    // Vitality penalties (post-bond only)
+    const vitalityPenalties: string[] = [];
+    if (healthPhase !== 'on_curve') {
+      if (vol24 < 500 && nonLpHolders.length > 100) { healthScore -= 15; vitalityPenalties.push('Volume collapse (<$500/24h)'); }
+      if (priceH24 < -60) { healthScore -= 10; vitalityPenalties.push('Price crash (>60% drop/24h)'); }
+      if (vitality.txns.h1.buys + vitality.txns.h1.sells === 0) { healthScore -= 10; vitalityPenalties.push('Zero transactions in last hour'); }
+    }
+    
+    healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
+    
     let healthGrade = 'A';
-    
-    // Deduct for whale concentration
-    if (distributionStats.top5Percentage > 40) healthScore -= 30;
-    else if (distributionStats.top5Percentage > 30) healthScore -= 20;
-    else if (distributionStats.top5Percentage > 20) healthScore -= 10;
-    
-    // Deduct for low LP
-    if (lpPercentage < 10) healthScore -= 20;
-    else if (lpPercentage < 20) healthScore -= 10;
-    
-    // Deduct for bundling
-    if (insidersResult.bundledPercentage > 20) healthScore -= 25;
-    else if (insidersResult.bundledPercentage > 10) healthScore -= 15;
-    else if (insidersResult.bundledPercentage > 5) healthScore -= 5;
-    
-    // Deduct for too few holders
-    if (rankedHolders.length < 50) healthScore -= 15;
-    else if (rankedHolders.length < 100) healthScore -= 10;
-    
-    // Deduct for high dust
-    if (simpleTiers.dust.percentage > 40) healthScore -= 10;
-    
-    // Clamp score
-    healthScore = Math.max(0, Math.min(100, healthScore));
-    
-    // Calculate grade
     if (healthScore >= 90) healthGrade = 'A';
     else if (healthScore >= 80) healthGrade = 'B';
     else if (healthScore >= 65) healthGrade = 'C';
@@ -495,7 +549,11 @@ serve(async (req) => {
       // NEW: Health score
       healthScore: {
         score: healthScore,
-        grade: healthGrade
+        grade: healthGrade,
+        phase: healthPhase,
+        breakdown: healthBreakdown,
+        vitalityPenalties,
+        pairAgeHours: pairAgeHours ? Math.round(pairAgeHours) : null,
       },
       firstBuyers: [],
       executionTimeMs: totalTime
