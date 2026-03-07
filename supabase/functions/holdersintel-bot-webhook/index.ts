@@ -478,7 +478,7 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   // Fetch momentum + holders + DexScreener metadata in parallel
   const [momentumData, holdersData, dexData] = await Promise.all([
     invokeFunction("token-momentum-analyzer", { tokenMint: ca }),
-    invokeFunction("token-ai-interpreter", { tokenMint: ca }),
+    invokeFunction("bagless-holders-report", { tokenMint: ca }),
     fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => d?.pairs?.[0] || null)
@@ -486,7 +486,9 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   ]);
 
   const momentumScore = momentumData?.momentum_score ?? 0;
-  const healthScore = holdersData?.health_score ?? holdersData?.score ?? 0;
+  const healthScore = holdersData?.healthScore?.score ?? holdersData?.stabilityScore ?? 0;
+  const verdictPhase = holdersData?.healthScore?.phase || null;
+  const verdictPhaseLabel = verdictPhase ? ` (${verdictPhase.replace('_', ' ')})` : '';
 
   // Extract token info — try multiple sources
   const tokenSymbol = momentumData?.metrics?.symbol 
@@ -554,7 +556,7 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     `${emoji} *${verdict}*\n\n` +
     `${description}\n\n` +
     `📈 Momentum: *${momentumScore}/100*\n` +
-    `❤️ Health: *${healthScore}/100*\n`;
+    `❤️ Health: *${healthScore}/100*${verdictPhaseLabel}\n`;
 
   if (momentumData?.metrics) {
     const m = momentumData.metrics;
