@@ -15,6 +15,14 @@ export interface Socials {
   website?: string;
 }
 
+export interface VitalityMetrics {
+  volume: { m5: number; h1: number; h6: number; h24: number };
+  priceChange: { m5: number; h1: number; h6: number; h24: number };
+  txns: { m5: { buys: number; sells: number }; h1: { buys: number; sells: number }; h6: { buys: number; sells: number }; h24: { buys: number; sells: number } };
+  pairCreatedAt: number | null; // unix ms
+  liquidityUsd: number;
+}
+
 export interface DexScreenerResult {
   pairs: any[];
   pairAddresses: Set<string>;
@@ -22,16 +30,25 @@ export interface DexScreenerResult {
   socials: Socials;
   dexStatus: DexStatus;
   priceUsd: number;
+  vitality: VitalityMetrics;
 }
 
 export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreenerResult> {
+  const zeroTxns = { buys: 0, sells: 0 };
   const result: DexScreenerResult = {
     pairs: [],
     pairAddresses: new Set(),
     launchpadInfo: { name: 'unknown', detected: false, confidence: 'low' },
     socials: {},
     dexStatus: { hasDexPaid: false, hasCTO: false, activeBoosts: 0, hasAds: false },
-    priceUsd: 0
+    priceUsd: 0,
+    vitality: {
+      volume: { m5: 0, h1: 0, h6: 0, h24: 0 },
+      priceChange: { m5: 0, h1: 0, h6: 0, h24: 0 },
+      txns: { m5: { ...zeroTxns }, h1: { ...zeroTxns }, h6: { ...zeroTxns }, h24: { ...zeroTxns } },
+      pairCreatedAt: null,
+      liquidityUsd: 0,
+    }
   };
 
   try {
