@@ -101,9 +101,28 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
         console.log(`[DexScreener] Launchpad detected: ${result.launchpadInfo.name} (${result.launchpadInfo.confidence})`);
         
         // Get price
-        if (result.pairs[0].priceUsd) {
-          result.priceUsd = parseFloat(result.pairs[0].priceUsd) || 0;
+        const p0 = result.pairs[0];
+        if (p0.priceUsd) {
+          result.priceUsd = parseFloat(p0.priceUsd) || 0;
         }
+        
+        // Extract vitality metrics from first pair
+        const vol = p0.volume || {};
+        const pc = p0.priceChange || {};
+        const tx = p0.txns || {};
+        result.vitality = {
+          volume: { m5: vol.m5 || 0, h1: vol.h1 || 0, h6: vol.h6 || 0, h24: vol.h24 || 0 },
+          priceChange: { m5: pc.m5 || 0, h1: pc.h1 || 0, h6: pc.h6 || 0, h24: pc.h24 || 0 },
+          txns: {
+            m5: { buys: tx.m5?.buys || 0, sells: tx.m5?.sells || 0 },
+            h1: { buys: tx.h1?.buys || 0, sells: tx.h1?.sells || 0 },
+            h6: { buys: tx.h6?.buys || 0, sells: tx.h6?.sells || 0 },
+            h24: { buys: tx.h24?.buys || 0, sells: tx.h24?.sells || 0 },
+          },
+          pairCreatedAt: p0.pairCreatedAt ? new Date(p0.pairCreatedAt).getTime() : null,
+          liquidityUsd: p0.liquidity?.usd || 0,
+        };
+        console.log(`[DexScreener] Vitality — Vol24h: $${result.vitality.volume.h24}, Liq: $${result.vitality.liquidityUsd}, PairAge: ${result.vitality.pairCreatedAt ? Math.round((Date.now() - result.vitality.pairCreatedAt) / 3600000) + 'h' : 'N/A'}`);
         
         // Extract social links
         const info = result.pairs[0].info;
