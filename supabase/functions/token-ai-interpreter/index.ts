@@ -494,7 +494,18 @@ serve(async (req) => {
       total_holders: totalHolders,
       lp_percentage: lpPercentage.toFixed(2),
       bundled_insider_pct: bundledPct.toFixed(2),
-      market_cap: reportData.marketCap ?? null
+      market_cap: reportData.marketCap ?? null,
+      // Vitality context for AI
+      token_phase: phase,
+      phase_label: phaseResult.label,
+      vitality_summary: vitality ? {
+        volume_24h: volume24h,
+        price_change_24h: priceChange24h,
+        txns_1h: txns1h,
+        liquidity_usd: liquidityUsd,
+        volume_1h: vitality?.volume?.h1 ?? null,
+        buy_sell_ratio_5m: vitality?.txns?.m5 ? (vitality.txns.m5.sells > 0 ? (vitality.txns.m5.buys / vitality.txns.m5.sells).toFixed(2) : '∞') : null,
+      } : null,
     };
 
     // Call Lovable AI
