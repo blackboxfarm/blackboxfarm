@@ -655,12 +655,33 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
     return;
   }
 
+  // Get token phase for contextualizing dev rep
+  let oraclePhase: TokenPhase | null = null;
+  try {
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+    if (dexRes.ok) {
+      const dexJson = await dexRes.json();
+      const pair = dexJson?.pairs?.[0];
+      if (pair) {
+        const { detectTokenPhase: dtf } = await import("../_shared/token-phase.ts");
+        const pr = dtf({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null });
+        oraclePhase = pr.phase;
+      }
+    }
+  } catch (_) {}
+
   let msg = `🔮 *Oracle Report*\n\n`;
 
   if (data.developer || data.creator) {
     const dev = data.developer || data.creator;
     if (dev.address) msg += `👤 Dev: \`${dev.address.slice(0, 8)}...${dev.address.slice(-6)}\`\n`;
-    if (dev.reputation_score != null) msg += `📊 Rep Score: *${dev.reputation_score}/100*\n`;
+    if (dev.reputation_score != null) {
+      msg += `📊 Rep Score: *${dev.reputation_score}/100*\n`;
+      // Contextualize dev rep against token phase
+      if (oraclePhase) {
+        msg += `💡 _${contextualizeDevRep(dev.reputation_score, oraclePhase)}_\n`;
+      }
+    }
     if (dev.total_tokens != null) msg += `🪙 Tokens Created: *${dev.total_tokens}*\n`;
     if (dev.rug_count != null) msg += `🚩 Rugs: *${dev.rug_count}*\n`;
     if (dev.avg_lifespan) msg += `⏱ Avg Lifespan: *${dev.avg_lifespan}*\n`;

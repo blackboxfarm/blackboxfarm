@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { wallet_address, token_mint } = await req.json();
+    const { wallet_address, token_mint, pair_created_at } = await req.json();
 
     if (!wallet_address) {
       return new Response(
@@ -28,6 +28,12 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const heliusApiKey = getHeliusApiKey();
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Determine token age for age-relative scoring
+    let tokenAgeMinutes: number | null = null;
+    if (pair_created_at) {
+      tokenAgeMinutes = Math.floor((Date.now() - pair_created_at) / 60_000);
+    }
 
     // Check if we have a recent profile
     const { data: existingProfile } = await supabase
@@ -42,7 +48,6 @@ serve(async (req) => {
 
     if (shouldUpdate && heliusApiKey) {
       try {
-        // Use heliusRestFetch — key goes in X-Api-Key header, NOT in URL
         const heliusResponse = await heliusRestFetch(
           `/v0/addresses/${wallet_address}/transactions`,
           { method: 'GET', timeoutMs: 10000 }
@@ -63,21 +68,56 @@ serve(async (req) => {
 
           if (tokenTransactions.length > 0) {
             const firstTxTimestamp = tokenTransactions[0]?.timestamp;
+
             if (firstTxTimestamp) {
-              const daysSinceLaunch = (Date.now() / 1000 - firstTxTimestamp) / 86400;
-              if (daysSinceLaunch > 30) {
-                smartMoneyScore += 10;
-                earlyEntryCount++;
+              // Age-relative "early entry" — entered within first 10% of token's life
+              if (tokenAgeMinutes !== null && tokenAgeMinutes > 0) {
+                const entryAgeMinutes = (Date.now() / 1000 - firstTxTimestamp) / 60;
+                const earlyThresholdMinutes = tokenAgeMinutes * 0.1; // first 10%
+                if (entryAgeMinutes >= tokenAgeMinutes * 0.9) {
+                  // Was there since near-launch (within first 10% of life)
+                  smartMoneyScore += 15;
+                  earlyEntryCount++;
+                } else if (entryAgeMinutes >= tokenAgeMinutes * 0.7) {
+                  // Was there within first 30%
+                  smartMoneyScore += 8;
+                  earlyEntryCount++;
+                }
+              } else {
+                // Fallback: fixed 30-day window if no token age provided
+                const daysSinceLaunch = (Date.now() / 1000 - firstTxTimestamp) / 86400;
+                if (daysSinceLaunch > 30) {
+                  smartMoneyScore += 10;
+                  earlyEntryCount++;
+                }
               }
             }
 
+            // Age-relative "diamond hands" — holding for >50% of token's life without selling
             const lastSell = tokenTransactions
               .filter((tx: any) => tx.type === 'SELL')
               .sort((a: any, b: any) => b.timestamp - a.timestamp)[0];
             
-            if (!lastSell || (Date.now() / 1000 - lastSell.timestamp) > 30 * 86400) {
-              smartMoneyScore += 15;
-              diamondHandsCount++;
+            if (tokenAgeMinutes !== null && tokenAgeMinutes > 0) {
+              const holdThresholdSeconds = (tokenAgeMinutes * 60) * 0.5; // 50% of token life
+              if (!lastSell || (Date.now() / 1000 - lastSell.timestamp) > holdThresholdSeconds) {
+                smartMoneyScore += 15;
+                diamondHandsCount++;
+              } else {
+                // Sold recently relative to token age
+                const sellRecency = Date.now() / 1000 - lastSell.timestamp;
+                if (sellRecency < (tokenAgeMinutes * 60) * 0.1) {
+                  // Sold within last 10% of token's life — paper hands
+                  paperHandsCount++;
+                  smartMoneyScore -= 5;
+                }
+              }
+            } else {
+              // Fallback: fixed 30-day window
+              if (!lastSell || (Date.now() / 1000 - lastSell.timestamp) > 30 * 86400) {
+                smartMoneyScore += 15;
+                diamondHandsCount++;
+              }
             }
           }
 
