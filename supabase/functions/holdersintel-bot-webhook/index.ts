@@ -663,8 +663,8 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
       const dexJson = await dexRes.json();
       const pair = dexJson?.pairs?.[0];
       if (pair) {
-        const { detectTokenPhase: dtf } = await import("../_shared/token-phase.ts");
-        const pr = dtf({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null });
+        const { detectTokenPhase } = await import("../_shared/token-phase.ts");
+        const pr = detectTokenPhase({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null });
         oraclePhase = pr.phase;
       }
     }
