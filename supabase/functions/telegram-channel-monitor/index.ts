@@ -1105,8 +1105,113 @@ async function evaluateSimpleMode(
 // ============================================================================
 // AI INTERPRETATION (Enhanced)
 // ============================================================================
+// AI-POWERED INTERPRETATION (Gemini via Lovable AI Gateway)
+// ============================================================================
 
-function generateAIInterpretation(
+const CHANNEL_AI_SYSTEM_PROMPT = `You are a crypto signal analyst. Analyze Telegram channel messages about Solana tokens and classify trading intent.
+
+You will receive: the raw message text, extracted token addresses, matched keywords, and enriched token data (price, platform, bonding curve %).
+
+RULES:
+- Be objective. Base classification on the actual message content and data.
+- High conviction = explicit buy calls, "ape", "gem", "100x", strong action words with a token address.
+- Low conviction = casual mentions, questions, "what do you think", discussion without clear call.
+- If message has bearish signals (dump, sell, rug, scam), classify accordingly.
+- Keep summary under 100 chars. Keep interpretation under 200 chars.
+- Confidence: 0.0-1.0 based on signal clarity.`;
+
+async function generateAIInterpretation(
+  messageText: string,
+  extractedTokens: string[],
+  keywordResult: KeywordMatchResult,
+  tokenData: EnrichedTokenData | null,
+  ruleResult: RuleEvaluationResult
+): Promise<{
+  summary: string;
+  interpretation: string;
+  decision: string;
+  reasoning: string;
+  confidence: number;
+}> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  
+  if (!LOVABLE_API_KEY) {
+    // Fallback to rule-based if no AI key
+    return fallbackInterpretation(messageText, extractedTokens, keywordResult, tokenData, ruleResult);
+  }
+
+  try {
+    const userPrompt = [
+      `MESSAGE: "${messageText.slice(0, 500)}"`,
+      `TOKENS FOUND: ${extractedTokens.length > 0 ? extractedTokens.join(', ') : 'none'}`,
+      `MATCHED KEYWORDS: ${keywordResult.matchedKeywords.slice(0, 10).join(', ') || 'none'}`,
+      `KEYWORD WEIGHT: ${keywordResult.totalWeight.toFixed(2)}`,
+      `HIGH CONVICTION KEYWORDS: ${keywordResult.hasHighConviction ? 'yes' : 'no'}`,
+      `BEARISH SIGNALS: ${keywordResult.hasBearishSignal ? 'yes' : 'no'}`,
+      tokenData ? `TOKEN: $${tokenData.symbol || 'Unknown'} | Price: $${tokenData.price?.toFixed(10) || 'N/A'} | Platform: ${tokenData.platform || 'Unknown'} | Bonding: ${tokenData.bondingCurvePercent?.toFixed(0) || 'N/A'}%` : 'TOKEN DATA: unavailable',
+      `RULE DECISION: ${ruleResult.decision} | REASONING: ${ruleResult.reasoning}`,
+    ].join('\n');
+
+    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-3-flash-preview',
+        messages: [
+          { role: 'system', content: CHANNEL_AI_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        tools: [{
+          type: 'function',
+          function: {
+            name: 'classify_signal',
+            description: 'Classify the trading signal from a Telegram channel message.',
+            parameters: {
+              type: 'object',
+              properties: {
+                summary: { type: 'string', description: 'Brief summary of the message intent, under 100 chars.' },
+                interpretation: { type: 'string', description: 'Detailed interpretation with token context, under 200 chars.' },
+                confidence: { type: 'number', description: 'Signal confidence 0.0-1.0.' },
+              },
+              required: ['summary', 'interpretation', 'confidence'],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: 'function', function: { name: 'classify_signal' } },
+        temperature: 0.2,
+        max_tokens: 300,
+      }),
+    });
+
+    if (!aiRes.ok) {
+      console.error(`[telegram-channel-monitor] AI interpretation error: ${aiRes.status}`);
+      return fallbackInterpretation(messageText, extractedTokens, keywordResult, tokenData, ruleResult);
+    }
+
+    const aiJson = await aiRes.json();
+    const toolCall = aiJson.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall) throw new Error('No tool call');
+
+    const parsed = JSON.parse(toolCall.function.arguments);
+
+    return {
+      summary: parsed.summary || 'AI analysis complete.',
+      interpretation: parsed.interpretation || 'No detailed interpretation available.',
+      decision: ruleResult.decision,
+      reasoning: ruleResult.reasoning,
+      confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
+    };
+  } catch (err) {
+    console.error('[telegram-channel-monitor] AI interpretation fallback:', err);
+    return fallbackInterpretation(messageText, extractedTokens, keywordResult, tokenData, ruleResult);
+  }
+}
+
+function fallbackInterpretation(
   messageText: string,
   extractedTokens: string[],
   keywordResult: KeywordMatchResult,
@@ -1725,7 +1830,7 @@ serve(async (req) => {
               };
 
           // Generate AI interpretation
-          const aiResult = generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
+          const aiResult = await generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
 
           // ============================================================================
           // SIGNAL CLASSIFICATION (INSIDER WALLET TRACKING analysis)
