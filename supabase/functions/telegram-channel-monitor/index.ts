@@ -1830,7 +1830,7 @@ serve(async (req) => {
               };
 
           // Generate AI interpretation
-          const aiResult = generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
+          const aiResult = await generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
 
           // ============================================================================
           // SIGNAL CLASSIFICATION (INSIDER WALLET TRACKING analysis)
