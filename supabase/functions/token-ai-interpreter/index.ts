@@ -385,6 +385,7 @@ serve(async (req) => {
 
     // Extract metrics from report data
     const healthScore = reportData.healthScore?.score ?? reportData.stabilityScore ?? 50;
+    const healthPhase = reportData.healthScore?.phase || null;
     const totalHolders = reportData.totalHolders ?? reportData.realHolders ?? 0;
     const top10Pct = reportData.distributionStats?.top10Percentage ?? 50;
     const lpPercentage = reportData.lpPercentageOfSupply ?? 10;
@@ -396,6 +397,18 @@ serve(async (req) => {
     const retailPercent = reportData.simpleTiers?.retail?.percentage ?? 0;
     const seriousPercent = reportData.simpleTiers?.serious?.percentage ?? 0;
     const whalePercent = reportData.simpleTiers?.whales?.percentage ?? 0;
+
+    // Extract vitality data (passed through from bagless-holders-report)
+    const vitality = reportData.vitality || reportData.healthScore?.vitality || null;
+    const pairCreatedAt = vitality?.pairCreatedAt ?? reportData.pairCreatedAt ?? null;
+    const liquidityUsd = vitality?.liquidityUsd ?? reportData.liquidityUsd ?? null;
+    const volume24h = vitality?.volume?.h24 ?? null;
+    const txns1h = vitality?.txns?.h1 ? (vitality.txns.h1.buys + vitality.txns.h1.sells) : null;
+    const priceChange24h = vitality?.priceChange?.h24 ?? null;
+
+    // Detect phase using shared utility
+    const phaseResult = detectTokenPhase({ pairCreatedAt, liquidityUsd });
+    const phase: TokenPhase = (healthPhase as TokenPhase) || phaseResult.phase;
 
     // Calculate derived metrics
     const unlockedToLpRatio = lpPercentage > 0 ? circulatingPct / lpPercentage : 10;
@@ -414,14 +427,18 @@ serve(async (req) => {
       healthScore
     });
 
-    // Determine lifecycle stage
+    // Determine lifecycle stage (now phase-aware + vitality-enriched)
     const lifecycle = determineLifecycleStage({
       totalHolders,
       healthScore,
       retailPercent,
       seriousPercent,
       whalePercent,
-      dustPercent
+      dustPercent,
+      phase,
+      volume24h,
+      txns1h,
+      priceChange24h,
     });
 
     // Select commentary mode (use forceMode if provided)
