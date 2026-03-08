@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { detectTokenPhase, contextualizeDevRep, type TokenPhase } from "../_shared/token-phase.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -524,36 +525,95 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     return;
   }
 
-  // Full verdict with sizing
+  // Full verdict with phase-gated sizing
+  const verdictPhase = (holdersData?.healthScore?.phase || momentumData?.phase || null) as TokenPhase | null;
   let verdict: string;
   let emoji: string;
   let description: string;
 
-  if (momentumScore >= 70 && healthScore >= 60) {
-    verdict = "BUY DEEP LONG";
-    emoji = "🟢";
-    description = "Strong chart, healthy holders. Full position, hold for gains.";
-  } else if (momentumScore >= 55 && healthScore >= 40) {
-    verdict = "BUY MEDIUM SHORT";
-    emoji = "🟢";
-    description = "Decent momentum. Medium position, target 2x then reassess.";
-  } else if (momentumScore >= 40) {
-    verdict = "BUY SMALL SHORT";
-    emoji = "🟡";
-    description = "Speculative. Small/disposable amount, quick 2x flip.";
+  if (verdictPhase === 'on_curve') {
+    // On curve: max recommendation is SMALL SHORT
+    if (momentumScore >= 55 && healthScore >= 40) {
+      verdict = "WATCH CURVE — SMALL SHORT";
+      emoji = "🟡";
+      description = "Active on bonding curve. Speculative small amount only — could bond or dump.";
+    } else if (momentumScore >= 40) {
+      verdict = "WATCH CURVE";
+      emoji = "🟡";
+      description = "On curve with some momentum. Observe, don't commit.";
+    } else {
+      verdict = "HOLD / AVOID";
+      emoji = "🔴";
+      description = "Weak signals on bonding curve. High risk, skip.";
+    }
+  } else if (verdictPhase === 'fresh') {
+    // Fresh (<48h): max recommendation is MEDIUM SHORT
+    if (momentumScore >= 70 && healthScore >= 60) {
+      verdict = "BUY MEDIUM SHORT";
+      emoji = "🟢";
+      description = "Strong early signals. Medium position, but token is <48h old — stay nimble.";
+    } else if (momentumScore >= 55 && healthScore >= 40) {
+      verdict = "BUY SMALL SHORT";
+      emoji = "🟡";
+      description = "Decent fresh launch. Small speculative position, quick flip target.";
+    } else if (momentumScore >= 40) {
+      verdict = "WATCH";
+      emoji = "🟡";
+      description = "Fresh token, insufficient conviction. Monitor for breakout.";
+    } else {
+      verdict = "HOLD / AVOID";
+      emoji = "🔴";
+      description = "Weak signals on a fresh token. Skip.";
+    }
+  } else if (verdictPhase === 'established') {
+    // Established (2-14d): full range but higher bar for DEEP LONG
+    if (momentumScore >= 75 && healthScore >= 70) {
+      verdict = "BUY DEEP LONG";
+      emoji = "🟢";
+      description = "Strong chart + healthy holders on an established token. Full position.";
+    } else if (momentumScore >= 55 && healthScore >= 40) {
+      verdict = "BUY MEDIUM SHORT";
+      emoji = "🟢";
+      description = "Decent momentum on established token. Medium position, reassess at 2x.";
+    } else if (momentumScore >= 40) {
+      verdict = "BUY SMALL SHORT";
+      emoji = "🟡";
+      description = "Speculative. Small amount, quick flip.";
+    } else {
+      verdict = "HOLD / AVOID";
+      emoji = "🔴";
+      description = "Weak signals. Skip this one.";
+    }
   } else {
-    verdict = "HOLD / AVOID";
-    emoji = "🔴";
-    description = "Weak signals or dump in progress. Skip this one.";
+    // Mature (>14d) or unknown: standard thresholds
+    if (momentumScore >= 70 && healthScore >= 60) {
+      verdict = "BUY DEEP LONG";
+      emoji = "🟢";
+      description = "Strong chart, healthy holders on a mature token. Full position, hold for gains.";
+    } else if (momentumScore >= 55 && healthScore >= 40) {
+      verdict = "BUY MEDIUM SHORT";
+      emoji = "🟢";
+      description = "Decent momentum. Medium position, target 2x then reassess.";
+    } else if (momentumScore >= 40) {
+      verdict = "BUY SMALL SHORT";
+      emoji = "🟡";
+      description = "Speculative. Small/disposable amount, quick 2x flip.";
+    } else {
+      verdict = "HOLD / AVOID";
+      emoji = "🔴";
+      description = "Weak signals or dump in progress. Skip this one.";
+    }
   }
 
   // Get mcap from momentum data or DexScreener
   const mcap = momentumData?.metrics?.market_cap || (dexData?.marketCap) || (dexData?.fdv) || null;
   const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
 
+  const phaseTag = verdictPhase ? ` [${verdictPhase.replace('_', ' ')}]` : '';
+
   let msg = `\`${ca}\`\n` +
     `🪙 *${tokenHeader}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}\n\n` +
-    `${emoji} *${verdict}*\n\n` +
+    `${emoji} *${verdict}*${phaseTag}\n\n` +
     `${description}\n\n` +
     `📈 Momentum: *${momentumScore}/100*\n` +
     `❤️ Health: *${healthScore}/100*${verdictPhaseLabel}\n`;
@@ -595,12 +655,32 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
     return;
   }
 
+  // Get token phase for contextualizing dev rep
+  let oraclePhase: TokenPhase | null = null;
+  try {
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+    if (dexRes.ok) {
+      const dexJson = await dexRes.json();
+      const pair = dexJson?.pairs?.[0];
+      if (pair) {
+        const pr = detectTokenPhase({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null });
+        oraclePhase = pr.phase;
+      }
+    }
+  } catch (_) {}
+
   let msg = `🔮 *Oracle Report*\n\n`;
 
   if (data.developer || data.creator) {
     const dev = data.developer || data.creator;
     if (dev.address) msg += `👤 Dev: \`${dev.address.slice(0, 8)}...${dev.address.slice(-6)}\`\n`;
-    if (dev.reputation_score != null) msg += `📊 Rep Score: *${dev.reputation_score}/100*\n`;
+    if (dev.reputation_score != null) {
+      msg += `📊 Rep Score: *${dev.reputation_score}/100*\n`;
+      // Contextualize dev rep against token phase
+      if (oraclePhase) {
+        msg += `💡 _${contextualizeDevRep(dev.reputation_score, oraclePhase)}_\n`;
+      }
+    }
     if (dev.total_tokens != null) msg += `🪙 Tokens Created: *${dev.total_tokens}*\n`;
     if (dev.rug_count != null) msg += `🚩 Rugs: *${dev.rug_count}*\n`;
     if (dev.avg_lifespan) msg += `⏱ Avg Lifespan: *${dev.avg_lifespan}*\n`;
