@@ -22,6 +22,90 @@ const RATE_LIMITS: Record<string, number> = {
   auth: 3, x_subscriber: 10, pro: 25, dev: 50, enterprise: 100,
 };
 
+// ─── AI Verdict System ───
+
+const VERDICT_SYSTEM_PROMPT = `You are a crypto trading analyst for Solana memecoins. Given token metrics, produce a single actionable trading verdict.
+
+CRITICAL RULES:
+- You MUST respect lifecycle phase caps:
+  • on_curve: NEVER recommend "BUY DEEP LONG" or "BUY MEDIUM SHORT". Max is "WATCH CURVE — SMALL SHORT".
+  • fresh (<48h): NEVER recommend "BUY DEEP LONG". Max is "BUY MEDIUM SHORT".
+  • established (2-14d): Full range, but "BUY DEEP LONG" requires exceptional metrics (momentum≥75, health≥70).
+  • mature (>14d): Full range with standard thresholds.
+- Be concise. Description = 1 sentence. Reasoning = 2-3 sentences max.
+- Focus on what the DATA shows, not speculation.
+- If volume is collapsing or health is low, lean bearish regardless of momentum.
+- A token with high momentum but low health likely has concentrated holders dumping — flag this.
+
+VERDICT OPTIONS (pick exactly one):
+🟢 BUY DEEP LONG — Full conviction, hold position
+🟢 BUY MEDIUM SHORT — Medium position, 2x target then reassess
+🟡 BUY SMALL SHORT — Speculative small amount, quick flip
+🟡 WATCH CURVE — SMALL SHORT — On bonding curve, tiny speculative bet
+🟡 WATCH CURVE — Observe only, don't commit
+🟡 WATCH — Monitor for breakout
+🔴 HOLD / AVOID — Skip this token`;
+
+function buildVerdictPrompt(data: {
+  tokenSymbol: string;
+  tokenName: string;
+  ca: string;
+  momentumScore: number;
+  healthScore: number;
+  phase: TokenPhase | null;
+  mcap: number | null;
+  metrics: Record<string, any> | null;
+  signals: Array<{ type: string; signal: string }>;
+  holdersData: { totalHolders: number | null; top10Pct: number | null; baglessCount: number | null };
+}): string {
+  const lines: string[] = [
+    `TOKEN: $${data.tokenSymbol} (${data.tokenName})`,
+    `PHASE: ${data.phase || 'unknown'}`,
+    `MOMENTUM SCORE: ${data.momentumScore}/100`,
+    `HEALTH SCORE: ${data.healthScore}/100`,
+  ];
+  if (data.mcap) lines.push(`MARKET CAP: $${data.mcap.toLocaleString()}`);
+  if (data.metrics) {
+    if (data.metrics.price_change_5m != null) lines.push(`5m Price Change: ${data.metrics.price_change_5m.toFixed(1)}%`);
+    if (data.metrics.price_change_1h != null) lines.push(`1h Price Change: ${data.metrics.price_change_1h.toFixed(1)}%`);
+    if (data.metrics.volume_5m != null) lines.push(`5m Volume: $${data.metrics.volume_5m.toLocaleString()}`);
+    if (data.metrics.buy_sell_ratio_5m != null) lines.push(`Buy/Sell Ratio 5m: ${data.metrics.buy_sell_ratio_5m.toFixed(2)}x`);
+    if (data.metrics.liquidity_usd != null) lines.push(`Liquidity: $${data.metrics.liquidity_usd.toLocaleString()}`);
+  }
+  if (data.holdersData.totalHolders) lines.push(`Total Holders: ${data.holdersData.totalHolders}`);
+  if (data.holdersData.top10Pct != null) lines.push(`Top 10% Concentration: ${data.holdersData.top10Pct.toFixed(1)}%`);
+  if (data.holdersData.baglessCount != null) lines.push(`Bagless (exited) holders: ${data.holdersData.baglessCount}`);
+  if (data.signals.length) {
+    lines.push(`SIGNALS: ${data.signals.map(s => `[${s.type}] ${s.signal}`).join('; ')}`);
+  }
+  return lines.join('\n');
+}
+
+function fallbackVerdict(momentumScore: number, healthScore: number, phase: TokenPhase | null): { verdict: string; emoji: string; description: string } {
+  if (phase === 'on_curve') {
+    if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'WATCH CURVE — SMALL SHORT', emoji: '🟡', description: 'Active on bonding curve. Speculative small amount only.' };
+    if (momentumScore >= 40) return { verdict: 'WATCH CURVE', emoji: '🟡', description: 'On curve with some momentum. Observe.' };
+    return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals on bonding curve.' };
+  }
+  if (phase === 'fresh') {
+    if (momentumScore >= 70 && healthScore >= 60) return { verdict: 'BUY MEDIUM SHORT', emoji: '🟢', description: 'Strong early signals. Medium position, stay nimble.' };
+    if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'BUY SMALL SHORT', emoji: '🟡', description: 'Decent fresh launch. Small speculative position.' };
+    if (momentumScore >= 40) return { verdict: 'WATCH', emoji: '🟡', description: 'Fresh token, monitor for breakout.' };
+    return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals on fresh token.' };
+  }
+  if (phase === 'established') {
+    if (momentumScore >= 75 && healthScore >= 70) return { verdict: 'BUY DEEP LONG', emoji: '🟢', description: 'Strong chart + healthy holders. Full position.' };
+    if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'BUY MEDIUM SHORT', emoji: '🟢', description: 'Decent momentum on established token.' };
+    if (momentumScore >= 40) return { verdict: 'BUY SMALL SHORT', emoji: '🟡', description: 'Speculative. Small amount.' };
+    return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals.' };
+  }
+  // mature / unknown
+  if (momentumScore >= 70 && healthScore >= 60) return { verdict: 'BUY DEEP LONG', emoji: '🟢', description: 'Strong chart, healthy holders on mature token.' };
+  if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'BUY MEDIUM SHORT', emoji: '🟢', description: 'Decent momentum. Target 2x.' };
+  if (momentumScore >= 40) return { verdict: 'BUY SMALL SHORT', emoji: '🟡', description: 'Speculative. Small amount.' };
+  return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals. Skip.' };
+}
+
 // ─── Helpers ───
 
 async function sendMessage(chatId: number, text: string, parseMode = "Markdown") {
