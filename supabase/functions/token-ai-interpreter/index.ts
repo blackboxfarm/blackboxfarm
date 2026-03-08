@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { detectTokenPhase, type TokenPhase } from "../_shared/token-phase.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,22 +61,51 @@ function determineLifecycleStage(metrics: {
   seriousPercent: number;
   whalePercent: number;
   dustPercent: number;
+  // New vitality fields
+  phase?: TokenPhase;
+  volume24h?: number | null;
+  txns1h?: number | null;
+  priceChange24h?: number | null;
 }): LifecycleResult {
-  const { totalHolders, healthScore, retailPercent, seriousPercent, whalePercent, dustPercent } = metrics;
+  const { totalHolders, healthScore, retailPercent, seriousPercent, whalePercent, dustPercent,
+    phase, volume24h, txns1h, priceChange24h } = metrics;
   const signals: string[] = [];
-  
-  // Genesis: Very new token
-  if (totalHolders < 100) {
-    signals.push(`holder_count_low:${totalHolders}`);
-    if (healthScore > 50) signals.push(`health_score_decent:${healthScore}`);
-    return {
-      stage: "Genesis",
-      confidence: totalHolders < 50 ? "high" : "medium",
-      signals
-    };
+
+  // Phase-aware: If on_curve, always Genesis regardless of holder count
+  if (phase === 'on_curve') {
+    signals.push(`on_bonding_curve`);
+    signals.push(`holder_count:${totalHolders}`);
+    return { stage: "Genesis", confidence: "high", signals };
+  }
+
+  // Dormant detection: many holders but dead activity
+  if (totalHolders > 100 && volume24h !== undefined && volume24h !== null && volume24h < 500
+    && txns1h !== undefined && txns1h !== null && txns1h < 10) {
+    signals.push(`dormant_volume:$${volume24h}`);
+    signals.push(`dormant_txns:${txns1h}/1h`);
+    signals.push(`holder_count:${totalHolders}`);
+    return { stage: "Dormant", confidence: totalHolders > 500 ? "high" : "medium", signals };
+  }
+
+  // Compression: holders > 500, but price crashing and volume declining
+  if (totalHolders > 500 && priceChange24h !== undefined && priceChange24h !== null && priceChange24h < -50) {
+    signals.push(`price_collapse:${priceChange24h.toFixed(1)}%`);
+    return { stage: "Compression", confidence: "high", signals };
   }
   
-  // Discovery: Growing retail base
+  // Genesis: Very new or very few holders
+  if (totalHolders < 100 || phase === 'fresh') {
+    signals.push(`holder_count:${totalHolders}`);
+    if (phase) signals.push(`phase:${phase}`);
+    if (totalHolders < 100) {
+      if (healthScore > 50) signals.push(`health_score_decent:${healthScore}`);
+      return { stage: "Genesis", confidence: totalHolders < 50 ? "high" : "medium", signals };
+    }
+    // Fresh phase with decent holders = Discovery
+    return { stage: "Discovery", confidence: "medium", signals };
+  }
+  
+  // Discovery: Growing retail base (100-500 holders)
   if (totalHolders >= 100 && totalHolders <= 500) {
     signals.push(`holder_count_growing:${totalHolders}`);
     if (retailPercent > 40) {
@@ -85,28 +115,23 @@ function determineLifecycleStage(metrics: {
     return { stage: "Discovery", confidence: "medium", signals };
   }
   
-  // Expansion: Mature holder base with strong tiers
-  if (totalHolders > 500) {
-    signals.push(`holder_count_mature:${totalHolders}`);
-    
-    // Check for Distribution signals
-    if (whalePercent < 10 && dustPercent > 50) {
-      signals.push(`whales_exiting:${whalePercent.toFixed(1)}%`);
-      signals.push(`dust_accumulating:${dustPercent.toFixed(1)}%`);
-      return { stage: "Distribution", confidence: "medium", signals };
-    }
-    
-    // Strong serious + whale tiers = Expansion
-    if (seriousPercent + whalePercent > 25) {
-      signals.push(`serious_whale_strong:${(seriousPercent + whalePercent).toFixed(1)}%`);
-      return { stage: "Expansion", confidence: "high", signals };
-    }
-    
-    return { stage: "Expansion", confidence: "low", signals };
+  // Expansion / Distribution (500+ holders)
+  signals.push(`holder_count_mature:${totalHolders}`);
+  
+  // Distribution: whales leaving, dust accumulating
+  if (whalePercent < 10 && dustPercent > 50) {
+    signals.push(`whales_exiting:${whalePercent.toFixed(1)}%`);
+    signals.push(`dust_accumulating:${dustPercent.toFixed(1)}%`);
+    return { stage: "Distribution", confidence: "medium", signals };
   }
   
-  // Default fallback
-  return { stage: "Discovery", confidence: "low", signals: ["insufficient_data"] };
+  // Strong serious + whale tiers = Expansion
+  if (seriousPercent + whalePercent > 25) {
+    signals.push(`serious_whale_strong:${(seriousPercent + whalePercent).toFixed(1)}%`);
+    return { stage: "Expansion", confidence: "high", signals };
+  }
+  
+  return { stage: "Expansion", confidence: "low", signals };
 }
 
 // ============================================================================
