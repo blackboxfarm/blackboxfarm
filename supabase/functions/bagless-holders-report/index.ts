@@ -450,7 +450,7 @@ serve(async (req) => {
     // Dev holding score (lower % = healthier for mature, higher tolerance for fresh)
     const devPct = potentialDevWallet?.percentageOfSupply ?? 0;
     const devThresholdGood = healthPhase === 'on_curve' ? 15 : healthPhase === 'fresh' ? 10 : 5;
-    const devScore = scoreMetric(devPct, devThresholdGood, 40, true);
+    const devScore = scoreMetric(devPct, devThresholdGood, 40); // lower dev % is better
     
     // Phase-weighted scoring matrix
     const weights: Record<HealthPhase, Record<string, number>> = {
