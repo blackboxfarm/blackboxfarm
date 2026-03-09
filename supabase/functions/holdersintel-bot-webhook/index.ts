@@ -610,7 +610,6 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   }
 
   // Full verdict with AI-driven synthesis
-  const verdictPhase = (holdersData?.healthScore?.phase || momentumData?.phase || null) as TokenPhase | null;
   
   // Get mcap from momentum data or DexScreener
   const mcap = momentumData?.metrics?.market_cap || (dexData?.marketCap) || (dexData?.fdv) || null;
