@@ -572,7 +572,7 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
 
   const momentumScore = momentumData?.momentum_score ?? 0;
   const healthScore = holdersData?.healthScore?.score ?? holdersData?.stabilityScore ?? 0;
-  const verdictPhase = holdersData?.healthScore?.phase || null;
+  const verdictPhase = (holdersData?.healthScore?.phase || momentumData?.phase || null) as TokenPhase | null;
   const verdictPhaseLabel = verdictPhase ? ` (${verdictPhase.replace('_', ' ')})` : '';
 
   // Extract token info — try multiple sources
