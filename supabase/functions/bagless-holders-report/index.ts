@@ -417,8 +417,9 @@ serve(async (req) => {
     }
     
     // Helper: score a metric 0-100
-    const scoreMetric = (value: number, good: number, bad: number, invert = false): number => {
-      if (invert) { const t = good; good = bad; bad = t; }
+    // When good < bad (e.g. good=10%, bad=50% for whale concentration),
+    // the formula naturally handles "lower is better" — no invert needed.
+    const scoreMetric = (value: number, good: number, bad: number): number => {
       if (good === bad) return 50;
       const raw = ((value - bad) / (good - bad)) * 100;
       return Math.max(0, Math.min(100, raw));
