@@ -398,8 +398,9 @@ Deno.serve(async (req) => {
                              tweetTemplate.includes('{ai_overview}') || tweetTemplate.includes('{AI_OVERVIEW}') ||
                              tweetTemplate.includes('{lifecycle}') || tweetTemplate.includes('{LIFECYCLE}');
       const aiEnabledForItem = item.include_ai_summary === true;
+      const aiHealthModeOn = await getHealthMode('x_posts');
       
-      if (templateUsesAI || aiEnabledForItem) {
+      if (templateUsesAI || aiEnabledForItem || aiHealthModeOn) {
         console.log('[poster] Template uses AI variables, fetching AI interpretation...');
         const aiResult = await fetchAISummary(report, item.token_mint, supabaseUrl, anonKey);
         if (aiResult) {
