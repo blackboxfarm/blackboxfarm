@@ -427,10 +427,10 @@ serve(async (req) => {
     
     // Compute individual metric scores
     const holderCountScore = scoreMetric(nonLpHolders.length, 500, 20);
-    const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50, true); // lower is better
+    const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50); // lower is better (good=10, bad=50)
     const lpScore = scoreMetric(lpPercentage, 30, 5);
-    const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25, true);
-    const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60, true);
+    const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25); // lower is better
+    const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60); // lower is better
     
     // Buy/sell ratio (h1 for fresh, h24 for established/mature)
     const txWindow = healthPhase === 'on_curve' || healthPhase === 'fresh' ? vitality.txns.h1 : vitality.txns.h24;
