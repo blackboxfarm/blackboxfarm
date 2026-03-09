@@ -1569,6 +1569,11 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 </div>
               )}
 
+              {/* === AI HEALTH INTERPRETATION (when AI mode on) === */}
+              {report.healthScore && tokenMint && (
+                <AIHealthInterpretation tokenMint={tokenMint} reportData={report} />
+              )}
+
               {/* === RISK SNAPSHOT === REMOVED */}
 
               {/* === DISTRIBUTION INTEGRITY === */}
