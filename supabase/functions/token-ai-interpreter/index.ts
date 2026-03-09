@@ -61,40 +61,53 @@ function determineLifecycleStage(metrics: {
   seriousPercent: number;
   whalePercent: number;
   dustPercent: number;
-  // New vitality fields
   phase?: TokenPhase;
   volume24h?: number | null;
   txns1h?: number | null;
   priceChange24h?: number | null;
   pairCreatedAt?: number | null;
+  socialsGone?: boolean; // true if X community / socials confirmed deleted
 }): LifecycleResult {
   const { totalHolders, healthScore, retailPercent, seriousPercent, whalePercent, dustPercent,
-    phase, volume24h, txns1h, priceChange24h, pairCreatedAt } = metrics;
+    phase, volume24h, txns1h, priceChange24h, pairCreatedAt, socialsGone } = metrics;
   const signals: string[] = [];
 
-  // Phase-aware: If on_curve, check for "dead on curve" before defaulting to Genesis
+  // Phase-aware: If on_curve, check for dead/sleeper before defaulting to Genesis
   if (phase === 'on_curve') {
     signals.push(`on_bonding_curve`);
     signals.push(`holder_count:${totalHolders}`);
 
-    // Dead on curve: token has been on bonding curve for 24h+ with low activity
-    // This means it hit some ATH but never bonded, and is now abandoned
     const tokenAgeMs = pairCreatedAt ? (Date.now() - pairCreatedAt) : null;
     const tokenAgeHours = tokenAgeMs ? tokenAgeMs / 3_600_000 : null;
     const isAged = tokenAgeHours !== null && tokenAgeHours >= 24;
-    const isLowActivity = (volume24h !== undefined && volume24h !== null && volume24h < 1000)
-      || (txns1h !== undefined && txns1h !== null && txns1h < 5);
-    
-    if (isAged && isLowActivity) {
+    const isZeroActivity = (volume24h !== undefined && volume24h !== null && volume24h < 100)
+      && (txns1h !== undefined && txns1h !== null && txns1h === 0);
+    const isTinyActivity = (volume24h !== undefined && volume24h !== null && volume24h < 1000)
+      && (txns1h !== undefined && txns1h !== null && txns1h < 5);
+
+    if (tokenAgeHours !== null) signals.push(`age:${Math.floor(tokenAgeHours)}h`);
+    if (volume24h !== null && volume24h !== undefined) signals.push(`volume_24h:$${volume24h.toFixed(0)}`);
+    if (txns1h !== null && txns1h !== undefined) signals.push(`txns_1h:${txns1h}`);
+
+    // Confirmed dead: socials deleted + aged + no activity
+    if (socialsGone) {
+      signals.push(`socials_deleted`);
+      if (isAged || isZeroActivity) {
+        signals.push(`confirmed_dead`);
+        return { stage: "Dormant", confidence: "high", signals };
+      }
+    }
+
+    // Dead on curve: zero activity for 24h+
+    if (isAged && isZeroActivity) {
       signals.push(`dead_on_curve`);
-      signals.push(`age:${tokenAgeHours !== null ? Math.floor(tokenAgeHours) + 'h' : 'unknown'}`);
-      if (volume24h !== null && volume24h !== undefined) signals.push(`volume_24h:$${volume24h.toFixed(0)}`);
-      if (txns1h !== null && txns1h !== undefined) signals.push(`txns_1h:${txns1h}`);
-      return { 
-        stage: "Dormant", 
-        confidence: tokenAgeHours !== null && tokenAgeHours >= 48 ? "high" : "medium", 
-        signals 
-      };
+      return { stage: "Dormant", confidence: tokenAgeHours! >= 48 ? "high" : "medium", signals };
+    }
+
+    // Sleeper: tiny but non-zero activity, aged 24h+
+    if (isAged && isTinyActivity) {
+      signals.push(`sleeper_on_curve`);
+      return { stage: "Dormant", confidence: "low", signals };
     }
 
     return { stage: "Genesis", confidence: "high", signals };
@@ -275,11 +288,12 @@ CRITICAL RULES - FOLLOW EXACTLY:
 7. Never recommend actions - only describe structure and its implications
 
 LIFECYCLE AWARENESS:
-- A token on the bonding curve (on_curve phase) for 24-96+ hours with low volume and few transactions is NOT "Genesis" — it is DEAD ON CURVE.
-  This means the token likely had an initial ATH/spike but never accumulated enough momentum to bond (graduate from the bonding curve to Raydium).
-  After 24h+ of inactivity on curve, treat this as a failed launch / abandoned token. Use "Dormant" stage.
-  After 48h+, confidence should be "high" that the token is dead.
-- Signals like "dead_on_curve" in the lifecycle data confirm this pattern — the AI should frame its narrative around the token's failure to bond rather than describing it as a new launch.
+- A token on the bonding curve (on_curve phase) for 24-96+ hours with low volume and few transactions is NOT "Genesis."
+  - If there is ZERO activity (0 txns/hr, <$100 vol): it is DEAD ON CURVE — a failed launch that never bonded. Use "Dormant" with high confidence.
+  - If there is TINY activity (<5 txns/hr, <$1K vol): it is a SLEEPER — possibly abandoned but with faint signs of life. Use "Dormant" with low confidence. Frame it as "a sleeper that could theoretically reactivate but shows no meaningful momentum."
+- If the signal "socials_deleted" or "confirmed_dead" appears, the token's X account or community has been deleted by its owner. This is a STRONG confirmation of abandonment — always classify as Dormant with high confidence.
+- Signals like "dead_on_curve", "sleeper_on_curve", "socials_deleted" in the lifecycle data guide your narrative. Match your framing to the signal strength.
+- Never describe a 48h+ inactive on-curve token as a "new launch" or "Genesis."
 
 COMMENTARY MODE: ${mode.label} (${mode.mode})
 ${modeInstructions[mode.mode]}
@@ -435,9 +449,33 @@ serve(async (req) => {
     const txns1h = vitality?.txns?.h1 ? (vitality.txns.h1.buys + vitality.txns.h1.sells) : null;
     const priceChange24h = vitality?.priceChange?.h24 ?? null;
 
-    // Detect phase using shared utility
+    // Detect phase using shared utility (must happen before socials check)
     const phaseResult = detectTokenPhase({ pairCreatedAt, liquidityUsd });
     const phase: TokenPhase = (healthPhase as TokenPhase) || phaseResult.phase;
+
+    // Check if socials exist and verify X community/twitter is still live
+    const socials = reportData.socials || {};
+    let socialsGone = false;
+    if (phase === 'on_curve' || phase === 'fresh') {
+      const twitterUrl = socials.twitter || null;
+      if (twitterUrl) {
+        try {
+          const headRes = await fetch(twitterUrl, { method: 'HEAD', redirect: 'follow' });
+          if (headRes.status === 404 || headRes.status === 403) {
+            socialsGone = true;
+            console.log(`[token-ai-interpreter] X social link GONE (${headRes.status}): ${twitterUrl}`);
+          }
+        } catch {
+          // Network error — don't assume deleted
+        }
+      }
+      if (!socials.twitter && !socials.telegram && !socials.website) {
+        if (pairCreatedAt && (Date.now() - pairCreatedAt) > 24 * 3600000) {
+          socialsGone = true;
+          console.log(`[token-ai-interpreter] No socials found for aged on-curve token`);
+        }
+      }
+    }
 
     // Calculate derived metrics
     const unlockedToLpRatio = lpPercentage > 0 ? circulatingPct / lpPercentage : 10;
@@ -456,7 +494,7 @@ serve(async (req) => {
       healthScore
     });
 
-    // Determine lifecycle stage (now phase-aware + vitality-enriched)
+    // Determine lifecycle stage (now phase-aware + vitality-enriched + socials-aware)
     const lifecycle = determineLifecycleStage({
       totalHolders,
       healthScore,
@@ -469,6 +507,7 @@ serve(async (req) => {
       txns1h,
       priceChange24h,
       pairCreatedAt,
+      socialsGone,
     });
 
     // Select commentary mode (use forceMode if provided)
@@ -536,6 +575,13 @@ serve(async (req) => {
         volume_1h: vitality?.volume?.h1 ?? null,
         buy_sell_ratio_5m: vitality?.txns?.m5 ? (vitality.txns.m5.sells > 0 ? (vitality.txns.m5.buys / vitality.txns.m5.sells).toFixed(2) : '∞') : null,
       } : null,
+      // Socials context
+      socials_status: {
+        has_twitter: !!socials.twitter,
+        has_telegram: !!socials.telegram,
+        has_website: !!socials.website,
+        socials_gone: socialsGone,
+      },
     };
 
     // Call Lovable AI
