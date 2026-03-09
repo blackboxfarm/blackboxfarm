@@ -17,7 +17,9 @@ export default function UtilitiesTab() {
   const [activeSubTab, setActiveSubTab] = useState("api-resources");
 
   return (
-    <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
+    <div className="space-y-4">
+      <HealthModeToggles />
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
         <TabsTrigger value="api-resources">📊 API Resources</TabsTrigger>
         <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
