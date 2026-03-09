@@ -575,6 +575,13 @@ serve(async (req) => {
         volume_1h: vitality?.volume?.h1 ?? null,
         buy_sell_ratio_5m: vitality?.txns?.m5 ? (vitality.txns.m5.sells > 0 ? (vitality.txns.m5.buys / vitality.txns.m5.sells).toFixed(2) : '∞') : null,
       } : null,
+      // Socials context
+      socials_status: {
+        has_twitter: !!socials.twitter,
+        has_telegram: !!socials.telegram,
+        has_website: !!socials.website,
+        socials_gone: socialsGone,
+      },
     };
 
     // Call Lovable AI
