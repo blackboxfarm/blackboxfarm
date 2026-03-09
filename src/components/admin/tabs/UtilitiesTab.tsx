@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LazyLoader } from '@/components/ui/lazy-loader';
+import { HealthModeToggles } from '@/components/admin/HealthModeToggles';
 
 // Lazy load each utility component
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
