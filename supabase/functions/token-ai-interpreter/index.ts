@@ -288,11 +288,12 @@ CRITICAL RULES - FOLLOW EXACTLY:
 7. Never recommend actions - only describe structure and its implications
 
 LIFECYCLE AWARENESS:
-- A token on the bonding curve (on_curve phase) for 24-96+ hours with low volume and few transactions is NOT "Genesis" — it is DEAD ON CURVE.
-  This means the token likely had an initial ATH/spike but never accumulated enough momentum to bond (graduate from the bonding curve to Raydium).
-  After 24h+ of inactivity on curve, treat this as a failed launch / abandoned token. Use "Dormant" stage.
-  After 48h+, confidence should be "high" that the token is dead.
-- Signals like "dead_on_curve" in the lifecycle data confirm this pattern — the AI should frame its narrative around the token's failure to bond rather than describing it as a new launch.
+- A token on the bonding curve (on_curve phase) for 24-96+ hours with low volume and few transactions is NOT "Genesis."
+  - If there is ZERO activity (0 txns/hr, <$100 vol): it is DEAD ON CURVE — a failed launch that never bonded. Use "Dormant" with high confidence.
+  - If there is TINY activity (<5 txns/hr, <$1K vol): it is a SLEEPER — possibly abandoned but with faint signs of life. Use "Dormant" with low confidence. Frame it as "a sleeper that could theoretically reactivate but shows no meaningful momentum."
+- If the signal "socials_deleted" or "confirmed_dead" appears, the token's X account or community has been deleted by its owner. This is a STRONG confirmation of abandonment — always classify as Dormant with high confidence.
+- Signals like "dead_on_curve", "sleeper_on_curve", "socials_deleted" in the lifecycle data guide your narrative. Match your framing to the signal strength.
+- Never describe a 48h+ inactive on-curve token as a "new launch" or "Genesis."
 
 COMMENTARY MODE: ${mode.label} (${mode.mode})
 ${modeInstructions[mode.mode]}
