@@ -448,6 +448,34 @@ serve(async (req) => {
     const txns1h = vitality?.txns?.h1 ? (vitality.txns.h1.buys + vitality.txns.h1.sells) : null;
     const priceChange24h = vitality?.priceChange?.h24 ?? null;
 
+    // Check if socials exist and verify X community/twitter is still live
+    const socials = reportData.socials || {};
+    let socialsGone = false;
+    if (phase === 'on_curve' || phase === 'fresh') {
+      // If token had a twitter/X link, check if it's still reachable
+      const twitterUrl = socials.twitter || null;
+      if (twitterUrl) {
+        try {
+          const headRes = await fetch(twitterUrl, { method: 'HEAD', redirect: 'follow' });
+          // X returns 404 for deleted accounts/communities
+          if (headRes.status === 404 || headRes.status === 403) {
+            socialsGone = true;
+            console.log(`[token-ai-interpreter] X social link GONE (${headRes.status}): ${twitterUrl}`);
+          }
+        } catch {
+          // Network error — don't assume deleted
+        }
+      }
+      // If no socials at all on an aged token, that's also a negative signal
+      if (!socials.twitter && !socials.telegram && !socials.website) {
+        // No socials ever set — weak signal but notable
+        if (pairCreatedAt && (Date.now() - pairCreatedAt) > 24 * 3600000) {
+          socialsGone = true; // treat as gone — never had any
+          console.log(`[token-ai-interpreter] No socials found for aged on-curve token`);
+        }
+      }
+    }
+
     // Detect phase using shared utility
     const phaseResult = detectTokenPhase({ pairCreatedAt, liquidityUsd });
     const phase: TokenPhase = (healthPhase as TokenPhase) || phaseResult.phase;
@@ -469,7 +497,7 @@ serve(async (req) => {
       healthScore
     });
 
-    // Determine lifecycle stage (now phase-aware + vitality-enriched)
+    // Determine lifecycle stage (now phase-aware + vitality-enriched + socials-aware)
     const lifecycle = determineLifecycleStage({
       totalHolders,
       healthScore,
@@ -482,6 +510,7 @@ serve(async (req) => {
       txns1h,
       priceChange24h,
       pairCreatedAt,
+      socialsGone,
     });
 
     // Select commentary mode (use forceMode if provided)
