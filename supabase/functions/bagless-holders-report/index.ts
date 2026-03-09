@@ -482,6 +482,24 @@ serve(async (req) => {
       if (vitality.txns.h1.buys + vitality.txns.h1.sells === 0) { healthScore -= 10; vitalityPenalties.push('Zero transactions in last hour'); }
     }
     
+    // Dead on curve: token stuck on bonding curve 24h+ with low activity = failed launch
+    if (healthPhase === 'on_curve' && pairAgeHours === null) {
+      // For on-curve tokens, use DexScreener pair age as proxy (even if liq < $50k)
+      // Check raw vitality for signs of death
+      const totalTxns1h = vitality.txns.h1.buys + vitality.txns.h1.sells;
+      if (vol24 < 1000 && totalTxns1h < 5) {
+        // Can't determine age without pairCreatedAt, but low activity = likely dead
+        healthScore -= 20;
+        vitalityPenalties.push('Dead on curve: minimal activity, never bonded');
+      }
+    } else if (healthPhase === 'on_curve' && pairAgeHours !== null && pairAgeHours >= 24) {
+      const totalTxns1h = vitality.txns.h1.buys + vitality.txns.h1.sells;
+      if (vol24 < 1000 && totalTxns1h < 5) {
+        healthScore -= 25;
+        vitalityPenalties.push(`Dead on curve: ${Math.floor(pairAgeHours)}h old, never bonded`);
+      }
+    }
+    
     healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
     
     let healthGrade = 'A';

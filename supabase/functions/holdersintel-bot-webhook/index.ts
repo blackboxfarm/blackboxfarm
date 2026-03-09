@@ -84,6 +84,8 @@ function buildVerdictPrompt(data: {
 
 function fallbackVerdict(momentumScore: number, healthScore: number, phase: TokenPhase | null): { verdict: string; emoji: string; description: string } {
   if (phase === 'on_curve') {
+    // Dead on curve: health score already penalized by bagless-holders-report
+    if (healthScore < 30) return { verdict: 'DEAD — AVOID', emoji: '💀', description: 'Dead on bonding curve. Never bonded, abandoned token.' };
     if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'WATCH CURVE — SMALL SHORT', emoji: '🟡', description: 'Active on bonding curve. Speculative small amount only.' };
     if (momentumScore >= 40) return { verdict: 'WATCH CURVE', emoji: '🟡', description: 'On curve with some momentum. Observe.' };
     return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals on bonding curve.' };
