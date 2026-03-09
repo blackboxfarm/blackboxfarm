@@ -61,40 +61,53 @@ function determineLifecycleStage(metrics: {
   seriousPercent: number;
   whalePercent: number;
   dustPercent: number;
-  // New vitality fields
   phase?: TokenPhase;
   volume24h?: number | null;
   txns1h?: number | null;
   priceChange24h?: number | null;
   pairCreatedAt?: number | null;
+  socialsGone?: boolean; // true if X community / socials confirmed deleted
 }): LifecycleResult {
   const { totalHolders, healthScore, retailPercent, seriousPercent, whalePercent, dustPercent,
-    phase, volume24h, txns1h, priceChange24h, pairCreatedAt } = metrics;
+    phase, volume24h, txns1h, priceChange24h, pairCreatedAt, socialsGone } = metrics;
   const signals: string[] = [];
 
-  // Phase-aware: If on_curve, check for "dead on curve" before defaulting to Genesis
+  // Phase-aware: If on_curve, check for dead/sleeper before defaulting to Genesis
   if (phase === 'on_curve') {
     signals.push(`on_bonding_curve`);
     signals.push(`holder_count:${totalHolders}`);
 
-    // Dead on curve: token has been on bonding curve for 24h+ with low activity
-    // This means it hit some ATH but never bonded, and is now abandoned
     const tokenAgeMs = pairCreatedAt ? (Date.now() - pairCreatedAt) : null;
     const tokenAgeHours = tokenAgeMs ? tokenAgeMs / 3_600_000 : null;
     const isAged = tokenAgeHours !== null && tokenAgeHours >= 24;
-    const isLowActivity = (volume24h !== undefined && volume24h !== null && volume24h < 1000)
-      || (txns1h !== undefined && txns1h !== null && txns1h < 5);
-    
-    if (isAged && isLowActivity) {
+    const isZeroActivity = (volume24h !== undefined && volume24h !== null && volume24h < 100)
+      && (txns1h !== undefined && txns1h !== null && txns1h === 0);
+    const isTinyActivity = (volume24h !== undefined && volume24h !== null && volume24h < 1000)
+      && (txns1h !== undefined && txns1h !== null && txns1h < 5);
+
+    if (tokenAgeHours !== null) signals.push(`age:${Math.floor(tokenAgeHours)}h`);
+    if (volume24h !== null && volume24h !== undefined) signals.push(`volume_24h:$${volume24h.toFixed(0)}`);
+    if (txns1h !== null && txns1h !== undefined) signals.push(`txns_1h:${txns1h}`);
+
+    // Confirmed dead: socials deleted + aged + no activity
+    if (socialsGone) {
+      signals.push(`socials_deleted`);
+      if (isAged || isZeroActivity) {
+        signals.push(`confirmed_dead`);
+        return { stage: "Dormant", confidence: "high", signals };
+      }
+    }
+
+    // Dead on curve: zero activity for 24h+
+    if (isAged && isZeroActivity) {
       signals.push(`dead_on_curve`);
-      signals.push(`age:${tokenAgeHours !== null ? Math.floor(tokenAgeHours) + 'h' : 'unknown'}`);
-      if (volume24h !== null && volume24h !== undefined) signals.push(`volume_24h:$${volume24h.toFixed(0)}`);
-      if (txns1h !== null && txns1h !== undefined) signals.push(`txns_1h:${txns1h}`);
-      return { 
-        stage: "Dormant", 
-        confidence: tokenAgeHours !== null && tokenAgeHours >= 48 ? "high" : "medium", 
-        signals 
-      };
+      return { stage: "Dormant", confidence: tokenAgeHours! >= 48 ? "high" : "medium", signals };
+    }
+
+    // Sleeper: tiny but non-zero activity, aged 24h+
+    if (isAged && isTinyActivity) {
+      signals.push(`sleeper_on_curve`);
+      return { stage: "Dormant", confidence: "low", signals };
     }
 
     return { stage: "Genesis", confidence: "high", signals };
