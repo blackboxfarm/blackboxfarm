@@ -5848,6 +5848,30 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_health_mode: {
+        Row: {
+          id: string
+          medium: string
+          updated_at: string
+          updated_by: string | null
+          use_ai: boolean
+        }
+        Insert: {
+          id?: string
+          medium: string
+          updated_at?: string
+          updated_by?: string | null
+          use_ai?: boolean
+        }
+        Update: {
+          id?: string
+          medium?: string
+          updated_at?: string
+          updated_by?: string | null
+          use_ai?: boolean
+        }
+        Relationships: []
+      }
       premium_feature_views: {
         Row: {
           converted_to_signup: boolean | null

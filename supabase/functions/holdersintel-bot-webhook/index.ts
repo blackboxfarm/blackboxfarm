@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { detectTokenPhase, contextualizeDevRep, type TokenPhase } from "../_shared/token-phase.ts";
+import { getHealthMode } from "../_shared/health-mode.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -494,6 +495,23 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   // Circulating supply
   if (data.circulatingSupply?.percentage != null) {
     msg += `♻️ Circulating: *${data.circulatingSupply.percentage.toFixed(1)}%*\n`;
+  }
+
+  // AI-enhanced health interpretation (if AI mode enabled)
+  try {
+    const useAI = await getHealthMode('telegram_bot');
+    if (useAI) {
+      const aiData = await invokeFunction("token-ai-interpreter", { tokenMint: ca, reportData: data });
+      if (aiData?.interpretation) {
+        const interp = aiData.interpretation;
+        msg += `\n🧠 *AI Health Analysis*\n`;
+        if (interp.lifecycle) msg += `📍 Stage: *${interp.lifecycle.stage}* (${interp.lifecycle.confidence})\n`;
+        if (interp.narrative) msg += `💬 ${interp.narrative.substring(0, 300)}\n`;
+      }
+    }
+  } catch (aiErr) {
+    console.error('[holders] AI health enhancement failed:', aiErr);
+    // Continue without AI — basic report already built
   }
 
   await sendMessage(chatId, msg);

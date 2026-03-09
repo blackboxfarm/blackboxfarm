@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { AIHealthInterpretation } from '@/components/AIHealthInterpretation';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1566,6 +1567,11 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* === AI HEALTH INTERPRETATION (when AI mode on) === */}
+              {report.healthScore && tokenMint && (
+                <AIHealthInterpretation tokenMint={tokenMint} reportData={report} />
               )}
 
               {/* === RISK SNAPSHOT === REMOVED */}

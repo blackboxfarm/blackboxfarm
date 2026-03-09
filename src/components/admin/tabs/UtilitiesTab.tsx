@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LazyLoader } from '@/components/ui/lazy-loader';
+import { HealthModeToggles } from '@/components/admin/HealthModeToggles';
 
 // Lazy load each utility component
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
@@ -16,7 +17,9 @@ export default function UtilitiesTab() {
   const [activeSubTab, setActiveSubTab] = useState("api-resources");
 
   return (
-    <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
+    <div className="space-y-4">
+      <HealthModeToggles />
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
         <TabsTrigger value="api-resources">📊 API Resources</TabsTrigger>
         <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
@@ -53,5 +56,6 @@ export default function UtilitiesTab() {
         {activeSubTab === "liquidity" && <Suspense fallback={<LazyLoader />}><LiquidityLockChecker /></Suspense>}
       </TabsContent>
     </Tabs>
+    </div>
   );
 }
