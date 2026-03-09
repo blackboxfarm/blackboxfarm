@@ -461,6 +461,7 @@ serve(async (req) => {
       volume24h,
       txns1h,
       priceChange24h,
+      pairCreatedAt,
     });
 
     // Select commentary mode (use forceMode if provided)
