@@ -497,6 +497,23 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
     msg += `♻️ Circulating: *${data.circulatingSupply.percentage.toFixed(1)}%*\n`;
   }
 
+  // AI-enhanced health interpretation (if AI mode enabled)
+  try {
+    const useAI = await getHealthMode('telegram_bot');
+    if (useAI) {
+      const aiData = await invokeFunction("token-ai-interpreter", { tokenMint: ca, reportData: data });
+      if (aiData?.interpretation) {
+        const interp = aiData.interpretation;
+        msg += `\n🧠 *AI Health Analysis*\n`;
+        if (interp.lifecycle) msg += `📍 Stage: *${interp.lifecycle.stage}* (${interp.lifecycle.confidence})\n`;
+        if (interp.narrative) msg += `💬 ${interp.narrative.substring(0, 300)}\n`;
+      }
+    }
+  } catch (aiErr) {
+    console.error('[holders] AI health enhancement failed:', aiErr);
+    // Continue without AI — basic report already built
+  }
+
   await sendMessage(chatId, msg);
 }
 
