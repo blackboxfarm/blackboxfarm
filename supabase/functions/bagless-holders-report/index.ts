@@ -54,9 +54,12 @@ serve(async (req) => {
 
     console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint}`);
 
-    const rpcEndpoints = heliusApiKey
-      ? [getHeliusRpcUrl(heliusApiKey), 'https://api.mainnet-beta.solana.com']
-      : ['https://api.mainnet-beta.solana.com'];
+    const rpcEndpoints = [
+      ...(heliusApiKey ? [getHeliusRpcUrl(heliusApiKey)] : []),
+      'https://api.mainnet-beta.solana.com',
+      'https://rpc.ankr.com/solana',
+      'https://solana-mainnet.g.alchemy.com/v2/demo',
+    ];
 
     let usedRpc = '';
     const rpcErrors: string[] = [];

@@ -9,7 +9,7 @@ const TWITTER_HANDLE = 'HoldersIntel';
 
 // Quality thresholds
 const MIN_HOLDERS = 50;
-const SKIP_GRADES = ['F'];
+const SKIP_GRADES: string[] = []; // Post all grades — let users decide
 
 // Fallback template if DB fetch fails
 const FALLBACK_TEMPLATE = `🔍 $\{TICKER} Holder Analysis
