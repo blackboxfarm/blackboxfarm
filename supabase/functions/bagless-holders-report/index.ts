@@ -417,8 +417,9 @@ serve(async (req) => {
     }
     
     // Helper: score a metric 0-100
-    const scoreMetric = (value: number, good: number, bad: number, invert = false): number => {
-      if (invert) { const t = good; good = bad; bad = t; }
+    // When good < bad (e.g. good=10%, bad=50% for whale concentration),
+    // the formula naturally handles "lower is better" — no invert needed.
+    const scoreMetric = (value: number, good: number, bad: number): number => {
       if (good === bad) return 50;
       const raw = ((value - bad) / (good - bad)) * 100;
       return Math.max(0, Math.min(100, raw));
@@ -426,10 +427,10 @@ serve(async (req) => {
     
     // Compute individual metric scores
     const holderCountScore = scoreMetric(nonLpHolders.length, 500, 20);
-    const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50, true); // lower is better
+    const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50); // lower is better (good=10, bad=50)
     const lpScore = scoreMetric(lpPercentage, 30, 5);
-    const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25, true);
-    const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60, true);
+    const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25); // lower is better
+    const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60); // lower is better
     
     // Buy/sell ratio (h1 for fresh, h24 for established/mature)
     const txWindow = healthPhase === 'on_curve' || healthPhase === 'fresh' ? vitality.txns.h1 : vitality.txns.h24;
@@ -449,7 +450,7 @@ serve(async (req) => {
     // Dev holding score (lower % = healthier for mature, higher tolerance for fresh)
     const devPct = potentialDevWallet?.percentageOfSupply ?? 0;
     const devThresholdGood = healthPhase === 'on_curve' ? 15 : healthPhase === 'fresh' ? 10 : 5;
-    const devScore = scoreMetric(devPct, devThresholdGood, 40, true);
+    const devScore = scoreMetric(devPct, devThresholdGood, 40); // lower dev % is better
     
     // Phase-weighted scoring matrix
     const weights: Record<HealthPhase, Record<string, number>> = {
