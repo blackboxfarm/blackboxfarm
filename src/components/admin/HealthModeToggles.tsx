@@ -47,18 +47,35 @@ export function HealthModeToggles() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: async ({ id, use_ai }: { id: string; use_ai: boolean }) => {
-      const { error } = await supabase
+    mutationFn: async ({ id, use_ai, label }: { id: string; use_ai: boolean; label: string }) => {
+      const { data, error, count } = await supabase
         .from("platform_health_mode")
         .update({ use_ai, updated_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .select();
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error("Update failed — check your admin permissions");
+      return { use_ai, label };
     },
-    onSuccess: () => {
+    onMutate: async ({ id, use_ai }) => {
+      await queryClient.cancelQueries({ queryKey: ["platform-health-mode"] });
+      const previous = queryClient.getQueryData<HealthMode[]>(["platform-health-mode"]);
+      queryClient.setQueryData<HealthMode[]>(["platform-health-mode"], (old) =>
+        old?.map((m) => (m.id === id ? { ...m, use_ai } : m))
+      );
+      return { previous };
+    },
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["platform-health-mode"] });
-      toast.success("Health mode updated");
+      const mode = variables.use_ai ? "🧠 AI" : "📊 Basic";
+      toast.success(`${variables.label} → ${mode}`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["platform-health-mode"], context.previous);
+      }
+      toast.error(err.message);
+    },
   });
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading...</div>;
@@ -97,7 +114,7 @@ export function HealthModeToggles() {
                 <Switch
                   checked={mode.use_ai}
                   onCheckedChange={(checked) =>
-                    toggleMutation.mutate({ id: mode.id, use_ai: checked })
+                    toggleMutation.mutate({ id: mode.id, use_ai: checked, label: cfg.label })
                   }
                 />
               </div>
