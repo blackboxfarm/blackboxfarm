@@ -114,7 +114,7 @@ export function HealthModeToggles() {
                 <Switch
                   checked={mode.use_ai}
                   onCheckedChange={(checked) =>
-                    toggleMutation.mutate({ id: mode.id, use_ai: checked })
+                    toggleMutation.mutate({ id: mode.id, use_ai: checked, label: cfg.label })
                   }
                 />
               </div>
