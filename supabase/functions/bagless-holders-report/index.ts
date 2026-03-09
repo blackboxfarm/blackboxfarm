@@ -407,18 +407,22 @@ serve(async (req) => {
     const pairAgeMs = vitality.pairCreatedAt ? (Date.now() - vitality.pairCreatedAt) : null;
     const pairAgeHours = pairAgeMs ? pairAgeMs / 3600000 : null;
     
-    // Phase detection
-    type HealthPhase = 'on_curve' | 'fresh' | 'established' | 'mature';
+    // 8-phase detection (inline to avoid import issues with shared module in edge fn)
+    type HealthPhase = 'on_curve' | 'newborn' | 'early' | 'adolescent' | 'established' | 'growth' | 'mature' | 'blue_chip';
     let healthPhase: HealthPhase = 'on_curve';
     if (vitality.pairCreatedAt && vitality.liquidityUsd > 50000) {
-      if (pairAgeHours! < 48) healthPhase = 'fresh';
-      else if (pairAgeHours! < 336) healthPhase = 'established'; // 14 days
-      else healthPhase = 'mature';
+      if (pairAgeHours! < 2) healthPhase = 'newborn';
+      else if (pairAgeHours! < 12) healthPhase = 'early';
+      else if (pairAgeHours! < 48) healthPhase = 'adolescent';
+      else if (pairAgeHours! < 168) healthPhase = 'established'; // 7 days
+      else if (pairAgeHours! < 720) healthPhase = 'growth'; // 30 days
+      else if (pairAgeHours! < 2160) healthPhase = 'mature'; // 90 days
+      else {
+        healthPhase = vitality.volume.h24 > 1_000_000 ? 'blue_chip' : 'mature';
+      }
     }
     
     // Helper: score a metric 0-100
-    // When good < bad (e.g. good=10%, bad=50% for whale concentration),
-    // the formula naturally handles "lower is better" — no invert needed.
     const scoreMetric = (value: number, good: number, bad: number): number => {
       if (good === bad) return 50;
       const raw = ((value - bad) / (good - bad)) * 100;
@@ -427,18 +431,19 @@ serve(async (req) => {
     
     // Compute individual metric scores
     const holderCountScore = scoreMetric(nonLpHolders.length, 500, 20);
-    const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50); // lower is better (good=10, bad=50)
+    const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50); // lower is better
     const lpScore = scoreMetric(lpPercentage, 30, 5);
     const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25); // lower is better
     const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60); // lower is better
     
-    // Buy/sell ratio (h1 for fresh, h24 for established/mature)
-    const txWindow = healthPhase === 'on_curve' || healthPhase === 'fresh' ? vitality.txns.h1 : vitality.txns.h24;
+    // Buy/sell ratio
+    const isEarlyPhase = healthPhase === 'on_curve' || healthPhase === 'newborn' || healthPhase === 'early';
+    const txWindow = isEarlyPhase ? vitality.txns.h1 : vitality.txns.h24;
     const totalTxns = txWindow.buys + txWindow.sells;
     const buySellRatio = totalTxns > 0 ? txWindow.buys / totalTxns : 0.5;
     const buySellScore = scoreMetric(buySellRatio, 0.7, 0.2);
     
-    // Volume trend score (relative to mcap for context)
+    // Volume trend score
     const vol24 = vitality.volume.h24;
     const volToMcap = inferredMarketCapUSD > 0 ? (vol24 / inferredMarketCapUSD) : 0;
     const volumeScore = scoreMetric(volToMcap, 0.5, 0.01);
@@ -447,17 +452,21 @@ serve(async (req) => {
     const priceH24 = vitality.priceChange.h24;
     const priceTrendScore = scoreMetric(priceH24, 20, -50);
     
-    // Dev holding score (lower % = healthier for mature, higher tolerance for fresh)
+    // Dev holding score
     const devPct = potentialDevWallet?.percentageOfSupply ?? 0;
-    const devThresholdGood = healthPhase === 'on_curve' ? 15 : healthPhase === 'fresh' ? 10 : 5;
-    const devScore = scoreMetric(devPct, devThresholdGood, 40); // lower dev % is better
+    const devThresholdGood = isEarlyPhase ? 15 : healthPhase === 'adolescent' ? 10 : 5;
+    const devScore = scoreMetric(devPct, devThresholdGood, 40);
     
-    // Phase-weighted scoring matrix
+    // 8-phase weighted scoring matrix (dust is now weighted in ALL phases)
     const weights: Record<HealthPhase, Record<string, number>> = {
-      on_curve:    { holders: 0.25, whales: 0.10, dev: 0.20, buySell: 0.15, bundled: 0.05, lp: 0, volume: 0, price: 0.05, dust: 0.20 },
-      fresh:       { holders: 0.15, whales: 0.20, dev: 0.15, buySell: 0.15, bundled: 0.10, lp: 0.15, volume: 0.10, price: 0, dust: 0 },
-      established: { holders: 0.10, whales: 0.20, dev: 0.10, buySell: 0.10, bundled: 0.15, lp: 0.15, volume: 0.10, price: 0.10, dust: 0 },
-      mature:      { holders: 0.10, whales: 0.20, dev: 0.05, buySell: 0.10, bundled: 0.15, lp: 0.15, volume: 0.10, price: 0.15, dust: 0 },
+      on_curve:    { holders: 0.25, whales: 0.10, dev: 0.20, buySell: 0.15, bundled: 0.05, lp: 0,    volume: 0,    price: 0.05, dust: 0.20 },
+      newborn:     { holders: 0.15, whales: 0.15, dev: 0.15, buySell: 0.15, bundled: 0.10, lp: 0.05, volume: 0.05, price: 0.05, dust: 0.10 },
+      early:       { holders: 0.12, whales: 0.20, dev: 0.12, buySell: 0.15, bundled: 0.10, lp: 0.10, volume: 0.06, price: 0.05, dust: 0.10 },
+      adolescent:  { holders: 0.12, whales: 0.20, dev: 0.12, buySell: 0.12, bundled: 0.10, lp: 0.13, volume: 0.06, price: 0.05, dust: 0.10 },
+      established: { holders: 0.08, whales: 0.20, dev: 0.10, buySell: 0.10, bundled: 0.12, lp: 0.12, volume: 0.10, price: 0.08, dust: 0.10 },
+      growth:      { holders: 0.08, whales: 0.18, dev: 0.08, buySell: 0.10, bundled: 0.12, lp: 0.12, volume: 0.12, price: 0.10, dust: 0.10 },
+      mature:      { holders: 0.08, whales: 0.18, dev: 0.05, buySell: 0.10, bundled: 0.12, lp: 0.12, volume: 0.10, price: 0.15, dust: 0.10 },
+      blue_chip:   { holders: 0.05, whales: 0.15, dev: 0.05, buySell: 0.10, bundled: 0.10, lp: 0.10, volume: 0.15, price: 0.15, dust: 0.15 },
     };
     
     const w = weights[healthPhase];
@@ -475,15 +484,14 @@ serve(async (req) => {
       if (weight > 0) healthBreakdown[key] = { score: Math.round(s), weight, contribution: Math.round(contribution) };
     }
     
-    // Vitality penalties (post-bond only)
+    // === VITALITY PENALTIES (post-bond only) ===
     const vitalityPenalties: string[] = [];
     if (healthPhase !== 'on_curve') {
       if (vol24 < 500 && nonLpHolders.length > 100) { healthScore -= 15; vitalityPenalties.push('Volume collapse (<$500/24h)'); }
-      if (priceH24 < -60) { healthScore -= 10; vitalityPenalties.push('Price crash (>60% drop/24h)'); }
       if (vitality.txns.h1.buys + vitality.txns.h1.sells === 0) { healthScore -= 10; vitalityPenalties.push('Zero transactions in last hour'); }
     }
     
-    // Dead/sleeper on curve: token stuck on bonding curve with low activity
+    // Dead/sleeper on curve
     if (healthPhase === 'on_curve' && pairAgeHours === null) {
       const totalTxns1h = vitality.txns.h1.buys + vitality.txns.h1.sells;
       if (vol24 < 100 && totalTxns1h === 0) {
@@ -502,6 +510,70 @@ serve(async (req) => {
         healthScore -= 15;
         vitalityPenalties.push(`Sleeper on curve: ${Math.floor(pairAgeHours)}h old, tiny activity`);
       }
+    }
+    
+    // === CRASH-TRAJECTORY DETECTION ===
+    const priceH1 = vitality.priceChange.m5 !== undefined ? vitality.priceChange.h1 : 0;
+    const priceH6 = vitality.priceChange.h6 || 0;
+    
+    // Bleed arc: sustained downtrend across timeframes
+    if (priceH1 < -30 && priceH6 < -60) {
+      healthScore -= 20;
+      vitalityPenalties.push(`Bleed arc: -${Math.abs(Math.round(priceH1))}% 1h, -${Math.abs(Math.round(priceH6))}% 6h`);
+    }
+    
+    // Dump in progress: massive crash + sell-heavy order flow
+    if (priceH24 < -80 && vitality.txns.h1.sells > vitality.txns.h1.buys * 3) {
+      healthScore -= 25;
+      vitalityPenalties.push(`Dump in progress: -${Math.abs(Math.round(priceH24))}% 24h, ${vitality.txns.h1.sells}:${vitality.txns.h1.buys} sell:buy ratio`);
+    }
+    
+    // Exit scam pattern: paid DEX + crash
+    if (dexStatus.hasDexPaid && priceH24 < -70) {
+      healthScore -= 20;
+      vitalityPenalties.push(`Paid DEX + ${Math.abs(Math.round(priceH24))}% crash — possible exit scam`);
+    }
+    
+    // === CATASTROPHIC PRICE PENALTIES (replaces old single -10 for >60%) ===
+    if (priceH24 < -90) {
+      healthScore -= 35;
+      vitalityPenalties.push(`Catastrophic crash: -${Math.abs(Math.round(priceH24))}% in 24h`);
+    } else if (priceH24 < -80) {
+      healthScore -= 25;
+      vitalityPenalties.push(`Severe crash: -${Math.abs(Math.round(priceH24))}% in 24h`);
+    } else if (priceH24 < -60) {
+      healthScore -= 10;
+      vitalityPenalties.push(`Price crash: -${Math.abs(Math.round(priceH24))}% in 24h`);
+    }
+    
+    // Dead token: no volume + aged past initial period
+    if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6) {
+      healthScore -= 20;
+      vitalityPenalties.push(`Dead token: <$100 vol/24h after ${Math.floor(pairAgeHours)}h`);
+    }
+    
+    // High dust penalty
+    if (simpleTiers.dust.percentage > 75) {
+      healthScore -= 15;
+      vitalityPenalties.push(`Extreme dust: ${simpleTiers.dust.percentage.toFixed(0)}% of wallets under $1`);
+    }
+    
+    // Top 5 concentration penalty
+    if (distributionStats.top5Percentage > 60) {
+      healthScore -= 15;
+      vitalityPenalties.push(`Top 5 wallets hold ${distributionStats.top5Percentage.toFixed(0)}% of supply`);
+    }
+    
+    // === ABSOLUTE FAILURE FLOORS (hard gates) ===
+    // Real holders = total non-LP holders minus dust wallets
+    const realHolderCount = nonLpHolders.length - simpleTiers.dust.count;
+    
+    if (realHolderCount < 15) {
+      healthScore = Math.min(healthScore, 20);
+      vitalityPenalties.push(`CRITICAL: Only ${realHolderCount} real holders (non-dust) — automatic F`);
+    } else if (realHolderCount < 30) {
+      healthScore = Math.min(healthScore, 45);
+      vitalityPenalties.push(`WARNING: Only ${realHolderCount} real holders (non-dust) — capped at D`);
     }
     
     healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));

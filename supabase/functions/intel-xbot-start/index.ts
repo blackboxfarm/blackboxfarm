@@ -59,15 +59,19 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, serviceKey);
     
-    // Re-queue any skipped items back to pending (but NOT expired ones)
+    // STALENESS GUARD: Only re-queue skipped items from the last 2 hours.
+    // Anything older stays skipped permanently to avoid posting stale data
+    // (e.g. announcing "DEX Paid!" on a token that was rugged 18 hours ago).
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { data: requeuedItems, error: requeueError } = await supabase
       .from('holders_intel_post_queue')
       .update({ status: 'pending', error_message: null })
       .eq('status', 'skipped')
+      .gte('scheduled_at', twoHoursAgo)
       .select('id');
     
     const requeuedCount = requeuedItems?.length || 0;
-    console.log(`📥 Re-queued ${requeuedCount} skipped items back to pending`);
+    console.log(`📥 Re-queued ${requeuedCount} skipped items back to pending (only items < 2h old)`);
     
     // Also unschedule old 2-min job if it exists (from catchup mode)
     try {

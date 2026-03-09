@@ -1,101 +1,88 @@
 
 
-## Problem Summary
+# HoldersIntel Bot — Full Command Suite with Tier Gating
 
-Three distinct issues are causing bad XBot posts:
+## What You Gave Me (BotFather Commands)
 
-1. **Skipped tokens get re-queued on START** — `intel-xbot-start` blindly re-queues ALL `skipped` items to `pending`, including tokens that were skipped 20+ hours ago. When they finally post, the data is stale and the post looks absurd (announcing "DEX Paid!" on a token that was rugged 18 hours prior).
-
-2. **Health scoring has no "absolute failure" floors** — A token with 80%+ dust, 98% price crash, deleted socials, and 16 real holders can still score a C (67/100) because the weighted-average system dilutes catastrophic signals across many soft metrics. There are no hard gates that force an F.
-
-3. **No clear lifecycle model** — The current 4-phase system (`on_curve`, `fresh`, `established`, `mature`) is too coarse. It doesn't distinguish between a token that bonded 2 hours ago vs. one bonded 18 hours ago mid-dump, and metric weights/thresholds don't shift granularly enough across the lifecycle.
-
----
-
-## Plan
-
-### 1. Stop re-queuing stale skipped tokens
-
-**File:** `supabase/functions/intel-xbot-start/index.ts`
-
-- Change the re-queue query to only re-queue skipped items whose `scheduled_at` is within the last 2 hours. Anything older stays `skipped` permanently.
-- Add a `staleness_cutoff` filter: `.gte('scheduled_at', twoHoursAgo)`
-
-### 2. Add absolute failure floors to health scoring
-
-**File:** `supabase/functions/bagless-holders-report/index.ts` (lines ~478-514)
-
-Add hard gates **after** the weighted score is computed but **before** grade assignment:
-
-| Condition | Effect |
-|---|---|
-| Real holders (non-dust, non-LP) < 15 | Force score to min(score, 20) → automatic F |
-| Real holders < 30 | Force score to min(score, 45) → cap at D |
-| Price change h24 < -80% | Penalty -25 (currently only -10 for >60%) |
-| Price change h24 < -90% | Penalty -35 |
-| Volume h24 < $100 AND pair age > 6h | Penalty -20 (dead token) |
-| Dust % > 75% | Penalty -15 |
-| Top 5 holders > 60% of supply | Penalty -15 |
-
-### 3. Fix dust weight across all phases
-
-**File:** `supabase/functions/bagless-holders-report/index.ts` (line 458-460)
-
-Currently `fresh`, `established`, and `mature` phases have dust weight = 0. Change to:
-
-```
-on_curve:    dust: 0.20 (already correct)
-fresh:       dust: 0.10
-established: dust: 0.10
-mature:      dust: 0.10
-```
-
-Rebalance other weights accordingly (reduce `lp` slightly in each phase).
-
-### 4. Expand lifecycle phases from 4 to 8
-
-**File:** `supabase/functions/_shared/token-phase.ts` + `bagless-holders-report/index.ts`
-
-New lifecycle model:
+Based on the conversation and your existing bot, here's the command list I'm building around:
 
 ```text
-Phase           | Age / Condition                    | Key Signals
-----------------|------------------------------------|--------------------------
-on_curve        | No Raydium pair / liq < $50k       | Holder count, dev %, dust
-newborn         | Bonded < 2h                        | Buy momentum, early dist.
-early           | 2h - 12h                           | Concentration, sell pressure
-adolescent      | 12h - 48h                          | Holder growth, volume trend
-established     | 2d - 7d                            | Retention, whale stability
-growth          | 7d - 30d                           | Volume consistency, LP depth
-mature          | 30d - 90d                           | CEX listings, sustained vol
-blue_chip       | 90d+ with vol > $1M/day            | Institutional signals
+/start        — Welcome & setup
+/register     — Link BlackBox Farm account
+/status       — Check subscription tier
+/help         — Show commands
+/holders CA   — Holder distribution analysis
+/momentum CA  — Volume/price momentum score
+/verdict CA   — Quick Buy/Hold verdict
+/oracle CA    — Developer reputation lookup
+/wallet ADDR  — Wallet behavior analysis
+/alerts       — Manage alert preferences
 ```
 
-Each phase gets its own weight matrix. The `newborn` and `early` phases are critical for catching the $OilDividends pattern — tokens that bond, get boosted, then immediately dump.
+## Tier Gating Matrix
 
-### 5. Add crash-trajectory detection
+```text
+Command       │ Free │ Auth │ X Sub │ Pro  │ Dev
+──────────────┼──────┼──────┼───────┼──────┼─────
+/start        │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/register     │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/status       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/help         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/holders CA   │  —   │ lite │ full  │ full+│ full+
+/momentum CA  │  —   │  —   │  ✓    │  ✓   │  ✓
+/verdict CA   │  —   │ lite │  ✓    │  ✓   │  ✓
+/oracle CA    │  —   │  —   │  —    │  ✓   │  ✓
+/wallet ADDR  │  —   │  —   │  —    │  ✓   │  ✓
+/alerts       │  —   │  —   │  ✓    │  ✓   │  ✓
+```
 
-**File:** `supabase/functions/bagless-holders-report/index.ts`
+- **Free (unlinked)**: Only meta commands. Everything else says "link your account first."
+- **Auth (linked, free tier)**: `/holders` returns a lite summary (holder count, top 10% concentration, health score). `/verdict` returns just the color (🟢/🔴) with no detail.
+- **X Subscriber**: Full `/holders` with tier breakdown + distribution bars. `/momentum` unlocked. `/verdict` with sizing recommendation.
+- **Pro+**: `/oracle` dev reputation, `/wallet` behavior analysis, full detail on everything.
 
-New penalty block after vitality penalties:
+## The `/verdict` System (Your Buy Signal)
 
-- If `priceChange.h1 < -30%` AND `priceChange.h6 < -60%` → "Bleed arc detected" penalty -20
-- If `priceChange.h24 < -80%` AND `txns.h1.sells > txns.h1.buys * 3` → "Dump in progress" penalty -25
-- If `dexStatus.hasDexPaid` AND `priceChange.h24 < -70%` → "Paid DEX + crash = likely exit scam" penalty -20
+The verdict combines momentum score + holder health + dev reputation into a single actionable call:
 
----
+```text
+🟢 BUY DEEP LONG    — Strong chart, healthy holders, good dev. Full position, hold.
+🟢 BUY MEDIUM SHORT — Decent momentum, ride the wave. Medium position, 2x target.
+🟡 BUY SMALL SHORT  — Speculative. Small/disposable amount, quick 2x flip.
+🔴 HOLD / AVOID     — Weak signals, bad dev, or dump in progress. Skip.
+```
 
-### Technical Details
+The logic:
+- Momentum score ≥ 70 + health score ≥ 60 + dev GREEN → **DEEP LONG**
+- Momentum score ≥ 55 + health score ≥ 40 → **MEDIUM SHORT**
+- Momentum score ≥ 40 OR fresh token with buying pressure → **SMALL SHORT**
+- Everything else → **HOLD/AVOID**
 
-**Weight rebalancing for dust inclusion (fresh/established/mature):**
-- `fresh`: holders 0.15 → 0.12, lp 0.15 → 0.13, add dust 0.10 (total still 1.0)
-- `established`: holders 0.10 → 0.08, lp 0.15 → 0.12, add dust 0.10 (total still 1.0)
-- `mature`: holders 0.10 → 0.08, lp 0.15 → 0.12, add dust 0.10 (total still 1.0)
+## Technical Implementation
 
-**$OilDividends case trace with new logic:**
-- 80% dust → dustScore = scoreMetric(80, 10, 60) = 0 → weighted contribution tanks
-- 16 real holders → hard floor forces score ≤ 20 → **F**
-- Price -98% → penalty -35
-- Top5 concentration artificially low (spread across dust) → but real-holder floor catches it
-- Result: **F** (score ~0) instead of C (67)
+All new commands will be added to the existing `holdersintel-bot-webhook/index.ts` edge function. Each analytical command calls the existing edge functions internally via `supabase.functions.invoke()`:
+
+| Bot Command | Calls | Data Source |
+|---|---|---|
+| `/holders CA` | `token-ai-interpreter` | Helius holder data + bucketing |
+| `/momentum CA` | `token-momentum-analyzer` | DexScreener live metrics |
+| `/verdict CA` | `token-momentum-analyzer` + `token-ai-interpreter` + `oracle-unified-lookup` | Combined score |
+| `/oracle CA` | `oracle-unified-lookup` | Dev reputation mesh |
+| `/wallet ADDR` | `wallet-behavior-analysis` | Helius transaction history |
+| `/alerts` | DB read/write on user preferences | `telegram_link_codes` or new prefs table |
+
+### Rate Limiting
+Each analytical command will be rate-limited per user (e.g., 5 lookups/hour for X Sub, 20/hour for Pro) to prevent API abuse. Tracked via a simple counter in the `telegram_link_codes` table or a lightweight `telegram_bot_usage` table.
+
+### New DB Table
+`telegram_bot_usage` — tracks per-user command usage for rate limiting:
+- `id`, `telegram_user_id`, `command`, `token_mint`, `created_at`
+
+### Response Formatting
+All responses formatted as Telegram Markdown with ASCII bar charts for distributions (same style as the XBot channel posts), keeping messages under Telegram's 4096 char limit.
+
+## Files Changed
+1. **`supabase/functions/holdersintel-bot-webhook/index.ts`** — Add handlers for `/holders`, `/momentum`, `/verdict`, `/oracle`, `/wallet`, `/alerts`. Add tier gating middleware. Add rate limiting.
+2. **DB migration** — Create `telegram_bot_usage` table for rate limiting.
+3. **Update `/help`** — Show tier-appropriate command list per user.
 
