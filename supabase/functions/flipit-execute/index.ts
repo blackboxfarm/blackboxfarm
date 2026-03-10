@@ -722,7 +722,7 @@ serve(async (req) => {
 
       // CRITICAL: Fetch FRESH token price
       execLog.logPhaseStart('PRICE_FETCH');
-      const priceResult = await fetchTokenPrice(tokenMint, { forceFresh: true });
+      const priceResult = await fetchTokenPrice(tokenMint, { forceFresh: true, venueHint: preflightVenueHint, isOnCurve: preflightIsOnCurve });
       if (!priceResult) {
         execLog.logFailure('Could not fetch token price');
         return bad("Could not fetch token price");
