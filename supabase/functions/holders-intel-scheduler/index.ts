@@ -285,7 +285,12 @@ Deno.serve(async (req) => {
     // Fetch trending tokens
     const trendingTokens = await fetchTrendingTokens();
     
+    // Proven Dev Tracking: upsert ALL tokens ≥400k mcap (runs in parallel, non-blocking)
+    const tierTrackingPromise = upsertProvenDevTokens(supabase, trendingTokens, currentSlot)
+      .catch(err => console.error('[scheduler] Tier tracking error (non-fatal):', err));
+    
     if (trendingTokens.length === 0) {
+      await tierTrackingPromise; // still let tier tracking finish
       return new Response(
         JSON.stringify({ success: false, error: 'No trending tokens found' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
