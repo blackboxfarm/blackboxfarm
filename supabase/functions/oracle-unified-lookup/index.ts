@@ -886,10 +886,11 @@ Deno.serve(async (req) => {
         console.log(`[Oracle] Updated dev_wallet_reputation for ${resolvedWallet.slice(0, 8)}...`);
         
         // Write individual tokens to developer_tokens (first 200)
+        // Use the token's actual creator field from pump.fun API if available
         const tokenUpserts = liveTokens.slice(0, 200).map((token: any) => ({
           token_mint: token.mint,
-          creator_wallet: resolvedWallet,
-          developer_id: resolvedWallet, // Use wallet as developer ID
+          creator_wallet: token.creator || resolvedWallet, // Prefer actual creator from pump.fun
+          developer_id: resolvedWallet, // developer_id tracks the network root
           token_symbol: token.symbol,
           is_active: token.usd_market_cap > 1000,
           outcome: token.complete ? 'graduated' : (token.usd_market_cap > 50000 ? 'success' : (token.usd_market_cap < 100 ? 'failed' : 'unknown')),
