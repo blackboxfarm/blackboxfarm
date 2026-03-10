@@ -17,7 +17,16 @@ serve(async (req) => {
   }
 
   try {
-    const { tokenMint, solAmount, walletPubkey, slippageBps = 500 } = await req.json();
+    const body = await req.json();
+
+    // Pre-warm handler: keep isolate alive without side effects
+    if (body.action === 'warmup') {
+      return new Response(JSON.stringify({ warm: true, ts: Date.now() }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { tokenMint, solAmount, walletPubkey, slippageBps = 500 } = body;
 
     if (!tokenMint) {
       return new Response(
