@@ -1426,6 +1426,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         </Card>
       )}
 
+      {report && (
         <>
           {/* Token Health Dashboard - Hidden (data available via ExtendedAnalysisSection) */}
           <div className="hidden">
