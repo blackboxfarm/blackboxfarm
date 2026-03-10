@@ -113,6 +113,7 @@ async function fetchDexScreenerMetrics(tokenMint: string) {
       marketCap: pair.marketCap || null,
       liquidity: pair.liquidity?.usd || null,
       pairCreatedAt: pair.pairCreatedAt || null,
+      dexId: pair.dexId || null,
       priceChange: {
         m5: pair.priceChange?.m5 ?? null,
         h1: pair.priceChange?.h1 ?? null,
