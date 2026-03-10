@@ -521,6 +521,9 @@ serve(async (req) => {
       if (weight > 0) healthBreakdown[key] = { score: Math.round(s), weight, contribution: Math.round(contribution) };
     }
     
+    // === VITALITY PENALTIES ===
+    const vitalityPenalties: string[] = [];
+    
     // === BONDING CURVE PROGRESS ADJUSTMENT (on_curve only) ===
     if (healthPhase === 'on_curve' && creatorInfo.bondingCurveProgress !== undefined) {
       const bcp = creatorInfo.bondingCurveProgress;
@@ -533,8 +536,7 @@ serve(async (req) => {
       }
     }
     
-    // === VITALITY PENALTIES (post-bond only) ===
-    const vitalityPenalties_arr: string[] = [];
+    // Post-bond vitality penalties
     if (healthPhase !== 'on_curve') {
       if (vol24 < 500 && nonLpHolders.length > 100) { healthScore -= 15; vitalityPenalties.push('Volume collapse (<$500/24h)'); }
       if (vitality.txns.h1.buys + vitality.txns.h1.sells === 0) { healthScore -= 10; vitalityPenalties.push('Zero transactions in last hour'); }
