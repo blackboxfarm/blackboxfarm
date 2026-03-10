@@ -72,8 +72,14 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
         return <Badge className="bg-green-500/20 text-green-400 border-green-500/50">✅ Legitimate Builder</Badge>;
       case 'mixed_track_record':
         return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50">📊 Mixed Record</Badge>;
+      case 'low_success_newcomer':
+        return <Badge className="bg-red-500/20 text-red-400 border-red-500/50">⚠️ Low Success Dev</Badge>;
+      case 'moderate_launcher':
+        return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50">🔄 Moderate Launcher</Badge>;
+      case 'unknown':
+        return <Badge className="bg-muted text-muted-foreground border-border">🆕 Not Yet Profiled</Badge>;
       default:
-        return <Badge variant="outline">❓ Unknown</Badge>;
+        return null;
     }
   };
 
