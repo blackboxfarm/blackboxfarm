@@ -621,6 +621,10 @@ function quickAnalyzeTokens(tokens: any[]): {
     pattern = 'legitimate_builder';
   } else if (graduated > 0) {
     pattern = 'mixed_track_record';
+  } else if (totalTokens > 0 && totalTokens <= 10 && successRate < 30) {
+    pattern = 'low_success_newcomer';
+  } else if (totalTokens > 10 && totalTokens < 20) {
+    pattern = 'moderate_launcher';
   }
   
   return { totalTokens, graduated, successful, failed, rugged, pattern, successRate, avgMcap };
