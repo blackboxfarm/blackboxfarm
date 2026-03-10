@@ -1016,18 +1016,61 @@ Deno.serve(async (req) => {
     // Calculate score and traffic light
     const isBlacklisted = !!blacklistEntry;
     const isWhitelisted = !!whitelistEntry;
-    const score = calculateScore(stats, isBlacklisted, isWhitelisted);
+    const { score, breakdown: scoreBreakdown } = calculateScore(stats, isBlacklisted, isWhitelisted);
     const trafficLight = getTrafficLight(score);
     const recommendation = generateRecommendation(score, stats, !hasExistingData);
 
-    // Build network associations
+    // Process mesh links into structured data
+    const processedMeshLinks = meshLinks.map((link: any) => ({
+      sourceType: link.source_type,
+      sourceId: link.source_id,
+      linkedType: link.linked_type,
+      linkedId: link.linked_id,
+      relationship: link.relationship,
+      confidence: link.confidence || 0,
+      discoveredVia: link.discovered_via
+    }));
+
+    // Extract upstream wallets from mesh (funded_by, same_kyc_root, etc.)
+    const upstreamWallets = meshLinks
+      .filter((link: any) => 
+        ['funded_by', 'same_kyc_root', 'directly_funded', 'satellite_of'].includes(link.relationship) &&
+        link.linked_id !== resolvedWallet
+      )
+      .map((link: any) => link.linked_id);
+    
+    // Extract linked wallets from mesh
+    const meshLinkedWallets = meshLinks
+      .filter((link: any) => 
+        (link.source_type === 'wallet' || link.linked_type === 'wallet') &&
+        link.source_id !== resolvedWallet && link.linked_id !== resolvedWallet
+      )
+      .map((link: any) => link.source_id === resolvedWallet ? link.linked_id : link.source_id)
+      .filter((w: string) => isBase58(w));
+
+    // Build network associations - now including mesh data
+    const allLinkedWallets = [...new Set([
+      ...(xAccountData?.linkedWallets || []),
+      ...upstreamWallets,
+      ...meshLinkedWallets
+    ])];
+
     const network: OracleResult['network'] = {
-      linkedWallets: xAccountData?.linkedWallets || [],
+      linkedWallets: allLinkedWallets,
       linkedXAccounts: xAccountData?.linkedXAccounts || developerProfile?.twitter_handle ? [developerProfile.twitter_handle] : [],
       sharedMods: xAccountData?.sharedMods || [],
       relatedTokens: developerTokens.map(t => t.token_symbol || t.token_mint).slice(0, 10),
-      devTeam: devTeam ? { id: devTeam.id, name: devTeam.team_name } : undefined
+      devTeam: devTeam ? { id: devTeam.id, name: devTeam.team_name } : undefined,
+      meshLinks: processedMeshLinks
     };
+
+    // Build token history
+    const tokenHistory = developerTokens.map(t => ({
+      mint: t.token_mint,
+      symbol: t.token_symbol || '???',
+      outcome: t.outcome || 'unknown',
+      isActive: t.is_active ?? false
+    }));
 
     // Store new mesh links for relationships discovered
     let meshLinksAdded = 0;
@@ -1078,9 +1121,11 @@ Deno.serve(async (req) => {
         tags: developerProfile.tags || []
       } : undefined,
       score,
+      scoreBreakdown,
       trafficLight,
       stats,
       network,
+      tokenHistory,
       blacklistStatus: {
         isBlacklisted,
         reason: blacklistEntry?.blacklist_reason,
