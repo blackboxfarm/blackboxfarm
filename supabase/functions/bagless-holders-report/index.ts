@@ -730,6 +730,12 @@ serve(async (req) => {
         vitalityPenalties,
         pairAgeHours: pairAgeHours ? Math.round(pairAgeHours) : null,
       },
+      // Intelligence data
+      flaggedHolders: flaggedHolders.length > 0 ? flaggedHolders : undefined,
+      historicalDelta: hasHistoricalData ? historicalDelta : undefined,
+      hasHistoricalData,
+      bondingCurveProgress: creatorInfo.bondingCurveProgress ?? null,
+      
       firstBuyers: [],
       executionTimeMs: totalTime
     };
