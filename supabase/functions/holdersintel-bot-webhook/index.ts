@@ -509,7 +509,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
         const interp = aiData.interpretation;
         msg += `\n🧠 *AI Health Analysis*\n`;
         if (interp.lifecycle) msg += `📍 Stage: *${interp.lifecycle.stage}* (${interp.lifecycle.confidence})\n`;
-        if (interp.narrative) msg += `💬 ${interp.narrative.substring(0, 300)}\n`;
+        if (interp.status_overview) msg += `💬 ${interp.status_overview.substring(0, 300)}\n`;
       }
     }
   } catch (aiErr) {
