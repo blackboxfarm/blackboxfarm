@@ -286,8 +286,33 @@ serve(async (req) => {
     const lpWallets = rankedHolders.filter(h => h.isLiquidityPool);
     const nonLpHolders = rankedHolders.filter(h => !h.isLiquidityPool);
     
-    // Dev wallet detection (simplified)
-    if (nonLpHolders.length > 0) {
+    // Dev wallet detection — prefer verified creator wallet from launchpad API
+    if (creatorInfo.wallet) {
+      const creatorHolder = nonLpHolders.find(h => h.owner === creatorInfo.wallet);
+      if (creatorHolder) {
+        potentialDevWallet = {
+          address: creatorHolder.owner,
+          balance: creatorHolder.balance,
+          usdValue: creatorHolder.usdValue,
+          percentageOfSupply: creatorHolder.percentageOfSupply,
+          confidence: 100,
+          detectionMethod: 'creator_api',
+          reason: `Verified creator wallet via ${launchpadInfo.name} (${creatorHolder.percentageOfSupply.toFixed(1)}%)`
+        };
+      } else {
+        // Creator wallet exists but holds 0 — still mark it
+        potentialDevWallet = {
+          address: creatorInfo.wallet,
+          balance: 0,
+          usdValue: 0,
+          percentageOfSupply: 0,
+          confidence: 95,
+          detectionMethod: 'creator_api_sold',
+          reason: `Verified creator via ${launchpadInfo.name} — sold entire position`
+        };
+      }
+    } else if (nonLpHolders.length > 0) {
+      // Fallback: heuristic — top non-LP holder
       const top = nonLpHolders[0];
       potentialDevWallet = {
         address: top.owner,
@@ -296,7 +321,7 @@ serve(async (req) => {
         percentageOfSupply: top.percentageOfSupply,
         confidence: top.percentageOfSupply > 10 ? 65 : 45,
         detectionMethod: 'top_holder',
-        reason: `Top non-LP holder (${top.percentageOfSupply.toFixed(1)}%)`
+        reason: `Top non-LP holder (${top.percentageOfSupply.toFixed(1)}%) — creator unverified`
       };
     }
     
