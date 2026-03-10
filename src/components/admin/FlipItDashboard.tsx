@@ -3635,7 +3635,9 @@ export function FlipItDashboard() {
                           {blacklistWarning.reason}
                         </span>
                         <button 
-                          onClick={() => navigate(`/super-admin?tab=oracle&subtab=lookup${inputToken.creatorWallet ? `&wallet=${inputToken.creatorWallet}` : ''}`)}
+                          onClick={() => {
+                            window.location.href = `/super-admin?tab=oracle&subtab=lookup${inputToken.creatorWallet ? `&wallet=${inputToken.creatorWallet}` : ''}`;
+                          }}
                           className="text-amber-400 hover:text-amber-300 text-xs underline flex-shrink-0 bg-transparent border-none cursor-pointer"
                         >
                           View Mesh →
