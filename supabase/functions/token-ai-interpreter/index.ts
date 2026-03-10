@@ -129,7 +129,7 @@ function determineLifecycleStage(metrics: {
   }
   
   // Genesis: Very new or very few holders
-  if (totalHolders < 100 || phase === 'fresh') {
+  if (totalHolders < 100 || phase === 'newborn' || phase === 'early') {
     signals.push(`holder_count:${totalHolders}`);
     if (phase) signals.push(`phase:${phase}`);
     if (totalHolders < 100) {
