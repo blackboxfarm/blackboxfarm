@@ -1,88 +1,73 @@
 
 
-# HoldersIntel Bot — Full Command Suite with Tier Gating
+## State-Aware Price Routing for FlipIt
 
-## What You Gave Me (BotFather Commands)
+### Problem
 
-Based on the conversation and your existing bot, here's the command list I'm building around:
+`resolvePrice()` runs a **blind sequential cascade** for every token:
 
-```text
-/start        — Welcome & setup
-/register     — Link BlackBox Farm account
-/status       — Check subscription tier
-/help         — Show commands
-/holders CA   — Holder distribution analysis
-/momentum CA  — Volume/price momentum score
-/verdict CA   — Quick Buy/Hold verdict
-/oracle CA    — Developer reputation lookup
-/wallet ADDR  — Wallet behavior analysis
-/alerts       — Manage alert preferences
-```
+1. pump.fun API (~1-3s if timeout)
+2. pump.fun on-chain curve (~1-2s if not pump token)
+3. Meteora DBC scan (~1-2s, only BAGS suffix)
+4. Raydium Launchlab (~1-2s, only BONK suffix)
+5. DexScreener (~1s)
+6. Jupiter (~1s)
 
-## Tier Gating Matrix
+For a **graduated pump.fun token**, steps 1-2 both run and fail before hitting DexScreener at step 5 — wasting 2-4 seconds. For a **non-pump token** (like a Raydium native), it still tries pump.fun first.
 
-```text
-Command       │ Free │ Auth │ X Sub │ Pro  │ Dev
-──────────────┼──────┼──────┼───────┼──────┼─────
-/start        │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/register     │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/status       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/help         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/holders CA   │  —   │ lite │ full  │ full+│ full+
-/momentum CA  │  —   │  —   │  ✓    │  ✓   │  ✓
-/verdict CA   │  —   │ lite │  ✓    │  ✓   │  ✓
-/oracle CA    │  —   │  —   │  —    │  ✓   │  ✓
-/wallet ADDR  │  —   │  —   │  —    │  ✓   │  ✓
-/alerts       │  —   │  —   │  ✓    │  ✓   │  ✓
-```
+Trojan Bot skips all this because it already knows the venue from its signal source.
 
-- **Free (unlinked)**: Only meta commands. Everything else says "link your account first."
-- **Auth (linked, free tier)**: `/holders` returns a lite summary (holder count, top 10% concentration, health score). `/verdict` returns just the color (🟢/🔴) with no detail.
-- **X Subscriber**: Full `/holders` with tier breakdown + distribution bars. `/momentum` unlocked. `/verdict` with sizing recommendation.
-- **Pro+**: `/oracle` dev reputation, `/wallet` behavior analysis, full detail on everything.
+### Solution
 
-## The `/verdict` System (Your Buy Signal)
+Add a `venueHint` parameter to `resolvePrice()` so callers can skip straight to the right source. The hint comes from:
+- **Mint suffix**: `pump` → pump.fun, `BAGS` → bags.fm, `BONK` → bonk.fun
+- **Signal metadata**: Telegram signals often include venue/pair info
+- **Preflight result**: `flipit-preflight` already runs `detectVenue()` — pass that result through
 
-The verdict combines momentum score + holder health + dev reputation into a single actionable call:
+### Changes
 
-```text
-🟢 BUY DEEP LONG    — Strong chart, healthy holders, good dev. Full position, hold.
-🟢 BUY MEDIUM SHORT — Decent momentum, ride the wave. Medium position, 2x target.
-🟡 BUY SMALL SHORT  — Speculative. Small/disposable amount, quick 2x flip.
-🔴 HOLD / AVOID     — Weak signals, bad dev, or dump in progress. Skip.
-```
+**File: `supabase/functions/_shared/price-resolver.ts`**
 
-The logic:
-- Momentum score ≥ 70 + health score ≥ 60 + dev GREEN → **DEEP LONG**
-- Momentum score ≥ 55 + health score ≥ 40 → **MEDIUM SHORT**
-- Momentum score ≥ 40 OR fresh token with buying pressure → **SMALL SHORT**
-- Everything else → **HOLD/AVOID**
+1. Add `venueHint` to the options type:
+   ```
+   venueHint?: 'pumpfun_curve' | 'pumpfun_graduated' | 'bags_fm' | 'bonk_fun' | 'dex' | undefined
+   ```
 
-## Technical Implementation
+2. Add **auto-detection from mint suffix** at the top of `resolvePrice()` (before any API calls):
+   - If `tokenMint.endsWith('pump')` and no hint → set hint to `'pumpfun_curve'`
+   - If `tokenMint.endsWith('BAGS')` → set hint to `'bags_fm'`
+   - If `tokenMint.endsWith('BONK')` or `tokenMint.endsWith('bonk')` → set hint to `'bonk_fun'`
 
-All new commands will be added to the existing `holdersintel-bot-webhook/index.ts` edge function. Each analytical command calls the existing edge functions internally via `supabase.functions.invoke()`:
+3. Use the hint to **skip irrelevant steps**:
+   - `pumpfun_curve` → try pump.fun API only, skip bags/bonk/dex
+   - `pumpfun_graduated` → skip pump.fun entirely, go straight to DexScreener
+   - `bags_fm` → skip pump.fun, go straight to Meteora DBC
+   - `bonk_fun` → skip pump.fun, go straight to Raydium Launchlab
+   - `dex` → skip all bonding curve checks, go straight to DexScreener → Jupiter
+   - `undefined` → current sequential behavior (backward compatible)
 
-| Bot Command | Calls | Data Source |
+4. Add a **parallel fast-path** for graduated tokens: run DexScreener and Jupiter simultaneously via `Promise.race`, use whichever responds first.
+
+**File: `supabase/functions/flipit-execute/index.ts`**
+
+5. In `fetchTokenPrice()`, derive `venueHint` from the token mint suffix and pass it to `resolvePrice()`.
+
+6. If the caller provides `isOnCurve` from preflight data, use it: `isOnCurve === false` → hint = `'dex'` or `'pumpfun_graduated'`.
+
+**File: `supabase/functions/_shared/venue-aware-quote.ts`**
+
+7. In `getVenueAwareQuote()`, the venue is already detected — pass it as `venueHint` to any internal `resolvePrice()` calls to avoid double-detection.
+
+### Expected Impact
+
+| Scenario | Before | After |
 |---|---|---|
-| `/holders CA` | `token-ai-interpreter` | Helius holder data + bucketing |
-| `/momentum CA` | `token-momentum-analyzer` | DexScreener live metrics |
-| `/verdict CA` | `token-momentum-analyzer` + `token-ai-interpreter` + `oracle-unified-lookup` | Combined score |
-| `/oracle CA` | `oracle-unified-lookup` | Dev reputation mesh |
-| `/wallet ADDR` | `wallet-behavior-analysis` | Helius transaction history |
-| `/alerts` | DB read/write on user preferences | `telegram_link_codes` or new prefs table |
+| Graduated pump token | ~3-4s (pump fail → curve fail → DexScreener) | ~1s (skip to DexScreener) |
+| On-curve pump token | ~1-2s (pump API hit) | ~1-2s (no change, already fast) |
+| Non-pump token (Raydium/Jupiter) | ~3-5s (pump fail → curve fail → bags fail → DexScreener) | ~1s (skip to DexScreener) |
+| bags.fm token | ~4-5s (pump fail → curve fail → Meteora) | ~1-2s (skip to Meteora) |
 
-### Rate Limiting
-Each analytical command will be rate-limited per user (e.g., 5 lookups/hour for X Sub, 20/hour for Pro) to prevent API abuse. Tracked via a simple counter in the `telegram_link_codes` table or a lightweight `telegram_bot_usage` table.
+### Backward Compatibility
 
-### New DB Table
-`telegram_bot_usage` — tracks per-user command usage for rate limiting:
-- `id`, `telegram_user_id`, `command`, `token_mint`, `created_at`
-
-### Response Formatting
-All responses formatted as Telegram Markdown with ASCII bar charts for distributions (same style as the XBot channel posts), keeping messages under Telegram's 4096 char limit.
-
-## Files Changed
-1. **`supabase/functions/holdersintel-bot-webhook/index.ts`** — Add handlers for `/holders`, `/momentum`, `/verdict`, `/oracle`, `/wallet`, `/alerts`. Add tier gating middleware. Add rate limiting.
-2. **DB migration** — Create `telegram_bot_usage` table for rate limiting.
-3. **Update `/help`** — Show tier-appropriate command list per user.
+All changes are additive. `venueHint` is optional and defaults to `undefined`, preserving current behavior for any caller that doesn't pass it.
 
