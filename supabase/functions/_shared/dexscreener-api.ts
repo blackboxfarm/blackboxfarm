@@ -21,6 +21,7 @@ export interface VitalityMetrics {
   txns: { m5: { buys: number; sells: number }; h1: { buys: number; sells: number }; h6: { buys: number; sells: number }; h24: { buys: number; sells: number } };
   pairCreatedAt: number | null; // unix ms
   liquidityUsd: number;
+  dexId: string | null; // e.g. 'pumpswap', 'raydium', 'orca'
 }
 
 export interface DexScreenerResult {
@@ -48,6 +49,7 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
       txns: { m5: { ...zeroTxns }, h1: { ...zeroTxns }, h6: { ...zeroTxns }, h24: { ...zeroTxns } },
       pairCreatedAt: null,
       liquidityUsd: 0,
+      dexId: null,
     }
   };
 
@@ -95,21 +97,26 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
         }
       }
       
-      // Detect launchpad from first pair
+      // Pick best Solana pair by liquidity (not just pairs[0])
       if (result.pairs.length > 0) {
-        result.launchpadInfo = detectLaunchpad(result.pairs[0], tokenMint);
+        const solanaPairs = result.pairs.filter((p: any) => p.chainId === 'solana');
+        const bestPair = solanaPairs.length > 0 
+          ? solanaPairs.reduce((best: any, p: any) => (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best, solanaPairs[0])
+          : result.pairs[0];
+        
+        result.launchpadInfo = detectLaunchpad(bestPair, tokenMint);
         console.log(`[DexScreener] Launchpad detected: ${result.launchpadInfo.name} (${result.launchpadInfo.confidence})`);
+        console.log(`[DexScreener] Best pair dexId: ${bestPair.dexId}, liquidity: $${bestPair.liquidity?.usd || 0}`);
         
         // Get price
-        const p0 = result.pairs[0];
-        if (p0.priceUsd) {
-          result.priceUsd = parseFloat(p0.priceUsd) || 0;
+        if (bestPair.priceUsd) {
+          result.priceUsd = parseFloat(bestPair.priceUsd) || 0;
         }
         
-        // Extract vitality metrics from first pair
-        const vol = p0.volume || {};
-        const pc = p0.priceChange || {};
-        const tx = p0.txns || {};
+        // Extract vitality metrics from best pair
+        const vol = bestPair.volume || {};
+        const pc = bestPair.priceChange || {};
+        const tx = bestPair.txns || {};
         result.vitality = {
           volume: { m5: vol.m5 || 0, h1: vol.h1 || 0, h6: vol.h6 || 0, h24: vol.h24 || 0 },
           priceChange: { m5: pc.m5 || 0, h1: pc.h1 || 0, h6: pc.h6 || 0, h24: pc.h24 || 0 },
@@ -119,10 +126,11 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
             h6: { buys: tx.h6?.buys || 0, sells: tx.h6?.sells || 0 },
             h24: { buys: tx.h24?.buys || 0, sells: tx.h24?.sells || 0 },
           },
-          pairCreatedAt: p0.pairCreatedAt ? new Date(p0.pairCreatedAt).getTime() : null,
-          liquidityUsd: p0.liquidity?.usd || 0,
+          pairCreatedAt: bestPair.pairCreatedAt ? new Date(bestPair.pairCreatedAt).getTime() : null,
+          liquidityUsd: bestPair.liquidity?.usd || 0,
+          dexId: bestPair.dexId || null,
         };
-        console.log(`[DexScreener] Vitality — Vol24h: $${result.vitality.volume.h24}, Liq: $${result.vitality.liquidityUsd}, PairAge: ${result.vitality.pairCreatedAt ? Math.round((Date.now() - result.vitality.pairCreatedAt) / 3600000) + 'h' : 'N/A'}`);
+        console.log(`[DexScreener] Vitality — Vol24h: $${result.vitality.volume.h24}, Liq: $${result.vitality.liquidityUsd}, DexId: ${result.vitality.dexId}, PairAge: ${result.vitality.pairCreatedAt ? Math.round((Date.now() - result.vitality.pairCreatedAt) / 3600000) + 'h' : 'N/A'}`);
         
         // Extract social links
         const info = result.pairs[0].info;
