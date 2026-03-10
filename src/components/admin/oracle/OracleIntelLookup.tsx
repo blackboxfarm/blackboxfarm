@@ -540,29 +540,52 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {result.network.meshLinks.map((link: any, i: number) => (
-                    <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-muted/20 border border-border/30 text-xs">
+                  {result.network.meshLinks.map((link: any, i: number) => {
+                    const isKycLink = ['same_kyc_root', 'kyc_root', 'funded_by'].includes(link.relationship);
+                    return (
+                    <div key={i} className={`flex items-center gap-3 p-2 rounded-lg border text-xs ${isKycLink ? 'bg-amber-500/10 border-amber-500/30' : 'bg-muted/20 border-border/30'}`}>
                       <div className="flex items-center gap-1 min-w-0 flex-1">
                         <Badge variant="outline" className="text-[10px] flex-shrink-0">{link.sourceType}</Badge>
-                        <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.sourceId.length > 12 ? `${link.sourceId.slice(0, 6)}...${link.sourceId.slice(-4)}` : link.sourceId}</code>
+                        {isWalletAddress(link.sourceId) ? (
+                          <a href={solscanLink(link.sourceId)} target="_blank" rel="noopener noreferrer" className="font-mono truncate max-w-[120px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
+                            {link.sourceId.slice(0, 6)}...{link.sourceId.slice(-4)}
+                          </a>
+                        ) : (
+                          <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.sourceId.length > 12 ? `${link.sourceId.slice(0, 6)}...${link.sourceId.slice(-4)}` : link.sourceId}</code>
+                        )}
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(link.sourceId)}>
+                          <Copy className="h-3 w-3" />
+                        </Button>
                       </div>
                       <div className="flex-shrink-0">
-                        <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/40 text-[10px]">
-                          {getRelationshipLabel(link.relationship)}
+                        <Badge className={`text-[10px] ${isKycLink ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-purple-500/20 text-purple-400 border-purple-500/40'}`}>
+                          {isKycLink && '🔑 '}{getRelationshipLabel(link.relationship)}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-1 min-w-0 flex-1">
                         <Badge variant="outline" className="text-[10px] flex-shrink-0">{link.linkedType}</Badge>
-                        <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.linkedId.length > 12 ? `${link.linkedId.slice(0, 6)}...${link.linkedId.slice(-4)}` : link.linkedId}</code>
+                        {isWalletAddress(link.linkedId) ? (
+                          <a href={solscanLink(link.linkedId)} target="_blank" rel="noopener noreferrer" className="font-mono truncate max-w-[120px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
+                            {link.linkedId.slice(0, 6)}...{link.linkedId.slice(-4)}
+                          </a>
+                        ) : (
+                          <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.linkedId.length > 12 ? `${link.linkedId.slice(0, 6)}...${link.linkedId.slice(-4)}` : link.linkedId}</code>
+                        )}
                         <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(link.linkedId)}>
                           <Copy className="h-3 w-3" />
                         </Button>
+                        {isWalletAddress(link.linkedId) && (
+                          <a href={solscanLink(link.linkedId)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 hover:text-primary">
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
                       </div>
                       <div className="flex-shrink-0">
                         <span className="text-muted-foreground">{link.confidence}%</span>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
