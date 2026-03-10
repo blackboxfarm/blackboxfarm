@@ -101,6 +101,102 @@ async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null;
   }
 }
 
+// Tier thresholds for proven dev tracking
+const TIER_THRESHOLDS = [
+  { tier: 6, minMcap: 3_000_000 },
+  { tier: 5, minMcap: 2_000_000 },
+  { tier: 4, minMcap: 1_000_000 },
+  { tier: 3, minMcap: 800_000 },
+  { tier: 2, minMcap: 600_000 },
+  { tier: 1, minMcap: 400_000 },
+];
+
+function calculateTier(marketCap: number): number {
+  for (const t of TIER_THRESHOLDS) {
+    if (marketCap >= t.minMcap) return t.tier;
+  }
+  return 0;
+}
+
+const TIER_COLUMN_MAP: Record<number, string> = {
+  1: 'tier_1_at', 2: 'tier_2_at', 3: 'tier_3_at',
+  4: 'tier_4_at', 5: 'tier_5_at', 6: 'tier_6_at',
+};
+
+async function upsertProvenDevTokens(supabase: any, tokens: TrendingToken[], currentSlot: string) {
+  const qualifying = tokens.filter(t => t.marketCap >= 400_000);
+  if (qualifying.length === 0) return;
+
+  console.log(`[scheduler] ${qualifying.length} tokens qualify for proven dev tracking (≥400k mcap)`);
+
+  for (const token of qualifying) {
+    const tier = calculateTier(token.marketCap);
+    const now = new Date().toISOString();
+
+    // Check if already exists
+    const { data: existing } = await supabase
+      .from('proven_dev_tokens')
+      .select('id, tier, market_cap_ath')
+      .eq('token_mint', token.mint)
+      .maybeSingle();
+
+    if (existing) {
+      // Only update if new tier is HIGHER or new ATH
+      if (tier > existing.tier || token.marketCap > (existing.market_cap_ath || 0)) {
+        const updates: Record<string, any> = {
+          updated_at: now,
+        };
+
+        if (token.marketCap > (existing.market_cap_ath || 0)) {
+          updates.market_cap_ath = token.marketCap;
+          updates.ath_timestamp = now;
+        }
+
+        if (tier > existing.tier) {
+          updates.tier = tier;
+          // Set timestamp for each new tier reached
+          for (let t = existing.tier + 1; t <= tier; t++) {
+            const col = TIER_COLUMN_MAP[t];
+            if (col) updates[col] = now;
+          }
+          console.log(`[scheduler] ⬆ ${token.symbol} upgraded T${existing.tier}→T${tier} (mcap: ${token.marketCap})`);
+        }
+
+        await supabase
+          .from('proven_dev_tokens')
+          .update(updates)
+          .eq('id', existing.id);
+      }
+    } else {
+      // New entry
+      const tierTimestamps: Record<string, string> = {};
+      for (let t = 1; t <= tier; t++) {
+        const col = TIER_COLUMN_MAP[t];
+        if (col) tierTimestamps[col] = now;
+      }
+
+      const { error } = await supabase
+        .from('proven_dev_tokens')
+        .insert({
+          token_mint: token.mint,
+          symbol: token.symbol,
+          name: token.name,
+          tier,
+          market_cap_at_discovery: token.marketCap,
+          market_cap_ath: token.marketCap,
+          ath_timestamp: now,
+          snapshot_slot: currentSlot,
+          trigger_source: 'dex_trending',
+          ...tierTimestamps,
+        });
+
+      if (!error) {
+        console.log(`[scheduler] ✦ New proven token: ${token.symbol} at T${tier} (mcap: ${token.marketCap})`);
+      }
+    }
+  }
+}
+
 async function fetchTrendingTokens(): Promise<TrendingToken[]> {
   console.log('[scheduler] Fetching from Cloudflare KV worker...');
   
