@@ -20,7 +20,7 @@ interface KOLEntry {
 }
 
 // Cloudflare worker URL - to be deployed by user
-const KOL_WORKER_URL = 'https://kol-scanner.yayasanjembatanbali.workers.dev/api/kols';
+const KOL_WORKER_URL = 'https://top-kols-568f.yayasanjembatanbali.workers.dev/api/kols';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
