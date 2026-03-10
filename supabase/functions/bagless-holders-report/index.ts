@@ -804,6 +804,7 @@ serve(async (req) => {
       kolCount: kolMatches.length,
       devGenealogy: devGenealogy || undefined,
       insiderClusters: insidersResult.clusters.length > 0 ? insidersResult.clusters : undefined,
+      freshWallets: freshWallets || undefined,
       
       firstBuyers: [],
       executionTimeMs: totalTime
