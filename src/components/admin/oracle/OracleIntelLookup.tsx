@@ -773,13 +773,16 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">Linked Wallets (from Mesh)</span>
                   <div className="flex flex-wrap gap-2">
-                    {result.network.linkedWallets.slice(0, 5).map((wallet: string, i: number) => (
-                      <div key={i} className="flex items-center gap-1">
+                    {result.network.linkedWallets.slice(0, 10).map((wallet: string, i: number) => (
+                      <div key={i} className="flex items-center gap-1 p-1.5 rounded border border-border/40 bg-muted/20">
                         <Badge variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => { setQuery(wallet); handleLookup(); }}>
                           {wallet.slice(0, 8)}...{wallet.slice(-4)}
                         </Badge>
-                        <a href={solscanLink(wallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
+                        <a href={solscanLink(wallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary" title="Solscan">
                           <ExternalLink className="h-3 w-3" />
+                        </a>
+                        <a href={`https://pump.fun/profile/${wallet}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300" title="Pump.fun profile">
+                          <span className="text-[9px]">🟢PF</span>
                         </a>
                       </div>
                     ))}
