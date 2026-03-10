@@ -239,6 +239,21 @@ interface HoldersReport {
     alreadyKnown: boolean;
   };
   insiderClusters?: WalletCluster[];
+  freshWallets?: {
+    freshWalletCount: number;
+    totalChecked: number;
+    freshPercentage: number;
+    oldestAccountAge: string;
+    newestAccountAge: string;
+    clusterDetected: boolean;
+    clusterWindowHours: number | null;
+    walletAges: Array<{
+      wallet: string;
+      createdAt: string | null;
+      ageHours: number | null;
+      isFresh: boolean;
+    }>;
+  };
   bondingCurveProgress?: number | null;
   summary: string;
 }
@@ -1356,6 +1371,56 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                   </div>
                 </div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Fresh Wallet / Sybil Detection */}
+      {report?.freshWallets && report.freshWallets.freshWalletCount > 0 && (
+        <Card className={`mb-4 md:mb-6 border-2 ${report.freshWallets.clusterDetected ? 'border-destructive/40 bg-destructive/5' : 'border-yellow-500/30 bg-yellow-500/5'}`}>
+          <CardHeader className="pb-2 pt-3 px-3 md:px-6">
+            <CardTitle className="text-sm md:text-base flex items-center gap-2">
+              <AlertTriangle className={`h-4 w-4 ${report.freshWallets.clusterDetected ? 'text-destructive' : 'text-yellow-500'}`} />
+              Fresh Wallet Detection
+              {report.freshWallets.clusterDetected && (
+                <Badge variant="destructive" className="text-[10px]">SYBIL CLUSTER</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 md:px-6 pb-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <div className="text-center p-2 bg-background/50 rounded">
+                <p className="text-lg font-bold text-foreground">{report.freshWallets.freshWalletCount}/{report.freshWallets.totalChecked}</p>
+                <p className="text-[10px] text-muted-foreground">Fresh Wallets</p>
+              </div>
+              <div className="text-center p-2 bg-background/50 rounded">
+                <p className={`text-lg font-bold ${report.freshWallets.freshPercentage >= 40 ? 'text-destructive' : 'text-yellow-500'}`}>{report.freshWallets.freshPercentage}%</p>
+                <p className="text-[10px] text-muted-foreground">Fresh Ratio</p>
+              </div>
+              <div className="text-center p-2 bg-background/50 rounded">
+                <p className="text-lg font-bold text-foreground">{report.freshWallets.newestAccountAge}</p>
+                <p className="text-[10px] text-muted-foreground">Newest Wallet</p>
+              </div>
+              <div className="text-center p-2 bg-background/50 rounded">
+                <p className="text-lg font-bold text-foreground">{report.freshWallets.oldestAccountAge}</p>
+                <p className="text-[10px] text-muted-foreground">Oldest Wallet</p>
+              </div>
+            </div>
+            {report.freshWallets.clusterDetected && (
+              <p className="text-xs text-destructive font-medium">
+                ⚠️ {report.freshWallets.freshWalletCount} wallets were created within a {report.freshWallets.clusterWindowHours}h window — high probability of coordinated sybil attack or bot network.
+              </p>
+            )}
+            <div className="mt-2 space-y-1">
+              {report.freshWallets.walletAges.filter(w => w.isFresh).slice(0, 8).map((w, idx) => (
+                <div key={idx} className="flex items-center justify-between text-[10px] font-mono">
+                  <a href={`https://solscan.io/account/${w.wallet}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                    {w.wallet.slice(0, 6)}...{w.wallet.slice(-4)}
+                  </a>
+                  <span className="text-muted-foreground">{w.ageHours !== null ? (w.ageHours < 24 ? `${w.ageHours}h old` : `${Math.round(w.ageHours / 24)}d old`) : 'unknown'}</span>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

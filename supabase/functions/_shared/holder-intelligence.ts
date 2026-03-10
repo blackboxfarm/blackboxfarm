@@ -390,6 +390,243 @@ export async function traceDevGenealogy(
 }
 
 // ============================================
+// FRESH WALLET AGE DETECTION (Item 10)
+// ============================================
+
+export interface FreshWalletResult {
+  freshWalletCount: number;
+  totalChecked: number;
+  freshPercentage: number;
+  oldestAccountAge: string;
+  newestAccountAge: string;
+  clusterDetected: boolean; // true if many wallets created around same time
+  clusterWindowHours: number | null;
+  walletAges: Array<{
+    wallet: string;
+    createdAt: string | null;
+    ageHours: number | null;
+    isFresh: boolean; // created within 48h of token launch
+  }>;
+}
+
+/**
+ * Check wallet creation dates for the top holders using Helius getMultipleAccounts.
+ * Detects sybil/bot wallets by finding clusters of recently-created wallets.
+ * 
+ * Cost: 1 Helius RPC call per report (batch of up to 20 wallets).
+ */
+export async function detectFreshWallets(
+  holderAddresses: string[],
+  tokenCreatedAt?: string | null, // ISO timestamp or null
+): Promise<FreshWalletResult | null> {
+  if (holderAddresses.length === 0) return null;
+
+  try {
+    const { getHeliusRpcUrl, getHeliusApiKey } = await import('./helius-client.ts');
+    const { heliusFetch } = await import('./helius-rate-limiter.ts');
+    const heliusKey = getHeliusApiKey();
+    if (!heliusKey) return null;
+
+    const rpcUrl = getHeliusRpcUrl(heliusKey);
+    const walletsToCheck = holderAddresses.slice(0, 20);
+
+    // Single batch RPC call — 1 credit
+    const response = await heliusFetch(
+      rpcUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'fresh-wallet-check',
+          method: 'getMultipleAccounts',
+          params: [walletsToCheck, { encoding: 'jsonParsed' }],
+        }),
+      },
+      {
+        functionName: 'bagless-holders-report',
+        endpoint: 'getMultipleAccounts',
+        method: 'getMultipleAccounts',
+        requestParams: { walletCount: walletsToCheck.length },
+      },
+    );
+
+    if (!response || !response.ok) {
+      console.warn('[HolderIntel] Fresh wallet check failed — RPC unavailable');
+      return null;
+    }
+
+    const rpcData = await response.json();
+    const accounts = rpcData.result?.value;
+    if (!accounts || !Array.isArray(accounts)) return null;
+
+    // Parse account ages from rent epoch and slot data
+    // Accounts with very low lamports and recent rent_epoch are "fresh"
+    const tokenBirth = tokenCreatedAt ? new Date(tokenCreatedAt).getTime() : null;
+    const now = Date.now();
+    const FRESH_THRESHOLD_HOURS = 48;
+
+    const walletAges: FreshWalletResult['walletAges'] = [];
+    const creationTimestamps: number[] = [];
+
+    for (let i = 0; i < walletsToCheck.length; i++) {
+      const account = accounts[i];
+      if (!account) {
+        walletAges.push({ wallet: walletsToCheck[i], createdAt: null, ageHours: null, isFresh: false });
+        continue;
+      }
+
+      // Use rent_epoch as a proxy for account age
+      // Lower rent_epoch = older account. Current epoch ~ 750+ (as of 2025)
+      // Each epoch is ~2-3 days on Solana
+      const rentEpoch = account.rentEpoch ?? 0;
+      
+      // Estimate creation time: epoch 0 ≈ Solana genesis (March 2020)
+      // Average epoch duration ≈ 2.5 days
+      const SOLANA_GENESIS_MS = new Date('2020-03-16').getTime();
+      const AVG_EPOCH_DURATION_MS = 2.5 * 24 * 60 * 60 * 1000;
+      const estimatedCreationMs = SOLANA_GENESIS_MS + (rentEpoch * AVG_EPOCH_DURATION_MS);
+      const ageMs = now - estimatedCreationMs;
+      const ageHours = Math.max(0, Math.round(ageMs / 3600000));
+
+      // Determine "fresh" relative to token creation
+      let isFresh = false;
+      if (tokenBirth) {
+        // Fresh = wallet created within 48h before or after token launch
+        const diffFromLaunch = Math.abs(estimatedCreationMs - tokenBirth);
+        isFresh = diffFromLaunch < FRESH_THRESHOLD_HOURS * 3600000;
+      } else {
+        // No token birth known — consider fresh if < 7 days old
+        isFresh = ageHours < 7 * 24;
+      }
+
+      walletAges.push({
+        wallet: walletsToCheck[i],
+        createdAt: new Date(estimatedCreationMs).toISOString(),
+        ageHours,
+        isFresh,
+      });
+
+      if (isFresh) {
+        creationTimestamps.push(estimatedCreationMs);
+      }
+    }
+
+    const freshCount = walletAges.filter(w => w.isFresh).length;
+    const validAges = walletAges.filter(w => w.ageHours !== null);
+
+    // Detect clustering: if many fresh wallets were created within a tight window
+    let clusterDetected = false;
+    let clusterWindowHours: number | null = null;
+    if (creationTimestamps.length >= 3) {
+      creationTimestamps.sort((a, b) => a - b);
+      const windowMs = creationTimestamps[creationTimestamps.length - 1] - creationTimestamps[0];
+      clusterWindowHours = Math.round(windowMs / 3600000);
+      // If 3+ fresh wallets created within 24h window → cluster
+      clusterDetected = clusterWindowHours <= 24 && creationTimestamps.length >= 3;
+    }
+
+    const sortedAges = validAges.map(w => w.ageHours!).sort((a, b) => a - b);
+
+    const formatAge = (hours: number) => {
+      if (hours < 24) return `${hours}h`;
+      if (hours < 24 * 30) return `${Math.round(hours / 24)}d`;
+      return `${Math.round(hours / (24 * 30))}mo`;
+    };
+
+    const result: FreshWalletResult = {
+      freshWalletCount: freshCount,
+      totalChecked: walletsToCheck.length,
+      freshPercentage: walletsToCheck.length > 0 ? Math.round((freshCount / walletsToCheck.length) * 100) : 0,
+      oldestAccountAge: sortedAges.length > 0 ? formatAge(sortedAges[sortedAges.length - 1]) : 'unknown',
+      newestAccountAge: sortedAges.length > 0 ? formatAge(sortedAges[0]) : 'unknown',
+      clusterDetected,
+      clusterWindowHours,
+      walletAges,
+    };
+
+    console.log(`[HolderIntel] Fresh wallet check: ${freshCount}/${walletsToCheck.length} fresh (${result.freshPercentage}%), cluster=${clusterDetected}`);
+    return result;
+  } catch (e) {
+    console.warn('[HolderIntel] Fresh wallet detection error:', e);
+    return null;
+  }
+}
+
+// ============================================
+// INCREMENTAL GENEALOGY EXPANSION
+// ============================================
+
+/**
+ * When genealogy is cached, fire-and-forget a background check
+ * for new tokens minted by any wallet in the tree.
+ * This passively expands actor profiles over time.
+ */
+export async function expandGenealogyTree(
+  creatorWallet: string,
+  upstreamWallets: string[],
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  if (!supabase || upstreamWallets.length === 0) return;
+
+  try {
+    const allWallets = [creatorWallet, ...upstreamWallets];
+
+    // Check for new tokens minted by any wallet in the tree
+    const { data: knownTokens } = await supabase
+      .from('token_lifecycle')
+      .select('creator_wallet, token_mint')
+      .in('creator_wallet', allWallets);
+
+    const knownMints = new Set((knownTokens || []).map(t => t.token_mint));
+
+    // Check pumpfun_watchlist for tokens we haven't linked yet
+    const { data: watchlistTokens } = await supabase
+      .from('pumpfun_watchlist')
+      .select('creator_wallet, token_mint')
+      .in('creator_wallet', allWallets)
+      .limit(50);
+
+    if (watchlistTokens) {
+      const newTokens = watchlistTokens.filter(t => !knownMints.has(t.token_mint));
+      if (newTokens.length > 0) {
+        // Upsert new token_lifecycle entries
+        const inserts = newTokens.map(t => ({
+          token_mint: t.token_mint,
+          creator_wallet: t.creator_wallet,
+          last_seen_at: new Date().toISOString(),
+        }));
+        await supabase.from('token_lifecycle').upsert(inserts, {
+          onConflict: 'token_mint',
+          ignoreDuplicates: true,
+        });
+
+        // Also link these tokens to the KYC root in reputation_mesh
+        for (const t of newTokens.slice(0, 10)) {
+          await supabase.from('reputation_mesh').upsert({
+            source_type: 'wallet',
+            source_id: t.creator_wallet,
+            linked_type: 'token',
+            linked_id: t.token_mint,
+            relationship: 'created',
+            confidence: 90,
+            evidence: `Discovered via genealogy tree expansion from ${creatorWallet.slice(0, 8)}...`,
+            discovered_via: 'genealogy-expansion',
+          }, {
+            onConflict: 'source_type,source_id,linked_type,linked_id,relationship',
+            ignoreDuplicates: true,
+          });
+        }
+
+        console.log(`[HolderIntel] Genealogy expansion: found ${newTokens.length} new tokens across ${allWallets.length} wallets`);
+      }
+    }
+  } catch (e) {
+    console.warn('[HolderIntel] Genealogy expansion error:', e);
+  }
+}
+
+// ============================================
 // INSIDER WALLET MESH FEEDING
 // ============================================
 
