@@ -497,28 +497,43 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-2 max-h-80 overflow-y-auto">
                   {result.tokenHistory.map((token: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-semibold text-sm">{token.symbol}</span>
-                        <code className="text-muted-foreground font-mono truncate max-w-[180px]">{token.mint}</code>
-                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(token.mint)}>
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                        <a 
-                          href={`https://pump.fun/coin/${token.mint}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-primary flex-shrink-0"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
+                    <div key={i} className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-muted/30 border border-border/30 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-sm">{token.symbol}</span>
+                          <code className="text-muted-foreground font-mono truncate max-w-[180px]">{token.mint}</code>
+                          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(token.mint)}>
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                          <a href={`https://pump.fun/coin/${token.mint}`} target="_blank" rel="noopener noreferrer" className="hover:text-primary flex-shrink-0">
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {getOutcomeBadge(token.outcome)}
+                          {token.isActive && <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-[10px]">Active</Badge>}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {getOutcomeBadge(token.outcome)}
-                        {token.isActive && <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-[10px]">Active</Badge>}
-                      </div>
+                      {/* Dev wallet row */}
+                      {result.resolvedWallet && (
+                        <div className="flex items-center gap-1.5 pl-2 border-l-2 border-purple-500/30">
+                          <span className="text-[10px] text-muted-foreground">Dev:</span>
+                          <a href={solscanLink(result.resolvedWallet)} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
+                            {result.resolvedWallet.slice(0, 6)}...{result.resolvedWallet.slice(-4)}
+                          </a>
+                          <a href={`https://pump.fun/profile/${result.resolvedWallet}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300" title="Pump.fun profile">
+                            <span className="text-[9px]">🟢PF</span>
+                          </a>
+                          <a href={solscanLink(result.resolvedWallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary" title="Solscan">
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                          <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(result.resolvedWallet!)}>
+                            <Copy className="h-2.5 w-2.5" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
