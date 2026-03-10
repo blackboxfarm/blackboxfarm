@@ -7,9 +7,20 @@ import { useOracleLookup } from "@/hooks/useOracleLookup";
 import { Search, AlertTriangle, CheckCircle, AlertCircle, Shield, Users, Coins, ExternalLink, Copy, Zap, Scan, Eye } from "lucide-react";
 import { toast } from "sonner";
 
-const OracleIntelLookup = () => {
-  const [query, setQuery] = useState("");
+interface OracleIntelLookupProps {
+  initialQuery?: string;
+}
+
+const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
+  const [query, setQuery] = useState(initialQuery || "");
   const { lookup, result, isLoading, error, reset } = useOracleLookup();
+
+  // Auto-trigger lookup when initialQuery is provided
+  React.useEffect(() => {
+    if (initialQuery && initialQuery.trim()) {
+      lookup(initialQuery.trim());
+    }
+  }, [initialQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLookup = (scanMode?: 'deep' | 'quick' | 'spider') => {
     if (!query.trim()) {
