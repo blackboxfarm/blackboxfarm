@@ -16,8 +16,13 @@ const TeamIntelDashboard = lazy(() => import("@/components/admin/oracle/TeamInte
 const PumpfunBlacklist = lazy(() => import("@/components/admin/PumpfunBlacklist").then(m => ({ default: m.PumpfunBlacklist })));
 const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist").then(m => ({ default: m.PumpfunWhitelist })));
 
-const OracleTab = () => {
-  const [activeSubTab, setActiveSubTab] = useState("spider");
+interface OracleTabProps {
+  initialSubTab?: string;
+  initialWallet?: string;
+}
+
+const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
+  const [activeSubTab, setActiveSubTab] = useState(initialSubTab || "spider");
 
   return (
     <div className="space-y-6">
