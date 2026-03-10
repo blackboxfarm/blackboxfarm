@@ -43,12 +43,19 @@ export default function SuperAdmin() {
     setHydrated(true);
   }, []);
 
+  const [oracleSubTab, setOracleSubTab] = useState<string | undefined>();
+  const [oracleWallet, setOracleWallet] = useState<string | undefined>();
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
     if (tabParam) {
       setActiveTab(tabParam);
     }
+    const subtab = urlParams.get('subtab');
+    if (subtab) setOracleSubTab(subtab);
+    const wallet = urlParams.get('wallet');
+    if (wallet) setOracleWallet(wallet);
   }, []);
 
   // Redirect unauthenticated users to auth page

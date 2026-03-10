@@ -3635,7 +3635,7 @@ export function FlipItDashboard() {
                           {blacklistWarning.reason}
                         </span>
                         <a 
-                          href={`/super-admin?tab=oracle`}
+                          href={`/super-admin?tab=oracle&subtab=lookup${inputToken.creatorWallet ? `&wallet=${inputToken.creatorWallet}` : ''}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-amber-400 hover:text-amber-300 text-xs underline flex-shrink-0"
