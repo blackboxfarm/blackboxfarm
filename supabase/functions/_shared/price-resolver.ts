@@ -726,14 +726,18 @@ async function fetchJupiterPrice(tokenMint: string): Promise<PriceResult | null>
 // MAIN PRICE RESOLVER
 // ============================================
 
+export type VenueHint = 'pumpfun_curve' | 'pumpfun_graduated' | 'bags_fm' | 'bonk_fun' | 'dex' | undefined;
+
 export async function resolvePrice(
   tokenMint: string,
   options: {
     forceFresh?: boolean;
     heliusApiKey?: string;
+    venueHint?: VenueHint;
   } = {}
 ): Promise<PriceResult | null> {
   const { forceFresh = false, heliusApiKey } = options;
+  let venueHint = options.venueHint;
 
   // Check cache first (unless force fresh)
   if (!forceFresh) {
@@ -744,37 +748,87 @@ export async function resolvePrice(
     }
   }
 
+  // ============================================
+  // AUTO-DETECT VENUE HINT FROM MINT SUFFIX
+  // Skip irrelevant cascade steps for massive speed gains
+  // ============================================
+  if (!venueHint) {
+    if (tokenMint.endsWith('pump')) {
+      venueHint = 'pumpfun_curve'; // Will be overridden if graduated
+    } else if (tokenMint.endsWith('BAGS')) {
+      venueHint = 'bags_fm';
+    } else if (tokenMint.endsWith('BONK') || tokenMint.endsWith('bonk')) {
+      venueHint = 'bonk_fun';
+    }
+  }
+
+  console.log(`[${tokenMint.slice(0, 8)}] resolvePrice venueHint=${venueHint || 'none'}`);
+
   const solPrice = await fetchSolPrice();
 
   // ============================================
-  // ROUTING LOGIC - Multi-Platform Detection
+  // FAST PATH: 'dex' or 'pumpfun_graduated' → skip ALL curve checks
+  // Run DexScreener + Jupiter in parallel, use fastest responder
   // ============================================
-  // Priority order:
-  // 1. pump.fun API (handles pump.fun tokens)
-  // 2. pump.fun on-chain bonding curve (fallback for old pump tokens)
-  // 3. Meteora DBC on-chain (handles bags.fm tokens)
-  // 4. Raydium Launchlab on-chain (handles Bonk.fun tokens)
-  // 5. DexScreener (graduated tokens on any DEX)
-  // 6. Jupiter (last resort fallback)
-
-  // STEP 1: Try pump.fun API for ALL tokens (handles both old and new pump tokens)
-  console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API`);
-  const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
-  
-  if (pumpResult) {
-    console.log(`[${tokenMint.slice(0, 8)}] pump.fun API: $${pumpResult.price.toFixed(10)}, onCurve=${pumpResult.isOnCurve}`);
+  if (venueHint === 'dex' || venueHint === 'pumpfun_graduated') {
+    console.log(`[${tokenMint.slice(0, 8)}] Fast-path: parallel DexScreener + Jupiter`);
     
-    // If token is still on curve, this is authoritative - use it
-    if (pumpResult.isOnCurve) {
-      priceCache.set(tokenMint, { result: pumpResult, timestamp: Date.now() });
-      return pumpResult;
+    const [dexResult, jupResult] = await Promise.all([
+      fetchDexScreenerPrice(tokenMint),
+      fetchJupiterPrice(tokenMint)
+    ]);
+
+    // Prefer DexScreener (more accurate for graduated tokens), fall back to Jupiter
+    const result = dexResult || jupResult;
+    if (result) {
+      console.log(`[${tokenMint.slice(0, 8)}] Fast-path hit: $${result.price.toFixed(10)} from ${result.source}`);
+      priceCache.set(tokenMint, { result, timestamp: Date.now() });
+      return result;
     }
     
-    // Token graduated according to pump.fun - fall through to other checks
+    console.log(`[${tokenMint.slice(0, 8)}] Fast-path miss, falling through to full cascade`);
+    // Fall through to full cascade if both fail
   }
 
-  // STEP 2: Try pump.fun on-chain bonding curve (catches old pump tokens API might miss)
-  if (heliusApiKey) {
+  // ============================================
+  // ROUTING LOGIC - State-Aware Multi-Platform Detection
+  // ============================================
+  // venueHint determines which steps to run:
+  // 'pumpfun_curve' → steps 1-2 only, then DexScreener/Jupiter
+  // 'bags_fm' → skip pump.fun, go to step 3
+  // 'bonk_fun' → skip pump.fun + bags.fm, go to step 4
+  // undefined → full cascade (backward compatible)
+
+  // STEP 1: Try pump.fun API (skip if hint says bags_fm or bonk_fun)
+  if (!venueHint || venueHint === 'pumpfun_curve') {
+    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API`);
+    const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
+    
+    if (pumpResult) {
+      console.log(`[${tokenMint.slice(0, 8)}] pump.fun API: $${pumpResult.price.toFixed(10)}, onCurve=${pumpResult.isOnCurve}`);
+      
+      // If token is still on curve, this is authoritative - use it
+      if (pumpResult.isOnCurve) {
+        priceCache.set(tokenMint, { result: pumpResult, timestamp: Date.now() });
+        return pumpResult;
+      }
+      
+      // Token graduated according to pump.fun - skip to DexScreener/Jupiter fast path
+      console.log(`[${tokenMint.slice(0, 8)}] pump.fun says graduated, running parallel DexScreener + Jupiter`);
+      const [dexResult, jupResult] = await Promise.all([
+        fetchDexScreenerPrice(tokenMint),
+        fetchJupiterPrice(tokenMint)
+      ]);
+      const graduatedResult = dexResult || jupResult;
+      if (graduatedResult) {
+        priceCache.set(tokenMint, { result: graduatedResult, timestamp: Date.now() });
+        return graduatedResult;
+      }
+    }
+  }
+
+  // STEP 2: Try pump.fun on-chain bonding curve (skip if hint says bags_fm or bonk_fun)
+  if (heliusApiKey && (!venueHint || venueHint === 'pumpfun_curve')) {
     console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun on-chain curve`);
     const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
     
@@ -803,9 +857,9 @@ export async function resolvePrice(
     }
   }
 
-  // STEP 3: Try Meteora DBC (bags.fm tokens) - ONLY for BAGS suffix tokens
+  // STEP 3: Try Meteora DBC (bags.fm tokens) - ONLY for BAGS suffix or bags_fm hint
   // Skip this expensive scan for pump.fun tokens (already handled above)
-  if (heliusApiKey && tokenMint.endsWith('BAGS')) {
+  if (heliusApiKey && (venueHint === 'bags_fm' || tokenMint.endsWith('BAGS'))) {
     console.log(`[${tokenMint.slice(0, 8)}] Trying Meteora DBC (bags.fm)`);
     const meteoraState = await fetchMeteoraDBC(tokenMint, heliusApiKey);
     

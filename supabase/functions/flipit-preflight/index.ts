@@ -92,11 +92,17 @@ serve(async (req) => {
       );
     }
 
+    // Derive venueHint for downstream use
+    const venueHint = quote.isOnCurve 
+      ? (quote.venue === 'pumpfun' ? 'pumpfun_curve' : quote.venue === 'bags_fm' ? 'bags_fm' : quote.venue === 'bonk_fun' ? 'bonk_fun' : undefined)
+      : 'dex';
+
     return new Response(
       JSON.stringify({
         success: true,
         venue: quote.venue,
         isOnCurve: quote.isOnCurve,
+        venueHint,
         executablePriceUsd: quote.executablePriceUsd,
         tokensOut: quote.tokensOut,
         solSpent: quote.solSpent,

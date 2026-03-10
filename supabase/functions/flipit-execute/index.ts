@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { 
   resolvePrice, 
   fetchSolPrice, 
-  type PriceResult 
+  type PriceResult,
+  type VenueHint
 } from "../_shared/price-resolver.ts";
 import { parseBuyFromSolscan } from "../_shared/solscan-api.ts";
 import { validateBuyQuote, getTradeGuardConfig } from "../_shared/trade-guard.ts";
@@ -61,19 +62,28 @@ function firstSignature(swapResult: any): string | null {
  * - Pre-Raydium (on bonding curve): pump.fun API -> bonding curve math  
  * - Post-Raydium (graduated): DexScreener -> Jupiter fallback
  */
-async function fetchTokenPrice(tokenMint: string, options: { forceFresh?: boolean } = {}): Promise<{ price: number; metadata: PriceResult } | null> {
+async function fetchTokenPrice(tokenMint: string, options: { forceFresh?: boolean; venueHint?: VenueHint; isOnCurve?: boolean } = {}): Promise<{ price: number; metadata: PriceResult } | null> {
   const heliusApiKey = getHeliusApiKey();
+  
+  // Derive venueHint from isOnCurve if not provided
+  let hint = options.venueHint;
+  if (!hint && options.isOnCurve === false) {
+    // Token is confirmed graduated — skip all curve checks
+    hint = 'dex';
+  }
+  
   // CRITICAL: Pass forceFresh to bypass cache for accurate buy execution
   const result = await resolvePrice(tokenMint, { 
     heliusApiKey, 
-    forceFresh: options.forceFresh ?? false 
+    forceFresh: options.forceFresh ?? false,
+    venueHint: hint
   });
   
   if (!result) {
     return null;
   }
   
-  console.log(`Price for ${tokenMint.slice(0, 8)}: $${result.price.toFixed(10)} from ${result.source}${result.isOnCurve ? ` (curve ${result.bondingCurveProgress?.toFixed(1)}%)` : ''}${options.forceFresh ? ' [FRESH]' : ''}`);
+  console.log(`Price for ${tokenMint.slice(0, 8)}: $${result.price.toFixed(10)} from ${result.source}${result.isOnCurve ? ` (curve ${result.bondingCurveProgress?.toFixed(1)}%)` : ''}${options.forceFresh ? ' [FRESH]' : ''}${hint ? ` [hint=${hint}]` : ''}`);
   
   return { price: result.price, metadata: result };
 }
@@ -531,7 +541,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -712,7 +722,7 @@ serve(async (req) => {
 
       // CRITICAL: Fetch FRESH token price
       execLog.logPhaseStart('PRICE_FETCH');
-      const priceResult = await fetchTokenPrice(tokenMint, { forceFresh: true });
+      const priceResult = await fetchTokenPrice(tokenMint, { forceFresh: true, venueHint: preflightVenueHint, isOnCurve: preflightIsOnCurve });
       if (!priceResult) {
         execLog.logFailure('Could not fetch token price');
         return bad("Could not fetch token price");
