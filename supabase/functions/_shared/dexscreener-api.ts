@@ -49,6 +49,7 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
       txns: { m5: { ...zeroTxns }, h1: { ...zeroTxns }, h6: { ...zeroTxns }, h24: { ...zeroTxns } },
       pairCreatedAt: null,
       liquidityUsd: 0,
+      dexId: null,
     }
   };
 
