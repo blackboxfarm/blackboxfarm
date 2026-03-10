@@ -14,6 +14,9 @@ import {
   fetchHistoricalDelta,
   feedTokenLifecycle,
   detectSocialChanges,
+  matchKOLWallets,
+  traceDevGenealogy,
+  feedInsiderWallets,
 } from "../_shared/holder-intelligence.ts"
 
 const corsHeaders = {
