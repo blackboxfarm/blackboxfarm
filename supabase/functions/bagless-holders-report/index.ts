@@ -622,6 +622,44 @@ serve(async (req) => {
     else if (healthScore >= 50) healthGrade = 'D';
     else healthGrade = 'F';
 
+    // === HOLDER INTELLIGENCE (parallel, non-blocking) ===
+    const top20Addresses = nonLpHolders.slice(0, 20).map(h => h.owner);
+    const [flaggedHolders, historicalDelta, socialWarnings] = await Promise.all([
+      crossLinkHolderReputation(top20Addresses),
+      fetchHistoricalDelta(tokenMint),
+      detectSocialChanges(tokenMint, socials),
+    ]);
+    
+    // Add social removal warnings to risk flags
+    for (const warning of socialWarnings) {
+      riskFlags.push(warning);
+    }
+    
+    // Add flagged holder warnings to risk flags
+    if (flaggedHolders.length > 0) {
+      const flagSummary = flaggedHolders.map(f => {
+        const parts: string[] = [];
+        if (f.is_blacklisted) parts.push('BLACKLISTED');
+        if (f.trust_level) parts.push(f.trust_level);
+        if (f.tokens_rugged && f.tokens_rugged > 0) parts.push(`${f.tokens_rugged} rugs`);
+        return `${f.wallet_address.slice(0, 6)}...${f.wallet_address.slice(-4)}: ${parts.join(', ')}`;
+      });
+      riskFlags.push(`⚠️ ${flaggedHolders.length} flagged wallet(s) in top 20: ${flagSummary.join(' | ')}`);
+    }
+    
+    // Compute historical deltas if we have prior data
+    let hasHistoricalData = false;
+    if (historicalDelta) {
+      historicalDelta.holderCountChange = rankedHolders.length - historicalDelta.previousHolderCount;
+      historicalDelta.healthScoreChange = healthScore - historicalDelta.previousHealthScore;
+      historicalDelta.dustPctChange = simpleTiers.dust.percentage - historicalDelta.previousDustPct;
+      historicalDelta.top5PctChange = distributionStats.top5Percentage - historicalDelta.previousTop5Pct;
+      hasHistoricalData = true;
+    }
+    
+    // Feed token lifecycle (fire and forget)
+    feedTokenLifecycle(tokenMint, creatorInfo.wallet, tokenSymbol, launchpadInfo.name).catch(() => {});
+
     const totalTime = Date.now() - requestStartTime;
     console.log(`✅ [PERF] Request complete in ${totalTime}ms — ${rankedHolders.length} holders`);
 
