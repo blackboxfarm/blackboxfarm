@@ -621,6 +621,10 @@ function quickAnalyzeTokens(tokens: any[]): {
     pattern = 'legitimate_builder';
   } else if (graduated > 0) {
     pattern = 'mixed_track_record';
+  } else if (totalTokens > 0 && totalTokens <= 10 && successRate < 30) {
+    pattern = 'low_success_newcomer';
+  } else if (totalTokens > 10 && totalTokens < 20) {
+    pattern = 'moderate_launcher';
   }
   
   return { totalTokens, graduated, successful, failed, rugged, pattern, successRate, avgMcap };
@@ -1064,13 +1068,41 @@ Deno.serve(async (req) => {
       meshLinks: processedMeshLinks
     };
 
-    // Build token history
-    const tokenHistory = developerTokens.map(t => ({
-      mint: t.token_mint,
-      symbol: t.token_symbol || '???',
-      outcome: t.outcome || 'unknown',
-      isActive: t.is_active ?? false
-    }));
+    // Build token history — merge live tokens with DB tokens, prefer live data for symbols
+    const liveTokenMap = new Map<string, any>();
+    for (const lt of liveTokens) {
+      if (lt.mint) liveTokenMap.set(lt.mint, lt);
+    }
+    
+    // Start with DB tokens, enrich with live data
+    const dbTokenMap = new Map<string, any>();
+    for (const t of developerTokens) {
+      const live = liveTokenMap.get(t.token_mint);
+      dbTokenMap.set(t.token_mint, {
+        mint: t.token_mint,
+        symbol: (live?.symbol && live.symbol !== '???' ? live.symbol : null) || (t.token_symbol && t.token_symbol !== '???' ? t.token_symbol : null) || (live?.name && live.name !== 'Unknown' ? live.name : null) || '???',
+        name: live?.name || t.token_symbol || 'Unknown',
+        outcome: t.outcome || (live?.complete ? 'graduated' : 'unknown'),
+        isActive: t.is_active ?? false,
+        mcap: live?.usd_market_cap || 0
+      });
+    }
+    
+    // Add any live tokens not in DB
+    for (const lt of liveTokens) {
+      if (lt.mint && !dbTokenMap.has(lt.mint)) {
+        dbTokenMap.set(lt.mint, {
+          mint: lt.mint,
+          symbol: (lt.symbol && lt.symbol !== '???') ? lt.symbol : (lt.name && lt.name !== 'Unknown' ? lt.name : '???'),
+          name: lt.name || 'Unknown',
+          outcome: lt.complete ? 'graduated' : (lt.usd_market_cap > 50000 ? 'success' : (lt.usd_market_cap < 100 ? 'failed' : 'unknown')),
+          isActive: lt.usd_market_cap > 1000,
+          mcap: lt.usd_market_cap || 0
+        });
+      }
+    }
+    
+    const tokenHistory = Array.from(dbTokenMap.values());
 
     // Store new mesh links for relationships discovered
     let meshLinksAdded = 0;
