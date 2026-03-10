@@ -18,7 +18,7 @@ import {
   Transaction,
   Keypair,
 } from "npm:@solana/web3.js@1.95.3";
-import bs58 from "https://esm.sh/bs58@5.0.0";
+import bs58 from "npm:bs58@5.0.0";
 
 // Jito tip accounts - we randomly select one to distribute tips
 const JITO_TIP_ACCOUNTS = [

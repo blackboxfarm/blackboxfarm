@@ -6,7 +6,7 @@
 // 4. Raw plaintext private key (base58 or JSON array)
 
 import { SecureStorage } from "./encryption.ts";
-import bs58 from "https://esm.sh/bs58@6.0.0";
+import bs58 from "npm:bs58@6.0.0";
 
 /**
  * Attempts to decrypt a wallet secret stored in the database.

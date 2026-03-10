@@ -3,7 +3,7 @@
  * Uses the unified CoinGecko helper with automatic Jupiter/DexScreener fallback.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { getSolPriceWithFallback, getCoinGeckoConfig, PriceResult } from "./coingecko.ts";
 
 interface PriceFetchResult {
