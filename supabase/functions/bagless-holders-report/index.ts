@@ -14,6 +14,9 @@ import {
   fetchHistoricalDelta,
   feedTokenLifecycle,
   detectSocialChanges,
+  matchKOLWallets,
+  traceDevGenealogy,
+  feedInsiderWallets,
 } from "../_shared/holder-intelligence.ts"
 
 const corsHeaders = {
@@ -638,10 +641,14 @@ serve(async (req) => {
 
     // === HOLDER INTELLIGENCE (parallel, non-blocking) ===
     const top20Addresses = nonLpHolders.slice(0, 20).map(h => h.owner);
-    const [flaggedHolders, historicalDelta, socialWarnings] = await Promise.all([
+    const allHolderAddresses = nonLpHolders.slice(0, 50).map(h => h.owner);
+    
+    const [flaggedHolders, historicalDelta, socialWarnings, kolMatches, devGenealogy] = await Promise.all([
       crossLinkHolderReputation(top20Addresses),
       fetchHistoricalDelta(tokenMint),
       detectSocialChanges(tokenMint, socials),
+      matchKOLWallets(allHolderAddresses),
+      traceDevGenealogy(creatorInfo.wallet),
     ]);
     
     // Add social removal warnings to risk flags
@@ -671,8 +678,16 @@ serve(async (req) => {
       hasHistoricalData = true;
     }
     
-    // Feed token lifecycle (fire and forget)
+    // Feed token lifecycle + insider mesh (fire and forget)
     feedTokenLifecycle(tokenMint, creatorInfo.wallet, tokenSymbol, launchpadInfo.name).catch(() => {});
+    if (insidersResult.hasInsiders && insidersResult.bundledPercentage > 2) {
+      feedInsiderWallets(
+        tokenMint,
+        insidersResult.bundledWallets,
+        insidersResult.bundledPercentage,
+        insidersResult.clusters
+      ).catch(() => {});
+    }
 
     const totalTime = Date.now() - requestStartTime;
     console.log(`✅ [PERF] Request complete in ${totalTime}ms — ${rankedHolders.length} holders`);
@@ -749,6 +764,10 @@ serve(async (req) => {
       historicalDelta: hasHistoricalData ? historicalDelta : undefined,
       hasHistoricalData,
       bondingCurveProgress: creatorInfo.bondingCurveProgress ?? null,
+      kolMatches: kolMatches.length > 0 ? kolMatches : undefined,
+      kolCount: kolMatches.length,
+      devGenealogy: devGenealogy || undefined,
+      insiderClusters: insidersResult.clusters.length > 0 ? insidersResult.clusters : undefined,
       
       firstBuyers: [],
       executionTimeMs: totalTime

@@ -1,9 +1,11 @@
 /**
- * Holder Intelligence — Cross-links holder wallets against reputation databases
- * and fetches historical snapshot data for delta analysis.
+ * Holder Intelligence — Cross-links holder wallets against reputation databases,
+ * fetches historical snapshots, traces dev wallet genealogy, matches KOLs,
+ * and feeds insider wallets into the reputation mesh.
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { traceParentWallets, meshGenealogyResults } from "./auto-genealogy.ts";
 
 function getSupabaseClient() {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://apxauapuusmgwbbzjgfl.supabase.co';
@@ -231,5 +233,228 @@ export async function detectSocialChanges(
     return warnings;
   } catch (e) {
     return [];
+  }
+}
+
+// ============================================
+// KOL MATCHING (server-side)
+// ============================================
+
+export interface KOLMatch {
+  wallet_address: string;
+  twitter_handle: string | null;
+  kol_tier: string | null;
+  trust_score: number | null;
+  is_active: boolean;
+}
+
+/**
+ * Match holder wallets against the kol_wallets table.
+ * Returns matched KOL holders with their metadata.
+ */
+export async function matchKOLWallets(
+  holderAddresses: string[]
+): Promise<KOLMatch[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase || holderAddresses.length === 0) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('kol_wallets')
+      .select('wallet_address, twitter_handle, kol_tier, trust_score, is_active')
+      .in('wallet_address', holderAddresses)
+      .eq('is_active', true);
+
+    if (error || !data) return [];
+
+    console.log(`[HolderIntel] KOL match: ${data.length} KOLs found in ${holderAddresses.length} wallets`);
+    return data as KOLMatch[];
+  } catch (e) {
+    console.warn('[HolderIntel] KOL matching error:', e);
+    return [];
+  }
+}
+
+// ============================================
+// DEV WALLET GENEALOGY
+// ============================================
+
+export interface DevGenealogyResult {
+  creatorWallet: string;
+  parentWallets: Array<{
+    wallet: string;
+    depth: number;
+    amountSol: number;
+    cexName?: string;
+    label?: string; // 'FUNDER', 'KYC_ROOT', etc.
+  }>;
+  xAccounts: string[];
+  cexSources: string[];
+  kycRootWallet: string | null;
+  alreadyKnown: boolean; // true if genealogy was already in DB
+}
+
+/**
+ * Trace dev wallet's funding chain: Dev → Funder → KYC Root.
+ * First checks if we already have genealogy data. If not, runs a lightweight trace
+ * and stores results in dev_wallet_reputation + reputation_mesh.
+ */
+export async function traceDevGenealogy(
+  creatorWallet: string | undefined
+): Promise<DevGenealogyResult | null> {
+  if (!creatorWallet) return null;
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  try {
+    // Step 1: Check if we already have upstream data
+    const { data: existing } = await supabase
+      .from('dev_wallet_reputation')
+      .select('wallet_address, upstream_wallets, twitter_accounts, trust_level')
+      .eq('wallet_address', creatorWallet)
+      .maybeSingle();
+
+    if (existing?.upstream_wallets && existing.upstream_wallets.length > 0) {
+      // Already traced — return cached data
+      console.log(`[HolderIntel] Genealogy cache hit for ${creatorWallet.slice(0, 8)}... (${existing.upstream_wallets.length} upstream)`);
+      
+      // Look up the deepest upstream wallet for KYC root label
+      const upstreamWallets = existing.upstream_wallets as string[];
+      
+      // Check reputation_mesh for KYC root
+      let kycRoot: string | null = null;
+      const { data: meshLinks } = await supabase
+        .from('reputation_mesh')
+        .select('source_id, linked_id, relationship')
+        .or(`source_id.in.(${upstreamWallets.join(',')}),linked_id.in.(${upstreamWallets.join(',')})`)
+        .eq('relationship', 'same_kyc_root')
+        .limit(1);
+      
+      if (meshLinks && meshLinks.length > 0) {
+        kycRoot = meshLinks[0].source_id === creatorWallet ? meshLinks[0].linked_id : meshLinks[0].source_id;
+      }
+
+      return {
+        creatorWallet,
+        parentWallets: upstreamWallets.map((w, i) => ({
+          wallet: w,
+          depth: i + 1,
+          amountSol: 0,
+          label: i === upstreamWallets.length - 1 && kycRoot ? 'KYC_ROOT' : 'FUNDER',
+        })),
+        xAccounts: (existing.twitter_accounts as string[]) || [],
+        cexSources: [],
+        kycRootWallet: kycRoot,
+        alreadyKnown: true,
+      };
+    }
+
+    // Step 2: Run a live trace (lightweight, 2-depth max to not slow report)
+    console.log(`[HolderIntel] Running live genealogy trace for ${creatorWallet.slice(0, 8)}...`);
+    const genealogy = await traceParentWallets(supabase, creatorWallet, 'holders-report');
+
+    if (genealogy.parentWallets.length === 0 && genealogy.xAccounts.length === 0) {
+      console.log(`[HolderIntel] No genealogy data found for ${creatorWallet.slice(0, 8)}...`);
+      return null;
+    }
+
+    // Step 3: Store results in mesh (fire and forget)
+    meshGenealogyResults(supabase, creatorWallet, genealogy, 'holders-report').catch(e =>
+      console.warn('[HolderIntel] Mesh storage error:', e)
+    );
+
+    // Determine KYC root (deepest non-CEX wallet, or CEX itself)
+    const deepestParent = genealogy.parentWallets[genealogy.parentWallets.length - 1];
+    const kycRoot = deepestParent?.cexName
+      ? deepestParent.wallet
+      : genealogy.parentWallets.length >= 2 ? deepestParent?.wallet : null;
+
+    return {
+      creatorWallet,
+      parentWallets: genealogy.parentWallets.map((p, i) => ({
+        wallet: p.wallet,
+        depth: p.depth,
+        amountSol: p.amountSol,
+        cexName: p.cexName,
+        label: p.cexName ? 'CEX' : (i === genealogy.parentWallets.length - 1 ? 'KYC_ROOT' : 'FUNDER'),
+      })),
+      xAccounts: genealogy.xAccounts,
+      cexSources: genealogy.cexSources,
+      kycRootWallet: kycRoot || null,
+      alreadyKnown: false,
+    };
+  } catch (e) {
+    console.warn('[HolderIntel] Genealogy trace error:', e);
+    return null;
+  }
+}
+
+// ============================================
+// INSIDER WALLET MESH FEEDING
+// ============================================
+
+/**
+ * Feed bundled/insider wallets into the reputation mesh for cross-report pattern detection.
+ * Only stores wallets that control significant supply (>2%).
+ */
+export async function feedInsiderWallets(
+  tokenMint: string,
+  bundledWallets: string[],
+  bundledPercentage: number,
+  clusters: Array<{ wallets: string[]; totalPercentage: number; clusterType: string }>
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  if (!supabase || bundledWallets.length === 0) return;
+
+  try {
+    const now = new Date().toISOString();
+    const meshLinks: any[] = [];
+
+    // Store bundled wallets as insider links to the token
+    for (const wallet of bundledWallets.slice(0, 20)) {
+      meshLinks.push({
+        source_type: 'wallet',
+        source_id: wallet,
+        linked_type: 'token',
+        linked_id: tokenMint,
+        relationship: 'insider_of',
+        confidence: 80,
+        evidence: `Bundled insider (${bundledPercentage.toFixed(1)}% total bundle), detected via RugCheck`,
+        discovered_via: 'holders-report',
+      });
+    }
+
+    // Store cluster connections (wallets within same cluster)
+    for (const cluster of clusters) {
+      if (cluster.wallets.length < 2 || cluster.totalPercentage < 2) continue;
+      
+      for (let i = 0; i < cluster.wallets.length - 1; i++) {
+        for (let j = i + 1; j < Math.min(cluster.wallets.length, 5); j++) {
+          meshLinks.push({
+            source_type: 'wallet',
+            source_id: cluster.wallets[i],
+            linked_type: 'wallet',
+            linked_id: cluster.wallets[j],
+            relationship: 'same_cluster',
+            confidence: 75,
+            evidence: `${cluster.clusterType} cluster (${cluster.totalPercentage.toFixed(1)}% supply) on ${tokenMint.slice(0, 8)}...`,
+            discovered_via: 'holders-report',
+          });
+        }
+      }
+    }
+
+    if (meshLinks.length > 0) {
+      await supabase.from('reputation_mesh').upsert(meshLinks, {
+        onConflict: 'source_type,source_id,linked_type,linked_id,relationship',
+        ignoreDuplicates: true,
+      });
+      console.log(`[HolderIntel] Fed ${meshLinks.length} insider/cluster links to mesh for ${tokenMint.slice(0, 8)}...`);
+    }
+  } catch (e) {
+    // Ignore constraint errors
+    if (!String(e).includes('duplicate') && !String(e).includes('23505')) {
+      console.warn('[HolderIntel] Insider mesh feed error:', e);
+    }
   }
 }
