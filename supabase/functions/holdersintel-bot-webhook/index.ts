@@ -946,14 +946,8 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   await sendMessage(chatId, `🔍 Quick snapshot for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/ca", ca);
 
-  // Fresh pull from bagless-holders-report + DexScreener in parallel
-  const [data, dexData] = await Promise.all([
-    invokeFunction("bagless-holders-report", { tokenMint: ca }),
-    fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d?.pairs?.[0] || null)
-      .catch(() => null),
-  ]);
+  // Fresh pull from bagless-holders-report (already includes DexScreener data)
+  const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
 
   if (!data || data.error) {
     await sendMessage(chatId, `❌ Could not fetch data for this token.`);
@@ -965,9 +959,9 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const healthPhase = data.healthScore?.phase || null;
   const phaseLabel = healthPhase ? ` (${healthPhase.replace('_', ' ')})` : '';
   const top10Pct = data.distributionStats?.top10Percentage ?? null;
-  const symbol = data.symbol || data.tokenSymbol || dexData?.baseToken?.symbol || null;
-  const name = data.name || data.tokenName || dexData?.baseToken?.name || null;
-  const mcap = dexData?.marketCap || dexData?.fdv || null;
+  const symbol = data.symbol || data.tokenSymbol || null;
+  const name = data.name || data.tokenName || null;
+  const mcap = data.marketCap || null;
   const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
   const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
 
