@@ -4,7 +4,7 @@
  *          token_dex_status_history, token_price_history
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 export interface SearchLogParams {
   tokenMint: string;

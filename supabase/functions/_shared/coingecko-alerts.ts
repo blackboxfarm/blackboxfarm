@@ -3,7 +3,7 @@
  * Sends notifications to Telegram and Email when CoinGecko has issues
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { CoinGeckoErrorInfo } from "./coingecko-error-handler.ts";
 import { broadcastToBlackBox } from "./telegram-broadcast.ts";
 
