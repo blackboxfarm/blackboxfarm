@@ -218,6 +218,28 @@ interface HoldersReport {
   riskFlags?: string[];
   // NEW: Health score
   healthScore?: HealthScore;
+  // Intelligence data
+  kolMatches?: Array<{ wallet_address: string; twitter_handle: string | null; kol_tier: string | null; trust_score: number | null }>;
+  kolCount?: number;
+  flaggedHolders?: Array<{ wallet_address: string; trust_level: string | null; tokens_rugged: number | null; is_blacklisted: boolean; source: string }>;
+  historicalDelta?: {
+    previousHolderCount: number;
+    holderCountChange: number;
+    previousHealthScore: number;
+    healthScoreChange: number;
+    snapshotAge: string;
+  };
+  hasHistoricalData?: boolean;
+  devGenealogy?: {
+    creatorWallet: string;
+    parentWallets: Array<{ wallet: string; depth: number; amountSol: number; cexName?: string; label?: string }>;
+    xAccounts: string[];
+    cexSources: string[];
+    kycRootWallet: string | null;
+    alreadyKnown: boolean;
+  };
+  insiderClusters?: WalletCluster[];
+  bondingCurveProgress?: number | null;
   summary: string;
 }
 interface BaglessHoldersReportProps {
