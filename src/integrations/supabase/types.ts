@@ -4584,6 +4584,60 @@ export type Database = {
         }
         Relationships: []
       }
+      kol_registry: {
+        Row: {
+          avatar_url: string | null
+          avg_multiplier: number | null
+          categories: string[] | null
+          created_at: string | null
+          display_name: string | null
+          followers_count: number | null
+          id: string
+          last_synced_at: string | null
+          rank: number | null
+          score: number | null
+          updated_at: string | null
+          wallet_addresses: string[] | null
+          win_rate: number | null
+          x_handle: string
+          x_url: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          avg_multiplier?: number | null
+          categories?: string[] | null
+          created_at?: string | null
+          display_name?: string | null
+          followers_count?: number | null
+          id?: string
+          last_synced_at?: string | null
+          rank?: number | null
+          score?: number | null
+          updated_at?: string | null
+          wallet_addresses?: string[] | null
+          win_rate?: number | null
+          x_handle: string
+          x_url?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          avg_multiplier?: number | null
+          categories?: string[] | null
+          created_at?: string | null
+          display_name?: string | null
+          followers_count?: number | null
+          id?: string
+          last_synced_at?: string | null
+          rank?: number | null
+          score?: number | null
+          updated_at?: string | null
+          wallet_addresses?: string[] | null
+          win_rate?: number | null
+          x_handle?: string
+          x_url?: string | null
+        }
+        Relationships: []
+      }
       kol_wallets: {
         Row: {
           created_at: string
@@ -6052,6 +6106,81 @@ export type Database = {
           template_text?: string
           template_type?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      proven_dev_tokens: {
+        Row: {
+          ath_timestamp: string | null
+          bonding_timestamp: string | null
+          created_at: string | null
+          dev_wallet: string | null
+          first_dex_boost_at: string | null
+          id: string
+          market_cap_at_discovery: number | null
+          market_cap_ath: number | null
+          mint_timestamp: string | null
+          name: string | null
+          snapshot_slot: string | null
+          symbol: string | null
+          tier: number
+          tier_1_at: string | null
+          tier_2_at: string | null
+          tier_3_at: string | null
+          tier_4_at: string | null
+          tier_5_at: string | null
+          tier_6_at: string | null
+          token_mint: string
+          trigger_source: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ath_timestamp?: string | null
+          bonding_timestamp?: string | null
+          created_at?: string | null
+          dev_wallet?: string | null
+          first_dex_boost_at?: string | null
+          id?: string
+          market_cap_at_discovery?: number | null
+          market_cap_ath?: number | null
+          mint_timestamp?: string | null
+          name?: string | null
+          snapshot_slot?: string | null
+          symbol?: string | null
+          tier?: number
+          tier_1_at?: string | null
+          tier_2_at?: string | null
+          tier_3_at?: string | null
+          tier_4_at?: string | null
+          tier_5_at?: string | null
+          tier_6_at?: string | null
+          token_mint: string
+          trigger_source?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ath_timestamp?: string | null
+          bonding_timestamp?: string | null
+          created_at?: string | null
+          dev_wallet?: string | null
+          first_dex_boost_at?: string | null
+          id?: string
+          market_cap_at_discovery?: number | null
+          market_cap_ath?: number | null
+          mint_timestamp?: string | null
+          name?: string | null
+          snapshot_slot?: string | null
+          symbol?: string | null
+          tier?: number
+          tier_1_at?: string | null
+          tier_2_at?: string | null
+          tier_3_at?: string | null
+          tier_4_at?: string | null
+          tier_5_at?: string | null
+          tier_6_at?: string | null
+          token_mint?: string
+          trigger_source?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
