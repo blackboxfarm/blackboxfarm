@@ -114,6 +114,15 @@ Deno.serve(async (req) => {
     const html = await response.text();
     console.log(`[kol-sync] Received ${html.length} bytes`);
 
+    // Debug: find exact escape pattern
+    const clukzIdx = html.indexOf('clukz');
+    if (clukzIdx > -1) {
+      console.log('[kol-sync] DEBUG clukz context:', JSON.stringify(html.substring(Math.max(0, clukzIdx - 120), clukzIdx + 200)));
+    }
+    const wIdx1 = html.indexOf('"wallet"');
+    const wIdx2 = html.indexOf('\\"wallet\\"');
+    console.log(`[kol-sync] "wallet" at ${wIdx1}, \\"wallet\\" at ${wIdx2}`);
+
     const kols = parseLeaderboardData(html);
     console.log(`[kol-sync] Parsed ${kols.length} KOLs, X handles: ${kols.filter(k => k.xHandle).length}`);
 
