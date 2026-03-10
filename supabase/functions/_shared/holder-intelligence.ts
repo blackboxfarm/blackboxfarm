@@ -1,9 +1,11 @@
 /**
- * Holder Intelligence — Cross-links holder wallets against reputation databases
- * and fetches historical snapshot data for delta analysis.
+ * Holder Intelligence — Cross-links holder wallets against reputation databases,
+ * fetches historical snapshots, traces dev wallet genealogy, matches KOLs,
+ * and feeds insider wallets into the reputation mesh.
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { traceParentWallets, meshGenealogyResults } from "./auto-genealogy.ts";
 
 function getSupabaseClient() {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://apxauapuusmgwbbzjgfl.supabase.co';
