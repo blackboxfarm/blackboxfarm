@@ -535,55 +535,112 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                   Reputation Mesh ({result.network.meshLinks.length} links)
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Upstream parents, KYC roots, funding chains, and associated entities
+                  Upstream parents, KYC roots, funding chains, and associated entities. Wallets link to Solscan & Pump.fun.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 max-h-72 overflow-y-auto">
+                <div className="space-y-2 max-h-96 overflow-y-auto">
                   {result.network.meshLinks.map((link: any, i: number) => {
                     const isKycLink = ['same_kyc_root', 'kyc_root', 'funded_by'].includes(link.relationship);
+                    const isSatellite = ['satellite_of', 'child_wallet'].includes(link.relationship);
+                    const isCoMod = link.relationship === 'co_mod';
+                    
+                    // Determine hierarchy role for source & linked
+                    const getWalletRole = (id: string, isSource: boolean) => {
+                      if (id === result.resolvedWallet) return '⭐ SUBJECT';
+                      if (isKycLink && !isSource) return '🔑 KYC ROOT';
+                      if (isKycLink && isSource) return '📡 SATELLITE';
+                      if (isSatellite && isSource) return '📡 SATELLITE';
+                      if (isSatellite && !isSource) return '🔑 PARENT';
+                      if (link.relationship === 'directly_funded' && !isSource) return '💰 FUNDER';
+                      if (link.relationship === 'directly_funded' && isSource) return '📡 FUNDED';
+                      return null;
+                    };
+
+                    const sourceRole = getWalletRole(link.sourceId, true);
+                    const linkedRole = getWalletRole(link.linkedId, false);
+
+                    // Direction arrow based on relationship
+                    const getDirectionArrow = () => {
+                      if (['funded_by', 'satellite_of', 'child_wallet'].includes(link.relationship)) return '← funded by';
+                      if (['directly_funded', 'funds'].includes(link.relationship)) return '→ funds';
+                      if (['same_kyc_root', 'kyc_root'].includes(link.relationship)) return '↔ same KYC';
+                      if (['co_mod', 'same_team'].includes(link.relationship)) return '↔ linked';
+                      return '→';
+                    };
+
+                    const renderWalletCell = (id: string, type: string, role: string | null) => (
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <Badge variant="outline" className="text-[10px] flex-shrink-0">{type}</Badge>
+                          {role && (
+                            <Badge className={`text-[9px] px-1 py-0 ${
+                              role.includes('KYC') || role.includes('PARENT') ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' :
+                              role.includes('SATELLITE') || role.includes('FUNDED') ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
+                              role.includes('FUNDER') ? 'bg-green-500/20 text-green-400 border-green-500/40' :
+                              role.includes('SUBJECT') ? 'bg-purple-500/20 text-purple-400 border-purple-500/40' :
+                              'bg-muted/50 text-muted-foreground'
+                            }`}>
+                              {role}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {isWalletAddress(id) ? (
+                            <>
+                              <a href={solscanLink(id)} target="_blank" rel="noopener noreferrer" className="font-mono text-blue-400 hover:text-blue-300 underline decoration-dotted text-[11px]" title={id}>
+                                {id.slice(0, 6)}...{id.slice(-4)}
+                              </a>
+                              <a href={`https://pump.fun/profile/${id}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-green-400 hover:text-green-300" title="View on Pump.fun">
+                                <span className="text-[9px]">🟢PF</span>
+                              </a>
+                              <a href={solscanLink(id)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 hover:text-primary" title="View on Solscan">
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(id)}>
+                                <Copy className="h-2.5 w-2.5" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-4 p-0 px-1 flex-shrink-0 text-[9px] text-purple-400 hover:text-purple-300" onClick={() => { setQuery(id); handleLookup(); }}>
+                                🔍
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <code className="font-mono truncate max-w-[140px] text-muted-foreground text-[11px]">{id.length > 16 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id}</code>
+                              <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(id)}>
+                                <Copy className="h-2.5 w-2.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+
                     return (
-                    <div key={i} className={`flex items-center gap-3 p-2 rounded-lg border text-xs ${isKycLink ? 'bg-amber-500/10 border-amber-500/30' : 'bg-muted/20 border-border/30'}`}>
-                      <div className="flex items-center gap-1 min-w-0 flex-1">
-                        <Badge variant="outline" className="text-[10px] flex-shrink-0">{link.sourceType}</Badge>
-                        {isWalletAddress(link.sourceId) ? (
-                          <a href={solscanLink(link.sourceId)} target="_blank" rel="noopener noreferrer" className="font-mono truncate max-w-[120px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
-                            {link.sourceId.slice(0, 6)}...{link.sourceId.slice(-4)}
-                          </a>
-                        ) : (
-                          <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.sourceId.length > 12 ? `${link.sourceId.slice(0, 6)}...${link.sourceId.slice(-4)}` : link.sourceId}</code>
-                        )}
-                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(link.sourceId)}>
-                          <Copy className="h-3 w-3" />
-                        </Button>
+                      <div key={i} className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${
+                        isKycLink ? 'bg-amber-500/10 border-amber-500/30' : 
+                        isSatellite ? 'bg-blue-500/5 border-blue-500/20' :
+                        'bg-muted/20 border-border/30'
+                      }`}>
+                        {renderWalletCell(link.sourceId, link.sourceType, sourceRole)}
+                        
+                        <div className="flex flex-col items-center flex-shrink-0 px-1">
+                          <Badge className={`text-[9px] whitespace-nowrap ${
+                            isKycLink ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 
+                            isSatellite ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
+                            'bg-purple-500/20 text-purple-400 border-purple-500/40'
+                          }`}>
+                            {getRelationshipLabel(link.relationship)}
+                          </Badge>
+                          <span className="text-[9px] text-muted-foreground mt-0.5">{getDirectionArrow()}</span>
+                        </div>
+                        
+                        {renderWalletCell(link.linkedId, link.linkedType, linkedRole)}
+                        
+                        <div className="flex-shrink-0 text-right">
+                          <span className="text-muted-foreground text-[10px]">{link.confidence}%</span>
+                        </div>
                       </div>
-                      <div className="flex-shrink-0">
-                        <Badge className={`text-[10px] ${isKycLink ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-purple-500/20 text-purple-400 border-purple-500/40'}`}>
-                          {isKycLink && '🔑 '}{getRelationshipLabel(link.relationship)}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-1 min-w-0 flex-1">
-                        <Badge variant="outline" className="text-[10px] flex-shrink-0">{link.linkedType}</Badge>
-                        {isWalletAddress(link.linkedId) ? (
-                          <a href={solscanLink(link.linkedId)} target="_blank" rel="noopener noreferrer" className="font-mono truncate max-w-[120px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
-                            {link.linkedId.slice(0, 6)}...{link.linkedId.slice(-4)}
-                          </a>
-                        ) : (
-                          <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.linkedId.length > 12 ? `${link.linkedId.slice(0, 6)}...${link.linkedId.slice(-4)}` : link.linkedId}</code>
-                        )}
-                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(link.linkedId)}>
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                        {isWalletAddress(link.linkedId) && (
-                          <a href={solscanLink(link.linkedId)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 hover:text-primary">
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex-shrink-0">
-                        <span className="text-muted-foreground">{link.confidence}%</span>
-                      </div>
-                    </div>
                     );
                   })}
                 </div>
@@ -716,13 +773,16 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">Linked Wallets (from Mesh)</span>
                   <div className="flex flex-wrap gap-2">
-                    {result.network.linkedWallets.slice(0, 5).map((wallet: string, i: number) => (
-                      <div key={i} className="flex items-center gap-1">
+                    {result.network.linkedWallets.slice(0, 10).map((wallet: string, i: number) => (
+                      <div key={i} className="flex items-center gap-1 p-1.5 rounded border border-border/40 bg-muted/20">
                         <Badge variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => { setQuery(wallet); handleLookup(); }}>
                           {wallet.slice(0, 8)}...{wallet.slice(-4)}
                         </Badge>
-                        <a href={solscanLink(wallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
+                        <a href={solscanLink(wallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary" title="Solscan">
                           <ExternalLink className="h-3 w-3" />
+                        </a>
+                        <a href={`https://pump.fun/profile/${wallet}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300" title="Pump.fun profile">
+                          <span className="text-[9px]">🟢PF</span>
                         </a>
                       </div>
                     ))}
