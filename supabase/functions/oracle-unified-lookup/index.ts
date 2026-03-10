@@ -1084,7 +1084,8 @@ Deno.serve(async (req) => {
         name: live?.name || t.token_symbol || 'Unknown',
         outcome: t.outcome || (live?.complete ? 'graduated' : 'unknown'),
         isActive: t.is_active ?? false,
-        mcap: live?.usd_market_cap || 0
+        mcap: live?.usd_market_cap || 0,
+        creatorWallet: live?.creator || t.creator_wallet || resolvedWallet
       });
     }
     
@@ -1097,12 +1098,69 @@ Deno.serve(async (req) => {
           name: lt.name || 'Unknown',
           outcome: lt.complete ? 'graduated' : (lt.usd_market_cap > 50000 ? 'success' : (lt.usd_market_cap < 100 ? 'failed' : 'unknown')),
           isActive: lt.usd_market_cap > 1000,
-          mcap: lt.usd_market_cap || 0
+          mcap: lt.usd_market_cap || 0,
+          creatorWallet: lt.creator || resolvedWallet
         });
       }
     }
     
     const tokenHistory = Array.from(dbTokenMap.values());
+    
+    // Build upstream wallet chain from mesh for display
+    // Walk from resolvedWallet → funder → funder → KYC root
+    const upstreamChain: Array<{ wallet: string; role: string; relationship: string }> = [];
+    const visited = new Set<string>();
+    let currentWallet = resolvedWallet;
+    
+    // Add the direct creator/subject first
+    if (currentWallet) {
+      upstreamChain.push({ wallet: currentWallet, role: 'creator', relationship: 'subject' });
+      visited.add(currentWallet);
+    }
+    
+    // Walk upstream through mesh
+    const fundingRelationships = ['funded_by', 'directly_funded', 'satellite_of', 'same_kyc_root', 'kyc_root'];
+    let depth = 0;
+    const maxChainDepth = 5;
+    
+    while (currentWallet && depth < maxChainDepth) {
+      const upstreamLink = meshLinks.find((link: any) => {
+        // Find links where currentWallet is the source (child) pointing to a parent
+        if (fundingRelationships.includes(link.relationship)) {
+          if (link.source_id === currentWallet && !visited.has(link.linked_id) && isBase58(link.linked_id)) {
+            return true;
+          }
+          // Also check reverse direction for some relationships
+          if (['directly_funded', 'funds'].includes(link.relationship) && 
+              link.linked_id === currentWallet && !visited.has(link.source_id) && isBase58(link.source_id)) {
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (!upstreamLink) break;
+      
+      const nextWallet = upstreamLink.source_id === currentWallet ? upstreamLink.linked_id : upstreamLink.source_id;
+      visited.add(nextWallet);
+      
+      // Determine role based on relationship and position
+      let role = 'intermediary';
+      if (['same_kyc_root', 'kyc_root'].includes(upstreamLink.relationship)) {
+        role = 'kyc_root';
+      } else if (['funded_by', 'directly_funded', 'satellite_of'].includes(upstreamLink.relationship)) {
+        role = 'funder';
+      }
+      
+      upstreamChain.push({ 
+        wallet: nextWallet, 
+        role, 
+        relationship: upstreamLink.relationship 
+      });
+      
+      currentWallet = nextWallet;
+      depth++;
+    }
 
     // Store new mesh links for relationships discovered
     let meshLinksAdded = 0;
