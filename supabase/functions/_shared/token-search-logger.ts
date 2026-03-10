@@ -376,7 +376,7 @@ export async function logCompleteSearch(
       riskFlags: result.riskFlags,
       bundledPercentage: result.insidersGraph?.bundledPercentage,
       launchpad: result.launchpadInfo?.name,
-      creatorWallet: result.creatorInfo?.creatorAddress,
+      creatorWallet: result.creatorInfo?.wallet,
     }));
   }
   
