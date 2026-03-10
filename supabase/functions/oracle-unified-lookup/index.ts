@@ -401,20 +401,34 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
         }
       }
       
-      // Extract token mints from original profile page links
-      const tokenMints = links
-        .filter((link: string) => link.includes('/coin/') || link.match(/pump\.fun\/[A-Za-z0-9]{32,44}/))
-        .map((link: string) => {
-          const match = link.match(/(?:\/coin\/|pump\.fun\/)([A-Za-z0-9]{32,44})/);
-          return match ? match[1] : null;
-        })
-        .filter(Boolean);
+      // Extract token mints ONLY from the "Created coins" section of the profile
+      // The markdown typically has sections like "Created coins (N)" followed by token links
+      // We must NOT include tokens from "Held tokens" or other sections
+      const createdSection = markdown.match(/Created coins[\s\S]*?(?=(?:Held|Followers|Following|$))/i);
+      const createdMarkdown = createdSection ? createdSection[0] : '';
       
-      const uniqueMints = [...new Set(tokenMints)] as string[];
-      console.log(`[Oracle] Profile page found ${uniqueMints.length} unique token links`);
+      // Only extract links that appear within the created coins section
+      let createdLinks: string[] = [];
+      if (createdMarkdown) {
+        createdLinks = (createdMarkdown.match(/\/coin\/([A-Za-z0-9]{32,44})/g) || [])
+          .map((match: string) => {
+            const m = match.match(/\/coin\/([A-Za-z0-9]{32,44})/);
+            return m ? m[1] : null;
+          })
+          .filter(Boolean) as string[];
+        console.log(`[Oracle] Created coins section found ${createdLinks.length} token links`);
+      }
       
-      // Only return early if we got a decent amount of tokens (>50% of expected)
-      // Otherwise continue to Helius for better data
+      // If we couldn't isolate the created section, DON'T fall back to all links
+      // That would include held/traded tokens which corrupts the data
+      if (createdLinks.length === 0 && expectedCount > 0) {
+        console.log(`[Oracle] WARNING: Could not isolate "Created coins" section from profile page. Skipping Firecrawl tokens to avoid data corruption.`);
+      }
+      
+      const uniqueMints = [...new Set(createdLinks)] as string[];
+      console.log(`[Oracle] Profile page found ${uniqueMints.length} CREATED token links (filtered)`);
+      
+      // Only return if we found created tokens
       const bestCount = Math.max(allTokens.length, uniqueMints.length);
       if (bestCount > 0 && (expectedCount === 0 || bestCount >= expectedCount * 0.5)) {
         if (allTokens.length > uniqueMints.length) {
