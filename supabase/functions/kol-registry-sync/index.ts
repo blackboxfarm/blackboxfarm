@@ -21,33 +21,49 @@ interface ParsedKOL {
 function parseLeaderboardData(html: string): ParsedKOL[] {
   const kols: ParsedKOL[] = [];
 
-  // The data is embedded as escaped JSON in the HTML (Next.js serialized props)
-  // Pattern: "wallet":"WALLET","name":"NAME","telegram":"URL_OR_NULL","twitter":"URL_OR_NULL","profit":NUMBER
-  const entryRe = /\\?"wallet\\?":\s*\\?"([A-Za-z0-9]{32,44})\\?"[^}]*?\\?"name\\?":\s*\\?"([^"\\]+)\\?"[^}]*?\\?"telegram\\?":\s*(?:\\?"([^"\\]*)\\?"|null)[^}]*?\\?"twitter\\?":\s*(?:\\?"([^"\\]*)\\?"|null)[^}]*?\\?"profit\\?":\s*(-?[\d.]+)/g;
-
-  let match;
+  // The data is in escaped JSON embedded in the HTML (Next.js serialized state)
+  // From logs, format is: \"wallet\":\"ADDR\",\"name\":\"NAME\",\"telegram\":\"URL\"|null,\"twitter\":\"URL\"|null,\"profit\":NUM
+  
+  // Strategy: find each wallet occurrence with surrounding JSON context
+  const walletRe = /\\"wallet\\":\s*\\"([A-Za-z0-9]{32,44})\\"/g;
   const seenWallets = new Set<string>();
+  let match;
   let rank = 0;
 
-  while ((match = entryRe.exec(html)) !== null) {
+  while ((match = walletRe.exec(html)) !== null) {
     const wallet = match[1];
     if (seenWallets.has(wallet)) continue;
     seenWallets.add(wallet);
     rank++;
 
-    const displayName = match[2];
-    const telegramUrl = match[3] || '';
-    const twitterUrl = match[4] || '';
-    const solProfit = parseFloat(match[5]) || 0;
+    // Get surrounding context (the JSON object this wallet belongs to)
+    const ctxStart = Math.max(0, match.index - 50);
+    const ctxEnd = Math.min(html.length, match.index + 500);
+    const ctx = html.substring(ctxStart, ctxEnd);
 
-    // Extract X handle from URL like "https://x.com/clukzSOL"
+    // Extract name
+    const nameMatch = ctx.match(/\\"name\\":\s*\\"([^\\]+)\\"/);
+    const displayName = nameMatch ? nameMatch[1] : wallet.slice(0, 8);
+
+    // Extract twitter URL
+    const twitterMatch = ctx.match(/\\"twitter\\":\s*\\"(https?:[^\\]+)\\"/);
+    const twitterUrl = twitterMatch ? twitterMatch[1].replace(/\\\//g, '/') : '';
+
+    // Extract telegram URL
+    const telegramMatch = ctx.match(/\\"telegram\\":\s*\\"(https?:[^\\]+)\\"/);
+    const telegramUrl = telegramMatch ? telegramMatch[1].replace(/\\\//g, '/') : '';
+
+    // Extract profit
+    const profitMatch = ctx.match(/\\"profit\\":\s*(-?[\d.]+)/);
+    const solProfit = profitMatch ? parseFloat(profitMatch[1]) : 0;
+
+    // Extract X handle from twitter URL
     let xHandle = '';
     if (twitterUrl) {
       const handleMatch = twitterUrl.match(/x\.com\/([A-Za-z0-9_]+)/);
       if (handleMatch) xHandle = handleMatch[1];
     }
 
-    // Avatar URL follows kolscan CDN pattern
     const avatarUrl = `https://cdn.kolscan.io/profiles/${wallet}.png`;
 
     kols.push({
