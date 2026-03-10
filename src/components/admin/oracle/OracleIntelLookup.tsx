@@ -717,9 +717,14 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                   <span className="text-xs text-muted-foreground block mb-1">Linked Wallets (from Mesh)</span>
                   <div className="flex flex-wrap gap-2">
                     {result.network.linkedWallets.slice(0, 5).map((wallet: string, i: number) => (
-                      <Badge key={i} variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => { setQuery(wallet); handleLookup(); }}>
-                        {wallet.slice(0, 8)}...{wallet.slice(-4)}
-                      </Badge>
+                      <div key={i} className="flex items-center gap-1">
+                        <Badge variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => { setQuery(wallet); handleLookup(); }}>
+                          {wallet.slice(0, 8)}...{wallet.slice(-4)}
+                        </Badge>
+                        <a href={solscanLink(wallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
                     ))}
                   </div>
                 </div>
