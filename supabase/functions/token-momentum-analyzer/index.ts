@@ -303,6 +303,7 @@ serve(async (req) => {
     const phaseResult: TokenPhaseResult = detectTokenPhase({
       pairCreatedAt: dexData.pairCreatedAt,
       liquidityUsd: dexData.liquidity,
+      dexId: dexData.dexId,
     });
 
     const ageMinutes = phaseResult.ageMinutes;

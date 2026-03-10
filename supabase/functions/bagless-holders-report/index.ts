@@ -410,7 +410,13 @@ serve(async (req) => {
     // 8-phase detection (inline to avoid import issues with shared module in edge fn)
     type HealthPhase = 'on_curve' | 'newborn' | 'early' | 'adolescent' | 'established' | 'growth' | 'mature' | 'blue_chip';
     let healthPhase: HealthPhase = 'on_curve';
-    if (vitality.pairCreatedAt && vitality.liquidityUsd > 50000) {
+    
+    // Graduated DEX venues — PumpSwap, Raydium, Orca, Meteora all mean token left bonding curve
+    const dexId = vitality.dexId || (dexResult.pairs?.[0]?.dexId) || null;
+    const graduatedDex = dexId?.toLowerCase();
+    const isGraduatedVenue = graduatedDex === 'pumpswap' || graduatedDex === 'raydium' || graduatedDex === 'orca' || graduatedDex === 'meteora';
+    
+    if (vitality.pairCreatedAt && (vitality.liquidityUsd > 50000 || isGraduatedVenue)) {
       if (pairAgeHours! < 2) healthPhase = 'newborn';
       else if (pairAgeHours! < 12) healthPhase = 'early';
       else if (pairAgeHours! < 48) healthPhase = 'adolescent';

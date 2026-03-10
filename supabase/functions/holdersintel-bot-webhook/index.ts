@@ -786,7 +786,7 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
       const dexJson = await dexRes.json();
       const pair = dexJson?.pairs?.[0];
       if (pair) {
-        const pr = detectTokenPhase({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null });
+        const pr = detectTokenPhase({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null, dexId: pair.dexId || null });
         oraclePhase = pr.phase;
       }
     }

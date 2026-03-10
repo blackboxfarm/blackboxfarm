@@ -450,7 +450,8 @@ serve(async (req) => {
     const priceChange24h = vitality?.priceChange?.h24 ?? null;
 
     // Detect phase using shared utility (must happen before socials check)
-    const phaseResult = detectTokenPhase({ pairCreatedAt, liquidityUsd });
+    const dexId = vitality?.dexId ?? reportData.dexId ?? null;
+    const phaseResult = detectTokenPhase({ pairCreatedAt, liquidityUsd, dexId });
     const phase: TokenPhase = (healthPhase as TokenPhase) || phaseResult.phase;
 
     // Check if socials exist and verify X community/twitter is still live
