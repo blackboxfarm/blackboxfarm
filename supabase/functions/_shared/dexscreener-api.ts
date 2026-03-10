@@ -21,6 +21,7 @@ export interface VitalityMetrics {
   txns: { m5: { buys: number; sells: number }; h1: { buys: number; sells: number }; h6: { buys: number; sells: number }; h24: { buys: number; sells: number } };
   pairCreatedAt: number | null; // unix ms
   liquidityUsd: number;
+  dexId: string | null; // e.g. 'pumpswap', 'raydium', 'orca'
 }
 
 export interface DexScreenerResult {

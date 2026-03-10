@@ -48,11 +48,17 @@ export function detectTokenPhase(params: {
   pairCreatedAt: number | null; // unix ms timestamp
   liquidityUsd: number | null;
   volumeH24?: number | null; // optional, used for blue_chip detection
+  dexId?: string | null; // optional, used to detect graduated venues like PumpSwap
 }): TokenPhaseResult {
-  const { pairCreatedAt, liquidityUsd, volumeH24 } = params;
+  const { pairCreatedAt, liquidityUsd, volumeH24, dexId } = params;
+
+  // Graduated DEX venues — if token trades on these, it's NOT on the bonding curve
+  const graduatedDex = dexId?.toLowerCase();
+  const isGraduatedVenue = graduatedDex === 'pumpswap' || graduatedDex === 'raydium' || graduatedDex === 'orca' || graduatedDex === 'meteora';
 
   // No pair or very low liquidity → still on bonding curve
-  if (!pairCreatedAt || (liquidityUsd !== null && liquidityUsd < 50_000)) {
+  // UNLESS it's on a graduated DEX venue (PumpSwap, Raydium, etc.)
+  if (!pairCreatedAt || (!isGraduatedVenue && liquidityUsd !== null && liquidityUsd < 50_000)) {
     return {
       phase: 'on_curve',
       legacyPhase: 'on_curve',
