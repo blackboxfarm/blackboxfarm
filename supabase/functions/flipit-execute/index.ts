@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { 
   resolvePrice, 
   fetchSolPrice, 
-  type PriceResult 
+  type PriceResult,
+  type VenueHint
 } from "../_shared/price-resolver.ts";
 import { parseBuyFromSolscan } from "../_shared/solscan-api.ts";
 import { validateBuyQuote, getTradeGuardConfig } from "../_shared/trade-guard.ts";
