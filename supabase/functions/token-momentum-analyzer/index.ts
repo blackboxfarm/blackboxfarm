@@ -135,7 +135,12 @@ async function fetchDexScreenerMetrics(tokenMint: string) {
       return null;
     }
     const data = await response.json();
-    const pair = data.pairs?.[0];
+    // Pick best Solana pair by liquidity, not just pairs[0]
+    const allPairs = data.pairs || [];
+    const solanaPairs = allPairs.filter((p: any) => p.chainId === 'solana');
+    const pair = solanaPairs.length > 0
+      ? solanaPairs.reduce((best: any, p: any) => (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best, solanaPairs[0])
+      : allPairs[0];
     if (!pair) {
       console.log(`[momentum] No pair found for ${tokenMint}`);
       return null;
