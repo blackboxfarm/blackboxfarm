@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,85 +12,89 @@ interface ParsedKOL {
   displayName: string;
   walletAddress: string;
   avatarUrl: string;
+  xHandle: string;
+  xUrl: string;
   rank: number;
   solProfit: number;
   usdProfit: number;
-  tradesWon: number;
-  tradesTotal: number;
 }
 
 function parseLeaderboardHTML(html: string): ParsedKOL[] {
   const kols: ParsedKOL[] = [];
-  
-  // Match account links with wallet addresses and display names
-  // Pattern: <a ... href="https://kolscan.io/account/WALLET_ADDRESS?timeframe=1">...<h1>NAME</h1>...</a>
-  // or from the rendered HTML structure
-  
-  // Extract all account entries from HTML
-  // The HTML has patterns like: href="/account/WALLET_ADDRESS?timeframe=1" or href="https://kolscan.io/account/WALLET_ADDRESS..."
-  const accountRegex = /href="(?:https:\/\/kolscan\.io)?\/account\/([A-Za-z0-9]{32,44})\?timeframe=\d"/g;
-  const walletAddresses: string[] = [];
-  let match;
-  
-  while ((match = accountRegex.exec(html)) !== null) {
-    const addr = match[1];
-    if (!walletAddresses.includes(addr)) {
-      walletAddresses.push(addr);
+
+  // Strategy: regex-based extraction from the raw HTML string
+  // Each KOL entry has:
+  //  - account link: href="/account/WALLET?timeframe=..."
+  //  - display name in <h1> tag
+  //  - X link: href="https://x.com/HANDLE" or href="https://twitter.com/HANDLE"
+  //  - avatar: src="https://cdn.kolscan.io/profiles/WALLET.png"
+  //  - profit: "+XXX.XX Sol" and "($XXX.X)"
+
+  // Find all account wallet links first to identify each KOL block
+  const allWallets: { wallet: string; index: number }[] = [];
+  const walletRe = /href="(?:https:\/\/kolscan\.io)?\/account\/([A-Za-z0-9]{32,44})\?/g;
+  let m;
+  const seenWallets = new Set<string>();
+  while ((m = walletRe.exec(html)) !== null) {
+    if (!seenWallets.has(m[1])) {
+      seenWallets.add(m[1]);
+      allWallets.push({ wallet: m[1], index: m.index });
     }
   }
-  
-  console.log(`[kol-sync] Found ${walletAddresses.length} unique wallet addresses in HTML`);
-  
-  // For each wallet, extract associated data from HTML context
-  for (let i = 0; i < walletAddresses.length && i < 100; i++) {
-    const wallet = walletAddresses[i];
-    
-    // Find display name - pattern: bold text near the account link
-    // HTML pattern: <h1 class="...">NAME</h1> near the account link
-    const nameRegex = new RegExp(
-      `href="(?:https:\\/\\/kolscan\\.io)?\\/account\\/${wallet}[^"]*"[^>]*>.*?<h1[^>]*>([^<]+)<\\/h1>`,
-      's'
-    );
-    const nameMatch = nameRegex.exec(html);
-    const displayName = nameMatch ? nameMatch[1].trim() : wallet.slice(0, 8);
-    
-    // Find avatar URL
-    const avatarRegex = new RegExp(
-      `src="(https://cdn\\.kolscan\\.io/profiles/${wallet}\\.png)"`,
-    );
-    const avatarMatch = avatarRegex.exec(html);
+
+  console.log(`[kol-sync] Found ${allWallets.length} unique wallets in HTML`);
+
+  for (let i = 0; i < allWallets.length && i < 100; i++) {
+    const { wallet, index } = allWallets[i];
+    const nextIndex = i + 1 < allWallets.length ? allWallets[i + 1].index : index + 3000;
+    const block = html.substring(Math.max(0, index - 500), Math.min(html.length, nextIndex + 200));
+
+    // Extract display name from <h1> tags within the account link area
+    const nameRe = /<h1[^>]*>([^<]+)<\/h1>/g;
+    let nameMatch;
+    let displayName = wallet.slice(0, 8);
+    // Get the first h1 that's not a number or generic text
+    while ((nameMatch = nameRe.exec(block)) !== null) {
+      const candidate = nameMatch[1].trim();
+      if (candidate && !/^\d+$/.test(candidate) && candidate !== 'Pump app' && candidate !== 'App' && candidate.length > 0) {
+        displayName = candidate;
+        break;
+      }
+    }
+
+    // Extract X/Twitter handle from href
+    const xRe = /href="https?:\/\/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)"/;
+    const xMatch = xRe.exec(block);
+    const xHandle = xMatch ? xMatch[1] : '';
+    const xUrl = xMatch ? `https://x.com/${xMatch[1]}` : '';
+
+    // Extract avatar
+    const avatarRe = new RegExp(`src="(https://cdn\\.kolscan\\.io/profiles/${wallet}\\.[^"]+)"`);
+    const avatarMatch = avatarRe.exec(block);
     const avatarUrl = avatarMatch ? avatarMatch[1] : '';
-    
-    // Find SOL profit - pattern: +XX.XX Sol or -XX.XX Sol near this entry
-    // We'll use position-based extraction from the HTML around this wallet
-    const walletIdx = html.indexOf(wallet);
-    if (walletIdx === -1) continue;
-    
-    // Look ahead ~2000 chars for profit data
-    const contextAfter = html.substring(walletIdx, walletIdx + 2000);
-    
-    // Match SOL profit pattern like "+188.87 Sol" or "-5.23 Sol"  
-    const solRegex = /([+-]?\d+\.?\d*)\s*Sol/i;
-    const solMatch = solRegex.exec(contextAfter);
+
+    // Extract SOL profit
+    const solRe = /([+-]?\d+\.?\d*)\s*Sol/i;
+    const solMatch = solRe.exec(block);
     const solProfit = solMatch ? parseFloat(solMatch[1]) : 0;
-    
-    // Match USD profit pattern like "($16,357.9)" or "(-$500.0)"
-    const usdRegex = /\(\$?([\d,]+\.?\d*)\)/;
-    const usdMatch = usdRegex.exec(contextAfter);
+
+    // Extract USD profit
+    const usdRe = /\(\$?([\d,]+\.?\d*)\)/;
+    const usdMatch = usdRe.exec(block);
     const usdProfit = usdMatch ? parseFloat(usdMatch[1].replace(/,/g, '')) : 0;
-    
+
     kols.push({
       displayName,
       walletAddress: wallet,
       avatarUrl,
+      xHandle,
+      xUrl,
       rank: i + 1,
       solProfit,
       usdProfit,
-      tradesWon: 0,
-      tradesTotal: 0,
     });
   }
-  
+
   return kols;
 }
 
@@ -105,40 +110,53 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log('[kol-sync] Fetching kolscan.io leaderboard...');
+    // Try weekly timeframe for more KOLs (100+)
+    const timeframes = ['7', '1']; // weekly first, then daily
+    let allKols: ParsedKOL[] = [];
 
-    const response = await fetch(KOLSCAN_URL, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
-    });
+    for (const tf of timeframes) {
+      console.log(`[kol-sync] Fetching kolscan.io leaderboard (timeframe=${tf})...`);
 
-    if (!response.ok) {
-      console.error('[kol-sync] Kolscan fetch failed:', response.status);
-      return new Response(
-        JSON.stringify({ success: false, error: `Kolscan returned ${response.status}` }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      const response = await fetch(`${KOLSCAN_URL}?timeframe=${tf}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+        },
+      });
+
+      if (!response.ok) {
+        console.error(`[kol-sync] Kolscan fetch failed (tf=${tf}):`, response.status);
+        continue;
+      }
+
+      const html = await response.text();
+      console.log(`[kol-sync] Received ${html.length} bytes of HTML (tf=${tf})`);
+
+      // Debug: check if x.com links exist in the HTML
+      const xComCount = (html.match(/x\.com\//g) || []).length;
+      const twitterCount = (html.match(/twitter\.com\//g) || []).length;
+      console.log(`[kol-sync] Found ${xComCount} x.com links and ${twitterCount} twitter.com links in HTML`);
+
+      const kols = parseLeaderboardHTML(html);
+      console.log(`[kol-sync] Parsed ${kols.length} KOLs (tf=${tf}), X handles found: ${kols.filter(k => k.xHandle).length}`);
+
+      // Merge: add KOLs we haven't seen yet
+      for (const kol of kols) {
+        if (!allKols.find(k => k.walletAddress === kol.walletAddress)) {
+          allKols.push(kol);
+        }
+      }
+
+      if (allKols.length >= 100) break;
     }
 
-    const html = await response.text();
-    console.log(`[kol-sync] Received ${html.length} bytes of HTML`);
-
-    const kols = parseLeaderboardHTML(html);
-    console.log(`[kol-sync] Parsed ${kols.length} KOLs from leaderboard`);
-
-    if (kols.length === 0) {
-      // Log a snippet of HTML for debugging
-      console.log('[kol-sync] HTML snippet (first 2000 chars):', html.substring(0, 2000));
+    if (allKols.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'No KOLs parsed from HTML', 
+        JSON.stringify({
+          success: true,
+          message: 'No KOLs parsed from HTML',
           synced: 0,
-          htmlLength: html.length,
-          debugSnippet: html.substring(0, 500),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -147,22 +165,28 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
     let upserted = 0;
 
-    // Batch upsert KOLs - use display name as x_handle since kolscan doesn't expose X handles
-    const upsertRows = kols.map((kol) => ({
-      x_handle: kol.displayName.toLowerCase().replace(/[^a-z0-9_]/g, ''),
-      x_url: `https://kolscan.io/account/${kol.walletAddress}`,
-      display_name: kol.displayName,
-      avatar_url: kol.avatarUrl || null,
-      followers_count: 0,
-      rank: kol.rank,
-      score: kol.solProfit,
-      win_rate: kol.tradesTotal > 0 ? (kol.tradesWon / kol.tradesTotal) * 100 : null,
-      avg_multiplier: null,
-      categories: ['kolscan_leaderboard'],
-      wallet_addresses: [kol.walletAddress],
-      last_synced_at: now,
-      updated_at: now,
-    }));
+    // Use x_handle if available, otherwise use display name
+    const upsertRows = allKols.map((kol) => {
+      const handle = kol.xHandle
+        ? kol.xHandle.toLowerCase()
+        : kol.displayName.toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+      return {
+        x_handle: handle,
+        x_url: kol.xUrl || `https://kolscan.io/account/${kol.walletAddress}`,
+        display_name: kol.displayName,
+        avatar_url: kol.avatarUrl || null,
+        followers_count: 0,
+        rank: kol.rank,
+        score: kol.solProfit,
+        win_rate: null,
+        avg_multiplier: null,
+        categories: ['kolscan_leaderboard'],
+        wallet_addresses: [kol.walletAddress],
+        last_synced_at: now,
+        updated_at: now,
+      };
+    });
 
     // Upsert in batches of 50
     for (let i = 0; i < upsertRows.length; i += 50) {
@@ -181,10 +205,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Also sync to kol_wallets table for holder matching
-    const walletInserts = kols.map((kol) => ({
+    // Sync to kol_wallets for holder matching
+    const walletInserts = allKols.map((kol) => ({
       wallet_address: kol.walletAddress,
-      x_handle: kol.displayName.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+      x_handle: kol.xHandle
+        ? kol.xHandle.toLowerCase()
+        : kol.displayName.toLowerCase().replace(/[^a-z0-9_]/g, ''),
       display_name: kol.displayName,
     }));
 
@@ -197,7 +223,7 @@ Deno.serve(async (req) => {
         });
 
       if (walletError) {
-        console.warn('[kol-sync] kol_wallets sync skipped:', walletError.message);
+        console.warn('[kol-sync] kol_wallets sync error:', walletError.message);
       } else {
         console.log(`[kol-sync] Synced ${walletInserts.length} KOL wallet addresses`);
       }
@@ -209,11 +235,18 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        kolsParsed: kols.length,
+        kolsParsed: allKols.length,
         synced: upserted,
         walletsSynced: walletInserts.length,
+        xHandlesFound: allKols.filter(k => k.xHandle).length,
         executionTimeMs: elapsed,
-        sampleKols: kols.slice(0, 3).map(k => ({ name: k.displayName, wallet: k.walletAddress, rank: k.rank })),
+        sampleKols: allKols.slice(0, 5).map(k => ({
+          name: k.displayName,
+          xHandle: k.xHandle,
+          wallet: k.walletAddress.slice(0, 8) + '...',
+          rank: k.rank,
+          sol: k.solProfit,
+        })),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
