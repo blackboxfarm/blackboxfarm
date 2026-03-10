@@ -426,26 +426,10 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   const top10Pct = data.distributionStats?.top10Percentage ?? "?";
   const tokenSymbol = data.symbol || data.tokenSymbol || null;
   const tokenName = data.name || data.tokenName || null;
+  const mcap = data.marketCap || null;
 
-  // Fetch DexScreener for MCap + fallback metadata
-  let mcap: number | null = null;
-  let dexSymbol: string | null = null;
-  let dexName: string | null = null;
-  try {
-    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
-    if (dexRes.ok) {
-      const dexJson = await dexRes.json();
-      const pair = dexJson?.pairs?.[0];
-      if (pair) {
-        mcap = pair.marketCap || pair.fdv || null;
-        dexSymbol = pair.baseToken?.symbol || null;
-        dexName = pair.baseToken?.name || null;
-      }
-    }
-  } catch (_) {}
-
-  const symbol = tokenSymbol || dexSymbol || null;
-  const name = tokenName || dexName || null;
+  const symbol = tokenSymbol || null;
+  const name = tokenName || null;
   const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
   const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
 
