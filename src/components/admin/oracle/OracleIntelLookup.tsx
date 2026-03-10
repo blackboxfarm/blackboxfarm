@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useOracleLookup } from "@/hooks/useOracleLookup";
-import { Search, AlertTriangle, CheckCircle, AlertCircle, Shield, Users, Coins, ExternalLink, Copy, Zap, Scan, Eye } from "lucide-react";
+import { Search, AlertTriangle, CheckCircle, AlertCircle, Shield, Users, Coins, ExternalLink, Copy, Zap, Scan, Eye, ArrowDown, ArrowUp, Minus, Link2, GitBranch } from "lucide-react";
 import { toast } from "sonner";
 
 interface OracleIntelLookupProps {
@@ -74,6 +74,30 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
         return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50">📊 Mixed Record</Badge>;
       default:
         return <Badge variant="outline">❓ Unknown</Badge>;
+    }
+  };
+
+  const getOutcomeBadge = (outcome: string) => {
+    switch (outcome) {
+      case 'graduated': return <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-[10px]">Graduated</Badge>;
+      case 'success': return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50 text-[10px]">Success</Badge>;
+      case 'failed': return <Badge variant="destructive" className="text-[10px]">Failed</Badge>;
+      case 'rug_pull': return <Badge variant="destructive" className="text-[10px]">🚨 Rug Pull</Badge>;
+      default: return <Badge variant="outline" className="text-[10px]">{outcome}</Badge>;
+    }
+  };
+
+  const getRelationshipLabel = (rel: string) => {
+    switch (rel) {
+      case 'funded_by': return '💰 Funded By';
+      case 'same_kyc_root': return '🔗 Same KYC Root';
+      case 'directly_funded': return '💸 Directly Funded';
+      case 'satellite_of': return '🛰️ Satellite Of';
+      case 'created': return '🪙 Created';
+      case 'co_mod': return '👥 Co-Mod';
+      case 'linked': return '🔗 Linked';
+      case 'same_team': return '👥 Same Team';
+      default: return rel.replace(/_/g, ' ');
     }
   };
 
@@ -316,6 +340,74 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                 </div>
               </div>
 
+              {/* Score Breakdown */}
+              {result.scoreBreakdown && (
+                <div className="mt-4 p-4 rounded-lg bg-muted/30 border border-border/50">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Coins className="h-4 w-4" />
+                    Score Breakdown — Why {result.score}/100?
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded bg-background/50">
+                      <span className="text-muted-foreground">Base Score</span>
+                      <span className="font-mono font-bold">{result.scoreBreakdown.base}</span>
+                    </div>
+                    {result.scoreBreakdown.rugPullPenalty !== 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-red-500/10">
+                        <span className="text-red-400 flex items-center gap-1"><ArrowDown className="h-3 w-3" />Rug Pulls</span>
+                        <span className="font-mono font-bold text-red-400">{result.scoreBreakdown.rugPullPenalty}</span>
+                      </div>
+                    )}
+                    {result.scoreBreakdown.slowDrainPenalty !== 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-red-500/10">
+                        <span className="text-red-400 flex items-center gap-1"><ArrowDown className="h-3 w-3" />Slow Drains</span>
+                        <span className="font-mono font-bold text-red-400">{result.scoreBreakdown.slowDrainPenalty}</span>
+                      </div>
+                    )}
+                    {result.scoreBreakdown.failedTokenPenalty !== 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-orange-500/10">
+                        <span className="text-orange-400 flex items-center gap-1"><ArrowDown className="h-3 w-3" />Failed Tokens</span>
+                        <span className="font-mono font-bold text-orange-400">{result.scoreBreakdown.failedTokenPenalty}</span>
+                      </div>
+                    )}
+                    {result.scoreBreakdown.lowLifespanPenalty !== 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-orange-500/10">
+                        <span className="text-orange-400 flex items-center gap-1"><ArrowDown className="h-3 w-3" />Low Lifespan</span>
+                        <span className="font-mono font-bold text-orange-400">{result.scoreBreakdown.lowLifespanPenalty}</span>
+                      </div>
+                    )}
+                    {result.scoreBreakdown.blacklistPenalty !== 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-red-500/10">
+                        <span className="text-red-400 flex items-center gap-1"><ArrowDown className="h-3 w-3" />Blacklisted</span>
+                        <span className="font-mono font-bold text-red-400">{result.scoreBreakdown.blacklistPenalty}</span>
+                      </div>
+                    )}
+                    {result.scoreBreakdown.successBonus > 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-green-500/10">
+                        <span className="text-green-400 flex items-center gap-1"><ArrowUp className="h-3 w-3" />Successes</span>
+                        <span className="font-mono font-bold text-green-400">+{result.scoreBreakdown.successBonus}</span>
+                      </div>
+                    )}
+                    {result.scoreBreakdown.whitelistBonus > 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-green-500/10">
+                        <span className="text-green-400 flex items-center gap-1"><ArrowUp className="h-3 w-3" />Whitelisted</span>
+                        <span className="font-mono font-bold text-green-400">+{result.scoreBreakdown.whitelistBonus}</span>
+                      </div>
+                    )}
+                    {result.scoreBreakdown.consistencyBonus > 0 && (
+                      <div className="flex items-center justify-between p-2 rounded bg-green-500/10">
+                        <span className="text-green-400 flex items-center gap-1"><ArrowUp className="h-3 w-3" />Consistency</span>
+                        <span className="font-mono font-bold text-green-400">+{result.scoreBreakdown.consistencyBonus}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between p-2 rounded bg-background/80 border col-span-full md:col-span-1">
+                      <span className="font-semibold">= Final Score</span>
+                      <span className={`font-mono font-bold text-lg ${getScoreColor(result.scoreBreakdown.final)}`}>{result.scoreBreakdown.final}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Live Analysis Extra Info */}
               {result.liveAnalysis && (
                 <div className="mt-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
@@ -385,6 +477,105 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Token History */}
+          {result.tokenHistory && result.tokenHistory.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Coins className="h-4 w-4" />
+                  Token History ({result.tokenHistory.length} tokens)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {result.tokenHistory.map((token: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-semibold text-sm">{token.symbol}</span>
+                        <code className="text-muted-foreground font-mono truncate max-w-[180px]">{token.mint}</code>
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(token.mint)}>
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                        <a 
+                          href={`https://pump.fun/coin/${token.mint}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-primary flex-shrink-0"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {getOutcomeBadge(token.outcome)}
+                        {token.isActive && <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-[10px]">Active</Badge>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Mesh Relationships */}
+          {result.network?.meshLinks && result.network.meshLinks.length > 0 && (
+            <Card className="border-purple-500/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <GitBranch className="h-4 w-4 text-purple-400" />
+                  Reputation Mesh ({result.network.meshLinks.length} links)
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Upstream parents, KYC roots, funding chains, and associated entities
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {result.network.meshLinks.map((link: any, i: number) => (
+                    <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-muted/20 border border-border/30 text-xs">
+                      <div className="flex items-center gap-1 min-w-0 flex-1">
+                        <Badge variant="outline" className="text-[10px] flex-shrink-0">{link.sourceType}</Badge>
+                        <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.sourceId.length > 12 ? `${link.sourceId.slice(0, 6)}...${link.sourceId.slice(-4)}` : link.sourceId}</code>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/40 text-[10px]">
+                          {getRelationshipLabel(link.relationship)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-1 min-w-0 flex-1">
+                        <Badge variant="outline" className="text-[10px] flex-shrink-0">{link.linkedType}</Badge>
+                        <code className="font-mono truncate max-w-[120px] text-muted-foreground">{link.linkedId.length > 12 ? `${link.linkedId.slice(0, 6)}...${link.linkedId.slice(-4)}` : link.linkedId}</code>
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0" onClick={() => copyToClipboard(link.linkedId)}>
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className="text-muted-foreground">{link.confidence}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No Mesh Links Warning */}
+          {(!result.network?.meshLinks || result.network.meshLinks.length === 0) && (
+            <Card className="border-dashed border-yellow-500/30">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-3 text-yellow-500/80">
+                  <GitBranch className="h-5 w-5" />
+                  <div>
+                    <p className="text-sm font-medium">No Mesh Links Found</p>
+                    <p className="text-xs text-muted-foreground">
+                      This wallet has no upstream parent, KYC root, or funding chain connections in the reputation mesh. 
+                      Run a <strong>Deep Scan</strong> to spider the funding network and discover hidden connections.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Status Cards */}
           <div className="grid md:grid-cols-2 gap-4">
@@ -457,7 +648,7 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">Linked X Accounts</span>
                   <div className="flex flex-wrap gap-2">
-                    {result.network.linkedXAccounts.map((handle, i) => (
+                    {result.network.linkedXAccounts.map((handle: string, i: number) => (
                       <Badge key={i} variant="outline">@{handle}</Badge>
                     ))}
                   </div>
@@ -468,7 +659,7 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">Shared Mods</span>
                   <div className="flex flex-wrap gap-2">
-                    {result.network.sharedMods.slice(0, 10).map((mod, i) => (
+                    {result.network.sharedMods.slice(0, 10).map((mod: string, i: number) => (
                       <Badge key={i} variant="outline" className="text-xs">@{mod}</Badge>
                     ))}
                     {result.network.sharedMods.length > 10 && (
@@ -482,7 +673,7 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">Related Tokens</span>
                   <div className="flex flex-wrap gap-2">
-                    {result.network.relatedTokens.slice(0, 10).map((token, i) => (
+                    {result.network.relatedTokens.slice(0, 10).map((token: string, i: number) => (
                       <Badge key={i} variant="outline" className="font-mono text-xs">{token}</Badge>
                     ))}
                   </div>
@@ -491,10 +682,10 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
 
               {result.network.linkedWallets.length > 0 && (
                 <div>
-                  <span className="text-xs text-muted-foreground block mb-1">Linked Wallets</span>
+                  <span className="text-xs text-muted-foreground block mb-1">Linked Wallets (from Mesh)</span>
                   <div className="flex flex-wrap gap-2">
-                    {result.network.linkedWallets.slice(0, 5).map((wallet, i) => (
-                      <Badge key={i} variant="outline" className="font-mono text-xs">
+                    {result.network.linkedWallets.slice(0, 5).map((wallet: string, i: number) => (
+                      <Badge key={i} variant="outline" className="font-mono text-xs cursor-pointer hover:bg-muted" onClick={() => { setQuery(wallet); handleLookup(); }}>
                         {wallet.slice(0, 8)}...{wallet.slice(-4)}
                       </Badge>
                     ))}
@@ -505,6 +696,19 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
               {result.meshLinksAdded > 0 && (
                 <div className="text-xs text-muted-foreground pt-2 border-t">
                   +{result.meshLinksAdded} new mesh links discovered
+                </div>
+              )}
+
+              {/* Show if network is empty */}
+              {!result.network.devTeam && 
+               result.network.linkedXAccounts.length === 0 && 
+               result.network.sharedMods.length === 0 && 
+               result.network.relatedTokens.length === 0 && 
+               result.network.linkedWallets.length === 0 && (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No network associations found</p>
+                  <p className="text-xs">Run a Deep Scan to discover connections</p>
                 </div>
               )}
             </CardContent>
