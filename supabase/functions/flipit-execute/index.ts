@@ -541,6 +541,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
+
+    // Pre-warm handler: keep isolate alive without side effects
+    if (body.action === 'warmup') {
+      return ok({ warm: true, ts: Date.now() });
+    }
+
     const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
 
     // Default slippage 5% (500 bps), configurable
