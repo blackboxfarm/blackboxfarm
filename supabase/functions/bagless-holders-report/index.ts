@@ -645,12 +645,18 @@ serve(async (req) => {
     const top20Addresses = nonLpHolders.slice(0, 20).map(h => h.owner);
     const allHolderAddresses = nonLpHolders.slice(0, 50).map(h => h.owner);
     
-    const [flaggedHolders, historicalDelta, socialWarnings, kolMatches, devGenealogy] = await Promise.all([
+    // Determine token creation time for fresh wallet detection
+    const tokenCreatedAt = creatorInfo.createdTimestamp 
+      ? new Date(creatorInfo.createdTimestamp * 1000).toISOString() 
+      : vitality?.pairCreatedAt || null;
+    
+    const [flaggedHolders, historicalDelta, socialWarnings, kolMatches, devGenealogy, freshWallets] = await Promise.all([
       crossLinkHolderReputation(top20Addresses),
       fetchHistoricalDelta(tokenMint),
       detectSocialChanges(tokenMint, socials),
       matchKOLWallets(allHolderAddresses),
       traceDevGenealogy(creatorInfo.wallet),
+      detectFreshWallets(top20Addresses, tokenCreatedAt),
     ]);
     
     // Add social removal warnings to risk flags
@@ -670,6 +676,26 @@ serve(async (req) => {
       riskFlags.push(`⚠️ ${flaggedHolders.length} flagged wallet(s) in top 20: ${flagSummary.join(' | ')}`);
     }
     
+    // Add fresh wallet warnings to risk flags
+    if (freshWallets) {
+      if (freshWallets.clusterDetected) {
+        riskFlags.push(`🤖 SYBIL ALERT: ${freshWallets.freshWalletCount}/${freshWallets.totalChecked} top holders have fresh wallets created within ${freshWallets.clusterWindowHours}h window`);
+        healthScore = Math.max(0, healthScore - 15);
+        vitalityPenalties.push(`Fresh wallet cluster: ${freshWallets.freshPercentage}% of top 20 holders created around same time`);
+      } else if (freshWallets.freshPercentage >= 40) {
+        riskFlags.push(`⚠️ ${freshWallets.freshPercentage}% of top 20 holders have recently-created wallets`);
+        healthScore = Math.max(0, healthScore - 8);
+        vitalityPenalties.push(`High fresh wallet ratio: ${freshWallets.freshPercentage}%`);
+      }
+    }
+    
+    // Recompute grade after fresh wallet penalties
+    if (healthScore >= 90) healthGrade = 'A';
+    else if (healthScore >= 80) healthGrade = 'B';
+    else if (healthScore >= 65) healthGrade = 'C';
+    else if (healthScore >= 50) healthGrade = 'D';
+    else healthGrade = 'F';
+    
     // Compute historical deltas if we have prior data
     let hasHistoricalData = false;
     if (historicalDelta) {
@@ -688,6 +714,14 @@ serve(async (req) => {
         insidersResult.bundledWallets,
         insidersResult.bundledPercentage,
         insidersResult.clusters
+      ).catch(() => {});
+    }
+    
+    // Incremental genealogy tree expansion (fire and forget)
+    if (devGenealogy?.alreadyKnown && devGenealogy.parentWallets.length > 0) {
+      expandGenealogyTree(
+        devGenealogy.creatorWallet,
+        devGenealogy.parentWallets.map(p => p.wallet),
       ).catch(() => {});
     }
 
