@@ -1,0 +1,1 @@
+UPDATE holders_intel_post_queue SET status = 'expired', error_message = 'Queue purge - stale data cleanup' WHERE status = 'pending'
