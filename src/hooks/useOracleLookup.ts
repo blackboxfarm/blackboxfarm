@@ -56,6 +56,11 @@ interface OracleLookupResult {
     outcome: string;
     isActive: boolean;
     creatorWallet?: string;
+    upstreamChain?: Array<{
+      wallet: string;
+      role: string;
+      relationship: string;
+    }>;
   }>;
   upstreamChain?: Array<{
     wallet: string;
