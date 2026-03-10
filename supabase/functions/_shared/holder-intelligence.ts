@@ -233,6 +233,7 @@ export async function detectSocialChanges(
     return warnings;
   } catch (e) {
     return [];
+  }
 }
 
 // ============================================
