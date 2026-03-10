@@ -457,7 +457,7 @@ serve(async (req) => {
     // Check if socials exist and verify X community/twitter is still live
     const socials = reportData.socials || {};
     let socialsGone = false;
-    if (phase === 'on_curve' || phase === 'fresh') {
+    if (phase === 'on_curve' || phase === 'newborn' || phase === 'early' || phase === 'adolescent') {
       const twitterUrl = socials.twitter || null;
       if (twitterUrl) {
         try {
