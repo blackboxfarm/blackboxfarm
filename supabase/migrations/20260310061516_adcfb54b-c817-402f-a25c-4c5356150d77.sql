@@ -1,0 +1,1 @@
+DELETE FROM developer_tokens WHERE creator_wallet = 'CmH2dnbcgn5sjLhXSKyaHxkMiSeDqJQg877toU5bs1u7' AND token_mint != 'HVnymhPHpCHLDbeDYSaEECXnvgaQvivzDUvZQhALay36';
