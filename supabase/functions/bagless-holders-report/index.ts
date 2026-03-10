@@ -17,6 +17,8 @@ import {
   matchKOLWallets,
   traceDevGenealogy,
   feedInsiderWallets,
+  detectFreshWallets,
+  expandGenealogyTree,
 } from "../_shared/holder-intelligence.ts"
 
 const corsHeaders = {
