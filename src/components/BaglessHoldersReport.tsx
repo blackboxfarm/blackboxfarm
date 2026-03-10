@@ -1283,6 +1283,83 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         </Card>
       )}
 
+      {/* Dev Wallet Genealogy — Funding Chain */}
+      {report?.devGenealogy && report.devGenealogy.parentWallets.length > 0 && (
+        <Card className="mb-4 md:mb-6 border-2 border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2 pt-3 px-3 md:px-6">
+            <CardTitle className="text-sm md:text-base flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              Dev Wallet Funding Chain
+              {report.devGenealogy.alreadyKnown && (
+                <Badge variant="outline" className="text-[10px]">Cached</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+            <div className="space-y-2">
+              {/* Creator wallet */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="px-1.5 py-0.5 bg-primary/20 text-primary rounded text-[10px] font-bold">MINT</span>
+                <a
+                  href={`https://solscan.io/account/${report.devGenealogy.creatorWallet}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-primary hover:underline"
+                >
+                  {report.devGenealogy.creatorWallet.slice(0, 8)}...{report.devGenealogy.creatorWallet.slice(-6)}
+                </a>
+              </div>
+              
+              {/* Funding chain */}
+              {report.devGenealogy.parentWallets.map((parent, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs ml-4">
+                  <span className="text-muted-foreground">↑</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    parent.label === 'KYC_ROOT' 
+                      ? 'bg-destructive/20 text-destructive' 
+                      : parent.label === 'CEX' 
+                        ? 'bg-accent text-accent-foreground'
+                        : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {parent.cexName || parent.label || 'FUNDER'}
+                  </span>
+                  <a
+                    href={`https://solscan.io/account/${parent.wallet}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-primary hover:underline"
+                  >
+                    {parent.wallet.slice(0, 8)}...{parent.wallet.slice(-6)}
+                  </a>
+                  {parent.amountSol > 0 && (
+                    <span className="text-muted-foreground">({parent.amountSol.toFixed(2)} SOL)</span>
+                  )}
+                </div>
+              ))}
+              
+              {/* X accounts discovered */}
+              {report.devGenealogy.xAccounts.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-border/50">
+                  <p className="text-[10px] text-muted-foreground mb-1">Linked X Accounts:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {report.devGenealogy.xAccounts.map((x, idx) => (
+                      <a
+                        key={idx}
+                        href={x.startsWith('http') ? x : `https://x.com/${x}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        @{x.replace(/^https?:\/\/(x|twitter)\.com\//, '')}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {report && (
         <>
