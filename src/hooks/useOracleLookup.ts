@@ -13,6 +13,18 @@ interface OracleLookupResult {
     tags: string[];
   };
   score: number;
+  scoreBreakdown?: {
+    base: number;
+    rugPullPenalty: number;
+    slowDrainPenalty: number;
+    failedTokenPenalty: number;
+    lowLifespanPenalty: number;
+    blacklistPenalty: number;
+    successBonus: number;
+    whitelistBonus: number;
+    consistencyBonus: number;
+    final: number;
+  };
   trafficLight: 'RED' | 'YELLOW' | 'GREEN' | 'BLUE' | 'UNKNOWN';
   stats: {
     totalTokens: number;
@@ -28,7 +40,22 @@ interface OracleLookupResult {
     sharedMods: string[];
     relatedTokens: string[];
     devTeam?: { id: string; name: string };
+    meshLinks?: Array<{
+      sourceType: string;
+      sourceId: string;
+      linkedType: string;
+      linkedId: string;
+      relationship: string;
+      confidence: number;
+      discoveredVia?: string;
+    }>;
   };
+  tokenHistory?: Array<{
+    mint: string;
+    symbol: string;
+    outcome: string;
+    isActive: boolean;
+  }>;
   blacklistStatus: {
     isBlacklisted: boolean;
     reason?: string;
