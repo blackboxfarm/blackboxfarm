@@ -495,10 +495,29 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                   <Coins className="h-4 w-4" />
                   Token History ({result.tokenHistory.length} tokens)
                 </CardTitle>
+                {result.upstreamChain && result.upstreamChain.length > 1 && (
+                  <CardDescription className="text-xs">
+                    Wallet chain: {result.upstreamChain.map((node, idx) => (
+                      <span key={idx}>
+                        {idx > 0 && <span className="text-muted-foreground"> → </span>}
+                        <span className={`font-mono ${
+                          node.role === 'kyc_root' ? 'text-amber-400' :
+                          node.role === 'funder' ? 'text-green-400' :
+                          'text-purple-400'
+                        }`}>
+                          {node.role === 'creator' ? '📡' : node.role === 'funder' ? '💰' : '🔑'}
+                          {node.wallet.slice(0, 4)}...{node.wallet.slice(-4)}
+                        </span>
+                      </span>
+                    ))}
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-80 overflow-y-auto">
-                  {result.tokenHistory.map((token: any, i: number) => (
+                  {result.tokenHistory.map((token: any, i: number) => {
+                    const directCreator = token.creatorWallet || result.resolvedWallet;
+                    return (
                     <div key={i} className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-muted/30 border border-border/30 text-xs">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 min-w-0">
@@ -516,26 +535,61 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                           {token.isActive && <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-[10px]">Active</Badge>}
                         </div>
                       </div>
-                      {/* Dev wallet row */}
-                      {result.resolvedWallet && (
-                        <div className="flex items-center gap-1.5 pl-2 border-l-2 border-purple-500/30">
-                          <span className="text-[10px] text-muted-foreground">Dev:</span>
-                          <a href={solscanLink(result.resolvedWallet)} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
-                            {result.resolvedWallet.slice(0, 6)}...{result.resolvedWallet.slice(-4)}
-                          </a>
-                          <a href={`https://pump.fun/profile/${result.resolvedWallet}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300" title="Pump.fun profile">
-                            <span className="text-[9px]">🟢PF</span>
-                          </a>
-                          <a href={solscanLink(result.resolvedWallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary" title="Solscan">
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                          <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(result.resolvedWallet!)}>
-                            <Copy className="h-2.5 w-2.5" />
-                          </Button>
-                        </div>
-                      )}
+                      
+                      {/* Wallet chain: Direct Creator → Funder → KYC Root */}
+                      <div className="flex flex-col gap-0.5 ml-1">
+                        {/* Direct creator (pump.fun dev wallet) */}
+                        {directCreator && (
+                          <div className="flex items-center gap-1.5 pl-2 border-l-2 border-purple-500/30">
+                            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/40 text-[9px] px-1 py-0">📡 Creator</Badge>
+                            <a href={solscanLink(directCreator)} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
+                              {directCreator.slice(0, 6)}...{directCreator.slice(-4)}
+                            </a>
+                            <a href={`https://pump.fun/profile/${directCreator}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300" title="Pump.fun profile">
+                              <span className="text-[9px]">🟢PF</span>
+                            </a>
+                            <a href={solscanLink(directCreator)} target="_blank" rel="noopener noreferrer" className="hover:text-primary" title="Solscan">
+                              <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                            <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(directCreator)}>
+                              <Copy className="h-2.5 w-2.5" />
+                            </Button>
+                          </div>
+                        )}
+                        
+                        {/* Upstream chain (funder → KYC root) */}
+                        {result.upstreamChain && result.upstreamChain.slice(1).map((node, idx) => (
+                          <div key={idx} className={`flex items-center gap-1.5 pl-2 border-l-2 ${
+                            node.role === 'kyc_root' ? 'border-amber-500/40' : 'border-green-500/30'
+                          }`}>
+                            <Badge className={`text-[9px] px-1 py-0 ${
+                              node.role === 'kyc_root' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' :
+                              'bg-green-500/20 text-green-400 border-green-500/40'
+                            }`}>
+                              {node.role === 'kyc_root' ? '🔑 KYC Root' : '💰 Funder'}
+                            </Badge>
+                            <span className="text-[9px] text-muted-foreground">↑ {node.relationship.replace(/_/g, ' ')}</span>
+                            <a href={solscanLink(node.wallet)} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
+                              {node.wallet.slice(0, 6)}...{node.wallet.slice(-4)}
+                            </a>
+                            <a href={`https://pump.fun/profile/${node.wallet}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300" title="Pump.fun profile">
+                              <span className="text-[9px]">🟢PF</span>
+                            </a>
+                            <a href={solscanLink(node.wallet)} target="_blank" rel="noopener noreferrer" className="hover:text-primary" title="Solscan">
+                              <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                            <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(node.wallet)}>
+                              <Copy className="h-2.5 w-2.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-4 p-0 px-1 flex-shrink-0 text-[9px] text-purple-400 hover:text-purple-300" onClick={() => { setQuery(node.wallet); handleLookup(); }}>
+                              🔍
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
