@@ -143,6 +143,10 @@ interface CirculatingSupply {
 interface HealthScore {
   score: number;
   grade: string;
+  phase?: string;
+  breakdown?: Record<string, { score: number; weight: number; contribution: number }>;
+  vitalityPenalties?: string[];
+  pairAgeHours?: number | null;
 }
 
 interface HoldersReport {
