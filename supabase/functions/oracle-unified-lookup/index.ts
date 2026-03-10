@@ -123,23 +123,35 @@ function detectInputType(input: string): 'token' | 'wallet' | 'x_account' | 'unk
   return 'unknown';
 }
 
-function calculateScore(stats: OracleResult['stats'], blacklisted: boolean, whitelisted: boolean): number {
-  let score = 50; // Base score
+function calculateScore(stats: OracleResult['stats'], blacklisted: boolean, whitelisted: boolean): { score: number; breakdown: OracleResult['scoreBreakdown'] } {
+  const base = 50;
+  const rugPullPenalty = (stats.rugPulls || 0) * 30;
+  const slowDrainPenalty = (stats.slowDrains || 0) * 20;
+  const failedTokenPenalty = (stats.failedTokens || 0) * 5;
+  const lowLifespanPenalty = (stats.avgLifespanHours < 24 && stats.totalTokens > 0) ? 15 : 0;
+  const blacklistPenalty = blacklisted ? 30 : 0;
+  const successBonus = (stats.successfulTokens || 0) * 15;
+  const whitelistBonus = whitelisted ? 20 : 0;
+  const consistencyBonus = (stats.totalTokens > 5 && stats.successfulTokens / stats.totalTokens > 0.5) ? 15 : 0;
   
-  // Negative signals
-  score -= (stats.rugPulls || 0) * 30;
-  score -= (stats.slowDrains || 0) * 20;
-  score -= (stats.failedTokens || 0) * 5;
-  if (stats.avgLifespanHours < 24 && stats.totalTokens > 0) score -= 15;
-  if (blacklisted) score -= 30;
+  const raw = base - rugPullPenalty - slowDrainPenalty - failedTokenPenalty - lowLifespanPenalty - blacklistPenalty + successBonus + whitelistBonus + consistencyBonus;
+  const final = Math.max(0, Math.min(100, raw));
   
-  // Positive signals
-  score += (stats.successfulTokens || 0) * 15;
-  if (whitelisted) score += 20;
-  if (stats.totalTokens > 5 && stats.successfulTokens / stats.totalTokens > 0.5) score += 15;
-  
-  // Clamp to 0-100
-  return Math.max(0, Math.min(100, score));
+  return {
+    score: final,
+    breakdown: {
+      base,
+      rugPullPenalty: -rugPullPenalty,
+      slowDrainPenalty: -slowDrainPenalty,
+      failedTokenPenalty: -failedTokenPenalty,
+      lowLifespanPenalty: -lowLifespanPenalty,
+      blacklistPenalty: -blacklistPenalty,
+      successBonus,
+      whitelistBonus,
+      consistencyBonus,
+      final
+    }
+  };
 }
 
 function getTrafficLight(score: number): OracleResult['trafficLight'] {
