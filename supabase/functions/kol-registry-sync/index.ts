@@ -20,87 +20,45 @@ interface ParsedKOL {
 function parseLeaderboardData(html: string): ParsedKOL[] {
   const kols: ParsedKOL[] = [];
 
-  // Debug: check various escape patterns 
-  const patterns = [
-    { name: 'backslash-quote-wallet', pat: '\\"wallet\\"' },
-    { name: 'raw-wallet-colon', pat: '"wallet":' },
-    { name: 'escaped-json', pat: '\\u0022wallet\\u0022' },
-    { name: 'just-wallet-quote', pat: 'wallet":"' },
-    { name: 'wallet-backslash', pat: 'wallet\\"' },
-  ];
+  // From debug logs, the escaped JSON in HTML contains patterns like:
+  // ...WALLET_ADDR\",\"name\":\"NAME\",\"telegram\":null,\"twitter\":\"https://x.com/HANDLE\",\"profit\":NUM
+  // 
+  // The \" in the HTML is a literal backslash+quote character pair.
+  // In JS string matching, we need to match the literal characters \ and "
+  // which in a JS regex means we write: \\\" (or in a string: \\\\\\")
   
-  for (const { name, pat } of patterns) {
-    const idx = html.indexOf(pat);
-    console.log(`[kol-sync] Pattern "${name}" => index: ${idx}`);
-    if (idx > -1) {
-      console.log(`[kol-sync] Context for "${name}":`, JSON.stringify(html.substring(idx, idx + 200)));
-    }
-  }
-
-  // Strategy 1: Try to find __NEXT_DATA__ script tag which contains JSON
-  const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-  if (nextDataMatch) {
-    console.log('[kol-sync] Found __NEXT_DATA__, length:', nextDataMatch[1].length);
-    try {
-      const nextData = JSON.parse(nextDataMatch[1]);
-      // Navigate the Next.js data structure to find leaderboard entries
-      const props = nextData?.props?.pageProps;
-      if (props) {
-        console.log('[kol-sync] pageProps keys:', Object.keys(props).join(', '));
-        // Try common key names
-        const leaderboard = props.leaderboard || props.kols || props.data || props.accounts || props.users;
-        if (Array.isArray(leaderboard)) {
-          console.log(`[kol-sync] Found leaderboard array with ${leaderboard.length} entries`);
-          for (let i = 0; i < leaderboard.length && i < 100; i++) {
-            const entry = leaderboard[i];
-            const wallet = entry.wallet || entry.address || entry.pubkey || '';
-            const name = entry.name || entry.displayName || entry.username || wallet.slice(0, 8);
-            const twitter = entry.twitter || entry.twitterUrl || entry.x_url || '';
-            const profit = entry.profit || entry.pnl || entry.sol_profit || 0;
-            
-            let xHandle = '';
-            if (twitter) {
-              const hm = twitter.match(/x\.com\/([A-Za-z0-9_]+)/);
-              if (hm) xHandle = hm[1];
-            }
-            
-            kols.push({
-              displayName: name,
-              walletAddress: wallet,
-              avatarUrl: `https://cdn.kolscan.io/profiles/${wallet}.png`,
-              xHandle,
-              xUrl: twitter,
-              rank: i + 1,
-              solProfit: typeof profit === 'number' ? profit : parseFloat(profit) || 0,
-            });
-          }
-          return kols;
-        }
-      }
-    } catch (e) {
-      console.error('[kol-sync] Failed to parse __NEXT_DATA__:', e.message);
-    }
-  }
-
-  // Strategy 2: Find JSON-like data anywhere in the HTML
-  // The data contains patterns like: "wallet":"ADDR","name":"NAME","twitter":"URL","profit":NUM
-  // Try to find the JSON blob by looking for the characteristic pattern
-  const jsonBlobRe = /"wallet":"([A-Za-z0-9]{32,44})","name":"([^"]+)"/g;
+  // Simplest approach: find all x.com/HANDLE patterns with surrounding context
+  // and extract wallet+name+profit from the same JSON blob
+  
+  // First, find all the JSON data blobs containing twitter links
+  // The regex matches: \"name\":\"SOMETHING\", followed eventually by \"twitter\":\"https://x.com/HANDLE\"
+  // Using a regex that matches the escaped JSON format: \" in HTML = literal backslash + quote
+  
+  // Match the characteristic pattern: WALLET_ADDRESS\",\"name\":\"
+  // In regex, to match a literal \", we need \\\" in the regex string
+  const blobRe = /([A-Za-z0-9]{32,44})\\",\\"name\\":\\"([^\\]+)\\"/g;
+  
   let match;
   const seenWallets = new Set<string>();
   let rank = 0;
 
-  while ((match = jsonBlobRe.exec(html)) !== null) {
+  while ((match = blobRe.exec(html)) !== null) {
     const wallet = match[1];
     if (seenWallets.has(wallet)) continue;
+    
+    // Validate it's a proper Solana address (base58)
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) continue;
+    
     seenWallets.add(wallet);
     rank++;
 
     const displayName = match[2];
-    const ctx = html.substring(match.index, match.index + 500);
+    
+    // Get context after this match for twitter and profit
+    const ctx = html.substring(match.index, Math.min(html.length, match.index + 600));
 
-    // Get twitter
-    const twMatch = ctx.match(/"twitter":"(https?:\/\/x\.com\/[A-Za-z0-9_]+)"/);
+    // Find twitter URL: \"twitter\":\"https://x.com/HANDLE\"
+    const twMatch = ctx.match(/\\"twitter\\":\\"(https:\/\/x\.com\/[A-Za-z0-9_]+)\\"/);
     const twitterUrl = twMatch ? twMatch[1] : '';
     let xHandle = '';
     if (twitterUrl) {
@@ -108,52 +66,8 @@ function parseLeaderboardData(html: string): ParsedKOL[] {
       if (hm) xHandle = hm[1];
     }
 
-    // Get profit
-    const profitMatch = ctx.match(/"profit":(-?[\d.]+)/);
-    const solProfit = profitMatch ? parseFloat(profitMatch[1]) : 0;
-
-    kols.push({
-      displayName,
-      walletAddress: wallet,
-      avatarUrl: `https://cdn.kolscan.io/profiles/${wallet}.png`,
-      xHandle,
-      xUrl: twitterUrl,
-      rank,
-      solProfit,
-    });
-
-    if (rank >= 100) break;
-  }
-
-  if (kols.length > 0) return kols;
-
-  // Strategy 3: The JSON might be escaped (e.g. in a script with escaped quotes)
-  // Unescape and retry
-  console.log('[kol-sync] Strategy 2 found 0. Trying unescaped...');
-  const unescaped = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-  
-  const jsonBlobRe2 = /"wallet":"([A-Za-z0-9]{32,44})","name":"([^"]+)"/g;
-  let match2;
-  rank = 0;
-
-  while ((match2 = jsonBlobRe2.exec(unescaped)) !== null) {
-    const wallet = match2[1];
-    if (seenWallets.has(wallet)) continue;
-    seenWallets.add(wallet);
-    rank++;
-
-    const displayName = match2[2];
-    const ctx = unescaped.substring(match2.index, match2.index + 500);
-
-    const twMatch = ctx.match(/"twitter":"(https?:\/\/x\.com\/[A-Za-z0-9_]+)"/);
-    const twitterUrl = twMatch ? twMatch[1] : '';
-    let xHandle = '';
-    if (twitterUrl) {
-      const hm = twitterUrl.match(/x\.com\/([A-Za-z0-9_]+)/);
-      if (hm) xHandle = hm[1];
-    }
-
-    const profitMatch = ctx.match(/"profit":(-?[\d.]+)/);
+    // Find profit: \"profit\":NUMBER
+    const profitMatch = ctx.match(/\\"profit\\":(-?[\d.]+)/);
     const solProfit = profitMatch ? parseFloat(profitMatch[1]) : 0;
 
     kols.push({
@@ -202,11 +116,28 @@ Deno.serve(async (req) => {
 
     const html = await response.text();
     console.log(`[kol-sync] Received ${html.length} bytes`);
+    
+    // Debug: test our exact regex pattern
+    const testRe = /([A-Za-z0-9]{32,44})\\",\\"name\\":\\"/;
+    const testMatch = testRe.exec(html);
+    console.log(`[kol-sync] Test regex match: ${testMatch ? 'YES at ' + testMatch.index + ' wallet=' + testMatch[1].slice(0,8) : 'NO'}`);
+    
+    // Also try without escaping to see what format the data actually is in
+    const testRe2 = /([A-Za-z0-9]{32,44})","name":"/;
+    const testMatch2 = testRe2.exec(html);
+    console.log(`[kol-sync] Test regex2 (unescaped) match: ${testMatch2 ? 'YES at ' + testMatch2.index : 'NO'}`);
 
     const kols = parseLeaderboardData(html);
     console.log(`[kol-sync] Parsed ${kols.length} KOLs, X handles: ${kols.filter(k => k.xHandle).length}`);
 
     if (kols.length === 0) {
+      // Last resort debug: find where x.com appears and show 200 chars before it
+      const xIdx = html.indexOf('x.com/');
+      if (xIdx > -1) {
+        const before = html.substring(Math.max(0, xIdx - 200), xIdx + 50);
+        console.log('[kol-sync] DEBUG context before first x.com:', JSON.stringify(before));
+      }
+      
       return new Response(
         JSON.stringify({ success: true, message: 'No KOLs parsed', synced: 0 }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -216,7 +147,6 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
     let upserted = 0;
 
-    // Deduplicate by handle
     const seenHandles = new Set<string>();
     const upsertRows = [];
     
@@ -258,7 +188,6 @@ Deno.serve(async (req) => {
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[kol-sync] Done: ${upserted} synced in ${elapsed}ms`);
 
     return new Response(
       JSON.stringify({
