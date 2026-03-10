@@ -42,10 +42,10 @@ Deno.serve(async (req) => {
       }
     }
     
-    // Also mark all pending items as cancelled
+    // Also mark all pending items as expired
     const { data, error } = await supabase
       .from('holders_intel_post_queue')
-      .update({ status: 'cancelled', error_message: 'Emergency stop' })
+      .update({ status: 'expired', error_message: 'Emergency stop' })
       .eq('status', 'pending');
     
     return new Response(
