@@ -712,10 +712,12 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     aiReasoning = parsed.reasoning || '';
 
     // Phase safety caps — AI should respect these, but enforce as guardrail
+    const isEarlyPhase = verdictPhase === 'on_curve' || verdictPhase === 'newborn' || verdictPhase === 'early' || verdictPhase === 'adolescent';
+    const isFreshPhase = verdictPhase === 'newborn' || verdictPhase === 'early' || verdictPhase === 'adolescent';
     if (verdictPhase === 'on_curve' && ['BUY DEEP LONG', 'BUY MEDIUM SHORT'].includes(verdict)) {
       verdict = 'WATCH CURVE — SMALL SHORT';
       emoji = '🟡';
-    } else if (verdictPhase === 'fresh' && verdict === 'BUY DEEP LONG') {
+    } else if (isFreshPhase && verdict === 'BUY DEEP LONG') {
       verdict = 'BUY MEDIUM SHORT';
       emoji = '🟢';
     }
