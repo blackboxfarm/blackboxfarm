@@ -1229,6 +1229,56 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 </AccordionItem>
               </Accordion>
             )}
+            {/* Wallet Clusters — shows connected wallet groups */}
+            {report.insidersGraph.clusters.length > 0 && (
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="clusters" className="border-none">
+                  <AccordionTrigger className="text-xs py-2 hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Users className="h-3 w-3" />
+                      {report.insidersGraph.clusters.length} Connected Wallet Cluster{report.insidersGraph.clusters.length !== 1 ? 's' : ''}
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-2 pt-1">
+                      {report.insidersGraph.clusters.map((cluster, idx) => (
+                        <div key={cluster.id || idx} className="p-2 bg-muted/30 rounded-lg border border-border/50">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs font-medium flex items-center gap-1">
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {cluster.clusterType}
+                              </Badge>
+                              Cluster #{idx + 1}
+                            </span>
+                            <span className={`text-xs font-bold ${
+                              cluster.totalPercentage > 10 ? 'text-destructive' : 'text-muted-foreground'
+                            }`}>
+                              {cluster.totalPercentage.toFixed(1)}% supply
+                            </span>
+                          </div>
+                          <div className="space-y-0.5">
+                            {cluster.wallets.slice(0, 8).map((wallet, wIdx) => (
+                              <a
+                                key={wIdx}
+                                href={`https://solscan.io/account/${wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-[11px] font-mono text-primary hover:underline"
+                              >
+                                {wallet.slice(0, 6)}...{wallet.slice(-4)}
+                              </a>
+                            ))}
+                            {cluster.wallets.length > 8 && (
+                              <p className="text-[10px] text-muted-foreground">+{cluster.wallets.length - 8} more</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
           </CardContent>
         </Card>
       )}
