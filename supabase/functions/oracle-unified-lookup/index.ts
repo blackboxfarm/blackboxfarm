@@ -1091,7 +1091,7 @@ Deno.serve(async (req) => {
         outcome: t.outcome || (live?.complete ? 'graduated' : 'unknown'),
         isActive: t.is_active ?? false,
         mcap: live?.usd_market_cap || 0,
-        creatorWallet: live?.creator || t.creator_wallet || resolvedWallet
+        creatorWallet: live?.creator || null // Don't default to resolvedWallet yet
       });
     }
     
@@ -1105,9 +1105,104 @@ Deno.serve(async (req) => {
           outcome: lt.complete ? 'graduated' : (lt.usd_market_cap > 50000 ? 'success' : (lt.usd_market_cap < 100 ? 'failed' : 'unknown')),
           isActive: lt.usd_market_cap > 1000,
           mcap: lt.usd_market_cap || 0,
-          creatorWallet: lt.creator || resolvedWallet
+          creatorWallet: lt.creator || null
         });
       }
+    }
+    
+    // RESOLVE REAL CREATORS: batch-lookup from token_lifecycle for tokens missing creator
+    const tokenMints = Array.from(dbTokenMap.keys());
+    const mintsNeedingCreator = tokenMints.filter(mint => !dbTokenMap.get(mint)?.creatorWallet);
+    
+    if (mintsNeedingCreator.length > 0) {
+      console.log(`[Oracle] Resolving real creators for ${mintsNeedingCreator.length} tokens via token_lifecycle...`);
+      
+      // Batch query token_lifecycle (max 50 at a time)
+      for (let i = 0; i < mintsNeedingCreator.length; i += 50) {
+        const batch = mintsNeedingCreator.slice(i, i + 50);
+        const { data: lifecycleData } = await supabase
+          .from('token_lifecycle')
+          .select('token_mint, creator_wallet')
+          .in('token_mint', batch);
+        
+        if (lifecycleData) {
+          for (const lc of lifecycleData) {
+            const entry = dbTokenMap.get(lc.token_mint);
+            if (entry && lc.creator_wallet) {
+              entry.creatorWallet = lc.creator_wallet;
+            }
+          }
+        }
+      }
+    }
+    
+    // For remaining tokens still without creator, try pump.fun API (max 5 to avoid rate limits)
+    const stillMissingCreator = tokenMints.filter(mint => !dbTokenMap.get(mint)?.creatorWallet).slice(0, 5);
+    if (stillMissingCreator.length > 0) {
+      console.log(`[Oracle] Fetching creators from pump.fun API for ${stillMissingCreator.length} tokens...`);
+      
+      const pfCreatorPromises = stillMissingCreator.map(async (mint) => {
+        try {
+          const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(3000)
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.creator) {
+              const entry = dbTokenMap.get(mint);
+              if (entry) entry.creatorWallet = data.creator;
+            }
+          }
+        } catch (e) {
+          // Ignore individual failures
+        }
+      });
+      
+      await Promise.all(pfCreatorPromises);
+    }
+    
+    // Build per-token upstream chains from mesh data
+    for (const [mint, tokenEntry] of dbTokenMap.entries()) {
+      const creator = tokenEntry.creatorWallet;
+      if (!creator || creator === resolvedWallet) continue;
+      
+      // Find mesh links connecting this creator to the resolvedWallet
+      const tokenChain: Array<{ wallet: string; role: string; relationship: string }> = [];
+      const chainVisited = new Set<string>([creator]);
+      let chainWallet = creator;
+      let chainDepth = 0;
+      
+      while (chainWallet && chainWallet !== resolvedWallet && chainDepth < 4) {
+        const upLink = meshLinks.find((link: any) => {
+          if (['funded_by', 'directly_funded', 'satellite_of', 'same_kyc_root', 'kyc_root'].includes(link.relationship)) {
+            if (link.source_id === chainWallet && !chainVisited.has(link.linked_id) && isBase58(link.linked_id)) return true;
+            if (['directly_funded', 'funds'].includes(link.relationship) && 
+                link.linked_id === chainWallet && !chainVisited.has(link.source_id) && isBase58(link.source_id)) return true;
+          }
+          return false;
+        });
+        
+        if (!upLink) break;
+        
+        const nextW = upLink.source_id === chainWallet ? upLink.linked_id : upLink.source_id;
+        chainVisited.add(nextW);
+        
+        let chainRole = 'intermediary';
+        if (['same_kyc_root', 'kyc_root'].includes(upLink.relationship)) chainRole = 'kyc_root';
+        else if (['funded_by', 'directly_funded', 'satellite_of'].includes(upLink.relationship)) chainRole = 'funder';
+        
+        tokenChain.push({ wallet: nextW, role: chainRole, relationship: upLink.relationship });
+        chainWallet = nextW;
+        chainDepth++;
+      }
+      
+      // If we didn't reach resolvedWallet but it's known to be upstream, add it
+      if (chainWallet !== resolvedWallet && resolvedWallet) {
+        tokenChain.push({ wallet: resolvedWallet, role: 'kyc_root', relationship: 'parent_wallet' });
+      }
+      
+      tokenEntry.upstreamChain = tokenChain;
     }
     
     const tokenHistory = Array.from(dbTokenMap.values());
