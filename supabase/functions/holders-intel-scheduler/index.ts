@@ -382,7 +382,11 @@ Deno.serve(async (req) => {
       console.log(`[scheduler] Last post scheduled for: ${lastScheduled}`);
     }
     
+    // Wait for tier tracking to complete before responding
+    await tierTrackingPromise;
+    
     const elapsed = Date.now() - startTime;
+    const tierQualified = trendingTokens.filter(t => t.marketCap >= 400_000).length;
     
     return new Response(
       JSON.stringify({
@@ -393,6 +397,7 @@ Deno.serve(async (req) => {
         newTokens: newTokens.length,
         qualifiedTokens: qualifiedTokens.length,
         queued: queueInserts.length,
+        tierTracked: tierQualified,
         executionTimeMs: elapsed,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
