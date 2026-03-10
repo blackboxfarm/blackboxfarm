@@ -188,7 +188,7 @@ function generateRecommendation(score: number, stats: OracleResult['stats'], req
   return `🔵 VERIFIED BUILDER - Consistent track record with ${stats.successfulTokens} active tokens. Lower risk for longer-term positions.`;
 }
 
-// Fetch tokens from pump.fun for a wallet - with FULL pagination and username lookup
+// Fetch tokens MINTED by a wallet — only returns tokens this wallet actually created
 async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise<any[]> {
   const headers = {
     'Accept': 'application/json',
@@ -198,28 +198,8 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
   };
   
   let allTokens: any[] = [];
-  let username: string | null = null;
   
-  // STEP 1: Try to get username first via profile API
-  try {
-    console.log('[Oracle] Fetching user profile to get username...');
-    const profileUrl = `https://frontend-api-v3.pump.fun/users/${walletAddress}`;
-    const profileRes = await fetch(profileUrl, { headers });
-    
-    if (profileRes.ok) {
-      const profileData = await profileRes.json();
-      username = profileData?.username;
-      if (username) {
-        console.log(`[Oracle] Found username: ${username}`);
-      }
-    } else {
-      console.log(`[Oracle] Profile API returned ${profileRes.status}`);
-    }
-  } catch (e) {
-    console.log('[Oracle] Profile fetch error:', e);
-  }
-  
-  // STEP 2: Try direct API with wallet address (paginated)
+  // STEP 1: Pump.fun user-created-coins API (ONLY returns tokens this wallet minted)
   const baseEndpoints = [
     `https://frontend-api-v3.pump.fun/coins/user-created-coins/${walletAddress}`,
     `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}`
@@ -233,21 +213,20 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
     try {
       while (keepFetching) {
         const url = `${baseUrl}?limit=${limit}&offset=${offset}&includeNsfw=true`;
-        console.log(`[Oracle] Fetching tokens offset=${offset}...`);
+        console.log(`[Oracle] Fetching created tokens offset=${offset}...`);
         
-        const response = await fetch(url, { headers });
+        const response = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
         
         if (response.ok) {
           const data = await response.json();
           if (Array.isArray(data) && data.length > 0) {
             allTokens = allTokens.concat(data);
-            console.log(`[Oracle] Got ${data.length} tokens (total: ${allTokens.length})`);
+            console.log(`[Oracle] Got ${data.length} minted tokens (total: ${allTokens.length})`);
             
             if (data.length < limit) {
-              keepFetching = false; // No more pages
+              keepFetching = false;
             } else {
               offset += limit;
-              // Safety limit: max 1000 tokens
               if (offset >= 1000) keepFetching = false;
             }
           } else {
@@ -260,7 +239,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
       }
       
       if (allTokens.length > 0) {
-        console.log(`[Oracle] Total tokens fetched from API: ${allTokens.length}`);
+        console.log(`[Oracle] Total minted tokens from pump.fun API: ${allTokens.length}`);
         return allTokens;
       }
     } catch (error) {
@@ -268,213 +247,26 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
     }
   }
   
-  // STEP 3: Fallback - Use Firecrawl to scrape AND find username for proper API call
-  console.log('[Oracle] APIs blocked, trying Firecrawl to extract username...');
-  
-  try {
-    // First scrape: Get user profile to find username
-    const { data: firecrawlResult, error: firecrawlError } = await supabase.functions.invoke('firecrawl-scrape', {
-      body: {
-        url: `https://pump.fun/profile/${walletAddress}`,
-        options: {
-          formats: ['markdown', 'links'],
-          waitFor: 5000,
-          onlyMainContent: false // Get full page to find username
-        }
-      }
-    });
-    
-    if (!firecrawlError && firecrawlResult?.success && firecrawlResult?.data) {
-      const markdown = firecrawlResult.data.markdown || '';
-      const links = firecrawlResult.data.links || [];
-      
-      // Extract username - look for the pattern "# username" or profile links
-      // Also check for pattern like "mystayor" appearing after "View on solscan"
-      const usernamePatterns = [
-        /^##?\s+([a-zA-Z0-9_]+)\s*$/m,  // Heading with username
-        /\[([a-zA-Z0-9_]+)\]\s*\n\s*FY/m,  // Username before wallet
-        /\/profile\/([a-zA-Z0-9_]{3,30})/,  // Profile URL
-      ];
-      
-      for (const pattern of usernamePatterns) {
-        const match = markdown.match(pattern);
-        if (match && match[1] && match[1] !== walletAddress.slice(0, 8)) {
-          // Make sure it's not just a wallet fragment
-          if (!/^[A-Za-z0-9]{32,}$/.test(match[1])) {
-            username = match[1];
-            console.log(`[Oracle] Extracted username: ${username}`);
-            break;
-          }
-        }
-      }
-      
-      // Extract "Created coins (XXX)" count
-      const coinCountMatch = markdown.match(/Created coins\s*\((\d+)\)/i) ||
-                            markdown.match(/(\d+)\s*Created coins/i);
-      const expectedCount = coinCountMatch ? parseInt(coinCountMatch[1]) : 0;
-      console.log(`[Oracle] Profile shows ${expectedCount} created coins`);
-      
-      // If we found username, try DexScreener API which indexes pump.fun tokens
-      if (username) {
-        console.log(`[Oracle] Trying DexScreener search for username: ${username}...`);
-        try {
-          const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${username}`, {
-            headers: { 'Accept': 'application/json' }
-          });
-          
-          if (dexResponse.ok) {
-            const dexData = await dexResponse.json();
-            const pairs = dexData?.pairs || [];
-            
-            // Filter for Solana pump.fun tokens
-            const pumpTokens = pairs.filter((p: any) => 
-              p.chainId === 'solana' && 
-              p.dexId === 'pump' || 
-              p.url?.includes('pump.fun')
-            );
-            
-            if (pumpTokens.length > 0) {
-              console.log(`[Oracle] DexScreener found ${pumpTokens.length} tokens for ${username}`);
-              return pumpTokens.map((p: any) => ({
-                mint: p.baseToken?.address,
-                name: p.baseToken?.name || 'Unknown',
-                symbol: p.baseToken?.symbol || '???',
-                complete: p.fdv > 1000000, // Graduated if over 1M FDV
-                usd_market_cap: p.fdv || 0
-              }));
-            }
-          }
-        } catch (e) {
-          console.log('[Oracle] DexScreener search failed:', e);
-        }
-      }
-      
-      // Scrape the "See all" coins page directly
-      if (expectedCount > 9) {
-        console.log('[Oracle] Trying to scrape full coins list page...');
-        
-        // Try multiple possible URLs for the full coins list
-        const coinsPageUrls = [
-          `https://pump.fun/profile/${walletAddress}/created`,
-          `https://pump.fun/profile/${walletAddress}?tab=created`,
-          username ? `https://pump.fun/profile/${username}/created` : null,
-        ].filter(Boolean);
-        
-        for (const coinsUrl of coinsPageUrls) {
-          try {
-            const { data: coinsResult, error: coinsError } = await supabase.functions.invoke('firecrawl-scrape', {
-              body: {
-                url: coinsUrl,
-                options: {
-                  formats: ['links'],
-                  waitFor: 8000, // Longer wait for coins to load
-                  onlyMainContent: false
-                }
-              }
-            });
-            
-            if (!coinsError && coinsResult?.success && coinsResult?.data?.links) {
-              const coinLinks = coinsResult.data.links
-                .filter((link: string) => link.includes('/coin/') || link.match(/pump\.fun\/[A-Za-z0-9]{32,44}/))
-                .map((link: string) => {
-                  const match = link.match(/(?:\/coin\/|pump\.fun\/)([A-Za-z0-9]{32,44})/);
-                  return match ? match[1] : null;
-                })
-                .filter(Boolean);
-              
-              const uniqueMints = [...new Set(coinLinks)];
-              
-              if (uniqueMints.length > allTokens.length) {
-                console.log(`[Oracle] Coins page found ${uniqueMints.length} unique tokens`);
-                allTokens = uniqueMints.map((mint: string) => ({
-                  mint,
-                  name: 'Unknown',
-                  symbol: '???',
-                  complete: false,
-                  usd_market_cap: 0
-                }));
-              }
-            }
-          } catch (e) {
-            console.log(`[Oracle] Failed to scrape ${coinsUrl}:`, e);
-          }
-        }
-      }
-      
-      // Extract token mints ONLY from the "Created coins" section of the profile
-      // The markdown typically has sections like "Created coins (N)" followed by token links
-      // We must NOT include tokens from "Held tokens" or other sections
-      const createdSection = markdown.match(/Created coins[\s\S]*?(?=(?:Held|Followers|Following|$))/i);
-      const createdMarkdown = createdSection ? createdSection[0] : '';
-      
-      // Only extract links that appear within the created coins section
-      let createdLinks: string[] = [];
-      if (createdMarkdown) {
-        createdLinks = (createdMarkdown.match(/\/coin\/([A-Za-z0-9]{32,44})/g) || [])
-          .map((match: string) => {
-            const m = match.match(/\/coin\/([A-Za-z0-9]{32,44})/);
-            return m ? m[1] : null;
-          })
-          .filter(Boolean) as string[];
-        console.log(`[Oracle] Created coins section found ${createdLinks.length} token links`);
-      }
-      
-      // If we couldn't isolate the created section, DON'T fall back to all links
-      // That would include held/traded tokens which corrupts the data
-      if (createdLinks.length === 0 && expectedCount > 0) {
-        console.log(`[Oracle] WARNING: Could not isolate "Created coins" section from profile page. Skipping Firecrawl tokens to avoid data corruption.`);
-      }
-      
-      const uniqueMints = [...new Set(createdLinks)] as string[];
-      console.log(`[Oracle] Profile page found ${uniqueMints.length} CREATED token links (filtered)`);
-      
-      // Only return if we found created tokens
-      const bestCount = Math.max(allTokens.length, uniqueMints.length);
-      if (bestCount > 0 && (expectedCount === 0 || bestCount >= expectedCount * 0.5)) {
-        if (allTokens.length > uniqueMints.length) {
-          return allTokens;
-        } else {
-          return uniqueMints.map((mint: string) => ({
-            mint,
-            name: 'Unknown',
-            symbol: '???',
-            complete: false,
-            usd_market_cap: 0
-          }));
-        }
-      } else {
-        console.log(`[Oracle] Found ${bestCount} tokens but expected ${expectedCount}, trying Helius...`);
-      }
-    } else {
-      console.log('[Oracle] Firecrawl failed:', firecrawlError || 'no data');
-    }
-  } catch (error) {
-    console.error('[Oracle] Firecrawl error:', error);
-  }
-  
-  // STEP 4: Try Helius API for transaction history to find created tokens
-  console.log('[Oracle] Trying Helius transaction history for created tokens...');
+  // STEP 2: Helius TOKEN_MINT transaction history (on-chain proof of minting)
+  console.log('[Oracle] Pump.fun API unavailable. Trying Helius TOKEN_MINT transactions...');
   try {
     const heliusKey = getHeliusApiKey();
     if (heliusKey) {
-      // Use Helius parsed transaction history - find TOKEN_MINT transactions
       const txHistoryUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100' });
       
       let allMints: string[] = [];
       let currentUrl = txHistoryUrl;
       let pageCount = 0;
       
-      while (currentUrl && pageCount < 10) { // Max 10 pages = 1000 tokens
-        console.log(`[Oracle] Fetching Helius tx page ${pageCount + 1}...`);
-        const response = await fetch(currentUrl);
+      while (currentUrl && pageCount < 10) {
+        console.log(`[Oracle] Fetching Helius TOKEN_MINT page ${pageCount + 1}...`);
+        const response = await fetch(currentUrl, { signal: AbortSignal.timeout(10000) });
         
         if (response.ok) {
           const transactions = await response.json();
           
           if (Array.isArray(transactions) && transactions.length > 0) {
-            // Extract mints from TOKEN_MINT transactions
             for (const tx of transactions) {
-              // Look for tokenTransfers where the wallet is the authority/signer
               const transfers = tx.tokenTransfers || [];
               for (const transfer of transfers) {
                 if (transfer.mint && !allMints.includes(transfer.mint)) {
@@ -482,10 +274,8 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
                 }
               }
               
-              // Also check for nativeBalanceChanges and instructions
               const instructions = tx.instructions || [];
               for (const instr of instructions) {
-                // SPL Token Initialize Mint instruction has mint account
                 if (instr.programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
                   const accounts = instr.accounts || [];
                   if (accounts.length > 0 && !allMints.includes(accounts[0])) {
@@ -495,12 +285,8 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
               }
             }
             
-            // Check for pagination
-            if (transactions.length < 100) {
-              break; // No more pages
-            }
+            if (transactions.length < 100) break;
             
-            // Get last signature for pagination
             const lastTx = transactions[transactions.length - 1];
             if (lastTx?.signature) {
               currentUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100', before: lastTx.signature });
@@ -518,17 +304,18 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
       }
       
       if (allMints.length > 0) {
-        console.log(`[Oracle] Helius found ${allMints.length} token mints in transaction history`);
+        console.log(`[Oracle] Helius found ${allMints.length} MINTED tokens in transaction history`);
         return allMints.map((mint: string) => ({
           mint,
           name: 'Unknown',
           symbol: '???',
           complete: false,
-          usd_market_cap: 0
+          usd_market_cap: 0,
+          creator: walletAddress // Helius TOKEN_MINT confirms this wallet minted it
         }));
       }
       
-      // Also try DAS getAssetsByCreator
+      // STEP 3: Helius DAS getAssetsByCreator
       console.log('[Oracle] Trying Helius DAS getAssetsByCreator...');
       const heliusRpcUrl = getHeliusRpcUrl(heliusKey);
       
@@ -544,7 +331,8 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
             page: 1,
             limit: 1000
           }
-        })
+        }),
+        signal: AbortSignal.timeout(10000)
       });
       
       if (dasResponse.ok) {
@@ -558,7 +346,8 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
             name: item.content?.metadata?.name || 'Unknown',
             symbol: item.content?.metadata?.symbol || '???',
             complete: false,
-            usd_market_cap: 0
+            usd_market_cap: 0,
+            creator: walletAddress
           }));
         }
       }
@@ -569,8 +358,8 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
     console.error('[Oracle] Helius error:', error);
   }
   
-  // STEP 5: Final fallback - Check local DB cache
-  console.log('[Oracle] Checking local DB for cached tokens...');
+  // STEP 4: Local DB cache (only tokens we've previously verified as created by this wallet)
+  console.log('[Oracle] Checking local DB for cached minted tokens...');
   try {
     const { data: cachedTokens } = await supabase
       .from('developer_tokens')
@@ -579,20 +368,21 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
       .limit(500);
     
     if (cachedTokens && cachedTokens.length > 0) {
-      console.log(`[Oracle] Found ${cachedTokens.length} cached tokens in DB`);
+      console.log(`[Oracle] Found ${cachedTokens.length} cached minted tokens in DB`);
       return cachedTokens.map((t: any) => ({
         mint: t.token_mint,
         symbol: t.token_symbol || '???',
         name: t.token_symbol || 'Unknown',
         complete: t.outcome === 'graduated',
-        usd_market_cap: t.peak_market_cap_usd || 0
+        usd_market_cap: t.peak_market_cap_usd || 0,
+        creator: walletAddress
       }));
     }
   } catch (error) {
     console.error('[Oracle] DB lookup error:', error);
   }
   
-  console.log('[Oracle] All token fetch methods failed');
+  console.log('[Oracle] All mint-lookup methods exhausted — no tokens found');
   return [];
 }
 
