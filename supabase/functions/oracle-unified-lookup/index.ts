@@ -62,6 +62,12 @@ interface OracleResult {
     symbol: string;
     outcome: string;
     isActive: boolean;
+    creatorWallet?: string;
+  }>;
+  upstreamChain?: Array<{
+    wallet: string;
+    role: string;
+    relationship: string;
   }>;
   blacklistStatus: {
     isBlacklisted: boolean;
