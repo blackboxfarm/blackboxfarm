@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { getVenueAwareQuote, detectVenue } from "../_shared/venue-aware-quote.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
