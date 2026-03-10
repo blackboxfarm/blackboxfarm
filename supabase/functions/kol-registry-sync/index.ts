@@ -10,71 +10,160 @@ const KOLSCAN_URL = 'https://kolscan.io/leaderboard';
 interface ParsedKOL {
   displayName: string;
   walletAddress: string;
+  avatarUrl: string;
   xHandle: string;
   xUrl: string;
-  telegramUrl: string;
   rank: number;
   solProfit: number;
-  avatarUrl: string;
 }
 
 function parseLeaderboardData(html: string): ParsedKOL[] {
   const kols: ParsedKOL[] = [];
 
-  // The data is in escaped JSON embedded in the HTML (Next.js serialized state)
-  // From logs, format is: \"wallet\":\"ADDR\",\"name\":\"NAME\",\"telegram\":\"URL\"|null,\"twitter\":\"URL\"|null,\"profit\":NUM
+  // Debug: check various escape patterns 
+  const patterns = [
+    { name: 'backslash-quote-wallet', pat: '\\"wallet\\"' },
+    { name: 'raw-wallet-colon', pat: '"wallet":' },
+    { name: 'escaped-json', pat: '\\u0022wallet\\u0022' },
+    { name: 'just-wallet-quote', pat: 'wallet":"' },
+    { name: 'wallet-backslash', pat: 'wallet\\"' },
+  ];
   
-  // Strategy: find each wallet occurrence with surrounding JSON context
-  const walletRe = /\\"wallet\\":\s*\\"([A-Za-z0-9]{32,44})\\"/g;
-  const seenWallets = new Set<string>();
+  for (const { name, pat } of patterns) {
+    const idx = html.indexOf(pat);
+    console.log(`[kol-sync] Pattern "${name}" => index: ${idx}`);
+    if (idx > -1) {
+      console.log(`[kol-sync] Context for "${name}":`, JSON.stringify(html.substring(idx, idx + 200)));
+    }
+  }
+
+  // Strategy 1: Try to find __NEXT_DATA__ script tag which contains JSON
+  const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (nextDataMatch) {
+    console.log('[kol-sync] Found __NEXT_DATA__, length:', nextDataMatch[1].length);
+    try {
+      const nextData = JSON.parse(nextDataMatch[1]);
+      // Navigate the Next.js data structure to find leaderboard entries
+      const props = nextData?.props?.pageProps;
+      if (props) {
+        console.log('[kol-sync] pageProps keys:', Object.keys(props).join(', '));
+        // Try common key names
+        const leaderboard = props.leaderboard || props.kols || props.data || props.accounts || props.users;
+        if (Array.isArray(leaderboard)) {
+          console.log(`[kol-sync] Found leaderboard array with ${leaderboard.length} entries`);
+          for (let i = 0; i < leaderboard.length && i < 100; i++) {
+            const entry = leaderboard[i];
+            const wallet = entry.wallet || entry.address || entry.pubkey || '';
+            const name = entry.name || entry.displayName || entry.username || wallet.slice(0, 8);
+            const twitter = entry.twitter || entry.twitterUrl || entry.x_url || '';
+            const profit = entry.profit || entry.pnl || entry.sol_profit || 0;
+            
+            let xHandle = '';
+            if (twitter) {
+              const hm = twitter.match(/x\.com\/([A-Za-z0-9_]+)/);
+              if (hm) xHandle = hm[1];
+            }
+            
+            kols.push({
+              displayName: name,
+              walletAddress: wallet,
+              avatarUrl: `https://cdn.kolscan.io/profiles/${wallet}.png`,
+              xHandle,
+              xUrl: twitter,
+              rank: i + 1,
+              solProfit: typeof profit === 'number' ? profit : parseFloat(profit) || 0,
+            });
+          }
+          return kols;
+        }
+      }
+    } catch (e) {
+      console.error('[kol-sync] Failed to parse __NEXT_DATA__:', e.message);
+    }
+  }
+
+  // Strategy 2: Find JSON-like data anywhere in the HTML
+  // The data contains patterns like: "wallet":"ADDR","name":"NAME","twitter":"URL","profit":NUM
+  // Try to find the JSON blob by looking for the characteristic pattern
+  const jsonBlobRe = /"wallet":"([A-Za-z0-9]{32,44})","name":"([^"]+)"/g;
   let match;
+  const seenWallets = new Set<string>();
   let rank = 0;
 
-  while ((match = walletRe.exec(html)) !== null) {
+  while ((match = jsonBlobRe.exec(html)) !== null) {
     const wallet = match[1];
     if (seenWallets.has(wallet)) continue;
     seenWallets.add(wallet);
     rank++;
 
-    // Get surrounding context (the JSON object this wallet belongs to)
-    const ctxStart = Math.max(0, match.index - 50);
-    const ctxEnd = Math.min(html.length, match.index + 500);
-    const ctx = html.substring(ctxStart, ctxEnd);
+    const displayName = match[2];
+    const ctx = html.substring(match.index, match.index + 500);
 
-    // Extract name
-    const nameMatch = ctx.match(/\\"name\\":\s*\\"([^\\]+)\\"/);
-    const displayName = nameMatch ? nameMatch[1] : wallet.slice(0, 8);
-
-    // Extract twitter URL
-    const twitterMatch = ctx.match(/\\"twitter\\":\s*\\"(https?:[^\\]+)\\"/);
-    const twitterUrl = twitterMatch ? twitterMatch[1].replace(/\\\//g, '/') : '';
-
-    // Extract telegram URL
-    const telegramMatch = ctx.match(/\\"telegram\\":\s*\\"(https?:[^\\]+)\\"/);
-    const telegramUrl = telegramMatch ? telegramMatch[1].replace(/\\\//g, '/') : '';
-
-    // Extract profit
-    const profitMatch = ctx.match(/\\"profit\\":\s*(-?[\d.]+)/);
-    const solProfit = profitMatch ? parseFloat(profitMatch[1]) : 0;
-
-    // Extract X handle from twitter URL
+    // Get twitter
+    const twMatch = ctx.match(/"twitter":"(https?:\/\/x\.com\/[A-Za-z0-9_]+)"/);
+    const twitterUrl = twMatch ? twMatch[1] : '';
     let xHandle = '';
     if (twitterUrl) {
-      const handleMatch = twitterUrl.match(/x\.com\/([A-Za-z0-9_]+)/);
-      if (handleMatch) xHandle = handleMatch[1];
+      const hm = twitterUrl.match(/x\.com\/([A-Za-z0-9_]+)/);
+      if (hm) xHandle = hm[1];
     }
 
-    const avatarUrl = `https://cdn.kolscan.io/profiles/${wallet}.png`;
+    // Get profit
+    const profitMatch = ctx.match(/"profit":(-?[\d.]+)/);
+    const solProfit = profitMatch ? parseFloat(profitMatch[1]) : 0;
 
     kols.push({
       displayName,
       walletAddress: wallet,
+      avatarUrl: `https://cdn.kolscan.io/profiles/${wallet}.png`,
       xHandle,
       xUrl: twitterUrl,
-      telegramUrl,
       rank,
       solProfit,
-      avatarUrl,
+    });
+
+    if (rank >= 100) break;
+  }
+
+  if (kols.length > 0) return kols;
+
+  // Strategy 3: The JSON might be escaped (e.g. in a script with escaped quotes)
+  // Unescape and retry
+  console.log('[kol-sync] Strategy 2 found 0. Trying unescaped...');
+  const unescaped = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  
+  const jsonBlobRe2 = /"wallet":"([A-Za-z0-9]{32,44})","name":"([^"]+)"/g;
+  let match2;
+  rank = 0;
+
+  while ((match2 = jsonBlobRe2.exec(unescaped)) !== null) {
+    const wallet = match2[1];
+    if (seenWallets.has(wallet)) continue;
+    seenWallets.add(wallet);
+    rank++;
+
+    const displayName = match2[2];
+    const ctx = unescaped.substring(match2.index, match2.index + 500);
+
+    const twMatch = ctx.match(/"twitter":"(https?:\/\/x\.com\/[A-Za-z0-9_]+)"/);
+    const twitterUrl = twMatch ? twMatch[1] : '';
+    let xHandle = '';
+    if (twitterUrl) {
+      const hm = twitterUrl.match(/x\.com\/([A-Za-z0-9_]+)/);
+      if (hm) xHandle = hm[1];
+    }
+
+    const profitMatch = ctx.match(/"profit":(-?[\d.]+)/);
+    const solProfit = profitMatch ? parseFloat(profitMatch[1]) : 0;
+
+    kols.push({
+      displayName,
+      walletAddress: wallet,
+      avatarUrl: `https://cdn.kolscan.io/profiles/${wallet}.png`,
+      xHandle,
+      xUrl: twitterUrl,
+      rank,
+      solProfit,
     });
 
     if (rank >= 100) break;
@@ -114,15 +203,6 @@ Deno.serve(async (req) => {
     const html = await response.text();
     console.log(`[kol-sync] Received ${html.length} bytes`);
 
-    // Debug: find exact escape pattern
-    const clukzIdx = html.indexOf('clukz');
-    if (clukzIdx > -1) {
-      console.log('[kol-sync] DEBUG clukz context:', JSON.stringify(html.substring(Math.max(0, clukzIdx - 120), clukzIdx + 200)));
-    }
-    const wIdx1 = html.indexOf('"wallet"');
-    const wIdx2 = html.indexOf('\\"wallet\\"');
-    console.log(`[kol-sync] "wallet" at ${wIdx1}, \\"wallet\\" at ${wIdx2}`);
-
     const kols = parseLeaderboardData(html);
     console.log(`[kol-sync] Parsed ${kols.length} KOLs, X handles: ${kols.filter(k => k.xHandle).length}`);
 
@@ -136,7 +216,7 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
     let upserted = 0;
 
-    // Deduplicate by x_handle to avoid ON CONFLICT duplicate row errors
+    // Deduplicate by handle
     const seenHandles = new Set<string>();
     const upsertRows = [];
     
@@ -145,7 +225,7 @@ Deno.serve(async (req) => {
         ? kol.xHandle.toLowerCase()
         : kol.displayName.toLowerCase().replace(/[^a-z0-9_]/g, '') || kol.walletAddress.slice(0, 12).toLowerCase();
 
-      if (seenHandles.has(handle)) continue;
+      if (seenHandles.has(handle) || !handle) continue;
       seenHandles.add(handle);
 
       upsertRows.push({
@@ -165,37 +245,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Upsert in batches of 50
     for (let i = 0; i < upsertRows.length; i += 50) {
       const batch = upsertRows.slice(i, i + 50);
       const { error } = await supabase
         .from('kol_registry')
         .upsert(batch, { onConflict: 'x_handle', ignoreDuplicates: false });
-
       if (error) {
         console.error(`[kol-sync] Upsert error:`, error.message);
       } else {
         upserted += batch.length;
-      }
-    }
-
-    // Sync wallets - check what columns exist
-    const walletInserts = kols.map((kol) => ({
-      wallet_address: kol.walletAddress,
-      kol_handle: kol.xHandle
-        ? kol.xHandle.toLowerCase()
-        : kol.displayName.toLowerCase().replace(/[^a-z0-9_]/g, ''),
-    }));
-
-    if (walletInserts.length > 0) {
-      const { error: walletError } = await supabase
-        .from('kol_wallets')
-        .upsert(walletInserts, { onConflict: 'wallet_address', ignoreDuplicates: false });
-
-      if (walletError) {
-        console.warn('[kol-sync] kol_wallets error:', walletError.message);
-      } else {
-        console.log(`[kol-sync] Synced ${walletInserts.length} wallets`);
       }
     }
 
@@ -207,7 +265,6 @@ Deno.serve(async (req) => {
         success: true,
         kolsParsed: kols.length,
         synced: upserted,
-        walletsSynced: walletInserts.length,
         xHandlesFound: kols.filter(k => k.xHandle).length,
         executionTimeMs: elapsed,
         sampleKols: kols.slice(0, 5).map(k => ({
