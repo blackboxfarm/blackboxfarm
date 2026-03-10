@@ -81,7 +81,7 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
         </TabsContent>
 
         <TabsContent value="lookup" className="space-y-4">
-          <OracleIntelLookup />
+          <OracleIntelLookup initialQuery={initialWallet} />
         </TabsContent>
 
         <TabsContent value="communities" className="space-y-4">

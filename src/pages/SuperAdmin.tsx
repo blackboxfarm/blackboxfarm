@@ -141,7 +141,7 @@ export default function SuperAdmin() {
           <TabsContent value="oracle">
             {activeTab === "oracle" && (
               <Suspense fallback={<TabLoader />}>
-                <OracleTab />
+                <OracleTab initialSubTab={oracleSubTab} initialWallet={oracleWallet} />
               </Suspense>
             )}
           </TabsContent>
