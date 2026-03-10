@@ -143,6 +143,10 @@ interface CirculatingSupply {
 interface HealthScore {
   score: number;
   grade: string;
+  phase?: string;
+  breakdown?: Record<string, { score: number; weight: number; contribution: number }>;
+  vitalityPenalties?: string[];
+  pairAgeHours?: number | null;
 }
 
 interface HoldersReport {
@@ -816,82 +820,44 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     };
   };
 
-  // Calculate Stability Score
+  // Stability Score — uses the edge function's 8-phase health score (no duplicate calc)
   const calculateStabilityScore = () => {
-    if (!report) return null;
+    if (!report || !report.healthScore) return null;
     
-    const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool);
-    const whalePercentage = nonLPHolders
-      .filter(h => h.percentageOfSupply >= 1)
-      .reduce((sum, h) => sum + h.percentageOfSupply, 0);
+    const { score, grade, breakdown } = report.healthScore;
     
-    const top10Stats = calculateTop10Stats();
-    const lpAnalysis = calculateLPAnalysis();
-    
-    // Whale concentration score (40 points max)
-    const whaleScore = Math.max(0, Math.min(40, 40 - (whalePercentage * 1.33)));
-    
-    // Top 10 distribution score (30 points max)
-    const top10Percentage = top10Stats.cumulativePercentage;
-    let distributionScore = 30;
-    if (top10Percentage > 40) {
-      distributionScore = Math.max(0, 30 - ((top10Percentage - 40) * 0.75));
-    } else if (top10Percentage > 20) {
-      distributionScore = 15 + ((40 - top10Percentage) * 0.75);
-    } else {
-      distributionScore = 25 + ((20 - top10Percentage) * 0.25);
-    }
-    
-    // LP percentage score (20 points max) - ideal range 5-15%
-    const lpPct = lpAnalysis.lpPercentage;
-    let lpScore = 0;
-    if (lpPct >= 5 && lpPct <= 15) {
-      lpScore = 18 + ((15 - Math.abs(lpPct - 10)) * 0.2);
-    } else if ((lpPct >= 2 && lpPct < 5) || (lpPct > 15 && lpPct <= 25)) {
-      lpScore = 10 + (8 * (1 - Math.abs(lpPct - 10) / 15));
-    } else {
-      lpScore = Math.max(0, 10 - (Math.abs(lpPct - 10) / 3));
-    }
-    
-    // Holder count score (10 points max)
-    let holderScore = 0;
-    if (report.totalHolders > 1000) holderScore = 10;
-    else if (report.totalHolders > 500) holderScore = 7 + ((report.totalHolders - 500) / 500) * 3;
-    else if (report.totalHolders > 100) holderScore = 4 + ((report.totalHolders - 100) / 400) * 3;
-    else holderScore = (report.totalHolders / 100) * 4;
-    
-    const totalScore = Math.round(whaleScore + distributionScore + lpScore + holderScore);
-    
-    // Determine risk level based on whale concentration
+    // Map grade to risk level
     let riskLevel: 'low' | 'medium' | 'high';
     let emoji: string;
     let label: string;
     
-    if (whalePercentage < 10) {
+    if (score >= 65) {
       riskLevel = 'low';
       emoji = '🟢';
-      label = 'Community-owned';
-    } else if (whalePercentage < 30) {
+      label = grade === 'A' ? 'Excellent' : 'Healthy';
+    } else if (score >= 50) {
       riskLevel = 'medium';
       emoji = '🟡';
       label = 'Neutral';
     } else {
       riskLevel = 'high';
       emoji = '🔴';
-      label = 'High Risk';
+      label = score < 25 ? 'Critical' : 'High Risk';
     }
     
+    // Map breakdown to expected shape (use edge fn metrics where available)
+    const b = breakdown || {};
     return {
-      score: totalScore,
+      score,
       riskLevel,
       emoji,
       label,
-      whalePercentage,
+      whalePercentage: report.distributionStats?.top5Percentage ?? 0,
       breakdown: {
-        whaleScore: Math.round(whaleScore),
-        distributionScore: Math.round(distributionScore),
-        lpScore: Math.round(lpScore),
-        holderCountScore: Math.round(holderScore)
+        whaleScore: b.whales?.score ?? 0,
+        distributionScore: b.holders?.score ?? 0,
+        lpScore: b.lp?.score ?? 0,
+        holderCountScore: b.holders?.score ?? 0,
       }
     };
   };

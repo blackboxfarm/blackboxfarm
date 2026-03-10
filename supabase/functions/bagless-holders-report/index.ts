@@ -9,6 +9,12 @@ import {
   extractIpAddress, 
   logCompleteSearch 
 } from "../_shared/token-search-logger.ts"
+import {
+  crossLinkHolderReputation,
+  fetchHistoricalDelta,
+  feedTokenLifecycle,
+  detectSocialChanges,
+} from "../_shared/holder-intelligence.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -286,8 +292,33 @@ serve(async (req) => {
     const lpWallets = rankedHolders.filter(h => h.isLiquidityPool);
     const nonLpHolders = rankedHolders.filter(h => !h.isLiquidityPool);
     
-    // Dev wallet detection (simplified)
-    if (nonLpHolders.length > 0) {
+    // Dev wallet detection — prefer verified creator wallet from launchpad API
+    if (creatorInfo.wallet) {
+      const creatorHolder = nonLpHolders.find(h => h.owner === creatorInfo.wallet);
+      if (creatorHolder) {
+        potentialDevWallet = {
+          address: creatorHolder.owner,
+          balance: creatorHolder.balance,
+          usdValue: creatorHolder.usdValue,
+          percentageOfSupply: creatorHolder.percentageOfSupply,
+          confidence: 100,
+          detectionMethod: 'creator_api',
+          reason: `Verified creator wallet via ${launchpadInfo.name} (${creatorHolder.percentageOfSupply.toFixed(1)}%)`
+        };
+      } else {
+        // Creator wallet exists but holds 0 — still mark it
+        potentialDevWallet = {
+          address: creatorInfo.wallet,
+          balance: 0,
+          usdValue: 0,
+          percentageOfSupply: 0,
+          confidence: 95,
+          detectionMethod: 'creator_api_sold',
+          reason: `Verified creator via ${launchpadInfo.name} — sold entire position`
+        };
+      }
+    } else if (nonLpHolders.length > 0) {
+      // Fallback: heuristic — top non-LP holder
       const top = nonLpHolders[0];
       potentialDevWallet = {
         address: top.owner,
@@ -296,7 +327,7 @@ serve(async (req) => {
         percentageOfSupply: top.percentageOfSupply,
         confidence: top.percentageOfSupply > 10 ? 65 : 45,
         detectionMethod: 'top_holder',
-        reason: `Top non-LP holder (${top.percentageOfSupply.toFixed(1)}%)`
+        reason: `Top non-LP holder (${top.percentageOfSupply.toFixed(1)}%) — creator unverified`
       };
     }
     
@@ -490,8 +521,22 @@ serve(async (req) => {
       if (weight > 0) healthBreakdown[key] = { score: Math.round(s), weight, contribution: Math.round(contribution) };
     }
     
-    // === VITALITY PENALTIES (post-bond only) ===
+    // === VITALITY PENALTIES ===
     const vitalityPenalties: string[] = [];
+    
+    // === BONDING CURVE PROGRESS ADJUSTMENT (on_curve only) ===
+    if (healthPhase === 'on_curve' && creatorInfo.bondingCurveProgress !== undefined) {
+      const bcp = creatorInfo.bondingCurveProgress;
+      if (bcp > 80) {
+        healthScore += 10;
+        vitalityPenalties.push(`Graduation imminent: ${bcp.toFixed(0)}% bonding curve`);
+      } else if (bcp < 20) {
+        healthScore -= 10;
+        vitalityPenalties.push(`Low bonding curve progress: ${bcp.toFixed(0)}%`);
+      }
+    }
+    
+    // Post-bond vitality penalties
     if (healthPhase !== 'on_curve') {
       if (vol24 < 500 && nonLpHolders.length > 100) { healthScore -= 15; vitalityPenalties.push('Volume collapse (<$500/24h)'); }
       if (vitality.txns.h1.buys + vitality.txns.h1.sells === 0) { healthScore -= 10; vitalityPenalties.push('Zero transactions in last hour'); }
@@ -591,6 +636,44 @@ serve(async (req) => {
     else if (healthScore >= 50) healthGrade = 'D';
     else healthGrade = 'F';
 
+    // === HOLDER INTELLIGENCE (parallel, non-blocking) ===
+    const top20Addresses = nonLpHolders.slice(0, 20).map(h => h.owner);
+    const [flaggedHolders, historicalDelta, socialWarnings] = await Promise.all([
+      crossLinkHolderReputation(top20Addresses),
+      fetchHistoricalDelta(tokenMint),
+      detectSocialChanges(tokenMint, socials),
+    ]);
+    
+    // Add social removal warnings to risk flags
+    for (const warning of socialWarnings) {
+      riskFlags.push(warning);
+    }
+    
+    // Add flagged holder warnings to risk flags
+    if (flaggedHolders.length > 0) {
+      const flagSummary = flaggedHolders.map(f => {
+        const parts: string[] = [];
+        if (f.is_blacklisted) parts.push('BLACKLISTED');
+        if (f.trust_level) parts.push(f.trust_level);
+        if (f.tokens_rugged && f.tokens_rugged > 0) parts.push(`${f.tokens_rugged} rugs`);
+        return `${f.wallet_address.slice(0, 6)}...${f.wallet_address.slice(-4)}: ${parts.join(', ')}`;
+      });
+      riskFlags.push(`⚠️ ${flaggedHolders.length} flagged wallet(s) in top 20: ${flagSummary.join(' | ')}`);
+    }
+    
+    // Compute historical deltas if we have prior data
+    let hasHistoricalData = false;
+    if (historicalDelta) {
+      historicalDelta.holderCountChange = rankedHolders.length - historicalDelta.previousHolderCount;
+      historicalDelta.healthScoreChange = healthScore - historicalDelta.previousHealthScore;
+      historicalDelta.dustPctChange = simpleTiers.dust.percentage - historicalDelta.previousDustPct;
+      historicalDelta.top5PctChange = distributionStats.top5Percentage - historicalDelta.previousTop5Pct;
+      hasHistoricalData = true;
+    }
+    
+    // Feed token lifecycle (fire and forget)
+    feedTokenLifecycle(tokenMint, creatorInfo.wallet, tokenSymbol, launchpadInfo.name).catch(() => {});
+
     const totalTime = Date.now() - requestStartTime;
     console.log(`✅ [PERF] Request complete in ${totalTime}ms — ${rankedHolders.length} holders`);
 
@@ -661,6 +744,12 @@ serve(async (req) => {
         vitalityPenalties,
         pairAgeHours: pairAgeHours ? Math.round(pairAgeHours) : null,
       },
+      // Intelligence data
+      flaggedHolders: flaggedHolders.length > 0 ? flaggedHolders : undefined,
+      historicalDelta: hasHistoricalData ? historicalDelta : undefined,
+      hasHistoricalData,
+      bondingCurveProgress: creatorInfo.bondingCurveProgress ?? null,
+      
       firstBuyers: [],
       executionTimeMs: totalTime
     };
