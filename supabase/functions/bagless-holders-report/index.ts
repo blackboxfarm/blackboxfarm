@@ -624,6 +624,9 @@ serve(async (req) => {
       creatorInfo: Object.keys(creatorInfo).length > 0 ? creatorInfo : undefined,
       insidersGraph: insidersResult.hasInsiders ? insidersResult : undefined,
 
+      // Vitality data — CRITICAL: passed to token-ai-interpreter for phase detection & analysis
+      vitality,
+
       // Back-compat fields for UI widgets
       // Real Holders = Total Wallets - Dust Wallets (not a specific tier)
       realHolders: rankedHolders.length - dustWallets,

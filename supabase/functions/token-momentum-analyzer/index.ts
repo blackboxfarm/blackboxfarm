@@ -68,29 +68,61 @@ const PHASE_THRESHOLDS: Record<TokenPhase, PhaseThresholds> = {
     txns5m: { high: 20, low: 2 },
     weights: { volume: 0.10, buySell: 0.35, price5m: 0.30, price1h: 0.05, activity: 0.20 },
   },
-  fresh: {
-    // Fresh: emphasize buy pressure and activity, volume starting to matter
+  newborn: {
+    // Newborn (<2h): buy pressure and activity dominate, volume barely established
+    volumeSurge: { high: 2.5, elevated: 1.3, low: 0.3 },
+    buySell: { strong: 1.6, positive: 1.1, selling: 0.55, heavySelling: 0.4 },
+    priceChange5m: { surging: 15, rising: 5, dumping: -15, falling: -8 },
+    txns5m: { high: 25, low: 3 },
+    weights: { volume: 0.15, buySell: 0.30, price5m: 0.25, price1h: 0.10, activity: 0.20 },
+  },
+  early: {
+    // Early (2-12h): buy pressure still key, volume starting to matter
     volumeSurge: { high: 3, elevated: 1.5, low: 0.4 },
     buySell: { strong: 1.8, positive: 1.2, selling: 0.55, heavySelling: 0.4 },
     priceChange5m: { surging: 12, rising: 4, dumping: -12, falling: -6 },
     txns5m: { high: 30, low: 3 },
     weights: { volume: 0.20, buySell: 0.30, price5m: 0.20, price1h: 0.10, activity: 0.20 },
   },
+  adolescent: {
+    // Adolescent (12-48h): transitioning, volume and trends gain weight
+    volumeSurge: { high: 3.5, elevated: 1.8, low: 0.4 },
+    buySell: { strong: 1.8, positive: 1.2, selling: 0.5, heavySelling: 0.4 },
+    priceChange5m: { surging: 10, rising: 3.5, dumping: -10, falling: -5 },
+    txns5m: { high: 40, low: 4 },
+    weights: { volume: 0.22, buySell: 0.25, price5m: 0.18, price1h: 0.15, activity: 0.20 },
+  },
   established: {
-    // Established: standard balanced thresholds
+    // Established (2-7d): standard balanced thresholds
     volumeSurge: { high: 4, elevated: 2, low: 0.5 },
     buySell: { strong: 2, positive: 1.2, selling: 0.5, heavySelling: 0.4 },
     priceChange5m: { surging: 10, rising: 3, dumping: -10, falling: -5 },
     txns5m: { high: 50, low: 5 },
     weights: { volume: 0.25, buySell: 0.20, price5m: 0.15, price1h: 0.20, activity: 0.20 },
   },
+  growth: {
+    // Growth (7-30d): volume consistency and longer trends matter more
+    volumeSurge: { high: 4.5, elevated: 2.2, low: 0.5 },
+    buySell: { strong: 2.2, positive: 1.2, selling: 0.5, heavySelling: 0.4 },
+    priceChange5m: { surging: 8, rising: 2.5, dumping: -8, falling: -4 },
+    txns5m: { high: 60, low: 8 },
+    weights: { volume: 0.25, buySell: 0.18, price5m: 0.12, price1h: 0.22, activity: 0.23 },
+  },
   mature: {
-    // Mature: raise the bar — need bigger moves to matter, weight trends over noise
+    // Mature (30-90d): raise the bar — need bigger moves to matter
     volumeSurge: { high: 5, elevated: 2.5, low: 0.5 },
     buySell: { strong: 2.5, positive: 1.3, selling: 0.5, heavySelling: 0.35 },
     priceChange5m: { surging: 8, rising: 2, dumping: -8, falling: -4 },
     txns5m: { high: 80, low: 10 },
     weights: { volume: 0.25, buySell: 0.15, price5m: 0.10, price1h: 0.25, activity: 0.25 },
+  },
+  blue_chip: {
+    // Blue chip (90d+): institutional-grade, highest bars
+    volumeSurge: { high: 6, elevated: 3, low: 0.5 },
+    buySell: { strong: 3, positive: 1.5, selling: 0.5, heavySelling: 0.3 },
+    priceChange5m: { surging: 6, rising: 1.5, dumping: -6, falling: -3 },
+    txns5m: { high: 100, low: 15 },
+    weights: { volume: 0.25, buySell: 0.12, price5m: 0.08, price1h: 0.28, activity: 0.27 },
   },
 };
 
@@ -103,7 +135,12 @@ async function fetchDexScreenerMetrics(tokenMint: string) {
       return null;
     }
     const data = await response.json();
-    const pair = data.pairs?.[0];
+    // Pick best Solana pair by liquidity, not just pairs[0]
+    const allPairs = data.pairs || [];
+    const solanaPairs = allPairs.filter((p: any) => p.chainId === 'solana');
+    const pair = solanaPairs.length > 0
+      ? solanaPairs.reduce((best: any, p: any) => (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best, solanaPairs[0])
+      : allPairs[0];
     if (!pair) {
       console.log(`[momentum] No pair found for ${tokenMint}`);
       return null;

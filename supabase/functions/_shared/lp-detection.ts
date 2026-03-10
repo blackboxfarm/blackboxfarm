@@ -217,18 +217,10 @@ export function detectLP(
     }
   }
   
-  // Priority 7: High concentration heuristic (less reliable)
-  // NOTE: Some LP vault owners are unique PDAs and won't match static lists.
-  // Use a conservative threshold to catch LPs that reliably sit ~15-25%.
-  if (percentageOfSupply >= 15) {
-    return {
-      isLP: true,
-      confidence: 60,
-      platform: 'Unknown Platform',
-      reason: `High concentration (${percentageOfSupply.toFixed(1)}%) - likely LP vault/authority`,
-      source: 'heuristic'
-    };
-  }
+  // NOTE: Removed the old 15% heuristic threshold. It was misclassifying
+  // whales and dev wallets as LPs. We now rely on Solscan's verified LP labels,
+  // DexScreener pair addresses, known wallet lists, and program ID matching.
+  // If a wallet isn't caught by any of the above, it's a real holder.
   
   // Not detected as LP
   return {

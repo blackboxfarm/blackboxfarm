@@ -91,13 +91,13 @@ function fallbackVerdict(momentumScore: number, healthScore: number, phase: Toke
     if (momentumScore >= 40) return { verdict: 'WATCH CURVE', emoji: '🟡', description: 'On curve with some momentum. Observe.' };
     return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals on bonding curve.' };
   }
-  if (phase === 'fresh') {
+  if (phase === 'newborn' || phase === 'early' || phase === 'adolescent') {
     if (momentumScore >= 70 && healthScore >= 60) return { verdict: 'BUY MEDIUM SHORT', emoji: '🟢', description: 'Strong early signals. Medium position, stay nimble.' };
     if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'BUY SMALL SHORT', emoji: '🟡', description: 'Decent fresh launch. Small speculative position.' };
     if (momentumScore >= 40) return { verdict: 'WATCH', emoji: '🟡', description: 'Fresh token, monitor for breakout.' };
     return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals on fresh token.' };
   }
-  if (phase === 'established') {
+  if (phase === 'established' || phase === 'growth') {
     if (momentumScore >= 75 && healthScore >= 70) return { verdict: 'BUY DEEP LONG', emoji: '🟢', description: 'Strong chart + healthy holders. Full position.' };
     if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'BUY MEDIUM SHORT', emoji: '🟢', description: 'Decent momentum on established token.' };
     if (momentumScore >= 40) return { verdict: 'BUY SMALL SHORT', emoji: '🟡', description: 'Speculative. Small amount.' };
@@ -426,26 +426,10 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   const top10Pct = data.distributionStats?.top10Percentage ?? "?";
   const tokenSymbol = data.symbol || data.tokenSymbol || null;
   const tokenName = data.name || data.tokenName || null;
+  const mcap = data.marketCap || null;
 
-  // Fetch DexScreener for MCap + fallback metadata
-  let mcap: number | null = null;
-  let dexSymbol: string | null = null;
-  let dexName: string | null = null;
-  try {
-    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
-    if (dexRes.ok) {
-      const dexJson = await dexRes.json();
-      const pair = dexJson?.pairs?.[0];
-      if (pair) {
-        mcap = pair.marketCap || pair.fdv || null;
-        dexSymbol = pair.baseToken?.symbol || null;
-        dexName = pair.baseToken?.name || null;
-      }
-    }
-  } catch (_) {}
-
-  const symbol = tokenSymbol || dexSymbol || null;
-  const name = tokenName || dexName || null;
+  const symbol = tokenSymbol || null;
+  const name = tokenName || null;
   const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
   const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
 
@@ -509,7 +493,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
         const interp = aiData.interpretation;
         msg += `\n🧠 *AI Health Analysis*\n`;
         if (interp.lifecycle) msg += `📍 Stage: *${interp.lifecycle.stage}* (${interp.lifecycle.confidence})\n`;
-        if (interp.narrative) msg += `💬 ${interp.narrative.substring(0, 300)}\n`;
+        if (interp.status_overview) msg += `💬 ${interp.status_overview.substring(0, 300)}\n`;
       }
     }
   } catch (aiErr) {
@@ -712,10 +696,12 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     aiReasoning = parsed.reasoning || '';
 
     // Phase safety caps — AI should respect these, but enforce as guardrail
+    const isEarlyPhase = verdictPhase === 'on_curve' || verdictPhase === 'newborn' || verdictPhase === 'early' || verdictPhase === 'adolescent';
+    const isFreshPhase = verdictPhase === 'newborn' || verdictPhase === 'early' || verdictPhase === 'adolescent';
     if (verdictPhase === 'on_curve' && ['BUY DEEP LONG', 'BUY MEDIUM SHORT'].includes(verdict)) {
       verdict = 'WATCH CURVE — SMALL SHORT';
       emoji = '🟡';
-    } else if (verdictPhase === 'fresh' && verdict === 'BUY DEEP LONG') {
+    } else if (isFreshPhase && verdict === 'BUY DEEP LONG') {
       verdict = 'BUY MEDIUM SHORT';
       emoji = '🟢';
     }
@@ -960,14 +946,8 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   await sendMessage(chatId, `🔍 Quick snapshot for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/ca", ca);
 
-  // Fresh pull from bagless-holders-report + DexScreener in parallel
-  const [data, dexData] = await Promise.all([
-    invokeFunction("bagless-holders-report", { tokenMint: ca }),
-    fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d?.pairs?.[0] || null)
-      .catch(() => null),
-  ]);
+  // Fresh pull from bagless-holders-report (already includes DexScreener data)
+  const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
 
   if (!data || data.error) {
     await sendMessage(chatId, `❌ Could not fetch data for this token.`);
@@ -979,9 +959,9 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const healthPhase = data.healthScore?.phase || null;
   const phaseLabel = healthPhase ? ` (${healthPhase.replace('_', ' ')})` : '';
   const top10Pct = data.distributionStats?.top10Percentage ?? null;
-  const symbol = data.symbol || data.tokenSymbol || dexData?.baseToken?.symbol || null;
-  const name = data.name || data.tokenName || dexData?.baseToken?.name || null;
-  const mcap = dexData?.marketCap || dexData?.fdv || null;
+  const symbol = data.symbol || data.tokenSymbol || null;
+  const name = data.name || data.tokenName || null;
+  const mcap = data.marketCap || null;
   const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
   const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
 
