@@ -149,7 +149,7 @@ export async function fetchHistoricalDelta(
       holderCountChange: 0, // Will be computed by caller
       previousHealthScore: prev.health_score ?? 0,
       healthScoreChange: 0,
-      previousDustPct: prev.tier_dust ?? 0,
+      previousDustPct: prevDustPct,
       dustPctChange: 0,
       previousTop5Pct: prev.top5_concentration ?? 0,
       top5PctChange: 0,
