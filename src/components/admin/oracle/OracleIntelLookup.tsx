@@ -11,6 +11,9 @@ interface OracleIntelLookupProps {
   initialQuery?: string;
 }
 
+const solscanLink = (address: string) => `https://solscan.io/account/${address}`;
+const isWalletAddress = (id: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id);
+
 const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
   const [query, setQuery] = useState(initialQuery || "");
   const { lookup, result, isLoading, error, reset } = useOracleLookup();
