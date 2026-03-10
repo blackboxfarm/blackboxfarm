@@ -1,88 +1,80 @@
 
 
-# HoldersIntel Bot — Full Command Suite with Tier Gating
+## Root Cause: MISSILE is on PumpSwap, not Raydium — system doesn't recognize it
 
-## What You Gave Me (BotFather Commands)
+From the DexScreener screenshot: MISSILE trades on **PumpSwap** (Pump.fun's own AMM after graduation), not Raydium. It has $86K liquidity, $1M MCap, 2,943 holders, 19h old, +1,682% in 24h. It's clearly graduated and actively trading.
 
-Based on the conversation and your existing bot, here's the command list I'm building around:
+### The Bug
 
-```text
-/start        — Welcome & setup
-/register     — Link BlackBox Farm account
-/status       — Check subscription tier
-/help         — Show commands
-/holders CA   — Holder distribution analysis
-/momentum CA  — Volume/price momentum score
-/verdict CA   — Quick Buy/Hold verdict
-/oracle CA    — Developer reputation lookup
-/wallet ADDR  — Wallet behavior analysis
-/alerts       — Manage alert preferences
+**`dexscreener-api.ts` line 122-123**: Vitality metrics are extracted from the **first pair** returned by DexScreener. For PumpSwap tokens, DexScreener returns `dexId: "pumpswap"` — the `pairCreatedAt` and `liquidityUsd` values ARE populated correctly.
+
+**`bagless-holders-report/index.ts` line 413**: The phase gate is:
+```typescript
+if (vitality.pairCreatedAt && vitality.liquidityUsd > 50000)
 ```
 
-## Tier Gating Matrix
+This should pass for MISSILE ($86K liquidity > $50K threshold). So either:
+1. The first pair returned by DexScreener for MISSILE has lower liquidity than the PumpSwap pair (DexScreener may return a different pair first)
+2. OR the `pairCreatedAt` is null for the PumpSwap pair format
 
-```text
-Command       │ Free │ Auth │ X Sub │ Pro  │ Dev
-──────────────┼──────┼──────┼───────┼──────┼─────
-/start        │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/register     │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/status       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/help         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/holders CA   │  —   │ lite │ full  │ full+│ full+
-/momentum CA  │  —   │  —   │  ✓    │  ✓   │  ✓
-/verdict CA   │  —   │ lite │  ✓    │  ✓   │  ✓
-/oracle CA    │  —   │  —   │  —    │  ✓   │  ✓
-/wallet ADDR  │  —   │  —   │  —    │  ✓   │  ✓
-/alerts       │  —   │  —   │  ✓    │  ✓   │  ✓
+**But the shared `token-phase.ts` has a harder problem**: It uses a $50K liquidity threshold designed for Raydium. PumpSwap pairs should be treated as graduated — any token on PumpSwap with liquidity has already left the bonding curve.
+
+### The Fix (3 files, 1 shared utility)
+
+**1. `_shared/token-phase.ts`** — Accept an optional `dexId` parameter. If `dexId` includes "pumpswap", treat the token as graduated (not on curve) regardless of liquidity threshold:
+```typescript
+export function detectTokenPhase(params: {
+  pairCreatedAt: number | null;
+  liquidityUsd: number | null;
+  volumeH24?: number | null;
+  dexId?: string | null; // NEW
+}): TokenPhaseResult {
+  // PumpSwap = graduated from bonding curve, treat as having valid pair
+  const isPumpSwap = params.dexId?.toLowerCase().includes('pumpswap');
+  
+  if (!pairCreatedAt || (!isPumpSwap && liquidityUsd !== null && liquidityUsd < 50_000)) {
+    return on_curve result...
+  }
+  // ... rest of phase detection
+}
 ```
 
-- **Free (unlinked)**: Only meta commands. Everything else says "link your account first."
-- **Auth (linked, free tier)**: `/holders` returns a lite summary (holder count, top 10% concentration, health score). `/verdict` returns just the color (🟢/🔴) with no detail.
-- **X Subscriber**: Full `/holders` with tier breakdown + distribution bars. `/momentum` unlocked. `/verdict` with sizing recommendation.
-- **Pro+**: `/oracle` dev reputation, `/wallet` behavior analysis, full detail on everything.
+**2. `_shared/dexscreener-api.ts`** — Add `dexId` to `VitalityMetrics` and populate it from the first pair. Also, prefer the highest-liquidity Solana pair (not just `pairs[0]`):
+```typescript
+// In VitalityMetrics interface, add:
+dexId: string | null;
 
-## The `/verdict` System (Your Buy Signal)
-
-The verdict combines momentum score + holder health + dev reputation into a single actionable call:
-
-```text
-🟢 BUY DEEP LONG    — Strong chart, healthy holders, good dev. Full position, hold.
-🟢 BUY MEDIUM SHORT — Decent momentum, ride the wave. Medium position, 2x target.
-🟡 BUY SMALL SHORT  — Speculative. Small/disposable amount, quick 2x flip.
-🔴 HOLD / AVOID     — Weak signals, bad dev, or dump in progress. Skip.
+// When extracting vitality, pick best pair and include dexId:
+dexId: bestPair.dexId || null,
 ```
 
-The logic:
-- Momentum score ≥ 70 + health score ≥ 60 + dev GREEN → **DEEP LONG**
-- Momentum score ≥ 55 + health score ≥ 40 → **MEDIUM SHORT**
-- Momentum score ≥ 40 OR fresh token with buying pressure → **SMALL SHORT**
-- Everything else → **HOLD/AVOID**
+**3. `bagless-holders-report/index.ts` line 411-423** — Pass `dexId` through to phase detection and also recognize PumpSwap as graduated:
+```typescript
+const isPumpSwap = result.pairs.some(p => 
+  p.dexId === 'pumpswap' && (p.liquidity?.usd || 0) > 0
+);
 
-## Technical Implementation
+if (vitality.pairCreatedAt && (vitality.liquidityUsd > 50000 || isPumpSwap)) {
+  // ... phase classification (newborn, early, etc.)
+}
+```
 
-All new commands will be added to the existing `holdersintel-bot-webhook/index.ts` edge function. Each analytical command calls the existing edge functions internally via `supabase.functions.invoke()`:
+**4. `token-ai-interpreter/index.ts` line 453** — Pass `dexId` to `detectTokenPhase`:
+```typescript
+const phaseResult = detectTokenPhase({ 
+  pairCreatedAt, liquidityUsd, 
+  dexId: reportData.vitality?.dexId || reportData.dexId || null 
+});
+```
 
-| Bot Command | Calls | Data Source |
-|---|---|---|
-| `/holders CA` | `token-ai-interpreter` | Helius holder data + bucketing |
-| `/momentum CA` | `token-momentum-analyzer` | DexScreener live metrics |
-| `/verdict CA` | `token-momentum-analyzer` + `token-ai-interpreter` + `oracle-unified-lookup` | Combined score |
-| `/oracle CA` | `oracle-unified-lookup` | Dev reputation mesh |
-| `/wallet ADDR` | `wallet-behavior-analysis` | Helius transaction history |
-| `/alerts` | DB read/write on user preferences | `telegram_link_codes` or new prefs table |
+**5. `holdersintel-bot-webhook/index.ts`** — Same: pass `dexId` through when detecting phase, and ensure PumpSwap tokens aren't capped to "WATCH CURVE".
 
-### Rate Limiting
-Each analytical command will be rate-limited per user (e.g., 5 lookups/hour for X Sub, 20/hour for Pro) to prevent API abuse. Tracked via a simple counter in the `telegram_link_codes` table or a lightweight `telegram_bot_usage` table.
+### Why This Matters
 
-### New DB Table
-`telegram_bot_usage` — tracks per-user command usage for rate limiting:
-- `id`, `telegram_user_id`, `command`, `token_mint`, `created_at`
+PumpSwap is Pump.fun's new AMM venue. Tokens graduate from the bonding curve TO PumpSwap (instead of Raydium). The system was built when graduation meant Raydium only. Now `dexId === "pumpswap"` is definitive proof of graduation — even stronger than a liquidity check.
 
-### Response Formatting
-All responses formatted as Telegram Markdown with ASCII bar charts for distributions (same style as the XBot channel posts), keeping messages under Telegram's 4096 char limit.
-
-## Files Changed
-1. **`supabase/functions/holdersintel-bot-webhook/index.ts`** — Add handlers for `/holders`, `/momentum`, `/verdict`, `/oracle`, `/wallet`, `/alerts`. Add tier gating middleware. Add rate limiting.
-2. **DB migration** — Create `telegram_bot_usage` table for rate limiting.
-3. **Update `/help`** — Show tier-appropriate command list per user.
+### Summary of Changes
+- **5 files** modified across edge functions and shared utilities
+- Core fix: recognize `pumpswap` as a graduated DEX venue alongside `raydium`, `orca`, `meteora`
+- The `mint-monitor-scanner` already does this correctly (line 84) — the holders report and AI interpreter just need to catch up
 
