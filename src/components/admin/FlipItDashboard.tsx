@@ -3634,14 +3634,14 @@ export function FlipItDashboard() {
                         <span className="text-zinc-400 text-xs max-w-[300px] truncate" title={blacklistWarning.reason || ''}>
                           {blacklistWarning.reason}
                         </span>
-                        <a 
-                          href={`/super-admin?tab=oracle&subtab=lookup${inputToken.creatorWallet ? `&wallet=${inputToken.creatorWallet}` : ''}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-amber-400 hover:text-amber-300 text-xs underline flex-shrink-0"
+                        <button 
+                          onClick={() => {
+                            window.location.href = `/super-admin?tab=oracle&subtab=lookup${inputToken.creatorWallet ? `&wallet=${inputToken.creatorWallet}` : ''}`;
+                          }}
+                          className="text-amber-400 hover:text-amber-300 text-xs underline flex-shrink-0 bg-transparent border-none cursor-pointer"
                         >
-                          View Mesh ↗
-                        </a>
+                          View Mesh →
+                        </button>
                       </div>
                     ) : blacklistWarning.level === 'trusted' ? (
                       <div className="flex items-center gap-2">
