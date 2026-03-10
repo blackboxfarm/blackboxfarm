@@ -124,7 +124,7 @@ export async function fetchHistoricalDelta(
   try {
     const { data, error } = await supabase
       .from('token_search_results')
-      .select('created_at, holder_count, health_score, top5_concentration, tier_dust')
+      .select('created_at, holder_count, health_score, top5_concentration, tier_dust, tier_retail, tier_serious, tier_whale')
       .eq('token_mint', tokenMint)
       .order('created_at', { ascending: false })
       .limit(1);
@@ -132,6 +132,9 @@ export async function fetchHistoricalDelta(
     if (error || !data || data.length === 0) return null;
 
     const prev = data[0];
+    const totalTiers = (prev.tier_dust ?? 0) + (prev.tier_retail ?? 0) + (prev.tier_serious ?? 0) + (prev.tier_whale ?? 0);
+    const prevDustPct = totalTiers > 0 ? ((prev.tier_dust ?? 0) / totalTiers) * 100 : 0;
+    
     const snapshotDate = new Date(prev.created_at);
     const ageMs = Date.now() - snapshotDate.getTime();
     const ageHours = Math.floor(ageMs / 3600000);
