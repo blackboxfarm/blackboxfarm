@@ -764,6 +764,10 @@ serve(async (req) => {
       historicalDelta: hasHistoricalData ? historicalDelta : undefined,
       hasHistoricalData,
       bondingCurveProgress: creatorInfo.bondingCurveProgress ?? null,
+      kolMatches: kolMatches.length > 0 ? kolMatches : undefined,
+      kolCount: kolMatches.length,
+      devGenealogy: devGenealogy || undefined,
+      insiderClusters: insidersResult.clusters.length > 0 ? insidersResult.clusters : undefined,
       
       firstBuyers: [],
       executionTimeMs: totalTime
