@@ -239,6 +239,21 @@ interface HoldersReport {
     alreadyKnown: boolean;
   };
   insiderClusters?: WalletCluster[];
+  freshWallets?: {
+    freshWalletCount: number;
+    totalChecked: number;
+    freshPercentage: number;
+    oldestAccountAge: string;
+    newestAccountAge: string;
+    clusterDetected: boolean;
+    clusterWindowHours: number | null;
+    walletAges: Array<{
+      wallet: string;
+      createdAt: string | null;
+      ageHours: number | null;
+      isFresh: boolean;
+    }>;
+  };
   bondingCurveProgress?: number | null;
   summary: string;
 }
