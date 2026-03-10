@@ -516,7 +516,9 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
               <CardContent>
                 <div className="space-y-2 max-h-80 overflow-y-auto">
                   {result.tokenHistory.map((token: any, i: number) => {
-                    const directCreator = token.creatorWallet || result.resolvedWallet;
+                    const directCreator = token.creatorWallet;
+                    const isCreatorDifferent = directCreator && directCreator !== result.resolvedWallet;
+                    const tokenUpstreamChain = token.upstreamChain || [];
                     return (
                     <div key={i} className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-muted/30 border border-border/30 text-xs">
                       <div className="flex items-center justify-between">
@@ -536,12 +538,12 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                         </div>
                       </div>
                       
-                      {/* Wallet chain: Direct Creator → Funder → KYC Root */}
+                      {/* Per-token wallet chain: Direct Creator → Funder → KYC Root */}
                       <div className="flex flex-col gap-0.5 ml-1">
-                        {/* Direct creator (pump.fun dev wallet) */}
+                        {/* Direct creator (pump.fun dev wallet for THIS token) */}
                         {directCreator && (
                           <div className="flex items-center gap-1.5 pl-2 border-l-2 border-purple-500/30">
-                            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/40 text-[9px] px-1 py-0">📡 Creator</Badge>
+                            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/40 text-[9px] px-1 py-0">📡 Dev</Badge>
                             <a href={solscanLink(directCreator)} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
                               {directCreator.slice(0, 6)}...{directCreator.slice(-4)}
                             </a>
@@ -554,11 +556,15 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                             <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(directCreator)}>
                               <Copy className="h-2.5 w-2.5" />
                             </Button>
+                            <Button variant="ghost" size="sm" className="h-4 p-0 px-1 flex-shrink-0 text-[9px] text-purple-400 hover:text-purple-300" onClick={() => { setQuery(directCreator); lookup(directCreator); }}>
+                              🔍
+                            </Button>
+                            {!isCreatorDifferent && <span className="text-[9px] text-muted-foreground italic">= looked-up wallet</span>}
                           </div>
                         )}
                         
-                        {/* Upstream chain (funder → KYC root) */}
-                        {result.upstreamChain && result.upstreamChain.slice(1).map((node, idx) => (
+                        {/* Per-token upstream chain (funder → KYC root) */}
+                        {tokenUpstreamChain.map((node: any, idx: number) => (
                           <div key={idx} className={`flex items-center gap-1.5 pl-2 border-l-2 ${
                             node.role === 'kyc_root' ? 'border-amber-500/40' : 'border-green-500/30'
                           }`}>
@@ -581,11 +587,29 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                             <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(node.wallet)}>
                               <Copy className="h-2.5 w-2.5" />
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-4 p-0 px-1 flex-shrink-0 text-[9px] text-purple-400 hover:text-purple-300" onClick={() => { setQuery(node.wallet); handleLookup(); }}>
+                            <Button variant="ghost" size="sm" className="h-4 p-0 px-1 flex-shrink-0 text-[9px] text-purple-400 hover:text-purple-300" onClick={() => { setQuery(node.wallet); lookup(node.wallet); }}>
                               🔍
                             </Button>
+                            {node.wallet === result.resolvedWallet && <span className="text-[9px] text-muted-foreground italic">⭐ looked-up wallet</span>}
                           </div>
                         ))}
+                        
+                        {/* If creator is different but no upstream chain found, still show the looked-up wallet as parent */}
+                        {isCreatorDifferent && tokenUpstreamChain.length === 0 && result.resolvedWallet && (
+                          <div className="flex items-center gap-1.5 pl-2 border-l-2 border-amber-500/40">
+                            <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/40 text-[9px] px-1 py-0">🔑 Parent</Badge>
+                            <span className="text-[9px] text-muted-foreground">↑ parent wallet</span>
+                            <a href={solscanLink(result.resolvedWallet)} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
+                              {result.resolvedWallet.slice(0, 6)}...{result.resolvedWallet.slice(-4)}
+                            </a>
+                            <a href={`https://pump.fun/profile/${result.resolvedWallet}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300" title="Pump.fun profile">
+                              <span className="text-[9px]">🟢PF</span>
+                            </a>
+                            <Button variant="ghost" size="sm" className="h-4 w-4 p-0 flex-shrink-0" onClick={() => copyToClipboard(result.resolvedWallet!)}>
+                              <Copy className="h-2.5 w-2.5" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                     );
