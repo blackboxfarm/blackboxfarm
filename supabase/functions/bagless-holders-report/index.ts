@@ -9,6 +9,12 @@ import {
   extractIpAddress, 
   logCompleteSearch 
 } from "../_shared/token-search-logger.ts"
+import {
+  crossLinkHolderReputation,
+  fetchHistoricalDelta,
+  feedTokenLifecycle,
+  detectSocialChanges,
+} from "../_shared/holder-intelligence.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
