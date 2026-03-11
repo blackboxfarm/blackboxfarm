@@ -1,0 +1,1 @@
+ALTER TABLE public.pumpfun_watchlist ADD COLUMN IF NOT EXISTS dust_checked_at timestamptz;

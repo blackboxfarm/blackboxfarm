@@ -169,44 +169,16 @@ async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   }
 }
 
-// Fetch actual holder count from Helius
-async function fetchHeliusHolderCount(mint: string): Promise<number> {
-  const heliusApiKey = getHeliusApiKey();
-  if (!heliusApiKey) return 0;
-
-  try {
-    const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'holder-count',
-        method: 'getTokenAccounts',
-        params: { mint, limit: 500 }
-      })
-    });
-
-    if (!response.ok) return 0;
-    const data = await response.json();
-    if (data.error || !data.result) return 0;
-    
-    const accounts = data.result.token_accounts || [];
-    const activeHolders = accounts.filter((a: any) => Number(a.amount || 0) > 0).length;
-    
-    console.log(`   👥 Helius holder count: ${mint.slice(0, 8)} - ${activeHolders} holders`);
-    return activeHolders;
-  } catch (error) {
-    console.error(`Error fetching Helius holder count for ${mint}:`, error);
-    return 0;
-  }
+// Unified Helius holder + dust call — ONE getTokenAccounts request for both
+interface HeliusHolderResult {
+  holderCount: number;
+  dustPct: number | null;
+  accounts: any[];
 }
 
-// Calculate dust holder percentage
-async function calculateDustHolderPct(mint: string, priceUsd: number | null, decimals = 6): Promise<number | null> {
-  if (!priceUsd || priceUsd <= 0) return null;
-  
+async function fetchHeliusHolderData(mint: string, priceUsd: number | null, decimals = 6): Promise<HeliusHolderResult> {
   const heliusApiKey = getHeliusApiKey();
-  if (!heliusApiKey) return null;
+  if (!heliusApiKey) return { holderCount: 0, dustPct: null, accounts: [] };
 
   try {
     const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
@@ -214,38 +186,54 @@ async function calculateDustHolderPct(mint: string, priceUsd: number | null, dec
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: 'dust-check',
+        id: 'holder-data',
         method: 'getTokenAccounts',
         params: { mint, limit: 500 }
       })
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) return { holderCount: 0, dustPct: null, accounts: [] };
     const data = await response.json();
-    if (data.error || !data.result) return null;
+    if (data.error || !data.result) return { holderCount: 0, dustPct: null, accounts: [] };
 
     const accounts = data.result.token_accounts || [];
     const activeAccounts = accounts.filter((a: any) => Number(a.amount || 0) > 0);
-    
-    if (activeAccounts.length === 0) return null;
+    const holderCount = activeAccounts.length;
 
-    const DUST_THRESHOLD_USD = 2;
-    let dustCount = 0;
-    
-    for (const account of activeAccounts) {
-      const rawAmount = Number(account.amount || 0);
-      const tokenAmount = rawAmount / Math.pow(10, decimals);
-      const valueUsd = tokenAmount * priceUsd;
-      if (valueUsd < DUST_THRESHOLD_USD) dustCount++;
+    // Calculate dust from the SAME data — no second API call
+    let dustPct: number | null = null;
+    if (priceUsd && priceUsd > 0 && activeAccounts.length > 0) {
+      const DUST_THRESHOLD_USD = 2;
+      let dustCount = 0;
+      for (const account of activeAccounts) {
+        const rawAmount = Number(account.amount || 0);
+        const tokenAmount = rawAmount / Math.pow(10, decimals);
+        const valueUsd = tokenAmount * priceUsd;
+        if (valueUsd < DUST_THRESHOLD_USD) dustCount++;
+      }
+      dustPct = (dustCount / activeAccounts.length) * 100;
+      console.log(`   👥🧹 Helius: ${mint.slice(0, 8)} — ${holderCount} holders, ${dustCount} dust (${dustPct.toFixed(1)}%)`);
+    } else {
+      console.log(`   👥 Helius: ${mint.slice(0, 8)} — ${holderCount} holders`);
     }
 
-    const dustPct = (dustCount / activeAccounts.length) * 100;
-    console.log(`   🧹 Dust check: ${mint.slice(0, 8)} - ${dustCount}/${activeAccounts.length} holders are dust (${dustPct.toFixed(1)}%)`);
-    return dustPct;
+    return { holderCount, dustPct, accounts };
   } catch (error) {
-    console.error(`Error calculating dust for ${mint}:`, error);
-    return null;
+    console.error(`Error fetching Helius holder data for ${mint}:`, error);
+    return { holderCount: 0, dustPct: null, accounts: [] };
   }
+}
+
+// Legacy wrappers for backward compatibility in fallback paths
+async function fetchHeliusHolderCount(mint: string): Promise<number> {
+  const result = await fetchHeliusHolderData(mint, null);
+  return result.holderCount;
+}
+
+// Legacy wrapper — only used if dust is needed independently (shouldn't happen now)
+async function calculateDustHolderPct(mint: string, priceUsd: number | null, decimals = 6): Promise<number | null> {
+  const result = await fetchHeliusHolderData(mint, priceUsd, decimals);
+  return result.dustPct;
 }
 
 // Fetch Helius metrics
@@ -934,7 +922,54 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           continue;
         }
 
-        // Fetch current metrics
+        // === PRE-API DEAD CHECK — skip expensive API calls for obviously dead tokens ===
+        const watchingMinutesPreCheck = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
+        const storedHolders = token.holder_count || 0;
+        const storedVolume = token.volume_sol || 0;
+        const storedStaleChecks = token.consecutive_stale_checks || 0;
+
+        // Kill zombies using STORED data — no API call needed
+        if (watchingMinutesPreCheck > 30 && storedHolders <= 1 && storedVolume <= 0.001) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check zombie: ${watchingMinutesPreCheck.toFixed(0)}m, ${storedHolders} holders`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (pre-check zombie)`);
+          continue;
+        }
+        if (watchingMinutesPreCheck > 60 && storedHolders < 5 && storedVolume < 0.1) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check low activity: ${storedHolders} holders after ${watchingMinutesPreCheck.toFixed(0)}m`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (pre-check low 1h)`);
+          continue;
+        }
+        if (storedStaleChecks >= 4 && watchingMinutesPreCheck > 8) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check stale: ${storedStaleChecks} stale checks, ${watchingMinutesPreCheck.toFixed(0)}m`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedStale++;
+          continue;
+        }
+        if (watchingMinutesPreCheck > config.max_watch_time_minutes) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check max time: ${watchingMinutesPreCheck.toFixed(0)}m`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (pre-check max time)`);
+          continue;
+        }
+
+        // Fetch current metrics (only for tokens that survived pre-checks)
         const metrics = await fetchPumpFunMetrics(token.token_mint);
         const watchingMinutesNow = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
         
@@ -1083,9 +1118,23 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             updates.rugcheck_version = (token.rugcheck_version || 0) + 1;
           }
 
-          // Calculate dust
-          const dustPct = await calculateDustHolderPct(token.token_mint, metrics.priceUsd);
-          updates.dust_holder_pct = dustPct;
+          // Calculate dust — SKIP Helius call for low-mcap tokens (dust is meaningless there)
+          // Also skip if dust was checked recently (within last 15 min)
+          const currentMcapForDust = metrics.marketCapUsd ?? token.market_cap_usd ?? 0;
+          const dustCheckedRecently = token.dust_checked_at && 
+            (now.getTime() - new Date(token.dust_checked_at).getTime()) < 15 * 60 * 1000;
+          
+          let dustPct: number | null = token.dust_holder_pct ?? null;
+          if (currentMcapForDust >= 15000 && !dustCheckedRecently) {
+            // Use unified holder+dust call — ONE Helius request instead of TWO
+            const holderData = await fetchHeliusHolderData(token.token_mint, metrics.priceUsd);
+            dustPct = holderData.dustPct;
+            updates.dust_holder_pct = dustPct;
+            updates.dust_checked_at = now.toISOString();
+          } else if (currentMcapForDust < 15000) {
+            // Skip dust API call entirely — scoring already discounts dust for low mcap
+            console.log(`   ⏭️ Skipping dust check: ${token.token_symbol} mcap $${currentMcapForDust.toFixed(0)} < $15k`);
+          }
 
           // Look up dev reputation
           const devReputation = await getDevReputation(supabase, token.creator_wallet);
@@ -1196,45 +1245,16 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           }
         }
         
-        // === DEAD CHECKS (unchanged from v1) ===
-        if (watchingMinutes > config.max_watch_time_minutes) {
+        // === POST-API DEAD CHECKS — catches tokens that looked alive in stored data but are dead on fresh fetch ===
+        // NOTE: Most dead tokens are now caught by pre-API checks using stored data.
+        // These only fire for edge cases where fresh metrics reveal death.
+        if (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol) {
           updates.status = 'dead';
           updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
-          updates.removal_reason = `Exceeded max watch time: ${watchingMinutes.toFixed(0)}m`;
-          stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (max time)`);
-        }
-        else if (watchingMinutes > 30 && metrics.holders <= 1 && metrics.volume24hSol <= 0.001) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `Zombie: ${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders`;
-          stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (zombie)`);
-        }
-        else if (watchingMinutes > 60 && metrics.holders < 5) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `Low activity after 1h: ${metrics.holders} holders`;
-          stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (low 1h)`);
-        }
-        else if (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL`;
+          updates.removal_reason = `${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL (fresh data)`;
           stats.markedDead++;
           stats.deadTokens.push(`${token.token_symbol} (${metrics.holders} holders)`);
-        }
-        else if (updates.consecutive_stale_checks >= 4 && watchingMinutes > 8) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `Stale: ${updates.consecutive_stale_checks} checks, ${watchingMinutes.toFixed(0)}m`;
-          stats.markedStale++;
         }
 
         // Update token
@@ -1262,11 +1282,13 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   // ═══════════════════════════════════════════════════════════════════
   const QUALIFIED_DECAY_MCAP_THRESHOLD = 3000; // $3k
   try {
+    const decayCutoff = new Date(now.getTime() - 5 * 60 * 1000).toISOString(); // only check if not checked in 5min
     const { data: qualifiedTokens } = await supabase
       .from('pumpfun_watchlist')
       .select('id, token_mint, token_symbol, market_cap_usd, qualified_at, creator_wallet, token_name')
       .eq('status', 'qualified')
-      .limit(30);
+      .or(`last_checked_at.is.null,last_checked_at.lt.${decayCutoff}`)
+      .limit(15);
 
     if (qualifiedTokens && qualifiedTokens.length > 0) {
       console.log(`🔄 QUALIFIED DECAY: Checking ${qualifiedTokens.length} qualified tokens...`);
