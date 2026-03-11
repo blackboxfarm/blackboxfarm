@@ -32,6 +32,7 @@ export default function UtilitiesTab() {
         <TabsTrigger value="api-providers">🔌 API Providers</TabsTrigger>
         <TabsTrigger value="liquidity">💧 Liquidity Checker</TabsTrigger>
         <TabsTrigger value="housekeeping">🧹 Housekeeping</TabsTrigger>
+        <TabsTrigger value="helius-breakdown">📊 Helius Usage</TabsTrigger>
       </TabsList>
 
       <TabsContent value="api-resources">
