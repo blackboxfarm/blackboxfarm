@@ -57,6 +57,9 @@ export default function UtilitiesTab() {
       <TabsContent value="liquidity">
         {activeSubTab === "liquidity" && <Suspense fallback={<LazyLoader />}><LiquidityLockChecker /></Suspense>}
       </TabsContent>
+      <TabsContent value="housekeeping">
+        {activeSubTab === "housekeeping" && <Suspense fallback={<LazyLoader />}><DatabaseHousekeeping /></Suspense>}
+      </TabsContent>
     </Tabs>
     </div>
   );
