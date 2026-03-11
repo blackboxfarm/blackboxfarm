@@ -742,6 +742,7 @@ async function getConfig(supabase: any) {
     
   return {
     is_enabled: data?.is_enabled ?? true,
+    enricher_is_enabled: data?.enricher_is_enabled ?? true,
     max_bundle_score: data?.max_bundle_score ?? 70,
     min_holder_count: data?.min_holder_count ?? 10,
     max_token_age_minutes: data?.max_token_age_minutes ?? 60,
