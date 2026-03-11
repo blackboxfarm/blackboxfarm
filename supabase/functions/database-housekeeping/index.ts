@@ -25,6 +25,73 @@ const DEFAULT_RETENTION: Record<string, number> = {
   'helius_api_usage': 30,
 };
 
+// Snapshot helius usage data before pruning (aggregated by day + function)
+async function snapshotHeliusUsage(supabase: any, retentionDays: number) {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 3600_000).toISOString();
+  
+  // Get aggregated data for rows that will be pruned
+  const { data, error } = await supabase.rpc('get_helius_usage_for_snapshot', {
+    p_cutoff: cutoff,
+  });
+
+  // Fallback: if RPC doesn't exist, query directly
+  if (error) {
+    console.log('[housekeeping] RPC not found, using direct query for snapshot');
+    const { data: rawData } = await supabase
+      .from('helius_api_usage')
+      .select('function_name, credits_used, success, response_time_ms, timestamp')
+      .lt('timestamp', cutoff)
+      .limit(10000);
+
+    if (!rawData || rawData.length === 0) return 0;
+
+    // Aggregate manually
+    const byDayFn: Record<string, {
+      calls: number; credits: number; success: number; failed: number; totalTime: number;
+    }> = {};
+
+    for (const row of rawData) {
+      const day = row.timestamp?.substring(0, 10);
+      const key = `${day}|${row.function_name}`;
+      if (!byDayFn[key]) byDayFn[key] = { calls: 0, credits: 0, success: 0, failed: 0, totalTime: 0 };
+      byDayFn[key].calls++;
+      byDayFn[key].credits += row.credits_used || 0;
+      if (row.success) byDayFn[key].success++; else byDayFn[key].failed++;
+      byDayFn[key].totalTime += row.response_time_ms || 0;
+    }
+
+    const snapshots = Object.entries(byDayFn).map(([key, v]) => {
+      const [date, fn] = key.split('|');
+      return {
+        snapshot_date: date,
+        function_name: fn,
+        total_calls: v.calls,
+        total_credits: v.credits,
+        successful_calls: v.success,
+        failed_calls: v.failed,
+        avg_response_time_ms: v.calls > 0 ? Math.round(v.totalTime / v.calls) : 0,
+      };
+    });
+
+    if (snapshots.length > 0) {
+      await supabase.from('helius_usage_snapshots').upsert(snapshots, {
+        onConflict: 'snapshot_date,function_name',
+      });
+    }
+
+    return snapshots.length;
+  }
+
+  // If RPC worked, insert results
+  if (data && data.length > 0) {
+    await supabase.from('helius_usage_snapshots').upsert(data, {
+      onConflict: 'snapshot_date,function_name',
+    });
+  }
+
+  return data?.length || 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -37,14 +104,13 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse request body for optional overrides
     let body: { dryRun?: boolean; retentionOverrides?: Record<string, number>; action?: string } = {};
     try {
       body = await req.json();
     } catch { /* empty body is fine for cron */ }
 
     const dryRun = body.dryRun ?? false;
-    const action = body.action ?? 'prune'; // 'prune' | 'stats' | 'prune_notifications'
+    const action = body.action ?? 'prune';
 
     // ── Action: Stats only ──
     if (action === 'stats') {
@@ -55,11 +121,19 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Action: Snapshot helius usage (can be called manually) ──
+    if (action === 'snapshot_helius') {
+      const snapshotCount = await snapshotHeliusUsage(supabase, 0); // snapshot all data
+      return new Response(
+        JSON.stringify({ action: 'snapshot_helius', snapshotsCreated: snapshotCount }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // ── Action: Bulk dismiss old read notifications ──
     if (action === 'prune_notifications') {
       const cutoff = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
       
-      // Count before
       const { count: before } = await supabase
         .from('admin_notifications')
         .select('*', { count: 'exact', head: true })
@@ -74,7 +148,6 @@ Deno.serve(async (req) => {
           .lt('created_at', cutoff);
       }
 
-      // Also mark all unread notifications older than 30 days as read
       const oldCutoff = new Date(Date.now() - 30 * 24 * 3600_000).toISOString();
       if (!dryRun) {
         await supabase
@@ -86,10 +159,8 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ 
-          action: 'prune_notifications',
-          dryRun,
-          readNotificationsDeleted: before || 0,
-          cutoffDate: cutoff,
+          action: 'prune_notifications', dryRun,
+          readNotificationsDeleted: before || 0, cutoffDate: cutoff,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -99,7 +170,17 @@ Deno.serve(async (req) => {
     const retention = { ...DEFAULT_RETENTION, ...(body.retentionOverrides || {}) };
     const results: PruneResult[] = [];
 
-    // Timestamp column mapping
+    // ** Auto-snapshot helius usage BEFORE pruning **
+    let heliusSnapshotCount = 0;
+    if (!dryRun && retention['helius_api_usage']) {
+      try {
+        heliusSnapshotCount = await snapshotHeliusUsage(supabase, retention['helius_api_usage']);
+        console.log(`[housekeeping] Snapshotted ${heliusSnapshotCount} helius usage aggregates before pruning`);
+      } catch (e: any) {
+        console.error('[housekeeping] Helius snapshot failed:', e.message);
+      }
+    }
+
     const timestampCol: Record<string, string> = {
       'api_usage_log': 'timestamp',
       'activity_logs': 'timestamp',
@@ -108,6 +189,7 @@ Deno.serve(async (req) => {
       'admin_notifications': 'created_at',
       'banner_impressions': 'created_at',
       'banner_clicks': 'created_at',
+      'helius_api_usage': 'timestamp',
     };
 
     for (const [table, days] of Object.entries(retention)) {
@@ -116,12 +198,10 @@ Deno.serve(async (req) => {
 
       const cutoff = new Date(Date.now() - days * 24 * 3600_000).toISOString();
 
-      // Count total rows
       const { count: totalRows } = await supabase
         .from(table)
         .select('*', { count: 'exact', head: true });
 
-      // Count rows to delete
       const { count: oldRows } = await supabase
         .from(table)
         .select('*', { count: 'exact', head: true })
@@ -148,20 +228,18 @@ Deno.serve(async (req) => {
     const totalDeleted = results.reduce((sum, r) => sum + r.rowsDeleted, 0);
     const elapsed = Date.now() - startTime;
 
-    // Log the housekeeping run
     await supabase.from('activity_logs').insert({
       message: `[housekeeping] ${dryRun ? 'DRY RUN' : 'PRUNED'}: ${totalDeleted} rows deleted across ${results.length} tables (${elapsed}ms)`,
       log_level: 'info',
-      metadata: { dryRun, results, elapsed },
+      metadata: { dryRun, results, elapsed, heliusSnapshotCount },
     });
 
-    // Write alert if significant cleanup happened
     if (totalDeleted > 1000 && !dryRun) {
       await supabase.from('admin_notifications').insert({
         title: '🧹 Database Housekeeping Complete',
-        message: `Pruned ${totalDeleted.toLocaleString()} old rows across ${results.length} tables.`,
+        message: `Pruned ${totalDeleted.toLocaleString()} old rows across ${results.length} tables. ${heliusSnapshotCount} Helius usage snapshots preserved.`,
         notification_type: 'housekeeping',
-        metadata: { totalDeleted, results },
+        metadata: { totalDeleted, results, heliusSnapshotCount },
       });
     }
 
@@ -169,12 +247,8 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        action: 'prune',
-        dryRun,
-        totalDeleted,
-        executionMs: elapsed,
-        timestamp: new Date().toISOString(),
-        results,
+        action: 'prune', dryRun, totalDeleted, heliusSnapshotCount,
+        executionMs: elapsed, timestamp: new Date().toISOString(), results,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
