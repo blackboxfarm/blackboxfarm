@@ -400,4 +400,98 @@ export const meshFeed = {
 
     return await batchUpsertLinks(supabase, links);
   },
+
+  /**
+   * Auto-resolve creator from ALL launchpad APIs (pump.fun, bonk.fun, bags.fm).
+   * Call this when you have a token mint but don't know which launchpad it came from.
+   * It tries all three in parallel and feeds whatever it finds.
+   */
+  async resolveCreatorFromLaunchpads(supabase: any, mint: string, source: string): Promise<{
+    creator?: string;
+    launchpad?: string;
+    twitter?: string;
+    linksAdded: number;
+  }> {
+    const results = { creator: undefined as string | undefined, launchpad: undefined as string | undefined, twitter: undefined as string | undefined, linksAdded: 0 };
+
+    // Fire all 3 launchpad APIs in parallel
+    const [pumpResult, bonkResult, bagsResult] = await Promise.allSettled([
+      // 1. Pump.fun
+      fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      }).then(r => r.ok ? r.json() : null).catch(() => null),
+
+      // 2. Bonk.fun
+      fetch(`https://api.bonk.fun/token/${mint}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      }).then(r => r.ok ? r.json() : null).catch(() => null),
+
+      // 3. Bags.fm
+      fetch(`https://public-api-v2.bags.fm/api/v1/analytics/token-creators/${mint}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
+
+    // Process pump.fun
+    const pumpData = pumpResult.status === 'fulfilled' ? pumpResult.value : null;
+    if (pumpData?.creator) {
+      results.creator = pumpData.creator;
+      results.launchpad = 'pump.fun';
+      if (pumpData.twitter) {
+        results.twitter = pumpData.twitter.startsWith('http') ? pumpData.twitter : `https://x.com/${pumpData.twitter}`;
+      }
+      console.log(`[mesh-feeder] pump.fun creator: ${pumpData.creator}`);
+    }
+
+    // Process bonk.fun (if pump.fun didn't find it)
+    const bonkData = bonkResult.status === 'fulfilled' ? bonkResult.value : null;
+    if (!results.creator && bonkData && (bonkData.creator || bonkData.deployer)) {
+      results.creator = bonkData.creator || bonkData.deployer;
+      results.launchpad = 'bonk.fun';
+      if (bonkData.twitter) {
+        results.twitter = bonkData.twitter.startsWith('http') ? bonkData.twitter : `https://x.com/${bonkData.twitter}`;
+      }
+      console.log(`[mesh-feeder] bonk.fun creator: ${results.creator}`);
+    }
+
+    // Process bags.fm
+    const bagsData = bagsResult.status === 'fulfilled' ? bagsResult.value : null;
+    if (!results.creator && bagsData?.success && bagsData.response?.length > 0) {
+      const creators = bagsData.response.filter((c: any) => c.isCreator);
+      if (creators.length > 0) {
+        results.creator = creators[0].wallet;
+        results.launchpad = 'bags.fm';
+        if (creators[0].provider === 'twitter' && creators[0].providerUsername) {
+          results.twitter = `https://x.com/${creators[0].providerUsername}`;
+        }
+        console.log(`[mesh-feeder] bags.fm creator: ${results.creator}`);
+
+        // bags.fm fee split → link co-creators
+        if (creators.length > 1) {
+          await meshFeed.wallet(supabase, {
+            wallet: creators[1].wallet,
+            role: 'creator',
+            linkedTo: creators[0].wallet,
+            relationship: 'same_team',
+            source: `${source}:bags_fee_split`,
+          });
+        }
+      }
+    }
+
+    // Feed the discovered data into the mesh
+    if (results.creator) {
+      results.linksAdded = await meshFeed.token(supabase, {
+        mint,
+        creatorWallet: results.creator,
+        twitterUrl: results.twitter,
+        source: `${source}:launchpad_resolve:${results.launchpad}`,
+      });
+    }
+
+    return results;
+  },
 };
