@@ -114,6 +114,12 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           <OracleBackfillStatus />
         </TabsContent>
 
+        <TabsContent value="bubble-map" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <MeshGraphVisualizer />
+          </Suspense>
+        </TabsContent>
+
         <TabsContent value="mesh" className="space-y-4">
           <OracleMeshViewer />
         </TabsContent>
