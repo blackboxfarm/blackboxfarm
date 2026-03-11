@@ -8379,6 +8379,7 @@ export type Database = {
           social_score: number | null
           socials_checked_at: string | null
           socials_count: number | null
+          socials_mesh_linked: boolean
           source: string | null
           spike_detected_at: string | null
           stagnant_reason: string | null
@@ -8503,6 +8504,7 @@ export type Database = {
           social_score?: number | null
           socials_checked_at?: string | null
           socials_count?: number | null
+          socials_mesh_linked?: boolean
           source?: string | null
           spike_detected_at?: string | null
           stagnant_reason?: string | null
@@ -8627,6 +8629,7 @@ export type Database = {
           social_score?: number | null
           socials_checked_at?: string | null
           socials_count?: number | null
+          socials_mesh_linked?: boolean
           source?: string | null
           spike_detected_at?: string | null
           stagnant_reason?: string | null

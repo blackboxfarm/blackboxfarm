@@ -1,0 +1,1 @@
+ALTER TABLE pumpfun_watchlist ADD COLUMN IF NOT EXISTS socials_mesh_linked boolean NOT NULL DEFAULT false;
