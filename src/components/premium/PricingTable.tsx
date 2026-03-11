@@ -319,7 +319,7 @@ export function PricingTable() {
                     } else if (tier.stripeKey) {
                       handleCheckout(tier.stripeKey);
                     } else if (!user) {
-                      navigate('/auth');
+                      setShowAuthModal(true);
                     }
                   }}
                 >
