@@ -718,6 +718,31 @@ serve(async (req) => {
       ).catch(() => {});
     }
     
+    // 🕸️ MESH FEEDER: Every holders analysis feeds the mesh
+    const supabaseForMesh = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    meshFeed.token(supabaseForMesh, {
+      mint: tokenMint,
+      symbol: tokenSymbol,
+      name: tokenName,
+      creatorWallet: creatorInfo.wallet,
+      twitterUrl: socials?.twitter,
+      telegramUrl: socials?.telegram,
+      websiteUrl: socials?.website,
+      source: 'bagless-holders-report',
+    }).catch(e => console.warn('[mesh-feeder] holders report feed failed:', e));
+    
+    // Feed insiders into mesh
+    if (insidersResult.hasInsiders && insidersResult.bundledWallets?.length > 0) {
+      meshFeed.insiders(supabaseForMesh, {
+        tokenMint,
+        insiderWallets: insidersResult.bundledWallets.map((w: any) => w.wallet || w),
+        source: 'bagless-holders-report',
+      }).catch(e => console.warn('[mesh-feeder] insiders feed failed:', e));
+    }
+    
     // Incremental genealogy tree expansion (fire and forget)
     if (devGenealogy?.alreadyKnown && devGenealogy.parentWallets.length > 0) {
       expandGenealogyTree(
