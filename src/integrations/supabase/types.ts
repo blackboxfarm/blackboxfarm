@@ -8308,6 +8308,7 @@ export type Database = {
           dev_secondary_wallets: string[] | null
           dev_sold: boolean | null
           dump_from_ath_pct: number | null
+          dust_checked_at: string | null
           dust_holder_pct: number | null
           fantasy_position_id: string | null
           first_10_buys_analyzed: boolean | null
@@ -8433,6 +8434,7 @@ export type Database = {
           dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
           dump_from_ath_pct?: number | null
+          dust_checked_at?: string | null
           dust_holder_pct?: number | null
           fantasy_position_id?: string | null
           first_10_buys_analyzed?: boolean | null
@@ -8558,6 +8560,7 @@ export type Database = {
           dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
           dump_from_ath_pct?: number | null
+          dust_checked_at?: string | null
           dust_holder_pct?: number | null
           fantasy_position_id?: string | null
           first_10_buys_analyzed?: boolean | null
