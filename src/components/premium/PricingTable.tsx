@@ -76,12 +76,11 @@ export function PricingTable() {
   const navigate = useNavigate();
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
 
-  const handleCheckout = async (tierKey: 'pro' | 'dev' | 'enterprise') => {
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingCheckoutTier, setPendingCheckoutTier] = useState<'pro' | 'dev' | 'enterprise' | null>(null);
 
+  // After auth completes, continue to checkout
+  const continueCheckoutAfterAuth = useCallback(async (tierKey: 'pro' | 'dev' | 'enterprise') => {
     setLoadingTier(tierKey);
     try {
       const isXSub = tierInfo.isXSubscriber;
@@ -101,6 +100,32 @@ export function PricingTable() {
       toast.error('Failed to start checkout. Please try again.');
     } finally {
       setLoadingTier(null);
+    }
+  }, [tierInfo.isXSubscriber]);
+
+  const handleCheckout = async (tierKey: 'pro' | 'dev' | 'enterprise') => {
+    if (!user) {
+      // Store which tier they wanted, then show auth modal
+      setPendingCheckoutTier(tierKey);
+      setShowAuthModal(true);
+      return;
+    }
+    await continueCheckoutAfterAuth(tierKey);
+  };
+
+  const handleAuthModalClose = () => {
+    setShowAuthModal(false);
+    // If user just authenticated and had a pending checkout, continue it
+    if (pendingCheckoutTier) {
+      // Small delay to let auth state propagate
+      const tier = pendingCheckoutTier;
+      setPendingCheckoutTier(null);
+      setTimeout(async () => {
+        const { data } = await supabase.auth.getUser();
+        if (data.user) {
+          await continueCheckoutAfterAuth(tier);
+        }
+      }, 500);
     }
   };
 
