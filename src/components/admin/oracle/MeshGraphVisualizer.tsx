@@ -53,8 +53,15 @@ const MeshGraphVisualizer = () => {
     focusOnEntity(searchInput.trim(), type);
   }, [searchInput, focusOnEntity, resetView]);
 
-  // Auto-spider: when focused entity returns 0 results, offer to spider
-  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active;
+  // Auto-spider: when focused entity returns 0 results, auto-trigger spider
+  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
+
+  // Auto-trigger spider when entity not found in mesh
+  useEffect(() => {
+    if (shouldOfferSpider && searchInput.trim()) {
+      triggerSpider(searchInput.trim(), 'deep');
+    }
+  }, [shouldOfferSpider, searchInput, triggerSpider]);
 
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
@@ -274,18 +281,15 @@ const MeshGraphVisualizer = () => {
           ) : shouldOfferSpider ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-4 max-w-md px-6">
-                <p className="text-3xl">🕷️</p>
-                <h3 className="text-lg font-semibold text-foreground">Entity not in mesh yet</h3>
+                <Radar className="h-8 w-8 text-primary animate-spin mx-auto" />
+                <h3 className="text-lg font-semibold text-foreground">Auto-spidering entity...</h3>
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-mono text-xs text-primary">{focusedEntity?.id.slice(0, 16)}...</span> has no existing reputation mesh data.
+                  Resolving dev wallet, funding chain, tokens, and socials for{' '}
+                  <span className="font-mono text-xs text-primary">{focusedEntity?.id.slice(0, 16)}...</span>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Launch the Oracle Spider to discover its wallet family, minted tokens, social accounts, and KYC chain — then visualize everything as bubbles.
+                  Pump.fun creator → Dev wallet → Funder → KYC Root → Tokens → Socials
                 </p>
-                <Button onClick={handleSpider} className="gap-2">
-                  <Radar className="h-4 w-4" />
-                  🕷️ Spider This Entity
-                </Button>
               </div>
             </div>
           ) : (
