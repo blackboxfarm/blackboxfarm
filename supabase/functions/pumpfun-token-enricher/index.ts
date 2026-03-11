@@ -1300,11 +1300,11 @@ serve(async (req) => {
       const config = await getConfig(supabase);
       console.log('Config:', config);
 
-      if (!config.is_enabled) {
+      if (!config.is_enabled || !config.enricher_is_enabled) {
         return new Response(JSON.stringify({
           success: true,
           paused: true,
-          message: 'Pump.fun monitor is paused (is_enabled=false)',
+          message: `Enricher paused (is_enabled=${config.is_enabled}, enricher_is_enabled=${config.enricher_is_enabled})`,
           stats: { enriched: 0, promoted: 0, rejected: 0, softRejected: 0 }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

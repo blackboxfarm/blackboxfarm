@@ -480,6 +480,7 @@ async function getConfig(supabase: any) {
 
   return {
     is_enabled: data?.is_enabled ?? true,
+    monitor_is_enabled: data?.monitor_is_enabled ?? true,
     min_watch_time_minutes: data?.min_watch_time_minutes ?? 2,
     max_watch_time_minutes: data?.max_watch_time_minutes ?? 600,
     dead_holder_threshold: data?.dead_holder_threshold ?? 3,
