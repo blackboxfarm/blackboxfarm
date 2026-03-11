@@ -4,9 +4,9 @@ import { useCallback, useState } from "react";
 
 export interface MeshNode {
   id: string;
-  type: string; // wallet, token, x_account, x_community, telegram, kyc_root, discord, github, twitch, website
+  type: string;
   label: string;
-  val: number; // bubble size
+  val: number;
 }
 
 export interface MeshLink {
@@ -21,21 +21,32 @@ export interface MeshGraphData {
   links: MeshLink[];
 }
 
+export interface SpiderStatus {
+  active: boolean;
+  stage: string;
+  inputType?: string;
+  meshLinksAdded?: number;
+  score?: number;
+  trafficLight?: string;
+  recommendation?: string;
+  error?: string;
+}
+
 // Color palette for entity types
 export const ENTITY_COLORS: Record<string, string> = {
-  wallet: '#22c55e',       // green
-  token: '#eab308',        // yellow
-  x_account: '#3b82f6',   // blue (twitter)
-  x_community: '#6366f1', // indigo
-  telegram: '#06b6d4',    // cyan
-  kyc_root: '#ffffff',    // white
-  discord: '#8b5cf6',     // purple
-  github: '#a3a3a3',      // gray
-  twitch: '#a855f7',      // purple
-  website: '#f97316',     // orange
-  reddit: '#ef4444',      // red
-  youtube: '#dc2626',     // red
-  medium: '#737373',      // gray
+  wallet: '#22c55e',
+  token: '#eab308',
+  x_account: '#3b82f6',
+  x_community: '#6366f1',
+  telegram: '#06b6d4',
+  kyc_root: '#ffffff',
+  discord: '#8b5cf6',
+  github: '#a3a3a3',
+  twitch: '#a855f7',
+  website: '#f97316',
+  reddit: '#ef4444',
+  youtube: '#dc2626',
+  medium: '#737373',
 };
 
 export const ENTITY_LABELS: Record<string, string> = {
@@ -54,7 +65,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   medium: '📝 Medium',
 };
 
-const getNodeLabel = (id: string, type: string) => {
+const getNodeLabel = (id: string, _type: string) => {
   if (id.length > 16) return `${id.slice(0, 6)}...${id.slice(-4)}`;
   return id;
 };
@@ -65,8 +76,8 @@ export function useMeshGraph(initialEntityId?: string) {
   );
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set(Object.keys(ENTITY_COLORS)));
+  const [spiderStatus, setSpiderStatus] = useState<SpiderStatus>({ active: false, stage: '' });
 
-  // Fetch mesh links for a set of entity IDs (all expanded + focused)
   const entityIds = [...expandedEntities];
   if (focusedEntity) entityIds.push(focusedEntity.id);
   const uniqueIds = [...new Set(entityIds)];
@@ -75,11 +86,9 @@ export function useMeshGraph(initialEntityId?: string) {
     queryKey: ['mesh-graph', uniqueIds.sort().join(','), [...typeFilters].sort().join(',')],
     queryFn: async (): Promise<MeshGraphData> => {
       if (uniqueIds.length === 0) {
-        // Start blank — user must search for an entity
         return { nodes: [], links: [] };
       }
 
-      // Fetch all links where any of our entities appear
       const allLinks: any[] = [];
       for (const entityId of uniqueIds) {
         const { data, error } = await supabase
@@ -91,7 +100,6 @@ export function useMeshGraph(initialEntityId?: string) {
         if (data) allLinks.push(...data);
       }
 
-      // Deduplicate by id
       const seen = new Set<string>();
       const dedupedLinks = allLinks.filter(l => {
         if (seen.has(l.id)) return false;
@@ -102,8 +110,52 @@ export function useMeshGraph(initialEntityId?: string) {
       return buildGraph(dedupedLinks, typeFilters);
     },
     staleTime: 30_000,
-    enabled: uniqueIds.length > 0, // Don't run until user searches
+    enabled: uniqueIds.length > 0,
   });
+
+  // Trigger oracle spider for unknown entities
+  const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
+    setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
+
+    try {
+      setSpiderStatus({ active: true, stage: '🔍 Resolving entity type & wallet...' });
+
+      const { data, error } = await supabase.functions.invoke('oracle-unified-lookup', {
+        body: { input, scanMode },
+      });
+
+      if (error) throw error;
+
+      const result = data as any;
+      
+      setSpiderStatus({
+        active: true,
+        stage: `✅ Spider complete — ${result.meshLinksAdded || 0} mesh links discovered`,
+        inputType: result.inputType,
+        meshLinksAdded: result.meshLinksAdded || 0,
+        score: result.score,
+        trafficLight: result.trafficLight,
+        recommendation: result.recommendation,
+      });
+
+      // Refresh mesh graph after spider populates data
+      setTimeout(() => {
+        refetch();
+        // Keep status visible for a few more seconds
+        setTimeout(() => {
+          setSpiderStatus(prev => ({ ...prev, active: false }));
+        }, 5000);
+      }, 1000);
+
+    } catch (err: any) {
+      console.error('[MeshSpider] Error:', err);
+      setSpiderStatus({
+        active: false,
+        stage: '',
+        error: err.message || 'Spider scan failed',
+      });
+    }
+  }, [refetch]);
 
   const focusOnEntity = useCallback((id: string, type: string) => {
     setFocusedEntity({ id, type });
@@ -126,6 +178,7 @@ export function useMeshGraph(initialEntityId?: string) {
   const resetView = useCallback(() => {
     setFocusedEntity(null);
     setExpandedEntities(new Set());
+    setSpiderStatus({ active: false, stage: '' });
   }, []);
 
   return {
@@ -139,6 +192,8 @@ export function useMeshGraph(initialEntityId?: string) {
     typeFilters,
     toggleTypeFilter,
     setTypeFilters,
+    spiderStatus,
+    triggerSpider,
   };
 }
 
