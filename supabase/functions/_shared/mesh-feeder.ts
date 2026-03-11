@@ -4,6 +4,11 @@
  * ANY edge function that touches a token, wallet, or social handle
  * should call these helpers to ensure the entity enters the reputation_mesh.
  * 
+ * Supports auto-resolution of creators from:
+ *   - pump.fun (frontend-api-v3)
+ *   - bonk.fun (api.bonk.fun)
+ *   - bags.fm (public-api-v2.bags.fm)
+ * 
  * This is PASSIVE — no verdicts, no blacklisting, just data collection.
  * The mesh grows 24/7 from every cron and manual process.
  * 
@@ -12,7 +17,7 @@
  *   await meshFeed.token(supabase, { mint, symbol, name, creatorWallet, source });
  *   await meshFeed.wallet(supabase, { wallet, source });
  *   await meshFeed.social(supabase, { type, handle, linkedWallet, source });
- *   await meshFeed.batch(supabase, items); // bulk insert
+ *   await meshFeed.resolveCreatorFromLaunchpads(supabase, mint, source);
  */
 
 interface MeshLink {
