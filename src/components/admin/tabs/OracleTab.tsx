@@ -64,6 +64,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           <TabsTrigger value="mesh" className="data-[state=active]:bg-primary/20">
             🗺️ Mesh Viewer
           </TabsTrigger>
+          <TabsTrigger value="bubble-map" className="data-[state=active]:bg-cyan-500/20">
+            🫧 Bubble Map
+          </TabsTrigger>
           <TabsTrigger value="dev-intel" className="data-[state=active]:bg-primary/20">
             🌳 Dev Intel Report
           </TabsTrigger>
