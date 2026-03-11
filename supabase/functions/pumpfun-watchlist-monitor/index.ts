@@ -751,8 +751,8 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   console.log('👁️ WATCHLIST MONITOR v2 (MOMENTUM SCORING): Starting...');
 
   const config = await getConfig(supabase);
-  if (!config.is_enabled) {
-    console.log('⏸️ Monitor disabled');
+  if (!config.is_enabled || !config.monitor_is_enabled) {
+    console.log('⏸️ Monitor disabled (is_enabled=' + config.is_enabled + ', monitor_is_enabled=' + config.monitor_is_enabled + ')');
     stats.durationMs = Date.now() - startTime;
     return stats;
   }
