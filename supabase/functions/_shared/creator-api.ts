@@ -12,7 +12,7 @@ export interface CreatorInfo {
   feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
 }
 
-export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: string): Promise<CreatorInfo> {
+export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: string, supabaseClient?: any): Promise<CreatorInfo> {
   const creatorInfo: CreatorInfo = {};
   
   try {
