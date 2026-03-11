@@ -7432,6 +7432,7 @@ export type Database = {
           dead_holder_threshold: number | null
           dead_retention_hours: number | null
           dead_volume_threshold_sol: number | null
+          enricher_is_enabled: boolean
           fantasy_buy_amount_sol: number | null
           fantasy_buy_amount_usd: number | null
           fantasy_mode_enabled: boolean | null
@@ -7476,6 +7477,7 @@ export type Database = {
           min_volume_sol_5m: number
           min_volume_sol_fantasy: number | null
           min_watch_time_minutes: number | null
+          monitor_is_enabled: boolean
           polling_interval_seconds: number | null
           qualification_holder_count: number | null
           qualification_volume_sol: number | null
@@ -7515,6 +7517,7 @@ export type Database = {
           dead_holder_threshold?: number | null
           dead_retention_hours?: number | null
           dead_volume_threshold_sol?: number | null
+          enricher_is_enabled?: boolean
           fantasy_buy_amount_sol?: number | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode_enabled?: boolean | null
@@ -7559,6 +7562,7 @@ export type Database = {
           min_volume_sol_5m?: number
           min_volume_sol_fantasy?: number | null
           min_watch_time_minutes?: number | null
+          monitor_is_enabled?: boolean
           polling_interval_seconds?: number | null
           qualification_holder_count?: number | null
           qualification_volume_sol?: number | null
@@ -7598,6 +7602,7 @@ export type Database = {
           dead_holder_threshold?: number | null
           dead_retention_hours?: number | null
           dead_volume_threshold_sol?: number | null
+          enricher_is_enabled?: boolean
           fantasy_buy_amount_sol?: number | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode_enabled?: boolean | null
@@ -7642,6 +7647,7 @@ export type Database = {
           min_volume_sol_5m?: number
           min_volume_sol_fantasy?: number | null
           min_watch_time_minutes?: number | null
+          monitor_is_enabled?: boolean
           polling_interval_seconds?: number | null
           qualification_holder_count?: number | null
           qualification_volume_sol?: number | null
