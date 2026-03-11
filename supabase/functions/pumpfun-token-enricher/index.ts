@@ -742,6 +742,7 @@ async function getConfig(supabase: any) {
     
   return {
     is_enabled: data?.is_enabled ?? true,
+    enricher_is_enabled: data?.enricher_is_enabled ?? true,
     max_bundle_score: data?.max_bundle_score ?? 70,
     min_holder_count: data?.min_holder_count ?? 10,
     max_token_age_minutes: data?.max_token_age_minutes ?? 60,
@@ -1299,11 +1300,11 @@ serve(async (req) => {
       const config = await getConfig(supabase);
       console.log('Config:', config);
 
-      if (!config.is_enabled) {
+      if (!config.is_enabled || !config.enricher_is_enabled) {
         return new Response(JSON.stringify({
           success: true,
           paused: true,
-          message: 'Pump.fun monitor is paused (is_enabled=false)',
+          message: `Enricher paused (is_enabled=${config.is_enabled}, enricher_is_enabled=${config.enricher_is_enabled})`,
           stats: { enriched: 0, promoted: 0, rejected: 0, softRejected: 0 }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

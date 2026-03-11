@@ -480,6 +480,7 @@ async function getConfig(supabase: any) {
 
   return {
     is_enabled: data?.is_enabled ?? true,
+    monitor_is_enabled: data?.monitor_is_enabled ?? true,
     min_watch_time_minutes: data?.min_watch_time_minutes ?? 2,
     max_watch_time_minutes: data?.max_watch_time_minutes ?? 600,
     dead_holder_threshold: data?.dead_holder_threshold ?? 3,
@@ -751,8 +752,8 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   console.log('👁️ WATCHLIST MONITOR v2 (MOMENTUM SCORING): Starting...');
 
   const config = await getConfig(supabase);
-  if (!config.is_enabled) {
-    console.log('⏸️ Monitor disabled');
+  if (!config.is_enabled || !config.monitor_is_enabled) {
+    console.log('⏸️ Monitor disabled (is_enabled=' + config.is_enabled + ', monitor_is_enabled=' + config.monitor_is_enabled + ')');
     stats.durationMs = Date.now() - startTime;
     return stats;
   }
