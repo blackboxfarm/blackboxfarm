@@ -22,6 +22,7 @@ const DEFAULT_RETENTION: Record<string, number> = {
   'admin_notifications': 60,
   'banner_impressions': 90,
   'banner_clicks': 90,
+  'helius_api_usage': 30,
 };
 
 Deno.serve(async (req) => {
