@@ -75,14 +75,8 @@ export function useMeshGraph(initialEntityId?: string) {
     queryKey: ['mesh-graph', uniqueIds.sort().join(','), [...typeFilters].sort().join(',')],
     queryFn: async (): Promise<MeshGraphData> => {
       if (uniqueIds.length === 0) {
-        // Load a sample of recent mesh data for overview
-        const { data, error } = await supabase
-          .from('reputation_mesh')
-          .select('*')
-          .order('discovered_at', { ascending: false })
-          .limit(200);
-        if (error) throw error;
-        return buildGraph(data || [], typeFilters);
+        // Start blank — user must search for an entity
+        return { nodes: [], links: [] };
       }
 
       // Fetch all links where any of our entities appear
@@ -108,6 +102,7 @@ export function useMeshGraph(initialEntityId?: string) {
       return buildGraph(dedupedLinks, typeFilters);
     },
     staleTime: 30_000,
+    enabled: uniqueIds.length > 0, // Don't run until user searches
   });
 
   const focusOnEntity = useCallback((id: string, type: string) => {

@@ -203,12 +203,31 @@ const MeshGraphVisualizer = () => {
                 <p className="text-sm text-muted-foreground">Loading mesh graph...</p>
               </div>
             </div>
+          ) : !focusedEntity && graphData.nodes.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center space-y-4 max-w-md px-6">
+                <p className="text-4xl">🫧</p>
+                <h3 className="text-lg font-semibold text-foreground">Enter an entity to explore</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Paste a <span className="text-green-400 font-medium">wallet address</span>,{' '}
+                  <span className="text-yellow-400 font-medium">token mint</span>, or{' '}
+                  <span className="text-blue-400 font-medium">@handle</span> above to visualize its reputation mesh connections.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Wallets</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /> Tokens</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> X Accounts</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-500 inline-block" /> Telegram</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-white border border-border inline-block" /> KYC Root</span>
+                </div>
+              </div>
+            </div>
           ) : graphData.nodes.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-2">
                 <p className="text-lg">🫧</p>
                 <p className="text-sm text-muted-foreground">
-                  No mesh data to visualize. Search for an entity or reset filters.
+                  No mesh data found for this entity. Try a different search.
                 </p>
               </div>
             </div>
