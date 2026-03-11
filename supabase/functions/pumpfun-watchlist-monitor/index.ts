@@ -169,44 +169,16 @@ async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   }
 }
 
-// Fetch actual holder count from Helius
-async function fetchHeliusHolderCount(mint: string): Promise<number> {
-  const heliusApiKey = getHeliusApiKey();
-  if (!heliusApiKey) return 0;
-
-  try {
-    const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'holder-count',
-        method: 'getTokenAccounts',
-        params: { mint, limit: 500 }
-      })
-    });
-
-    if (!response.ok) return 0;
-    const data = await response.json();
-    if (data.error || !data.result) return 0;
-    
-    const accounts = data.result.token_accounts || [];
-    const activeHolders = accounts.filter((a: any) => Number(a.amount || 0) > 0).length;
-    
-    console.log(`   👥 Helius holder count: ${mint.slice(0, 8)} - ${activeHolders} holders`);
-    return activeHolders;
-  } catch (error) {
-    console.error(`Error fetching Helius holder count for ${mint}:`, error);
-    return 0;
-  }
+// Unified Helius holder + dust call — ONE getTokenAccounts request for both
+interface HeliusHolderResult {
+  holderCount: number;
+  dustPct: number | null;
+  accounts: any[];
 }
 
-// Calculate dust holder percentage
-async function calculateDustHolderPct(mint: string, priceUsd: number | null, decimals = 6): Promise<number | null> {
-  if (!priceUsd || priceUsd <= 0) return null;
-  
+async function fetchHeliusHolderData(mint: string, priceUsd: number | null, decimals = 6): Promise<HeliusHolderResult> {
   const heliusApiKey = getHeliusApiKey();
-  if (!heliusApiKey) return null;
+  if (!heliusApiKey) return { holderCount: 0, dustPct: null, accounts: [] };
 
   try {
     const response = await fetch(getHeliusRpcUrl(heliusApiKey), {
@@ -214,38 +186,54 @@ async function calculateDustHolderPct(mint: string, priceUsd: number | null, dec
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: 'dust-check',
+        id: 'holder-data',
         method: 'getTokenAccounts',
         params: { mint, limit: 500 }
       })
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) return { holderCount: 0, dustPct: null, accounts: [] };
     const data = await response.json();
-    if (data.error || !data.result) return null;
+    if (data.error || !data.result) return { holderCount: 0, dustPct: null, accounts: [] };
 
     const accounts = data.result.token_accounts || [];
     const activeAccounts = accounts.filter((a: any) => Number(a.amount || 0) > 0);
-    
-    if (activeAccounts.length === 0) return null;
+    const holderCount = activeAccounts.length;
 
-    const DUST_THRESHOLD_USD = 2;
-    let dustCount = 0;
-    
-    for (const account of activeAccounts) {
-      const rawAmount = Number(account.amount || 0);
-      const tokenAmount = rawAmount / Math.pow(10, decimals);
-      const valueUsd = tokenAmount * priceUsd;
-      if (valueUsd < DUST_THRESHOLD_USD) dustCount++;
+    // Calculate dust from the SAME data — no second API call
+    let dustPct: number | null = null;
+    if (priceUsd && priceUsd > 0 && activeAccounts.length > 0) {
+      const DUST_THRESHOLD_USD = 2;
+      let dustCount = 0;
+      for (const account of activeAccounts) {
+        const rawAmount = Number(account.amount || 0);
+        const tokenAmount = rawAmount / Math.pow(10, decimals);
+        const valueUsd = tokenAmount * priceUsd;
+        if (valueUsd < DUST_THRESHOLD_USD) dustCount++;
+      }
+      dustPct = (dustCount / activeAccounts.length) * 100;
+      console.log(`   👥🧹 Helius: ${mint.slice(0, 8)} — ${holderCount} holders, ${dustCount} dust (${dustPct.toFixed(1)}%)`);
+    } else {
+      console.log(`   👥 Helius: ${mint.slice(0, 8)} — ${holderCount} holders`);
     }
 
-    const dustPct = (dustCount / activeAccounts.length) * 100;
-    console.log(`   🧹 Dust check: ${mint.slice(0, 8)} - ${dustCount}/${activeAccounts.length} holders are dust (${dustPct.toFixed(1)}%)`);
-    return dustPct;
+    return { holderCount, dustPct, accounts };
   } catch (error) {
-    console.error(`Error calculating dust for ${mint}:`, error);
-    return null;
+    console.error(`Error fetching Helius holder data for ${mint}:`, error);
+    return { holderCount: 0, dustPct: null, accounts: [] };
   }
+}
+
+// Legacy wrappers for backward compatibility in fallback paths
+async function fetchHeliusHolderCount(mint: string): Promise<number> {
+  const result = await fetchHeliusHolderData(mint, null);
+  return result.holderCount;
+}
+
+// Legacy wrapper — only used if dust is needed independently (shouldn't happen now)
+async function calculateDustHolderPct(mint: string, priceUsd: number | null, decimals = 6): Promise<number | null> {
+  const result = await fetchHeliusHolderData(mint, priceUsd, decimals);
+  return result.dustPct;
 }
 
 // Fetch Helius metrics
