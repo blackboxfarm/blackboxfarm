@@ -839,7 +839,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
                 body: {
                   token_mint: token.token_mint, token_symbol: token.token_symbol, token_name: token.token_name,
                   creator_wallet: token.creator_wallet, rug_type: 'dev_sold_crashed',
-                  evidence: { dev_holding_pct: devHoldingPct, price_at_rug: metrics.priceUsd, price_ath: token.price_ath_usd, market_cap_at_rug: currentMcap, holder_count: metrics.holders, volume_sol: metrics.volume24hSol },
+                  evidence: { dev_holding_pct: devHoldingPct, price_at_rug: token.price_usd, price_ath: token.price_ath_usd, market_cap_at_rug: currentMcap, holder_count: token.holder_count, volume_sol: token.volume_sol },
                   triggered_by: 'watchlist-monitor-v2',
                 },
               });
