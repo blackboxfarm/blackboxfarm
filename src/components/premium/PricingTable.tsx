@@ -7,9 +7,10 @@ import { useUserTier } from '@/hooks/useUserTier';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { STRIPE_TIERS } from '@/config/stripeTiers';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { XSubscriberVerification } from './XSubscriberVerification';
+import { AuthModal } from '@/components/auth/AuthModal';
 
 interface PricingFeature {
   label: string;

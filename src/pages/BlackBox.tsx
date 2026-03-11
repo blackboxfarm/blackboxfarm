@@ -236,6 +236,7 @@ export default function BlackBox() {
           </CardContent>
         </Card>
       </div>
+      <SiteFooter />
     </div>
   );
 }
