@@ -13,6 +13,7 @@ import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { ActiveTabOnly } from "@/components/ui/ActiveTabOnly";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { SiteFooter } from "@/components/SiteFooter";
 
 // Lazy load all tab components
 const OverviewTab = lazy(() => import("@/components/blackbox/OverviewTab").then(m => ({ default: m.OverviewTab })));
@@ -236,6 +237,7 @@ export default function BlackBox() {
           </CardContent>
         </Card>
       </div>
+      <SiteFooter />
     </div>
   );
 }
