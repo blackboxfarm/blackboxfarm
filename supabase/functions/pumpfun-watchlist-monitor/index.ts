@@ -922,7 +922,54 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           continue;
         }
 
-        // Fetch current metrics
+        // === PRE-API DEAD CHECK — skip expensive API calls for obviously dead tokens ===
+        const watchingMinutesPreCheck = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
+        const storedHolders = token.holder_count || 0;
+        const storedVolume = token.volume_sol || 0;
+        const storedStaleChecks = token.consecutive_stale_checks || 0;
+
+        // Kill zombies using STORED data — no API call needed
+        if (watchingMinutesPreCheck > 30 && storedHolders <= 1 && storedVolume <= 0.001) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check zombie: ${watchingMinutesPreCheck.toFixed(0)}m, ${storedHolders} holders`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (pre-check zombie)`);
+          continue;
+        }
+        if (watchingMinutesPreCheck > 60 && storedHolders < 5 && storedVolume < 0.1) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check low activity: ${storedHolders} holders after ${watchingMinutesPreCheck.toFixed(0)}m`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (pre-check low 1h)`);
+          continue;
+        }
+        if (storedStaleChecks >= 4 && watchingMinutesPreCheck > 8) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check stale: ${storedStaleChecks} stale checks, ${watchingMinutesPreCheck.toFixed(0)}m`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedStale++;
+          continue;
+        }
+        if (watchingMinutesPreCheck > config.max_watch_time_minutes) {
+          await supabase.from('pumpfun_watchlist').update({
+            status: 'dead', rejection_type: 'soft', removed_at: now.toISOString(),
+            removal_reason: `Pre-check max time: ${watchingMinutesPreCheck.toFixed(0)}m`,
+            last_checked_at: now.toISOString(), last_processor: 'watchlist-monitor-v2',
+          }).eq('id', token.id);
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (pre-check max time)`);
+          continue;
+        }
+
+        // Fetch current metrics (only for tokens that survived pre-checks)
         const metrics = await fetchPumpFunMetrics(token.token_mint);
         const watchingMinutesNow = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
         
