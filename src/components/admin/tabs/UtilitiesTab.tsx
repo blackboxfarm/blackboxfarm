@@ -13,6 +13,7 @@ const ApiProviderManager = lazy(() => import("@/components/admin/ApiProviderMana
 const LiquidityLockChecker = lazy(() => import("@/components/LiquidityLockChecker").then(m => ({ default: m.LiquidityLockChecker })));
 const ApiResourceManager = lazy(() => import("@/components/admin/ApiResourceManager").then(m => ({ default: m.ApiResourceManager })));
 const DatabaseHousekeeping = lazy(() => import("@/components/admin/DatabaseHousekeeping").then(m => ({ default: m.DatabaseHousekeeping })));
+const HeliusUsageBreakdown = lazy(() => import("@/components/admin/HeliusUsageBreakdown").then(m => ({ default: m.HeliusUsageBreakdown })));
 
 export default function UtilitiesTab() {
   const [activeSubTab, setActiveSubTab] = useState("api-resources");
