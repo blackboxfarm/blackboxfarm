@@ -34,6 +34,7 @@ export default function UtilitiesTab() {
         <TabsTrigger value="liquidity">💧 Liquidity Checker</TabsTrigger>
         <TabsTrigger value="housekeeping">🧹 Housekeeping</TabsTrigger>
         <TabsTrigger value="helius-breakdown">📊 Helius Usage</TabsTrigger>
+        <TabsTrigger value="solscan-breakdown">🔎 Solscan Usage</TabsTrigger>
       </TabsList>
 
       <TabsContent value="api-resources">
