@@ -12,6 +12,7 @@ const OracleMasterSpider = lazy(() => import("@/components/admin/oracle/OracleMa
 
 const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 const XCommunityManager = lazy(() => import("@/components/admin/oracle/XCommunityManager"));
+const MeshGraphVisualizer = lazy(() => import("@/components/admin/oracle/MeshGraphVisualizer"));
 const TeamIntelDashboard = lazy(() => import("@/components/admin/oracle/TeamIntelDashboard"));
 const PumpfunBlacklist = lazy(() => import("@/components/admin/PumpfunBlacklist").then(m => ({ default: m.PumpfunBlacklist })));
 const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist").then(m => ({ default: m.PumpfunWhitelist })));
