@@ -1282,11 +1282,13 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   // ═══════════════════════════════════════════════════════════════════
   const QUALIFIED_DECAY_MCAP_THRESHOLD = 3000; // $3k
   try {
+    const decayCutoff = new Date(now.getTime() - 5 * 60 * 1000).toISOString(); // only check if not checked in 5min
     const { data: qualifiedTokens } = await supabase
       .from('pumpfun_watchlist')
       .select('id, token_mint, token_symbol, market_cap_usd, qualified_at, creator_wallet, token_name')
       .eq('status', 'qualified')
-      .limit(30);
+      .or(`last_checked_at.is.null,last_checked_at.lt.${decayCutoff}`)
+      .limit(15);
 
     if (qualifiedTokens && qualifiedTokens.length > 0) {
       console.log(`🔄 QUALIFIED DECAY: Checking ${qualifiedTokens.length} qualified tokens...`);
