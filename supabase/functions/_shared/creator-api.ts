@@ -121,5 +121,26 @@ export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: 
     console.error('[Creator Lookup] Error:', error);
   }
   
+  // 🕸️ MESH FEEDER: Auto-feed every discovered creator into the mesh
+  if (supabaseClient && creatorInfo.wallet) {
+    meshFeed.token(supabaseClient, {
+      mint: tokenMint,
+      creatorWallet: creatorInfo.wallet,
+      twitterUrl: creatorInfo.xAccount,
+      source: `creator-api:${launchpadInfo.name}`,
+    }).catch(e => console.warn('[mesh-feeder] creator-api feed failed:', e));
+    
+    // If fee split detected (bags.fm co-creators), link them
+    if (creatorInfo.feeSplit?.wallet2) {
+      meshFeed.wallet(supabaseClient, {
+        wallet: creatorInfo.feeSplit.wallet2,
+        role: 'creator',
+        linkedTo: creatorInfo.wallet,
+        relationship: 'same_team',
+        source: `creator-api:${launchpadInfo.name}:fee_split`,
+      }).catch(e => console.warn('[mesh-feeder] fee-split feed failed:', e));
+    }
+  }
+  
   return creatorInfo;
 }
