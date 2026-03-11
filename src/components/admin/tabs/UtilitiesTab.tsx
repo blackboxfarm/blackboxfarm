@@ -14,6 +14,7 @@ const LiquidityLockChecker = lazy(() => import("@/components/LiquidityLockChecke
 const ApiResourceManager = lazy(() => import("@/components/admin/ApiResourceManager").then(m => ({ default: m.ApiResourceManager })));
 const DatabaseHousekeeping = lazy(() => import("@/components/admin/DatabaseHousekeeping").then(m => ({ default: m.DatabaseHousekeeping })));
 const HeliusUsageBreakdown = lazy(() => import("@/components/admin/HeliusUsageBreakdown").then(m => ({ default: m.HeliusUsageBreakdown })));
+const SolscanUsageBreakdown = lazy(() => import("@/components/admin/SolscanUsageBreakdown").then(m => ({ default: m.SolscanUsageBreakdown })));
 
 export default function UtilitiesTab() {
   const [activeSubTab, setActiveSubTab] = useState("api-resources");
@@ -33,6 +34,7 @@ export default function UtilitiesTab() {
         <TabsTrigger value="liquidity">💧 Liquidity Checker</TabsTrigger>
         <TabsTrigger value="housekeeping">🧹 Housekeeping</TabsTrigger>
         <TabsTrigger value="helius-breakdown">📊 Helius Usage</TabsTrigger>
+        <TabsTrigger value="solscan-breakdown">🔎 Solscan Usage</TabsTrigger>
       </TabsList>
 
       <TabsContent value="api-resources">
@@ -64,6 +66,9 @@ export default function UtilitiesTab() {
       </TabsContent>
       <TabsContent value="helius-breakdown">
         {activeSubTab === "helius-breakdown" && <Suspense fallback={<LazyLoader />}><HeliusUsageBreakdown /></Suspense>}
+      </TabsContent>
+      <TabsContent value="solscan-breakdown">
+        {activeSubTab === "solscan-breakdown" && <Suspense fallback={<LazyLoader />}><SolscanUsageBreakdown /></Suspense>}
       </TabsContent>
     </Tabs>
     </div>
