@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { meshFeed } from '../_shared/mesh-feeder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -189,6 +190,15 @@ Deno.serve(async (req) => {
               success: true,
               updates
             });
+            
+            // 🕸️ MESH FEEDER: Every enriched token feeds the mesh
+            meshFeed.token(supabaseClient, {
+              mint: token.token_mint,
+              symbol: updates.symbol || token.symbol,
+              name: updates.name || token.name,
+              creatorWallet: updates.creator_wallet || token.creator_wallet,
+              source: 'enrich-scraped-tokens',
+            }).catch(e => console.warn('[mesh-feeder] enrich feed failed:', e));
           } else {
             console.error(`Failed to update ${token.token_mint}:`, updateError);
             results.push({

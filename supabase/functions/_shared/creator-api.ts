@@ -1,6 +1,7 @@
 // Creator/Dev wallet API utilities
 import type { LaunchpadInfo } from "./lp-detection.ts";
 import { createApiLogger } from "./api-logger.ts";
+import { meshFeed } from "./mesh-feeder.ts";
 
 export interface CreatorInfo {
   wallet?: string;
@@ -11,7 +12,7 @@ export interface CreatorInfo {
   feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
 }
 
-export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: string): Promise<CreatorInfo> {
+export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: string, supabaseClient?: any): Promise<CreatorInfo> {
   const creatorInfo: CreatorInfo = {};
   
   try {
@@ -118,6 +119,27 @@ export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: 
     }
   } catch (error) {
     console.error('[Creator Lookup] Error:', error);
+  }
+  
+  // 🕸️ MESH FEEDER: Auto-feed every discovered creator into the mesh
+  if (supabaseClient && creatorInfo.wallet) {
+    meshFeed.token(supabaseClient, {
+      mint: tokenMint,
+      creatorWallet: creatorInfo.wallet,
+      twitterUrl: creatorInfo.xAccount,
+      source: `creator-api:${launchpadInfo.name}`,
+    }).catch(e => console.warn('[mesh-feeder] creator-api feed failed:', e));
+    
+    // If fee split detected (bags.fm co-creators), link them
+    if (creatorInfo.feeSplit?.wallet2) {
+      meshFeed.wallet(supabaseClient, {
+        wallet: creatorInfo.feeSplit.wallet2,
+        role: 'creator',
+        linkedTo: creatorInfo.wallet,
+        relationship: 'same_team',
+        source: `creator-api:${launchpadInfo.name}:fee_split`,
+      }).catch(e => console.warn('[mesh-feeder] fee-split feed failed:', e));
+    }
   }
   
   return creatorInfo;
