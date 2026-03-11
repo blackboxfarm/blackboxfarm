@@ -488,6 +488,15 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
         if (!error) {
           results.newlyAdded++;
           console.log(`➕ Added to watchlist: ${tokenData.token?.symbol} (${holderCount} holders, ${volumeSol.toFixed(2)} SOL)`);
+          
+          // 🕸️ MESH FEEDER: Passively feed every new token into the mesh
+          meshFeed.token(supabase, {
+            mint,
+            symbol: tokenData.token?.symbol,
+            name: tokenData.token?.name,
+            creatorWallet: tokenData.creator,
+            source: 'pumpfun-new-token-monitor',
+          }).catch(e => console.warn('[mesh-feeder] new token feed failed:', e));
         }
       }
     } catch (error) {

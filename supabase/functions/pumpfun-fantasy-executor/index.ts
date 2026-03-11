@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { broadcastToBlackBox } from '../_shared/telegram-broadcast.ts';
+import { meshFeed } from '../_shared/mesh-feeder.ts';
 enableHeliusTracking('pumpfun-fantasy-executor');
 
 /**
