@@ -466,6 +466,14 @@ Deno.serve(async (req) => {
       
       console.log(`[poster] Successfully posted tweet: ${tweetResult.tweetId}`);
       
+      // 🕸️ MESH FEEDER: Every posted token feeds the mesh
+      meshFeed.token(supabase, {
+        mint: item.token_mint,
+        symbol: stats.symbol,
+        name: stats.name,
+        source: 'holders-intel-poster',
+      }).catch(e => console.warn('[mesh-feeder] poster feed failed:', e));
+      
       // Also post to BlackBox TG group (fire-and-forget, with retry)
       try {
         // Generate ASCII bar for TG messages
