@@ -402,6 +402,17 @@ Deno.serve(async (req) => {
         }
       }
 
+      // 🕸️ MESH FEEDER: Feed community admins/mods for all linked tokens
+      for (const tokenMint of linkedTokenMints) {
+        meshFeed.communityStaff(supabase, {
+          tokenMint,
+          creatorWallet: linkedWallets[0],
+          admins: communityData.adminUsernames,
+          mods: communityData.moderatorUsernames,
+          source: 'x-community-enricher',
+        }).catch(e => console.warn('[mesh-feeder] community staff feed failed:', e));
+      }
+
       // Trigger team detection if enabled
       if (triggerTeamDetection && (linkedTokenMint || linkedWallet)) {
         await supabase.functions.invoke('blacklist-enricher', {
