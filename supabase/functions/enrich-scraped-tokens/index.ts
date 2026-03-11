@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { meshFeed } from '../_shared/mesh-feeder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
