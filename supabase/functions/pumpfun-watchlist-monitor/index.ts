@@ -1118,9 +1118,23 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             updates.rugcheck_version = (token.rugcheck_version || 0) + 1;
           }
 
-          // Calculate dust
-          const dustPct = await calculateDustHolderPct(token.token_mint, metrics.priceUsd);
-          updates.dust_holder_pct = dustPct;
+          // Calculate dust — SKIP Helius call for low-mcap tokens (dust is meaningless there)
+          // Also skip if dust was checked recently (within last 15 min)
+          const currentMcapForDust = metrics.marketCapUsd ?? token.market_cap_usd ?? 0;
+          const dustCheckedRecently = token.dust_checked_at && 
+            (now.getTime() - new Date(token.dust_checked_at).getTime()) < 15 * 60 * 1000;
+          
+          let dustPct: number | null = token.dust_holder_pct ?? null;
+          if (currentMcapForDust >= 15000 && !dustCheckedRecently) {
+            // Use unified holder+dust call — ONE Helius request instead of TWO
+            const holderData = await fetchHeliusHolderData(token.token_mint, metrics.priceUsd);
+            dustPct = holderData.dustPct;
+            updates.dust_holder_pct = dustPct;
+            updates.dust_checked_at = now.toISOString();
+          } else if (currentMcapForDust < 15000) {
+            // Skip dust API call entirely — scoring already discounts dust for low mcap
+            console.log(`   ⏭️ Skipping dust check: ${token.token_symbol} mcap $${currentMcapForDust.toFixed(0)} < $15k`);
+          }
 
           // Look up dev reputation
           const devReputation = await getDevReputation(supabase, token.creator_wallet);
