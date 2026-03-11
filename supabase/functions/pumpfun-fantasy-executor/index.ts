@@ -573,6 +573,18 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
 
       console.log(`🎮 FANTASY BUY: ${token.token_symbol} @ $${entryPriceUsd.toFixed(8)} ($${buyAmountUsd} = ${buyAmountSol.toFixed(4)} SOL = ${tokenAmount.toFixed(2)} tokens)`);
 
+      // 🕸️ MESH FEEDER: Every fantasy buy feeds the mesh
+      meshFeed.token(supabase, {
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: token.token_name,
+        creatorWallet: token.creator_wallet,
+        twitterUrl: token.twitter_url,
+        telegramUrl: token.telegram_url,
+        websiteUrl: token.website_url,
+        source: 'pumpfun-fantasy-executor',
+      }).catch(e => console.warn('[mesh-feeder] fantasy feed failed:', e));
+
       // Notify: admin_notifications + Telegram
       const buyMsg = `🎮 Fantasy BUY: $${token.token_symbol}\n` +
         `💰 Entry: $${entryPriceUsd.toFixed(8)}\n` +

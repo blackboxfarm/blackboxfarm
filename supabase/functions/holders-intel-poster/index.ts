@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { getHealthMode } from "../_shared/health-mode.ts";
+import { meshFeed } from "../_shared/mesh-feeder.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
