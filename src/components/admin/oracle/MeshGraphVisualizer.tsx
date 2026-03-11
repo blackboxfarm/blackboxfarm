@@ -53,8 +53,15 @@ const MeshGraphVisualizer = () => {
     focusOnEntity(searchInput.trim(), type);
   }, [searchInput, focusOnEntity, resetView]);
 
-  // Auto-spider: when focused entity returns 0 results, offer to spider
-  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active;
+  // Auto-spider: when focused entity returns 0 results, auto-trigger spider
+  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
+
+  // Auto-trigger spider when entity not found in mesh
+  useEffect(() => {
+    if (shouldOfferSpider && searchInput.trim()) {
+      triggerSpider(searchInput.trim(), 'deep');
+    }
+  }, [shouldOfferSpider, searchInput, triggerSpider]);
 
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
