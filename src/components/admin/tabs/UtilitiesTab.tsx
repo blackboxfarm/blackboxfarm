@@ -62,6 +62,9 @@ export default function UtilitiesTab() {
       <TabsContent value="housekeeping">
         {activeSubTab === "housekeeping" && <Suspense fallback={<LazyLoader />}><DatabaseHousekeeping /></Suspense>}
       </TabsContent>
+      <TabsContent value="helius-breakdown">
+        {activeSubTab === "helius-breakdown" && <Suspense fallback={<LazyLoader />}><HeliusUsageBreakdown /></Suspense>}
+      </TabsContent>
     </Tabs>
     </div>
   );
