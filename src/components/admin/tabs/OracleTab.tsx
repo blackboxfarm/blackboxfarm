@@ -12,6 +12,7 @@ const OracleMasterSpider = lazy(() => import("@/components/admin/oracle/OracleMa
 
 const MeshPipelineDashboard = lazy(() => import("@/components/admin/MeshPipelineDashboard").then(m => ({ default: m.MeshPipelineDashboard })));
 const XCommunityManager = lazy(() => import("@/components/admin/oracle/XCommunityManager"));
+const MeshGraphVisualizer = lazy(() => import("@/components/admin/oracle/MeshGraphVisualizer"));
 const TeamIntelDashboard = lazy(() => import("@/components/admin/oracle/TeamIntelDashboard"));
 const PumpfunBlacklist = lazy(() => import("@/components/admin/PumpfunBlacklist").then(m => ({ default: m.PumpfunBlacklist })));
 const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist").then(m => ({ default: m.PumpfunWhitelist })));
@@ -63,6 +64,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           <TabsTrigger value="mesh" className="data-[state=active]:bg-primary/20">
             🗺️ Mesh Viewer
           </TabsTrigger>
+          <TabsTrigger value="bubble-map" className="data-[state=active]:bg-cyan-500/20">
+            🫧 Bubble Map
+          </TabsTrigger>
           <TabsTrigger value="dev-intel" className="data-[state=active]:bg-primary/20">
             🌳 Dev Intel Report
           </TabsTrigger>
@@ -108,6 +112,12 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
 
         <TabsContent value="backfill" className="space-y-4">
           <OracleBackfillStatus />
+        </TabsContent>
+
+        <TabsContent value="bubble-map" className="space-y-4">
+          <Suspense fallback={<LazyLoader />}>
+            <MeshGraphVisualizer />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="mesh" className="space-y-4">
