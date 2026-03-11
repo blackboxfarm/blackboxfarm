@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, ZoomIn, Maximize2 } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle } from "lucide-react";
 
 const MeshGraphVisualizer = () => {
   const graphRef = useRef<any>();
@@ -23,6 +23,8 @@ const MeshGraphVisualizer = () => {
     resetView,
     typeFilters,
     toggleTypeFilter,
+    spiderStatus,
+    triggerSpider,
   } = useMeshGraph();
 
   // Resize observer for responsive canvas
@@ -45,17 +47,22 @@ const MeshGraphVisualizer = () => {
       resetView();
       return;
     }
-    // Try to determine type from input
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
     focusOnEntity(searchInput.trim(), type);
   }, [searchInput, focusOnEntity, resetView]);
 
+  // Auto-spider: when focused entity returns 0 results, offer to spider
+  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active;
+
+  const handleSpider = useCallback(() => {
+    if (!searchInput.trim()) return;
+    triggerSpider(searchInput.trim(), 'deep');
+  }, [searchInput, triggerSpider]);
+
   const handleNodeClick = useCallback((node: any) => {
-    const rawId = (node.id as string).split(':').slice(1).join(':');
     expandEntity(node.id);
-    // Re-center on clicked node
     if (graphRef.current) {
       graphRef.current.centerAt(node.x, node.y, 500);
       graphRef.current.zoom(2.5, 500);
@@ -76,13 +83,11 @@ const MeshGraphVisualizer = () => {
     const fontSize = Math.max(8, 12 / globalScale);
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
 
-    // Glow for focused
     if (isFocused) {
       ctx.shadowColor = color;
       ctx.shadowBlur = 15;
     }
 
-    // Draw bubble
     ctx.beginPath();
     ctx.arc(meshNode.x, meshNode.y, size, 0, 2 * Math.PI);
     ctx.fillStyle = color;
@@ -90,14 +95,11 @@ const MeshGraphVisualizer = () => {
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // Border
     ctx.strokeStyle = isFocused ? '#fff' : 'rgba(255,255,255,0.3)';
     ctx.lineWidth = isFocused ? 2 : 0.5;
     ctx.stroke();
-
     ctx.shadowBlur = 0;
 
-    // Label when zoomed in
     if (globalScale > 1.2) {
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = 'center';
@@ -119,7 +121,6 @@ const MeshGraphVisualizer = () => {
     ctx.lineWidth = 0.5;
     ctx.stroke();
 
-    // Draw relationship label when zoomed
     if (globalScale > 2) {
       const midX = (src.x + tgt.x) / 2;
       const midY = (src.y + tgt.y) / 2;
@@ -131,6 +132,16 @@ const MeshGraphVisualizer = () => {
     }
   }, []);
 
+  const trafficLightColor = (tl?: string) => {
+    switch (tl) {
+      case 'RED': return 'text-red-400';
+      case 'YELLOW': return 'text-yellow-400';
+      case 'GREEN': return 'text-green-400';
+      case 'BLUE': return 'text-blue-400';
+      default: return 'text-muted-foreground';
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Controls */}
@@ -140,20 +151,20 @@ const MeshGraphVisualizer = () => {
             🫧 Mesh Bubble Map
           </CardTitle>
           <CardDescription>
-            Interactive visualization of the reputation mesh. Click bubbles to expand connections, right-click to focus.
+            Interactive visualization of the reputation mesh. Enter any entity — if it's new, the spider will automatically discover and map its network.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Search */}
           <div className="flex gap-2">
             <Input
-              placeholder="Enter wallet, token mint, or @handle to focus..."
+              placeholder="Paste wallet, token mint, or @handle..."
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              className="flex-1"
+              className="flex-1 font-mono text-sm"
             />
-            <Button variant="outline" size="sm" onClick={handleSearch}>
+            <Button variant="outline" size="sm" onClick={handleSearch} disabled={isLoading}>
               <Search className="h-4 w-4 mr-1" /> Focus
             </Button>
             <Button variant="ghost" size="sm" onClick={resetView}>
@@ -190,6 +201,40 @@ const MeshGraphVisualizer = () => {
               </span>
             )}
           </div>
+
+          {/* Spider Status Banner */}
+          {spiderStatus.active && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Radar className="h-4 w-4 text-primary animate-spin" />
+                <span className="text-sm font-medium text-primary">{spiderStatus.stage}</span>
+              </div>
+              {spiderStatus.meshLinksAdded !== undefined && spiderStatus.meshLinksAdded > 0 && (
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <span>Links: <strong>{spiderStatus.meshLinksAdded}</strong></span>
+                  {spiderStatus.score !== undefined && (
+                    <span className={trafficLightColor(spiderStatus.trafficLight)}>
+                      Score: <strong>{spiderStatus.score}/100</strong> {spiderStatus.trafficLight}
+                    </span>
+                  )}
+                  {spiderStatus.inputType && (
+                    <span>Type: <strong>{spiderStatus.inputType}</strong></span>
+                  )}
+                </div>
+              )}
+              {spiderStatus.recommendation && (
+                <p className="text-xs text-muted-foreground">{spiderStatus.recommendation}</p>
+              )}
+            </div>
+          )}
+
+          {/* Spider Error */}
+          {spiderStatus.error && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <span className="text-sm text-destructive">{spiderStatus.error}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -209,26 +254,38 @@ const MeshGraphVisualizer = () => {
                 <p className="text-4xl">🫧</p>
                 <h3 className="text-lg font-semibold text-foreground">Enter an entity to explore</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Paste a <span className="text-green-400 font-medium">wallet address</span>,{' '}
-                  <span className="text-yellow-400 font-medium">token mint</span>, or{' '}
-                  <span className="text-blue-400 font-medium">@handle</span> above to visualize its reputation mesh connections.
+                  Paste a <span className="font-medium" style={{ color: ENTITY_COLORS.wallet }}>wallet address</span>,{' '}
+                  <span className="font-medium" style={{ color: ENTITY_COLORS.token }}>token mint</span>, or{' '}
+                  <span className="font-medium" style={{ color: ENTITY_COLORS.x_account }}>@handle</span> above.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  If the entity isn't in our database yet, the Oracle Spider will automatically discover its full network — wallets, tokens, socials, and KYC chains.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Wallets</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /> Tokens</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> X Accounts</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-500 inline-block" /> Telegram</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-white border border-border inline-block" /> KYC Root</span>
+                  {Object.entries({ wallet: 'Wallets', token: 'Tokens', x_account: 'X Accounts', telegram: 'Telegram', kyc_root: 'KYC Root' }).map(([k, v]) => (
+                    <span key={k} className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: ENTITY_COLORS[k], border: k === 'kyc_root' ? '1px solid hsl(var(--border))' : 'none' }} />
+                      {v}
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>
-          ) : graphData.nodes.length === 0 ? (
+          ) : shouldOfferSpider ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-2">
-                <p className="text-lg">🫧</p>
+              <div className="text-center space-y-4 max-w-md px-6">
+                <p className="text-3xl">🕷️</p>
+                <h3 className="text-lg font-semibold text-foreground">Entity not in mesh yet</h3>
                 <p className="text-sm text-muted-foreground">
-                  No mesh data found for this entity. Try a different search.
+                  <span className="font-mono text-xs text-primary">{focusedEntity?.id.slice(0, 16)}...</span> has no existing reputation mesh data.
                 </p>
+                <p className="text-xs text-muted-foreground">
+                  Launch the Oracle Spider to discover its wallet family, minted tokens, social accounts, and KYC chain — then visualize everything as bubbles.
+                </p>
+                <Button onClick={handleSpider} className="gap-2">
+                  <Radar className="h-4 w-4" />
+                  🕷️ Spider This Entity
+                </Button>
               </div>
             </div>
           ) : (
