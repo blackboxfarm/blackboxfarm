@@ -337,6 +337,13 @@ export function PricingTable() {
 
       {/* X Subscriber Verification */}
       {user && <XSubscriberVerification />}
+
+      {/* Inline Auth Modal for smooth checkout flow */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={handleAuthModalClose}
+        defaultTab="signup"
+      />
     </div>
   );
 }
