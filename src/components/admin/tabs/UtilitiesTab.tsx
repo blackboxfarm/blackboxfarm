@@ -12,6 +12,7 @@ const HeliusUsageDashboard = lazy(() => import("@/pages/HeliusUsage"));
 const ApiProviderManager = lazy(() => import("@/components/admin/ApiProviderManager").then(m => ({ default: m.ApiProviderManager })));
 const LiquidityLockChecker = lazy(() => import("@/components/LiquidityLockChecker").then(m => ({ default: m.LiquidityLockChecker })));
 const ApiResourceManager = lazy(() => import("@/components/admin/ApiResourceManager").then(m => ({ default: m.ApiResourceManager })));
+const DatabaseHousekeeping = lazy(() => import("@/components/admin/DatabaseHousekeeping").then(m => ({ default: m.DatabaseHousekeeping })));
 
 export default function UtilitiesTab() {
   const [activeSubTab, setActiveSubTab] = useState("api-resources");
@@ -29,6 +30,7 @@ export default function UtilitiesTab() {
         <TabsTrigger value="helius">⚡ HELIUS</TabsTrigger>
         <TabsTrigger value="api-providers">🔌 API Providers</TabsTrigger>
         <TabsTrigger value="liquidity">💧 Liquidity Checker</TabsTrigger>
+        <TabsTrigger value="housekeeping">🧹 Housekeeping</TabsTrigger>
       </TabsList>
 
       <TabsContent value="api-resources">
@@ -54,6 +56,9 @@ export default function UtilitiesTab() {
       </TabsContent>
       <TabsContent value="liquidity">
         {activeSubTab === "liquidity" && <Suspense fallback={<LazyLoader />}><LiquidityLockChecker /></Suspense>}
+      </TabsContent>
+      <TabsContent value="housekeeping">
+        {activeSubTab === "housekeeping" && <Suspense fallback={<LazyLoader />}><DatabaseHousekeeping /></Suspense>}
       </TabsContent>
     </Tabs>
     </div>
