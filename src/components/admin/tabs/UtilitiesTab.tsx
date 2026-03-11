@@ -22,6 +22,7 @@ export default function UtilitiesTab() {
 
   return (
     <div className="space-y-4">
+      <ServiceToggles />
       <HealthModeToggles />
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
