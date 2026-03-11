@@ -4112,6 +4112,42 @@ export type Database = {
         }
         Relationships: []
       }
+      helius_usage_snapshots: {
+        Row: {
+          avg_response_time_ms: number | null
+          created_at: string
+          failed_calls: number
+          function_name: string
+          id: string
+          snapshot_date: string
+          successful_calls: number
+          total_calls: number
+          total_credits: number
+        }
+        Insert: {
+          avg_response_time_ms?: number | null
+          created_at?: string
+          failed_calls?: number
+          function_name: string
+          id?: string
+          snapshot_date: string
+          successful_calls?: number
+          total_calls?: number
+          total_credits?: number
+        }
+        Update: {
+          avg_response_time_ms?: number | null
+          created_at?: string
+          failed_calls?: number
+          function_name?: string
+          id?: string
+          snapshot_date?: string
+          successful_calls?: number
+          total_calls?: number
+          total_credits?: number
+        }
+        Relationships: []
+      }
       holder_movements: {
         Row: {
           action: string
