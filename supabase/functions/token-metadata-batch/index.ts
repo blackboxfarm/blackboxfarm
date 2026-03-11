@@ -1,4 +1,6 @@
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { meshFeed } from '../_shared/mesh-feeder.ts';
 enableHeliusTracking('token-metadata-batch');
 
 const corsHeaders = {
@@ -80,6 +82,22 @@ Deno.serve(async (req) => {
       }
       
       results.push(tokenInfo);
+    }
+
+    // 🕸️ MESH FEEDER: Feed every fetched token into the mesh passively
+    try {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      meshFeed.tokenBatch(supabase, results.filter(t => t.name).map(t => ({
+        mint: t.mint,
+        symbol: t.symbol,
+        name: t.name,
+        source: 'token-metadata-batch',
+      }))).catch(e => console.warn('[mesh-feeder] batch feed failed:', e));
+    } catch (e) {
+      console.warn('[mesh-feeder] init failed:', e);
     }
 
     return new Response(

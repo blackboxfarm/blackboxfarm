@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { getHealthMode } from "../_shared/health-mode.ts";
+import { meshFeed } from "../_shared/mesh-feeder.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -464,6 +465,14 @@ Deno.serve(async (req) => {
         .eq('token_mint', item.token_mint);
       
       console.log(`[poster] Successfully posted tweet: ${tweetResult.tweetId}`);
+      
+      // 🕸️ MESH FEEDER: Every posted token feeds the mesh
+      meshFeed.token(supabase, {
+        mint: item.token_mint,
+        symbol: stats.symbol,
+        name: stats.name,
+        source: 'holders-intel-poster',
+      }).catch(e => console.warn('[mesh-feeder] poster feed failed:', e));
       
       // Also post to BlackBox TG group (fire-and-forget, with retry)
       try {

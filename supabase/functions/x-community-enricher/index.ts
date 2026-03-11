@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { validateCommunityExists } from "../_shared/x-community-validator.ts";
 import { alertAndLogCommunityDeletion, CommunityAlertInfo } from "../_shared/x-community-alerts.ts";
+import { meshFeed } from "../_shared/mesh-feeder.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -399,6 +400,17 @@ Deno.serve(async (req) => {
         } else {
           console.log(`Created ${meshLinks.length} mesh links for community ${communityId}`);
         }
+      }
+
+      // 🕸️ MESH FEEDER: Feed community admins/mods for all linked tokens
+      for (const tokenMint of linkedTokenMints) {
+        meshFeed.communityStaff(supabase, {
+          tokenMint,
+          creatorWallet: linkedWallets[0],
+          admins: communityData.adminUsernames,
+          mods: communityData.moderatorUsernames,
+          source: 'x-community-enricher',
+        }).catch(e => console.warn('[mesh-feeder] community staff feed failed:', e));
       }
 
       // Trigger team detection if enabled

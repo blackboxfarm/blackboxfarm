@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { meshFeed } from "../_shared/mesh-feeder.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -487,6 +488,15 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
         if (!error) {
           results.newlyAdded++;
           console.log(`➕ Added to watchlist: ${tokenData.token?.symbol} (${holderCount} holders, ${volumeSol.toFixed(2)} SOL)`);
+          
+          // 🕸️ MESH FEEDER: Passively feed every new token into the mesh
+          meshFeed.token(supabase, {
+            mint,
+            symbol: tokenData.token?.symbol,
+            name: tokenData.token?.name,
+            creatorWallet: tokenData.creator,
+            source: 'pumpfun-new-token-monitor',
+          }).catch(e => console.warn('[mesh-feeder] new token feed failed:', e));
         }
       }
     } catch (error) {

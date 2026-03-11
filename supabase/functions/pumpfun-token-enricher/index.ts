@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { heliusFetch, canMakeHeliusCall } from "../_shared/helius-rate-limiter.ts";
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
+import { meshFeed } from '../_shared/mesh-feeder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1270,6 +1271,18 @@ async function enrichTokenBatch(
         .eq('id', token.id);
         
       promoted++;
+      
+      // 🕸️ MESH FEEDER: Feed every promoted token + socials into the mesh
+      meshFeed.token(supabase, {
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: (token as any).token_name,
+        creatorWallet: (token as any).creator_wallet,
+        twitterUrl: token.twitter_url,
+        telegramUrl: token.telegram_url,
+        websiteUrl: token.website_url,
+        source: 'pumpfun-token-enricher',
+      }).catch(e => console.warn('[mesh-feeder] enricher feed failed:', e));
     }
     
     enriched++;

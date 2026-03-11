@@ -5649,6 +5649,51 @@ export type Database = {
         }
         Relationships: []
       }
+      mesh_spider_queue: {
+        Row: {
+          completed_at: string | null
+          entity_id: string
+          entity_type: string
+          error_message: string | null
+          id: string
+          links_discovered: number | null
+          priority: number
+          queued_at: string
+          result_summary: Json | null
+          source: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          entity_id: string
+          entity_type: string
+          error_message?: string | null
+          id?: string
+          links_discovered?: number | null
+          priority?: number
+          queued_at?: string
+          result_summary?: Json | null
+          source: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          links_discovered?: number | null
+          priority?: number
+          queued_at?: string
+          result_summary?: Json | null
+          source?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       mint_monitor_detections: {
         Row: {
           created_at: string
