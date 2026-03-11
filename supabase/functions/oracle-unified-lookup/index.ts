@@ -1068,10 +1068,11 @@ Deno.serve(async (req) => {
       depth++;
     }
 
-    // Store new mesh links for relationships discovered
+    // Store ALL discovered mesh links — full family tree
     let meshLinksAdded = 0;
     const newLinks: any[] = [];
 
+    // 1. Input token → creator wallet
     if (resolvedWallet && inputType === 'token') {
       newLinks.push({
         source_type: 'wallet',
@@ -1080,10 +1081,11 @@ Deno.serve(async (req) => {
         linked_id: cleanedInput,
         relationship: 'created',
         confidence: 100,
-        discovered_via: 'public_query'
+        discovered_via: 'oracle_spider'
       });
     }
 
+    // 2. X account → wallet
     if (resolvedWallet && inputType === 'x_account') {
       newLinks.push({
         source_type: 'x_account',
@@ -1092,17 +1094,115 @@ Deno.serve(async (req) => {
         linked_id: resolvedWallet,
         relationship: 'linked',
         confidence: 80,
-        discovered_via: 'public_query'
+        discovered_via: 'oracle_spider'
       });
     }
 
-    // Upsert mesh links
-    if (newLinks.length > 0) {
-      const { data: insertedLinks } = await supabase
-        .from('reputation_mesh')
-        .upsert(newLinks, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' })
-        .select();
-      meshLinksAdded = insertedLinks?.length || 0;
+    // 3. ALL tokens created by this dev → mesh links
+    if (resolvedWallet && liveTokens.length > 0) {
+      for (const token of liveTokens.slice(0, 100)) {
+        if (token.mint && token.mint !== cleanedInput) {
+          newLinks.push({
+            source_type: 'wallet',
+            source_id: resolvedWallet,
+            linked_type: 'token',
+            linked_id: token.mint,
+            relationship: 'created',
+            confidence: 95,
+            discovered_via: 'oracle_spider'
+          });
+        }
+      }
+    }
+
+    // 4. Upstream funding chain → mesh links (dev→funder→KYC root)
+    if (upstreamChain.length > 1) {
+      for (let i = 0; i < upstreamChain.length - 1; i++) {
+        const child = upstreamChain[i];
+        const parent = upstreamChain[i + 1];
+        if (child.wallet && parent.wallet && child.wallet !== parent.wallet) {
+          newLinks.push({
+            source_type: 'wallet',
+            source_id: child.wallet,
+            linked_type: 'wallet',
+            linked_id: parent.wallet,
+            relationship: parent.relationship || 'funded_by',
+            confidence: 85,
+            discovered_via: 'oracle_spider'
+          });
+        }
+      }
+    }
+
+    // 5. Linked X accounts from profile → mesh
+    if (resolvedWallet && developerProfile?.twitter_handle) {
+      const handle = developerProfile.twitter_handle.replace(/^@/, '');
+      newLinks.push({
+        source_type: 'x_account',
+        source_id: handle,
+        linked_type: 'wallet',
+        linked_id: resolvedWallet,
+        relationship: 'linked',
+        confidence: 90,
+        discovered_via: 'oracle_spider'
+      });
+    }
+    
+    // 6. Linked X accounts from dev_wallet_reputation
+    if (resolvedWallet && devWalletRep?.twitter_url) {
+      const twitterMatch = devWalletRep.twitter_url.match(/(?:x\.com|twitter\.com)\/(@?[\w]+)/i);
+      if (twitterMatch) {
+        const handle = twitterMatch[1].replace('@', '');
+        newLinks.push({
+          source_type: 'x_account',
+          source_id: handle,
+          linked_type: 'wallet',
+          linked_id: resolvedWallet,
+          relationship: 'linked',
+          confidence: 85,
+          discovered_via: 'oracle_spider'
+        });
+      }
+    }
+
+    // 7. Dev team members → mesh links
+    if (resolvedWallet && devTeam?.member_wallets) {
+      for (const memberWallet of devTeam.member_wallets) {
+        if (memberWallet !== resolvedWallet && isBase58(memberWallet)) {
+          newLinks.push({
+            source_type: 'wallet',
+            source_id: resolvedWallet,
+            linked_type: 'wallet',
+            linked_id: memberWallet,
+            relationship: 'same_team',
+            confidence: 80,
+            discovered_via: 'oracle_spider'
+          });
+        }
+      }
+    }
+
+    // Deduplicate links before upsert
+    const linkKeys = new Set<string>();
+    const dedupedLinks = newLinks.filter(link => {
+      const key = `${link.source_type}:${link.source_id}:${link.linked_type}:${link.linked_id}:${link.relationship}`;
+      if (linkKeys.has(key)) return false;
+      linkKeys.add(key);
+      return true;
+    });
+
+    // Batch upsert in chunks of 50
+    if (dedupedLinks.length > 0) {
+      console.log(`[Oracle] Writing ${dedupedLinks.length} mesh links...`);
+      for (let i = 0; i < dedupedLinks.length; i += 50) {
+        const batch = dedupedLinks.slice(i, i + 50);
+        const { data: insertedLinks } = await supabase
+          .from('reputation_mesh')
+          .upsert(batch, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' })
+          .select();
+        meshLinksAdded += insertedLinks?.length || 0;
+      }
+      console.log(`[Oracle] Total mesh links written: ${meshLinksAdded}`);
     }
 
     const result: OracleResult = {
