@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { meshFeed } from "../_shared/mesh-feeder.ts"
 import { detectLP, type LPDetectionResult, type LaunchpadInfo } from "../_shared/lp-detection.ts"
 import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts"
 import { fetchCreatorInfo } from "../_shared/creator-api.ts"
