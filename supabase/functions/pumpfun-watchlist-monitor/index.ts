@@ -1245,45 +1245,16 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           }
         }
         
-        // === DEAD CHECKS (unchanged from v1) ===
-        if (watchingMinutes > config.max_watch_time_minutes) {
+        // === POST-API DEAD CHECKS — catches tokens that looked alive in stored data but are dead on fresh fetch ===
+        // NOTE: Most dead tokens are now caught by pre-API checks using stored data.
+        // These only fire for edge cases where fresh metrics reveal death.
+        if (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol) {
           updates.status = 'dead';
           updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
-          updates.removal_reason = `Exceeded max watch time: ${watchingMinutes.toFixed(0)}m`;
-          stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (max time)`);
-        }
-        else if (watchingMinutes > 30 && metrics.holders <= 1 && metrics.volume24hSol <= 0.001) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `Zombie: ${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders`;
-          stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (zombie)`);
-        }
-        else if (watchingMinutes > 60 && metrics.holders < 5) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `Low activity after 1h: ${metrics.holders} holders`;
-          stats.markedDead++;
-          stats.deadTokens.push(`${token.token_symbol} (low 1h)`);
-        }
-        else if (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL`;
+          updates.removal_reason = `${watchingMinutes.toFixed(0)}m, ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL (fresh data)`;
           stats.markedDead++;
           stats.deadTokens.push(`${token.token_symbol} (${metrics.holders} holders)`);
-        }
-        else if (updates.consecutive_stale_checks >= 4 && watchingMinutes > 8) {
-          updates.status = 'dead';
-          updates.rejection_type = 'soft';
-          updates.removed_at = now.toISOString();
-          updates.removal_reason = `Stale: ${updates.consecutive_stale_checks} checks, ${watchingMinutes.toFixed(0)}m`;
-          stats.markedStale++;
         }
 
         // Update token
