@@ -69,12 +69,30 @@ const MeshGraphVisualizer = () => {
   }, [searchInput, triggerSpider]);
 
   const handleNodeClick = useCallback((node: any) => {
-    expandEntity(node.id);
+    const nodeId = node.id as string;
+    const parts = nodeId.split(':');
+    const type = parts[0];
+    const rawId = parts.slice(1).join(':');
+    
+    // Check if this node has any connections beyond what we see
+    const nodeConnections = graphData.links.filter(
+      (l: any) => (l.source?.id || l.source) === nodeId || (l.target?.id || l.target) === nodeId
+    );
+    
+    // Always expand in the graph
+    expandEntity(nodeId);
+    
+    // If node has very few connections (leaf node), auto-spider it
+    if (nodeConnections.length <= 1 && (type === 'wallet' || type === 'token')) {
+      console.log(`[BubbleMap] Auto-spidering leaf node: ${rawId}`);
+      triggerSpider(rawId, 'deep');
+    }
+    
     if (graphRef.current) {
       graphRef.current.centerAt(node.x, node.y, 500);
       graphRef.current.zoom(2.5, 500);
     }
-  }, [expandEntity]);
+  }, [expandEntity, triggerSpider, graphData.links]);
 
   const handleNodeRightClick = useCallback((node: any) => {
     const parts = (node.id as string).split(':');
