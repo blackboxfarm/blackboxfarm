@@ -136,7 +136,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Check 4: Database table bloat (large tables with no cleanup) ──
-    const logTables = ['api_usage_log', 'activity_logs', 'arb_opportunities', 'arb_price_snapshots'];
+    const logTables = ['api_usage_log', 'activity_logs', 'arb_opportunities', 'arb_price_snapshots', 'helius_api_usage'];
     for (const table of logTables) {
       const { count } = await supabase.from(table).select('*', { count: 'exact', head: true });
       if (count && count > 100_000) {
