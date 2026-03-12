@@ -153,9 +153,9 @@ export async function solscanCheckAccountLabel(
     );
 
     if (!resp.ok) {
-      const errBody = await resp.text().catch(() => '');
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${errBody.slice(0, 200)}`);
-      apiErrors.push(`Solscan account/detail ${resp.status}`);
+      const detail = await readSolscanErrorDetail(resp);
+      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
+      apiErrors.push(formatSolscanApiError('Solscan account/detail', resp.status, detail));
       return { label: null, isCex: false, tags: [] };
     }
 
