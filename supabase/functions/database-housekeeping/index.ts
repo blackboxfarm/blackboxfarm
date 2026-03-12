@@ -207,20 +207,49 @@ Deno.serve(async (req) => {
         .select('*', { count: 'exact', head: true })
         .lt(col, cutoff);
 
-      const rowsToDelete = oldRows || 0;
+      let rowsToDelete = oldRows || 0;
+      let actualDeleted = 0;
 
       if (!dryRun && rowsToDelete > 0) {
-        await supabase
-          .from(table)
-          .delete()
-          .lt(col, cutoff);
+        // Batch delete to overcome PostgREST row limits (~1000 per call)
+        const BATCH_SIZE = 5000;
+        let remaining = rowsToDelete;
+        let iterations = 0;
+        const MAX_ITERATIONS = 200; // Safety cap: 200 * 5000 = 1M rows max
+        
+        while (remaining > 0 && iterations < MAX_ITERATIONS) {
+          const { data: batch } = await supabase
+            .from(table)
+            .select('id')
+            .lt(col, cutoff)
+            .limit(BATCH_SIZE);
+          
+          if (!batch || batch.length === 0) break;
+          
+          const ids = batch.map((r: any) => r.id);
+          const { error: delError } = await supabase
+            .from(table)
+            .delete()
+            .in('id', ids);
+          
+          if (delError) {
+            console.error(`[housekeeping] Batch delete error on ${table}:`, delError.message);
+            break;
+          }
+          
+          actualDeleted += ids.length;
+          remaining -= ids.length;
+          iterations++;
+          
+          console.log(`[housekeeping] ${table}: deleted batch ${iterations} (${ids.length} rows, ${remaining} remaining)`);
+        }
       }
 
       results.push({
         table,
         rowsBefore: totalRows || 0,
-        rowsDeleted: dryRun ? 0 : rowsToDelete,
-        rowsAfter: (totalRows || 0) - (dryRun ? 0 : rowsToDelete),
+        rowsDeleted: dryRun ? rowsToDelete : actualDeleted,
+        rowsAfter: (totalRows || 0) - (dryRun ? 0 : actualDeleted),
         retentionDays: days,
       });
     }
