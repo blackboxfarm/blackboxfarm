@@ -135,6 +135,8 @@ const App = () => {
                       <Route path="/subscriptions" element={<Subscriptions />} />
                       <Route path="/tgbot" element={<TelegramBot />} />
                       <Route path="/features" element={<Features />} />
+                      <Route path="/bubblepromo" element={<BubblePromo />} />
+                      <Route path="/bubblemap" element={<BubbleMapPage />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>

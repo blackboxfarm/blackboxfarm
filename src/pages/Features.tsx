@@ -520,7 +520,7 @@ export default function Features() {
           <Button 
             variant="outline" 
             size="lg"
-            onClick={() => navigate("/holders")}
+            onClick={() => navigate("/bubblepromo")}
             className="gap-2"
           >
             <Network className="w-4 h-4" />
