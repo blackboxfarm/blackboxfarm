@@ -367,7 +367,6 @@ const MeshGraphVisualizer = () => {
               cooldownTicks={100}
               d3AlphaDecay={0.015}
               d3VelocityDecay={0.25}
-              d3Force="charge"
               linkDistance={120}
               linkDirectionalParticles={(link: any) => {
                 // Bidirectional relationships get 2 particles, directional get 1
