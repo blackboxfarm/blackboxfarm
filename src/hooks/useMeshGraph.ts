@@ -411,26 +411,42 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     // Block direct token↔kyc_root (KYC must connect through wallet chain only)
     if ((st === 'token' && lt === 'kyc_root') || (st === 'kyc_root' && lt === 'token')) continue;
 
+    // Extract evidence for friendly labels
+    const evidence = link.evidence && typeof link.evidence === 'object' ? link.evidence : {};
+
     if (!nodesMap.has(sourceKey)) {
       nodesMap.set(sourceKey, {
         id: sourceKey,
+        fullId: link.source_id,
         type: link.source_type,
-        label: getNodeLabel(link.source_id, link.source_type),
+        label: getNodeLabel(link.source_id, link.source_type, evidence),
         val: 1,
       });
     } else {
-      nodesMap.get(sourceKey)!.val += 0.3;
+      // Update label if new evidence provides a better one
+      const existing = nodesMap.get(sourceKey)!;
+      existing.val += 0.3;
+      const betterLabel = getNodeLabel(link.source_id, link.source_type, evidence);
+      if (betterLabel.length > 2 && !betterLabel.includes('…') && existing.label.includes('…')) {
+        existing.label = betterLabel;
+      }
     }
 
     if (!nodesMap.has(targetKey)) {
       nodesMap.set(targetKey, {
         id: targetKey,
+        fullId: link.linked_id,
         type: link.linked_type,
-        label: getNodeLabel(link.linked_id, link.linked_type),
+        label: getNodeLabel(link.linked_id, link.linked_type, evidence),
         val: 1,
       });
     } else {
-      nodesMap.get(targetKey)!.val += 0.3;
+      const existing = nodesMap.get(targetKey)!;
+      existing.val += 0.3;
+      const betterLabel = getNodeLabel(link.linked_id, link.linked_type, evidence);
+      if (betterLabel.length > 2 && !betterLabel.includes('…') && existing.label.includes('…')) {
+        existing.label = betterLabel;
+      }
     }
 
     links.push({
