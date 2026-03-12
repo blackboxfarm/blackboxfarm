@@ -98,7 +98,7 @@ export function WhaleBubbleMap({
       <CardContent className="space-y-4">
         {/* SVG Bubble Map */}
         <div className="relative bg-background/50 rounded-lg overflow-hidden">
-          <svg viewBox="0 0 300 300" className="w-full h-64">
+          <svg viewBox="0 0 300 300" className="w-full h-64 max-w-full">
             {/* Background grid */}
             <defs>
               <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">

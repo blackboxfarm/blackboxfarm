@@ -135,8 +135,11 @@ const MeshGraphVisualizer = () => {
     }
 
     setTokenSearching(true);
+    // Extract raw wallet addresses — strip type prefix and skip non-wallet entities
     const walletsToScan = focusedEntity 
-      ? [focusedEntity.id]
+      ? (focusedEntity.type === 'wallet' 
+          ? [focusedEntity.id.replace(/^wallet:/, '')]
+          : (() => { toast.error('Focused entity is not a wallet — select a wallet node to scan tokens'); return []; })())
       : walletNodes.slice(0, 5).map(n => n.id.split(':').slice(1).join(':'));
 
     let totalTokens = 0;
