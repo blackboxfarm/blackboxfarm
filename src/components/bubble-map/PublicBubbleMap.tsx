@@ -174,15 +174,21 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const walletsToScan = focusedEntity?.type === 'wallet'
       ? [focusedEntity.id.replace(/^wallet:/, '')]
       : walletNodes.slice(0, 5).map(n => n.id.split(':').slice(1).join(':'));
+    console.log('[BubbleMap] Token discovery started:', { walletCount: walletsToScan.length });
     let totalTokens = 0;
     for (const wallet of walletsToScan) {
       try {
         const { data, error } = await supabase.functions.invoke('mesh-wallet-token-discovery', {
           body: { walletAddress: wallet },
         });
-        if (error) throw error;
+        if (error) {
+          console.error('[BubbleMap] Token discovery edge function error:', { wallet: wallet.slice(0, 12), error });
+          throw error;
+        }
+        console.log('[BubbleMap] Token discovery result:', { wallet: wallet.slice(0, 12), tokensFound: data?.tokensFound });
         totalTokens += data?.tokensFound || 0;
       } catch (err: any) {
+        console.error('[BubbleMap] Token scan failed for wallet:', wallet.slice(0, 12), err);
         toast.error(`Token scan failed: ${err.message}`);
       }
     }
