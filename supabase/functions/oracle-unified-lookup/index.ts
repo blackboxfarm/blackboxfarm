@@ -846,7 +846,8 @@ Deno.serve(async (req) => {
     const isWhitelisted = !!whitelistEntry;
     const { score, breakdown: scoreBreakdown } = calculateScore(stats, isBlacklisted, isWhitelisted);
     const trafficLight = getTrafficLight(score);
-    const recommendation = generateRecommendation(score, stats, !hasExistingData);
+    const requiresScan = !hasExistingData && liveTokens.length === 0 && !creatorResolvedFromToken;
+    const recommendation = generateRecommendation(score, stats, requiresScan);
 
     // Process mesh links into structured data
     const processedMeshLinks = meshLinks.map((link: any) => ({
