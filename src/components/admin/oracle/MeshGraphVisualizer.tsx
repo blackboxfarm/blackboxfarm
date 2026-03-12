@@ -1069,6 +1069,49 @@ const MeshGraphVisualizer = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Red Flag Explainer Dialog */}
+      <Dialog open={!!redFlagDialog} onOpenChange={(open) => !open && setRedFlagDialog(null)}>
+        <DialogContent className="max-w-lg border-red-500/30 bg-background">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              🚩 Intelligence Red Flag
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {redFlagDialog && (
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full inline-block" style={{ backgroundColor: ENTITY_COLORS[redFlagDialog.node.type] }} />
+                  {ENTITY_LABELS[redFlagDialog.node.type]} — {redFlagDialog.node.label}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {redFlagDialog && (
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {redFlagDialog.flags.map((flag, i) => (
+                <div key={i} className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm text-red-400">{flag.shortLabel}</span>
+                    <Badge 
+                      variant={flag.severity === 'critical' ? 'destructive' : 'outline'}
+                      className={flag.severity === 'critical' ? '' : 'border-orange-500/50 text-orange-400'}
+                    >
+                      {flag.severity.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                    {flag.explanation}
+                  </div>
+                </div>
+              ))}
+              <div className="text-[10px] text-muted-foreground font-mono break-all pt-2 border-t border-border">
+                Entity ID: {redFlagDialog.node.fullId || redFlagDialog.node.id}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
