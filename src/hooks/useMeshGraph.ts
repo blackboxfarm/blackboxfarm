@@ -536,12 +536,19 @@ export function useMeshGraph(initialEntityId?: string) {
   };
 }
 
-function applyTickerCache(data: MeshGraphData, cache: Map<string, string>): MeshGraphData {
+function applyEnrichmentCaches(
+  data: MeshGraphData, 
+  tickerCache: Map<string, string>,
+  commNameCache: Map<string, string>
+): MeshGraphData {
   const updatedNodes = data.nodes.map(node => {
-    if (node.type !== 'token') return node;
-    const ticker = cache.get(node.fullId);
-    if (ticker) {
-      return { ...node, label: `$${ticker.toUpperCase()}` };
+    if (node.type === 'token') {
+      const ticker = tickerCache.get(node.fullId);
+      if (ticker) return { ...node, label: `$${ticker.toUpperCase()}` };
+    }
+    if (node.type === 'x_community') {
+      const name = commNameCache.get(node.fullId);
+      if (name) return { ...node, label: name.length > 18 ? name.slice(0, 16) + '…' : name };
     }
     return node;
   });
