@@ -41,6 +41,7 @@ export const ENTITY_COLORS: Record<string, string> = {
   x_account: '#3b82f6',
   x_community: '#6366f1',
   telegram: '#06b6d4',
+  telegram_channel: '#0891b2',
   kyc_root: '#ffffff',
   discord: '#8b5cf6',
   github: '#a3a3a3',
@@ -57,6 +58,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   x_account: '🐦 X Account',
   x_community: '👥 X Community',
   telegram: '📡 Telegram',
+  telegram_channel: '📡 TG Channel',
   kyc_root: '🏦 KYC Root',
   discord: '💬 Discord',
   github: '🐙 GitHub',
@@ -80,6 +82,14 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
       const name = evidence.community_name || evidence.name || evidence.title;
       if (name) return name.length > 18 ? name.slice(0, 16) + '…' : name;
     }
+    if (type === 'telegram_channel') {
+      const title = evidence.channel_title || evidence.title || evidence.name;
+      if (title) {
+        const prefix = evidence.is_recycled ? '♻️ ' : '';
+        const label = title.length > 16 ? title.slice(0, 14) + '…' : title;
+        return `${prefix}${label}`;
+      }
+    }
     if (type === 'kyc_root') {
       const exchange = evidence.exchange || evidence.platform || evidence.kyc_provider;
       if (exchange) return `KYC ${exchange}`;
@@ -95,6 +105,7 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
   // Default friendly labels by type
   if (type === 'token') return `$${id.length > 8 ? id.slice(0, 6) + '…' : id}`;
   if (type === 'x_account') return `@${id.replace(/^@/, '')}`;
+  if (type === 'telegram_channel') return `TG ${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'kyc_root') return `KYC ${id.length > 12 ? id.slice(0, 8) + '…' : id}`;
   if (type === 'website') {
     try {
@@ -409,10 +420,11 @@ export function useMeshGraph(initialEntityId?: string) {
     spiderAttemptsRef.current.clear();
   }, []);
 
-  // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES ═══
+  // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES + TELEGRAM CHANNELS ═══
   const [enrichedGraphData, setEnrichedGraphData] = useState<MeshGraphData>({ nodes: [], links: [] });
   const tickerCacheRef = useRef<Map<string, string>>(new Map());
   const commNameCacheRef = useRef<Map<string, string>>(new Map());
+  const tgChannelCacheRef = useRef<Map<string, { title: string; isRecycled: boolean; tokenCount: number }>>(new Map());
   
   useEffect(() => {
     if (!graphData) {
@@ -429,13 +441,18 @@ export function useMeshGraph(initialEntityId?: string) {
       n.type === 'x_community' && /^\d+$/.test(n.fullId) && !commNameCacheRef.current.has(n.fullId)
     );
     
-    if (tokenNodes.length === 0 && communityNodes.length === 0) {
-      setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current));
+    // Find telegram_channel nodes not yet enriched
+    const tgChannelNodes = graphData.nodes.filter(n =>
+      n.type === 'telegram_channel' && !tgChannelCacheRef.current.has(n.fullId)
+    );
+    
+    if (tokenNodes.length === 0 && communityNodes.length === 0 && tgChannelNodes.length === 0) {
+      setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
       return;
     }
 
     // Set current data immediately, enrich async
-    setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current));
+    setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
 
     const enrichAll = async () => {
       // ── Ticker enrichment ──
@@ -475,7 +492,6 @@ export function useMeshGraph(initialEntityId?: string) {
       if (communityNodes.length > 0) {
         try {
           const communityIds = communityNodes.map(n => n.fullId);
-          // Query x_communities table for names
           const { data: communities } = await supabase
             .from('x_communities')
             .select('community_id, name')
@@ -489,7 +505,6 @@ export function useMeshGraph(initialEntityId?: string) {
             }
           }
 
-          // Also check reputation_mesh evidence for community_name
           for (const cNode of communityNodes) {
             if (commNameCacheRef.current.has(cNode.fullId)) continue;
             const { data: meshLinks } = await supabase
@@ -511,7 +526,6 @@ export function useMeshGraph(initialEntityId?: string) {
             }
           }
 
-          // Mark unfound communities so we don't re-fetch
           for (const id of communityIds) {
             if (!commNameCacheRef.current.has(id)) {
               commNameCacheRef.current.set(id, '');
@@ -522,7 +536,63 @@ export function useMeshGraph(initialEntityId?: string) {
         }
       }
 
-      setEnrichedGraphData(prev => applyEnrichmentCaches(prev, tickerCacheRef.current, commNameCacheRef.current));
+      // ── Telegram channel name enrichment ──
+      if (tgChannelNodes.length > 0) {
+        try {
+          const channelIds = tgChannelNodes.map(n => n.fullId);
+          const { data: channels } = await supabase
+            .from('telegram_channel_registry')
+            .select('channel_id, current_title, linked_token_count')
+            .in('channel_id', channelIds);
+          
+          if (channels) {
+            for (const ch of channels) {
+              tgChannelCacheRef.current.set(ch.channel_id, {
+                title: ch.current_title || ch.channel_id,
+                isRecycled: (ch.linked_token_count || 0) > 1,
+                tokenCount: ch.linked_token_count || 0,
+              });
+            }
+          }
+
+          // Also check mesh evidence for channel_title
+          for (const tgNode of tgChannelNodes) {
+            if (tgChannelCacheRef.current.has(tgNode.fullId)) continue;
+            const { data: meshLinks } = await supabase
+              .from('reputation_mesh')
+              .select('evidence')
+              .or(`source_id.eq.${tgNode.fullId},linked_id.eq.${tgNode.fullId}`)
+              .not('evidence', 'is', null)
+              .limit(5);
+            
+            if (meshLinks) {
+              for (const link of meshLinks) {
+                const ev = link.evidence as any;
+                const title = ev?.channel_title || ev?.title || ev?.name;
+                if (title && typeof title === 'string') {
+                  tgChannelCacheRef.current.set(tgNode.fullId, {
+                    title,
+                    isRecycled: ev?.is_recycled === true || (ev?.linked_token_count || 0) > 1,
+                    tokenCount: ev?.linked_token_count || 0,
+                  });
+                  break;
+                }
+              }
+            }
+          }
+
+          // Mark unfound channels
+          for (const id of channelIds) {
+            if (!tgChannelCacheRef.current.has(id)) {
+              tgChannelCacheRef.current.set(id, { title: '', isRecycled: false, tokenCount: 0 });
+            }
+          }
+        } catch (err) {
+          console.warn('[MeshGraph] Telegram channel enrichment failed:', err);
+        }
+      }
+
+      setEnrichedGraphData(prev => applyEnrichmentCaches(prev, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
     };
     
     enrichAll();
@@ -547,7 +617,8 @@ export function useMeshGraph(initialEntityId?: string) {
 function applyEnrichmentCaches(
   data: MeshGraphData, 
   tickerCache: Map<string, string>,
-  commNameCache: Map<string, string>
+  commNameCache: Map<string, string>,
+  tgChannelCache?: Map<string, { title: string; isRecycled: boolean; tokenCount: number }>,
 ): MeshGraphData {
   const updatedNodes = data.nodes.map(node => {
     if (node.type === 'token') {
@@ -557,6 +628,15 @@ function applyEnrichmentCaches(
     if (node.type === 'x_community') {
       const name = commNameCache.get(node.fullId);
       if (name) return { ...node, label: name.length > 18 ? name.slice(0, 16) + '…' : name };
+    }
+    if (node.type === 'telegram_channel' && tgChannelCache) {
+      const info = tgChannelCache.get(node.fullId);
+      if (info && info.title) {
+        const prefix = info.isRecycled ? '♻️ ' : '📡 ';
+        const suffix = info.isRecycled ? ` (${info.tokenCount})` : '';
+        const label = info.title.length > 14 ? info.title.slice(0, 12) + '…' : info.title;
+        return { ...node, label: `${prefix}${label}${suffix}` };
+      }
     }
     return node;
   });

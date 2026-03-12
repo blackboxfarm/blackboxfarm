@@ -1,55 +1,88 @@
 
 
-## Plan: Telegram Group Recycling Detection via Immutable Channel ID
+# HoldersIntel Bot — Full Command Suite with Tier Gating
 
-### The Insight
-Developers recycle Telegram groups by simply renaming them (`t.me/guanocoin` → `t.me/newcoin`). Currently the mesh only stores the mutable username, so recycled groups look like separate entities. By resolving usernames to their immutable numeric channel IDs, recycled groups automatically link all tokens that ever used them.
+## What You Gave Me (BotFather Commands)
 
-### What Changes
+Based on the conversation and your existing bot, here's the command list I'm building around:
 
-**1. Extend `social-mesh-linker` to resolve Telegram numeric IDs**
-- After extracting the username from `t.me/xxxxx`, call Bot API `getChat?chat_id=@xxxxx` to get the numeric ID
-- Store the numeric ID as the primary `source_id` (e.g., `source_type: "telegram_channel"`, `source_id: "-1001234567890"`)
-- Keep the username as a secondary mesh link (`telegram_username → telegram_channel`) so both are searchable
-- Store the resolved title and username history in `evidence`
-- If Bot API call fails (bot not in group, private group), fall back to current username-only behavior
-
-**2. Add a `telegram_channel_registry` table**
-```
-telegram_channel_registry:
-  - channel_id (bigint, PK) — immutable numeric ID
-  - current_username (text, nullable) — last known @username
-  - current_title (text) — last known display name
-  - username_history (jsonb[]) — [{username, first_seen, last_seen}]
-  - title_history (jsonb[]) — [{title, first_seen, last_seen}]
-  - linked_token_count (int) — how many tokens have used this group
-  - first_seen_at, last_seen_at (timestamps)
+```text
+/start        — Welcome & setup
+/register     — Link BlackBox Farm account
+/status       — Check subscription tier
+/help         — Show commands
+/holders CA   — Holder distribution analysis
+/momentum CA  — Volume/price momentum score
+/verdict CA   — Quick Buy/Hold verdict
+/oracle CA    — Developer reputation lookup
+/wallet ADDR  — Wallet behavior analysis
+/alerts       — Manage alert preferences
 ```
 
-**3. Create mesh links using the numeric ID**
-- `telegram_channel:-1001234567890` → `wallet:ABC` (social_account_of, from $LOBSTAR)
-- `telegram_channel:-1001234567890` → `wallet:DEF` (social_account_of, from $DISTORTED)
-- `telegram_channel:-1001234567890` → `wallet:GHI` (social_account_of, from $GUANOCOIN)
+## Tier Gating Matrix
 
-All three wallets now visibly connect through the same immutable node in the Bubble Map, regardless of what the group was called at the time.
+```text
+Command       │ Free │ Auth │ X Sub │ Pro  │ Dev
+──────────────┼──────┼──────┼───────┼──────┼─────
+/start        │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/register     │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/status       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/help         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/holders CA   │  —   │ lite │ full  │ full+│ full+
+/momentum CA  │  —   │  —   │  ✓    │  ✓   │  ✓
+/verdict CA   │  —   │ lite │  ✓    │  ✓   │  ✓
+/oracle CA    │  —   │  —   │  —    │  ✓   │  ✓
+/wallet ADDR  │  —   │  —   │  —    │  ✓   │  ✓
+/alerts       │  —   │  —   │  ✓    │  ✓   │  ✓
+```
 
-**4. Bubble Map label for Telegram nodes**
-- Show the current group title (e.g., "Guano Coin Community") instead of the username
-- If recycled (linked_token_count > 1), show a warning badge: "♻️ Recycled Group (3 tokens)"
+- **Free (unlinked)**: Only meta commands. Everything else says "link your account first."
+- **Auth (linked, free tier)**: `/holders` returns a lite summary (holder count, top 10% concentration, health score). `/verdict` returns just the color (🟢/🔴) with no detail.
+- **X Subscriber**: Full `/holders` with tier breakdown + distribution bars. `/momentum` unlocked. `/verdict` with sizing recommendation.
+- **Pro+**: `/oracle` dev reputation, `/wallet` behavior analysis, full detail on everything.
 
-**5. Backfill existing Telegram links**
-- One-time scan of existing `reputation_mesh` rows where `source_type = "telegram"` 
-- Resolve each username → numeric ID and migrate to new format
-- Creates instant connections for already-indexed tokens
+## The `/verdict` System (Your Buy Signal)
 
-### Files to create/change
-- **Create**: `supabase/functions/_shared/telegram-resolver.ts` — shared utility calling Bot API `getChat`
-- **Create**: migration for `telegram_channel_registry` table
-- **Edit**: `supabase/functions/social-mesh-linker/index.ts` — use resolver before inserting mesh links
-- **Edit**: `src/hooks/useMeshGraph.ts` — label enrichment for `telegram_channel` nodes
-- **Edit**: `src/components/admin/oracle/MeshGraphVisualizer.tsx` — recycled group badge/color
+The verdict combines momentum score + holder health + dev reputation into a single actionable call:
 
-### Performance impact
-- Adds 1 Bot API call per unique Telegram URL per token (rate limit: 30 calls/sec, well within BATCH_SIZE of 20)
-- Resolution is cached in `telegram_channel_registry` so repeated usernames skip the API call
+```text
+🟢 BUY DEEP LONG    — Strong chart, healthy holders, good dev. Full position, hold.
+🟢 BUY MEDIUM SHORT — Decent momentum, ride the wave. Medium position, 2x target.
+🟡 BUY SMALL SHORT  — Speculative. Small/disposable amount, quick 2x flip.
+🔴 HOLD / AVOID     — Weak signals, bad dev, or dump in progress. Skip.
+```
+
+The logic:
+- Momentum score ≥ 70 + health score ≥ 60 + dev GREEN → **DEEP LONG**
+- Momentum score ≥ 55 + health score ≥ 40 → **MEDIUM SHORT**
+- Momentum score ≥ 40 OR fresh token with buying pressure → **SMALL SHORT**
+- Everything else → **HOLD/AVOID**
+
+## Technical Implementation
+
+All new commands will be added to the existing `holdersintel-bot-webhook/index.ts` edge function. Each analytical command calls the existing edge functions internally via `supabase.functions.invoke()`:
+
+| Bot Command | Calls | Data Source |
+|---|---|---|
+| `/holders CA` | `token-ai-interpreter` | Helius holder data + bucketing |
+| `/momentum CA` | `token-momentum-analyzer` | DexScreener live metrics |
+| `/verdict CA` | `token-momentum-analyzer` + `token-ai-interpreter` + `oracle-unified-lookup` | Combined score |
+| `/oracle CA` | `oracle-unified-lookup` | Dev reputation mesh |
+| `/wallet ADDR` | `wallet-behavior-analysis` | Helius transaction history |
+| `/alerts` | DB read/write on user preferences | `telegram_link_codes` or new prefs table |
+
+### Rate Limiting
+Each analytical command will be rate-limited per user (e.g., 5 lookups/hour for X Sub, 20/hour for Pro) to prevent API abuse. Tracked via a simple counter in the `telegram_link_codes` table or a lightweight `telegram_bot_usage` table.
+
+### New DB Table
+`telegram_bot_usage` — tracks per-user command usage for rate limiting:
+- `id`, `telegram_user_id`, `command`, `token_mint`, `created_at`
+
+### Response Formatting
+All responses formatted as Telegram Markdown with ASCII bar charts for distributions (same style as the XBot channel posts), keeping messages under Telegram's 4096 char limit.
+
+## Files Changed
+1. **`supabase/functions/holdersintel-bot-webhook/index.ts`** — Add handlers for `/holders`, `/momentum`, `/verdict`, `/oracle`, `/wallet`, `/alerts`. Add tier gating middleware. Add rate limiting.
+2. **DB migration** — Create `telegram_bot_usage` table for rate limiting.
+3. **Update `/help`** — Show tier-appropriate command list per user.
 

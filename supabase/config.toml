@@ -468,3 +468,6 @@ verify_jwt = false
 
 [functions.holdersintel-bot-webhook]
 verify_jwt = false
+
+[functions.social-mesh-linker]
+verify_jwt = false
