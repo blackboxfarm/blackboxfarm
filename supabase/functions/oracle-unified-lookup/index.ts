@@ -1243,7 +1243,8 @@ Deno.serve(async (req) => {
       recommendation,
       meshLinksAdded,
       liveAnalysis: liveAnalysis || undefined,
-      upstreamChain: upstreamChain.length > 1 ? upstreamChain : undefined
+      upstreamChain: upstreamChain.length > 1 ? upstreamChain : undefined,
+      apiErrors: apiErrors.length > 0 ? apiErrors : undefined
     };
 
     console.log(`[Oracle] Result: score=${score}, trafficLight=${trafficLight}, found=${result.found}`);
