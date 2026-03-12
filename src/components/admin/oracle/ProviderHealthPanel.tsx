@@ -48,7 +48,7 @@ const ProviderHealthPanel = () => {
         .select('service_name, display_name, is_enabled');
 
       const knownServices = new Set([
-        'helius', 'solscan', 'dexscreener', 'pumpfun', 'rugcheck', 'jupiter', 'coingecko',
+        'helius', 'solscan', 'dexscreener', 'pumpfun', 'rugcheck', 'jupiter', 'coingecko', 'apify',
         ...(configs || []).map(c => c.service_name),
         ...grouped.keys(),
       ]);

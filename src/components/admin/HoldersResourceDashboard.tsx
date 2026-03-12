@@ -28,6 +28,7 @@ const SERVICE_COLORS: Record<string, string> = {
   pumpfun: '#22c55e',     // Green
   jupiter: '#06b6d4',     // Cyan
   coingecko: '#eab308',   // Yellow
+  apify: '#00d4aa',       // Teal
 };
 
 // Estimated costs per credit (in USD)
