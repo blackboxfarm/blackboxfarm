@@ -145,8 +145,7 @@ serve(async (req) => {
 
       console.log(`[phanes-x-query] Backfill: querying @${nextHandle.current_handle} (${count} remaining)`);
 
-      // Query Phanes for this handle
-      const result = await queryPhanes(supabase, nextHandle.current_handle, targetChatId);
+      const result = await queryPhanes(supabase, nextHandle.current_handle);
 
       return new Response(JSON.stringify({
         success: true,
