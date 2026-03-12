@@ -904,7 +904,7 @@ const MeshGraphVisualizer = () => {
               linkCanvasObject={paintLink}
               onNodeClick={handleNodeClick}
               onNodeRightClick={handleNodeRightClick}
-              onNodeDblClick={handleNodeDoubleClick}
+              
               onNodeHover={(node: any) => setHoveredNode(node as MeshNode | null)}
               nodeLabel={(node: any) => {
                 const n = node as MeshNode;
