@@ -104,6 +104,11 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 300));
     }
 
+    const planUpgradeError = errors.find((e) => e.includes('PLAN_UPGRADE_REQUIRED')) || null;
+    if (planUpgradeError) {
+      console.error(`[KYCDeep] Solscan plan restriction: ${planUpgradeError}`);
+    }
+
     // If we found a KYC root, mark it in the mesh
     if (kycRoot && kycRoot !== walletAddress) {
       await supabase
@@ -156,6 +161,12 @@ Deno.serve(async (req) => {
           depth: c.depth,
         })),
         errors,
+        diagnostic: planUpgradeError
+          ? 'Solscan API key is valid but your plan cannot access required v2 endpoints.'
+          : null,
+        actionRequired: planUpgradeError
+          ? 'Upgrade Solscan API access level for /v2.0/account/detail and /v2.0/account/transfer.'
+          : null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

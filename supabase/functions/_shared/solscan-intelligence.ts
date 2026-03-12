@@ -51,6 +51,28 @@ function solscanHeaders(apiKey: string): Record<string, string> {
   return { 'Accept': 'application/json', 'token': apiKey };
 }
 
+async function readSolscanErrorDetail(resp: Response): Promise<string> {
+  const body = await resp.text().catch(() => '');
+  if (!body) return `HTTP ${resp.status}`;
+
+  try {
+    const parsed = JSON.parse(body);
+    const detail = parsed?.error_message || parsed?.message || parsed?.error || body;
+    return String(detail).slice(0, 200);
+  } catch {
+    return body.slice(0, 200);
+  }
+}
+
+function formatSolscanApiError(endpoint: string, status: number, detail: string): string {
+  const normalized = detail.toLowerCase();
+  if (status === 401 && normalized.includes('upgrade your api key level')) {
+    return `${endpoint} ${status} PLAN_UPGRADE_REQUIRED: ${detail}`;
+  }
+
+  return `${endpoint} ${status}: ${detail}`;
+}
+
 /**
  * Resolve creator wallet for a token mint via Solscan token meta
  */
@@ -80,9 +102,9 @@ export async function solscanResolveTokenCreator(
     );
 
     if (!resp.ok) {
-      const errBody = await resp.text().catch(() => '');
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${errBody.slice(0, 200)}`);
-      apiErrors.push(`Solscan token/meta ${resp.status}`);
+      const detail = await readSolscanErrorDetail(resp);
+      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
+      apiErrors.push(formatSolscanApiError('Solscan token/meta', resp.status, detail));
       return { creator: null, mintAuthority: null, meta: null };
     }
 
@@ -131,9 +153,9 @@ export async function solscanCheckAccountLabel(
     );
 
     if (!resp.ok) {
-      const errBody = await resp.text().catch(() => '');
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${errBody.slice(0, 200)}`);
-      apiErrors.push(`Solscan account/detail ${resp.status}`);
+      const detail = await readSolscanErrorDetail(resp);
+      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
+      apiErrors.push(formatSolscanApiError('Solscan account/detail', resp.status, detail));
       return { label: null, isCex: false, tags: [] };
     }
 
@@ -207,9 +229,9 @@ export async function solscanDiscoverFunders(
       });
 
       if (!resp.ok) {
-        const errBody = await resp.text().catch(() => '');
-        await logger.complete(resp.status, `Solscan ${resp.status}: ${errBody.slice(0, 200)}`);
-        apiErrors.push(`Solscan account/transfer ${resp.status}`);
+        const detail = await readSolscanErrorDetail(resp);
+        await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
+        apiErrors.push(formatSolscanApiError('Solscan account/transfer', resp.status, detail));
         break;
       }
 
@@ -301,9 +323,9 @@ export async function solscanDiscoverCreatedTokens(
     });
 
     if (!resp.ok) {
-      const errBody = await resp.text().catch(() => '');
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${errBody.slice(0, 200)}`);
-      apiErrors.push(`Solscan account/transfer MINT ${resp.status}`);
+      const detail = await readSolscanErrorDetail(resp);
+      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
+      apiErrors.push(formatSolscanApiError('Solscan account/transfer MINT', resp.status, detail));
       return [];
     }
 
