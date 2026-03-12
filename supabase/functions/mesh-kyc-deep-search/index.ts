@@ -104,6 +104,11 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 300));
     }
 
+    const planUpgradeError = errors.find((e) => e.includes('PLAN_UPGRADE_REQUIRED')) || null;
+    if (planUpgradeError) {
+      console.error(`[KYCDeep] Solscan plan restriction: ${planUpgradeError}`);
+    }
+
     // If we found a KYC root, mark it in the mesh
     if (kycRoot && kycRoot !== walletAddress) {
       await supabase

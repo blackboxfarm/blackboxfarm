@@ -51,6 +51,28 @@ function solscanHeaders(apiKey: string): Record<string, string> {
   return { 'Accept': 'application/json', 'token': apiKey };
 }
 
+async function readSolscanErrorDetail(resp: Response): Promise<string> {
+  const body = await resp.text().catch(() => '');
+  if (!body) return `HTTP ${resp.status}`;
+
+  try {
+    const parsed = JSON.parse(body);
+    const detail = parsed?.error_message || parsed?.message || parsed?.error || body;
+    return String(detail).slice(0, 200);
+  } catch {
+    return body.slice(0, 200);
+  }
+}
+
+function formatSolscanApiError(endpoint: string, status: number, detail: string): string {
+  const normalized = detail.toLowerCase();
+  if (status === 401 && normalized.includes('upgrade your api key level')) {
+    return `${endpoint} ${status} PLAN_UPGRADE_REQUIRED: ${detail}`;
+  }
+
+  return `${endpoint} ${status}: ${detail}`;
+}
+
 /**
  * Resolve creator wallet for a token mint via Solscan token meta
  */
