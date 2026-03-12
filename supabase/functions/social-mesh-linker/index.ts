@@ -250,6 +250,7 @@ Deno.serve(async (req) => {
             discovered_via: "social-mesh-linker",
           });
           discoveredSocials.push(`x:@${twitterHandle}(unresolved)`);
+        }
       }
 
       // 1b. X Community URL → community + token + wallet mesh links
