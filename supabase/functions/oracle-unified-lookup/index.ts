@@ -890,11 +890,16 @@ Deno.serve(async (req) => {
       ...heliusFunderWallets
     ])];
 
+    const relatedTokens = [
+      ...(deepScanOverride?.relatedTokens || []),
+      ...developerTokens.map(t => t.token_symbol || t.token_mint)
+    ].filter(Boolean) as string[];
+
     const network: OracleResult['network'] = {
       linkedWallets: allLinkedWallets,
       linkedXAccounts: xAccountData?.linkedXAccounts || developerProfile?.twitter_handle ? [developerProfile.twitter_handle] : [],
       sharedMods: xAccountData?.sharedMods || [],
-      relatedTokens: developerTokens.map(t => t.token_symbol || t.token_mint).slice(0, 10),
+      relatedTokens: Array.from(new Set(relatedTokens)).slice(0, 10),
       devTeam: devTeam ? { id: devTeam.id, name: devTeam.team_name } : undefined,
       meshLinks: processedMeshLinks
     };
