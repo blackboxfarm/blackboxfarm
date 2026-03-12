@@ -783,6 +783,16 @@ const MeshGraphVisualizer = () => {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>{displayData.nodes.length} entities</span>
             <span>{displayData.links.length} connections</span>
+            {redFlagCount > 0 && (
+              <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] animate-pulse cursor-pointer"
+                onClick={() => {
+                  const flaggedNode = displayData.nodes.find(n => n.redFlags && n.redFlags.length > 0);
+                  if (flaggedNode) setRedFlagDialog({ node: flaggedNode, flags: flaggedNode.redFlags! });
+                }}
+              >
+                🚩 {redFlagCount} Flagged
+              </Badge>
+            )}
             {focusedEntity && (
               <span className="text-primary font-mono">
                 {focusedEntity.id.slice(0, 16)}...
