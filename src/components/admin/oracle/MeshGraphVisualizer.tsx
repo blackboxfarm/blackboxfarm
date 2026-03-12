@@ -416,7 +416,11 @@ const MeshGraphVisualizer = () => {
 
   const handleNodeClick = useCallback((node: any) => {
     const nodeId = node.id as string;
+    const meshNode = node as MeshNode;
 
+    // If node has red flags, show the explainer dialog on single-click of the flag area
+    // We use double-click for spider, single-click for red flag dialog if flagged
+    
     // If same node clicked within 300ms → double-click
     if (lastClickNodeRef.current === nodeId && clickTimerRef.current) {
       clearTimeout(clickTimerRef.current);
@@ -460,11 +464,18 @@ const MeshGraphVisualizer = () => {
       return;
     }
 
-    // ── Single click: expand + center/zoom only ──
+    // ── Single click: if flagged, show red flag dialog; otherwise expand + center ──
     lastClickNodeRef.current = nodeId;
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null;
       lastClickNodeRef.current = null;
+      
+      // Show red flag dialog if node has flags
+      if (meshNode.redFlags && meshNode.redFlags.length > 0) {
+        setRedFlagDialog({ node: meshNode, flags: meshNode.redFlags });
+        return;
+      }
+      
       expandEntity(nodeId);
       if (graphRef.current) {
         graphRef.current.centerAt(node.x, node.y, 800);
