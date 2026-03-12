@@ -849,7 +849,7 @@ const MeshGraphVisualizer = () => {
                 <p className="text-sm text-muted-foreground">Loading mesh graph...</p>
               </div>
             </div>
-          ) : !focusedEntity && graphData.nodes.length === 0 ? (
+          ) : !focusedEntity && displayData.nodes.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-4 max-w-md px-6">
                 <p className="text-4xl">🫧</p>
