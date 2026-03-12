@@ -397,7 +397,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
 }
 
 // ─── /holders CA ───
-async function handleHolders(chatId: number, telegramUserId: string, args: string) {
+async function handleHolders(chatId: number, telegramUserId: string, args: string, isGroupChat = false) {
   const ca = extractCA(args);
   if (!ca) {
     await sendMessage(chatId, `❌ Usage: \`/holders <token_address>\``);
