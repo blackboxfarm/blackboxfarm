@@ -367,7 +367,7 @@ Deno.serve(async (req) => {
             relationship: 'co_mod',
             confidence: 90,
             discovered_via: 'x_community_enricher',
-            metadata: { community_id: communityId, scraped_at: now, staff_count: allStaff.length }
+            evidence: { community_id: communityId, scraped_at: now, staff_count: allStaff.length }
           });
         }
       }
