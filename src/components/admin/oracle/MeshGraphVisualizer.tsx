@@ -80,9 +80,10 @@ const MeshGraphVisualizer = () => {
     
     expandEntity(nodeId);
     
-    if (nodeConnections.length <= 1 && (type === 'wallet' || type === 'token')) {
-      console.log(`[BubbleMap] Auto-spidering leaf node: ${rawId}`);
-      triggerSpider(rawId, 'deep');
+    // Always spider wallet/token nodes to discover KYC roots, funders, child wallets, and created tokens
+    if (type === 'wallet' || type === 'token') {
+      console.log(`[BubbleMap] Spidering node: ${rawId} (${nodeConnections.length} existing connections)`);
+      triggerSpider(rawId, 'quick');
     }
     
     if (graphRef.current) {

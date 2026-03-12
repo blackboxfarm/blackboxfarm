@@ -785,9 +785,10 @@ Deno.serve(async (req) => {
       );
     }
     
-    // If scan mode was requested, run the pumpfun-dev-analyzer for deeper analysis
-    if (scanMode && resolvedWallet) {
-      console.log(`[Oracle] Running ${scanMode} scan for ${resolvedWallet}`);
+    // If DEEP scan mode was requested, run the pumpfun-dev-analyzer for deeper analysis
+    // Quick mode skips this heavy step to avoid timeouts (used by bubble map clicks)
+    if (scanMode === 'deep' && resolvedWallet) {
+      console.log(`[Oracle] Running deep scan for ${resolvedWallet}`);
       
       try {
         const { data: analyzerResult, error: analyzerError } = await supabase.functions.invoke('pumpfun-dev-analyzer', {

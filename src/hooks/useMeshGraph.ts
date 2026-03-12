@@ -82,7 +82,13 @@ export function useMeshGraph(initialEntityId?: string) {
   // Track spider attempts to prevent infinite loops
   const spiderAttemptsRef = useRef<Map<string, number>>(new Map());
 
-  const entityIds = [...expandedEntities];
+  // Strip type prefix (e.g., "wallet:ABC..." → "ABC...") for DB queries
+  const stripPrefix = (id: string) => {
+    const colonIdx = id.indexOf(':');
+    return colonIdx >= 0 ? id.slice(colonIdx + 1) : id;
+  };
+  
+  const entityIds = [...expandedEntities].map(stripPrefix);
   if (focusedEntity) entityIds.push(focusedEntity.id);
   const uniqueIds = [...new Set(entityIds)];
 
