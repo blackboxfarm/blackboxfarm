@@ -366,10 +366,11 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
 
     if (!typeFilters.has(link.source_type) || !typeFilters.has(link.linked_type)) continue;
 
-    // Skip direct token↔x_account links when the handle already connects via an x_community
-    const isDirectTokenHandle = 
-      (link.source_type === 'token' && link.linked_type === 'x_account' && handlesWithCommunity.has(link.linked_id.toLowerCase())) ||
-      (link.source_type === 'x_account' && link.linked_type === 'token' && handlesWithCommunity.has(link.source_id.toLowerCase()));
+    // Hard rule: never render direct token↔x_account links.
+    // X handles must attach through X Community only (token -> x_community -> x_account).
+    const isDirectTokenHandle =
+      (link.source_type === 'token' && link.linked_type === 'x_account') ||
+      (link.source_type === 'x_account' && link.linked_type === 'token');
     if (isDirectTokenHandle) continue;
 
     if (!nodesMap.has(sourceKey)) {
