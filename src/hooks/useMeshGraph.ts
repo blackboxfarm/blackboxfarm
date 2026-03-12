@@ -612,7 +612,7 @@ export function useMeshGraph(initialEntityId?: string) {
           
           if (xUsers) {
             for (const xu of xUsers) {
-              const history = xu.handle_history || [];
+              const history = Array.isArray(xu.handle_history) ? xu.handle_history : [];
               xUserCacheRef.current.set(xu.x_user_id, {
                 handle: xu.current_handle || xu.x_user_id,
                 displayName: xu.display_name || xu.current_handle || xu.x_user_id,
