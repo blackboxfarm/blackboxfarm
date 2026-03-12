@@ -132,6 +132,7 @@ const App = () => {
                       <Route path="/pricing" element={<Pricing />} />
                       <Route path="/subscriptions" element={<Subscriptions />} />
                       <Route path="/tgbot" element={<TelegramBot />} />
+                      <Route path="/features" element={<Features />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
