@@ -55,13 +55,24 @@ const MeshGraphVisualizer = () => {
   // Adjust forces based on view mode
   useEffect(() => {
     if (graphRef.current) {
-      if (viewMode === 'tree') {
-        graphRef.current.d3Force('link')?.distance(95);
-        graphRef.current.d3Force('charge')?.strength(-300);
-      } else {
-        graphRef.current.d3Force('link')?.distance(70);
-        graphRef.current.d3Force('charge')?.strength(-180);
+      // Use per-link distance: admin/mod handles stay tight around their X Community
+      const linkForce = graphRef.current.d3Force('link');
+      if (linkForce) {
+        linkForce.distance((link: any) => {
+          const rel = link.relationship || '';
+          // Admin/mod handles satellite tightly around X Community
+          if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) {
+            return viewMode === 'tree' ? 40 : 30;
+          }
+          // Community links to token at normal distance
+          if (['community_for', 'social_account'].includes(rel)) {
+            return viewMode === 'tree' ? 80 : 60;
+          }
+          // Default distance for other relationships
+          return viewMode === 'tree' ? 95 : 70;
+        });
       }
+      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -300 : -180);
     }
   }, [graphData, viewMode]);
 
