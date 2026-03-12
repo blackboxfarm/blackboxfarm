@@ -13488,6 +13488,42 @@ export type Database = {
         }
         Relationships: []
       }
+      x_account_registry: {
+        Row: {
+          current_handle: string | null
+          display_name: string | null
+          first_seen_at: string | null
+          handle_history: Json | null
+          is_verified: boolean | null
+          last_seen_at: string | null
+          linked_token_count: number | null
+          name_history: Json | null
+          x_user_id: string
+        }
+        Insert: {
+          current_handle?: string | null
+          display_name?: string | null
+          first_seen_at?: string | null
+          handle_history?: Json | null
+          is_verified?: boolean | null
+          last_seen_at?: string | null
+          linked_token_count?: number | null
+          name_history?: Json | null
+          x_user_id: string
+        }
+        Update: {
+          current_handle?: string | null
+          display_name?: string | null
+          first_seen_at?: string | null
+          handle_history?: Json | null
+          is_verified?: boolean | null
+          last_seen_at?: string | null
+          linked_token_count?: number | null
+          name_history?: Json | null
+          x_user_id?: string
+        }
+        Relationships: []
+      }
       x_communities: {
         Row: {
           admin_usernames: string[] | null

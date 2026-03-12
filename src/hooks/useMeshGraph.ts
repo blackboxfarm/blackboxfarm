@@ -39,6 +39,7 @@ export const ENTITY_COLORS: Record<string, string> = {
   wallet: '#22c55e',
   token: '#eab308',
   x_account: '#3b82f6',
+  x_user: '#2563eb',
   x_community: '#6366f1',
   telegram: '#06b6d4',
   telegram_channel: '#0891b2',
@@ -55,7 +56,8 @@ export const ENTITY_COLORS: Record<string, string> = {
 export const ENTITY_LABELS: Record<string, string> = {
   wallet: '💰 Wallet',
   token: '🪙 Token',
-  x_account: '🐦 X Account',
+  x_account: '🐦 X Handle',
+  x_user: '🔵 X User ID',
   x_community: '👥 X Community',
   telegram: '📡 Telegram',
   telegram_channel: '📡 TG Channel',
@@ -105,6 +107,7 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
   // Default friendly labels by type
   if (type === 'token') return `$${id.length > 8 ? id.slice(0, 6) + '…' : id}`;
   if (type === 'x_account') return `@${id.replace(/^@/, '')}`;
+  if (type === 'x_user') return `X:${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'telegram_channel') return `TG ${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'kyc_root') return `KYC ${id.length > 12 ? id.slice(0, 8) + '…' : id}`;
   if (type === 'website') {
@@ -420,11 +423,12 @@ export function useMeshGraph(initialEntityId?: string) {
     spiderAttemptsRef.current.clear();
   }, []);
 
-  // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES + TELEGRAM CHANNELS ═══
+  // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES + TELEGRAM CHANNELS + X USERS ═══
   const [enrichedGraphData, setEnrichedGraphData] = useState<MeshGraphData>({ nodes: [], links: [] });
   const tickerCacheRef = useRef<Map<string, string>>(new Map());
   const commNameCacheRef = useRef<Map<string, string>>(new Map());
   const tgChannelCacheRef = useRef<Map<string, { title: string; isRecycled: boolean; tokenCount: number }>>(new Map());
+  const xUserCacheRef = useRef<Map<string, { handle: string; displayName: string; isRotated: boolean; handleCount: number }>>(new Map());
   
   useEffect(() => {
     if (!graphData) {
@@ -446,13 +450,18 @@ export function useMeshGraph(initialEntityId?: string) {
       n.type === 'telegram_channel' && !tgChannelCacheRef.current.has(n.fullId)
     );
     
-    if (tokenNodes.length === 0 && communityNodes.length === 0 && tgChannelNodes.length === 0) {
-      setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
+    // Find x_user nodes not yet enriched
+    const xUserNodes = graphData.nodes.filter(n =>
+      n.type === 'x_user' && !xUserCacheRef.current.has(n.fullId)
+    );
+    
+    if (tokenNodes.length === 0 && communityNodes.length === 0 && tgChannelNodes.length === 0 && xUserNodes.length === 0) {
+      setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current, xUserCacheRef.current));
       return;
     }
 
     // Set current data immediately, enrich async
-    setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
+    setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current, xUserCacheRef.current));
 
     const enrichAll = async () => {
       // ── Ticker enrichment ──
@@ -592,7 +601,65 @@ export function useMeshGraph(initialEntityId?: string) {
         }
       }
 
-      setEnrichedGraphData(prev => applyEnrichmentCaches(prev, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
+      // ── X User enrichment ──
+      if (xUserNodes.length > 0) {
+        try {
+          const userIds = xUserNodes.map(n => n.fullId);
+          const { data: xUsers } = await supabase
+            .from('x_account_registry')
+            .select('x_user_id, current_handle, display_name, handle_history, linked_token_count')
+            .in('x_user_id', userIds);
+          
+          if (xUsers) {
+            for (const xu of xUsers) {
+              const history = Array.isArray(xu.handle_history) ? xu.handle_history : [];
+              xUserCacheRef.current.set(xu.x_user_id, {
+                handle: xu.current_handle || xu.x_user_id,
+                displayName: xu.display_name || xu.current_handle || xu.x_user_id,
+                isRotated: history.length > 0,
+                handleCount: history.length + 1,
+              });
+            }
+          }
+
+          // Also check mesh evidence for display_name
+          for (const xNode of xUserNodes) {
+            if (xUserCacheRef.current.has(xNode.fullId)) continue;
+            const { data: meshLinks } = await supabase
+              .from('reputation_mesh')
+              .select('evidence')
+              .or(`source_id.eq.${xNode.fullId},linked_id.eq.${xNode.fullId}`)
+              .not('evidence', 'is', null)
+              .limit(5);
+            
+            if (meshLinks) {
+              for (const link of meshLinks) {
+                const ev = link.evidence as any;
+                const handle = ev?.resolved_handle || ev?.handle;
+                if (handle && typeof handle === 'string') {
+                  xUserCacheRef.current.set(xNode.fullId, {
+                    handle,
+                    displayName: ev?.display_name || handle,
+                    isRotated: ev?.is_rotated === true || (ev?.handle_count || 0) > 1,
+                    handleCount: ev?.handle_count || 1,
+                  });
+                  break;
+                }
+              }
+            }
+          }
+
+          for (const id of userIds) {
+            if (!xUserCacheRef.current.has(id)) {
+              xUserCacheRef.current.set(id, { handle: '', displayName: '', isRotated: false, handleCount: 0 });
+            }
+          }
+        } catch (err) {
+          console.warn('[MeshGraph] X User enrichment failed:', err);
+        }
+      }
+
+      setEnrichedGraphData(prev => applyEnrichmentCaches(prev, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current, xUserCacheRef.current));
     };
     
     enrichAll();
@@ -619,6 +686,7 @@ function applyEnrichmentCaches(
   tickerCache: Map<string, string>,
   commNameCache: Map<string, string>,
   tgChannelCache?: Map<string, { title: string; isRecycled: boolean; tokenCount: number }>,
+  xUserCache?: Map<string, { handle: string; displayName: string; isRotated: boolean; handleCount: number }>,
 ): MeshGraphData {
   const updatedNodes = data.nodes.map(node => {
     if (node.type === 'token') {
@@ -636,6 +704,14 @@ function applyEnrichmentCaches(
         const suffix = info.isRecycled ? ` (${info.tokenCount})` : '';
         const label = info.title.length > 14 ? info.title.slice(0, 12) + '…' : info.title;
         return { ...node, label: `${prefix}${label}${suffix}` };
+      }
+    }
+    if (node.type === 'x_user' && xUserCache) {
+      const info = xUserCache.get(node.fullId);
+      if (info && info.handle) {
+        const prefix = info.isRotated ? '🔄 ' : '🐦 ';
+        const suffix = info.isRotated ? ` (${info.handleCount} handles)` : '';
+        return { ...node, label: `${prefix}@${info.handle}${suffix}` };
       }
     }
     return node;
