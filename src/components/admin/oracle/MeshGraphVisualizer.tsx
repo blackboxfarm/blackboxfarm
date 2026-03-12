@@ -634,6 +634,31 @@ const MeshGraphVisualizer = () => {
     return acc;
   }, {} as Record<string, number>);
 
+  // Animation tick for blinking red flags
+  const hasAnyRedFlags = displayData.nodes.some(n => n.redFlags && n.redFlags.length > 0);
+  useEffect(() => {
+    if (!hasAnyRedFlags || !graphRef.current) return;
+    let animFrame: number;
+    const tick = () => {
+      if (graphRef.current) {
+        // Force canvas repaint for blink animation
+        graphRef.current.refresh?.();
+      }
+      animFrame = requestAnimationFrame(tick);
+    };
+    // Throttle to ~15fps for blink
+    const interval = setInterval(() => {
+      if (graphRef.current) graphRef.current.refresh?.();
+    }, 66);
+    return () => {
+      cancelAnimationFrame(animFrame);
+      clearInterval(interval);
+    };
+  }, [hasAnyRedFlags]);
+
+  // Count red-flagged nodes
+  const redFlagCount = displayData.nodes.filter(n => n.redFlags && n.redFlags.length > 0).length;
+
   return (
     <div className="space-y-4">
       {/* Controls */}
