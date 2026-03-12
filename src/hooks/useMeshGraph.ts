@@ -82,6 +82,14 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
       const name = evidence.community_name || evidence.name || evidence.title;
       if (name) return name.length > 18 ? name.slice(0, 16) + '…' : name;
     }
+    if (type === 'telegram_channel') {
+      const title = evidence.channel_title || evidence.title || evidence.name;
+      if (title) {
+        const prefix = evidence.is_recycled ? '♻️ ' : '';
+        const label = title.length > 16 ? title.slice(0, 14) + '…' : title;
+        return `${prefix}${label}`;
+      }
+    }
     if (type === 'kyc_root') {
       const exchange = evidence.exchange || evidence.platform || evidence.kyc_provider;
       if (exchange) return `KYC ${exchange}`;
@@ -97,6 +105,7 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
   // Default friendly labels by type
   if (type === 'token') return `$${id.length > 8 ? id.slice(0, 6) + '…' : id}`;
   if (type === 'x_account') return `@${id.replace(/^@/, '')}`;
+  if (type === 'telegram_channel') return `TG ${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'kyc_root') return `KYC ${id.length > 12 ? id.slice(0, 8) + '…' : id}`;
   if (type === 'website') {
     try {
