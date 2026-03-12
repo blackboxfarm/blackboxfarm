@@ -75,7 +75,7 @@ export function WhaleBubbleMap({
 
   const getWhaleBubblePosition = (index: number, total: number, isActive: boolean) => {
     const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
-    const radius = isActive ? 80 : 120;
+    const radius = isActive ? 55 : 85;
     const x = 150 + Math.cos(angle) * radius;
     const y = 150 + Math.sin(angle) * radius;
     return { x, y };
