@@ -886,7 +886,7 @@ const MeshGraphVisualizer = () => {
           ) : (
             <ForceGraph2D
               ref={graphRef}
-              graphData={graphData}
+              graphData={displayData}
               width={dimensions.width}
               height={600}
               backgroundColor="transparent"
