@@ -601,7 +601,65 @@ export function useMeshGraph(initialEntityId?: string) {
         }
       }
 
-      setEnrichedGraphData(prev => applyEnrichmentCaches(prev, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
+      // ── X User enrichment ──
+      if (xUserNodes.length > 0) {
+        try {
+          const userIds = xUserNodes.map(n => n.fullId);
+          const { data: xUsers } = await supabase
+            .from('x_account_registry')
+            .select('x_user_id, current_handle, display_name, handle_history, linked_token_count')
+            .in('x_user_id', userIds);
+          
+          if (xUsers) {
+            for (const xu of xUsers) {
+              const history = xu.handle_history || [];
+              xUserCacheRef.current.set(xu.x_user_id, {
+                handle: xu.current_handle || xu.x_user_id,
+                displayName: xu.display_name || xu.current_handle || xu.x_user_id,
+                isRotated: history.length > 0,
+                handleCount: history.length + 1,
+              });
+            }
+          }
+
+          // Also check mesh evidence for display_name
+          for (const xNode of xUserNodes) {
+            if (xUserCacheRef.current.has(xNode.fullId)) continue;
+            const { data: meshLinks } = await supabase
+              .from('reputation_mesh')
+              .select('evidence')
+              .or(`source_id.eq.${xNode.fullId},linked_id.eq.${xNode.fullId}`)
+              .not('evidence', 'is', null)
+              .limit(5);
+            
+            if (meshLinks) {
+              for (const link of meshLinks) {
+                const ev = link.evidence as any;
+                const handle = ev?.resolved_handle || ev?.handle;
+                if (handle && typeof handle === 'string') {
+                  xUserCacheRef.current.set(xNode.fullId, {
+                    handle,
+                    displayName: ev?.display_name || handle,
+                    isRotated: ev?.is_rotated === true || (ev?.handle_count || 0) > 1,
+                    handleCount: ev?.handle_count || 1,
+                  });
+                  break;
+                }
+              }
+            }
+          }
+
+          for (const id of userIds) {
+            if (!xUserCacheRef.current.has(id)) {
+              xUserCacheRef.current.set(id, { handle: '', displayName: '', isRotated: false, handleCount: 0 });
+            }
+          }
+        } catch (err) {
+          console.warn('[MeshGraph] X User enrichment failed:', err);
+        }
+      }
+
+      setEnrichedGraphData(prev => applyEnrichmentCaches(prev, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current, xUserCacheRef.current));
     };
     
     enrichAll();
