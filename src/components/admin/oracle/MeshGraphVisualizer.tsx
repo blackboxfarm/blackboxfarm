@@ -94,7 +94,9 @@ const MeshGraphVisualizer = () => {
   const handleFindKYC = useCallback(async () => {
     // Find wallet nodes in the graph to trace
     const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
-    const targetWallet = focusedEntity?.id || walletNodes[0]?.id.split(':').slice(1).join(':');
+    const targetWallet = focusedEntity?.type === 'wallet' 
+      ? focusedEntity.id.replace(/^wallet:/, '') 
+      : walletNodes[0]?.id.split(':').slice(1).join(':');
     
     if (!targetWallet) {
       toast.error('No wallet found to trace KYC root');
@@ -135,8 +137,11 @@ const MeshGraphVisualizer = () => {
     }
 
     setTokenSearching(true);
+    // Extract raw wallet addresses — strip type prefix and skip non-wallet entities
     const walletsToScan = focusedEntity 
-      ? [focusedEntity.id]
+      ? (focusedEntity.type === 'wallet' 
+          ? [focusedEntity.id.replace(/^wallet:/, '')]
+          : (() => { toast.error('Focused entity is not a wallet — select a wallet node to scan tokens'); setTokenSearching(false); return []; })())
       : walletNodes.slice(0, 5).map(n => n.id.split(':').slice(1).join(':'));
 
     let totalTokens = 0;

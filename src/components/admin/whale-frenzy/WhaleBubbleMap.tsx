@@ -75,7 +75,7 @@ export function WhaleBubbleMap({
 
   const getWhaleBubblePosition = (index: number, total: number, isActive: boolean) => {
     const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
-    const radius = isActive ? 80 : 120;
+    const radius = isActive ? 55 : 85;
     const x = 150 + Math.cos(angle) * radius;
     const y = 150 + Math.sin(angle) * radius;
     return { x, y };
@@ -98,7 +98,7 @@ export function WhaleBubbleMap({
       <CardContent className="space-y-4">
         {/* SVG Bubble Map */}
         <div className="relative bg-background/50 rounded-lg overflow-hidden">
-          <svg viewBox="0 0 300 300" className="w-full h-64">
+          <svg viewBox="0 0 300 300" className="w-full h-64 max-w-full">
             {/* Background grid */}
             <defs>
               <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
