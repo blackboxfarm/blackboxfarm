@@ -39,6 +39,7 @@ export const ENTITY_COLORS: Record<string, string> = {
   wallet: '#22c55e',
   token: '#eab308',
   x_account: '#3b82f6',
+  x_user: '#2563eb',
   x_community: '#6366f1',
   telegram: '#06b6d4',
   telegram_channel: '#0891b2',
@@ -55,7 +56,8 @@ export const ENTITY_COLORS: Record<string, string> = {
 export const ENTITY_LABELS: Record<string, string> = {
   wallet: '💰 Wallet',
   token: '🪙 Token',
-  x_account: '🐦 X Account',
+  x_account: '🐦 X Handle',
+  x_user: '🔵 X User ID',
   x_community: '👥 X Community',
   telegram: '📡 Telegram',
   telegram_channel: '📡 TG Channel',
