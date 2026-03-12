@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2 } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ const MeshGraphVisualizer = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('bubble');
   const [kycSearching, setKycSearching] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
+  const [communitySearching, setCommunitySearching] = useState(false);
 
   const {
     graphData,
@@ -168,6 +169,84 @@ const MeshGraphVisualizer = () => {
 
     setTimeout(() => refetch(), 1000);
     setTokenSearching(false);
+  }, [graphData.nodes, focusedEntity, refetch]);
+
+  // ═══ Enrich X Communities ═══
+  const handleEnrichCommunities = useCallback(async () => {
+    // Find community nodes or token nodes to discover communities for
+    const communityNodes = graphData.nodes.filter(n => n.type === 'x_community');
+    const tokenNodes = graphData.nodes.filter(n => n.type === 'token');
+    
+    if (communityNodes.length === 0 && tokenNodes.length === 0 && !focusedEntity) {
+      toast.error('No community or token nodes found to enrich');
+      return;
+    }
+
+    setCommunitySearching(true);
+    let enriched = 0;
+
+    // Enrich existing community nodes (scrape admins/mods)
+    for (const node of communityNodes) {
+      const communityId = node.id.split(':').slice(1).join(':');
+      toast.info(`👥 Scraping X Community ${communityId.slice(0, 12)}... for admins/mods`);
+      try {
+        const { data, error } = await supabase.functions.invoke('x-community-enricher', {
+          body: { 
+            communityUrl: `https://x.com/i/communities/${communityId}`,
+            linkedTokenMint: tokenNodes[0]?.id.split(':').slice(1).join(':'),
+            linkedWallet: graphData.nodes.find(n => n.type === 'wallet')?.id.split(':').slice(1).join(':'),
+          },
+        });
+        if (error) throw error;
+        if (data?.admins?.length || data?.moderators?.length) {
+          enriched++;
+          toast.success(`Found ${data.admins?.length || 0} admins, ${data.moderators?.length || 0} mods for community`);
+        }
+      } catch (err: any) {
+        toast.error(`Community enrichment failed: ${err.message}`);
+      }
+    }
+
+    // If no community nodes but we have tokens, try to discover communities via DexScreener
+    if (communityNodes.length === 0 && tokenNodes.length > 0) {
+      for (const tNode of tokenNodes.slice(0, 3)) {
+        const tokenMint = tNode.id.split(':').slice(1).join(':');
+        toast.info(`🔍 Looking for X Community for token ${tNode.label}...`);
+        try {
+          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+          if (dexRes.ok) {
+            const dexData = await dexRes.json();
+            const pair = dexData?.pairs?.[0];
+            const socials = pair?.info?.socials || [];
+            const communityUrl = socials.find((s: any) => s.url?.includes('/communities/'))?.url;
+            
+            if (communityUrl) {
+              toast.info(`Found community URL: ${communityUrl}`);
+              const { data, error } = await supabase.functions.invoke('x-community-enricher', {
+                body: {
+                  communityUrl,
+                  linkedTokenMint: tokenMint,
+                  linkedWallet: graphData.nodes.find(n => n.type === 'wallet')?.id.split(':').slice(1).join(':'),
+                },
+              });
+              if (error) throw error;
+              enriched++;
+              toast.success(`Community enriched: ${data?.admins?.length || 0} admins, ${data?.moderators?.length || 0} mods`);
+            } else {
+              toast.warning(`No X Community found on DexScreener for ${tNode.label}`);
+            }
+          }
+        } catch (err: any) {
+          toast.error(`Community discovery failed: ${err.message}`);
+        }
+      }
+    }
+
+    if (enriched > 0) {
+      toast.success(`🎯 ${enriched} communities enriched with admin/mod data`);
+    }
+    setTimeout(() => refetch(), 1500);
+    setCommunitySearching(false);
   }, [graphData.nodes, focusedEntity, refetch]);
 
   const handleNodeClick = useCallback((node: any) => {
@@ -383,6 +462,16 @@ const MeshGraphVisualizer = () => {
                 className="text-xs h-7"
               >
                 <Radar className="h-3 w-3 mr-1" /> Deep Spider
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEnrichCommunities}
+                disabled={communitySearching}
+                className="text-xs h-7 border-indigo-500/30 hover:bg-indigo-500/10 text-indigo-400"
+              >
+                {communitySearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Users className="h-3 w-3 mr-1" />}
+                Enrich Community
               </Button>
             </div>
           )}
