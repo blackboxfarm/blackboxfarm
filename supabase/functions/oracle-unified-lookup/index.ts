@@ -3,6 +3,7 @@ import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { discoverFundingChain } from '../_shared/funding-resolver.ts';
 import { isSolscanUsable } from '../_shared/provider-health.ts';
+import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
@@ -487,93 +488,20 @@ Deno.serve(async (req) => {
         xAccountData = xData;
       }
     } else if (inputType === 'token') {
-      // Full fallback chain: token_lifecycle -> pumpfun_watchlist -> developer_tokens -> pump.fun API
-      
-      // 1. token_lifecycle
-      const { data: lifecycle } = await supabase
-        .from('token_lifecycle')
-        .select('creator_wallet, developer_id')
-        .eq('token_mint', cleanedInput)
-        .maybeSingle();
-      
-      if (lifecycle?.creator_wallet) {
-        resolvedWallet = lifecycle.creator_wallet;
-        console.log(`[Oracle] Resolved via token_lifecycle: ${resolvedWallet?.slice(0, 8)}`);
+      // Canonical creator resolution chain (Pump.fun -> Helius TOKEN_MINT -> Helius DAS -> DB cache)
+      const creatorResolution = await resolveTokenCreator(cleanedInput, supabase, apiErrors);
+
+      if (creatorResolution.creatorWallet) {
+        resolvedWallet = creatorResolution.creatorWallet;
+        console.log(
+          `[Oracle] Creator resolved via ${creatorResolution.source}: ${resolvedWallet.slice(0, 8)} (confidence: ${creatorResolution.confidence})`
+        );
       }
-      
-      // 2. pumpfun_watchlist
-      if (!resolvedWallet) {
-        const { data: watchlistToken } = await supabase
-          .from('pumpfun_watchlist')
-          .select('creator_wallet, token_name, token_symbol')
-          .eq('token_mint', cleanedInput)
-          .maybeSingle();
-        
-        if (watchlistToken?.creator_wallet) {
-          resolvedWallet = watchlistToken.creator_wallet;
-          console.log(`[Oracle] Resolved via pumpfun_watchlist: ${resolvedWallet?.slice(0, 8)}`);
-        }
-      }
-      
-      // 3. developer_tokens
-      if (!resolvedWallet) {
-        const { data: devToken } = await supabase
-          .from('developer_tokens')
-          .select('creator_wallet')
-          .eq('token_mint', cleanedInput)
-          .maybeSingle();
-        
-        if (devToken?.creator_wallet) {
-          resolvedWallet = devToken.creator_wallet;
-          console.log(`[Oracle] Resolved via developer_tokens: ${resolvedWallet?.slice(0, 8)}`);
-        }
-      }
-      
-      // 4. pump.fun API
+
+      // Last-resort linker pass (backfills token_lifecycle)
       if (!resolvedWallet) {
         try {
-          const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${cleanedInput}`, {
-            headers: { 'Accept': 'application/json' }
-          });
-          if (pfRes.ok) {
-            const pfData = await pfRes.json();
-            if (pfData?.creator) {
-              resolvedWallet = pfData.creator;
-              console.log(`[Oracle] Resolved via pump.fun API: ${resolvedWallet?.slice(0, 8)}`);
-            }
-          }
-        } catch (e) {
-          console.log('[Oracle] Pump.fun API failed:', e);
-        }
-      }
-      
-      // 5. Helius TOKEN_MINT proof (replaces Solscan token/meta)
-      if (!resolvedWallet) {
-        console.log('[Oracle] Trying Helius TOKEN_MINT for creator resolution...');
-        try {
-          const heliusKey = getHeliusApiKey();
-          if (heliusKey) {
-            const txUrl = getHeliusRestUrl(`/v0/addresses/${cleanedInput}/transactions`, { type: 'TOKEN_MINT', limit: '5' });
-            const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(8000) });
-            if (txRes.ok) {
-              const transactions = await txRes.json();
-              if (Array.isArray(transactions) && transactions.length > 0) {
-                const feePayer = transactions[0]?.feePayer;
-                if (feePayer) {
-                  resolvedWallet = feePayer;
-                  console.log(`[Oracle] Resolved via Helius TOKEN_MINT: ${resolvedWallet?.slice(0, 8)}`);
-                }
-              }
-            }
-          }
-        } catch (e) {
-          apiErrors.push(`Helius TOKEN_MINT error: ${e instanceof Error ? e.message : 'timeout'}`);
-        }
-      }
-      
-      // 6. Try token-creator-linker as last resort
-      if (!resolvedWallet) {
-        try {
+          console.log('[Oracle] Creator unresolved; running token-creator-linker fallback...');
           await supabase.functions.invoke('token-creator-linker', {
             body: { tokenMints: [cleanedInput] }
           });
@@ -582,15 +510,39 @@ Deno.serve(async (req) => {
             .select('creator_wallet')
             .eq('token_mint', cleanedInput)
             .maybeSingle();
-          resolvedWallet = updatedLifecycle?.creator_wallet;
+
+          if (updatedLifecycle?.creator_wallet) {
+            resolvedWallet = updatedLifecycle.creator_wallet;
+            console.log(`[Oracle] Resolved via token-creator-linker backfill: ${resolvedWallet.slice(0, 8)}`);
+          }
         } catch (e) {
-          console.log('[Oracle] Token creator linker failed:', e);
+          const linkerErr = `Token creator linker failed: ${e instanceof Error ? e.message : 'unknown'}`;
+          apiErrors.push(linkerErr);
+          console.log(`[Oracle] ${linkerErr}`);
         }
       }
-      
-      // If still no wallet, treat input as wallet
+
+      // If creator cannot be resolved from any provider, return explicit failure
       if (!resolvedWallet) {
-        resolvedWallet = cleanedInput;
+        console.log('[Oracle] Creator resolution failed across all providers');
+        return new Response(
+          JSON.stringify({
+            found: false,
+            requiresScan: true,
+            inputType,
+            resolvedWallet: null,
+            score: 50,
+            trafficLight: 'UNKNOWN' as const,
+            stats: { totalTokens: 0, successfulTokens: 0, failedTokens: 0, rugPulls: 0, slowDrains: 0, avgLifespanHours: 0 },
+            network: { linkedWallets: [], linkedXAccounts: [], sharedMods: [], relatedTokens: [] },
+            blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
+            whitelistStatus: { isWhitelisted: false },
+            recommendation: '⚠️ CREATOR NOT RESOLVED - Pump.fun + Helius + DB cache all returned no creator for this mint.',
+            meshLinksAdded: 0,
+            apiErrors
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
       }
     } else {
       // Assume it's a wallet address
@@ -669,6 +621,7 @@ Deno.serve(async (req) => {
 
     // Check if we have any data on this developer
     const hasExistingData = !!(developerProfile || devWalletRep || blacklistEntry || whitelistEntry || developerTokens.length > 0);
+    const creatorResolvedFromToken = inputType === 'token' && !!resolvedWallet && resolvedWallet !== cleanedInput;
     
     // AUTO-SPIDER: Always fetch from pump.fun and write to DB on every lookup
     let liveTokens: any[] = [];
@@ -756,8 +709,8 @@ Deno.serve(async (req) => {
       }
     }
     
-    // If no existing data AND no live tokens found, offer scan options
-    if (!hasExistingData && liveTokens.length === 0 && resolvedWallet) {
+    // If there's zero intelligence and we couldn't even resolve creator for token context, offer scan options
+    if (!hasExistingData && liveTokens.length === 0 && resolvedWallet && !creatorResolvedFromToken) {
       console.log('[Oracle] No data found anywhere, offering scan options...');
       return new Response(
         JSON.stringify({
@@ -771,7 +724,7 @@ Deno.serve(async (req) => {
           network: { linkedWallets: [], linkedXAccounts: [], sharedMods: [], relatedTokens: [] },
           blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
           whitelistStatus: { isWhitelisted: false },
-          recommendation: `⚠️ UNKNOWN DEVELOPER - Could not fetch data from Pump.fun or Helius. Try "Deep Scan" for manual analysis.`,
+          recommendation: `⚠️ UNKNOWN DEVELOPER - We couldn't fetch historical token data for this wallet from Pump.fun/Helius yet.`,
           meshLinksAdded: 0,
           apiErrors
         }),
@@ -893,7 +846,8 @@ Deno.serve(async (req) => {
     const isWhitelisted = !!whitelistEntry;
     const { score, breakdown: scoreBreakdown } = calculateScore(stats, isBlacklisted, isWhitelisted);
     const trafficLight = getTrafficLight(score);
-    const recommendation = generateRecommendation(score, stats, !hasExistingData);
+    const requiresScan = !hasExistingData && liveTokens.length === 0 && !creatorResolvedFromToken;
+    const recommendation = generateRecommendation(score, stats, requiresScan);
 
     // Process mesh links into structured data
     const processedMeshLinks = meshLinks.map((link: any) => ({
@@ -1308,7 +1262,7 @@ Deno.serve(async (req) => {
     }
 
     const result: OracleResult = {
-      found: hasExistingData || liveTokens.length > 0,
+      found: hasExistingData || liveTokens.length > 0 || creatorResolvedFromToken,
       inputType,
       resolvedWallet,
       profile: developerProfile ? {
