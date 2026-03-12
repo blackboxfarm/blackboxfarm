@@ -57,12 +57,15 @@ interface SpiderResult {
   steps: SpiderStep[];
 }
 
+const X_RESERVED = new Set(['i','intent','search','hashtag','settings','home','explore','notifications','messages','compose','lists','bookmarks','communities','spaces','tos','privacy','help','about','login','signup','share','status','jobs','download']);
 function parseXUrl(input: string): string | null {
-  // Match https://x.com/handle, https://twitter.com/handle, x.com/handle etc
+  if (input.includes('/communities/')) return null;
   const xUrlPattern = /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/(@?[\w]+)\/?(?:\?.*)?$/i;
   const match = input.match(xUrlPattern);
-  if (match) return match[1].replace('@', '');
-  return null;
+  if (!match) return null;
+  const handle = match[1].replace('@', '').toLowerCase();
+  if (X_RESERVED.has(handle) || handle.length > 15) return null;
+  return handle;
 }
 
 function normalizeQuery(raw: string): { cleaned: string; originalUrl: string | null } {
