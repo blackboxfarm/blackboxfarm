@@ -904,15 +904,16 @@ const MeshGraphVisualizer = () => {
               linkCanvasObject={paintLink}
               onNodeClick={handleNodeClick}
               onNodeRightClick={handleNodeRightClick}
+              onNodeDblClick={handleNodeDoubleClick}
               onNodeHover={(node: any) => setHoveredNode(node as MeshNode | null)}
               nodeLabel={(node: any) => {
                 const n = node as MeshNode;
                 const rawId = n.fullId || n.id.split(':').slice(1).join(':');
-                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
+                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections\n(double-click to spider/enrich)`;
               }}
-              cooldownTicks={100}
-              d3AlphaDecay={0.015}
-              d3VelocityDecay={viewMode === 'tree' ? 0.35 : 0.25}
+              cooldownTicks={60}
+              d3AlphaDecay={0.05}
+              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
               linkDirectionalParticles={(link: any) => {

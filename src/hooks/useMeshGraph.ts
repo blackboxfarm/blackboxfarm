@@ -401,10 +401,10 @@ export function useMeshGraph(initialEntityId?: string) {
     spiderAttemptsRef.current.clear();
   }, []);
 
-  // ═══ ENRICH TOKEN TICKERS ═══
-  // After graph loads, resolve $TICKER for token nodes showing truncated addresses
+  // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES ═══
   const [enrichedGraphData, setEnrichedGraphData] = useState<MeshGraphData>({ nodes: [], links: [] });
   const tickerCacheRef = useRef<Map<string, string>>(new Map());
+  const commNameCacheRef = useRef<Map<string, string>>(new Map());
   
   useEffect(() => {
     if (!graphData) {
@@ -416,66 +416,108 @@ export function useMeshGraph(initialEntityId?: string) {
       n.type === 'token' && (n.label.includes('…') || n.label === `$${n.fullId}`)
     );
     
-    if (tokenNodes.length === 0) {
-      setEnrichedGraphData(graphData);
-      return;
-    }
-
-    // Check cache first, only fetch unknown mints
-    const uncachedMints = tokenNodes
-      .map(n => n.fullId)
-      .filter(mint => !tickerCacheRef.current.has(mint));
+    // Find x_community nodes showing numeric IDs (not yet enriched with names)
+    const communityNodes = graphData.nodes.filter(n =>
+      n.type === 'x_community' && /^\d+$/.test(n.fullId) && !commNameCacheRef.current.has(n.fullId)
+    );
     
-    if (uncachedMints.length === 0) {
-      // All cached, just apply
-      const enriched = applyTickerCache(graphData, tickerCacheRef.current);
-      setEnrichedGraphData(enriched);
+    if (tokenNodes.length === 0 && communityNodes.length === 0) {
+      setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current));
       return;
     }
 
     // Set current data immediately, enrich async
-    setEnrichedGraphData(graphData);
+    setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current));
 
-    // Batch fetch from DexScreener (max 30 addresses per call)
-    const fetchTickers = async () => {
-      try {
-        const batches = [];
-        for (let i = 0; i < uncachedMints.length; i += 30) {
-          batches.push(uncachedMints.slice(i, i + 30));
-        }
-        
-        for (const batch of batches) {
-          const res = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${batch.join(',')}`);
-          if (!res.ok) continue;
-          const pairs = await res.json();
-          if (!Array.isArray(pairs)) continue;
-          
-          // Extract ticker from first pair for each mint
-          const seen = new Set<string>();
-          for (const pair of pairs) {
-            const addr = pair.baseToken?.address;
-            const symbol = pair.baseToken?.symbol;
-            if (addr && symbol && !seen.has(addr)) {
-              seen.add(addr);
-              tickerCacheRef.current.set(addr, symbol);
+    const enrichAll = async () => {
+      // ── Ticker enrichment ──
+      const uncachedMints = tokenNodes
+        .map(n => n.fullId)
+        .filter(mint => !tickerCacheRef.current.has(mint));
+
+      if (uncachedMints.length > 0) {
+        try {
+          for (let i = 0; i < uncachedMints.length; i += 30) {
+            const batch = uncachedMints.slice(i, i + 30);
+            const res = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${batch.join(',')}`);
+            if (!res.ok) continue;
+            const pairs = await res.json();
+            if (!Array.isArray(pairs)) continue;
+            const seen = new Set<string>();
+            for (const pair of pairs) {
+              const addr = pair.baseToken?.address;
+              const symbol = pair.baseToken?.symbol;
+              if (addr && symbol && !seen.has(addr)) {
+                seen.add(addr);
+                tickerCacheRef.current.set(addr, symbol);
+              }
             }
           }
-        }
-        
-        // Mark unfound mints so we don't re-fetch
-        for (const mint of uncachedMints) {
-          if (!tickerCacheRef.current.has(mint)) {
-            tickerCacheRef.current.set(mint, '');
+          for (const mint of uncachedMints) {
+            if (!tickerCacheRef.current.has(mint)) {
+              tickerCacheRef.current.set(mint, '');
+            }
           }
+        } catch (err) {
+          console.warn('[MeshGraph] Ticker enrichment failed:', err);
         }
-        
-        setEnrichedGraphData(prev => applyTickerCache(prev, tickerCacheRef.current));
-      } catch (err) {
-        console.warn('[MeshGraph] Ticker enrichment failed:', err);
       }
+
+      // ── Community name enrichment ──
+      if (communityNodes.length > 0) {
+        try {
+          const communityIds = communityNodes.map(n => n.fullId);
+          // Query x_communities table for names
+          const { data: communities } = await supabase
+            .from('x_communities')
+            .select('community_id, name')
+            .in('community_id', communityIds);
+          
+          if (communities) {
+            for (const comm of communities) {
+              if (comm.name) {
+                commNameCacheRef.current.set(comm.community_id, comm.name);
+              }
+            }
+          }
+
+          // Also check reputation_mesh evidence for community_name
+          for (const cNode of communityNodes) {
+            if (commNameCacheRef.current.has(cNode.fullId)) continue;
+            const { data: meshLinks } = await supabase
+              .from('reputation_mesh')
+              .select('evidence')
+              .or(`source_id.eq.${cNode.fullId},linked_id.eq.${cNode.fullId}`)
+              .not('evidence', 'is', null)
+              .limit(5);
+            
+            if (meshLinks) {
+              for (const link of meshLinks) {
+                const ev = link.evidence as any;
+                const name = ev?.community_name || ev?.name || ev?.title;
+                if (name && typeof name === 'string') {
+                  commNameCacheRef.current.set(cNode.fullId, name);
+                  break;
+                }
+              }
+            }
+          }
+
+          // Mark unfound communities so we don't re-fetch
+          for (const id of communityIds) {
+            if (!commNameCacheRef.current.has(id)) {
+              commNameCacheRef.current.set(id, '');
+            }
+          }
+        } catch (err) {
+          console.warn('[MeshGraph] Community name enrichment failed:', err);
+        }
+      }
+
+      setEnrichedGraphData(prev => applyEnrichmentCaches(prev, tickerCacheRef.current, commNameCacheRef.current));
     };
     
-    fetchTickers();
+    enrichAll();
   }, [graphData]);
 
   return {
