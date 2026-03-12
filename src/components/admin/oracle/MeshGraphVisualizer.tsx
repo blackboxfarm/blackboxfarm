@@ -12,6 +12,8 @@ import { toast } from "sonner";
 
 type ViewMode = 'bubble' | 'tree';
 
+const NODE_CAP_DEFAULT = 80;
+
 const MeshGraphVisualizer = () => {
   const graphRef = useRef<any>();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -24,6 +26,10 @@ const MeshGraphVisualizer = () => {
   const [tokenSearching, setTokenSearching] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
+  const [capBroken, setCapBroken] = useState(false);
+
+  const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
 
   const {
     graphData,
