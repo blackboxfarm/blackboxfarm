@@ -850,8 +850,59 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     connectedIds.add(l.target);
   }
 
+  const connectedNodes = Array.from(nodesMap.values()).filter(n => connectedIds.has(n.id));
+
+  // ═══ UNLINKED CLUSTER DETECTION ═══
+  // Find wallet nodes that are 3+ hops from any KYC root
+  // These are potential bundled/sockpuppet wallets
+  const kycRootIds = new Set(connectedNodes.filter(n => n.type === 'kyc_root').map(n => n.id));
+  
+  if (kycRootIds.size > 0) {
+    // BFS from all KYC roots to find distance to each wallet
+    const adjacency = new Map<string, Set<string>>();
+    for (const l of links) {
+      if (!adjacency.has(l.source)) adjacency.set(l.source, new Set());
+      if (!adjacency.has(l.target)) adjacency.set(l.target, new Set());
+      adjacency.get(l.source)!.add(l.target);
+      adjacency.get(l.target)!.add(l.source);
+    }
+
+    const distFromKyc = new Map<string, number>();
+    const queue: [string, number][] = [];
+    for (const kycId of kycRootIds) {
+      distFromKyc.set(kycId, 0);
+      queue.push([kycId, 0]);
+    }
+    while (queue.length > 0) {
+      const [nodeId, dist] = queue.shift()!;
+      const neighbors = adjacency.get(nodeId);
+      if (!neighbors) continue;
+      for (const neighbor of neighbors) {
+        if (!distFromKyc.has(neighbor)) {
+          distFromKyc.set(neighbor, dist + 1);
+          queue.push([neighbor, dist + 1]);
+        }
+      }
+    }
+
+    // Flag wallet nodes 3+ hops away or completely disconnected from KYC
+    for (const node of connectedNodes) {
+      if (node.type !== 'wallet') continue;
+      const dist = distFromKyc.get(node.id);
+      if (dist === undefined || dist >= 3) {
+        if (!node.redFlags) node.redFlags = [];
+        node.redFlags.push({
+          type: 'unlinked_cluster',
+          severity: dist === undefined ? 'critical' : 'high',
+          shortLabel: dist === undefined ? '🚩 No KYC Link' : `🚩 ${dist} Hops from KYC`,
+          explanation: `This wallet is ${dist === undefined ? 'completely disconnected from' : `${dist} steps away from`} the developer's KYC root wallet. What this likely means:\n\n• Sybil/Sockpuppet Wallets — Controlled by the same person but deliberately isolated from the KYC chain to hide supply concentration.\n• Bundled Insider Wallets — Pre-funded wallets used to fake early trading volume, create artificial price action, or accumulate supply before a coordinated dump.\n• Exit Liquidity Network — A hidden whale setup where the dev controls far more supply than appears on-chain, staged for extraction.\n\nThese wallets share funding paths or timing patterns but have been deliberately distanced from the dev's identity chain. This is a common pattern in rug pull and slow drain operations.`,
+        });
+      }
+    }
+  }
+
   return {
-    nodes: Array.from(nodesMap.values()).filter(n => connectedIds.has(n.id)),
+    nodes: connectedNodes,
     links,
   };
 }
