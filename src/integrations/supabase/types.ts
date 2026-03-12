@@ -10078,6 +10078,39 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_channel_registry: {
+        Row: {
+          channel_id: string
+          current_title: string | null
+          current_username: string | null
+          first_seen_at: string | null
+          last_seen_at: string | null
+          linked_token_count: number | null
+          title_history: Json | null
+          username_history: Json | null
+        }
+        Insert: {
+          channel_id: string
+          current_title?: string | null
+          current_username?: string | null
+          first_seen_at?: string | null
+          last_seen_at?: string | null
+          linked_token_count?: number | null
+          title_history?: Json | null
+          username_history?: Json | null
+        }
+        Update: {
+          channel_id?: string
+          current_title?: string | null
+          current_username?: string | null
+          first_seen_at?: string | null
+          last_seen_at?: string | null
+          linked_token_count?: number | null
+          title_history?: Json | null
+          username_history?: Json | null
+        }
+        Relationships: []
+      }
       telegram_fantasy_positions: {
         Row: {
           adjusted_by_dev_risk: boolean | null
