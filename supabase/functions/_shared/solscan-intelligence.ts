@@ -284,19 +284,37 @@ export async function solscanDiscoverFunders(
   apiErrors: string[] = [],
   maxPages: number = 2
 ): Promise<SolscanFunder[]> {
+  const fallbackFromScrape = async (): Promise<SolscanFunder[]> => {
+    const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
+
+    if (scraped.fundedByWallet) {
+      return [{
+        wallet: scraped.fundedByWallet,
+        amountSol: 0,
+        timestamp: 0,
+      }];
+    }
+
+    if (scraped.fundedByLabel) {
+      console.log(`[Solscan Intel] Scrape fallback found funded_by label only for ${walletAddress.slice(0, 8)}...: ${scraped.fundedByLabel}`);
+    }
+
+    return [];
+  };
+
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
-    return [];
+    return await fallbackFromScrape();
   }
 
   const funders = new Map<string, SolscanFunder>();
+  let shouldUseScrapeFallback = false;
 
   try {
     // Fetch SOL transfers TO this wallet (incoming SOL = funding)
     let page = 1;
     let hasMore = true;
-    let lastSignature: string | undefined;
 
     while (hasMore && page <= maxPages) {
       const logger = createApiLogger({
@@ -308,7 +326,7 @@ export async function solscanDiscoverFunders(
         credits: 1,
       });
 
-      let url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${walletAddress}&activity_type[]=ACTIVITY_SPL_TRANSFER&token=${SOL_NATIVE_MINT}&page=${page}&page_size=40&sort_by=block_time&sort_order=desc`;
+      const url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${walletAddress}&activity_type[]=ACTIVITY_SPL_TRANSFER&token=${SOL_NATIVE_MINT}&page=${page}&page_size=40&sort_by=block_time&sort_order=desc`;
 
       const resp = await fetch(url, {
         headers: solscanHeaders(apiKey),
@@ -319,6 +337,7 @@ export async function solscanDiscoverFunders(
         const detail = await readSolscanErrorDetail(resp);
         await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
         apiErrors.push(formatSolscanApiError('Solscan account/transfer', resp.status, detail));
+        shouldUseScrapeFallback = resp.status === 401 || resp.status === 403 || resp.status === 429;
         break;
       }
 
@@ -364,14 +383,20 @@ export async function solscanDiscoverFunders(
     const sorted = Array.from(funders.values()).sort((a, b) => b.amountSol - a.amountSol);
     if (sorted.length > 0) {
       console.log(`[Solscan Intel] Wallet ${walletAddress.slice(0, 8)}... has ${sorted.length} funders. Top: ${sorted[0].wallet.slice(0, 8)}... (${sorted[0].amountSol.toFixed(2)} SOL)`);
+      return sorted;
     }
 
-    return sorted;
+    if (shouldUseScrapeFallback) {
+      return await fallbackFromScrape();
+    }
+
+    return [];
   } catch (e) {
     const msg = `Solscan account/transfer error: ${e instanceof Error ? e.message : 'timeout'}`;
     apiErrors.push(msg);
     console.error(`[Solscan Intel] ${msg}`);
-    return [];
+
+    return await fallbackFromScrape();
   }
 }
 
