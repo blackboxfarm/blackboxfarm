@@ -145,11 +145,11 @@ async function solscanScrapeFundingInfoWithFirecrawl(
       },
       body: JSON.stringify({
         url: `https://solscan.io/account/${walletAddress}`,
-        formats: ['markdown'],
-        onlyMainContent: true,
-        waitFor: 1500,
+        formats: ['markdown', 'html'],
+        onlyMainContent: false,
+        waitFor: 3000,
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(20000),
     });
 
     const payload = await resp.json().catch(() => null);
@@ -157,6 +157,14 @@ async function solscanScrapeFundingInfoWithFirecrawl(
       const detail = payload?.error || payload?.message || `HTTP ${resp.status}`;
       apiErrors.push(`Firecrawl scrape ${resp.status}: ${String(detail).slice(0, 200)}`);
       return { fundedByLabel: null, fundedByWallet: null };
+    }
+
+    const html = payload?.data?.html || payload?.html || '';
+    if (html) {
+      const parsedFromHtml = parseFundedByFromHtml(html);
+      if (parsedFromHtml.fundedByLabel || parsedFromHtml.fundedByWallet) {
+        return parsedFromHtml;
+      }
     }
 
     const markdown = payload?.data?.markdown || payload?.markdown || '';
@@ -167,7 +175,7 @@ async function solscanScrapeFundingInfoWithFirecrawl(
 
     const parsed = parseFundedByFromText(markdown);
     if (!parsed.fundedByLabel && !parsed.fundedByWallet) {
-      const lower = markdown.toLowerCase();
+      const lower = `${html}\n${markdown}`.toLowerCase();
       if (lower.includes('just a moment') || lower.includes('enable javascript and cookies')) {
         apiErrors.push('Firecrawl scrape hit Cloudflare challenge on Solscan account page');
       } else {
