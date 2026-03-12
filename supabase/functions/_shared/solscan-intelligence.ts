@@ -81,12 +81,37 @@ function formatSolscanApiError(endpoint: string, status: number, detail: string)
   return `${endpoint} ${status}: ${detail}`;
 }
 
+function parseFundedByFromText(rawText: string): { fundedByLabel: string | null; fundedByWallet: string | null } {
+  const marker = rawText.toLowerCase().indexOf('funded by');
+  if (marker === -1) return { fundedByLabel: null, fundedByWallet: null };
+
+  const snippet = rawText.slice(marker, marker + 800);
+  const walletFromLink = snippet.match(/\/account\/([1-9A-HJ-NP-Za-km-z]{32,44})/);
+  const walletFromText = snippet.match(/\b([1-9A-HJ-NP-Za-km-z]{32,44})\b/);
+
+  const cleaned = snippet
+    .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const labelMatch = cleaned.match(/Funded by\s+(.+?)(?:\s+Misc\b|\s+Personal label\b|\s+Tags\b|\s+Ad\b|\s+Transactions\b|$)/i);
+  const rawLabel = labelMatch?.[1] || null;
+  const fundedByLabel = rawLabel
+    ? rawLabel.replace(/^(image\s*)+/i, '').replace(/\s+/g, ' ').trim().slice(0, 120)
+    : null;
+
+  return {
+    fundedByLabel: fundedByLabel || null,
+    fundedByWallet: walletFromLink?.[1] || walletFromText?.[1] || null,
+  };
+}
+
 function parseFundedByFromHtml(html: string): { fundedByLabel: string | null; fundedByWallet: string | null } {
   const marker = html.toLowerCase().indexOf('funded by');
   if (marker === -1) return { fundedByLabel: null, fundedByWallet: null };
 
   const section = html.slice(Math.max(0, marker - 250), marker + 3000);
-  const walletMatch = section.match(/href="\/account\/([1-9A-HJ-NP-Za-km-z]{32,44})"/);
   const sectionText = section
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -98,16 +123,54 @@ function parseFundedByFromHtml(html: string): { fundedByLabel: string | null; fu
     .replace(/\s+/g, ' ')
     .trim();
 
-  const labelMatch = sectionText.match(/Funded by\s+(.+?)(?:\s+Misc\b|\s+Personal label\b|\s+Tags\b|\s+Ad\b|\s+Transactions\b|$)/i);
-  const rawLabel = labelMatch?.[1] || null;
-  const fundedByLabel = rawLabel
-    ? rawLabel.replace(/^(image\s*)+/i, '').replace(/\s+/g, ' ').trim().slice(0, 120)
-    : null;
+  return parseFundedByFromText(sectionText + '\n' + section);
+}
 
-  return {
-    fundedByLabel: fundedByLabel || null,
-    fundedByWallet: walletMatch?.[1] || null,
-  };
+async function solscanScrapeFundingInfoWithFirecrawl(
+  walletAddress: string,
+  apiErrors: string[] = []
+): Promise<{ fundedByLabel: string | null; fundedByWallet: string | null }> {
+  const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+  if (!firecrawlKey) {
+    apiErrors.push('FIRECRAWL_API_KEY not configured for Solscan scrape fallback');
+    return { fundedByLabel: null, fundedByWallet: null };
+  }
+
+  try {
+    const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://solscan.io/account/${walletAddress}`,
+        formats: ['markdown'],
+        onlyMainContent: true,
+        waitFor: 1500,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const payload = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const detail = payload?.error || payload?.message || `HTTP ${resp.status}`;
+      apiErrors.push(`Firecrawl scrape ${resp.status}: ${String(detail).slice(0, 200)}`);
+      return { fundedByLabel: null, fundedByWallet: null };
+    }
+
+    const markdown = payload?.data?.markdown || payload?.markdown || '';
+    if (!markdown) {
+      apiErrors.push('Firecrawl scrape returned no markdown for Solscan account page');
+      return { fundedByLabel: null, fundedByWallet: null };
+    }
+
+    return parseFundedByFromText(markdown);
+  } catch (e) {
+    const msg = `Firecrawl scrape error: ${e instanceof Error ? e.message : 'timeout'}`;
+    apiErrors.push(msg);
+    return { fundedByLabel: null, fundedByWallet: null };
+  }
 }
 
 async function solscanScrapeFundingInfo(
@@ -126,28 +189,35 @@ async function solscanScrapeFundingInfo(
       signal: AbortSignal.timeout(10000),
     });
 
-    if (!resp.ok) {
+    if (resp.ok) {
+      const html = await resp.text();
+      const parsed = parseFundedByFromHtml(html);
+      if (parsed.fundedByLabel || parsed.fundedByWallet) {
+        SOLSCAN_FUNDING_CACHE.set(walletAddress, parsed);
+        console.log(
+          `[Solscan Intel] Scrape fallback for ${walletAddress.slice(0, 8)}... funded_by="${parsed.fundedByLabel || 'none'}" wallet=${parsed.fundedByWallet?.slice(0, 8) || 'none'}`
+        );
+        return parsed;
+      }
+    } else {
       const detail = await readSolscanErrorDetail(resp);
       apiErrors.push(`Solscan scrape account ${resp.status}: ${detail}`);
-      return { fundedByLabel: null, fundedByWallet: null };
     }
-
-    const html = await resp.text();
-    const parsed = parseFundedByFromHtml(html);
-    SOLSCAN_FUNDING_CACHE.set(walletAddress, parsed);
-
-    if (parsed.fundedByLabel || parsed.fundedByWallet) {
-      console.log(
-        `[Solscan Intel] Scrape fallback for ${walletAddress.slice(0, 8)}... funded_by="${parsed.fundedByLabel || 'none'}" wallet=${parsed.fundedByWallet?.slice(0, 8) || 'none'}`
-      );
-    }
-
-    return parsed;
   } catch (e) {
     const msg = `Solscan scrape account error: ${e instanceof Error ? e.message : 'timeout'}`;
     apiErrors.push(msg);
-    return { fundedByLabel: null, fundedByWallet: null };
   }
+
+  const firecrawlParsed = await solscanScrapeFundingInfoWithFirecrawl(walletAddress, apiErrors);
+  SOLSCAN_FUNDING_CACHE.set(walletAddress, firecrawlParsed);
+
+  if (firecrawlParsed.fundedByLabel || firecrawlParsed.fundedByWallet) {
+    console.log(
+      `[Solscan Intel] Firecrawl fallback for ${walletAddress.slice(0, 8)}... funded_by="${firecrawlParsed.fundedByLabel || 'none'}" wallet=${firecrawlParsed.fundedByWallet?.slice(0, 8) || 'none'}`
+    );
+  }
+
+  return firecrawlParsed;
 }
 
 /**
