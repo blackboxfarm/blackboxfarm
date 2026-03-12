@@ -1,7 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
-import { solscanFullIntelSweep, solscanResolveTokenCreator, solscanDiscoverFunders } from '../_shared/solscan-intelligence.ts';
+import { discoverFundingChain } from '../_shared/funding-resolver.ts';
+import { isSolscanUsable } from '../_shared/provider-health.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
@@ -546,16 +547,27 @@ Deno.serve(async (req) => {
         }
       }
       
-      // 5. Solscan token meta (creator + mint authority)
+      // 5. Helius TOKEN_MINT proof (replaces Solscan token/meta)
       if (!resolvedWallet) {
-        console.log('[Oracle] Trying Solscan token/meta for creator resolution...');
-        const { creator, mintAuthority } = await solscanResolveTokenCreator(cleanedInput, apiErrors);
-        if (creator) {
-          resolvedWallet = creator;
-          console.log(`[Oracle] Resolved via Solscan creator: ${resolvedWallet?.slice(0, 8)}`);
-        } else if (mintAuthority) {
-          resolvedWallet = mintAuthority;
-          console.log(`[Oracle] Resolved via Solscan mint authority: ${resolvedWallet?.slice(0, 8)}`);
+        console.log('[Oracle] Trying Helius TOKEN_MINT for creator resolution...');
+        try {
+          const heliusKey = getHeliusApiKey();
+          if (heliusKey) {
+            const txUrl = getHeliusRestUrl(`/v0/addresses/${cleanedInput}/transactions`, { type: 'TOKEN_MINT', limit: '5' });
+            const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(8000) });
+            if (txRes.ok) {
+              const transactions = await txRes.json();
+              if (Array.isArray(transactions) && transactions.length > 0) {
+                const feePayer = transactions[0]?.feePayer;
+                if (feePayer) {
+                  resolvedWallet = feePayer;
+                  console.log(`[Oracle] Resolved via Helius TOKEN_MINT: ${resolvedWallet?.slice(0, 8)}`);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          apiErrors.push(`Helius TOKEN_MINT error: ${e instanceof Error ? e.message : 'timeout'}`);
         }
       }
       
@@ -721,45 +733,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ═══════ SOLSCAN INTELLIGENCE: Funding Chain + Token Discovery ═══════
-    let solscanFunders: Array<{ wallet: string; amountSol: number; timestamp: number }> = [];
-    let solscanCreatedTokens: Array<{ mint: string; name?: string; symbol?: string }> = [];
+    // ═══════ HELIUS FUNDING CHAIN (replaces Solscan) ═══════
+    let heliusFundingChain: Array<{ funder: string; funderName: string | null; amountSol: number; isCex: boolean }> = [];
+    let heliusKycRoot: string | null = null;
+    let heliusKycRootLabel: string | null = null;
     
     if (resolvedWallet) {
-      console.log('[Oracle] Running Solscan intelligence sweep for funding chain...');
+      console.log('[Oracle] Running Helius funding chain discovery...');
       
-      // Discover funders (who sent SOL to this wallet)
-      solscanFunders = await solscanDiscoverFunders(resolvedWallet, apiErrors);
+      const { chain, kycRoot, kycRootLabel } = await discoverFundingChain(resolvedWallet, 3, apiErrors);
+      heliusFundingChain = chain.map(f => ({
+        funder: f.funder,
+        funderName: f.funderName,
+        amountSol: f.amountSol,
+        isCex: f.isCex,
+      }));
+      heliusKycRoot = kycRoot;
+      heliusKycRootLabel = kycRootLabel;
       
-      // If we got no tokens from pump.fun/helius, try Solscan for created tokens
-      if (liveTokens.length === 0) {
-        const solscanIntel = await solscanFullIntelSweep(resolvedWallet, 'wallet', apiErrors);
-        solscanCreatedTokens = solscanIntel.createdTokens;
-        
-        // Convert Solscan-discovered tokens to the liveTokens format
-        if (solscanCreatedTokens.length > 0) {
-          console.log(`[Oracle] Solscan discovered ${solscanCreatedTokens.length} tokens for wallet`);
-          for (const st of solscanCreatedTokens) {
-            liveTokens.push({
-              mint: st.mint,
-              name: st.name || 'Unknown',
-              symbol: st.symbol || '???',
-              complete: false,
-              usd_market_cap: 0,
-              creator: resolvedWallet
-            });
-          }
-          
-          // Re-analyze with newly discovered tokens
-          if (liveTokens.length > 0) {
-            liveAnalysis = {
-              pattern: 'solscan_discovered',
-              tokensAnalyzed: liveTokens.length,
-              graduatedTokens: 0,
-              successRate: 0
-            };
-          }
-        }
+      if (heliusFundingChain.length > 0) {
+        console.log(`[Oracle] Helius funding chain: ${heliusFundingChain.length} hops, KYC root: ${heliusKycRoot?.slice(0, 8) || 'none'} (${heliusKycRootLabel || 'N/A'})`);
       }
     }
     
@@ -930,13 +923,13 @@ Deno.serve(async (req) => {
       .map((link: any) => link.source_id === resolvedWallet ? link.linked_id : link.source_id)
       .filter((w: string) => isBase58(w));
 
-    // Build network associations - now including mesh data + Solscan funders
-    const solscanFunderWallets = solscanFunders.map(f => f.wallet);
+    // Build network associations - now including mesh data + Helius funders
+    const heliusFunderWallets = heliusFundingChain.map(f => f.funder);
     const allLinkedWallets = [...new Set([
       ...(xAccountData?.linkedWallets || []),
       ...upstreamWallets,
       ...meshLinkedWallets,
-      ...solscanFunderWallets
+      ...heliusFunderWallets
     ])];
 
     const network: OracleResult['network'] = {
@@ -1251,46 +1244,42 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 8. Solscan-discovered funders → funded_by mesh links
-    if (resolvedWallet && solscanFunders.length > 0) {
-      console.log(`[Oracle] Adding ${solscanFunders.length} Solscan funding links to mesh...`);
-      for (const funder of solscanFunders.slice(0, 10)) { // Top 10 funders
+    // 8. Helius-discovered funders → funded_by mesh links
+    if (resolvedWallet && heliusFundingChain.length > 0) {
+      console.log(`[Oracle] Adding ${heliusFundingChain.length} Helius funding links to mesh...`);
+      let previousWallet = resolvedWallet;
+      for (const funding of heliusFundingChain) {
         newLinks.push({
           source_type: 'wallet',
-          source_id: resolvedWallet,
+          source_id: previousWallet,
           linked_type: 'wallet',
-          linked_id: funder.wallet,
+          linked_id: funding.funder,
           relationship: 'funded_by',
-          confidence: Math.min(95, 70 + Math.floor(funder.amountSol * 5)), // Higher SOL = higher confidence
-          discovered_via: 'solscan_transfer'
+          confidence: Math.min(95, 70 + Math.floor(funding.amountSol * 5)),
+          discovered_via: 'helius_funded_by'
+        });
+        previousWallet = funding.funder;
+      }
+      
+      // Add KYC root to upstream chain
+      if (heliusKycRoot && !upstreamChain.find(u => u.wallet === heliusKycRoot)) {
+        upstreamChain.push({
+          wallet: heliusKycRoot,
+          role: heliusKycRootLabel ? 'kyc_root' : 'funder',
+          relationship: 'funded_by'
         });
       }
       
-      // The top funder could be the KYC root
-      const topFunder = solscanFunders[0];
-      if (topFunder && topFunder.amountSol > 0.5) {
-        // Also add to upstream chain for display
-        if (!upstreamChain.find(u => u.wallet === topFunder.wallet)) {
-          upstreamChain.push({
-            wallet: topFunder.wallet,
-            role: 'funder',
-            relationship: 'funded_by'
-          });
-        }
-      }
-    }
-
-    // 9. Solscan-discovered created tokens → mesh links
-    if (resolvedWallet && solscanCreatedTokens.length > 0) {
-      for (const token of solscanCreatedTokens.slice(0, 50)) {
+      // If CEX-funded KYC root found, add kyc_root mesh link
+      if (heliusKycRoot && heliusKycRootLabel) {
         newLinks.push({
-          source_type: 'wallet',
-          source_id: resolvedWallet,
-          linked_type: 'token',
-          linked_id: token.mint,
-          relationship: 'created',
+          source_type: 'kyc_root',
+          source_id: heliusKycRoot,
+          linked_type: 'wallet',
+          linked_id: resolvedWallet,
+          relationship: 'same_kyc_root',
           confidence: 85,
-          discovered_via: 'solscan_mint'
+          discovered_via: 'helius_funded_by'
         });
       }
     }

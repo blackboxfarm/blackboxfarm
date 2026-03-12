@@ -114,8 +114,8 @@ export function useMeshGraph(initialEntityId?: string) {
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set(Object.keys(ENTITY_COLORS)));
   const [spiderStatus, setSpiderStatus] = useState<SpiderStatus>({ active: false, stage: '' });
   
-  // Track spider attempts to prevent infinite loops
-  const spiderAttemptsRef = useRef<Map<string, number>>(new Map());
+  // Track spider attempts with cooldown-based retry (resets after 5 minutes)
+  const spiderAttemptsRef = useRef<Map<string, { count: number; lastAttempt: number }>>(new Map());
 
   // Strip type prefix (e.g., "wallet:ABC..." → "ABC...") for DB queries
   const stripPrefix = (id: string) => {
@@ -135,12 +135,36 @@ export function useMeshGraph(initialEntityId?: string) {
       }
 
       const allLinks: any[] = [];
+      
+      // 1-hop: fetch links for all focused/expanded entities
       for (const entityId of uniqueIds) {
         const { data, error } = await supabase
           .from('reputation_mesh')
           .select('*')
           .or(`source_id.eq.${entityId},linked_id.eq.${entityId}`)
           .limit(200);
+        if (error) throw error;
+        if (data) allLinks.push(...data);
+      }
+
+      // 2-hop: for wallet entities, also fetch links for their direct neighbors
+      const hop1Ids = new Set<string>();
+      for (const link of allLinks) {
+        if (link.source_type === 'wallet' || link.linked_type === 'wallet' ||
+            link.source_type === 'kyc_root' || link.linked_type === 'kyc_root') {
+          hop1Ids.add(link.source_id);
+          hop1Ids.add(link.linked_id);
+        }
+      }
+      
+      // Only fetch 2nd-hop for IDs not already queried
+      const hop2Ids = [...hop1Ids].filter(id => !uniqueIds.includes(id));
+      for (const entityId of hop2Ids.slice(0, 20)) { // Cap at 20 to avoid overload
+        const { data, error } = await supabase
+          .from('reputation_mesh')
+          .select('*')
+          .or(`source_id.eq.${entityId},linked_id.eq.${entityId}`)
+          .limit(100);
         if (error) throw error;
         if (data) allLinks.push(...data);
       }
@@ -218,19 +242,33 @@ export function useMeshGraph(initialEntityId?: string) {
 
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
-    // Prevent infinite retry loops — max 2 attempts per entity
-    const attempts = spiderAttemptsRef.current.get(input) || 0;
-    if (attempts >= 2) {
-      console.log(`[MeshSpider] Max attempts reached for ${input}, stopping`);
-      setSpiderStatus({
-        active: false,
-        stage: '',
-        error: `Spider exhausted after ${attempts} attempts. External APIs may be down (Pump.fun, Helius). Try again later.`,
-        diagnostics: ['Max retry attempts reached', 'Pump.fun API may be returning 404/503', 'Helius RPC may be timing out'],
-      });
-      return;
+    // Cooldown-based retry: 2 immediate attempts, then reset after 5 minutes
+    const COOLDOWN_MS = 5 * 60 * 1000;
+    const MAX_IMMEDIATE = 2;
+    const record = spiderAttemptsRef.current.get(input);
+    const now = Date.now();
+    
+    if (record) {
+      const timeSince = now - record.lastAttempt;
+      if (timeSince > COOLDOWN_MS) {
+        // Reset after cooldown
+        spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
+      } else if (record.count >= MAX_IMMEDIATE) {
+        const remainingMin = Math.ceil((COOLDOWN_MS - timeSince) / 60000);
+        console.log(`[MeshSpider] Cooldown active for ${input}, ${remainingMin}min remaining`);
+        setSpiderStatus({
+          active: false,
+          stage: '',
+          error: `Spider cooling down (${record.count} attempts). Retry in ~${remainingMin} min.`,
+          diagnostics: ['Cooldown-based retry active', `${record.count} attempts made`, `Resets in ~${remainingMin} minutes`],
+        });
+        return;
+      } else {
+        spiderAttemptsRef.current.set(input, { count: record.count + 1, lastAttempt: now });
+      }
+    } else {
+      spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
     }
-    spiderAttemptsRef.current.set(input, attempts + 1);
 
     setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
 
