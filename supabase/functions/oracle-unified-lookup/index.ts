@@ -646,10 +646,11 @@ Deno.serve(async (req) => {
     // AUTO-SPIDER: Always fetch from pump.fun and write to DB on every lookup
     let liveTokens: any[] = [];
     let liveAnalysis: any = null;
+    const apiErrors: string[] = [];
     
     if (resolvedWallet) {
       console.log('[Oracle] Auto-spider: fetching tokens from Pump.fun...');
-      liveTokens = await fetchPumpfunTokens(resolvedWallet, supabase);
+      liveTokens = await fetchPumpfunTokens(resolvedWallet, supabase, apiErrors);
       
       if (liveTokens.length > 0) {
         const quickStats = quickAnalyzeTokens(liveTokens);
