@@ -352,34 +352,36 @@ serve(async (req) => {
     // === SIMPLE WALLET TIERS (new) ===
     // Dust: < $1, Retail: $1-199, Serious: $200-1000, Whales: > $1000
     const simpleTiers = {
-      dust: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 },
-      retail: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 },
-      serious: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 },
-      whales: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 }
+      dust: { count: 0, percentage: 0, supplyPercentage: 0, avgValue: 0, totalValue: 0 },
+      retail: { count: 0, percentage: 0, supplyPercentage: 0, avgValue: 0, totalValue: 0 },
+      serious: { count: 0, percentage: 0, supplyPercentage: 0, avgValue: 0, totalValue: 0 },
+      whales: { count: 0, percentage: 0, supplyPercentage: 0, avgValue: 0, totalValue: 0 }
     };
     
     for (const h of nonLpHolders) {
       if (h.usdValue < 1) {
         simpleTiers.dust.count++;
         simpleTiers.dust.totalValue += h.usdValue;
-        simpleTiers.dust.percentage += h.percentageOfSupply;
+        simpleTiers.dust.supplyPercentage += h.percentageOfSupply;
       } else if (h.usdValue < 200) {
         simpleTiers.retail.count++;
         simpleTiers.retail.totalValue += h.usdValue;
-        simpleTiers.retail.percentage += h.percentageOfSupply;
+        simpleTiers.retail.supplyPercentage += h.percentageOfSupply;
       } else if (h.usdValue <= 1000) {
         simpleTiers.serious.count++;
         simpleTiers.serious.totalValue += h.usdValue;
-        simpleTiers.serious.percentage += h.percentageOfSupply;
+        simpleTiers.serious.supplyPercentage += h.percentageOfSupply;
       } else {
         simpleTiers.whales.count++;
         simpleTiers.whales.totalValue += h.usdValue;
-        simpleTiers.whales.percentage += h.percentageOfSupply;
+        simpleTiers.whales.supplyPercentage += h.percentageOfSupply;
       }
     }
     
-    // Calculate averages
+    // Calculate holder count percentages and averages
+    const totalNonLp = nonLpHolders.length;
     for (const tier of Object.values(simpleTiers)) {
+      tier.percentage = totalNonLp > 0 ? (tier.count / totalNonLp) * 100 : 0;
       tier.avgValue = tier.count > 0 ? tier.totalValue / tier.count : 0;
     }
     
