@@ -52,6 +52,7 @@ export const SERVICE_RATE_LIMITS: Record<ServiceName, number> = {
   coingecko: 50,
   bonkfun: 60,      // Estimated
   bagsfm: 60,       // Estimated
+  apify: 10,        // Rate limited - actor runs
 };
 
 /**

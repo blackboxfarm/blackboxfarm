@@ -60,6 +60,15 @@ function extractTwitterUsername(url: string): string | null {
 }
 
 async function fetchCommunityMembers(communityId: string, apifyApiKey: string): Promise<ApifyCommunityMember[]> {
+  const { createApiLogger } = await import("../_shared/api-logger.ts");
+  const logger = createApiLogger({
+    serviceName: 'apify',
+    endpoint: 'danpoletaev~twitter-x-community-member-scraper',
+    method: 'POST',
+    functionName: 'x-community-enricher',
+    metadata: { communityId },
+  });
+
   try {
     console.log(`Fetching X Community members for community ${communityId}...`);
     
@@ -80,6 +89,8 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
       }
     );
 
+    await logger.complete(response.status);
+
     if (!response.ok) {
       console.error(`Apify API error: ${response.status}`);
       return [];
@@ -88,6 +99,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
     const data = await response.json();
     return data || [];
   } catch (error) {
+    await logger.fail(error instanceof Error ? error.message : String(error));
     console.error('Failed to fetch community members:', error);
     return [];
   }

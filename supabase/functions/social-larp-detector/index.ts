@@ -156,6 +156,16 @@ async function checkXCommunityForToken(
   const communityId = communityMatch[1];
 
   try {
+    const { createApiLogger } = await import("../_shared/api-logger.ts");
+    const logger = createApiLogger({
+      serviceName: 'apify',
+      endpoint: 'danpoletaev~twitter-x-community-member-scraper',
+      method: 'POST',
+      functionName: 'social-larp-detector',
+      tokenMint: tokenMint,
+      metadata: { communityId },
+    });
+
     console.log(`[LARP] Scraping X Community: ${communityId}`);
     
     // Use Apify X Community Member Scraper to get community data
@@ -174,6 +184,8 @@ async function checkXCommunityForToken(
         }),
       },
     );
+
+    await logger.complete(response.status);
 
     if (!response.ok) {
       console.warn(`[LARP] Apify community scrape failed: ${response.status}`);

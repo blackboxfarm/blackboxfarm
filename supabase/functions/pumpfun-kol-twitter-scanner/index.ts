@@ -477,7 +477,15 @@ async function scanKolTimeline(
   kolWallet: string,
   limit: number
 ): Promise<{ tweets_scanned: number; token_mentions: number }> {
+  const { createApiLogger } = await import("../_shared/api-logger.ts");
   const actorId = "apidojo~tweet-scraper";
+  const logger = createApiLogger({
+    serviceName: 'apify',
+    endpoint: `${actorId}/kol-scan`,
+    method: 'POST',
+    functionName: 'pumpfun-kol-twitter-scanner',
+    metadata: { twitterHandle, kolId, limit },
+  });
   
   const runResponse = await fetch(
     `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyKey}`,
@@ -492,6 +500,8 @@ async function scanKolTimeline(
       }),
     }
   );
+
+  await logger.complete(runResponse.status);
 
   if (!runResponse.ok) {
     throw new Error(`Apify error: ${runResponse.status}`);
