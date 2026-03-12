@@ -192,17 +192,64 @@ Deno.serve(async (req) => {
       // 1. Twitter/X → wallet (handle or community)
       const twitterHandle = extractTwitterHandle(twitter_url);
       if (twitterHandle) {
-        meshLinks.push({
-          source_type: "x_account",
-          source_id: twitterHandle,
-          linked_type: "wallet",
-          linked_id: creator_wallet,
-          relationship: "social_account_of",
-          confidence: 75,
-          evidence: { source: "watchlist_enrichment", token_mint, token_symbol, url: twitter_url },
-          discovered_via: "social-mesh-linker",
-        });
-        discoveredSocials.push(`x:@${twitterHandle}`);
+        // Try to resolve handle → immutable numeric user ID
+        const xResolved = await resolveXHandle(twitterHandle, supabase);
+        
+        if (xResolved) {
+          // Primary link: immutable user ID → wallet
+          meshLinks.push({
+            source_type: "x_user",
+            source_id: xResolved.userId,
+            linked_type: "wallet",
+            linked_id: creator_wallet,
+            relationship: "social_account_of",
+            confidence: 80,
+            evidence: {
+              source: "watchlist_enrichment",
+              token_mint, token_symbol,
+              url: twitter_url,
+              display_name: xResolved.displayName,
+              resolved_handle: xResolved.handle,
+              is_verified: xResolved.isVerified,
+              is_rotated: xResolved.isRotated,
+              handle_count: xResolved.handleCount,
+              linked_token_count: xResolved.linkedTokenCount,
+            },
+            discovered_via: "social-mesh-linker",
+          });
+          
+          // Secondary link: handle → user ID (so both are searchable)
+          meshLinks.push({
+            source_type: "x_account",
+            source_id: twitterHandle,
+            linked_type: "x_user",
+            linked_id: xResolved.userId,
+            relationship: "handle_of",
+            confidence: 95,
+            evidence: { source: "x_api_resolution", display_name: xResolved.displayName, url: twitter_url },
+            discovered_via: "social-mesh-linker",
+          });
+          
+          // Increment token count for rotation detection
+          await incrementXUserTokenCount(xResolved.userId, supabase);
+          
+          discoveredSocials.push(`x_user:${xResolved.userId}(@${xResolved.handle})`);
+          if (xResolved.isRotated) {
+            console.log(`   🔄 ROTATED X HANDLE detected: @${xResolved.handle} has ${xResolved.handleCount} known handles`);
+          }
+        } else {
+          // Fallback: handle-only (API failed, rate limited, etc.)
+          meshLinks.push({
+            source_type: "x_account",
+            source_id: twitterHandle,
+            linked_type: "wallet",
+            linked_id: creator_wallet,
+            relationship: "social_account_of",
+            confidence: 55,
+            evidence: { source: "watchlist_enrichment", token_mint, token_symbol, url: twitter_url, resolution_failed: true },
+            discovered_via: "social-mesh-linker",
+          });
+          discoveredSocials.push(`x:@${twitterHandle}(unresolved)`);
       }
 
       // 1b. X Community URL → community + token + wallet mesh links
