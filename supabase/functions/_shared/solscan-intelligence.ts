@@ -51,6 +51,14 @@ function solscanHeaders(apiKey: string): Record<string, string> {
   return { 'Accept': 'application/json', 'token': apiKey };
 }
 
+const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin', 'huobi', 'gate.io', 'ftx', 'gemini', 'bitfinex', 'crypto.com', 'mexc'];
+const SOLSCAN_FUNDING_CACHE = new Map<string, { fundedByLabel: string | null; fundedByWallet: string | null }>();
+
+function isKnownCexLabel(value: string | null): boolean {
+  const normalized = (value || '').toLowerCase();
+  return CEX_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
 async function readSolscanErrorDetail(resp: Response): Promise<string> {
   const body = await resp.text().catch(() => '');
   if (!body) return `HTTP ${resp.status}`;
@@ -71,6 +79,164 @@ function formatSolscanApiError(endpoint: string, status: number, detail: string)
   }
 
   return `${endpoint} ${status}: ${detail}`;
+}
+
+function parseFundedByFromText(rawText: string): { fundedByLabel: string | null; fundedByWallet: string | null } {
+  const marker = rawText.toLowerCase().indexOf('funded by');
+  if (marker === -1) return { fundedByLabel: null, fundedByWallet: null };
+
+  const snippet = rawText.slice(marker, marker + 800);
+  const walletFromLink = snippet.match(/\/account\/([1-9A-HJ-NP-Za-km-z]{32,44})/);
+  const walletFromText = snippet.match(/\b([1-9A-HJ-NP-Za-km-z]{32,44})\b/);
+
+  const cleaned = snippet
+    .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const labelMatch = cleaned.match(/Funded by\s+(.+?)(?:\s+Misc\b|\s+Personal label\b|\s+Tags\b|\s+Ad\b|\s+Transactions\b|$)/i);
+  const rawLabel = labelMatch?.[1] || null;
+  const fundedByLabel = rawLabel
+    ? rawLabel.replace(/^(image\s*)+/i, '').replace(/\s+/g, ' ').trim().slice(0, 120)
+    : null;
+
+  return {
+    fundedByLabel: fundedByLabel || null,
+    fundedByWallet: walletFromLink?.[1] || walletFromText?.[1] || null,
+  };
+}
+
+function parseFundedByFromHtml(html: string): { fundedByLabel: string | null; fundedByWallet: string | null } {
+  const marker = html.toLowerCase().indexOf('funded by');
+  if (marker === -1) return { fundedByLabel: null, fundedByWallet: null };
+
+  const section = html.slice(Math.max(0, marker - 250), marker + 3000);
+  const sectionText = section
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x27;|&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return parseFundedByFromText(sectionText + '\n' + section);
+}
+
+async function solscanScrapeFundingInfoWithFirecrawl(
+  walletAddress: string,
+  apiErrors: string[] = []
+): Promise<{ fundedByLabel: string | null; fundedByWallet: string | null }> {
+  const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+  if (!firecrawlKey) {
+    apiErrors.push('FIRECRAWL_API_KEY not configured for Solscan scrape fallback');
+    return { fundedByLabel: null, fundedByWallet: null };
+  }
+
+  try {
+    const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://solscan.io/account/${walletAddress}`,
+        formats: ['markdown', 'html'],
+        onlyMainContent: false,
+        waitFor: 3000,
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    const payload = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const detail = payload?.error || payload?.message || `HTTP ${resp.status}`;
+      apiErrors.push(`Firecrawl scrape ${resp.status}: ${String(detail).slice(0, 200)}`);
+      return { fundedByLabel: null, fundedByWallet: null };
+    }
+
+    const html = payload?.data?.html || payload?.html || '';
+    if (html) {
+      const parsedFromHtml = parseFundedByFromHtml(html);
+      if (parsedFromHtml.fundedByLabel || parsedFromHtml.fundedByWallet) {
+        return parsedFromHtml;
+      }
+    }
+
+    const markdown = payload?.data?.markdown || payload?.markdown || '';
+    if (!markdown) {
+      apiErrors.push('Firecrawl scrape returned no markdown for Solscan account page');
+      return { fundedByLabel: null, fundedByWallet: null };
+    }
+
+    const parsed = parseFundedByFromText(markdown);
+    if (!parsed.fundedByLabel && !parsed.fundedByWallet) {
+      const lower = `${html}\n${markdown}`.toLowerCase();
+      if (lower.includes('just a moment') || lower.includes('enable javascript and cookies')) {
+        apiErrors.push('Firecrawl scrape hit Cloudflare challenge on Solscan account page');
+      } else {
+        apiErrors.push('Firecrawl scrape did not expose funded-by data on Solscan account page');
+      }
+      console.log(`[Solscan Intel] Firecrawl fallback raw snippet: ${markdown.slice(0, 180).replace(/\s+/g, ' ')}`);
+    }
+
+    return parsed;
+  } catch (e) {
+    const msg = `Firecrawl scrape error: ${e instanceof Error ? e.message : 'timeout'}`;
+    apiErrors.push(msg);
+    return { fundedByLabel: null, fundedByWallet: null };
+  }
+}
+
+async function solscanScrapeFundingInfo(
+  walletAddress: string,
+  apiErrors: string[] = []
+): Promise<{ fundedByLabel: string | null; fundedByWallet: string | null }> {
+  const cached = SOLSCAN_FUNDING_CACHE.get(walletAddress);
+  if (cached) return cached;
+
+  try {
+    const resp = await fetch(`https://solscan.io/account/${walletAddress}`, {
+      headers: {
+        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (compatible; LovableKYCBot/1.0)',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (resp.ok) {
+      const html = await resp.text();
+      const parsed = parseFundedByFromHtml(html);
+      if (parsed.fundedByLabel || parsed.fundedByWallet) {
+        SOLSCAN_FUNDING_CACHE.set(walletAddress, parsed);
+        console.log(
+          `[Solscan Intel] Scrape fallback for ${walletAddress.slice(0, 8)}... funded_by="${parsed.fundedByLabel || 'none'}" wallet=${parsed.fundedByWallet?.slice(0, 8) || 'none'}`
+        );
+        return parsed;
+      }
+    } else {
+      const detail = await readSolscanErrorDetail(resp);
+      apiErrors.push(`Solscan scrape account ${resp.status}: ${detail}`);
+    }
+  } catch (e) {
+    const msg = `Solscan scrape account error: ${e instanceof Error ? e.message : 'timeout'}`;
+    apiErrors.push(msg);
+  }
+
+  const firecrawlParsed = await solscanScrapeFundingInfoWithFirecrawl(walletAddress, apiErrors);
+  SOLSCAN_FUNDING_CACHE.set(walletAddress, firecrawlParsed);
+
+  if (firecrawlParsed.fundedByLabel || firecrawlParsed.fundedByWallet) {
+    console.log(
+      `[Solscan Intel] Firecrawl fallback for ${walletAddress.slice(0, 8)}... funded_by="${firecrawlParsed.fundedByLabel || 'none'}" wallet=${firecrawlParsed.fundedByWallet?.slice(0, 8) || 'none'}`
+    );
+  }
+
+  return firecrawlParsed;
 }
 
 /**
@@ -134,8 +300,22 @@ export async function solscanCheckAccountLabel(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<{ label: string | null; isCex: boolean; tags: string[] }> {
+  const scrapeFallback = async () => {
+    const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
+    const label = scraped.fundedByLabel || null;
+    const isCex = isKnownCexLabel(label);
+
+    if (label) {
+      console.log(`[Solscan Intel] Scrape label fallback ${walletAddress.slice(0, 8)}... funded_by: "${label}" (CEX: ${isCex})`);
+    }
+
+    return { label, isCex, tags: [] };
+  };
+
   const apiKey = getSolscanApiKey();
-  if (!apiKey) return { label: null, isCex: false, tags: [] };
+  if (!apiKey) {
+    return await scrapeFallback();
+  }
 
   try {
     const logger = createApiLogger({
@@ -156,26 +336,22 @@ export async function solscanCheckAccountLabel(
       const detail = await readSolscanErrorDetail(resp);
       await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
       apiErrors.push(formatSolscanApiError('Solscan account/detail', resp.status, detail));
-      return { label: null, isCex: false, tags: [] };
+      return await scrapeFallback();
     }
 
     await logger.complete(resp.status);
     const data = await resp.json();
     const detail = data?.data || data;
 
-    // Solscan returns tags like ["Token Creator", "#Pump.fun"] and 
+    // Solscan returns tags like ["Token Creator", "#Pump.fun"] and
     // assigned_to or label fields for CEX wallets
     const tags: string[] = detail?.tags || [];
     const label = detail?.assigned_to || detail?.label || detail?.account_label || null;
-    
+
     // Also check the "funded_by" field directly if present
     const fundedBy = detail?.funded_by || null;
-    
-    const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin', 'huobi', 'gate.io', 'ftx', 'gemini', 'bitfinex', 'crypto.com', 'mexc'];
-    
-    const labelLower = (label || '').toLowerCase();
-    const fundedByLower = (fundedBy || '').toLowerCase();
-    const isCex = CEX_KEYWORDS.some(k => labelLower.includes(k) || fundedByLower.includes(k));
+
+    const isCex = isKnownCexLabel(label) || isKnownCexLabel(fundedBy);
 
     if (label) console.log(`[Solscan Intel] Account ${walletAddress.slice(0, 8)}... label: "${label}" (CEX: ${isCex})`);
     if (fundedBy) console.log(`[Solscan Intel] Account ${walletAddress.slice(0, 8)}... funded_by: "${fundedBy}"`);
@@ -184,7 +360,7 @@ export async function solscanCheckAccountLabel(
   } catch (e) {
     const msg = `Solscan account/detail error: ${e instanceof Error ? e.message : 'timeout'}`;
     apiErrors.push(msg);
-    return { label: null, isCex: false, tags: [] };
+    return await scrapeFallback();
   }
 }
 
@@ -197,19 +373,37 @@ export async function solscanDiscoverFunders(
   apiErrors: string[] = [],
   maxPages: number = 2
 ): Promise<SolscanFunder[]> {
+  const fallbackFromScrape = async (): Promise<SolscanFunder[]> => {
+    const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
+
+    if (scraped.fundedByWallet) {
+      return [{
+        wallet: scraped.fundedByWallet,
+        amountSol: 0,
+        timestamp: 0,
+      }];
+    }
+
+    if (scraped.fundedByLabel) {
+      console.log(`[Solscan Intel] Scrape fallback found funded_by label only for ${walletAddress.slice(0, 8)}...: ${scraped.fundedByLabel}`);
+    }
+
+    return [];
+  };
+
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
-    return [];
+    return await fallbackFromScrape();
   }
 
   const funders = new Map<string, SolscanFunder>();
+  let shouldUseScrapeFallback = false;
 
   try {
     // Fetch SOL transfers TO this wallet (incoming SOL = funding)
     let page = 1;
     let hasMore = true;
-    let lastSignature: string | undefined;
 
     while (hasMore && page <= maxPages) {
       const logger = createApiLogger({
@@ -221,7 +415,7 @@ export async function solscanDiscoverFunders(
         credits: 1,
       });
 
-      let url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${walletAddress}&activity_type[]=ACTIVITY_SPL_TRANSFER&token=${SOL_NATIVE_MINT}&page=${page}&page_size=40&sort_by=block_time&sort_order=desc`;
+      const url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${walletAddress}&activity_type[]=ACTIVITY_SPL_TRANSFER&token=${SOL_NATIVE_MINT}&page=${page}&page_size=40&sort_by=block_time&sort_order=desc`;
 
       const resp = await fetch(url, {
         headers: solscanHeaders(apiKey),
@@ -232,6 +426,7 @@ export async function solscanDiscoverFunders(
         const detail = await readSolscanErrorDetail(resp);
         await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
         apiErrors.push(formatSolscanApiError('Solscan account/transfer', resp.status, detail));
+        shouldUseScrapeFallback = resp.status === 401 || resp.status === 403 || resp.status === 429;
         break;
       }
 
@@ -277,14 +472,20 @@ export async function solscanDiscoverFunders(
     const sorted = Array.from(funders.values()).sort((a, b) => b.amountSol - a.amountSol);
     if (sorted.length > 0) {
       console.log(`[Solscan Intel] Wallet ${walletAddress.slice(0, 8)}... has ${sorted.length} funders. Top: ${sorted[0].wallet.slice(0, 8)}... (${sorted[0].amountSol.toFixed(2)} SOL)`);
+      return sorted;
     }
 
-    return sorted;
+    if (shouldUseScrapeFallback) {
+      return await fallbackFromScrape();
+    }
+
+    return [];
   } catch (e) {
     const msg = `Solscan account/transfer error: ${e instanceof Error ? e.message : 'timeout'}`;
     apiErrors.push(msg);
     console.error(`[Solscan Intel] ${msg}`);
-    return [];
+
+    return await fallbackFromScrape();
   }
 }
 
