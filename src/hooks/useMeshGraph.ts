@@ -135,12 +135,36 @@ export function useMeshGraph(initialEntityId?: string) {
       }
 
       const allLinks: any[] = [];
+      
+      // 1-hop: fetch links for all focused/expanded entities
       for (const entityId of uniqueIds) {
         const { data, error } = await supabase
           .from('reputation_mesh')
           .select('*')
           .or(`source_id.eq.${entityId},linked_id.eq.${entityId}`)
           .limit(200);
+        if (error) throw error;
+        if (data) allLinks.push(...data);
+      }
+
+      // 2-hop: for wallet entities, also fetch links for their direct neighbors
+      const hop1Ids = new Set<string>();
+      for (const link of allLinks) {
+        if (link.source_type === 'wallet' || link.linked_type === 'wallet' ||
+            link.source_type === 'kyc_root' || link.linked_type === 'kyc_root') {
+          hop1Ids.add(link.source_id);
+          hop1Ids.add(link.linked_id);
+        }
+      }
+      
+      // Only fetch 2nd-hop for IDs not already queried
+      const hop2Ids = [...hop1Ids].filter(id => !uniqueIds.includes(id));
+      for (const entityId of hop2Ids.slice(0, 20)) { // Cap at 20 to avoid overload
+        const { data, error } = await supabase
+          .from('reputation_mesh')
+          .select('*')
+          .or(`source_id.eq.${entityId},linked_id.eq.${entityId}`)
+          .limit(100);
         if (error) throw error;
         if (data) allLinks.push(...data);
       }
