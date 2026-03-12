@@ -62,6 +62,7 @@ const BankerPool = lazy(() => import("./pages/BankerPool"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const TelegramBot = lazy(() => import("./pages/TelegramBot"));
+const Features = lazy(() => import("./pages/Features"));
 
 const queryClient = new QueryClient();
 
