@@ -60,6 +60,9 @@ const MeshGraphVisualizer = () => {
     return () => obs.disconnect();
   }, []);
 
+  // Track previous viewMode to only reheat on mode change
+  const prevViewModeRef = useRef<ViewMode>(viewMode);
+
   // Adjust forces based on view mode
   useEffect(() => {
     if (graphRef.current) {
@@ -97,8 +100,11 @@ const MeshGraphVisualizer = () => {
         });
       });
       
-      // Reheat simulation when switching modes
-      graphRef.current.d3ReheatSimulation();
+      // Only reheat simulation when viewMode actually changes, not on every graphData update
+      if (prevViewModeRef.current !== viewMode) {
+        prevViewModeRef.current = viewMode;
+        graphRef.current.d3ReheatSimulation();
+      }
     }
   }, [graphData, viewMode, dimensions.width]);
 
