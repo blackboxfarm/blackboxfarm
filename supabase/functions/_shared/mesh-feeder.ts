@@ -70,7 +70,10 @@ function extractHandle(url: string | null | undefined, pattern: RegExp): string 
   return match ? match[1].replace(/^@/, '').toLowerCase() : null;
 }
 
+// TWITTER_RE moved to _shared/x-handle-extractor.ts — import extractXHandle instead
+// Kept for backward compat but extractHandle now filters reserved paths
 const TWITTER_RE = /(?:twitter\.com|x\.com)\/(@?[a-zA-Z0-9_]+)/i;
+const X_RESERVED_PATHS = new Set(['i','intent','search','hashtag','settings','home','explore','notifications','messages','compose','lists','bookmarks','communities','spaces','tos','privacy','help','about','login','signup','share','status','jobs','download']);
 const TELEGRAM_RE = /t\.me\/([a-zA-Z0-9_]+)/i;
 
 /**
