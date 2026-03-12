@@ -7,6 +7,8 @@ import OracleClassificationsFeed from "@/components/admin/oracle/OracleClassific
 import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus";
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 
+const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
+
 const DevIntelReport = lazy(() => import("@/components/admin/oracle/DevIntelReport"));
 const OracleMasterSpider = lazy(() => import("@/components/admin/oracle/OracleMasterSpider"));
 
@@ -37,6 +39,11 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {/* Provider Health Diagnostics */}
+      <Suspense fallback={<LazyLoader />}>
+        <ProviderHealthPanel />
+      </Suspense>
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
         <TabsList className="flex flex-wrap gap-1">

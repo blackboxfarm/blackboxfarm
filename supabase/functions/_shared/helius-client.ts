@@ -69,19 +69,123 @@ export function redactHeliusSecrets(text: string): string {
   return text.replace(/api-key=[^&\s"')]+/gi, 'api-key=[REDACTED]');
 }
 
+// ─── Server-Side Rate Limiting ────────────────────────────────
+
+/**
+ * Check the persistent rate limit before making a Helius call.
+ * Uses helius_rate_limit_state table for cross-function coordination.
+ * Returns true if the call is allowed.
+ */
+async function checkServerRateLimit(): Promise<{ allowed: boolean; reason?: string }> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return { allowed: true }; // Allow if no DB
+
+    const { createClient } = await import('npm:@supabase/supabase-js@2');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const now = Date.now();
+    const nowIso = new Date().toISOString();
+
+    const { data: state } = await supabase
+      .from('helius_rate_limit_state')
+      .select('*')
+      .eq('id', 'global')
+      .single();
+
+    if (state) {
+      // Check circuit breaker
+      if (state.circuit_breaker_active && state.circuit_breaker_until) {
+        const breakerUntil = new Date(state.circuit_breaker_until).getTime();
+        if (now < breakerUntil) {
+          const remainingSec = Math.round((breakerUntil - now) / 1000);
+          return { allowed: false, reason: `Circuit breaker active (${remainingSec}s remaining)` };
+        }
+        // Reset expired breaker
+        await supabase.from('helius_rate_limit_state').upsert({
+          id: 'global', circuit_breaker_active: false, circuit_breaker_until: null, updated_at: nowIso
+        });
+      }
+
+      // Check window
+      const windowStart = new Date(state.window_start).getTime();
+      if (now - windowStart > 60000) {
+        await supabase.from('helius_rate_limit_state').upsert({
+          id: 'global', call_count: 1, window_start: nowIso, updated_at: nowIso
+        });
+        return { allowed: true };
+      }
+
+      if (state.call_count >= 50) {
+        return { allowed: false, reason: `Rate limit reached (${state.call_count}/50 calls/min)` };
+      }
+
+      await supabase.from('helius_rate_limit_state').upsert({
+        id: 'global', call_count: state.call_count + 1, updated_at: nowIso
+      });
+      return { allowed: true };
+    }
+
+    // First call — initialize state
+    await supabase.from('helius_rate_limit_state').upsert({
+      id: 'global', call_count: 1, window_start: nowIso, circuit_breaker_active: false, updated_at: nowIso
+    });
+    return { allowed: true };
+  } catch (e) {
+    console.warn('[HeliusClient] Rate limit check failed, allowing call:', e);
+    return { allowed: true }; // Fail-open
+  }
+}
+
+/**
+ * Trip the circuit breaker after a 429 response.
+ */
+async function tripCircuitBreaker(): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+
+    const { createClient } = await import('npm:@supabase/supabase-js@2');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const breakerUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    await supabase.from('helius_rate_limit_state').upsert({
+      id: 'global',
+      circuit_breaker_active: true,
+      circuit_breaker_until: breakerUntil,
+      updated_at: new Date().toISOString(),
+    });
+    console.log('🔴 Helius circuit breaker TRIPPED — pausing calls for 5 minutes');
+  } catch (e) {
+    console.warn('[HeliusClient] Failed to trip circuit breaker:', e);
+  }
+}
+
 // ─── Safe Fetch Wrappers ──────────────────────────────────────
 
 /**
  * Fetch wrapper for Helius RPC calls (JSON-RPC 2.0 POST).
+ * - Server-side rate limiting via persistent DB state
  * - Adds timeout via AbortController
  * - Redacts API key from any error messages
  * - Returns parsed JSON response
+ * 
+ * Performance impact: adds ~10-30ms per call for the rate limit DB check.
+ * This is negligible compared to the 50-500ms Helius response times and
+ * prevents catastrophic 429 responses that would halt all calls for minutes.
  */
 export async function heliusRpcFetch(
   method: string,
   params: unknown,
   options?: { timeoutMs?: number; apiKey?: string }
 ): Promise<any> {
+  // Server-side rate limit check
+  const rateCheck = await checkServerRateLimit();
+  if (!rateCheck.allowed) {
+    throw new Error(`Helius rate limited: ${rateCheck.reason}`);
+  }
+
   const url = getHeliusRpcUrl(options?.apiKey);
   const timeoutMs = options?.timeoutMs || 8000;
   const controller = new AbortController();
@@ -96,6 +200,7 @@ export async function heliusRpcFetch(
     });
 
     if (!response.ok) {
+      if (response.status === 429) await tripCircuitBreaker();
       throw new Error(`Helius RPC returned HTTP ${response.status}`);
     }
 
@@ -119,9 +224,12 @@ export async function heliusRpcFetch(
 
 /**
  * Fetch wrapper for Helius REST API calls.
+ * - Server-side rate limiting via persistent DB state
  * - Uses X-Api-Key header (removes key from URL for REST endpoints)
  * - Falls back to query param if header auth fails
  * - Adds timeout and redacts errors
+ * 
+ * Performance impact: adds ~10-30ms per call for the rate limit DB check.
  */
 export async function heliusRestFetch(
   path: string,
@@ -132,6 +240,12 @@ export async function heliusRestFetch(
     extraParams?: Record<string, string>;
   }
 ): Promise<Response> {
+  // Server-side rate limit check
+  const rateCheck = await checkServerRateLimit();
+  if (!rateCheck.allowed) {
+    throw new Error(`Helius rate limited: ${rateCheck.reason}`);
+  }
+
   const key = requireHeliusApiKey();
   const timeoutMs = options?.timeoutMs || 8000;
   const controller = new AbortController();
@@ -153,6 +267,8 @@ export async function heliusRestFetch(
       body: options?.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
     });
+
+    if (response.status === 429) await tripCircuitBreaker();
 
     return response;
   } catch (error) {

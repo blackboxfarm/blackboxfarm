@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users, Zap } from "lucide-react";
+import { useHeliusCreditTracker } from "@/hooks/useHeliusCreditTracker";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users, Zap, Gauge, Unlock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 type ViewMode = 'bubble' | 'tree';
+
+const NODE_CAP_DEFAULT = 80;
 
 const MeshGraphVisualizer = () => {
   const graphRef = useRef<any>();
@@ -23,6 +26,10 @@ const MeshGraphVisualizer = () => {
   const [tokenSearching, setTokenSearching] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
+  const [capBroken, setCapBroken] = useState(false);
+
+  const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
 
   const {
     graphData,
@@ -98,13 +105,20 @@ const MeshGraphVisualizer = () => {
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
       resetView();
+      stopTracking();
       return;
     }
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
     focusOnEntity(searchInput.trim(), type);
-  }, [searchInput, focusOnEntity, resetView]);
+    // Start credit tracking on new search
+    resetTracking();
+    startTracking();
+    // Reset node cap
+    setNodeCap(NODE_CAP_DEFAULT);
+    setCapBroken(false);
+  }, [searchInput, focusOnEntity, resetView, startTracking, stopTracking, resetTracking]);
 
   // Auto-spider: when focused entity returns 0 results
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
@@ -522,8 +536,24 @@ const MeshGraphVisualizer = () => {
     }
   };
 
+  // Apply node cap
+  const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
+  const displayData = isOverCap
+    ? (() => {
+        const cappedNodes = graphData.nodes.slice(0, nodeCap);
+        const cappedIds = new Set(cappedNodes.map(n => n.id));
+        return {
+          nodes: cappedNodes,
+          links: graphData.links.filter(l => 
+            cappedIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
+            cappedIds.has(typeof l.target === 'string' ? l.target : (l.target as any).id)
+          ),
+        };
+      })()
+    : graphData;
+
   // Count entity types in current graph
-  const typeCounts = graphData.nodes.reduce((acc, n) => {
+  const typeCounts = displayData.nodes.reduce((acc, n) => {
     acc[n.type] = (acc[n.type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -648,16 +678,91 @@ const MeshGraphVisualizer = () => {
             ))}
           </div>
 
-          {/* Stats */}
-          <div className="flex gap-4 text-xs text-muted-foreground">
-            <span>{graphData.nodes.length} entities</span>
-            <span>{graphData.links.length} connections</span>
+          {/* Stats + Credit Counter + Node Cap */}
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <span>{displayData.nodes.length} entities</span>
+            <span>{displayData.links.length} connections</span>
             {focusedEntity && (
               <span className="text-primary font-mono">
                 {focusedEntity.id.slice(0, 16)}...
               </span>
             )}
+
+            {/* Node Cap indicator */}
+            {isOverCap && (
+              <div className="flex items-center gap-1">
+                <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">
+                  CAP: {nodeCap}/{graphData.nodes.length}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-5 text-[10px] px-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition-colors"
+                  onClick={() => {
+                    setCapBroken(true);
+                    toast.info(`Node cap released — showing all ${graphData.nodes.length} nodes`);
+                  }}
+                >
+                  <Unlock className="h-2.5 w-2.5 mr-1" />
+                  Break Cap
+                </Button>
+              </div>
+            )}
+            {capBroken && graphData.nodes.length > NODE_CAP_DEFAULT && (
+              <Badge className="bg-green-500/10 text-green-400 border-green-500/30 text-[10px]">
+                UNCAPPED ({graphData.nodes.length})
+              </Badge>
+            )}
           </div>
+
+          {/* Helius Credit Counter */}
+          {creditSnapshot.isTracking && (
+            <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="text-xs font-medium text-cyan-400">Helius API Credits (Live)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-bold text-cyan-300">
+                    {creditSnapshot.totalCredits}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">credits</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    ({creditSnapshot.totalCalls} calls)
+                  </span>
+                </div>
+              </div>
+              
+              {creditSnapshot.callLog.length > 0 && (
+                <div className="max-h-24 overflow-y-auto space-y-0.5">
+                  {creditSnapshot.callLog.slice(-8).map((call, i) => (
+                    <div key={i} className="flex items-center justify-between text-[9px] font-mono text-muted-foreground">
+                      <span className="truncate max-w-[200px]">{call.endpoint}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-cyan-400">{call.credits}cr</span>
+                        <span>{call.responseMs}ms</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">
+                  Session: {Math.round((Date.now() - creditSnapshot.sessionStart) / 1000)}s
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => { stopTracking(); resetTracking(); }}
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Spider Status Banner */}
           {spiderStatus.active && (
@@ -744,7 +849,7 @@ const MeshGraphVisualizer = () => {
                 <p className="text-sm text-muted-foreground">Loading mesh graph...</p>
               </div>
             </div>
-          ) : !focusedEntity && graphData.nodes.length === 0 ? (
+          ) : !focusedEntity && displayData.nodes.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-4 max-w-md px-6">
                 <p className="text-4xl">🫧</p>
@@ -781,7 +886,7 @@ const MeshGraphVisualizer = () => {
           ) : (
             <ForceGraph2D
               ref={graphRef}
-              graphData={graphData}
+              graphData={displayData}
               width={dimensions.width}
               height={600}
               backgroundColor="transparent"
