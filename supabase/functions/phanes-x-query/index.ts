@@ -194,12 +194,12 @@ serve(async (req) => {
 });
 
 /**
- * Send /x <handle> to the Phanes bot via MTProto, wait for reply, parse & store.
+ * DM @Phanes_bot with /x <handle> via MTProto user account, wait for reply, parse & store.
+ * The /x command only works in DMs (Phanes rejects it in group chats).
  */
 async function queryPhanes(
   supabase: ReturnType<typeof createClient>,
   handle: string,
-  chatId: number,
 ): Promise<{
   sent: boolean;
   replyFound: boolean;
