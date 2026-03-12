@@ -471,3 +471,6 @@ verify_jwt = false
 
 [functions.social-mesh-linker]
 verify_jwt = false
+
+[functions.phanes-x-query]
+verify_jwt = false

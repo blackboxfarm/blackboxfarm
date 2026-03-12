@@ -13498,6 +13498,10 @@ export type Database = {
           last_seen_at: string | null
           linked_token_count: number | null
           name_history: Json | null
+          phanes_data: Json | null
+          phanes_queried_at: string | null
+          phanes_recycled_accounts: Json | null
+          phanes_username_history: Json | null
           x_user_id: string
         }
         Insert: {
@@ -13509,6 +13513,10 @@ export type Database = {
           last_seen_at?: string | null
           linked_token_count?: number | null
           name_history?: Json | null
+          phanes_data?: Json | null
+          phanes_queried_at?: string | null
+          phanes_recycled_accounts?: Json | null
+          phanes_username_history?: Json | null
           x_user_id: string
         }
         Update: {
@@ -13520,6 +13528,10 @@ export type Database = {
           last_seen_at?: string | null
           linked_token_count?: number | null
           name_history?: Json | null
+          phanes_data?: Json | null
+          phanes_queried_at?: string | null
+          phanes_recycled_accounts?: Json | null
+          phanes_username_history?: Json | null
           x_user_id?: string
         }
         Relationships: []
