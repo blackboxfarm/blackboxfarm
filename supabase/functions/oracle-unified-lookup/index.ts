@@ -547,16 +547,27 @@ Deno.serve(async (req) => {
         }
       }
       
-      // 5. Solscan token meta (creator + mint authority)
+      // 5. Helius TOKEN_MINT proof (replaces Solscan token/meta)
       if (!resolvedWallet) {
-        console.log('[Oracle] Trying Solscan token/meta for creator resolution...');
-        const { creator, mintAuthority } = await solscanResolveTokenCreator(cleanedInput, apiErrors);
-        if (creator) {
-          resolvedWallet = creator;
-          console.log(`[Oracle] Resolved via Solscan creator: ${resolvedWallet?.slice(0, 8)}`);
-        } else if (mintAuthority) {
-          resolvedWallet = mintAuthority;
-          console.log(`[Oracle] Resolved via Solscan mint authority: ${resolvedWallet?.slice(0, 8)}`);
+        console.log('[Oracle] Trying Helius TOKEN_MINT for creator resolution...');
+        try {
+          const heliusKey = getHeliusApiKey();
+          if (heliusKey) {
+            const txUrl = getHeliusRestUrl(`/v0/addresses/${cleanedInput}/transactions`, { type: 'TOKEN_MINT', limit: '5' });
+            const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(8000) });
+            if (txRes.ok) {
+              const transactions = await txRes.json();
+              if (Array.isArray(transactions) && transactions.length > 0) {
+                const feePayer = transactions[0]?.feePayer;
+                if (feePayer) {
+                  resolvedWallet = feePayer;
+                  console.log(`[Oracle] Resolved via Helius TOKEN_MINT: ${resolvedWallet?.slice(0, 8)}`);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          apiErrors.push(`Helius TOKEN_MINT error: ${e instanceof Error ? e.message : 'timeout'}`);
         }
       }
       
