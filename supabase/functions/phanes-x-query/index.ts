@@ -7,15 +7,19 @@ const corsHeaders = {
 };
 
 /**
- * Phanes X Query — sends /x <handle> to the Phanes bot in a Telegram group,
+ * Phanes X Query — DMs @Phanes_bot with /x <handle> via MTProto user account,
  * waits for the reply, parses recycled account + username history data,
  * and merges results into x_account_registry.
+ *
+ * The /x command is DM-only (Phanes rejects it in group chats).
  *
  * Modes:
  *  - single: query a specific handle
  *  - backfill: pick the next un-queried handle from x_account_registry (1/min via cron)
  */
 
+// The Phanes bot username for DMs (required — /x is DM-only)
+const PHANES_BOT_USERNAME = 'Phanes_bot';
 // How long to wait for Phanes to reply (ms)
 const PHANES_REPLY_WAIT_MS = 8000;
 // How many recent messages to fetch when looking for the reply
@@ -106,33 +110,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { action = 'single', handle, chatId: overrideChatId } = body;
+    const { action = 'single', handle } = body;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Get the BlackBox channel chat ID from telegram_message_targets
-    let targetChatId = overrideChatId;
-    if (!targetChatId) {
-      const { data: target } = await supabase
-        .from('telegram_message_targets')
-        .select('chat_id')
-        .eq('label', 'BLACKBOX')
-        .limit(1)
-        .maybeSingle();
-      
-      if (!target?.chat_id) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'No BLACKBOX Telegram target configured. Add one to telegram_message_targets.',
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      targetChatId = Number(target.chat_id);
-    }
 
     // ─── BACKFILL MODE ───
     if (action === 'backfill') {
@@ -163,8 +145,7 @@ serve(async (req) => {
 
       console.log(`[phanes-x-query] Backfill: querying @${nextHandle.current_handle} (${count} remaining)`);
 
-      // Query Phanes for this handle
-      const result = await queryPhanes(supabase, nextHandle.current_handle, targetChatId);
+      const result = await queryPhanes(supabase, nextHandle.current_handle);
 
       return new Response(JSON.stringify({
         success: true,
@@ -190,7 +171,7 @@ serve(async (req) => {
     const cleanHandle = handle.replace(/^@/, '').toLowerCase();
     console.log(`[phanes-x-query] Single query for @${cleanHandle}`);
 
-    const result = await queryPhanes(supabase, cleanHandle, targetChatId);
+    const result = await queryPhanes(supabase, cleanHandle);
 
     return new Response(JSON.stringify({
       success: true,
@@ -213,12 +194,12 @@ serve(async (req) => {
 });
 
 /**
- * Send /x <handle> to the Phanes bot via MTProto, wait for reply, parse & store.
+ * DM @Phanes_bot with /x <handle> via MTProto user account, wait for reply, parse & store.
+ * The /x command only works in DMs (Phanes rejects it in group chats).
  */
 async function queryPhanes(
   supabase: ReturnType<typeof createClient>,
   handle: string,
-  chatId: number,
 ): Promise<{
   sent: boolean;
   replyFound: boolean;
@@ -228,13 +209,13 @@ async function queryPhanes(
   const now = new Date().toISOString();
 
   try {
-    // 1. Send /x <handle> command via MTProto
-    console.log(`[phanes-x-query] Sending /x ${handle} to chat ${chatId}`);
+    // 1. DM /x <handle> to @Phanes_bot via MTProto (user account can DM bots)
+    console.log(`[phanes-x-query] DM'ing @${PHANES_BOT_USERNAME}: /x ${handle}`);
     
     const { data: sendResult, error: sendError } = await supabase.functions.invoke('telegram-mtproto-auth', {
       body: {
         action: 'send_message',
-        chatId: chatId,
+        chatId: PHANES_BOT_USERNAME,
         message: `/x ${handle}`,
       },
     });
@@ -258,11 +239,11 @@ async function queryPhanes(
     // 2. Wait for Phanes to process and reply
     await new Promise(resolve => setTimeout(resolve, PHANES_REPLY_WAIT_MS));
 
-    // 3. Fetch recent messages to find the reply
+    // 3. Fetch recent messages from the Phanes bot DM conversation
     const { data: fetchResult, error: fetchError } = await supabase.functions.invoke('telegram-mtproto-auth', {
       body: {
         action: 'fetch_recent_messages',
-        channelUsername: String(chatId),
+        channelUsername: PHANES_BOT_USERNAME,
         limit: REPLY_FETCH_LIMIT,
       },
     });
