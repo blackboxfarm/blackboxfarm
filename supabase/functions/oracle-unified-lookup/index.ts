@@ -1262,7 +1262,7 @@ Deno.serve(async (req) => {
     }
 
     const result: OracleResult = {
-      found: hasExistingData || liveTokens.length > 0,
+      found: hasExistingData || liveTokens.length > 0 || creatorResolvedFromToken,
       inputType,
       resolvedWallet,
       profile: developerProfile ? {
