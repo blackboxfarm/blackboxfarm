@@ -609,7 +609,8 @@ const MeshGraphVisualizer = () => {
               onNodeHover={(node: any) => setHoveredNode(node as MeshNode | null)}
               nodeLabel={(node: any) => {
                 const n = node as MeshNode;
-                return `${ENTITY_LABELS[n.type] || n.type}: ${n.id.split(':').slice(1).join(':')}`;
+                const rawId = n.fullId || n.id.split(':').slice(1).join(':');
+                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
               cooldownTicks={100}
               d3AlphaDecay={0.015}
