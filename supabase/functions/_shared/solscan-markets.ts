@@ -37,9 +37,16 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
       headers: { 'token': solscanApiKey }
     });
     
+    if (!marketsResp.ok) {
+      const errorBody = await marketsResp.text();
+      await marketsLogger.complete(marketsResp.status, `Solscan ${marketsResp.status}: ${errorBody.slice(0, 200)}`);
+      console.error(`[Solscan] API error ${marketsResp.status}: ${errorBody.slice(0, 200)}`);
+      return result;
+    }
+    
     await marketsLogger.complete(marketsResp.status);
     
-    if (marketsResp.ok) {
+    {
       const marketsData = await marketsResp.json();
       if (marketsData.success && marketsData.data?.length > 0) {
         console.log(`[Solscan] Found ${marketsData.data.length} markets`);
