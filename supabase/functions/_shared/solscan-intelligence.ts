@@ -166,6 +166,8 @@ export async function solscanCheckAccountLabel(
   }
 }
 
+/**
+ * Discover who funded a wallet by looking at SOL transfers TO the wallet.
  * Returns top funders sorted by amount.
  */
 export async function solscanDiscoverFunders(
