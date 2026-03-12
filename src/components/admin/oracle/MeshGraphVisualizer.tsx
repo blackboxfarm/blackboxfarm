@@ -599,6 +599,16 @@ const MeshGraphVisualizer = () => {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={handleEnrichAllTokens}
+                disabled={enriching}
+                className="text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400"
+              >
+                {enriching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Zap className="h-3 w-3 mr-1" />}
+                Enrich All Tokens
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleSpider}
                 disabled={spiderStatus.active}
                 className="text-xs h-7"
