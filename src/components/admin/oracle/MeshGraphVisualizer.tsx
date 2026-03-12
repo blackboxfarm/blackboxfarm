@@ -71,6 +71,22 @@ const MeshGraphVisualizer = () => {
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
+          const srcType = link.source?.type || '';
+          const tgtType = link.target?.type || '';
+          const involvesKyc = srcType === 'kyc_root' || tgtType === 'kyc_root';
+          const involvesWebsite = srcType === 'website' || tgtType === 'website';
+          const involvesCommunity = srcType === 'x_community' || tgtType === 'x_community';
+          
+          // Push important nodes (KYC, Website, X Community) to outer edge with longer links
+          if (involvesKyc) {
+            return viewMode === 'tree' ? 120 : 100;
+          }
+          if (involvesWebsite) {
+            return viewMode === 'tree' ? 110 : 90;
+          }
+          if (involvesCommunity) {
+            return viewMode === 'tree' ? 100 : 80;
+          }
           if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) {
             return viewMode === 'tree' ? 30 : 20;
           }
