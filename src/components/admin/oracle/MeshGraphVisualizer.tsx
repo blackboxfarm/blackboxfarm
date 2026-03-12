@@ -536,8 +536,24 @@ const MeshGraphVisualizer = () => {
     }
   };
 
+  // Apply node cap
+  const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
+  const displayData = isOverCap
+    ? (() => {
+        const cappedNodes = graphData.nodes.slice(0, nodeCap);
+        const cappedIds = new Set(cappedNodes.map(n => n.id));
+        return {
+          nodes: cappedNodes,
+          links: graphData.links.filter(l => 
+            cappedIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
+            cappedIds.has(typeof l.target === 'string' ? l.target : (l.target as any).id)
+          ),
+        };
+      })()
+    : graphData;
+
   // Count entity types in current graph
-  const typeCounts = graphData.nodes.reduce((acc, n) => {
+  const typeCounts = displayData.nodes.reduce((acc, n) => {
     acc[n.type] = (acc[n.type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
