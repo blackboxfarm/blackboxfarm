@@ -218,19 +218,33 @@ export function useMeshGraph(initialEntityId?: string) {
 
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
-    // Prevent infinite retry loops — max 2 attempts per entity
-    const attempts = spiderAttemptsRef.current.get(input) || 0;
-    if (attempts >= 2) {
-      console.log(`[MeshSpider] Max attempts reached for ${input}, stopping`);
-      setSpiderStatus({
-        active: false,
-        stage: '',
-        error: `Spider exhausted after ${attempts} attempts. External APIs may be down (Pump.fun, Helius). Try again later.`,
-        diagnostics: ['Max retry attempts reached', 'Pump.fun API may be returning 404/503', 'Helius RPC may be timing out'],
-      });
-      return;
+    // Cooldown-based retry: 2 immediate attempts, then reset after 5 minutes
+    const COOLDOWN_MS = 5 * 60 * 1000;
+    const MAX_IMMEDIATE = 2;
+    const record = spiderAttemptsRef.current.get(input);
+    const now = Date.now();
+    
+    if (record) {
+      const timeSince = now - record.lastAttempt;
+      if (timeSince > COOLDOWN_MS) {
+        // Reset after cooldown
+        spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
+      } else if (record.count >= MAX_IMMEDIATE) {
+        const remainingMin = Math.ceil((COOLDOWN_MS - timeSince) / 60000);
+        console.log(`[MeshSpider] Cooldown active for ${input}, ${remainingMin}min remaining`);
+        setSpiderStatus({
+          active: false,
+          stage: '',
+          error: `Spider cooling down (${record.count} attempts). Retry in ~${remainingMin} min.`,
+          diagnostics: ['Cooldown-based retry active', `${record.count} attempts made`, `Resets in ~${remainingMin} minutes`],
+        });
+        return;
+      } else {
+        spiderAttemptsRef.current.set(input, { count: record.count + 1, lastAttempt: now });
+      }
+    } else {
+      spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
     }
-    spiderAttemptsRef.current.set(input, attempts + 1);
 
     setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
 
