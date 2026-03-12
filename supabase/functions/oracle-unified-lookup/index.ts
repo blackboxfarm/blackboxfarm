@@ -1247,6 +1247,50 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 8. Solscan-discovered funders → funded_by mesh links
+    if (resolvedWallet && solscanFunders.length > 0) {
+      console.log(`[Oracle] Adding ${solscanFunders.length} Solscan funding links to mesh...`);
+      for (const funder of solscanFunders.slice(0, 10)) { // Top 10 funders
+        newLinks.push({
+          source_type: 'wallet',
+          source_id: resolvedWallet,
+          linked_type: 'wallet',
+          linked_id: funder.wallet,
+          relationship: 'funded_by',
+          confidence: Math.min(95, 70 + Math.floor(funder.amountSol * 5)), // Higher SOL = higher confidence
+          discovered_via: 'solscan_transfer'
+        });
+      }
+      
+      // The top funder could be the KYC root
+      const topFunder = solscanFunders[0];
+      if (topFunder && topFunder.amountSol > 0.5) {
+        // Also add to upstream chain for display
+        if (!upstreamChain.find(u => u.wallet === topFunder.wallet)) {
+          upstreamChain.push({
+            wallet: topFunder.wallet,
+            role: 'funder',
+            relationship: 'funded_by'
+          });
+        }
+      }
+    }
+
+    // 9. Solscan-discovered created tokens → mesh links
+    if (resolvedWallet && solscanCreatedTokens.length > 0) {
+      for (const token of solscanCreatedTokens.slice(0, 50)) {
+        newLinks.push({
+          source_type: 'wallet',
+          source_id: resolvedWallet,
+          linked_type: 'token',
+          linked_id: token.mint,
+          relationship: 'created',
+          confidence: 85,
+          discovered_via: 'solscan_mint'
+        });
+      }
+    }
+
     // Deduplicate links before upsert
     const linkKeys = new Set<string>();
     const dedupedLinks = newLinks.filter(link => {
