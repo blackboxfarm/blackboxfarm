@@ -2,12 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export interface RedFlag {
+  type: 'unlinked_cluster' | 'recycled_identity' | 'rotated_handle';
+  severity: 'high' | 'critical';
+  shortLabel: string;
+  explanation: string;
+}
+
 export interface MeshNode {
   id: string;
   type: string;
   label: string;       // Friendly display label ($TICKER, @handle, "KYC Root")
   fullId: string;      // Raw ID for tooltip (full address)
   val: number;
+  redFlags?: RedFlag[];
 }
 
 export interface MeshLink {
