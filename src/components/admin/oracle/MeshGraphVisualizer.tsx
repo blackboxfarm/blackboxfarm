@@ -415,6 +415,47 @@ const MeshGraphVisualizer = () => {
     }
   }, [graphData.nodes, refetch, triggerSpider]);
 
+  // ═══ % Holdings Toggle ═══
+  const handleFetchHoldings = useCallback(() => {
+    const tokenNode = graphData.nodes.find(n => n.type === 'token');
+    if (!tokenNode) {
+      toast.error('No token node found — search a token first');
+      return;
+    }
+    const tokenMint = tokenNode.fullId || tokenNode.id.split(':').slice(1).join(':');
+    holdings.fetchHoldings(graphData.nodes, tokenMint);
+  }, [graphData.nodes, holdings.fetchHoldings]);
+
+  // ═══ CTO Auto-Detection for Token Nodes ═══
+  useEffect(() => {
+    const tokenNodes = graphData.nodes.filter(n => n.type === 'token');
+    for (const token of tokenNodes) {
+      const mint = token.fullId || token.id.split(':').slice(1).join(':');
+      if (ctoChecked.has(mint)) continue;
+      setCtoChecked(prev => new Set([...prev, mint]));
+      
+      detectCTO(mint).then(result => {
+        if (result.isCTO) {
+          const flag = buildCTORedFlag(result);
+          if (flag) {
+            // Inject CTO flag into the token node
+            const existingNode = graphData.nodes.find(n => n.fullId === mint || n.id === `token:${mint}`);
+            if (existingNode) {
+              if (!existingNode.redFlags) existingNode.redFlags = [];
+              // Don't duplicate
+              if (!existingNode.redFlags.some(f => f.shortLabel.includes('Community Takeover'))) {
+                existingNode.redFlags.push(flag);
+                toast.warning(`🔄 CTO detected on ${existingNode.label}`, {
+                  description: `${result.changes.length} social links changed`,
+                });
+              }
+            }
+          }
+        }
+      });
+    }
+  }, [graphData.nodes, ctoChecked, detectCTO, buildCTORedFlag]);
+
   // Double-click detection via click timer
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickNodeRef = useRef<string | null>(null);
