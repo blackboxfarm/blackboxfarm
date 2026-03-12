@@ -397,7 +397,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
 }
 
 // ─── /holders CA ───
-async function handleHolders(chatId: number, telegramUserId: string, args: string) {
+async function handleHolders(chatId: number, telegramUserId: string, args: string, isGroupChat = false) {
   const ca = extractCA(args);
   if (!ca) {
     await sendMessage(chatId, `❌ Usage: \`/holders <token_address>\``);
@@ -494,7 +494,12 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
         const interp = aiData.interpretation;
         msg += `\n🧠 *AI Health Analysis*\n`;
         if (interp.lifecycle) msg += `📍 Stage: *${interp.lifecycle.stage}* (${interp.lifecycle.confidence})\n`;
-        if (interp.status_overview) msg += `💬 ${interp.status_overview.substring(0, 300)}\n`;
+        // Use abbreviated_summary for group chats, full status_overview for DMs
+        if (isGroupChat && interp.abbreviated_summary) {
+          msg += `💬 ${interp.abbreviated_summary}\n`;
+        } else if (interp.status_overview) {
+          msg += `💬 ${interp.status_overview.substring(0, 300)}\n`;
+        }
       }
     }
   } catch (aiErr) {
@@ -1142,6 +1147,8 @@ serve(async (req) => {
     }
 
     const chatId = message.chat.id;
+    const chatType = message.chat.type; // 'private', 'group', or 'supergroup'
+    const isGroupChat = chatType === 'group' || chatType === 'supergroup';
     const telegramUserId = String(message.from.id);
     const username = message.from.username || null;
     const text = message.text.trim();
@@ -1164,7 +1171,7 @@ serve(async (req) => {
         await handleHelp(chatId, telegramUserId);
         break;
       case "/holders":
-        await handleHolders(chatId, telegramUserId, args);
+        await handleHolders(chatId, telegramUserId, args, isGroupChat);
         break;
       case "/ca":
         await handleCA(chatId, telegramUserId, args);
