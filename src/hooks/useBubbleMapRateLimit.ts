@@ -50,12 +50,16 @@ export function useBubbleMapRateLimit() {
   const canSearch = remaining > 0 || isSubscriber;
 
   const recordSearch = useCallback(() => {
-    if (isSubscriber) return; // No tracking for subscribers
+    if (isSubscriber) {
+      console.log('[BubbleMapRateLimit] Subscriber — no limit tracked');
+      return;
+    }
     const current = getUsage();
     const updated = { date: getTodayKey(), count: current.count + 1 };
     setUsage(updated);
     setUsageState(updated);
-  }, [isSubscriber]);
+    console.log('[BubbleMapRateLimit] Search recorded:', { count: updated.count, limit, remaining: Math.max(0, limit - updated.count) });
+  }, [isSubscriber, limit]);
 
   return {
     canSearch,
