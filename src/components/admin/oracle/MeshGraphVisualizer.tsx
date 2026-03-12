@@ -43,6 +43,14 @@ const MeshGraphVisualizer = () => {
     return () => obs.disconnect();
   }, []);
 
+  // Increase link distance for better spacing
+  useEffect(() => {
+    if (graphRef.current) {
+      graphRef.current.d3Force('link')?.distance(120);
+      graphRef.current.d3Force('charge')?.strength(-300);
+    }
+  }, [graphData]);
+
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
       resetView();
