@@ -60,21 +60,35 @@ const MeshGraphVisualizer = () => {
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          // Admin/mod handles satellite tightly around X Community
           if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) {
-            return viewMode === 'tree' ? 40 : 30;
+            return viewMode === 'tree' ? 30 : 20;
           }
-          // Community links to token at normal distance
           if (['community_for', 'social_account'].includes(rel)) {
-            return viewMode === 'tree' ? 80 : 60;
+            return viewMode === 'tree' ? 55 : 40;
           }
-          // Default distance for other relationships
-          return viewMode === 'tree' ? 95 : 70;
+          return viewMode === 'tree' ? 65 : 45;
         });
       }
-      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -300 : -180);
+      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -120);
+      
+      // Add boundary force to keep nodes on screen
+      const padding = 40;
+      const w = dimensions.width || 800;
+      const h = 600;
+      graphRef.current.d3Force('boundX', () => {
+        graphData.nodes.forEach((node: any) => {
+          if (node.x < padding) node.vx += 2;
+          if (node.x > w - padding) node.vx -= 2;
+        });
+      });
+      graphRef.current.d3Force('boundY', () => {
+        graphData.nodes.forEach((node: any) => {
+          if (node.y < padding) node.vy += 2;
+          if (node.y > h - padding) node.vy -= 2;
+        });
+      });
     }
-  }, [graphData, viewMode]);
+  }, [graphData, viewMode, dimensions.width]);
 
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
