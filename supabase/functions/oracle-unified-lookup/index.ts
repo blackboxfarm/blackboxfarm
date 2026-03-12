@@ -472,6 +472,7 @@ Deno.serve(async (req) => {
 
     let resolvedWallet: string | undefined;
     let xAccountData: any = null;
+    const apiErrors: string[] = []; // Declare early — used during token resolution
 
     // Step 1: Resolve to wallet based on input type
     if (inputType === 'x_account') {
