@@ -171,7 +171,7 @@ serve(async (req) => {
     const cleanHandle = handle.replace(/^@/, '').toLowerCase();
     console.log(`[phanes-x-query] Single query for @${cleanHandle}`);
 
-    const result = await queryPhanes(supabase, cleanHandle, targetChatId);
+    const result = await queryPhanes(supabase, cleanHandle);
 
     return new Response(JSON.stringify({
       success: true,
