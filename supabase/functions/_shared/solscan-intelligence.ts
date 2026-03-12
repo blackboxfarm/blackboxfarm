@@ -105,7 +105,67 @@ export async function solscanResolveTokenCreator(
 }
 
 /**
- * Discover who funded a wallet by looking at SOL transfers TO the wallet.
+ * Check if a wallet has a known CEX label on Solscan (e.g., "Binance 2", "Coinbase 1")
+ * Uses the /v2.0/account/detail endpoint which returns tags/labels.
+ */
+export async function solscanCheckAccountLabel(
+  walletAddress: string,
+  apiErrors: string[] = []
+): Promise<{ label: string | null; isCex: boolean; tags: string[] }> {
+  const apiKey = getSolscanApiKey();
+  if (!apiKey) return { label: null, isCex: false, tags: [] };
+
+  try {
+    const logger = createApiLogger({
+      serviceName: 'solscan',
+      endpoint: '/v2.0/account/detail',
+      tokenMint: walletAddress,
+      functionName: 'solscanCheckAccountLabel',
+      requestType: 'oracle_spider',
+      credits: 1,
+    });
+
+    const resp = await fetch(
+      `https://pro-api.solscan.io/v2.0/account/detail?address=${walletAddress}`,
+      { headers: solscanHeaders(apiKey), signal: AbortSignal.timeout(8000) }
+    );
+
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => '');
+      await logger.complete(resp.status, `Solscan ${resp.status}: ${errBody.slice(0, 200)}`);
+      apiErrors.push(`Solscan account/detail ${resp.status}`);
+      return { label: null, isCex: false, tags: [] };
+    }
+
+    await logger.complete(resp.status);
+    const data = await resp.json();
+    const detail = data?.data || data;
+
+    // Solscan returns tags like ["Token Creator", "#Pump.fun"] and 
+    // assigned_to or label fields for CEX wallets
+    const tags: string[] = detail?.tags || [];
+    const label = detail?.assigned_to || detail?.label || detail?.account_label || null;
+    
+    // Also check the "funded_by" field directly if present
+    const fundedBy = detail?.funded_by || null;
+    
+    const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin', 'huobi', 'gate.io', 'ftx', 'gemini', 'bitfinex', 'crypto.com', 'mexc'];
+    
+    const labelLower = (label || '').toLowerCase();
+    const fundedByLower = (fundedBy || '').toLowerCase();
+    const isCex = CEX_KEYWORDS.some(k => labelLower.includes(k) || fundedByLower.includes(k));
+
+    if (label) console.log(`[Solscan Intel] Account ${walletAddress.slice(0, 8)}... label: "${label}" (CEX: ${isCex})`);
+    if (fundedBy) console.log(`[Solscan Intel] Account ${walletAddress.slice(0, 8)}... funded_by: "${fundedBy}"`);
+
+    return { label: label || fundedBy, isCex, tags };
+  } catch (e) {
+    const msg = `Solscan account/detail error: ${e instanceof Error ? e.message : 'timeout'}`;
+    apiErrors.push(msg);
+    return { label: null, isCex: false, tags: [] };
+  }
+}
+
  * Returns top funders sorted by amount.
  */
 export async function solscanDiscoverFunders(
