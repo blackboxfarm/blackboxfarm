@@ -719,6 +719,48 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    // ═══════ SOLSCAN INTELLIGENCE: Funding Chain + Token Discovery ═══════
+    let solscanFunders: Array<{ wallet: string; amountSol: number; timestamp: number }> = [];
+    let solscanCreatedTokens: Array<{ mint: string; name?: string; symbol?: string }> = [];
+    
+    if (resolvedWallet) {
+      console.log('[Oracle] Running Solscan intelligence sweep for funding chain...');
+      
+      // Discover funders (who sent SOL to this wallet)
+      solscanFunders = await solscanDiscoverFunders(resolvedWallet, apiErrors);
+      
+      // If we got no tokens from pump.fun/helius, try Solscan for created tokens
+      if (liveTokens.length === 0) {
+        const solscanIntel = await solscanFullIntelSweep(resolvedWallet, 'wallet', apiErrors);
+        solscanCreatedTokens = solscanIntel.createdTokens;
+        
+        // Convert Solscan-discovered tokens to the liveTokens format
+        if (solscanCreatedTokens.length > 0) {
+          console.log(`[Oracle] Solscan discovered ${solscanCreatedTokens.length} tokens for wallet`);
+          for (const st of solscanCreatedTokens) {
+            liveTokens.push({
+              mint: st.mint,
+              name: st.name || 'Unknown',
+              symbol: st.symbol || '???',
+              complete: false,
+              usd_market_cap: 0,
+              creator: resolvedWallet
+            });
+          }
+          
+          // Re-analyze with newly discovered tokens
+          if (liveTokens.length > 0) {
+            liveAnalysis = {
+              pattern: 'solscan_discovered',
+              tokensAnalyzed: liveTokens.length,
+              graduatedTokens: 0,
+              successRate: 0
+            };
+          }
+        }
+      }
+    }
     
     // If no existing data AND no live tokens found, offer scan options
     if (!hasExistingData && liveTokens.length === 0 && resolvedWallet) {
