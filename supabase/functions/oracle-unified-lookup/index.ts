@@ -256,9 +256,15 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
   
   // STEP 2: Helius TOKEN_MINT transaction history (on-chain proof of minting)
   console.log('[Oracle] Pump.fun API unavailable. Trying Helius TOKEN_MINT transactions...');
-  try {
-    const heliusKey = getHeliusApiKey();
-    if (heliusKey) {
+  const heliusKey = getHeliusApiKey();
+  if (!heliusKey) {
+    console.log('[Oracle] No HELIUS_API_KEY configured');
+    apiErrors.push('Helius API key not configured');
+  }
+  
+  // Step 2a: TOKEN_MINT tx history (separate try/catch so timeout doesn't kill Steps 3+4)
+  if (heliusKey) {
+    try {
       const txHistoryUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100' });
       
       let allMints: string[] = [];
@@ -267,7 +273,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
       
       while (currentUrl && pageCount < 10) {
         console.log(`[Oracle] Fetching Helius TOKEN_MINT page ${pageCount + 1}...`);
-        const response = await fetch(currentUrl, { signal: AbortSignal.timeout(10000) });
+        const response = await fetch(currentUrl, { signal: AbortSignal.timeout(6000) });
         
         if (response.ok) {
           const transactions = await response.json();
@@ -318,11 +324,19 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
           symbol: '???',
           complete: false,
           usd_market_cap: 0,
-          creator: walletAddress // Helius TOKEN_MINT confirms this wallet minted it
+          creator: walletAddress
         }));
       }
-      
-      // STEP 3: Helius DAS getAssetsByCreator
+    } catch (error) {
+      const errMsg = `Helius TOKEN_MINT error: ${error instanceof Error ? error.message : 'timeout'}`;
+      console.warn(`[Oracle] ${errMsg} — falling through to DAS/DB`);
+      apiErrors.push(errMsg);
+    }
+  }
+  
+  // Step 2b: Helius DAS getAssetsByCreator (separate try/catch)
+  if (heliusKey) {
+    try {
       console.log('[Oracle] Trying Helius DAS getAssetsByCreator...');
       const heliusRpcUrl = getHeliusRpcUrl(heliusKey);
       
@@ -339,7 +353,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
             limit: 1000
           }
         }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(8000)
       });
       
       if (dasResponse.ok) {
@@ -358,14 +372,11 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
           }));
         }
       }
-    } else {
-      console.log('[Oracle] No HELIUS_API_KEY configured');
-      apiErrors.push('Helius API key not configured');
+    } catch (error) {
+      const errMsg = `Helius DAS error: ${error instanceof Error ? error.message : 'timeout'}`;
+      console.warn(`[Oracle] ${errMsg} — falling through to DB cache`);
+      apiErrors.push(errMsg);
     }
-  } catch (error) {
-    const errMsg = `Helius error: ${error instanceof Error ? error.message : 'unknown'}`;
-    console.error(`[Oracle] ${errMsg}`);
-    apiErrors.push(errMsg);
   }
   
   // STEP 4: Local DB cache (only tokens we've previously verified as created by this wallet)
