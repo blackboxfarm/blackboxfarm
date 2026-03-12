@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
       const meshLinks: any[] = [];
       const discoveredSocials: string[] = [];
 
-      // 1. Twitter/X → wallet
+      // 1. Twitter/X → wallet (handle or community)
       const twitterHandle = extractTwitterHandle(twitter_url);
       if (twitterHandle) {
         meshLinks.push({
@@ -201,6 +201,46 @@ Deno.serve(async (req) => {
           discovered_via: "social-mesh-linker",
         });
         discoveredSocials.push(`x:@${twitterHandle}`);
+      }
+
+      // 1b. X Community URL → community + token + wallet mesh links
+      if (twitter_url && twitter_url.includes('/communities/')) {
+        const communityMatch = twitter_url.match(/communities\/(\d+)/);
+        if (communityMatch) {
+          const communityId = communityMatch[1];
+          // Community → token link
+          meshLinks.push({
+            source_type: "x_community",
+            source_id: communityId,
+            linked_type: "token",
+            linked_id: token_mint,
+            relationship: "community_for",
+            confidence: 95,
+            evidence: { source: "watchlist_enrichment", token_symbol, url: twitter_url },
+            discovered_via: "social-mesh-linker",
+          });
+          // Community → wallet link
+          meshLinks.push({
+            source_type: "x_community",
+            source_id: communityId,
+            linked_type: "wallet",
+            linked_id: creator_wallet,
+            relationship: "community_for",
+            confidence: 85,
+            evidence: { source: "watchlist_enrichment", token_symbol, url: twitter_url },
+            discovered_via: "social-mesh-linker",
+          });
+          discoveredSocials.push(`x_community:${communityId}`);
+
+          // Trigger x-community-enricher to scrape admins/mods (fire-and-forget)
+          supabase.functions.invoke('x-community-enricher', {
+            body: {
+              communityUrl: twitter_url,
+              linkedTokenMint: token_mint,
+              linkedWallet: creator_wallet,
+            }
+          }).catch(e => console.warn(`[mesh-linker] Community enricher trigger failed: ${e}`));
+        }
       }
 
       // 2. Telegram → wallet
