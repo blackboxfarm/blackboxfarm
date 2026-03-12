@@ -233,6 +233,14 @@ export function useMeshGraph(initialEntityId?: string) {
         });
         if (!error && data) {
           console.log(`[MeshSpider] Community enriched: ${data.admins?.length || 0} admins, ${data.moderators?.length || 0} mods`);
+          // Store community_name in evidence for label enrichment
+          const communityMatch = communityUrl.match(/communities\/(\d+)/);
+          if (communityMatch && data.communityName) {
+            await supabase.from('reputation_mesh')
+              .update({ evidence: { community_name: data.communityName, source: 'x-community-enricher' } })
+              .eq('linked_type', 'x_community')
+              .eq('linked_id', communityMatch[1]);
+          }
         }
       }
     } catch (err) {
