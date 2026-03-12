@@ -224,9 +224,12 @@ export async function heliusRpcFetch(
 
 /**
  * Fetch wrapper for Helius REST API calls.
+ * - Server-side rate limiting via persistent DB state
  * - Uses X-Api-Key header (removes key from URL for REST endpoints)
  * - Falls back to query param if header auth fails
  * - Adds timeout and redacts errors
+ * 
+ * Performance impact: adds ~10-30ms per call for the rate limit DB check.
  */
 export async function heliusRestFetch(
   path: string,
@@ -237,6 +240,12 @@ export async function heliusRestFetch(
     extraParams?: Record<string, string>;
   }
 ): Promise<Response> {
+  // Server-side rate limit check
+  const rateCheck = await checkServerRateLimit();
+  if (!rateCheck.allowed) {
+    throw new Error(`Helius rate limited: ${rateCheck.reason}`);
+  }
+
   const key = requireHeliusApiKey();
   const timeoutMs = options?.timeoutMs || 8000;
   const controller = new AbortController();
@@ -258,6 +267,8 @@ export async function heliusRestFetch(
       body: options?.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
     });
+
+    if (response.status === 429) await tripCircuitBreaker();
 
     return response;
   } catch (error) {
