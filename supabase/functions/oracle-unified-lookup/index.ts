@@ -189,7 +189,7 @@ function generateRecommendation(score: number, stats: OracleResult['stats'], req
 }
 
 // Fetch tokens MINTED by a wallet — only returns tokens this wallet actually created
-async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise<any[]> {
+async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiErrors: string[] = []): Promise<any[]> {
   const headers = {
     'Accept': 'application/json',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -233,7 +233,9 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
             keepFetching = false;
           }
         } else {
-          console.log(`[Oracle] Pump.fun API returned ${response.status}`);
+          const errMsg = `Pump.fun API ${response.status} on ${baseUrl.includes('frontend') ? 'frontend-api' : 'client-api'}`;
+          console.log(`[Oracle] ${errMsg}`);
+          apiErrors.push(errMsg);
           keepFetching = false;
         }
       }
@@ -243,7 +245,9 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
         return allTokens;
       }
     } catch (error) {
-      console.error(`[Oracle] Pump.fun fetch error:`, error);
+      const errMsg = `Pump.fun fetch error: ${error instanceof Error ? error.message : 'timeout'}`;
+      console.error(`[Oracle] ${errMsg}`);
+      apiErrors.push(errMsg);
     }
   }
   
@@ -353,9 +357,12 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
       }
     } else {
       console.log('[Oracle] No HELIUS_API_KEY configured');
+      apiErrors.push('Helius API key not configured');
     }
   } catch (error) {
-    console.error('[Oracle] Helius error:', error);
+    const errMsg = `Helius error: ${error instanceof Error ? error.message : 'unknown'}`;
+    console.error(`[Oracle] ${errMsg}`);
+    apiErrors.push(errMsg);
   }
   
   // STEP 4: Local DB cache (only tokens we've previously verified as created by this wallet)
@@ -639,10 +646,11 @@ Deno.serve(async (req) => {
     // AUTO-SPIDER: Always fetch from pump.fun and write to DB on every lookup
     let liveTokens: any[] = [];
     let liveAnalysis: any = null;
+    const apiErrors: string[] = [];
     
     if (resolvedWallet) {
       console.log('[Oracle] Auto-spider: fetching tokens from Pump.fun...');
-      liveTokens = await fetchPumpfunTokens(resolvedWallet, supabase);
+      liveTokens = await fetchPumpfunTokens(resolvedWallet, supabase, apiErrors);
       
       if (liveTokens.length > 0) {
         const quickStats = quickAnalyzeTokens(liveTokens);
@@ -714,7 +722,8 @@ Deno.serve(async (req) => {
           blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
           whitelistStatus: { isWhitelisted: false },
           recommendation: `⚠️ UNKNOWN DEVELOPER - Could not fetch data from Pump.fun or Helius. Try "Deep Scan" for manual analysis.`,
-          meshLinksAdded: 0
+          meshLinksAdded: 0,
+          apiErrors
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
@@ -1234,7 +1243,8 @@ Deno.serve(async (req) => {
       recommendation,
       meshLinksAdded,
       liveAnalysis: liveAnalysis || undefined,
-      upstreamChain: upstreamChain.length > 1 ? upstreamChain : undefined
+      upstreamChain: upstreamChain.length > 1 ? upstreamChain : undefined,
+      apiErrors: apiErrors.length > 0 ? apiErrors : undefined
     };
 
     console.log(`[Oracle] Result: score=${score}, trafficLight=${trafficLight}, found=${result.found}`);

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 export interface MeshNode {
   id: string;
@@ -30,6 +30,7 @@ export interface SpiderStatus {
   trafficLight?: string;
   recommendation?: string;
   error?: string;
+  diagnostics?: string[]; // NEW: detailed step-by-step logs
 }
 
 // Color palette for entity types
@@ -77,6 +78,9 @@ export function useMeshGraph(initialEntityId?: string) {
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set(Object.keys(ENTITY_COLORS)));
   const [spiderStatus, setSpiderStatus] = useState<SpiderStatus>({ active: false, stage: '' });
+  
+  // Track spider attempts to prevent infinite loops
+  const spiderAttemptsRef = useRef<Map<string, number>>(new Map());
 
   const entityIds = [...expandedEntities];
   if (focusedEntity) entityIds.push(focusedEntity.id);
@@ -115,6 +119,20 @@ export function useMeshGraph(initialEntityId?: string) {
 
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
+    // Prevent infinite retry loops — max 2 attempts per entity
+    const attempts = spiderAttemptsRef.current.get(input) || 0;
+    if (attempts >= 2) {
+      console.log(`[MeshSpider] Max attempts reached for ${input}, stopping`);
+      setSpiderStatus({
+        active: false,
+        stage: '',
+        error: `Spider exhausted after ${attempts} attempts. External APIs may be down (Pump.fun, Helius). Try again later.`,
+        diagnostics: ['Max retry attempts reached', 'Pump.fun API may be returning 404/503', 'Helius RPC may be timing out'],
+      });
+      return;
+    }
+    spiderAttemptsRef.current.set(input, attempts + 1);
+
     setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
 
     try {
@@ -128,24 +146,55 @@ export function useMeshGraph(initialEntityId?: string) {
 
       const result = data as any;
       
-      setSpiderStatus({
-        active: true,
-        stage: `✅ Spider complete — ${result.meshLinksAdded || 0} mesh links discovered`,
-        inputType: result.inputType,
-        meshLinksAdded: result.meshLinksAdded || 0,
-        score: result.score,
-        trafficLight: result.trafficLight,
-        recommendation: result.recommendation,
-      });
+      // Build diagnostics from result
+      const diagnostics: string[] = [];
+      if (result.inputType) diagnostics.push(`Input type: ${result.inputType}`);
+      if (result.resolvedWallet) diagnostics.push(`Resolved wallet: ${result.resolvedWallet.slice(0, 12)}...`);
+      else diagnostics.push('❌ Could not resolve wallet');
+      
+      if (result.requiresScan) diagnostics.push('⚠️ No data found in any source');
+      if (result.liveAnalysis) {
+        diagnostics.push(`Live analysis: ${result.liveAnalysis.tokensAnalyzed} tokens, pattern: ${result.liveAnalysis.pattern}`);
+      }
+      if (result.stats) {
+        diagnostics.push(`Stats: ${result.stats.totalTokens} tokens, ${result.stats.rugPulls} rugs, ${result.stats.successfulTokens} successful`);
+      }
+      if (result.apiErrors && result.apiErrors.length > 0) {
+        for (const err of result.apiErrors) {
+          diagnostics.push(`❌ ${err}`);
+        }
+      }
+      diagnostics.push(`Mesh links added: ${result.meshLinksAdded || 0}`);
 
-      // Refresh mesh graph after spider populates data
-      setTimeout(() => {
-        refetch();
-        // Keep status visible for a few more seconds
+      const hasUsefulData = (result.meshLinksAdded || 0) > 0 || result.found;
+
+      if (!hasUsefulData && result.requiresScan) {
+        setSpiderStatus({
+          active: false,
+          stage: '',
+          error: `No data found. External APIs returned errors. ${result.recommendation || ''}`,
+          diagnostics,
+        });
+      } else {
+        setSpiderStatus({
+          active: true,
+          stage: `✅ Spider complete — ${result.meshLinksAdded || 0} mesh links discovered`,
+          inputType: result.inputType,
+          meshLinksAdded: result.meshLinksAdded || 0,
+          score: result.score,
+          trafficLight: result.trafficLight,
+          recommendation: result.recommendation,
+          diagnostics,
+        });
+
+        // Refresh mesh graph after spider populates data
         setTimeout(() => {
-          setSpiderStatus(prev => ({ ...prev, active: false }));
-        }, 5000);
-      }, 1000);
+          refetch();
+          setTimeout(() => {
+            setSpiderStatus(prev => ({ ...prev, active: false }));
+          }, 5000);
+        }, 1000);
+      }
 
     } catch (err: any) {
       console.error('[MeshSpider] Error:', err);
@@ -153,13 +202,17 @@ export function useMeshGraph(initialEntityId?: string) {
         active: false,
         stage: '',
         error: err.message || 'Spider scan failed',
+        diagnostics: [`Exception: ${err.message}`],
       });
     }
   }, [refetch]);
 
   const focusOnEntity = useCallback((id: string, type: string) => {
+    // Reset spider attempts for new searches
+    spiderAttemptsRef.current.clear();
     setFocusedEntity({ id, type });
     setExpandedEntities(new Set([id]));
+    setSpiderStatus({ active: false, stage: '' }); // Clear previous errors
   }, []);
 
   const expandEntity = useCallback((id: string) => {
@@ -179,6 +232,7 @@ export function useMeshGraph(initialEntityId?: string) {
     setFocusedEntity(null);
     setExpandedEntities(new Set());
     setSpiderStatus({ active: false, stage: '' });
+    spiderAttemptsRef.current.clear();
   }, []);
 
   return {
