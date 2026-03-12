@@ -7,9 +7,11 @@ const corsHeaders = {
 };
 
 /**
- * Phanes X Query — sends /x <handle> to the Phanes bot in a Telegram group,
+ * Phanes X Query — DMs @Phanes_bot with /x <handle> via MTProto user account,
  * waits for the reply, parses recycled account + username history data,
  * and merges results into x_account_registry.
+ *
+ * The /x command is DM-only (Phanes rejects it in group chats).
  *
  * Modes:
  *  - single: query a specific handle
