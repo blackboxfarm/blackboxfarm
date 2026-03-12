@@ -709,8 +709,8 @@ Deno.serve(async (req) => {
       }
     }
     
-    // If no existing data AND no live tokens found, offer scan options
-    if (!hasExistingData && liveTokens.length === 0 && resolvedWallet) {
+    // If there's zero intelligence and we couldn't even resolve creator for token context, offer scan options
+    if (!hasExistingData && liveTokens.length === 0 && resolvedWallet && !creatorResolvedFromToken) {
       console.log('[Oracle] No data found anywhere, offering scan options...');
       return new Response(
         JSON.stringify({
@@ -724,7 +724,7 @@ Deno.serve(async (req) => {
           network: { linkedWallets: [], linkedXAccounts: [], sharedMods: [], relatedTokens: [] },
           blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
           whitelistStatus: { isWhitelisted: false },
-          recommendation: `⚠️ UNKNOWN DEVELOPER - Could not fetch data from Pump.fun or Helius. Try "Deep Scan" for manual analysis.`,
+          recommendation: `⚠️ UNKNOWN DEVELOPER - We couldn't fetch historical token data for this wallet from Pump.fun/Helius yet.`,
           meshLinksAdded: 0,
           apiErrors
         }),
