@@ -363,8 +363,85 @@ export function useMeshGraph(initialEntityId?: string) {
     spiderAttemptsRef.current.clear();
   }, []);
 
+  // ═══ ENRICH TOKEN TICKERS ═══
+  // After graph loads, resolve $TICKER for token nodes showing truncated addresses
+  const [enrichedGraphData, setEnrichedGraphData] = useState<MeshGraphData>({ nodes: [], links: [] });
+  const tickerCacheRef = useRef<Map<string, string>>(new Map());
+  
+  useEffect(() => {
+    if (!graphData) {
+      setEnrichedGraphData({ nodes: [], links: [] });
+      return;
+    }
+    
+    const tokenNodes = graphData.nodes.filter(n => 
+      n.type === 'token' && (n.label.includes('…') || n.label === `$${n.fullId}`)
+    );
+    
+    if (tokenNodes.length === 0) {
+      setEnrichedGraphData(graphData);
+      return;
+    }
+
+    // Check cache first, only fetch unknown mints
+    const uncachedMints = tokenNodes
+      .map(n => n.fullId)
+      .filter(mint => !tickerCacheRef.current.has(mint));
+    
+    if (uncachedMints.length === 0) {
+      // All cached, just apply
+      const enriched = applyTickerCache(graphData, tickerCacheRef.current);
+      setEnrichedGraphData(enriched);
+      return;
+    }
+
+    // Set current data immediately, enrich async
+    setEnrichedGraphData(graphData);
+
+    // Batch fetch from DexScreener (max 30 addresses per call)
+    const fetchTickers = async () => {
+      try {
+        const batches = [];
+        for (let i = 0; i < uncachedMints.length; i += 30) {
+          batches.push(uncachedMints.slice(i, i + 30));
+        }
+        
+        for (const batch of batches) {
+          const res = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${batch.join(',')}`);
+          if (!res.ok) continue;
+          const pairs = await res.json();
+          if (!Array.isArray(pairs)) continue;
+          
+          // Extract ticker from first pair for each mint
+          const seen = new Set<string>();
+          for (const pair of pairs) {
+            const addr = pair.baseToken?.address;
+            const symbol = pair.baseToken?.symbol;
+            if (addr && symbol && !seen.has(addr)) {
+              seen.add(addr);
+              tickerCacheRef.current.set(addr, symbol);
+            }
+          }
+        }
+        
+        // Mark unfound mints so we don't re-fetch
+        for (const mint of uncachedMints) {
+          if (!tickerCacheRef.current.has(mint)) {
+            tickerCacheRef.current.set(mint, '');
+          }
+        }
+        
+        setEnrichedGraphData(prev => applyTickerCache(prev, tickerCacheRef.current));
+      } catch (err) {
+        console.warn('[MeshGraph] Ticker enrichment failed:', err);
+      }
+    };
+    
+    fetchTickers();
+  }, [graphData]);
+
   return {
-    graphData: graphData || { nodes: [], links: [] },
+    graphData: enrichedGraphData,
     isLoading,
     refetch,
     focusedEntity,
@@ -377,6 +454,18 @@ export function useMeshGraph(initialEntityId?: string) {
     spiderStatus,
     triggerSpider,
   };
+}
+
+function applyTickerCache(data: MeshGraphData, cache: Map<string, string>): MeshGraphData {
+  const updatedNodes = data.nodes.map(node => {
+    if (node.type !== 'token') return node;
+    const ticker = cache.get(node.fullId);
+    if (ticker) {
+      return { ...node, label: `$${ticker.toUpperCase()}` };
+    }
+    return node;
+  });
+  return { nodes: updatedNodes, links: data.links };
 }
 
 function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
