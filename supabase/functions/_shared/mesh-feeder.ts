@@ -196,17 +196,22 @@ export const meshFeed = {
 
     // Twitter → wallet
     const twitterHandle = extractHandle(twitterUrl, TWITTER_RE);
-    if (twitterHandle && creatorWallet) {
-      links.push({
-        source_type: 'x_account',
-        source_id: twitterHandle,
-        linked_type: 'wallet',
-        linked_id: creatorWallet,
-        relationship: 'social_account_of',
-        confidence: 75,
-        evidence: { url: twitterUrl, token: mint, symbol, source },
-        discovered_via: `mesh-feeder:${source}`,
-      });
+    if (twitterHandle) {
+      // 🔗 Register for Phanes backfill (history lookup)
+      registerXHandlesForPhanes([twitterHandle], supabase, `mesh-feeder:${source}`).catch(() => {});
+
+      if (creatorWallet) {
+        links.push({
+          source_type: 'x_account',
+          source_id: twitterHandle,
+          linked_type: 'wallet',
+          linked_id: creatorWallet,
+          relationship: 'social_account_of',
+          confidence: 75,
+          evidence: { url: twitterUrl, token: mint, symbol, source },
+          discovered_via: `mesh-feeder:${source}`,
+        });
+      }
       // Also link twitter → token
       links.push({
         source_type: 'x_account',
