@@ -114,8 +114,8 @@ export function useMeshGraph(initialEntityId?: string) {
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set(Object.keys(ENTITY_COLORS)));
   const [spiderStatus, setSpiderStatus] = useState<SpiderStatus>({ active: false, stage: '' });
   
-  // Track spider attempts to prevent infinite loops
-  const spiderAttemptsRef = useRef<Map<string, number>>(new Map());
+  // Track spider attempts with cooldown-based retry (resets after 5 minutes)
+  const spiderAttemptsRef = useRef<Map<string, { count: number; lastAttempt: number }>>(new Map());
 
   // Strip type prefix (e.g., "wallet:ABC..." → "ABC...") for DB queries
   const stripPrefix = (id: string) => {
