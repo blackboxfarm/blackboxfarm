@@ -493,16 +493,6 @@ const MeshGraphVisualizer = () => {
               >
                 <Radar className="h-3 w-3 mr-1" /> Deep Spider
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleEnrichCommunities}
-                disabled={communitySearching}
-                className="text-xs h-7 border-indigo-500/30 hover:bg-indigo-500/10 text-indigo-400"
-              >
-                {communitySearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Users className="h-3 w-3 mr-1" />}
-                Enrich Community
-              </Button>
             </div>
           )}
 
