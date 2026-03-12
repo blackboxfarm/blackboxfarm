@@ -120,6 +120,18 @@ export function Footer() {
                   Security
                 </Link>
               </li>
+              <li>
+                <Link to="/bubblepromo" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>🫧</span>
+                  Bubble Map
+                </Link>
+              </li>
+              <li>
+                <Link to="/features" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>✨</span>
+                  Features
+                </Link>
+              </li>
             </ul>
           </div>
 
