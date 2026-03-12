@@ -95,10 +95,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
+      console.log('[BubbleMap] Reset — empty search');
       resetView();
       return;
     }
     if (!canSearch) {
+      console.warn('[BubbleMap] Search blocked — daily limit reached', { remaining, limit, isSubscriber });
       toast.error("Daily limit reached! Sign up or subscribe for unlimited access.");
       return;
     }
@@ -106,10 +108,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
+    console.log('[BubbleMap] Search started:', { input: searchInput.trim().slice(0, 16), type, mode, remaining });
     focusOnEntity(searchInput.trim(), type);
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
-  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch]);
+  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
 
