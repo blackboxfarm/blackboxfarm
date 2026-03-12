@@ -176,10 +176,15 @@ function detectCTO(pumpfunSocials: any, dexSocials: any): boolean {
   return false;
 }
 
+const X_RESERVED = new Set(['i','intent','search','hashtag','settings','home','explore','notifications','messages','compose','lists','bookmarks','communities','spaces','tos','privacy','help','about','login','signup','share','status','jobs','download']);
 function extractTwitterHandle(url: string): string | null {
   if (!url) return null;
+  if (url.includes('/communities/')) return null;
   const match = url.match(/(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]+)/);
-  return match ? match[1].toLowerCase() : null;
+  if (!match) return null;
+  const handle = match[1].toLowerCase();
+  if (X_RESERVED.has(handle) || handle.length > 15) return null;
+  return handle;
 }
 
 // Trace wallet genealogy (simplified - calls developer-wallet-tracer internally)

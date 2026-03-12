@@ -172,11 +172,16 @@ async function addMeshLink(
   }
 }
 
-// Extract X handle from twitter URL
+// Extract X handle from twitter URL (filters out reserved paths like "i")
+const X_RESERVED_PATHS = new Set(['i','intent','search','hashtag','settings','home','explore','notifications','messages','compose','lists','bookmarks','communities','spaces','tos','privacy','help','about','login','signup','share','status','jobs','download']);
 function extractXHandle(twitterUrl?: string): string | null {
   if (!twitterUrl) return null;
+  if (twitterUrl.includes('/communities/')) return null;
   const match = twitterUrl.match(/(?:twitter\.com|x\.com)\/(@?[\w]+)/i);
-  return match ? match[1].replace('@', '') : null;
+  if (!match) return null;
+  const handle = match[1].replace('@', '').toLowerCase();
+  if (X_RESERVED_PATHS.has(handle) || handle.length > 15) return null;
+  return handle;
 }
 
 Deno.serve(async (req) => {

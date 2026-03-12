@@ -44,12 +44,16 @@ const SOCIAL_PATTERNS = {
   ],
 };
 
-// Extract Twitter handle from URL
+// Extract Twitter handle from URL (filters out reserved paths like "i")
+const X_RESERVED = new Set(['i','intent','search','hashtag','settings','home','explore','notifications','messages','compose','lists','bookmarks','communities','spaces','tos','privacy','help','about','login','signup','share','status','jobs','download']);
 function extractTwitterHandle(url: string | null): string | null {
   if (!url) return null;
+  if (url.includes('/communities/')) return null;
   const match = url.match(/(?:twitter\.com|x\.com)\/(@?[a-zA-Z0-9_]+)/i);
   if (!match) return null;
-  return match[1].replace(/^@/, '').toLowerCase();
+  const handle = match[1].replace(/^@/, '').toLowerCase();
+  if (X_RESERVED.has(handle) || handle.length > 15) return null;
+  return handle;
 }
 
 // Extract Telegram group from URL

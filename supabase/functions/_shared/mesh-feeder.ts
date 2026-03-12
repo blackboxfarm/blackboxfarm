@@ -67,7 +67,13 @@ interface BatchItem {
 function extractHandle(url: string | null | undefined, pattern: RegExp): string | null {
   if (!url) return null;
   const match = url.match(pattern);
-  return match ? match[1].replace(/^@/, '').toLowerCase() : null;
+  if (!match) return null;
+  const handle = match[1].replace(/^@/, '').toLowerCase();
+  // Reject reserved X path segments (e.g. "i" from x.com/i/communities/...)
+  if (X_RESERVED_PATHS?.has?.(handle)) return null;
+  if (url.includes('/communities/')) return null;
+  if (handle.length === 0 || handle.length > 15) return null;
+  return handle;
 }
 
 // TWITTER_RE moved to _shared/x-handle-extractor.ts — import extractXHandle instead
