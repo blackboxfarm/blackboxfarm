@@ -407,8 +407,15 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     });
   }
 
+  // Prune orphan nodes (no links after filtering)
+  const connectedIds = new Set<string>();
+  for (const l of links) {
+    connectedIds.add(l.source);
+    connectedIds.add(l.target);
+  }
+
   return {
-    nodes: Array.from(nodesMap.values()),
+    nodes: Array.from(nodesMap.values()).filter(n => connectedIds.has(n.id)),
     links,
   };
 }
