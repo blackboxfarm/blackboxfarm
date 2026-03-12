@@ -800,7 +800,26 @@ const MeshGraphVisualizer = () => {
                 disabled={spiderStatus.active}
                 className="text-xs h-7"
               >
-                <Radar className="h-3 w-3 mr-1" /> Deep Spider
+              <Radar className="h-3 w-3 mr-1" /> Deep Spider
+              </Button>
+              {/* % Holdings Toggle */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={holdings.showOverlay ? holdings.toggleOverlay : handleFetchHoldings}
+                disabled={holdings.isLoading}
+                className={`text-xs h-7 ${holdings.showOverlay 
+                  ? 'border-green-500/50 bg-green-500/10 text-green-400' 
+                  : 'border-purple-500/30 hover:bg-purple-500/10 text-purple-400'}`}
+              >
+                {holdings.isLoading ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : holdings.showOverlay ? (
+                  <EyeOff className="h-3 w-3 mr-1" />
+                ) : (
+                  <PieChart className="h-3 w-3 mr-1" />
+                )}
+                {holdings.showOverlay ? 'Hide %' : 'Show %'}
               </Button>
             </div>
           )}
