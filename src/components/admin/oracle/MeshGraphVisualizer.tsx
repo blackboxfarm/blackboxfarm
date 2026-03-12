@@ -145,12 +145,22 @@ const MeshGraphVisualizer = () => {
 
       if (data?.kycRoot) {
         toast.success(`🏦 KYC Root found: ${data.kycRoot.slice(0, 12)}... (${data.walletsTraced} wallets traced, ${data.meshLinksAdded} links added)`);
+        
+        // Auto-expand all discovered wallets so they appear in the graph
+        if (data.kycRoot) expandEntity(`kyc_root:${data.kycRoot}`);
+        expandEntity(`wallet:${targetWallet}`);
+        if (data.chain) {
+          for (const link of data.chain) {
+            if (link.wallet) expandEntity(`wallet:${link.wallet}`);
+            if (link.funder) expandEntity(`wallet:${link.funder}`);
+          }
+        }
       } else {
         toast.warning(`No KYC root found after tracing ${data?.walletsTraced || 0} wallets`);
       }
 
-      // Refresh the graph
-      setTimeout(() => refetch(), 1000);
+      // Refresh the graph after expanding
+      setTimeout(() => refetch(), 500);
     } catch (err: any) {
       toast.error(`KYC search failed: ${err.message}`);
     } finally {
