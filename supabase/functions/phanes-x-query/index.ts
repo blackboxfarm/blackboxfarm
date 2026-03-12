@@ -239,11 +239,11 @@ async function queryPhanes(
     // 2. Wait for Phanes to process and reply
     await new Promise(resolve => setTimeout(resolve, PHANES_REPLY_WAIT_MS));
 
-    // 3. Fetch recent messages to find the reply
+    // 3. Fetch recent messages from the Phanes bot DM conversation
     const { data: fetchResult, error: fetchError } = await supabase.functions.invoke('telegram-mtproto-auth', {
       body: {
         action: 'fetch_recent_messages',
-        channelUsername: String(chatId),
+        channelUsername: PHANES_BOT_USERNAME,
         limit: REPLY_FETCH_LIMIT,
       },
     });
