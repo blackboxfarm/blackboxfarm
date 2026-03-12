@@ -485,15 +485,30 @@ const MeshGraphVisualizer = () => {
     const color = ENTITY_COLORS[meshNode.type] || '#888';
     const size = Math.max(4, Math.min(meshNode.val * 3 + 3, 20));
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
+    const hasRedFlags = meshNode.redFlags && meshNode.redFlags.length > 0;
 
     if (isFocused) {
       ctx.shadowColor = color;
       ctx.shadowBlur = 15;
     }
 
+    // Red flag glow for flagged nodes (blinking via time-based alpha)
+    if (hasRedFlags) {
+      const blinkAlpha = 0.3 + 0.4 * Math.abs(Math.sin(Date.now() / 400));
+      const isCritical = meshNode.redFlags!.some(f => f.severity === 'critical');
+      ctx.shadowColor = isCritical ? '#ef4444' : '#f97316';
+      ctx.shadowBlur = 12;
+      
+      // Pulsing danger ring
+      ctx.beginPath();
+      ctx.arc(meshNode.x, meshNode.y, size + 4, 0, 2 * Math.PI);
+      ctx.strokeStyle = isCritical ? `rgba(239,68,68,${blinkAlpha})` : `rgba(249,115,22,${blinkAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
     // Token nodes: show success/failure via ring color
     if (meshNode.type === 'token') {
-      // Outer ring to indicate status (will be enhanced when token data is available)
       ctx.beginPath();
       ctx.arc(meshNode.x, meshNode.y, size + 2, 0, 2 * Math.PI);
       ctx.strokeStyle = color;
@@ -524,14 +539,23 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
 
-    // Always show friendly label (not just when zoomed)
+    // 🚩 Red flag badge on flagged nodes
+    if (hasRedFlags) {
+      const flagSize = Math.max(7, 10 / globalScale);
+      ctx.font = `${flagSize}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🚩', meshNode.x + size + 3, meshNode.y - size - 2);
+    }
+
+    // Always show friendly label
     const labelText = meshNode.label;
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.9)';
       ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
   }, [focusedEntity]);
