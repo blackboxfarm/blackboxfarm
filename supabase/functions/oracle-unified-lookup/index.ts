@@ -357,9 +357,12 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
       }
     } else {
       console.log('[Oracle] No HELIUS_API_KEY configured');
+      apiErrors.push('Helius API key not configured');
     }
   } catch (error) {
-    console.error('[Oracle] Helius error:', error);
+    const errMsg = `Helius error: ${error instanceof Error ? error.message : 'unknown'}`;
+    console.error(`[Oracle] ${errMsg}`);
+    apiErrors.push(errMsg);
   }
   
   // STEP 4: Local DB cache (only tokens we've previously verified as created by this wallet)
