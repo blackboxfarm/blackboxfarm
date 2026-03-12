@@ -456,13 +456,13 @@ serve(async (req) => {
 
     // Check if socials are genuinely removed (history-based; avoids false X 403s)
     const socials = reportData.socials || {};
-    const riskFlags = Array.isArray(reportData.riskFlags) ? reportData.riskFlags : [];
+    const incomingRiskFlags = Array.isArray(reportData.riskFlags) ? reportData.riskFlags : [];
     const socialChanges = Array.isArray((reportData as any).social_changes)
       ? (reportData as any).social_changes
       : Array.isArray((reportData as any).socialChanges)
         ? (reportData as any).socialChanges
         : [];
-    const socialSignals = [...riskFlags, ...socialChanges].filter((s: unknown) => typeof s === 'string') as string[];
+    const socialSignals = [...incomingRiskFlags, ...socialChanges].filter((s: unknown) => typeof s === 'string') as string[];
 
     let socialsGone = false;
     if (phase === 'on_curve' || phase === 'newborn' || phase === 'early' || phase === 'adolescent') {
