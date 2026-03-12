@@ -686,6 +686,7 @@ function applyEnrichmentCaches(
   tickerCache: Map<string, string>,
   commNameCache: Map<string, string>,
   tgChannelCache?: Map<string, { title: string; isRecycled: boolean; tokenCount: number }>,
+  xUserCache?: Map<string, { handle: string; displayName: string; isRotated: boolean; handleCount: number }>,
 ): MeshGraphData {
   const updatedNodes = data.nodes.map(node => {
     if (node.type === 'token') {
@@ -703,6 +704,14 @@ function applyEnrichmentCaches(
         const suffix = info.isRecycled ? ` (${info.tokenCount})` : '';
         const label = info.title.length > 14 ? info.title.slice(0, 12) + '…' : info.title;
         return { ...node, label: `${prefix}${label}${suffix}` };
+      }
+    }
+    if (node.type === 'x_user' && xUserCache) {
+      const info = xUserCache.get(node.fullId);
+      if (info && info.handle) {
+        const prefix = info.isRotated ? '🔄 ' : '🐦 ';
+        const suffix = info.isRotated ? ` (${info.handleCount} handles)` : '';
+        return { ...node, label: `${prefix}@${info.handle}${suffix}` };
       }
     }
     return node;
