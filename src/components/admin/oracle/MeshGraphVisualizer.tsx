@@ -615,7 +615,35 @@ const MeshGraphVisualizer = () => {
       ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.9)';
       ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
-  }, [focusedEntity]);
+
+    // % Holdings overlay
+    if (holdings.showOverlay && meshNode.type === 'wallet') {
+      const holdingInfo = holdings.holdings.get(meshNode.id);
+      if (holdingInfo && holdingInfo.percentage > 0) {
+        const pctText = holdingInfo.percentage >= 1 
+          ? `${holdingInfo.percentage.toFixed(1)}%` 
+          : `${holdingInfo.percentage.toFixed(2)}%`;
+        const pctFontSize = Math.max(7, 10 / globalScale);
+        ctx.font = `bold ${pctFontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        
+        // Background pill
+        const textWidth = ctx.measureText(pctText).width;
+        const pillX = meshNode.x - textWidth / 2 - 3;
+        const pillY = meshNode.y - size - pctFontSize - 4;
+        ctx.fillStyle = holdingInfo.percentage >= 5 ? 'rgba(239,68,68,0.85)' : 
+                        holdingInfo.percentage >= 1 ? 'rgba(234,179,8,0.85)' : 
+                        'rgba(34,197,94,0.75)';
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, textWidth + 6, pctFontSize + 4, 3);
+        ctx.fill();
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillText(pctText, meshNode.x, pillY + 2);
+      }
+    }
+  }, [focusedEntity, holdings.showOverlay, holdings.holdings]);
 
   const paintLink = useCallback((link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const src = link.source;
