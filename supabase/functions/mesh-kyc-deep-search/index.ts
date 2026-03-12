@@ -161,6 +161,12 @@ Deno.serve(async (req) => {
           depth: c.depth,
         })),
         errors,
+        diagnostic: planUpgradeError
+          ? 'Solscan API key is valid but your plan cannot access required v2 endpoints.'
+          : null,
+        actionRequired: planUpgradeError
+          ? 'Upgrade Solscan API access level for /v2.0/account/detail and /v2.0/account/transfer.'
+          : null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
