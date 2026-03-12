@@ -710,13 +710,15 @@ function applyEnrichmentCaches(
   xUserCache?: Map<string, { handle: string; displayName: string; isRotated: boolean; handleCount: number }>,
 ): MeshGraphData {
   const updatedNodes = data.nodes.map(node => {
+    const flags: RedFlag[] = [...(node.redFlags || [])];
+    
     if (node.type === 'token') {
       const ticker = tickerCache.get(node.fullId);
-      if (ticker) return { ...node, label: `$${ticker.toUpperCase()}` };
+      if (ticker) return { ...node, label: `$${ticker.toUpperCase()}`, redFlags: flags.length > 0 ? flags : undefined };
     }
     if (node.type === 'x_community') {
       const name = commNameCache.get(node.fullId);
-      if (name) return { ...node, label: name.length > 18 ? name.slice(0, 16) + '…' : name };
+      if (name) return { ...node, label: name.length > 18 ? name.slice(0, 16) + '…' : name, redFlags: flags.length > 0 ? flags : undefined };
     }
     if (node.type === 'telegram_channel' && tgChannelCache) {
       const info = tgChannelCache.get(node.fullId);
@@ -724,7 +726,18 @@ function applyEnrichmentCaches(
         const prefix = info.isRecycled ? '♻️ ' : '📡 ';
         const suffix = info.isRecycled ? ` (${info.tokenCount})` : '';
         const label = info.title.length > 14 ? info.title.slice(0, 12) + '…' : info.title;
-        return { ...node, label: `${prefix}${label}${suffix}` };
+        
+        // RED FLAG: Recycled Telegram channel
+        if (info.isRecycled && info.tokenCount > 1) {
+          flags.push({
+            type: 'recycled_identity',
+            severity: info.tokenCount >= 3 ? 'critical' : 'high',
+            shortLabel: `♻️ Recycled TG (${info.tokenCount} tokens)`,
+            explanation: `This Telegram channel has been reused across ${info.tokenCount} different token launches. Recycled channels are a hallmark of serial scam operations — the operator deletes old messages, renames the group, and reuses the existing member base to create fake "organic" community traction for the next rug pull. The same admin network likely controls all linked tokens.`,
+          });
+        }
+        
+        return { ...node, label: `${prefix}${label}${suffix}`, redFlags: flags.length > 0 ? flags : undefined };
       }
     }
     if (node.type === 'x_user' && xUserCache) {
@@ -732,10 +745,21 @@ function applyEnrichmentCaches(
       if (info && info.handle) {
         const prefix = info.isRotated ? '🔄 ' : '🐦 ';
         const suffix = info.isRotated ? ` (${info.handleCount} handles)` : '';
-        return { ...node, label: `${prefix}@${info.handle}${suffix}` };
+        
+        // RED FLAG: Rotated X handle
+        if (info.isRotated && info.handleCount > 1) {
+          flags.push({
+            type: 'rotated_handle',
+            severity: info.handleCount >= 3 ? 'critical' : 'high',
+            shortLabel: `🔄 ${info.handleCount} Handle Changes`,
+            explanation: `This X account has changed its handle ${info.handleCount} times. Serial handle rotation is used to shed association with previous failed/rugged token launches. ${info.handleCount >= 3 ? 'This level of rotation is a STRONG indicator of a serial scam operator who cycles identities to avoid detection. ' : ''}Check the linked communities and token history — this account likely promoted multiple tokens that ended in rug pulls, slow drains, or abandonment.`,
+          });
+        }
+        
+        return { ...node, label: `${prefix}@${info.handle}${suffix}`, redFlags: flags.length > 0 ? flags : undefined };
       }
     }
-    return node;
+    return { ...node, redFlags: flags.length > 0 ? flags : undefined };
   });
   return { nodes: updatedNodes, links: data.links };
 }
