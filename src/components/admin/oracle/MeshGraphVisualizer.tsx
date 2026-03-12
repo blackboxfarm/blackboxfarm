@@ -392,55 +392,68 @@ const MeshGraphVisualizer = () => {
     }
   }, [graphData.nodes, refetch, triggerSpider]);
 
-  // (Enrich Communities is now auto-triggered by clicking x_community nodes)
+  // Double-click detection via click timer
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastClickNodeRef = useRef<string | null>(null);
 
-  // Single click: expand + center/zoom only (no API calls)
   const handleNodeClick = useCallback((node: any) => {
     const nodeId = node.id as string;
-    expandEntity(nodeId);
-    
-    if (graphRef.current) {
-      graphRef.current.centerAt(node.x, node.y, 800);
-      graphRef.current.zoom(2, 800);
-    }
-  }, [expandEntity]);
 
-  // Double-click: trigger spider/enrichment (deep action)
-  const handleNodeDoubleClick = useCallback(async (node: any) => {
-    const nodeId = node.id as string;
-    const parts = nodeId.split(':');
-    const type = parts[0];
-    const rawId = parts.slice(1).join(':');
+    // If same node clicked within 300ms → double-click
+    if (lastClickNodeRef.current === nodeId && clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      lastClickNodeRef.current = null;
 
-    if (type === 'wallet' || type === 'token') {
-      console.log(`[BubbleMap] Double-click spidering: ${rawId}`);
-      triggerSpider(rawId, 'quick');
-    }
+      // ── Double-click: trigger spider/enrichment ──
+      const parts = nodeId.split(':');
+      const type = parts[0];
+      const rawId = parts.slice(1).join(':');
 
-    if (type === 'x_community') {
-      console.log(`[BubbleMap] Double-click enriching X Community: ${rawId}`);
-      setCommunitySearching(true);
-      toast.info(`👥 Enriching X Community ${rawId.slice(0, 16)}...`);
-      try {
-        const tokenNode = graphData.nodes.find(n => n.type === 'token');
-        const walletNode = graphData.nodes.find(n => n.type === 'wallet');
-        const { data, error } = await supabase.functions.invoke('x-community-enricher', {
-          body: {
-            communityUrl: `https://x.com/i/communities/${rawId}`,
-            linkedTokenMint: tokenNode?.id.split(':').slice(1).join(':'),
-            linkedWallet: walletNode?.id.split(':').slice(1).join(':'),
-          },
-        });
-        if (error) throw error;
-        toast.success(`Found ${data?.admins?.length || 0} admins, ${data?.moderators?.length || 0} mods`);
-        setTimeout(() => refetch(), 1000);
-      } catch (err: any) {
-        toast.error(`Community enrichment failed: ${err.message}`);
-      } finally {
-        setCommunitySearching(false);
+      if (type === 'wallet' || type === 'token') {
+        console.log(`[BubbleMap] Double-click spidering: ${rawId}`);
+        triggerSpider(rawId, 'quick');
       }
+      if (type === 'x_community') {
+        console.log(`[BubbleMap] Double-click enriching X Community: ${rawId}`);
+        setCommunitySearching(true);
+        toast.info(`👥 Enriching X Community ${rawId.slice(0, 16)}...`);
+        (async () => {
+          try {
+            const tokenNode = graphData.nodes.find(n => n.type === 'token');
+            const walletNode = graphData.nodes.find(n => n.type === 'wallet');
+            const { data, error } = await supabase.functions.invoke('x-community-enricher', {
+              body: {
+                communityUrl: `https://x.com/i/communities/${rawId}`,
+                linkedTokenMint: tokenNode?.id.split(':').slice(1).join(':'),
+                linkedWallet: walletNode?.id.split(':').slice(1).join(':'),
+              },
+            });
+            if (error) throw error;
+            toast.success(`Found ${data?.admins?.length || 0} admins, ${data?.moderators?.length || 0} mods`);
+            setTimeout(() => refetch(), 1000);
+          } catch (err: any) {
+            toast.error(`Community enrichment failed: ${err.message}`);
+          } finally {
+            setCommunitySearching(false);
+          }
+        })();
+      }
+      return;
     }
-  }, [triggerSpider, graphData.nodes, refetch]);
+
+    // ── Single click: expand + center/zoom only ──
+    lastClickNodeRef.current = nodeId;
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      lastClickNodeRef.current = null;
+      expandEntity(nodeId);
+      if (graphRef.current) {
+        graphRef.current.centerAt(node.x, node.y, 800);
+        graphRef.current.zoom(2, 800);
+      }
+    }, 300);
+  }, [expandEntity, triggerSpider, graphData.nodes, refetch]);
 
   const handleNodeRightClick = useCallback((node: any) => {
     const parts = (node.id as string).split(':');
