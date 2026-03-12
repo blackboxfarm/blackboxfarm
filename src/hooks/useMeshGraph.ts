@@ -354,12 +354,25 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
 
     if (!typeFilters.has(link.source_type) || !typeFilters.has(link.linked_type)) continue;
 
-    // Hard rule: never render direct token↔x_account links.
-    // X handles must attach through X Community only (token -> x_community -> x_account).
-    const isDirectTokenHandle =
-      (link.source_type === 'token' && link.linked_type === 'x_account') ||
-      (link.source_type === 'x_account' && link.linked_type === 'token');
-    if (isDirectTokenHandle) continue;
+    // ═══ STRICT TOPOLOGY RULES ═══
+    // Token gets: 1 Dev Wallet, 1 X Community, 1 Website
+    // X Community gets: X Handles (admin_of, mod_of, co_mod)
+    // Dev Wallet gets: linked wallets, KYC Root
+    // NEVER: token↔x_account, wallet↔x_community, x_community↔wallet
+    
+    const st = link.source_type;
+    const lt = link.linked_type;
+
+    // Block direct token↔x_account (must go through x_community)
+    if ((st === 'token' && lt === 'x_account') || (st === 'x_account' && lt === 'token')) continue;
+
+    // Block wallet↔x_community links (wallets stay on wallet side, community stays on token side)
+    if ((st === 'wallet' && lt === 'x_community') || (st === 'x_community' && lt === 'wallet')) continue;
+    if ((st === 'kyc_root' && lt === 'x_community') || (st === 'x_community' && lt === 'kyc_root')) continue;
+
+    // Block x_account↔wallet links (handles only attach to x_community)
+    if ((st === 'x_account' && lt === 'wallet') || (st === 'wallet' && lt === 'x_account')) continue;
+    if ((st === 'x_account' && lt === 'kyc_root') || (st === 'kyc_root' && lt === 'x_account')) continue;
 
     if (!nodesMap.has(sourceKey)) {
       nodesMap.set(sourceKey, {
