@@ -165,7 +165,18 @@ async function solscanScrapeFundingInfoWithFirecrawl(
       return { fundedByLabel: null, fundedByWallet: null };
     }
 
-    return parseFundedByFromText(markdown);
+    const parsed = parseFundedByFromText(markdown);
+    if (!parsed.fundedByLabel && !parsed.fundedByWallet) {
+      const lower = markdown.toLowerCase();
+      if (lower.includes('just a moment') || lower.includes('enable javascript and cookies')) {
+        apiErrors.push('Firecrawl scrape hit Cloudflare challenge on Solscan account page');
+      } else {
+        apiErrors.push('Firecrawl scrape did not expose funded-by data on Solscan account page');
+      }
+      console.log(`[Solscan Intel] Firecrawl fallback raw snippet: ${markdown.slice(0, 180).replace(/\s+/g, ' ')}`);
+    }
+
+    return parsed;
   } catch (e) {
     const msg = `Firecrawl scrape error: ${e instanceof Error ? e.message : 'timeout'}`;
     apiErrors.push(msg);
