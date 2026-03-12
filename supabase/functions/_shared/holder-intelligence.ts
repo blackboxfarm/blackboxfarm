@@ -210,9 +210,9 @@ export async function detectSocialChanges(
   try {
     const { data } = await supabase
       .from('token_socials_history')
-      .select('twitter, telegram, website, discord, created_at')
+      .select('twitter, telegram, website, discord, captured_at')
       .eq('token_mint', tokenMint)
-      .order('created_at', { ascending: false })
+      .order('captured_at', { ascending: false })
       .limit(1);
 
     if (!data || data.length === 0) return [];

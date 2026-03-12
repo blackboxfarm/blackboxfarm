@@ -454,23 +454,27 @@ serve(async (req) => {
     const phaseResult = detectTokenPhase({ pairCreatedAt, liquidityUsd, dexId });
     const phase: TokenPhase = (healthPhase as TokenPhase) || phaseResult.phase;
 
-    // Check if socials exist and verify X community/twitter is still live
+    // Check if socials are genuinely removed (history-based; avoids false X 403s)
     const socials = reportData.socials || {};
+    const riskFlags = Array.isArray(reportData.riskFlags) ? reportData.riskFlags : [];
+    const socialChanges = Array.isArray((reportData as any).social_changes)
+      ? (reportData as any).social_changes
+      : Array.isArray((reportData as any).socialChanges)
+        ? (reportData as any).socialChanges
+        : [];
+    const socialSignals = [...riskFlags, ...socialChanges].filter((s: unknown) => typeof s === 'string') as string[];
+
     let socialsGone = false;
     if (phase === 'on_curve' || phase === 'newborn' || phase === 'early' || phase === 'adolescent') {
-      const twitterUrl = socials.twitter || null;
-      if (twitterUrl) {
-        try {
-          const headRes = await fetch(twitterUrl, { method: 'HEAD', redirect: 'follow' });
-          if (headRes.status === 404 || headRes.status === 403) {
-            socialsGone = true;
-            console.log(`[token-ai-interpreter] X social link GONE (${headRes.status}): ${twitterUrl}`);
-          }
-        } catch {
-          // Network error — don't assume deleted
-        }
-      }
-      if (!socials.twitter && !socials.telegram && !socials.website) {
+      const hasAnySocial = !!(socials.twitter || socials.telegram || socials.website);
+      const hasConfirmedRemovalSignal = socialSignals.some((s) =>
+        s.toLowerCase().includes('removed since last scan')
+      );
+
+      if (hasConfirmedRemovalSignal) {
+        socialsGone = true;
+        console.log('[token-ai-interpreter] Social removal confirmed from historical snapshot');
+      } else if (!hasAnySocial) {
         if (pairCreatedAt && (Date.now() - pairCreatedAt) > 24 * 3600000) {
           socialsGone = true;
           console.log(`[token-ai-interpreter] No socials found for aged on-curve token`);
