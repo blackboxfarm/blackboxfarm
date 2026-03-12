@@ -365,12 +365,36 @@ const MeshGraphVisualizer = () => {
                 return `${ENTITY_LABELS[n.type] || n.type}: ${n.id.split(':').slice(1).join(':')}`;
               }}
               cooldownTicks={100}
-              d3AlphaDecay={0.02}
-              d3VelocityDecay={0.3}
-              linkDirectionalParticles={1}
-              linkDirectionalParticleWidth={1.5}
-              linkDirectionalParticleSpeed={0.005}
-              linkDirectionalParticleColor={() => 'rgba(255,255,255,0.3)'}
+              d3AlphaDecay={0.015}
+              d3VelocityDecay={0.25}
+              d3Force="charge"
+              linkDistance={120}
+              linkDirectionalParticles={(link: any) => {
+                // Bidirectional relationships get 2 particles, directional get 1
+                const rel = link.relationship || '';
+                if (['same_kyc_root', 'same_team', 'same_developer'].includes(rel)) return 2;
+                return 1;
+              }}
+              linkDirectionalParticleWidth={2}
+              linkDirectionalParticleSpeed={(link: any) => {
+                const rel = link.relationship || '';
+                if (['same_kyc_root', 'same_team'].includes(rel)) return 0.008;
+                return 0.004;
+              }}
+              linkDirectionalParticleColor={(link: any) => {
+                const rel = link.relationship || '';
+                if (rel.includes('funded')) return 'rgba(34,197,94,0.6)';
+                if (rel.includes('created')) return 'rgba(234,179,8,0.6)';
+                if (rel.includes('kyc')) return 'rgba(255,255,255,0.6)';
+                return 'rgba(255,255,255,0.3)';
+              }}
+              linkDirectionalArrowLength={(link: any) => {
+                const rel = link.relationship || '';
+                // Show arrows on directional relationships
+                if (['funded_by', 'directly_funded', 'created', 'created_by'].includes(rel)) return 6;
+                return 0;
+              }}
+              linkDirectionalArrowRelPos={0.7}
               enableZoomInteraction={true}
               enablePanInteraction={true}
             />
