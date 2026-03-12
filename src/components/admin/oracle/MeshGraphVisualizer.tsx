@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode, RedFlag } from "@/hooks/useMeshGraph";
 import { useHeliusCreditTracker } from "@/hooks/useHeliusCreditTracker";
 import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users, Zap, Gauge, Unlock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ const MeshGraphVisualizer = () => {
   const [enriching, setEnriching] = useState(false);
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
+  const [redFlagDialog, setRedFlagDialog] = useState<{ node: MeshNode; flags: RedFlag[] } | null>(null);
 
   const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
 
@@ -414,7 +416,11 @@ const MeshGraphVisualizer = () => {
 
   const handleNodeClick = useCallback((node: any) => {
     const nodeId = node.id as string;
+    const meshNode = node as MeshNode;
 
+    // If node has red flags, show the explainer dialog on single-click of the flag area
+    // We use double-click for spider, single-click for red flag dialog if flagged
+    
     // If same node clicked within 300ms → double-click
     if (lastClickNodeRef.current === nodeId && clickTimerRef.current) {
       clearTimeout(clickTimerRef.current);
@@ -458,11 +464,18 @@ const MeshGraphVisualizer = () => {
       return;
     }
 
-    // ── Single click: expand + center/zoom only ──
+    // ── Single click: if flagged, show red flag dialog; otherwise expand + center ──
     lastClickNodeRef.current = nodeId;
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null;
       lastClickNodeRef.current = null;
+      
+      // Show red flag dialog if node has flags
+      if (meshNode.redFlags && meshNode.redFlags.length > 0) {
+        setRedFlagDialog({ node: meshNode, flags: meshNode.redFlags });
+        return;
+      }
+      
       expandEntity(nodeId);
       if (graphRef.current) {
         graphRef.current.centerAt(node.x, node.y, 800);
@@ -483,15 +496,30 @@ const MeshGraphVisualizer = () => {
     const color = ENTITY_COLORS[meshNode.type] || '#888';
     const size = Math.max(4, Math.min(meshNode.val * 3 + 3, 20));
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
+    const hasRedFlags = meshNode.redFlags && meshNode.redFlags.length > 0;
 
     if (isFocused) {
       ctx.shadowColor = color;
       ctx.shadowBlur = 15;
     }
 
+    // Red flag glow for flagged nodes (blinking via time-based alpha)
+    if (hasRedFlags) {
+      const blinkAlpha = 0.3 + 0.4 * Math.abs(Math.sin(Date.now() / 400));
+      const isCritical = meshNode.redFlags!.some(f => f.severity === 'critical');
+      ctx.shadowColor = isCritical ? '#ef4444' : '#f97316';
+      ctx.shadowBlur = 12;
+      
+      // Pulsing danger ring
+      ctx.beginPath();
+      ctx.arc(meshNode.x, meshNode.y, size + 4, 0, 2 * Math.PI);
+      ctx.strokeStyle = isCritical ? `rgba(239,68,68,${blinkAlpha})` : `rgba(249,115,22,${blinkAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
     // Token nodes: show success/failure via ring color
     if (meshNode.type === 'token') {
-      // Outer ring to indicate status (will be enhanced when token data is available)
       ctx.beginPath();
       ctx.arc(meshNode.x, meshNode.y, size + 2, 0, 2 * Math.PI);
       ctx.strokeStyle = color;
@@ -522,14 +550,23 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
 
-    // Always show friendly label (not just when zoomed)
+    // 🚩 Red flag badge on flagged nodes
+    if (hasRedFlags) {
+      const flagSize = Math.max(7, 10 / globalScale);
+      ctx.font = `${flagSize}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🚩', meshNode.x + size + 3, meshNode.y - size - 2);
+    }
+
+    // Always show friendly label
     const labelText = meshNode.label;
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.9)';
       ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
   }, [focusedEntity]);
@@ -596,6 +633,31 @@ const MeshGraphVisualizer = () => {
     acc[n.type] = (acc[n.type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+
+  // Animation tick for blinking red flags
+  const hasAnyRedFlags = displayData.nodes.some(n => n.redFlags && n.redFlags.length > 0);
+  useEffect(() => {
+    if (!hasAnyRedFlags || !graphRef.current) return;
+    let animFrame: number;
+    const tick = () => {
+      if (graphRef.current) {
+        // Force canvas repaint for blink animation
+        graphRef.current.refresh?.();
+      }
+      animFrame = requestAnimationFrame(tick);
+    };
+    // Throttle to ~15fps for blink
+    const interval = setInterval(() => {
+      if (graphRef.current) graphRef.current.refresh?.();
+    }, 66);
+    return () => {
+      cancelAnimationFrame(animFrame);
+      clearInterval(interval);
+    };
+  }, [hasAnyRedFlags]);
+
+  // Count red-flagged nodes
+  const redFlagCount = displayData.nodes.filter(n => n.redFlags && n.redFlags.length > 0).length;
 
   return (
     <div className="space-y-4">
@@ -721,6 +783,16 @@ const MeshGraphVisualizer = () => {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>{displayData.nodes.length} entities</span>
             <span>{displayData.links.length} connections</span>
+            {redFlagCount > 0 && (
+              <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] animate-pulse cursor-pointer"
+                onClick={() => {
+                  const flaggedNode = displayData.nodes.find(n => n.redFlags && n.redFlags.length > 0);
+                  if (flaggedNode) setRedFlagDialog({ node: flaggedNode, flags: flaggedNode.redFlags! });
+                }}
+              >
+                🚩 {redFlagCount} Flagged
+              </Badge>
+            )}
             {focusedEntity && (
               <span className="text-primary font-mono">
                 {focusedEntity.id.slice(0, 16)}...
@@ -997,6 +1069,49 @@ const MeshGraphVisualizer = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Red Flag Explainer Dialog */}
+      <Dialog open={!!redFlagDialog} onOpenChange={(open) => !open && setRedFlagDialog(null)}>
+        <DialogContent className="max-w-lg border-red-500/30 bg-background">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              🚩 Intelligence Red Flag
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {redFlagDialog && (
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full inline-block" style={{ backgroundColor: ENTITY_COLORS[redFlagDialog.node.type] }} />
+                  {ENTITY_LABELS[redFlagDialog.node.type]} — {redFlagDialog.node.label}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {redFlagDialog && (
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {redFlagDialog.flags.map((flag, i) => (
+                <div key={i} className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm text-red-400">{flag.shortLabel}</span>
+                    <Badge 
+                      variant={flag.severity === 'critical' ? 'destructive' : 'outline'}
+                      className={flag.severity === 'critical' ? '' : 'border-orange-500/50 text-orange-400'}
+                    >
+                      {flag.severity.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                    {flag.explanation}
+                  </div>
+                </div>
+              ))}
+              <div className="text-[10px] text-muted-foreground font-mono break-all pt-2 border-t border-border">
+                Entity ID: {redFlagDialog.node.fullId || redFlagDialog.node.id}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

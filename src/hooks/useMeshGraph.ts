@@ -2,12 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export interface RedFlag {
+  type: 'unlinked_cluster' | 'recycled_identity' | 'rotated_handle';
+  severity: 'high' | 'critical';
+  shortLabel: string;
+  explanation: string;
+}
+
 export interface MeshNode {
   id: string;
   type: string;
   label: string;       // Friendly display label ($TICKER, @handle, "KYC Root")
   fullId: string;      // Raw ID for tooltip (full address)
   val: number;
+  redFlags?: RedFlag[];
 }
 
 export interface MeshLink {
@@ -702,13 +710,15 @@ function applyEnrichmentCaches(
   xUserCache?: Map<string, { handle: string; displayName: string; isRotated: boolean; handleCount: number }>,
 ): MeshGraphData {
   const updatedNodes = data.nodes.map(node => {
+    const flags: RedFlag[] = [...(node.redFlags || [])];
+    
     if (node.type === 'token') {
       const ticker = tickerCache.get(node.fullId);
-      if (ticker) return { ...node, label: `$${ticker.toUpperCase()}` };
+      if (ticker) return { ...node, label: `$${ticker.toUpperCase()}`, redFlags: flags.length > 0 ? flags : undefined };
     }
     if (node.type === 'x_community') {
       const name = commNameCache.get(node.fullId);
-      if (name) return { ...node, label: name.length > 18 ? name.slice(0, 16) + '…' : name };
+      if (name) return { ...node, label: name.length > 18 ? name.slice(0, 16) + '…' : name, redFlags: flags.length > 0 ? flags : undefined };
     }
     if (node.type === 'telegram_channel' && tgChannelCache) {
       const info = tgChannelCache.get(node.fullId);
@@ -716,7 +726,18 @@ function applyEnrichmentCaches(
         const prefix = info.isRecycled ? '♻️ ' : '📡 ';
         const suffix = info.isRecycled ? ` (${info.tokenCount})` : '';
         const label = info.title.length > 14 ? info.title.slice(0, 12) + '…' : info.title;
-        return { ...node, label: `${prefix}${label}${suffix}` };
+        
+        // RED FLAG: Recycled Telegram channel
+        if (info.isRecycled && info.tokenCount > 1) {
+          flags.push({
+            type: 'recycled_identity',
+            severity: info.tokenCount >= 3 ? 'critical' : 'high',
+            shortLabel: `♻️ Recycled TG (${info.tokenCount} tokens)`,
+            explanation: `This Telegram channel has been reused across ${info.tokenCount} different token launches. Recycled channels are a hallmark of serial scam operations — the operator deletes old messages, renames the group, and reuses the existing member base to create fake "organic" community traction for the next rug pull. The same admin network likely controls all linked tokens.`,
+          });
+        }
+        
+        return { ...node, label: `${prefix}${label}${suffix}`, redFlags: flags.length > 0 ? flags : undefined };
       }
     }
     if (node.type === 'x_user' && xUserCache) {
@@ -724,10 +745,21 @@ function applyEnrichmentCaches(
       if (info && info.handle) {
         const prefix = info.isRotated ? '🔄 ' : '🐦 ';
         const suffix = info.isRotated ? ` (${info.handleCount} handles)` : '';
-        return { ...node, label: `${prefix}@${info.handle}${suffix}` };
+        
+        // RED FLAG: Rotated X handle
+        if (info.isRotated && info.handleCount > 1) {
+          flags.push({
+            type: 'rotated_handle',
+            severity: info.handleCount >= 3 ? 'critical' : 'high',
+            shortLabel: `🔄 ${info.handleCount} Handle Changes`,
+            explanation: `This X account has changed its handle ${info.handleCount} times. Serial handle rotation is used to shed association with previous failed/rugged token launches. ${info.handleCount >= 3 ? 'This level of rotation is a STRONG indicator of a serial scam operator who cycles identities to avoid detection. ' : ''}Check the linked communities and token history — this account likely promoted multiple tokens that ended in rug pulls, slow drains, or abandonment.`,
+          });
+        }
+        
+        return { ...node, label: `${prefix}@${info.handle}${suffix}`, redFlags: flags.length > 0 ? flags : undefined };
       }
     }
-    return node;
+    return { ...node, redFlags: flags.length > 0 ? flags : undefined };
   });
   return { nodes: updatedNodes, links: data.links };
 }
@@ -818,8 +850,59 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     connectedIds.add(l.target);
   }
 
+  const connectedNodes = Array.from(nodesMap.values()).filter(n => connectedIds.has(n.id));
+
+  // ═══ UNLINKED CLUSTER DETECTION ═══
+  // Find wallet nodes that are 3+ hops from any KYC root
+  // These are potential bundled/sockpuppet wallets
+  const kycRootIds = new Set(connectedNodes.filter(n => n.type === 'kyc_root').map(n => n.id));
+  
+  if (kycRootIds.size > 0) {
+    // BFS from all KYC roots to find distance to each wallet
+    const adjacency = new Map<string, Set<string>>();
+    for (const l of links) {
+      if (!adjacency.has(l.source)) adjacency.set(l.source, new Set());
+      if (!adjacency.has(l.target)) adjacency.set(l.target, new Set());
+      adjacency.get(l.source)!.add(l.target);
+      adjacency.get(l.target)!.add(l.source);
+    }
+
+    const distFromKyc = new Map<string, number>();
+    const queue: [string, number][] = [];
+    for (const kycId of kycRootIds) {
+      distFromKyc.set(kycId, 0);
+      queue.push([kycId, 0]);
+    }
+    while (queue.length > 0) {
+      const [nodeId, dist] = queue.shift()!;
+      const neighbors = adjacency.get(nodeId);
+      if (!neighbors) continue;
+      for (const neighbor of neighbors) {
+        if (!distFromKyc.has(neighbor)) {
+          distFromKyc.set(neighbor, dist + 1);
+          queue.push([neighbor, dist + 1]);
+        }
+      }
+    }
+
+    // Flag wallet nodes 3+ hops away or completely disconnected from KYC
+    for (const node of connectedNodes) {
+      if (node.type !== 'wallet') continue;
+      const dist = distFromKyc.get(node.id);
+      if (dist === undefined || dist >= 3) {
+        if (!node.redFlags) node.redFlags = [];
+        node.redFlags.push({
+          type: 'unlinked_cluster',
+          severity: dist === undefined ? 'critical' : 'high',
+          shortLabel: dist === undefined ? '🚩 No KYC Link' : `🚩 ${dist} Hops from KYC`,
+          explanation: `This wallet is ${dist === undefined ? 'completely disconnected from' : `${dist} steps away from`} the developer's KYC root wallet. What this likely means:\n\n• Sybil/Sockpuppet Wallets — Controlled by the same person but deliberately isolated from the KYC chain to hide supply concentration.\n• Bundled Insider Wallets — Pre-funded wallets used to fake early trading volume, create artificial price action, or accumulate supply before a coordinated dump.\n• Exit Liquidity Network — A hidden whale setup where the dev controls far more supply than appears on-chain, staged for extraction.\n\nThese wallets share funding paths or timing patterns but have been deliberately distanced from the dev's identity chain. This is a common pattern in rug pull and slow drain operations.`,
+        });
+      }
+    }
+  }
+
   return {
-    nodes: Array.from(nodesMap.values()).filter(n => connectedIds.has(n.id)),
+    nodes: connectedNodes,
     links,
   };
 }
