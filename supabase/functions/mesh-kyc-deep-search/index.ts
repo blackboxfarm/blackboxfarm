@@ -29,17 +29,9 @@ Deno.serve(async (req) => {
     let kycRoot: string | null = null;
     let meshLinksAdded = 0;
 
-    // Known CEX deposit/withdrawal patterns
-    const CEX_WALLETS = new Set([
-      // Binance hot wallets
-      '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9',
-      '2ojv9BAiHUrvsm9gxDe7fJSzbNZSJcxZvf8dqmWGHG8S',
-      // Coinbase
-      'H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS',
-      // FTX (historical)
-      '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
-    ]);
-
+    // Dynamic CEX detection via Solscan labels (instead of hardcoded list)
+    const knownCexWallets = new Set<string>();
+    
     const queue: Array<{ wallet: string; depth: number }> = [{ wallet: walletAddress, depth: 0 }];
 
     while (queue.length > 0) {
@@ -49,13 +41,25 @@ Deno.serve(async (req) => {
 
       console.log(`[KYCDeep] Tracing depth ${current.depth}: ${current.wallet.slice(0, 12)}...`);
 
-      // Find who funded this wallet
+      // Step 1: Check if THIS wallet has a CEX label on Solscan
+      const { label, isCex } = await solscanCheckAccountLabel(current.wallet, errors);
+      if (isCex && label) {
+        knownCexWallets.add(current.wallet);
+        console.log(`[KYCDeep] 🏦 CEX label detected on ${current.wallet.slice(0, 12)}...: "${label}"`);
+        // The wallet BEFORE this CEX is the KYC root (or this is depth 0 = wallet itself is CEX-funded)
+        if (current.depth === 0) {
+          // The search wallet itself is a CEX wallet — it IS the KYC root
+          kycRoot = current.wallet;
+        }
+        continue; // Don't trace further into CEX wallets
+      }
+
+      // Step 2: Find who funded this wallet via transfer history
       const funders = await solscanDiscoverFunders(current.wallet, errors);
 
       if (funders.length === 0 && current.depth > 0) {
-        // No more funders found — this might be the KYC root
         kycRoot = current.wallet;
-        console.log(`[KYCDeep] Potential KYC root found at depth ${current.depth}: ${current.wallet.slice(0, 12)}`);
+        console.log(`[KYCDeep] Potential KYC root found at depth ${current.depth}: ${current.wallet.slice(0, 12)} (no further funders)`);
       }
 
       for (const f of funders) {
@@ -66,10 +70,12 @@ Deno.serve(async (req) => {
           depth: current.depth + 1,
         });
 
-        // Check if funder is a known CEX
-        if (CEX_WALLETS.has(f.wallet)) {
+        // Check if funder has CEX label
+        const funderLabel = await solscanCheckAccountLabel(f.wallet, errors);
+        if (funderLabel.isCex) {
+          knownCexWallets.add(f.wallet);
           kycRoot = current.wallet; // The wallet funded by CEX is the KYC root
-          console.log(`[KYCDeep] CEX-funded KYC root: ${current.wallet.slice(0, 12)} (funded by CEX ${f.wallet.slice(0, 8)})`);
+          console.log(`[KYCDeep] 🏦 CEX-funded KYC root: ${current.wallet.slice(0, 12)} (funded by "${funderLabel.label}" ${f.wallet.slice(0, 8)})`);
         }
 
         // Write mesh link
@@ -88,14 +94,14 @@ Deno.serve(async (req) => {
 
         if (!error) meshLinksAdded++;
 
-        // Continue tracing upward
-        if (!visited.has(f.wallet) && !CEX_WALLETS.has(f.wallet)) {
+        // Continue tracing upward (skip CEX wallets)
+        if (!visited.has(f.wallet) && !knownCexWallets.has(f.wallet)) {
           queue.push({ wallet: f.wallet, depth: current.depth + 1 });
         }
       }
 
-      // Rate limit
-      await new Promise(r => setTimeout(r, 250));
+      // Rate limit between Solscan calls
+      await new Promise(r => setTimeout(r, 300));
     }
 
     // If we found a KYC root, mark it in the mesh
