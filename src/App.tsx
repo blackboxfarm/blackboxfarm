@@ -63,6 +63,8 @@ const Pricing = lazy(() => import("./pages/Pricing"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const TelegramBot = lazy(() => import("./pages/TelegramBot"));
 const Features = lazy(() => import("./pages/Features"));
+const BubblePromo = lazy(() => import("./pages/BubblePromo"));
+const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
 
 const queryClient = new QueryClient();
 
@@ -133,6 +135,8 @@ const App = () => {
                       <Route path="/subscriptions" element={<Subscriptions />} />
                       <Route path="/tgbot" element={<TelegramBot />} />
                       <Route path="/features" element={<Features />} />
+                      <Route path="/bubblepromo" element={<BubblePromo />} />
+                      <Route path="/bubblemap" element={<BubbleMapPage />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>

@@ -460,7 +460,7 @@ export default function Features() {
       </section>
 
       {/* Bubble Map Teaser */}
-      <section className="max-w-6xl mx-auto px-4 py-20">
+      <section id="bubble-map" className="max-w-6xl mx-auto px-4 py-20 scroll-mt-20">
         <div className="text-center mb-10">
           <Badge variant="outline" className="mb-3 text-primary border-primary/30">
             <Network className="w-3 h-3 mr-1" />
@@ -520,7 +520,7 @@ export default function Features() {
           <Button 
             variant="outline" 
             size="lg"
-            onClick={() => navigate("/holders")}
+            onClick={() => navigate("/bubblepromo")}
             className="gap-2"
           >
             <Network className="w-4 h-4" />
