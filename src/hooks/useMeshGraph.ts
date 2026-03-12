@@ -123,6 +123,64 @@ export function useMeshGraph(initialEntityId?: string) {
     enabled: uniqueIds.length > 0,
   });
 
+  // Auto-discover X Community for token mints via DexScreener
+  const autoDiscoverCommunity = useCallback(async (tokenMint: string, walletAddress?: string) => {
+    try {
+      console.log(`[MeshSpider] Auto-discovering X Community for token ${tokenMint.slice(0, 12)}...`);
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+      if (!dexRes.ok) return;
+      const dexData = await dexRes.json();
+      const pair = dexData?.pairs?.[0];
+      const socials = pair?.info?.socials || [];
+      
+      // Look for X Community URL
+      const communityUrl = socials.find((s: any) => s.url?.includes('/communities/'))?.url;
+      
+      // Also extract X handle if present
+      const xHandleUrl = socials.find((s: any) => 
+        (s.url?.includes('x.com/') || s.url?.includes('twitter.com/')) && 
+        !s.url?.includes('/communities/')
+      )?.url;
+      
+      if (xHandleUrl) {
+        // Extract handle and add to mesh
+        const handleMatch = xHandleUrl.match(/(?:x\.com|twitter\.com)\/(@?([a-zA-Z0-9_]+))/i);
+        if (handleMatch) {
+          const handle = (handleMatch[2] || handleMatch[1]).replace(/^@/, '').toLowerCase();
+          if (handle && !['i', 'intent', 'search', 'home', 'explore'].includes(handle)) {
+            console.log(`[MeshSpider] Found X handle: @${handle}`);
+            await supabase.from('reputation_mesh').upsert({
+              source_type: 'token',
+              source_id: tokenMint,
+              linked_type: 'x_account',
+              linked_id: handle,
+              relationship: 'social_account',
+              confidence: 85,
+              discovered_via: 'dexscreener_auto',
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+          }
+        }
+      }
+      
+      if (communityUrl) {
+        console.log(`[MeshSpider] Found X Community: ${communityUrl}`);
+        // Call x-community-enricher to scrape admins/mods
+        const { data, error } = await supabase.functions.invoke('x-community-enricher', {
+          body: {
+            communityUrl,
+            linkedTokenMint: tokenMint,
+            linkedWallet: walletAddress,
+          },
+        });
+        if (!error && data) {
+          console.log(`[MeshSpider] Community enriched: ${data.admins?.length || 0} admins, ${data.moderators?.length || 0} mods`);
+        }
+      }
+    } catch (err) {
+      console.warn('[MeshSpider] Community auto-discovery failed:', err);
+    }
+  }, []);
+
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
     // Prevent infinite retry loops — max 2 attempts per entity
@@ -184,7 +242,7 @@ export function useMeshGraph(initialEntityId?: string) {
       } else {
         setSpiderStatus({
           active: true,
-          stage: `✅ Spider complete — ${result.meshLinksAdded || 0} mesh links discovered`,
+          stage: `✅ Spider complete — ${result.meshLinksAdded || 0} mesh links discovered. 🔍 Looking for X Community...`,
           inputType: result.inputType,
           meshLinksAdded: result.meshLinksAdded || 0,
           score: result.score,
@@ -193,7 +251,36 @@ export function useMeshGraph(initialEntityId?: string) {
           diagnostics,
         });
 
-        // Refresh mesh graph after spider populates data
+        // ═══ AUTO-DISCOVER X COMMUNITY ═══
+        // If input is a token mint, discover its X Community + admins/mods
+        const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input.trim());
+        if (isBase58) {
+          // Input could be token or wallet. Try community discovery for input as token,
+          // and also for any tokens discovered in the spider result
+          const tokensToCheck = new Set<string>();
+          tokensToCheck.add(input.trim());
+          
+          // Also add tokens from the spider result's token history
+          if (result.tokenHistory) {
+            for (const t of result.tokenHistory.slice(0, 5)) {
+              if (t.mint) tokensToCheck.add(t.mint);
+            }
+          }
+          if (result.network?.relatedTokens) {
+            for (const t of result.network.relatedTokens.slice(0, 5)) {
+              tokensToCheck.add(t);
+            }
+          }
+
+          // Run community discovery for all tokens (parallel, max 5)
+          const communityPromises = [...tokensToCheck].slice(0, 5).map(mint => 
+            autoDiscoverCommunity(mint, result.resolvedWallet)
+          );
+          await Promise.allSettled(communityPromises);
+          diagnostics.push(`🏠 X Community auto-discovery ran for ${tokensToCheck.size} tokens`);
+        }
+
+        // Refresh mesh graph after spider + community discovery
         setTimeout(() => {
           refetch();
           setTimeout(() => {
@@ -211,7 +298,7 @@ export function useMeshGraph(initialEntityId?: string) {
         diagnostics: [`Exception: ${err.message}`],
       });
     }
-  }, [refetch]);
+  }, [refetch, autoDiscoverCommunity]);
 
   const focusOnEntity = useCallback((id: string, type: string) => {
     // Reset spider attempts for new searches
