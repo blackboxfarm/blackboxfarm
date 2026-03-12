@@ -105,13 +105,20 @@ const MeshGraphVisualizer = () => {
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
       resetView();
+      stopTracking();
       return;
     }
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
     focusOnEntity(searchInput.trim(), type);
-  }, [searchInput, focusOnEntity, resetView]);
+    // Start credit tracking on new search
+    resetTracking();
+    startTracking();
+    // Reset node cap
+    setNodeCap(NODE_CAP_DEFAULT);
+    setCapBroken(false);
+  }, [searchInput, focusOnEntity, resetView, startTracking, stopTracking, resetTracking]);
 
   // Auto-spider: when focused entity returns 0 results
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
