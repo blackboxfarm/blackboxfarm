@@ -18,6 +18,8 @@ const corsHeaders = {
  *  - backfill: pick the next un-queried handle from x_account_registry (1/min via cron)
  */
 
+// The Phanes bot username for DMs (required — /x is DM-only)
+const PHANES_BOT_USERNAME = 'Phanes_bot';
 // How long to wait for Phanes to reply (ms)
 const PHANES_REPLY_WAIT_MS = 8000;
 // How many recent messages to fetch when looking for the reply
