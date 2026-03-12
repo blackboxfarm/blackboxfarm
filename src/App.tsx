@@ -63,6 +63,8 @@ const Pricing = lazy(() => import("./pages/Pricing"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const TelegramBot = lazy(() => import("./pages/TelegramBot"));
 const Features = lazy(() => import("./pages/Features"));
+const BubblePromo = lazy(() => import("./pages/BubblePromo"));
+const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
 
 const queryClient = new QueryClient();
 
