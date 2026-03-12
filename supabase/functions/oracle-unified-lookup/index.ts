@@ -661,7 +661,7 @@ Deno.serve(async (req) => {
     // AUTO-SPIDER: Always fetch from pump.fun and write to DB on every lookup
     let liveTokens: any[] = [];
     let liveAnalysis: any = null;
-    const apiErrors: string[] = [];
+    // apiErrors already declared above — continue using it
     
     if (resolvedWallet) {
       console.log('[Oracle] Auto-spider: fetching tokens from Pump.fun...');

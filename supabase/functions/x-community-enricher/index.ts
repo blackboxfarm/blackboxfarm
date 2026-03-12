@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
           relationship: 'community_for',
           confidence: 95,
           discovered_via: 'x_community_enricher',
-          metadata: { scraped_at: now }
+          evidence: { scraped_at: now }
         });
       }
 
