@@ -5,7 +5,8 @@ import { useCallback, useRef, useState } from "react";
 export interface MeshNode {
   id: string;
   type: string;
-  label: string;
+  label: string;       // Friendly display label ($TICKER, @handle, "KYC Root")
+  fullId: string;      // Raw ID for tooltip (full address)
   val: number;
 }
 
