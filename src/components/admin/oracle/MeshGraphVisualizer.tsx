@@ -254,7 +254,7 @@ const MeshGraphVisualizer = () => {
     setCommunitySearching(false);
   }, [graphData.nodes, focusedEntity, refetch]);
 
-  const handleNodeClick = useCallback((node: any) => {
+  const handleNodeClick = useCallback(async (node: any) => {
     const nodeId = node.id as string;
     const parts = nodeId.split(':');
     const type = parts[0];
@@ -266,12 +266,37 @@ const MeshGraphVisualizer = () => {
       console.log(`[BubbleMap] Spidering node: ${rawId}`);
       triggerSpider(rawId, 'quick');
     }
+
+    // Auto-enrich X Community on click — scrape admins/mods
+    if (type === 'x_community') {
+      console.log(`[BubbleMap] Auto-enriching X Community: ${rawId}`);
+      setCommunitySearching(true);
+      toast.info(`👥 Enriching X Community ${rawId.slice(0, 16)}...`);
+      try {
+        const tokenNode = graphData.nodes.find(n => n.type === 'token');
+        const walletNode = graphData.nodes.find(n => n.type === 'wallet');
+        const { data, error } = await supabase.functions.invoke('x-community-enricher', {
+          body: {
+            communityUrl: `https://x.com/i/communities/${rawId}`,
+            linkedTokenMint: tokenNode?.id.split(':').slice(1).join(':'),
+            linkedWallet: walletNode?.id.split(':').slice(1).join(':'),
+          },
+        });
+        if (error) throw error;
+        toast.success(`Found ${data?.admins?.length || 0} admins, ${data?.moderators?.length || 0} mods`);
+        setTimeout(() => refetch(), 1000);
+      } catch (err: any) {
+        toast.error(`Community enrichment failed: ${err.message}`);
+      } finally {
+        setCommunitySearching(false);
+      }
+    }
     
     if (graphRef.current) {
       graphRef.current.centerAt(node.x, node.y, 500);
       graphRef.current.zoom(2.5, 500);
     }
-  }, [expandEntity, triggerSpider]);
+  }, [expandEntity, triggerSpider, graphData.nodes, refetch]);
 
   const handleNodeRightClick = useCallback((node: any) => {
     const parts = (node.id as string).split(':');
