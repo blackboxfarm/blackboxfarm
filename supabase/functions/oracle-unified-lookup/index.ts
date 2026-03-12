@@ -722,7 +722,8 @@ Deno.serve(async (req) => {
           blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
           whitelistStatus: { isWhitelisted: false },
           recommendation: `⚠️ UNKNOWN DEVELOPER - Could not fetch data from Pump.fun or Helius. Try "Deep Scan" for manual analysis.`,
-          meshLinksAdded: 0
+          meshLinksAdded: 0,
+          apiErrors
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
