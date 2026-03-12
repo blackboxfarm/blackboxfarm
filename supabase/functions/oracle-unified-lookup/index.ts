@@ -743,6 +743,15 @@ Deno.serve(async (req) => {
       );
     }
     
+    // Optional deep-scan overrides (do not early-return; mesh links must still be written below)
+    let deepScanOverride: {
+      stats: OracleResult['stats'];
+      score: number;
+      recommendation: string;
+      relatedTokens: string[];
+      liveAnalysis: NonNullable<OracleResult['liveAnalysis']>;
+    } | null = null;
+
     // If DEEP scan mode was requested, run the pumpfun-dev-analyzer for deeper analysis
     // Quick mode skips this heavy step to avoid timeouts (used by bubble map clicks)
     if (scanMode === 'deep' && resolvedWallet) {
@@ -760,9 +769,7 @@ Deno.serve(async (req) => {
           console.error('[Oracle] Dev analyzer error:', analyzerError);
         } else if (analyzerResult?.analysis) {
           const analysis = analyzerResult.analysis;
-          
-          // Build result from fresh analysis
-          const stats: OracleResult['stats'] = {
+          const analysisStats: OracleResult['stats'] = {
             totalTokens: analysis.totalTokens || 0,
             successfulTokens: (analysis.graduatedTokens || 0) + (analysis.successfulTokens || 0),
             failedTokens: analysis.failedTokens || 0,
@@ -771,79 +778,70 @@ Deno.serve(async (req) => {
             avgLifespanHours: analysis.avgLifespanMins ? analysis.avgLifespanMins / 60 : 0
           };
           
-          const score = analysis.reputationScore || 50;
-          const trafficLight = getTrafficLight(score);
+          const analysisScore = analysis.reputationScore || 50;
           
           // Get pattern-specific recommendation
-          let recommendation = '';
+          let analysisRecommendation = '';
           switch (analysis.pattern) {
             case 'serial_spammer':
-              recommendation = `🔴 SERIAL SPAMMER - ${stats.totalTokens} tokens launched with ${analysis.successRatePct?.toFixed(1)}% success rate. This developer mass-produces tokens. AVOID.`;
+              analysisRecommendation = `🔴 SERIAL SPAMMER - ${analysisStats.totalTokens} tokens launched with ${analysis.successRatePct?.toFixed(1)}% success rate. This developer mass-produces tokens. AVOID.`;
               break;
             case 'fee_farmer':
-              recommendation = `🔴 FEE FARMER - Creates many low-effort tokens, likely farming creation fees. High risk of abandonment.`;
+              analysisRecommendation = `🔴 FEE FARMER - Creates many low-effort tokens, likely farming creation fees. High risk of abandonment.`;
               break;
             case 'test_launcher':
-              recommendation = `🟡 TEST LAUNCHER - Reuses token names, testing before real launches. Check their graduated tokens for legitimacy.`;
+              analysisRecommendation = `🟡 TEST LAUNCHER - Reuses token names, testing before real launches. Check their graduated tokens for legitimacy.`;
               break;
             case 'legitimate_builder':
-              recommendation = `🟢 LEGITIMATE BUILDER - Few tokens with good success rate. More likely to be a serious project.`;
+              analysisRecommendation = `🟢 LEGITIMATE BUILDER - Few tokens with good success rate. More likely to be a serious project.`;
               break;
             default:
-              recommendation = generateRecommendation(score, stats);
+              analysisRecommendation = generateRecommendation(analysisScore, analysisStats);
           }
           
-          // Check blacklist/whitelist status for scan-mode results too
+          // Check blacklist status for scan-mode results too
           const isBlacklistedScan = !!blacklistEntry;
-          const isWhitelistedScan = !!whitelistEntry;
-          const finalScore = isBlacklistedScan ? Math.min(score, 10) : score;
-          const finalTrafficLight = isBlacklistedScan ? 'RED' : getTrafficLight(finalScore);
+          const finalScore = isBlacklistedScan ? Math.min(analysisScore, 10) : analysisScore;
+          const hasAnalyzerStats =
+            analysisStats.totalTokens > 0 ||
+            analysisStats.successfulTokens > 0 ||
+            analysisStats.failedTokens > 0 ||
+            analysisStats.rugPulls > 0;
 
-          return new Response(
-            JSON.stringify({
-              found: true,
-              inputType,
-              resolvedWallet,
+          if (hasAnalyzerStats) {
+            deepScanOverride = {
+              stats: analysisStats,
               score: finalScore,
-              trafficLight: finalTrafficLight,
-              stats,
-              network: {
-                linkedWallets: [],
-                linkedXAccounts: [],
-                sharedMods: [],
-                relatedTokens: (analysis.tokens || []).slice(0, 10).map((t: any) => t.symbol || t.name || t.mint?.slice(0, 8))
-              },
-              blacklistStatus: { 
-                isBlacklisted: isBlacklistedScan, 
-                reason: blacklistEntry?.blacklist_reason,
-                linkedEntities: blacklistEntry?.linked_wallets || [] 
-              },
-              whitelistStatus: { 
-                isWhitelisted: isWhitelistedScan,
-                reason: whitelistEntry?.whitelist_reason 
-              },
-              recommendation: isBlacklistedScan 
-                ? `🚫 BLACKLISTED - ${blacklistEntry?.blacklist_reason || 'Known bad actor'}. ${recommendation}`
-                : recommendation,
-              meshLinksAdded: 0,
-              scanMode,
+              recommendation: isBlacklistedScan
+                ? `🚫 BLACKLISTED - ${blacklistEntry?.blacklist_reason || 'Known bad actor'}. ${analysisRecommendation}`
+                : analysisRecommendation,
+              relatedTokens: (analysis.tokens || [])
+                .slice(0, 10)
+                .map((t: any) => t.symbol || t.name || t.mint?.slice(0, 8))
+                .filter(Boolean),
               liveAnalysis: {
                 pattern: analysis.pattern,
-                tokensAnalyzed: analysis.totalTokens,
-                graduatedTokens: analysis.graduatedTokens,
-                successRate: analysis.successRatePct
+                tokensAnalyzed: analysis.totalTokens || 0,
+                graduatedTokens: analysis.graduatedTokens || 0,
+                successRate: analysis.successRatePct || 0,
               }
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-          );
+            };
+          } else {
+            console.log('[Oracle] Deep scan returned no token stats; keeping live/DB stats.');
+          }
+
+          // Preserve analyzer data for diagnostics while still continuing to mesh write phase
+          if (deepScanOverride && (!liveAnalysis || (liveAnalysis.tokensAnalyzed || 0) === 0)) {
+            liveAnalysis = deepScanOverride.liveAnalysis;
+          }
         }
       } catch (e) {
         console.error('[Oracle] Dev analyzer invocation failed:', e);
       }
     }
 
-    // Calculate stats - prefer live data if available, otherwise use DB
-    const stats: OracleResult['stats'] = {
+    // Calculate stats - prefer deep scan data first, then live data, then DB
+    const derivedStats: OracleResult['stats'] = {
       totalTokens: liveAnalysis?.tokensAnalyzed || developerProfile?.total_tokens_created || devWalletRep?.total_tokens_launched || developerTokens.length || 0,
       successfulTokens: liveAnalysis?.graduatedTokens || developerProfile?.successful_tokens || devWalletRep?.tokens_successful || developerTokens.filter(t => t.outcome === 'success').length || 0,
       failedTokens: developerProfile?.failed_tokens || devWalletRep?.tokens_rugged || developerTokens.filter(t => t.outcome === 'failed').length || 0,
@@ -851,14 +849,18 @@ Deno.serve(async (req) => {
       slowDrains: developerProfile?.slow_drain_count || devWalletRep?.slow_drain_count || 0,
       avgLifespanHours: developerProfile?.avg_token_lifespan_hours || 0
     };
+    const stats: OracleResult['stats'] = deepScanOverride?.stats || derivedStats;
 
     // Calculate score and traffic light
     const isBlacklisted = !!blacklistEntry;
     const isWhitelisted = !!whitelistEntry;
-    const { score, breakdown: scoreBreakdown } = calculateScore(stats, isBlacklisted, isWhitelisted);
+    const calculated = calculateScore(stats, isBlacklisted, isWhitelisted);
+    const score = deepScanOverride?.score ?? calculated.score;
+    const scoreBreakdown = { ...calculated.breakdown, final: score };
     const trafficLight = getTrafficLight(score);
-    const requiresScan = !hasExistingData && liveTokens.length === 0 && !creatorResolvedFromToken;
-    const recommendation = generateRecommendation(score, stats, requiresScan);
+    const hasDeepScanData = (deepScanOverride?.stats.totalTokens || 0) > 0;
+    const requiresScan = !hasExistingData && liveTokens.length === 0 && !creatorResolvedFromToken && !hasDeepScanData;
+    const recommendation = deepScanOverride?.recommendation ?? generateRecommendation(score, stats, requiresScan);
 
     // Process mesh links into structured data
     const processedMeshLinks = meshLinks.map((link: any) => ({
@@ -897,11 +899,16 @@ Deno.serve(async (req) => {
       ...heliusFunderWallets
     ])];
 
+    const relatedTokens = [
+      ...(deepScanOverride?.relatedTokens || []),
+      ...developerTokens.map(t => t.token_symbol || t.token_mint)
+    ].filter(Boolean) as string[];
+
     const network: OracleResult['network'] = {
       linkedWallets: allLinkedWallets,
       linkedXAccounts: xAccountData?.linkedXAccounts || developerProfile?.twitter_handle ? [developerProfile.twitter_handle] : [],
       sharedMods: xAccountData?.sharedMods || [],
-      relatedTokens: developerTokens.map(t => t.token_symbol || t.token_mint).slice(0, 10),
+      relatedTokens: Array.from(new Set(relatedTokens)).slice(0, 10),
       devTeam: devTeam ? { id: devTeam.id, name: devTeam.team_name } : undefined,
       meshLinks: processedMeshLinks
     };
