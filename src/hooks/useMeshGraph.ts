@@ -374,6 +374,9 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     if ((st === 'x_account' && lt === 'wallet') || (st === 'wallet' && lt === 'x_account')) continue;
     if ((st === 'x_account' && lt === 'kyc_root') || (st === 'kyc_root' && lt === 'x_account')) continue;
 
+    // Block direct token↔kyc_root (KYC must connect through wallet chain only)
+    if ((st === 'token' && lt === 'kyc_root') || (st === 'kyc_root' && lt === 'token')) continue;
+
     if (!nodesMap.has(sourceKey)) {
       nodesMap.set(sourceKey, {
         id: sourceKey,
@@ -404,8 +407,15 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     });
   }
 
+  // Prune orphan nodes (no links after filtering)
+  const connectedIds = new Set<string>();
+  for (const l of links) {
+    connectedIds.add(l.source);
+    connectedIds.add(l.target);
+  }
+
   return {
-    nodes: Array.from(nodesMap.values()),
+    nodes: Array.from(nodesMap.values()).filter(n => connectedIds.has(n.id)),
     links,
   };
 }
