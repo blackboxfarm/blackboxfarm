@@ -38,6 +38,7 @@ export const SERVICE_CREDITS: Record<ServiceName, number> = {
   coingecko: 0,     // Free tier
   bonkfun: 0,       // Free
   bagsfm: 0,        // Free
+  apify: 1,         // Paid — compute units per actor run
 };
 
 // Rate limits per service (requests per minute)
