@@ -1142,6 +1142,8 @@ serve(async (req) => {
     }
 
     const chatId = message.chat.id;
+    const chatType = message.chat.type; // 'private', 'group', or 'supergroup'
+    const isGroupChat = chatType === 'group' || chatType === 'supergroup';
     const telegramUserId = String(message.from.id);
     const username = message.from.username || null;
     const text = message.text.trim();
