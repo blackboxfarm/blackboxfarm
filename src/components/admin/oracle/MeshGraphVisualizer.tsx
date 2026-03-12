@@ -29,6 +29,7 @@ const MeshGraphVisualizer = () => {
   const [enriching, setEnriching] = useState(false);
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
+  const [redFlagDialog, setRedFlagDialog] = useState<{ node: MeshNode; flags: RedFlag[] } | null>(null);
 
   const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
 
