@@ -621,6 +621,7 @@ Deno.serve(async (req) => {
 
     // Check if we have any data on this developer
     const hasExistingData = !!(developerProfile || devWalletRep || blacklistEntry || whitelistEntry || developerTokens.length > 0);
+    const creatorResolvedFromToken = inputType === 'token' && !!resolvedWallet && resolvedWallet !== cleanedInput;
     
     // AUTO-SPIDER: Always fetch from pump.fun and write to DB on every lookup
     let liveTokens: any[] = [];
