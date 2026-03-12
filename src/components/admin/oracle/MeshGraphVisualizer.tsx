@@ -375,7 +375,7 @@ const MeshGraphVisualizer = () => {
               cooldownTicks={100}
               d3AlphaDecay={0.015}
               d3VelocityDecay={0.25}
-              dagLevelDistance={120}
+              // dagLevelDistance removed, using d3Force config instead
               linkDirectionalParticles={(link: any) => {
                 // Bidirectional relationships get 2 particles, directional get 1
                 const rel = link.relationship || '';
