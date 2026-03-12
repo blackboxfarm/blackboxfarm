@@ -96,6 +96,16 @@ export function createApiLogger(params: ApiLogParams): ApiLogger {
       });
       
       console.log(`[ApiLogger] ${params.serviceName}:${params.endpoint} → ${status} (${responseTimeMs}ms, ${credits} credits)`);
+
+      // Fire TG alert for auth failures (401, 403, 429)
+      if ([401, 403, 429].includes(status)) {
+        try {
+          const { alertOnApiAuthFailure } = await import("./api-failure-alerts.ts");
+          await alertOnApiAuthFailure(supabase, params.serviceName, params.endpoint, status, errorMessage, params.functionName);
+        } catch (alertErr) {
+          console.warn('[ApiLogger] Failed to send auth failure alert:', alertErr);
+        }
+      }
     } catch (e) {
       // Fire and forget - don't let logging errors affect the main flow
       console.warn('[ApiLogger] Failed to log API call:', e);
