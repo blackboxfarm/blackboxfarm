@@ -348,11 +348,29 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
   const nodesMap = new Map<string, MeshNode>();
   const links: MeshLink[] = [];
 
+  // First pass: identify x_accounts that are linked to an x_community (admin_of/mod_of)
+  // These should NOT also have direct links to the token — they satellite around the community
+  const handlesWithCommunity = new Set<string>();
+  const communitiesInMesh = new Set<string>();
+  
+  for (const link of meshLinks) {
+    if (['admin_of', 'mod_of'].includes(link.relationship)) {
+      handlesWithCommunity.add(link.source_id.toLowerCase());
+      communitiesInMesh.add(link.linked_id);
+    }
+  }
+
   for (const link of meshLinks) {
     const sourceKey = `${link.source_type}:${link.source_id}`;
     const targetKey = `${link.linked_type}:${link.linked_id}`;
 
     if (!typeFilters.has(link.source_type) || !typeFilters.has(link.linked_type)) continue;
+
+    // Skip direct token↔x_account links when the handle already connects via an x_community
+    const isDirectTokenHandle = 
+      (link.source_type === 'token' && link.linked_type === 'x_account' && handlesWithCommunity.has(link.linked_id.toLowerCase())) ||
+      (link.source_type === 'x_account' && link.linked_type === 'token' && handlesWithCommunity.has(link.source_id.toLowerCase()));
+    if (isDirectTokenHandle) continue;
 
     if (!nodesMap.has(sourceKey)) {
       nodesMap.set(sourceKey, {
