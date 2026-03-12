@@ -17,6 +17,7 @@ const TokenHistoryViewer = lazy(() => import("@/components/admin/TokenHistoryVie
 const DailiesDashboard = lazy(() => import("@/components/admin/DailiesDashboard").then(m => ({ default: m.DailiesDashboard })));
 const TokenXDashboard = lazy(() => import("@/components/admin/TokenXDashboard").then(m => ({ default: m.TokenXDashboard })));
 const SubscribersDashboard = lazy(() => import("@/components/admin/SubscribersDashboard").then(m => ({ default: m.SubscribersDashboard })));
+const TelegramCommandsPlanner = lazy(() => import("@/components/admin/TelegramCommandsPlanner"));
 
 export default function HoldersIntelTab() {
   const [activeSubTab, setActiveSubTab] = useState("subscribers");
