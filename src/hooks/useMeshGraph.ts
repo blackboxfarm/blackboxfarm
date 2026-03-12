@@ -93,6 +93,7 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
   }
 
   // Default friendly labels by type
+  if (type === 'token') return `$${id.length > 8 ? id.slice(0, 6) + '…' : id}`;
   if (type === 'x_account') return `@${id.replace(/^@/, '')}`;
   if (type === 'kyc_root') return `KYC ${id.length > 12 ? id.slice(0, 8) + '…' : id}`;
   if (type === 'website') {
