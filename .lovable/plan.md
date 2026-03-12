@@ -1,88 +1,47 @@
 
 
-# HoldersIntel Bot — Full Command Suite with Tier Gating
+## Plan: Fix Community Labels, Click Behavior, and Graph Stability
 
-## What You Gave Me (BotFather Commands)
+### Problem 1: X Community shows ID instead of name
+The `getNodeLabel` function checks `evidence.community_name` but the `reputation_mesh` evidence field rarely contains community names. The `x-community-enricher` likely stores the name somewhere but it's not propagated to the evidence on mesh links.
 
-Based on the conversation and your existing bot, here's the command list I'm building around:
+**Fix:** After graph loads, look up community names from the DB (`reputation_mesh` evidence or a dedicated query) for any `x_community` nodes still showing numeric IDs. Cache results like the ticker enrichment already does for tokens. Also ensure `x-community-enricher` writes `community_name` into the evidence field when creating mesh links.
 
-```text
-/start        — Welcome & setup
-/register     — Link BlackBox Farm account
-/status       — Check subscription tier
-/help         — Show commands
-/holders CA   — Holder distribution analysis
-/momentum CA  — Volume/price momentum score
-/verdict CA   — Quick Buy/Hold verdict
-/oracle CA    — Developer reputation lookup
-/wallet ADDR  — Wallet behavior analysis
-/alerts       — Manage alert preferences
-```
+### Problem 2: Clicking a bubble triggers unwanted API calls
+Currently `handleNodeClick` (line 391-433):
+- Calls `triggerSpider(rawId, 'quick')` for every wallet/token click
+- Calls `x-community-enricher` for every x_community click
+- Then centers and zooms
 
-## Tier Gating Matrix
+**Fix:** Split click into two behaviors:
+- **Left-click**: Only expand node in graph + center/zoom (positioning). No API calls.
+- **Double-click**: Trigger spider/enrichment (the "deep action"). Or use the existing action buttons instead.
 
-```text
-Command       │ Free │ Auth │ X Sub │ Pro  │ Dev
-──────────────┼──────┼──────┼───────┼──────┼─────
-/start        │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/register     │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/status       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/help         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/holders CA   │  —   │ lite │ full  │ full+│ full+
-/momentum CA  │  —   │  —   │  ✓    │  ✓   │  ✓
-/verdict CA   │  —   │ lite │  ✓    │  ✓   │  ✓
-/oracle CA    │  —   │  —   │  —    │  ✓   │  ✓
-/wallet ADDR  │  —   │  —   │  —    │  ✓   │  ✓
-/alerts       │  —   │  —   │  ✓    │  ✓   │  ✓
-```
+Auto-enrichment on first search is already handled by `triggerSpider` in the search flow and the "Enrich All Tokens" button. Community enrichment should be a one-time auto action during initial spider, not on every click.
 
-- **Free (unlinked)**: Only meta commands. Everything else says "link your account first."
-- **Auth (linked, free tier)**: `/holders` returns a lite summary (holder count, top 10% concentration, health score). `/verdict` returns just the color (🟢/🔴) with no detail.
-- **X Subscriber**: Full `/holders` with tier breakdown + distribution bars. `/momentum` unlocked. `/verdict` with sizing recommendation.
-- **Pro+**: `/oracle` dev reputation, `/wallet` behavior analysis, full detail on everything.
+### Problem 3: Graph jumps wildly on click
+Root causes:
+- `d3ReheatSimulation()` is called on every `viewMode`/`graphData` change (line 101), which restarts the full physics simulation
+- `cooldownTicks={100}` allows 100 ticks of simulation, causing prolonged movement
+- `d3AlphaDecay={0.015}` is very slow decay, meaning simulation runs for a long time
+- `d3VelocityDecay={0.25}` is low friction, allowing fast movement
+- Charge strength of `-120` pushes nodes apart aggressively
 
-## The `/verdict` System (Your Buy Signal)
+**Fix:**
+- Increase `d3AlphaDecay` to `0.05` (faster settling)
+- Increase `d3VelocityDecay` to `0.4` (more friction, less wild movement)
+- Reduce `cooldownTicks` to `60`
+- Only call `d3ReheatSimulation()` when `viewMode` changes, not on every `graphData` update — use a ref to track previous mode
+- On node click centering, use `graphRef.current.zoom(2, 800)` with smoother transition instead of instant 2.5x
 
-The verdict combines momentum score + holder health + dev reputation into a single actionable call:
+### Files to change
 
-```text
-🟢 BUY DEEP LONG    — Strong chart, healthy holders, good dev. Full position, hold.
-🟢 BUY MEDIUM SHORT — Decent momentum, ride the wave. Medium position, 2x target.
-🟡 BUY SMALL SHORT  — Speculative. Small/disposable amount, quick 2x flip.
-🔴 HOLD / AVOID     — Weak signals, bad dev, or dump in progress. Skip.
-```
+1. **`src/components/admin/oracle/MeshGraphVisualizer.tsx`**
+   - Remove `triggerSpider` and community enrichment from `handleNodeClick` — keep only `expandEntity` + center/zoom
+   - Tune ForceGraph physics params
+   - Only reheat on viewMode change, not graphData change
 
-The logic:
-- Momentum score ≥ 70 + health score ≥ 60 + dev GREEN → **DEEP LONG**
-- Momentum score ≥ 55 + health score ≥ 40 → **MEDIUM SHORT**
-- Momentum score ≥ 40 OR fresh token with buying pressure → **SMALL SHORT**
-- Everything else → **HOLD/AVOID**
-
-## Technical Implementation
-
-All new commands will be added to the existing `holdersintel-bot-webhook/index.ts` edge function. Each analytical command calls the existing edge functions internally via `supabase.functions.invoke()`:
-
-| Bot Command | Calls | Data Source |
-|---|---|---|
-| `/holders CA` | `token-ai-interpreter` | Helius holder data + bucketing |
-| `/momentum CA` | `token-momentum-analyzer` | DexScreener live metrics |
-| `/verdict CA` | `token-momentum-analyzer` + `token-ai-interpreter` + `oracle-unified-lookup` | Combined score |
-| `/oracle CA` | `oracle-unified-lookup` | Dev reputation mesh |
-| `/wallet ADDR` | `wallet-behavior-analysis` | Helius transaction history |
-| `/alerts` | DB read/write on user preferences | `telegram_link_codes` or new prefs table |
-
-### Rate Limiting
-Each analytical command will be rate-limited per user (e.g., 5 lookups/hour for X Sub, 20/hour for Pro) to prevent API abuse. Tracked via a simple counter in the `telegram_link_codes` table or a lightweight `telegram_bot_usage` table.
-
-### New DB Table
-`telegram_bot_usage` — tracks per-user command usage for rate limiting:
-- `id`, `telegram_user_id`, `command`, `token_mint`, `created_at`
-
-### Response Formatting
-All responses formatted as Telegram Markdown with ASCII bar charts for distributions (same style as the XBot channel posts), keeping messages under Telegram's 4096 char limit.
-
-## Files Changed
-1. **`supabase/functions/holdersintel-bot-webhook/index.ts`** — Add handlers for `/holders`, `/momentum`, `/verdict`, `/oracle`, `/wallet`, `/alerts`. Add tier gating middleware. Add rate limiting.
-2. **DB migration** — Create `telegram_bot_usage` table for rate limiting.
-3. **Update `/help`** — Show tier-appropriate command list per user.
+2. **`src/hooks/useMeshGraph.ts`**
+   - Add community name enrichment (similar to ticker enrichment) — query `reputation_mesh` evidence for `x_community` nodes to find stored names
+   - Ensure `autoDiscoverCommunity` stores `community_name` in evidence when upserting
 
