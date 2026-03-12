@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
-import { solscanDiscoverFunders } from '../_shared/solscan-intelligence.ts';
+import { solscanDiscoverFunders, solscanCheckAccountLabel } from '../_shared/solscan-intelligence.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
