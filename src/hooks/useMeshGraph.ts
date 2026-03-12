@@ -617,7 +617,8 @@ export function useMeshGraph(initialEntityId?: string) {
 function applyEnrichmentCaches(
   data: MeshGraphData, 
   tickerCache: Map<string, string>,
-  commNameCache: Map<string, string>
+  commNameCache: Map<string, string>,
+  tgChannelCache?: Map<string, { title: string; isRecycled: boolean; tokenCount: number }>,
 ): MeshGraphData {
   const updatedNodes = data.nodes.map(node => {
     if (node.type === 'token') {
@@ -627,6 +628,15 @@ function applyEnrichmentCaches(
     if (node.type === 'x_community') {
       const name = commNameCache.get(node.fullId);
       if (name) return { ...node, label: name.length > 18 ? name.slice(0, 16) + '…' : name };
+    }
+    if (node.type === 'telegram_channel' && tgChannelCache) {
+      const info = tgChannelCache.get(node.fullId);
+      if (info && info.title) {
+        const prefix = info.isRecycled ? '♻️ ' : '📡 ';
+        const suffix = info.isRecycled ? ` (${info.tokenCount})` : '';
+        const label = info.title.length > 14 ? info.title.slice(0, 12) + '…' : info.title;
+        return { ...node, label: `${prefix}${label}${suffix}` };
+      }
     }
     return node;
   });
