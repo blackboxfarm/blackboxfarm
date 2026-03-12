@@ -60,6 +60,9 @@ const MeshGraphVisualizer = () => {
     return () => obs.disconnect();
   }, []);
 
+  // Track previous viewMode to only reheat on mode change
+  const prevViewModeRef = useRef<ViewMode>(viewMode);
+
   // Adjust forces based on view mode
   useEffect(() => {
     if (graphRef.current) {
@@ -97,8 +100,11 @@ const MeshGraphVisualizer = () => {
         });
       });
       
-      // Reheat simulation when switching modes
-      graphRef.current.d3ReheatSimulation();
+      // Only reheat simulation when viewMode actually changes, not on every graphData update
+      if (prevViewModeRef.current !== viewMode) {
+        prevViewModeRef.current = viewMode;
+        graphRef.current.d3ReheatSimulation();
+      }
     }
   }, [graphData, viewMode, dimensions.width]);
 
@@ -386,50 +392,67 @@ const MeshGraphVisualizer = () => {
     }
   }, [graphData.nodes, refetch, triggerSpider]);
 
-  // (Enrich Communities is now auto-triggered by clicking x_community nodes)
+  // Double-click detection via click timer
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastClickNodeRef = useRef<string | null>(null);
 
-  const handleNodeClick = useCallback(async (node: any) => {
+  const handleNodeClick = useCallback((node: any) => {
     const nodeId = node.id as string;
-    const parts = nodeId.split(':');
-    const type = parts[0];
-    const rawId = parts.slice(1).join(':');
-    
-    expandEntity(nodeId);
-    
-    if (type === 'wallet' || type === 'token') {
-      console.log(`[BubbleMap] Spidering node: ${rawId}`);
-      triggerSpider(rawId, 'quick');
+
+    // If same node clicked within 300ms → double-click
+    if (lastClickNodeRef.current === nodeId && clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      lastClickNodeRef.current = null;
+
+      // ── Double-click: trigger spider/enrichment ──
+      const parts = nodeId.split(':');
+      const type = parts[0];
+      const rawId = parts.slice(1).join(':');
+
+      if (type === 'wallet' || type === 'token') {
+        console.log(`[BubbleMap] Double-click spidering: ${rawId}`);
+        triggerSpider(rawId, 'quick');
+      }
+      if (type === 'x_community') {
+        console.log(`[BubbleMap] Double-click enriching X Community: ${rawId}`);
+        setCommunitySearching(true);
+        toast.info(`👥 Enriching X Community ${rawId.slice(0, 16)}...`);
+        (async () => {
+          try {
+            const tokenNode = graphData.nodes.find(n => n.type === 'token');
+            const walletNode = graphData.nodes.find(n => n.type === 'wallet');
+            const { data, error } = await supabase.functions.invoke('x-community-enricher', {
+              body: {
+                communityUrl: `https://x.com/i/communities/${rawId}`,
+                linkedTokenMint: tokenNode?.id.split(':').slice(1).join(':'),
+                linkedWallet: walletNode?.id.split(':').slice(1).join(':'),
+              },
+            });
+            if (error) throw error;
+            toast.success(`Found ${data?.admins?.length || 0} admins, ${data?.moderators?.length || 0} mods`);
+            setTimeout(() => refetch(), 1000);
+          } catch (err: any) {
+            toast.error(`Community enrichment failed: ${err.message}`);
+          } finally {
+            setCommunitySearching(false);
+          }
+        })();
+      }
+      return;
     }
 
-    // Auto-enrich X Community on click — scrape admins/mods
-    if (type === 'x_community') {
-      console.log(`[BubbleMap] Auto-enriching X Community: ${rawId}`);
-      setCommunitySearching(true);
-      toast.info(`👥 Enriching X Community ${rawId.slice(0, 16)}...`);
-      try {
-        const tokenNode = graphData.nodes.find(n => n.type === 'token');
-        const walletNode = graphData.nodes.find(n => n.type === 'wallet');
-        const { data, error } = await supabase.functions.invoke('x-community-enricher', {
-          body: {
-            communityUrl: `https://x.com/i/communities/${rawId}`,
-            linkedTokenMint: tokenNode?.id.split(':').slice(1).join(':'),
-            linkedWallet: walletNode?.id.split(':').slice(1).join(':'),
-          },
-        });
-        if (error) throw error;
-        toast.success(`Found ${data?.admins?.length || 0} admins, ${data?.moderators?.length || 0} mods`);
-        setTimeout(() => refetch(), 1000);
-      } catch (err: any) {
-        toast.error(`Community enrichment failed: ${err.message}`);
-      } finally {
-        setCommunitySearching(false);
+    // ── Single click: expand + center/zoom only ──
+    lastClickNodeRef.current = nodeId;
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      lastClickNodeRef.current = null;
+      expandEntity(nodeId);
+      if (graphRef.current) {
+        graphRef.current.centerAt(node.x, node.y, 800);
+        graphRef.current.zoom(2, 800);
       }
-    }
-    
-    if (graphRef.current) {
-      graphRef.current.centerAt(node.x, node.y, 500);
-      graphRef.current.zoom(2.5, 500);
-    }
+    }, 300);
   }, [expandEntity, triggerSpider, graphData.nodes, refetch]);
 
   const handleNodeRightClick = useCallback((node: any) => {
@@ -894,15 +917,16 @@ const MeshGraphVisualizer = () => {
               linkCanvasObject={paintLink}
               onNodeClick={handleNodeClick}
               onNodeRightClick={handleNodeRightClick}
+              
               onNodeHover={(node: any) => setHoveredNode(node as MeshNode | null)}
               nodeLabel={(node: any) => {
                 const n = node as MeshNode;
                 const rawId = n.fullId || n.id.split(':').slice(1).join(':');
-                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
+                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections\n(double-click to spider/enrich)`;
               }}
-              cooldownTicks={100}
-              d3AlphaDecay={0.015}
-              d3VelocityDecay={viewMode === 'tree' ? 0.35 : 0.25}
+              cooldownTicks={60}
+              d3AlphaDecay={0.05}
+              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
               linkDirectionalParticles={(link: any) => {
