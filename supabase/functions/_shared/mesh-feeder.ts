@@ -1,3 +1,5 @@
+import { registerXHandlesForPhanes } from './register-x-handle.ts';
+
 /**
  * MESH FEEDER — Universal passive intelligence collector
  * 
