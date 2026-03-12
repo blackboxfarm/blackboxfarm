@@ -472,6 +472,7 @@ Deno.serve(async (req) => {
 
     let resolvedWallet: string | undefined;
     let xAccountData: any = null;
+    const apiErrors: string[] = []; // Declare early — used during token resolution
 
     // Step 1: Resolve to wallet based on input type
     if (inputType === 'x_account') {
@@ -660,7 +661,7 @@ Deno.serve(async (req) => {
     // AUTO-SPIDER: Always fetch from pump.fun and write to DB on every lookup
     let liveTokens: any[] = [];
     let liveAnalysis: any = null;
-    const apiErrors: string[] = [];
+    // apiErrors already declared above — continue using it
     
     if (resolvedWallet) {
       console.log('[Oracle] Auto-spider: fetching tokens from Pump.fun...');

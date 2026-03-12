@@ -327,9 +327,9 @@ Deno.serve(async (req) => {
           linked_type: 'x_community',
           linked_id: communityId,
           relationship: 'admin_of',
-          confidence: 100,
-          discovered_via: 'x_community_enricher',
-          metadata: { scraped_at: now }
+           confidence: 100,
+           discovered_via: 'x_community_enricher',
+           evidence: { scraped_at: now }
         });
       }
 
@@ -341,9 +341,9 @@ Deno.serve(async (req) => {
           linked_type: 'x_community',
           linked_id: communityId,
           relationship: 'mod_of',
-          confidence: 100,
-          discovered_via: 'x_community_enricher',
-          metadata: { scraped_at: now }
+           confidence: 100,
+           discovered_via: 'x_community_enricher',
+           evidence: { scraped_at: now }
         });
       }
 
@@ -367,7 +367,7 @@ Deno.serve(async (req) => {
             relationship: 'co_mod',
             confidence: 90,
             discovered_via: 'x_community_enricher',
-            metadata: { community_id: communityId, scraped_at: now, staff_count: allStaff.length }
+            evidence: { community_id: communityId, scraped_at: now, staff_count: allStaff.length }
           });
         }
       }
@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
           relationship: 'community_for',
           confidence: 95,
           discovered_via: 'x_community_enricher',
-          metadata: { scraped_at: now }
+          evidence: { scraped_at: now }
         });
       }
 
