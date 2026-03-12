@@ -5,7 +5,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-export type ServiceName = 'helius' | 'dexscreener' | 'solscan' | 'rugcheck' | 'pumpfun' | 'jupiter' | 'coingecko' | 'bonkfun' | 'bagsfm';
+export type ServiceName = 'helius' | 'dexscreener' | 'solscan' | 'rugcheck' | 'pumpfun' | 'jupiter' | 'coingecko' | 'bonkfun' | 'bagsfm' | 'apify';
 export type RequestType = 'holders_report' | 'price_discovery' | 'sns_lookup' | 'lp_detection' | 'insider_check' | 'creator_lookup' | 'market_data';
 
 export interface ApiLogParams {
@@ -38,6 +38,7 @@ export const SERVICE_CREDITS: Record<ServiceName, number> = {
   coingecko: 0,     // Free tier
   bonkfun: 0,       // Free
   bagsfm: 0,        // Free
+  apify: 1,         // Paid — compute units per actor run
 };
 
 // Rate limits per service (requests per minute)
@@ -51,6 +52,7 @@ export const SERVICE_RATE_LIMITS: Record<ServiceName, number> = {
   coingecko: 50,
   bonkfun: 60,      // Estimated
   bagsfm: 60,       // Estimated
+  apify: 10,        // Rate limited - actor runs
 };
 
 /**

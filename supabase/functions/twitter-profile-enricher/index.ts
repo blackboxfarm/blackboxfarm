@@ -75,7 +75,15 @@ Deno.serve(async (req) => {
     console.log(`Enriching ${usernames.length} Twitter profiles:`, usernames);
 
     // Call Apify Twitter profile scraper
+    const { createApiLogger } = await import("../_shared/api-logger.ts");
     const actorId = "apidojo~twitter-user-scraper";
+    const logger = createApiLogger({
+      serviceName: 'apify',
+      endpoint: `${actorId}/profile-enrichment`,
+      method: 'POST',
+      functionName: 'twitter-profile-enricher',
+      metadata: { profileCount: usernames.length },
+    });
     
     console.log("Calling Apify with twitterHandles:", usernames);
     
@@ -93,6 +101,8 @@ Deno.serve(async (req) => {
         }),
       }
     );
+
+    await logger.complete(runResponse.status);
 
     if (!runResponse.ok) {
       const errorText = await runResponse.text();
