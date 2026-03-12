@@ -134,12 +134,17 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       : walletNodes[0]?.id.split(':').slice(1).join(':');
     if (!targetWallet) { toast.error('No wallet found to trace KYC root'); return; }
     setKycSearching(true);
+    console.log('[BubbleMap] KYC search started:', targetWallet.slice(0, 16));
     toast.info(`🔍 Deep KYC search for ${targetWallet.slice(0, 12)}...`);
     try {
       const { data, error } = await supabase.functions.invoke('mesh-kyc-deep-search', {
         body: { walletAddress: targetWallet, maxDepth: 5 },
       });
-      if (error) throw error;
+      if (error) {
+        console.error('[BubbleMap] KYC search edge function error:', error);
+        throw error;
+      }
+      console.log('[BubbleMap] KYC search result:', { kycRoot: data?.kycRoot?.slice(0, 12), walletsTraced: data?.walletsTraced, chain: data?.chain?.length });
       if (data?.kycRoot) {
         toast.success(`🏦 KYC Root found: ${data.kycRoot.slice(0, 12)}...`);
         if (data.kycRoot) expandEntity(`kyc_root:${data.kycRoot}`);
@@ -155,6 +160,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       }
       setTimeout(() => refetch(), 500);
     } catch (err: any) {
+      console.error('[BubbleMap] KYC search failed:', err);
       toast.error(`KYC search failed: ${err.message}`);
     } finally {
       setKycSearching(false);
