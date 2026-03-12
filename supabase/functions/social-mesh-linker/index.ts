@@ -244,20 +244,66 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 2. Telegram → wallet
+      // 2. Telegram → wallet (resolve to immutable channel ID when possible)
       const telegramHandle = extractTelegramHandle(telegram_url);
       if (telegramHandle) {
-        meshLinks.push({
-          source_type: "telegram",
-          source_id: telegramHandle,
-          linked_type: "wallet",
-          linked_id: creator_wallet,
-          relationship: "social_account_of",
-          confidence: 65,
-          evidence: { source: "watchlist_enrichment", token_mint, token_symbol, url: telegram_url },
-          discovered_via: "social-mesh-linker",
-        });
-        discoveredSocials.push(`tg:${telegramHandle}`);
+        // Try to resolve username → immutable numeric channel ID
+        const resolved = await resolveTelegramUsername(telegramHandle, supabase);
+        
+        if (resolved) {
+          // Primary link: immutable channel ID → wallet
+          meshLinks.push({
+            source_type: "telegram_channel",
+            source_id: resolved.channelId,
+            linked_type: "wallet",
+            linked_id: creator_wallet,
+            relationship: "social_account_of",
+            confidence: 75,
+            evidence: {
+              source: "watchlist_enrichment",
+              token_mint, token_symbol,
+              url: telegram_url,
+              channel_title: resolved.title,
+              resolved_username: resolved.username,
+              is_recycled: resolved.isRecycled,
+              linked_token_count: resolved.linkedTokenCount,
+            },
+            discovered_via: "social-mesh-linker",
+          });
+          
+          // Secondary link: username → channel ID (so both are searchable)
+          meshLinks.push({
+            source_type: "telegram",
+            source_id: telegramHandle,
+            linked_type: "telegram_channel",
+            linked_id: resolved.channelId,
+            relationship: "username_of",
+            confidence: 95,
+            evidence: { source: "bot_api_resolution", title: resolved.title, url: telegram_url },
+            discovered_via: "social-mesh-linker",
+          });
+          
+          // Increment token count for recycling detection
+          await incrementChannelTokenCount(resolved.channelId, supabase);
+          
+          discoveredSocials.push(`tg_channel:${resolved.channelId}(${resolved.title})`);
+          if (resolved.isRecycled) {
+            console.log(`   ♻️ RECYCLED GROUP detected: ${resolved.title} (${resolved.linkedTokenCount + 1} tokens)`);
+          }
+        } else {
+          // Fallback: username-only (bot not in group, private, etc.)
+          meshLinks.push({
+            source_type: "telegram",
+            source_id: telegramHandle,
+            linked_type: "wallet",
+            linked_id: creator_wallet,
+            relationship: "social_account_of",
+            confidence: 55,
+            evidence: { source: "watchlist_enrichment", token_mint, token_symbol, url: telegram_url, resolution_failed: true },
+            discovered_via: "social-mesh-linker",
+          });
+          discoveredSocials.push(`tg:${telegramHandle}(unresolved)`);
+        }
       }
 
       // 3. Website → wallet
