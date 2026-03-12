@@ -189,7 +189,7 @@ function generateRecommendation(score: number, stats: OracleResult['stats'], req
 }
 
 // Fetch tokens MINTED by a wallet — only returns tokens this wallet actually created
-async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise<any[]> {
+async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiErrors: string[] = []): Promise<any[]> {
   const headers = {
     'Accept': 'application/json',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -233,7 +233,9 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
             keepFetching = false;
           }
         } else {
-          console.log(`[Oracle] Pump.fun API returned ${response.status}`);
+          const errMsg = `Pump.fun API ${response.status} on ${baseUrl.includes('frontend') ? 'frontend-api' : 'client-api'}`;
+          console.log(`[Oracle] ${errMsg}`);
+          apiErrors.push(errMsg);
           keepFetching = false;
         }
       }
@@ -243,7 +245,9 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any): Promise
         return allTokens;
       }
     } catch (error) {
-      console.error(`[Oracle] Pump.fun fetch error:`, error);
+      const errMsg = `Pump.fun fetch error: ${error instanceof Error ? error.message : 'timeout'}`;
+      console.error(`[Oracle] ${errMsg}`);
+      apiErrors.push(errMsg);
     }
   }
   
