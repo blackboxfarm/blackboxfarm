@@ -341,9 +341,9 @@ Deno.serve(async (req) => {
           linked_type: 'x_community',
           linked_id: communityId,
           relationship: 'mod_of',
-          confidence: 100,
-          discovered_via: 'x_community_enricher',
-          metadata: { scraped_at: now }
+           confidence: 100,
+           discovered_via: 'x_community_enricher',
+           evidence: { scraped_at: now }
         });
       }
 
