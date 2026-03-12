@@ -374,6 +374,9 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     if ((st === 'x_account' && lt === 'wallet') || (st === 'wallet' && lt === 'x_account')) continue;
     if ((st === 'x_account' && lt === 'kyc_root') || (st === 'kyc_root' && lt === 'x_account')) continue;
 
+    // Block direct token↔kyc_root (KYC must connect through wallet chain only)
+    if ((st === 'token' && lt === 'kyc_root') || (st === 'kyc_root' && lt === 'token')) continue;
+
     if (!nodesMap.has(sourceKey)) {
       nodesMap.set(sourceKey, {
         id: sourceKey,
