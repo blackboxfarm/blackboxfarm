@@ -802,27 +802,36 @@ Deno.serve(async (req) => {
           // Check blacklist status for scan-mode results too
           const isBlacklistedScan = !!blacklistEntry;
           const finalScore = isBlacklistedScan ? Math.min(analysisScore, 10) : analysisScore;
+          const hasAnalyzerStats =
+            analysisStats.totalTokens > 0 ||
+            analysisStats.successfulTokens > 0 ||
+            analysisStats.failedTokens > 0 ||
+            analysisStats.rugPulls > 0;
 
-          deepScanOverride = {
-            stats: analysisStats,
-            score: finalScore,
-            recommendation: isBlacklistedScan
-              ? `🚫 BLACKLISTED - ${blacklistEntry?.blacklist_reason || 'Known bad actor'}. ${analysisRecommendation}`
-              : analysisRecommendation,
-            relatedTokens: (analysis.tokens || [])
-              .slice(0, 10)
-              .map((t: any) => t.symbol || t.name || t.mint?.slice(0, 8))
-              .filter(Boolean),
-            liveAnalysis: {
-              pattern: analysis.pattern,
-              tokensAnalyzed: analysis.totalTokens || 0,
-              graduatedTokens: analysis.graduatedTokens || 0,
-              successRate: analysis.successRatePct || 0,
-            }
-          };
+          if (hasAnalyzerStats) {
+            deepScanOverride = {
+              stats: analysisStats,
+              score: finalScore,
+              recommendation: isBlacklistedScan
+                ? `🚫 BLACKLISTED - ${blacklistEntry?.blacklist_reason || 'Known bad actor'}. ${analysisRecommendation}`
+                : analysisRecommendation,
+              relatedTokens: (analysis.tokens || [])
+                .slice(0, 10)
+                .map((t: any) => t.symbol || t.name || t.mint?.slice(0, 8))
+                .filter(Boolean),
+              liveAnalysis: {
+                pattern: analysis.pattern,
+                tokensAnalyzed: analysis.totalTokens || 0,
+                graduatedTokens: analysis.graduatedTokens || 0,
+                successRate: analysis.successRatePct || 0,
+              }
+            };
+          } else {
+            console.log('[Oracle] Deep scan returned no token stats; keeping live/DB stats.');
+          }
 
           // Preserve analyzer data for diagnostics while still continuing to mesh write phase
-          if (!liveAnalysis || (liveAnalysis.tokensAnalyzed || 0) === 0) {
+          if (deepScanOverride && (!liveAnalysis || (liveAnalysis.tokensAnalyzed || 0) === 0)) {
             liveAnalysis = deepScanOverride.liveAnalysis;
           }
         }
