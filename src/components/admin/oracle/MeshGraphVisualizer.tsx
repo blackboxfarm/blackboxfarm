@@ -32,8 +32,11 @@ const MeshGraphVisualizer = () => {
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
   const [redFlagDialog, setRedFlagDialog] = useState<{ node: MeshNode; flags: RedFlag[] } | null>(null);
+  const [ctoChecked, setCtoChecked] = useState<Set<string>>(new Set());
 
   const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
+  const holdings = useBubbleMapHoldings();
+  const { detectCTO, buildCTORedFlag } = useCTODetection();
 
   const {
     graphData,
