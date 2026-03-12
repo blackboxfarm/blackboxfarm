@@ -103,7 +103,7 @@ const MeshGraphVisualizer = () => {
     const meshNode = node as MeshNode & { x: number; y: number };
     const color = ENTITY_COLORS[meshNode.type] || '#888';
     const size = Math.max(4, Math.min(meshNode.val * 3 + 3, 20));
-    const fontSize = Math.max(8, 12 / globalScale);
+    const fontSize = Math.max(6, 9 / globalScale);
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
 
     if (isFocused) {
