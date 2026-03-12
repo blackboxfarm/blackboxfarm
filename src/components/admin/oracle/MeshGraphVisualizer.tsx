@@ -56,11 +56,11 @@ const MeshGraphVisualizer = () => {
   useEffect(() => {
     if (graphRef.current) {
       if (viewMode === 'tree') {
-        graphRef.current.d3Force('link')?.distance(160);
-        graphRef.current.d3Force('charge')?.strength(-500);
-      } else {
-        graphRef.current.d3Force('link')?.distance(120);
+        graphRef.current.d3Force('link')?.distance(95);
         graphRef.current.d3Force('charge')?.strength(-300);
+      } else {
+        graphRef.current.d3Force('link')?.distance(70);
+        graphRef.current.d3Force('charge')?.strength(-180);
       }
     }
   }, [graphData, viewMode]);
