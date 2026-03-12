@@ -1,88 +1,63 @@
 
 
-# HoldersIntel Bot — Full Command Suite with Tier Gating
+## Plan: X Account ID Resolution & Handle History Tracking
 
-## What You Gave Me (BotFather Commands)
+### The Problem
+Currently, X handles are stored as mutable strings (`source_type: "x_account"`, `source_id: "somehandle"`). When a scammer changes `@rugdev` → `@legitproject`, the mesh treats them as two separate entities. This is the exact same vulnerability we just solved for Telegram groups.
 
-Based on the conversation and your existing bot, here's the command list I'm building around:
+### Can We Query Phanes Bot?
+No. Phanes Crypto Bot has no public API. It's a closed Telegram bot with no documented query endpoints. We build this independently.
 
-```text
-/start        — Welcome & setup
-/register     — Link BlackBox Farm account
-/status       — Check subscription tier
-/help         — Show commands
-/holders CA   — Holder distribution analysis
-/momentum CA  — Volume/price momentum score
-/verdict CA   — Quick Buy/Hold verdict
-/oracle CA    — Developer reputation lookup
-/wallet ADDR  — Wallet behavior analysis
-/alerts       — Manage alert preferences
+### How X Handle Resolution Works
+The X API v2 endpoint `GET /2/users/by/username/:username` returns an **immutable numeric user ID** for any handle. This ID never changes regardless of how many times the account renames itself. This is our anchor — identical pattern to Telegram's `getChat` returning channel IDs.
+
+### What Changes
+
+**1. Create `supabase/functions/_shared/x-handle-resolver.ts`**
+Mirror of `telegram-resolver.ts`:
+- Takes a handle string, calls X API v2 `GET /2/users/by/username/:handle`
+- Returns `{ userId, displayName, handle, isRotated, handleCount }`
+- Caches in `x_account_registry` table
+- Tracks handle history: if numeric ID already exists under a different handle, records the old handle with timestamps
+- Falls back to handle-only if API fails (rate limit, suspended account, etc.)
+
+**2. Create `x_account_registry` table (migration)**
+```
+x_account_registry:
+  - x_user_id (text, PK) — immutable numeric ID (e.g., "1234567890")
+  - current_handle (text) — last known @handle
+  - display_name (text) — last known display name
+  - is_verified (boolean) — blue check status
+  - handle_history (jsonb[]) — [{handle, first_seen, last_seen}]
+  - name_history (jsonb[]) — [{name, first_seen, last_seen}]
+  - linked_token_count (int) — how many tokens this account has been linked to
+  - first_seen_at, last_seen_at (timestamps)
 ```
 
-## Tier Gating Matrix
+**3. Update `social-mesh-linker` to resolve X handles**
+After extracting a Twitter handle from `twitter_url`:
+- Call `resolveXHandle(handle, supabase)` → get numeric ID
+- Primary mesh link: `x_user:1234567890` → `wallet:ABC` (immutable)
+- Secondary link: `x_account:handle` → `x_user:1234567890` (searchable alias)
+- If resolution fails, fall back to current `x_account:handle` → `wallet` behavior
 
-```text
-Command       │ Free │ Auth │ X Sub │ Pro  │ Dev
-──────────────┼──────┼──────┼───────┼──────┼─────
-/start        │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/register     │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/status       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/help         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/holders CA   │  —   │ lite │ full  │ full+│ full+
-/momentum CA  │  —   │  —   │  ✓    │  ✓   │  ✓
-/verdict CA   │  —   │ lite │  ✓    │  ✓   │  ✓
-/oracle CA    │  —   │  —   │  —    │  ✓   │  ✓
-/wallet ADDR  │  —   │  —   │  —    │  ✓   │  ✓
-/alerts       │  —   │  —   │  ✓    │  ✓   │  ✓
-```
+**4. Update Bubble Map labels for `x_user` nodes**
+- Show `@currenthandle` as label (fetched from registry)
+- If `handle_history` has entries, show rotation badge: `🔄 @current (3 prev handles)`
+- Tooltip or click detail shows previous handles
 
-- **Free (unlinked)**: Only meta commands. Everything else says "link your account first."
-- **Auth (linked, free tier)**: `/holders` returns a lite summary (holder count, top 10% concentration, health score). `/verdict` returns just the color (🟢/🔴) with no detail.
-- **X Subscriber**: Full `/holders` with tier breakdown + distribution bars. `/momentum` unlocked. `/verdict` with sizing recommendation.
-- **Pro+**: `/oracle` dev reputation, `/wallet` behavior analysis, full detail on everything.
+**5. X API Access**
+The X API v2 Basic tier ($200/mo) allows 10,000 user lookups per month. We need the `TWITTER_BEARER_TOKEN` secret. Resolution is cached so each unique handle only costs 1 API call ever — subsequent encounters use the registry.
 
-## The `/verdict` System (Your Buy Signal)
+### Files to Create/Change
+- **Create**: `supabase/functions/_shared/x-handle-resolver.ts`
+- **Create**: Migration for `x_account_registry` table
+- **Edit**: `supabase/functions/social-mesh-linker/index.ts` — use X resolver before mesh inserts
+- **Edit**: `src/hooks/useMeshGraph.ts` — label enrichment for `x_user` nodes with rotation badge
+- **Edit**: `src/components/admin/oracle/MeshGraphVisualizer.tsx` — color/icon for `x_user` type
 
-The verdict combines momentum score + holder health + dev reputation into a single actionable call:
-
-```text
-🟢 BUY DEEP LONG    — Strong chart, healthy holders, good dev. Full position, hold.
-🟢 BUY MEDIUM SHORT — Decent momentum, ride the wave. Medium position, 2x target.
-🟡 BUY SMALL SHORT  — Speculative. Small/disposable amount, quick 2x flip.
-🔴 HOLD / AVOID     — Weak signals, bad dev, or dump in progress. Skip.
-```
-
-The logic:
-- Momentum score ≥ 70 + health score ≥ 60 + dev GREEN → **DEEP LONG**
-- Momentum score ≥ 55 + health score ≥ 40 → **MEDIUM SHORT**
-- Momentum score ≥ 40 OR fresh token with buying pressure → **SMALL SHORT**
-- Everything else → **HOLD/AVOID**
-
-## Technical Implementation
-
-All new commands will be added to the existing `holdersintel-bot-webhook/index.ts` edge function. Each analytical command calls the existing edge functions internally via `supabase.functions.invoke()`:
-
-| Bot Command | Calls | Data Source |
-|---|---|---|
-| `/holders CA` | `token-ai-interpreter` | Helius holder data + bucketing |
-| `/momentum CA` | `token-momentum-analyzer` | DexScreener live metrics |
-| `/verdict CA` | `token-momentum-analyzer` + `token-ai-interpreter` + `oracle-unified-lookup` | Combined score |
-| `/oracle CA` | `oracle-unified-lookup` | Dev reputation mesh |
-| `/wallet ADDR` | `wallet-behavior-analysis` | Helius transaction history |
-| `/alerts` | DB read/write on user preferences | `telegram_link_codes` or new prefs table |
-
-### Rate Limiting
-Each analytical command will be rate-limited per user (e.g., 5 lookups/hour for X Sub, 20/hour for Pro) to prevent API abuse. Tracked via a simple counter in the `telegram_link_codes` table or a lightweight `telegram_bot_usage` table.
-
-### New DB Table
-`telegram_bot_usage` — tracks per-user command usage for rate limiting:
-- `id`, `telegram_user_id`, `command`, `token_mint`, `created_at`
-
-### Response Formatting
-All responses formatted as Telegram Markdown with ASCII bar charts for distributions (same style as the XBot channel posts), keeping messages under Telegram's 4096 char limit.
-
-## Files Changed
-1. **`supabase/functions/holdersintel-bot-webhook/index.ts`** — Add handlers for `/holders`, `/momentum`, `/verdict`, `/oracle`, `/wallet`, `/alerts`. Add tier gating middleware. Add rate limiting.
-2. **DB migration** — Create `telegram_bot_usage` table for rate limiting.
-3. **Update `/help`** — Show tier-appropriate command list per user.
+### Performance
+- 1 X API call per unique handle (cached forever in registry)
+- Same BATCH_SIZE=20 flow as existing mesh linker
+- No impact on existing mesh queries — adds new node type alongside existing ones
 
