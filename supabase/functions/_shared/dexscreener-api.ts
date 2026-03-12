@@ -100,19 +100,19 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
       // Pick best Solana pair by liquidity (not just pairs[0])
       if (result.pairs.length > 0) {
         const solanaPairs = result.pairs.filter((p: any) => p.chainId === 'solana');
-        const bestPair = solanaPairs.length > 0 
+        const bestPair = solanaPairs.length > 0
           ? solanaPairs.reduce((best: any, p: any) => (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best, solanaPairs[0])
           : result.pairs[0];
-        
+
         result.launchpadInfo = detectLaunchpad(bestPair, tokenMint);
         console.log(`[DexScreener] Launchpad detected: ${result.launchpadInfo.name} (${result.launchpadInfo.confidence})`);
         console.log(`[DexScreener] Best pair dexId: ${bestPair.dexId}, liquidity: $${bestPair.liquidity?.usd || 0}`);
-        
+
         // Get price
         if (bestPair.priceUsd) {
           result.priceUsd = parseFloat(bestPair.priceUsd) || 0;
         }
-        
+
         // Extract vitality metrics from best pair
         const vol = bestPair.volume || {};
         const pc = bestPair.priceChange || {};
@@ -131,29 +131,73 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
           dexId: bestPair.dexId || null,
         };
         console.log(`[DexScreener] Vitality — Vol24h: $${result.vitality.volume.h24}, Liq: $${result.vitality.liquidityUsd}, DexId: ${result.vitality.dexId}, PairAge: ${result.vitality.pairCreatedAt ? Math.round((Date.now() - result.vitality.pairCreatedAt) / 3600000) + 'h' : 'N/A'}`);
-        
-        // Extract social links
-        const info = result.pairs[0].info;
-        if (info?.socials) {
-          for (const social of info.socials) {
-            if (social.type === 'twitter' && social.url) {
-              result.socials.twitter = social.url;
-            } else if (social.type === 'telegram' && social.url) {
-              result.socials.telegram = social.url;
+
+        // Extract social links with fallback across all pairs
+        const socialCandidates = [
+          bestPair,
+          ...result.pairs.filter((p: any) => p?.pairAddress !== bestPair?.pairAddress),
+        ];
+
+        for (const candidate of socialCandidates) {
+          const info = candidate?.info;
+          if (!info) continue;
+
+          if (Array.isArray(info.socials)) {
+            for (const social of info.socials) {
+              if (!social?.url) continue;
+              if (!result.socials.twitter && social.type === 'twitter') {
+                result.socials.twitter = social.url;
+              } else if (!result.socials.telegram && social.type === 'telegram') {
+                result.socials.telegram = social.url;
+              }
             }
           }
-        }
-        if (info?.websites?.length > 0) {
-          const nonLaunchpadSite = info.websites.find((w: any) => 
-            !w.url?.includes('pump.fun') && 
-            !w.url?.includes('bonk.fun') && 
-            !w.url?.includes('bags.fm') &&
-            !w.url?.includes('dexscreener')
-          );
-          if (nonLaunchpadSite?.url) {
-            result.socials.website = nonLaunchpadSite.url;
+
+          if (Array.isArray(info.websites)) {
+            if (!result.socials.twitter) {
+              const xCommunity = info.websites.find((w: any) => {
+                const url = (w?.url || '').toLowerCase();
+                return url.includes('x.com/') || url.includes('twitter.com/');
+              });
+              if (xCommunity?.url) {
+                result.socials.twitter = xCommunity.url;
+              }
+            }
+
+            if (!result.socials.telegram) {
+              const telegramSite = info.websites.find((w: any) => {
+                const url = (w?.url || '').toLowerCase();
+                return url.includes('t.me/') || url.includes('telegram.me/');
+              });
+              if (telegramSite?.url) {
+                result.socials.telegram = telegramSite.url;
+              }
+            }
+
+            if (!result.socials.website) {
+              const nonLaunchpadSite = info.websites.find((w: any) => {
+                const url = (w?.url || '').toLowerCase();
+                return !!url &&
+                  !url.includes('pump.fun') &&
+                  !url.includes('bonk.fun') &&
+                  !url.includes('bags.fm') &&
+                  !url.includes('dexscreener') &&
+                  !url.includes('x.com/') &&
+                  !url.includes('twitter.com/') &&
+                  !url.includes('t.me/') &&
+                  !url.includes('telegram.me/');
+              });
+              if (nonLaunchpadSite?.url) {
+                result.socials.website = nonLaunchpadSite.url;
+              }
+            }
+          }
+
+          if (result.socials.twitter && result.socials.telegram && result.socials.website) {
+            break;
           }
         }
+
         console.log(`[DexScreener] Socials found:`, result.socials);
       }
     } else {
