@@ -3,6 +3,7 @@ import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { discoverFundingChain } from '../_shared/funding-resolver.ts';
 import { isSolscanUsable } from '../_shared/provider-health.ts';
+import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
