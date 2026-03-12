@@ -299,12 +299,15 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
 
-    if (globalScale > 1.0) {
-      ctx.font = `${fontSize}px sans-serif`;
+    // Always show friendly label (not just when zoomed)
+    const labelText = meshNode.label;
+    if (labelText) {
+      const labelFontSize = Math.max(6, 9 / globalScale);
+      ctx.font = `bold ${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(meshNode.label, meshNode.x, meshNode.y + size + 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
   }, [focusedEntity]);
 
