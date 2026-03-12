@@ -394,22 +394,31 @@ const MeshGraphVisualizer = () => {
 
   // (Enrich Communities is now auto-triggered by clicking x_community nodes)
 
-  const handleNodeClick = useCallback(async (node: any) => {
+  // Single click: expand + center/zoom only (no API calls)
+  const handleNodeClick = useCallback((node: any) => {
+    const nodeId = node.id as string;
+    expandEntity(nodeId);
+    
+    if (graphRef.current) {
+      graphRef.current.centerAt(node.x, node.y, 800);
+      graphRef.current.zoom(2, 800);
+    }
+  }, [expandEntity]);
+
+  // Double-click: trigger spider/enrichment (deep action)
+  const handleNodeDoubleClick = useCallback(async (node: any) => {
     const nodeId = node.id as string;
     const parts = nodeId.split(':');
     const type = parts[0];
     const rawId = parts.slice(1).join(':');
-    
-    expandEntity(nodeId);
-    
+
     if (type === 'wallet' || type === 'token') {
-      console.log(`[BubbleMap] Spidering node: ${rawId}`);
+      console.log(`[BubbleMap] Double-click spidering: ${rawId}`);
       triggerSpider(rawId, 'quick');
     }
 
-    // Auto-enrich X Community on click — scrape admins/mods
     if (type === 'x_community') {
-      console.log(`[BubbleMap] Auto-enriching X Community: ${rawId}`);
+      console.log(`[BubbleMap] Double-click enriching X Community: ${rawId}`);
       setCommunitySearching(true);
       toast.info(`👥 Enriching X Community ${rawId.slice(0, 16)}...`);
       try {
@@ -431,12 +440,7 @@ const MeshGraphVisualizer = () => {
         setCommunitySearching(false);
       }
     }
-    
-    if (graphRef.current) {
-      graphRef.current.centerAt(node.x, node.y, 500);
-      graphRef.current.zoom(2.5, 500);
-    }
-  }, [expandEntity, triggerSpider, graphData.nodes, refetch]);
+  }, [triggerSpider, graphData.nodes, refetch]);
 
   const handleNodeRightClick = useCallback((node: any) => {
     const parts = (node.id as string).split(':');
