@@ -923,13 +923,13 @@ Deno.serve(async (req) => {
       .map((link: any) => link.source_id === resolvedWallet ? link.linked_id : link.source_id)
       .filter((w: string) => isBase58(w));
 
-    // Build network associations - now including mesh data + Solscan funders
-    const solscanFunderWallets = solscanFunders.map(f => f.wallet);
+    // Build network associations - now including mesh data + Helius funders
+    const heliusFunderWallets = heliusFundingChain.map(f => f.funder);
     const allLinkedWallets = [...new Set([
       ...(xAccountData?.linkedWallets || []),
       ...upstreamWallets,
       ...meshLinkedWallets,
-      ...solscanFunderWallets
+      ...heliusFunderWallets
     ])];
 
     const network: OracleResult['network'] = {
