@@ -293,6 +293,7 @@ export function useMeshGraph(initialEntityId?: string) {
     }
 
     setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
+    console.log('[MeshSpider] Starting spider:', { input: input.slice(0, 16), scanMode });
 
     try {
       setSpiderStatus({ active: true, stage: '🔍 Resolving entity type & wallet...' });
@@ -301,7 +302,19 @@ export function useMeshGraph(initialEntityId?: string) {
         body: { input, scanMode },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[MeshSpider] Edge function error:', error);
+        throw error;
+      }
+      
+      console.log('[MeshSpider] Spider result:', { 
+        inputType: data?.inputType, 
+        found: data?.found,
+        meshLinksAdded: data?.meshLinksAdded, 
+        requiresScan: data?.requiresScan,
+        apiErrors: data?.apiErrors,
+        resolvedWallet: data?.resolvedWallet?.slice(0, 12),
+      });
 
       const result = data as any;
       

@@ -95,10 +95,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
+      console.log('[BubbleMap] Reset — empty search');
       resetView();
       return;
     }
     if (!canSearch) {
+      console.warn('[BubbleMap] Search blocked — daily limit reached', { remaining, limit, isSubscriber });
       toast.error("Daily limit reached! Sign up or subscribe for unlimited access.");
       return;
     }
@@ -106,10 +108,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
+    console.log('[BubbleMap] Search started:', { input: searchInput.trim().slice(0, 16), type, mode, remaining });
     focusOnEntity(searchInput.trim(), type);
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
-  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch]);
+  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
 
@@ -131,12 +134,17 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       : walletNodes[0]?.id.split(':').slice(1).join(':');
     if (!targetWallet) { toast.error('No wallet found to trace KYC root'); return; }
     setKycSearching(true);
+    console.log('[BubbleMap] KYC search started:', targetWallet.slice(0, 16));
     toast.info(`🔍 Deep KYC search for ${targetWallet.slice(0, 12)}...`);
     try {
       const { data, error } = await supabase.functions.invoke('mesh-kyc-deep-search', {
         body: { walletAddress: targetWallet, maxDepth: 5 },
       });
-      if (error) throw error;
+      if (error) {
+        console.error('[BubbleMap] KYC search edge function error:', error);
+        throw error;
+      }
+      console.log('[BubbleMap] KYC search result:', { kycRoot: data?.kycRoot?.slice(0, 12), walletsTraced: data?.walletsTraced, chain: data?.chain?.length });
       if (data?.kycRoot) {
         toast.success(`🏦 KYC Root found: ${data.kycRoot.slice(0, 12)}...`);
         if (data.kycRoot) expandEntity(`kyc_root:${data.kycRoot}`);
@@ -152,6 +160,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       }
       setTimeout(() => refetch(), 500);
     } catch (err: any) {
+      console.error('[BubbleMap] KYC search failed:', err);
       toast.error(`KYC search failed: ${err.message}`);
     } finally {
       setKycSearching(false);
@@ -165,15 +174,21 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const walletsToScan = focusedEntity?.type === 'wallet'
       ? [focusedEntity.id.replace(/^wallet:/, '')]
       : walletNodes.slice(0, 5).map(n => n.id.split(':').slice(1).join(':'));
+    console.log('[BubbleMap] Token discovery started:', { walletCount: walletsToScan.length });
     let totalTokens = 0;
     for (const wallet of walletsToScan) {
       try {
         const { data, error } = await supabase.functions.invoke('mesh-wallet-token-discovery', {
           body: { walletAddress: wallet },
         });
-        if (error) throw error;
+        if (error) {
+          console.error('[BubbleMap] Token discovery edge function error:', { wallet: wallet.slice(0, 12), error });
+          throw error;
+        }
+        console.log('[BubbleMap] Token discovery result:', { wallet: wallet.slice(0, 12), tokensFound: data?.tokensFound });
         totalTokens += data?.tokensFound || 0;
       } catch (err: any) {
+        console.error('[BubbleMap] Token scan failed for wallet:', wallet.slice(0, 12), err);
         toast.error(`Token scan failed: ${err.message}`);
       }
     }
