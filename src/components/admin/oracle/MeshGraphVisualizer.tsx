@@ -206,6 +206,162 @@ const MeshGraphVisualizer = () => {
     setTokenSearching(false);
   }, [graphData.nodes, focusedEntity, refetch]);
 
+  // ═══ Enrich All Tokens — fetch $TICKER, socials, dev wallets from DexScreener ═══
+  const handleEnrichAllTokens = useCallback(async () => {
+    const tokenNodes = graphData.nodes.filter(n => n.type === 'token');
+    if (tokenNodes.length === 0) {
+      toast.error('No token nodes to enrich');
+      return;
+    }
+
+    setEnriching(true);
+    const mints = tokenNodes.map(n => n.fullId || n.id.split(':').slice(1).join(':'));
+    let totalLinksAdded = 0;
+    let totalTickersResolved = 0;
+
+    toast.info(`⚡ Enriching ${mints.length} tokens from DexScreener...`);
+
+    try {
+      // Batch fetch from DexScreener (max 30 per call)
+      for (let i = 0; i < mints.length; i += 30) {
+        const batch = mints.slice(i, i + 30);
+        const res = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${batch.join(',')}`);
+        if (!res.ok) {
+          console.warn(`[Enrich] DexScreener batch ${i / 30 + 1} failed: ${res.status}`);
+          continue;
+        }
+        const pairs = await res.json();
+        if (!Array.isArray(pairs)) continue;
+
+        // Group by base token address (first pair per token)
+        const tokenMap = new Map<string, any>();
+        for (const pair of pairs) {
+          const addr = pair.baseToken?.address;
+          if (addr && !tokenMap.has(addr)) {
+            tokenMap.set(addr, pair);
+          }
+        }
+
+        // Process each discovered token
+        for (const [mint, pair] of tokenMap.entries()) {
+          const symbol = pair.baseToken?.symbol;
+          if (symbol) totalTickersResolved++;
+
+          const socials = pair.info?.socials || [];
+          const websites = pair.info?.websites || [];
+
+          // Extract and upsert social links
+          const upserts: any[] = [];
+
+          // X/Twitter handle
+          const xUrl = socials.find((s: any) =>
+            (s.url?.includes('x.com/') || s.url?.includes('twitter.com/')) &&
+            !s.url?.includes('/communities/')
+          )?.url;
+          if (xUrl) {
+            const match = xUrl.match(/(?:x\.com|twitter\.com)\/(@?([a-zA-Z0-9_]+))/i);
+            if (match) {
+              const handle = (match[2] || match[1]).replace(/^@/, '').toLowerCase();
+              if (handle && !['i', 'intent', 'search', 'home', 'explore'].includes(handle)) {
+                upserts.push({
+                  source_type: 'token', source_id: mint,
+                  linked_type: 'x_account', linked_id: handle,
+                  relationship: 'social_account', confidence: 85,
+                  discovered_via: 'dexscreener_enrich',
+                  evidence: { symbol, source: 'dexscreener' },
+                });
+              }
+            }
+          }
+
+          // X Community
+          const communityUrl = socials.find((s: any) => s.url?.includes('/communities/'))?.url;
+          if (communityUrl) {
+            const communityMatch = communityUrl.match(/communities\/(\d+)/);
+            if (communityMatch) {
+              upserts.push({
+                source_type: 'token', source_id: mint,
+                linked_type: 'x_community', linked_id: communityMatch[1],
+                relationship: 'community_for', confidence: 90,
+                discovered_via: 'dexscreener_enrich',
+                evidence: { symbol, communityUrl, source: 'dexscreener' },
+              });
+            }
+          }
+
+          // Telegram
+          const telegramUrl = socials.find((s: any) => s.url?.includes('t.me/'))?.url;
+          if (telegramUrl) {
+            const tgMatch = telegramUrl.match(/t\.me\/([a-zA-Z0-9_]+)/);
+            if (tgMatch) {
+              upserts.push({
+                source_type: 'token', source_id: mint,
+                linked_type: 'telegram', linked_id: tgMatch[1],
+                relationship: 'social_account', confidence: 80,
+                discovered_via: 'dexscreener_enrich',
+                evidence: { symbol, source: 'dexscreener' },
+              });
+            }
+          }
+
+          // Website
+          const websiteUrl = websites?.[0]?.url || pair.info?.websites?.[0];
+          if (websiteUrl && typeof websiteUrl === 'string') {
+            upserts.push({
+              source_type: 'token', source_id: mint,
+              linked_type: 'website', linked_id: websiteUrl,
+              relationship: 'website', confidence: 85,
+              discovered_via: 'dexscreener_enrich',
+              evidence: { symbol, source: 'dexscreener' },
+            });
+          }
+
+          // Discord
+          const discordUrl = socials.find((s: any) => s.url?.includes('discord'))?.url;
+          if (discordUrl) {
+            upserts.push({
+              source_type: 'token', source_id: mint,
+              linked_type: 'discord', linked_id: discordUrl,
+              relationship: 'social_account', confidence: 80,
+              discovered_via: 'dexscreener_enrich',
+              evidence: { symbol, source: 'dexscreener' },
+            });
+          }
+
+          // Batch upsert all discovered links
+          if (upserts.length > 0) {
+            const { error } = await supabase
+              .from('reputation_mesh')
+              .upsert(upserts, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+            if (!error) totalLinksAdded += upserts.length;
+            else console.warn(`[Enrich] Upsert failed for ${mint.slice(0, 8)}:`, error);
+          }
+        }
+
+        // Rate limit between batches
+        if (i + 30 < mints.length) await new Promise(r => setTimeout(r, 300));
+      }
+
+      // Also trigger spider for dev wallet discovery on all token mints
+      const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
+      if (walletNodes.length > 0) {
+        toast.info(`🔍 Also spidering ${Math.min(walletNodes.length, 3)} wallets for deeper mesh data...`);
+        for (const wn of walletNodes.slice(0, 3)) {
+          const walletId = wn.fullId || wn.id.split(':').slice(1).join(':');
+          triggerSpider(walletId, 'quick');
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      toast.success(`⚡ Enriched: ${totalTickersResolved} tickers, ${totalLinksAdded} mesh links added`);
+      setTimeout(() => refetch(), 1500);
+    } catch (err: any) {
+      toast.error(`Enrichment failed: ${err.message}`);
+    } finally {
+      setEnriching(false);
+    }
+  }, [graphData.nodes, refetch, triggerSpider]);
+
   // (Enrich Communities is now auto-triggered by clicking x_community nodes)
 
   const handleNodeClick = useCallback(async (node: any) => {
