@@ -258,7 +258,6 @@ const MeshGraphVisualizer = () => {
     const meshNode = node as MeshNode & { x: number; y: number };
     const color = ENTITY_COLORS[meshNode.type] || '#888';
     const size = Math.max(4, Math.min(meshNode.val * 3 + 3, 20));
-    const fontSize = Math.max(5, 8 / globalScale);
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
 
     if (isFocused) {
@@ -299,12 +298,15 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
 
-    if (globalScale > 1.0) {
-      ctx.font = `${fontSize}px sans-serif`;
+    // Always show friendly label (not just when zoomed)
+    const labelText = meshNode.label;
+    if (labelText) {
+      const labelFontSize = Math.max(6, 9 / globalScale);
+      ctx.font = `bold ${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(meshNode.label, meshNode.x, meshNode.y + size + 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
   }, [focusedEntity]);
 
@@ -609,7 +611,8 @@ const MeshGraphVisualizer = () => {
               onNodeHover={(node: any) => setHoveredNode(node as MeshNode | null)}
               nodeLabel={(node: any) => {
                 const n = node as MeshNode;
-                return `${ENTITY_LABELS[n.type] || n.type}: ${n.id.split(':').slice(1).join(':')}`;
+                const rawId = n.fullId || n.id.split(':').slice(1).join(':');
+                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
               cooldownTicks={100}
               d3AlphaDecay={0.015}
@@ -650,19 +653,20 @@ const MeshGraphVisualizer = () => {
       {/* Hovered Node Info */}
       {hoveredNode && (
         <Card className="border-primary/30">
-          <CardContent className="py-2">
+          <CardContent className="py-2 space-y-1">
             <div className="flex items-center gap-2 text-xs">
               <div
                 className="h-3 w-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: ENTITY_COLORS[hoveredNode.type] }}
               />
               <span className="font-medium">{ENTITY_LABELS[hoveredNode.type] || hoveredNode.type}</span>
-              <span className="font-mono text-muted-foreground truncate">
-                {hoveredNode.id.split(':').slice(1).join(':')}
-              </span>
+              <span className="font-semibold">{hoveredNode.label}</span>
               <Badge variant="secondary" className="text-[10px] ml-auto">
                 {Math.round(hoveredNode.val)} conn
               </Badge>
+            </div>
+            <div className="font-mono text-[10px] text-muted-foreground select-all break-all pl-5">
+              {hoveredNode.fullId || hoveredNode.id.split(':').slice(1).join(':')}
             </div>
           </CardContent>
         </Card>

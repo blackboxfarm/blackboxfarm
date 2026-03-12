@@ -5,7 +5,8 @@ import { useCallback, useRef, useState } from "react";
 export interface MeshNode {
   id: string;
   type: string;
-  label: string;
+  label: string;       // Friendly display label ($TICKER, @handle, "KYC Root")
+  fullId: string;      // Raw ID for tooltip (full address)
   val: number;
 }
 
@@ -66,8 +67,41 @@ export const ENTITY_LABELS: Record<string, string> = {
   medium: '📝 Medium',
 };
 
-const getNodeLabel = (id: string, _type: string) => {
-  if (id.length > 16) return `${id.slice(0, 6)}...${id.slice(-4)}`;
+const getNodeLabel = (id: string, type: string, evidence?: any) => {
+  // Try to extract friendly names from evidence metadata
+  if (evidence) {
+    if (type === 'token') {
+      const symbol = evidence.symbol || evidence.ticker || evidence.token_symbol;
+      if (symbol) return `$${symbol.replace(/^\$/, '').toUpperCase()}`;
+      const name = evidence.token_name || evidence.name;
+      if (name && name.length <= 20) return name;
+    }
+    if (type === 'x_community') {
+      const name = evidence.community_name || evidence.name || evidence.title;
+      if (name) return name.length > 18 ? name.slice(0, 16) + '…' : name;
+    }
+    if (type === 'kyc_root') {
+      const exchange = evidence.exchange || evidence.platform || evidence.kyc_provider;
+      if (exchange) return `KYC ${exchange}`;
+    }
+    if (type === 'website') {
+      try {
+        const url = new URL(id.startsWith('http') ? id : `https://${id}`);
+        return url.hostname.replace(/^www\./, '');
+      } catch { /* fall through */ }
+    }
+  }
+
+  // Default friendly labels by type
+  if (type === 'x_account') return `@${id.replace(/^@/, '')}`;
+  if (type === 'kyc_root') return `KYC ${id.length > 12 ? id.slice(0, 8) + '…' : id}`;
+  if (type === 'website') {
+    try {
+      const url = new URL(id.startsWith('http') ? id : `https://${id}`);
+      return url.hostname.replace(/^www\./, '');
+    } catch { /* fall through */ }
+  }
+  if (id.length > 16) return `${id.slice(0, 6)}…${id.slice(-4)}`;
   return id;
 };
 
@@ -377,26 +411,42 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     // Block direct token↔kyc_root (KYC must connect through wallet chain only)
     if ((st === 'token' && lt === 'kyc_root') || (st === 'kyc_root' && lt === 'token')) continue;
 
+    // Extract evidence for friendly labels
+    const evidence = link.evidence && typeof link.evidence === 'object' ? link.evidence : {};
+
     if (!nodesMap.has(sourceKey)) {
       nodesMap.set(sourceKey, {
         id: sourceKey,
+        fullId: link.source_id,
         type: link.source_type,
-        label: getNodeLabel(link.source_id, link.source_type),
+        label: getNodeLabel(link.source_id, link.source_type, evidence),
         val: 1,
       });
     } else {
-      nodesMap.get(sourceKey)!.val += 0.3;
+      // Update label if new evidence provides a better one
+      const existing = nodesMap.get(sourceKey)!;
+      existing.val += 0.3;
+      const betterLabel = getNodeLabel(link.source_id, link.source_type, evidence);
+      if (betterLabel.length > 2 && !betterLabel.includes('…') && existing.label.includes('…')) {
+        existing.label = betterLabel;
+      }
     }
 
     if (!nodesMap.has(targetKey)) {
       nodesMap.set(targetKey, {
         id: targetKey,
+        fullId: link.linked_id,
         type: link.linked_type,
-        label: getNodeLabel(link.linked_id, link.linked_type),
+        label: getNodeLabel(link.linked_id, link.linked_type, evidence),
         val: 1,
       });
     } else {
-      nodesMap.get(targetKey)!.val += 0.3;
+      const existing = nodesMap.get(targetKey)!;
+      existing.val += 0.3;
+      const betterLabel = getNodeLabel(link.linked_id, link.linked_type, evidence);
+      if (betterLabel.length > 2 && !betterLabel.includes('…') && existing.label.includes('…')) {
+        existing.label = betterLabel;
+      }
     }
 
     links.push({
