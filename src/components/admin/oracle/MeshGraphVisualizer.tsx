@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode, RedFlag } from "@/hooks/useMeshGraph";
 import { useHeliusCreditTracker } from "@/hooks/useHeliusCreditTracker";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users, Zap, Gauge, Unlock } from "lucide-react";
+import { useBubbleMapHoldings } from "@/hooks/useBubbleMapHoldings";
+import { useCTODetection } from "@/hooks/useCTODetection";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users, Zap, Gauge, Unlock, PieChart, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -30,8 +32,11 @@ const MeshGraphVisualizer = () => {
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
   const [redFlagDialog, setRedFlagDialog] = useState<{ node: MeshNode; flags: RedFlag[] } | null>(null);
+  const [ctoChecked, setCtoChecked] = useState<Set<string>>(new Set());
 
   const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
+  const holdings = useBubbleMapHoldings();
+  const { detectCTO, buildCTORedFlag } = useCTODetection();
 
   const {
     graphData,
@@ -410,6 +415,47 @@ const MeshGraphVisualizer = () => {
     }
   }, [graphData.nodes, refetch, triggerSpider]);
 
+  // ═══ % Holdings Toggle ═══
+  const handleFetchHoldings = useCallback(() => {
+    const tokenNode = graphData.nodes.find(n => n.type === 'token');
+    if (!tokenNode) {
+      toast.error('No token node found — search a token first');
+      return;
+    }
+    const tokenMint = tokenNode.fullId || tokenNode.id.split(':').slice(1).join(':');
+    holdings.fetchHoldings(graphData.nodes, tokenMint);
+  }, [graphData.nodes, holdings.fetchHoldings]);
+
+  // ═══ CTO Auto-Detection for Token Nodes ═══
+  useEffect(() => {
+    const tokenNodes = graphData.nodes.filter(n => n.type === 'token');
+    for (const token of tokenNodes) {
+      const mint = token.fullId || token.id.split(':').slice(1).join(':');
+      if (ctoChecked.has(mint)) continue;
+      setCtoChecked(prev => new Set([...prev, mint]));
+      
+      detectCTO(mint).then(result => {
+        if (result.isCTO) {
+          const flag = buildCTORedFlag(result);
+          if (flag) {
+            // Inject CTO flag into the token node
+            const existingNode = graphData.nodes.find(n => n.fullId === mint || n.id === `token:${mint}`);
+            if (existingNode) {
+              if (!existingNode.redFlags) existingNode.redFlags = [];
+              // Don't duplicate
+              if (!existingNode.redFlags.some(f => f.shortLabel.includes('Community Takeover'))) {
+                existingNode.redFlags.push(flag);
+                toast.warning(`🔄 CTO detected on ${existingNode.label}`, {
+                  description: `${result.changes.length} social links changed`,
+                });
+              }
+            }
+          }
+        }
+      });
+    }
+  }, [graphData.nodes, ctoChecked, detectCTO, buildCTORedFlag]);
+
   // Double-click detection via click timer
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickNodeRef = useRef<string | null>(null);
@@ -569,7 +615,35 @@ const MeshGraphVisualizer = () => {
       ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.9)';
       ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
-  }, [focusedEntity]);
+
+    // % Holdings overlay
+    if (holdings.showOverlay && meshNode.type === 'wallet') {
+      const holdingInfo = holdings.holdings.get(meshNode.id);
+      if (holdingInfo && holdingInfo.percentage > 0) {
+        const pctText = holdingInfo.percentage >= 1 
+          ? `${holdingInfo.percentage.toFixed(1)}%` 
+          : `${holdingInfo.percentage.toFixed(2)}%`;
+        const pctFontSize = Math.max(7, 10 / globalScale);
+        ctx.font = `bold ${pctFontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        
+        // Background pill
+        const textWidth = ctx.measureText(pctText).width;
+        const pillX = meshNode.x - textWidth / 2 - 3;
+        const pillY = meshNode.y - size - pctFontSize - 4;
+        ctx.fillStyle = holdingInfo.percentage >= 5 ? 'rgba(239,68,68,0.85)' : 
+                        holdingInfo.percentage >= 1 ? 'rgba(234,179,8,0.85)' : 
+                        'rgba(34,197,94,0.75)';
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, textWidth + 6, pctFontSize + 4, 3);
+        ctx.fill();
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillText(pctText, meshNode.x, pillY + 2);
+      }
+    }
+  }, [focusedEntity, holdings.showOverlay, holdings.holdings]);
 
   const paintLink = useCallback((link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const src = link.source;
@@ -754,7 +828,26 @@ const MeshGraphVisualizer = () => {
                 disabled={spiderStatus.active}
                 className="text-xs h-7"
               >
-                <Radar className="h-3 w-3 mr-1" /> Deep Spider
+              <Radar className="h-3 w-3 mr-1" /> Deep Spider
+              </Button>
+              {/* % Holdings Toggle */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={holdings.showOverlay ? holdings.toggleOverlay : handleFetchHoldings}
+                disabled={holdings.isLoading}
+                className={`text-xs h-7 ${holdings.showOverlay 
+                  ? 'border-green-500/50 bg-green-500/10 text-green-400' 
+                  : 'border-purple-500/30 hover:bg-purple-500/10 text-purple-400'}`}
+              >
+                {holdings.isLoading ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : holdings.showOverlay ? (
+                  <EyeOff className="h-3 w-3 mr-1" />
+                ) : (
+                  <PieChart className="h-3 w-3 mr-1" />
+                )}
+                {holdings.showOverlay ? 'Hide %' : 'Show %'}
               </Button>
             </div>
           )}
