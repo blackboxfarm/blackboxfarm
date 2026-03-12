@@ -141,7 +141,7 @@ const MeshGraphVisualizer = () => {
     const walletsToScan = focusedEntity 
       ? (focusedEntity.type === 'wallet' 
           ? [focusedEntity.id.replace(/^wallet:/, '')]
-          : (() => { toast.error('Focused entity is not a wallet — select a wallet node to scan tokens'); return []; })())
+          : (() => { toast.error('Focused entity is not a wallet — select a wallet node to scan tokens'); setTokenSearching(false); return []; })())
       : walletNodes.slice(0, 5).map(n => n.id.split(':').slice(1).join(':'));
 
     let totalTokens = 0;
