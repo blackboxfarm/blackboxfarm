@@ -678,16 +678,91 @@ const MeshGraphVisualizer = () => {
             ))}
           </div>
 
-          {/* Stats */}
-          <div className="flex gap-4 text-xs text-muted-foreground">
-            <span>{graphData.nodes.length} entities</span>
-            <span>{graphData.links.length} connections</span>
+          {/* Stats + Credit Counter + Node Cap */}
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <span>{displayData.nodes.length} entities</span>
+            <span>{displayData.links.length} connections</span>
             {focusedEntity && (
               <span className="text-primary font-mono">
                 {focusedEntity.id.slice(0, 16)}...
               </span>
             )}
+
+            {/* Node Cap indicator */}
+            {isOverCap && (
+              <div className="flex items-center gap-1">
+                <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">
+                  CAP: {nodeCap}/{graphData.nodes.length}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-5 text-[10px] px-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition-colors"
+                  onClick={() => {
+                    setCapBroken(true);
+                    toast.info(`Node cap released — showing all ${graphData.nodes.length} nodes`);
+                  }}
+                >
+                  <Unlock className="h-2.5 w-2.5 mr-1" />
+                  Break Cap
+                </Button>
+              </div>
+            )}
+            {capBroken && graphData.nodes.length > NODE_CAP_DEFAULT && (
+              <Badge className="bg-green-500/10 text-green-400 border-green-500/30 text-[10px]">
+                UNCAPPED ({graphData.nodes.length})
+              </Badge>
+            )}
           </div>
+
+          {/* Helius Credit Counter */}
+          {creditSnapshot.isTracking && (
+            <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="text-xs font-medium text-cyan-400">Helius API Credits (Live)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-bold text-cyan-300">
+                    {creditSnapshot.totalCredits}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">credits</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    ({creditSnapshot.totalCalls} calls)
+                  </span>
+                </div>
+              </div>
+              
+              {creditSnapshot.callLog.length > 0 && (
+                <div className="max-h-24 overflow-y-auto space-y-0.5">
+                  {creditSnapshot.callLog.slice(-8).map((call, i) => (
+                    <div key={i} className="flex items-center justify-between text-[9px] font-mono text-muted-foreground">
+                      <span className="truncate max-w-[200px]">{call.endpoint}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-cyan-400">{call.credits}cr</span>
+                        <span>{call.responseMs}ms</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">
+                  Session: {Math.round((Date.now() - creditSnapshot.sessionStart) / 1000)}s
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => { stopTracking(); resetTracking(); }}
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Spider Status Banner */}
           {spiderStatus.active && (
