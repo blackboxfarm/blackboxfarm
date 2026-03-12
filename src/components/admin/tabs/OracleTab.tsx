@@ -7,6 +7,8 @@ import OracleClassificationsFeed from "@/components/admin/oracle/OracleClassific
 import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus";
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 
+const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
+
 const DevIntelReport = lazy(() => import("@/components/admin/oracle/DevIntelReport"));
 const OracleMasterSpider = lazy(() => import("@/components/admin/oracle/OracleMasterSpider"));
 
