@@ -71,22 +71,26 @@ const MeshGraphVisualizer = () => {
       }
       graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -120);
       
-      // Add boundary force to keep nodes on screen
-      const padding = 40;
+      // Add boundary force to keep nodes on screen (softer in tree mode)
+      const padding = viewMode === 'tree' ? 20 : 40;
+      const pushStrength = viewMode === 'tree' ? 1 : 2;
       const w = dimensions.width || 800;
       const h = 600;
       graphRef.current.d3Force('boundX', () => {
         graphData.nodes.forEach((node: any) => {
-          if (node.x < padding) node.vx += 2;
-          if (node.x > w - padding) node.vx -= 2;
+          if (node.x < padding) node.vx += pushStrength;
+          if (node.x > w - padding) node.vx -= pushStrength;
         });
       });
       graphRef.current.d3Force('boundY', () => {
         graphData.nodes.forEach((node: any) => {
-          if (node.y < padding) node.vy += 2;
-          if (node.y > h - padding) node.vy -= 2;
+          if (node.y < padding) node.vy += pushStrength;
+          if (node.y > h - padding) node.vy -= pushStrength;
         });
       });
+      
+      // Reheat simulation when switching modes
+      graphRef.current.d3ReheatSimulation();
     }
   }, [graphData, viewMode, dimensions.width]);
 
