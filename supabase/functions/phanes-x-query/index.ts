@@ -110,33 +110,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { action = 'single', handle, chatId: overrideChatId } = body;
+    const { action = 'single', handle } = body;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Get the BlackBox channel chat ID from telegram_message_targets
-    let targetChatId = overrideChatId;
-    if (!targetChatId) {
-      const { data: target } = await supabase
-        .from('telegram_message_targets')
-        .select('chat_id')
-        .eq('label', 'BLACKBOX')
-        .limit(1)
-        .maybeSingle();
-      
-      if (!target?.chat_id) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'No BLACKBOX Telegram target configured. Add one to telegram_message_targets.',
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      targetChatId = Number(target.chat_id);
-    }
 
     // ─── BACKFILL MODE ───
     if (action === 'backfill') {
