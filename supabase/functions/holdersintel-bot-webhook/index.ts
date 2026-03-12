@@ -1171,7 +1171,7 @@ serve(async (req) => {
         await handleHelp(chatId, telegramUserId);
         break;
       case "/holders":
-        await handleHolders(chatId, telegramUserId, args);
+        await handleHolders(chatId, telegramUserId, args, isGroupChat);
         break;
       case "/ca":
         await handleCA(chatId, telegramUserId, args);
