@@ -38,7 +38,9 @@ export function useBubbleMapRateLimit() {
 
   // Refresh on mount
   useEffect(() => {
-    setUsageState(getUsage());
+    const current = getUsage();
+    setUsageState(current);
+    console.log('[BubbleMapRateLimit] Init:', { userId: user?.id?.slice(0, 8), isPro, usage: current });
   }, []);
 
   const isSubscriber = isPro;
