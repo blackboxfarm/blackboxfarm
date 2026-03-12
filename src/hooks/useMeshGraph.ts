@@ -423,11 +423,12 @@ export function useMeshGraph(initialEntityId?: string) {
     spiderAttemptsRef.current.clear();
   }, []);
 
-  // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES + TELEGRAM CHANNELS ═══
+  // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES + TELEGRAM CHANNELS + X USERS ═══
   const [enrichedGraphData, setEnrichedGraphData] = useState<MeshGraphData>({ nodes: [], links: [] });
   const tickerCacheRef = useRef<Map<string, string>>(new Map());
   const commNameCacheRef = useRef<Map<string, string>>(new Map());
   const tgChannelCacheRef = useRef<Map<string, { title: string; isRecycled: boolean; tokenCount: number }>>(new Map());
+  const xUserCacheRef = useRef<Map<string, { handle: string; displayName: string; isRotated: boolean; handleCount: number }>>(new Map());
   
   useEffect(() => {
     if (!graphData) {
@@ -449,13 +450,18 @@ export function useMeshGraph(initialEntityId?: string) {
       n.type === 'telegram_channel' && !tgChannelCacheRef.current.has(n.fullId)
     );
     
-    if (tokenNodes.length === 0 && communityNodes.length === 0 && tgChannelNodes.length === 0) {
-      setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
+    // Find x_user nodes not yet enriched
+    const xUserNodes = graphData.nodes.filter(n =>
+      n.type === 'x_user' && !xUserCacheRef.current.has(n.fullId)
+    );
+    
+    if (tokenNodes.length === 0 && communityNodes.length === 0 && tgChannelNodes.length === 0 && xUserNodes.length === 0) {
+      setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current, xUserCacheRef.current));
       return;
     }
 
     // Set current data immediately, enrich async
-    setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current));
+    setEnrichedGraphData(applyEnrichmentCaches(graphData, tickerCacheRef.current, commNameCacheRef.current, tgChannelCacheRef.current, xUserCacheRef.current));
 
     const enrichAll = async () => {
       // ── Ticker enrichment ──
