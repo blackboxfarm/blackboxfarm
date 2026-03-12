@@ -21,6 +21,7 @@ const MeshGraphVisualizer = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('bubble');
   const [kycSearching, setKycSearching] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
+  const [communitySearching, setCommunitySearching] = useState(false);
 
   const {
     graphData,
