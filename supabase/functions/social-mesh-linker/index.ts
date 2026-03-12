@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveTelegramUsername, incrementChannelTokenCount } from "../_shared/telegram-resolver.ts";
+import { resolveXHandle, incrementXUserTokenCount } from "../_shared/x-handle-resolver.ts";
 
 /**
  * SOCIAL MESH LINKER — Background cron (every 10min)
