@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { solscanFullIntelSweep, solscanResolveTokenCreator, solscanDiscoverFunders } from '../_shared/solscan-intelligence.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
@@ -544,7 +545,20 @@ Deno.serve(async (req) => {
         }
       }
       
-      // 5. Try token-creator-linker as last resort
+      // 5. Solscan token meta (creator + mint authority)
+      if (!resolvedWallet) {
+        console.log('[Oracle] Trying Solscan token/meta for creator resolution...');
+        const { creator, mintAuthority } = await solscanResolveTokenCreator(cleanedInput, apiErrors);
+        if (creator) {
+          resolvedWallet = creator;
+          console.log(`[Oracle] Resolved via Solscan creator: ${resolvedWallet?.slice(0, 8)}`);
+        } else if (mintAuthority) {
+          resolvedWallet = mintAuthority;
+          console.log(`[Oracle] Resolved via Solscan mint authority: ${resolvedWallet?.slice(0, 8)}`);
+        }
+      }
+      
+      // 6. Try token-creator-linker as last resort
       if (!resolvedWallet) {
         try {
           await supabase.functions.invoke('token-creator-linker', {
@@ -702,6 +716,48 @@ Deno.serve(async (req) => {
             .from('developer_tokens')
             .upsert(tokenUpserts, { onConflict: 'token_mint' });
           console.log(`[Oracle] Upserted ${tokenUpserts.length} tokens to developer_tokens`);
+        }
+      }
+    }
+
+    // ═══════ SOLSCAN INTELLIGENCE: Funding Chain + Token Discovery ═══════
+    let solscanFunders: Array<{ wallet: string; amountSol: number; timestamp: number }> = [];
+    let solscanCreatedTokens: Array<{ mint: string; name?: string; symbol?: string }> = [];
+    
+    if (resolvedWallet) {
+      console.log('[Oracle] Running Solscan intelligence sweep for funding chain...');
+      
+      // Discover funders (who sent SOL to this wallet)
+      solscanFunders = await solscanDiscoverFunders(resolvedWallet, apiErrors);
+      
+      // If we got no tokens from pump.fun/helius, try Solscan for created tokens
+      if (liveTokens.length === 0) {
+        const solscanIntel = await solscanFullIntelSweep(resolvedWallet, 'wallet', apiErrors);
+        solscanCreatedTokens = solscanIntel.createdTokens;
+        
+        // Convert Solscan-discovered tokens to the liveTokens format
+        if (solscanCreatedTokens.length > 0) {
+          console.log(`[Oracle] Solscan discovered ${solscanCreatedTokens.length} tokens for wallet`);
+          for (const st of solscanCreatedTokens) {
+            liveTokens.push({
+              mint: st.mint,
+              name: st.name || 'Unknown',
+              symbol: st.symbol || '???',
+              complete: false,
+              usd_market_cap: 0,
+              creator: resolvedWallet
+            });
+          }
+          
+          // Re-analyze with newly discovered tokens
+          if (liveTokens.length > 0) {
+            liveAnalysis = {
+              pattern: 'solscan_discovered',
+              tokensAnalyzed: liveTokens.length,
+              graduatedTokens: 0,
+              successRate: 0
+            };
+          }
         }
       }
     }
@@ -872,11 +928,13 @@ Deno.serve(async (req) => {
       .map((link: any) => link.source_id === resolvedWallet ? link.linked_id : link.source_id)
       .filter((w: string) => isBase58(w));
 
-    // Build network associations - now including mesh data
+    // Build network associations - now including mesh data + Solscan funders
+    const solscanFunderWallets = solscanFunders.map(f => f.wallet);
     const allLinkedWallets = [...new Set([
       ...(xAccountData?.linkedWallets || []),
       ...upstreamWallets,
-      ...meshLinkedWallets
+      ...meshLinkedWallets,
+      ...solscanFunderWallets
     ])];
 
     const network: OracleResult['network'] = {
@@ -1188,6 +1246,50 @@ Deno.serve(async (req) => {
             discovered_via: 'oracle_spider'
           });
         }
+      }
+    }
+
+    // 8. Solscan-discovered funders → funded_by mesh links
+    if (resolvedWallet && solscanFunders.length > 0) {
+      console.log(`[Oracle] Adding ${solscanFunders.length} Solscan funding links to mesh...`);
+      for (const funder of solscanFunders.slice(0, 10)) { // Top 10 funders
+        newLinks.push({
+          source_type: 'wallet',
+          source_id: resolvedWallet,
+          linked_type: 'wallet',
+          linked_id: funder.wallet,
+          relationship: 'funded_by',
+          confidence: Math.min(95, 70 + Math.floor(funder.amountSol * 5)), // Higher SOL = higher confidence
+          discovered_via: 'solscan_transfer'
+        });
+      }
+      
+      // The top funder could be the KYC root
+      const topFunder = solscanFunders[0];
+      if (topFunder && topFunder.amountSol > 0.5) {
+        // Also add to upstream chain for display
+        if (!upstreamChain.find(u => u.wallet === topFunder.wallet)) {
+          upstreamChain.push({
+            wallet: topFunder.wallet,
+            role: 'funder',
+            relationship: 'funded_by'
+          });
+        }
+      }
+    }
+
+    // 9. Solscan-discovered created tokens → mesh links
+    if (resolvedWallet && solscanCreatedTokens.length > 0) {
+      for (const token of solscanCreatedTokens.slice(0, 50)) {
+        newLinks.push({
+          source_type: 'wallet',
+          source_id: resolvedWallet,
+          linked_type: 'token',
+          linked_id: token.mint,
+          relationship: 'created',
+          confidence: 85,
+          discovered_via: 'solscan_mint'
+        });
       }
     }
 
