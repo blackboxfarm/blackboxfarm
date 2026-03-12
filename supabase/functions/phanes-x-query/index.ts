@@ -209,13 +209,13 @@ async function queryPhanes(
   const now = new Date().toISOString();
 
   try {
-    // 1. Send /x <handle> command via MTProto
-    console.log(`[phanes-x-query] Sending /x ${handle} to chat ${chatId}`);
+    // 1. DM /x <handle> to @Phanes_bot via MTProto (user account can DM bots)
+    console.log(`[phanes-x-query] DM'ing @${PHANES_BOT_USERNAME}: /x ${handle}`);
     
     const { data: sendResult, error: sendError } = await supabase.functions.invoke('telegram-mtproto-auth', {
       body: {
         action: 'send_message',
-        chatId: chatId,
+        chatId: PHANES_BOT_USERNAME,
         message: `/x ${handle}`,
       },
     });
