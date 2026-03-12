@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 
 const MeshGraphVisualizer = () => {
   const graphRef = useRef<any>();
@@ -13,6 +13,7 @@ const MeshGraphVisualizer = () => {
   const [searchInput, setSearchInput] = useState("");
   const [hoveredNode, setHoveredNode] = useState<MeshNode | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const {
     graphData,
@@ -53,10 +54,9 @@ const MeshGraphVisualizer = () => {
     focusOnEntity(searchInput.trim(), type);
   }, [searchInput, focusOnEntity, resetView]);
 
-  // Auto-spider: when focused entity returns 0 results, auto-trigger spider
+  // Auto-spider: when focused entity returns 0 results, auto-trigger spider (max once)
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
 
-  // Auto-trigger spider when entity not found in mesh
   useEffect(() => {
     if (shouldOfferSpider && searchInput.trim()) {
       triggerSpider(searchInput.trim(), 'deep');
@@ -74,15 +74,12 @@ const MeshGraphVisualizer = () => {
     const type = parts[0];
     const rawId = parts.slice(1).join(':');
     
-    // Check if this node has any connections beyond what we see
     const nodeConnections = graphData.links.filter(
       (l: any) => (l.source?.id || l.source) === nodeId || (l.target?.id || l.target) === nodeId
     );
     
-    // Always expand in the graph
     expandEntity(nodeId);
     
-    // If node has very few connections (leaf node), auto-spider it
     if (nodeConnections.length <= 1 && (type === 'wallet' || type === 'token')) {
       console.log(`[BubbleMap] Auto-spidering leaf node: ${rawId}`);
       triggerSpider(rawId, 'deep');
@@ -250,14 +247,54 @@ const MeshGraphVisualizer = () => {
               {spiderStatus.recommendation && (
                 <p className="text-xs text-muted-foreground">{spiderStatus.recommendation}</p>
               )}
+              {/* Diagnostics toggle */}
+              {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+                <button
+                  onClick={() => setShowDiagnostics(!showDiagnostics)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  Diagnostics ({spiderStatus.diagnostics.length})
+                </button>
+              )}
+              {showDiagnostics && spiderStatus.diagnostics && (
+                <div className="rounded bg-background/50 p-2 space-y-0.5 text-xs font-mono text-muted-foreground">
+                  {spiderStatus.diagnostics.map((d, i) => (
+                    <div key={i}>{d}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Spider Error */}
+          {/* Spider Error - with diagnostics */}
           {spiderStatus.error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-              <span className="text-sm text-destructive">{spiderStatus.error}</span>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="text-sm text-destructive">{spiderStatus.error}</span>
+              </div>
+              {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+                <>
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    Diagnostics ({spiderStatus.diagnostics.length})
+                  </button>
+                  {showDiagnostics && (
+                    <div className="rounded bg-background/50 p-2 space-y-0.5 text-xs font-mono text-muted-foreground">
+                      {spiderStatus.diagnostics.map((d, i) => (
+                        <div key={i}>{d}</div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              <Button variant="outline" size="sm" onClick={handleSpider} className="text-xs mt-1">
+                <Radar className="h-3 w-3 mr-1" /> Retry Spider
+              </Button>
             </div>
           )}
         </CardContent>
