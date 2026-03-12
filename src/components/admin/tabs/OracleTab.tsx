@@ -40,6 +40,11 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
         </CardHeader>
       </Card>
 
+      {/* Provider Health Diagnostics */}
+      <Suspense fallback={<LazyLoader />}>
+        <ProviderHealthPanel />
+      </Suspense>
+
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
         <TabsList className="flex flex-wrap gap-1">
           <TabsTrigger value="spider" className="data-[state=active]:bg-violet-500/20">
