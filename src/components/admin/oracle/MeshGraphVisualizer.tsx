@@ -60,16 +60,13 @@ const MeshGraphVisualizer = () => {
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          // Admin/mod handles satellite tightly around X Community
           if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) {
-            return viewMode === 'tree' ? 40 : 30;
+            return viewMode === 'tree' ? 30 : 20;
           }
-          // Community links to token at normal distance
           if (['community_for', 'social_account'].includes(rel)) {
-            return viewMode === 'tree' ? 80 : 60;
+            return viewMode === 'tree' ? 55 : 40;
           }
-          // Default distance for other relationships
-          return viewMode === 'tree' ? 95 : 70;
+          return viewMode === 'tree' ? 65 : 45;
         });
       }
       graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -120);
