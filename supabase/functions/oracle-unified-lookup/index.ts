@@ -545,7 +545,20 @@ Deno.serve(async (req) => {
         }
       }
       
-      // 5. Try token-creator-linker as last resort
+      // 5. Solscan token meta (creator + mint authority)
+      if (!resolvedWallet) {
+        console.log('[Oracle] Trying Solscan token/meta for creator resolution...');
+        const { creator, mintAuthority } = await solscanResolveTokenCreator(cleanedInput, apiErrors);
+        if (creator) {
+          resolvedWallet = creator;
+          console.log(`[Oracle] Resolved via Solscan creator: ${resolvedWallet?.slice(0, 8)}`);
+        } else if (mintAuthority) {
+          resolvedWallet = mintAuthority;
+          console.log(`[Oracle] Resolved via Solscan mint authority: ${resolvedWallet?.slice(0, 8)}`);
+        }
+      }
+      
+      // 6. Try token-creator-linker as last resort
       if (!resolvedWallet) {
         try {
           await supabase.functions.invoke('token-creator-linker', {
