@@ -22,6 +22,7 @@ const MeshGraphVisualizer = () => {
   const [kycSearching, setKycSearching] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
+  const [enriching, setEnriching] = useState(false);
 
   const {
     graphData,
