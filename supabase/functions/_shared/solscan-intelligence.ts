@@ -102,9 +102,9 @@ export async function solscanResolveTokenCreator(
     );
 
     if (!resp.ok) {
-      const errBody = await resp.text().catch(() => '');
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${errBody.slice(0, 200)}`);
-      apiErrors.push(`Solscan token/meta ${resp.status}`);
+      const detail = await readSolscanErrorDetail(resp);
+      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
+      apiErrors.push(formatSolscanApiError('Solscan token/meta', resp.status, detail));
       return { creator: null, mintAuthority: null, meta: null };
     }
 
