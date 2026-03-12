@@ -39,6 +39,7 @@ export default function HoldersIntelTab() {
         <TabsTrigger value="token-viewer">📈 Token Viewer</TabsTrigger>
         <TabsTrigger value="dailies">📅 Dailies</TabsTrigger>
         <TabsTrigger value="token-x">🐦 Token X</TabsTrigger>
+        <TabsTrigger value="tg-commands">🤖 TG Commands</TabsTrigger>
       </TabsList>
 
       <TabsContent value="subscribers">
