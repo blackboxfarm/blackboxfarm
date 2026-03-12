@@ -1,0 +1,1 @@
+TRUNCATE TABLE public.helius_api_usage;
