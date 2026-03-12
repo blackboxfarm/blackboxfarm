@@ -733,45 +733,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ═══════ SOLSCAN INTELLIGENCE: Funding Chain + Token Discovery ═══════
-    let solscanFunders: Array<{ wallet: string; amountSol: number; timestamp: number }> = [];
-    let solscanCreatedTokens: Array<{ mint: string; name?: string; symbol?: string }> = [];
+    // ═══════ HELIUS FUNDING CHAIN (replaces Solscan) ═══════
+    let heliusFundingChain: Array<{ funder: string; funderName: string | null; amountSol: number; isCex: boolean }> = [];
+    let heliusKycRoot: string | null = null;
+    let heliusKycRootLabel: string | null = null;
     
     if (resolvedWallet) {
-      console.log('[Oracle] Running Solscan intelligence sweep for funding chain...');
+      console.log('[Oracle] Running Helius funding chain discovery...');
       
-      // Discover funders (who sent SOL to this wallet)
-      solscanFunders = await solscanDiscoverFunders(resolvedWallet, apiErrors);
+      const { chain, kycRoot, kycRootLabel } = await discoverFundingChain(resolvedWallet, 3, apiErrors);
+      heliusFundingChain = chain.map(f => ({
+        funder: f.funder,
+        funderName: f.funderName,
+        amountSol: f.amountSol,
+        isCex: f.isCex,
+      }));
+      heliusKycRoot = kycRoot;
+      heliusKycRootLabel = kycRootLabel;
       
-      // If we got no tokens from pump.fun/helius, try Solscan for created tokens
-      if (liveTokens.length === 0) {
-        const solscanIntel = await solscanFullIntelSweep(resolvedWallet, 'wallet', apiErrors);
-        solscanCreatedTokens = solscanIntel.createdTokens;
-        
-        // Convert Solscan-discovered tokens to the liveTokens format
-        if (solscanCreatedTokens.length > 0) {
-          console.log(`[Oracle] Solscan discovered ${solscanCreatedTokens.length} tokens for wallet`);
-          for (const st of solscanCreatedTokens) {
-            liveTokens.push({
-              mint: st.mint,
-              name: st.name || 'Unknown',
-              symbol: st.symbol || '???',
-              complete: false,
-              usd_market_cap: 0,
-              creator: resolvedWallet
-            });
-          }
-          
-          // Re-analyze with newly discovered tokens
-          if (liveTokens.length > 0) {
-            liveAnalysis = {
-              pattern: 'solscan_discovered',
-              tokensAnalyzed: liveTokens.length,
-              graduatedTokens: 0,
-              successRate: 0
-            };
-          }
-        }
+      if (heliusFundingChain.length > 0) {
+        console.log(`[Oracle] Helius funding chain: ${heliusFundingChain.length} hops, KYC root: ${heliusKycRoot?.slice(0, 8) || 'none'} (${heliusKycRootLabel || 'N/A'})`);
       }
     }
     
