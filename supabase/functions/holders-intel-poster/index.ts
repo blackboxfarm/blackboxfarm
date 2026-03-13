@@ -144,6 +144,8 @@ function processTemplate(template: string, data: any): string {
   const aiSummary = data.aiSummary || '';
   const aiOverview = data.aiOverview || '';
   const lifecycle = data.lifecycle || '';
+  const risk = data.risk || '';
+  const riskDetail = data.riskDetail || '';
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
