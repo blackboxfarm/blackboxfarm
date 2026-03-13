@@ -282,6 +282,13 @@ export function KOLsTab() {
 
   return (
     <div className="space-y-6">
+      {/* Scanner disabled warning */}
+      {scannerEnabled === false && (
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 text-sm">
+          <Twitter className="h-4 w-4 shrink-0" />
+          <span>KOL Twitter Scanner is <strong>disabled</strong>. Scan buttons are locked. Enable it in Super Admin → Utilities → Pipeline Services.</span>
+        </div>
+      )}
       {/* Stats */}
       <div className="grid grid-cols-5 gap-4">
         <Card className="bg-card/50">
