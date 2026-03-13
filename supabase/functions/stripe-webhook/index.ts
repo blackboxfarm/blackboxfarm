@@ -99,6 +99,31 @@ serve(async (req) => {
 
         if (error) logStep("Upsert error", { error: error.message });
         else logStep("Subscription synced to DB");
+
+        // Send admin notification for new/renewed subscription
+        if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+          const priceAmount = subscription.items.data[0]?.price?.unit_amount;
+          const currency = subscription.items.data[0]?.price?.currency?.toUpperCase() || 'USD';
+          const formattedAmount = priceAmount ? `$${(priceAmount / 100).toFixed(2)} ${currency}` : 'N/A';
+          const eventLabel = event.type === "customer.subscription.created" ? "New Subscription" : "Subscription Renewed";
+
+          await supabase.from("admin_notifications").insert({
+            notification_type: "payment_confirmed",
+            title: `💳 ${eventLabel}`,
+            message: `${email} subscribed to ${tierKey.toUpperCase()} tier\n\n💰 Amount: ${formattedAmount}\n📅 Expires: ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}`,
+            metadata: {
+              email,
+              user_id: userId,
+              tier: tierKey,
+              amount: formattedAmount,
+              product_id: productId,
+              stripe_subscription_id: subscription.id,
+              event_type: event.type,
+            },
+            is_read: false,
+          });
+          logStep("Admin notification sent for subscription", { email, tierKey });
+        }
       } else {
         // Deactivate
         const { error } = await supabase
@@ -109,6 +134,15 @@ serve(async (req) => {
 
         if (error) logStep("Deactivation error", { error: error.message });
         else logStep("Subscription deactivated in DB");
+
+        // Notify admin of cancellation
+        await supabase.from("admin_notifications").insert({
+          notification_type: "transaction",
+          title: "❌ Subscription Cancelled",
+          message: `${email} cancelled their ${tierKey.toUpperCase()} subscription`,
+          metadata: { email, user_id: userId, tier: tierKey, event_type: event.type },
+          is_read: false,
+        });
       }
     }
   } catch (err) {
