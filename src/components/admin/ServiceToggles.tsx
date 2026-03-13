@@ -32,6 +32,13 @@ const SERVICE_CONFIG = [
     emoji: "🔬",
   },
   {
+    field: "community_enricher_is_enabled" as const,
+    label: "X Community Enricher",
+    icon: <Shield className="h-4 w-4" />,
+    description: "Apify-powered X Community member scraping. Used by social-mesh-linker, FlipIt, MeshSpider, and manual scrape actions.",
+    emoji: "🏘️",
+  },
+  {
     field: "kol_scanner_is_enabled" as const,
     label: "KOL Twitter Scanner",
     icon: <Twitter className="h-4 w-4" />,
