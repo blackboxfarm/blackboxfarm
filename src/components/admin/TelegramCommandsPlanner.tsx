@@ -283,6 +283,7 @@ export function TelegramCommandsPlanner() {
           <TabsTrigger value="tiers">📊 Tier Breakdown</TabsTrigger>
           <TabsTrigger value="proposed">🆕 Proposed</TabsTrigger>
           <TabsTrigger value="bubblemap">🫧 Bubble Map Tiers</TabsTrigger>
+          <TabsTrigger value="admin-cmds">🛡️ Admin Commands</TabsTrigger>
           <TabsTrigger value="channels">📡 Channel Config</TabsTrigger>
         </TabsList>
 
