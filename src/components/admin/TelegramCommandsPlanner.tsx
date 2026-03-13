@@ -311,7 +311,7 @@ export function TelegramCommandsPlanner() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(['meta', 'analysis', 'advanced', 'pro'] as const).map(cat => (
+                  {(['meta', 'analysis', 'advanced', 'pro', 'admin'] as const).map(cat => (
                     <React.Fragment key={cat}>
                       <TableRow className="bg-muted/30">
                         <TableCell compact colSpan={TIERS.length + 1} className="font-semibold text-foreground">
