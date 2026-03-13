@@ -400,7 +400,8 @@ export function KOLsTab() {
           <Button 
             variant="outline" 
             onClick={() => scanAllMutation.mutate()}
-            disabled={scanAllMutation.isPending || kolsWithTwitter.length === 0}
+            disabled={scanAllMutation.isPending || kolsWithTwitter.length === 0 || scannerEnabled === false}
+            title={scannerEnabled === false ? "KOL Scanner is disabled" : undefined}
           >
             {scanAllMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
