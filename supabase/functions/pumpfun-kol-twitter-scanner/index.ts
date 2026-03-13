@@ -141,6 +141,27 @@ serve(async (req) => {
 
     const { action, ...params } = await req.json();
 
+    // Check if KOL scanner is enabled (for Apify-consuming actions)
+    const apifyActions = ['scan-kol', 'scan-all-kols'];
+    if (apifyActions.includes(action)) {
+      const { data: monitorConfig } = await supabase
+        .from('pumpfun_monitor_config')
+        .select('kol_scanner_is_enabled, is_enabled')
+        .limit(1)
+        .single();
+      
+      if (monitorConfig && (!monitorConfig.is_enabled || !monitorConfig.kol_scanner_is_enabled)) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'KOL Twitter Scanner is currently disabled. Enable it in Super Admin → Pipeline Services.',
+          disabled: true 
+        }), {
+          status: 403, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     switch (action) {
       case 'scan-kol': {
         // Scan a single KOL's timeline
