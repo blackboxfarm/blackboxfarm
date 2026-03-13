@@ -638,6 +638,70 @@ export function TelegramCommandsPlanner() {
           </Card>
         </TabsContent>
 
+        {/* ════════ ADMIN COMMANDS ════════ */}
+        <TabsContent value="admin-cmds">
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">🛡️ Channel Admin Commands</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                These commands are only usable by the channel/group admin who installed the bot. They configure bot behavior per-channel.
+                All settings are stored in the <code className="text-foreground">admin_config</code> JSON column on <code className="text-foreground">channel_installations</code>.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {COMMANDS.filter(c => c.category === 'admin').map(cmd => (
+                <div key={cmd.command} className="bg-muted/30 rounded-lg p-4 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <code className="text-sm font-bold text-primary">{cmd.command}</code>
+                    {cmd.aliases.length > 0 && (
+                      <span className="text-xs text-muted-foreground">({cmd.aliases.join(', ')})</span>
+                    )}
+                    <Badge variant="outline" className="text-[9px] ml-auto border-amber-500/30 text-amber-400">
+                      admin only
+                    </Badge>
+                    <Badge variant="outline" className="text-[9px] border-pink-400/30 text-pink-400">
+                      planned
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-1">{cmd.description}</p>
+                  <p className="text-xs text-foreground">{cmd.groupBehavior}</p>
+                  {cmd.notes && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-1 italic">{cmd.notes}</p>
+                  )}
+                </div>
+              ))}
+
+              <Separator />
+
+              <div className="bg-muted/30 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-foreground mb-2">🔐 Admin Detection Logic</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-muted-foreground">
+                  <div>
+                    <p className="font-semibold text-foreground mb-1">How Bot Knows Who's Admin:</p>
+                    <ol className="list-decimal list-inside space-y-0.5">
+                      <li>Bot calls <code className="text-foreground">getChatAdministrators</code> on the group</li>
+                      <li>Checks if sender's <code className="text-foreground">telegram_user_id</code> is in admin list</li>
+                      <li>Cross-references with <code className="text-foreground">channel_installations.user_id</code></li>
+                      <li>Only the installer OR group admins can use admin commands</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground mb-1">admin_config JSON Shape:</p>
+                    <pre className="bg-background/50 rounded p-2 text-[10px] whitespace-pre-wrap">{`{
+  "delay_ms": 3000,
+  "verbose": false,
+  "admin_only_commands": false,
+  "dev_alerts": true,
+  "disabled_commands": ["top"],
+  "max_tier": "x_subscriber"
+}`}</pre>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* ════════ CHANNEL CONFIG ════════ */}
         <TabsContent value="channels">
           <Card className="bg-card border-border">
