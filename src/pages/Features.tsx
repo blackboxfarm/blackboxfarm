@@ -166,8 +166,8 @@ const UNIQUE_SIGNALS = [
   },
   {
     icon: <Target className="w-6 h-6" />,
-    title: "AI Verdict Engine",
-    description: "Multi-factor AI analysis considers holder distribution, dev reputation, liquidity depth, and social signals to deliver actionable verdicts.",
+    title: "AI Risk Engine",
+    description: "Multi-factor AI analysis considers holder distribution, dev reputation, liquidity depth, and social signals to deliver actionable risk assessments.",
   },
 ];
 
