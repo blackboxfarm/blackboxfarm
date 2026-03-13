@@ -62,11 +62,11 @@ const commands = [
   },
 ];
 
-const verdictSignals = [
-  { emoji: '🟢', label: 'BUY DEEP LONG', desc: 'Strong chart, healthy holders, good dev. Full position, hold.', color: 'text-green-400' },
-  { emoji: '🟢', label: 'BUY MEDIUM SHORT', desc: 'Decent momentum. Medium position, 2x target.', color: 'text-green-400' },
-  { emoji: '🟡', label: 'BUY SMALL SHORT', desc: 'Speculative. Disposable amount, quick 2x flip.', color: 'text-yellow-400' },
-  { emoji: '🔴', label: 'HOLD / AVOID', desc: 'Weak signals, bad dev, or dump in progress. Skip.', color: 'text-red-400' },
+const riskSignals = [
+  { emoji: '🟢', label: 'STRONG NETWORK', desc: 'Healthy holder distribution, stable wallet behavior, and positive developer history. Signals indicate a strong and stable token structure.', color: 'text-green-400' },
+  { emoji: '🟢', label: 'MODERATE STRENGTH', desc: 'Reasonable holder distribution and acceptable developer signals. Some positive indicators, though network concentration or momentum may be mixed.', color: 'text-green-400' },
+  { emoji: '🟡', label: 'SPECULATIVE NETWORK', desc: 'High volatility or uneven holder distribution detected. Token structure shows speculative characteristics and elevated uncertainty.', color: 'text-yellow-400' },
+  { emoji: '🔴', label: 'HIGH RISK', desc: 'Network analysis detects potential warning signals such as concentrated holders, developer risk flags, or active distribution events.', color: 'text-red-400' },
 ];
 
 export default function TelegramBot() {
