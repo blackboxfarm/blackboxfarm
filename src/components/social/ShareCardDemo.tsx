@@ -729,9 +729,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
           <div className="mt-3 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
             <p className="text-xs font-medium text-purple-300 mb-1">🧠 AI-Powered Variables</p>
             <p className="text-xs text-muted-foreground">
-              Add <code className="bg-muted px-1 rounded">{'{ai_summary}'}</code>, <code className="bg-muted px-1 rounded">{'{ai_overview}'}</code>, or <code className="bg-muted px-1 rounded">{'{lifecycle}'}</code> to your template to include AI-generated interpretation. 
-              <code className="bg-muted px-1 rounded">{'{ai_overview}'}</code> provides a detailed multi-paragraph analysis ideal for subscription community posts.
-              The AI data will only be fetched when these variables are present in the active template.
+              Add <code className="bg-muted px-1 rounded">{'{ai_summary}'}</code>, <code className="bg-muted px-1 rounded">{'{ai_overview}'}</code>, <code className="bg-muted px-1 rounded">{'{lifecycle}'}</code>, <code className="bg-muted px-1 rounded">{'{risk}'}</code>, or <code className="bg-muted px-1 rounded">{'{risk_detail}'}</code> to your template.
+              <code className="bg-muted px-1 rounded">{'{risk}'}</code> shows the network signal (🟢 STRONG / 🟡 SPECULATIVE / 🔴 HIGH RISK).
+              <code className="bg-muted px-1 rounded">{'{risk_detail}'}</code> provides the 1-2 sentence explanation.
+              AI/risk data is only fetched when these variables are present in the active template.
             </p>
           </div>
           
