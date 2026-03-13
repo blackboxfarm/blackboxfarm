@@ -243,9 +243,7 @@ export function Footer() {
         {/* Additional Info */}
         <div className="mt-8 pt-6 border-t text-center">
           <p className="text-xs text-muted-foreground max-w-4xl mx-auto">
-            BlackBox Farm is not a registered investment advisor. All trading involves risk of loss. 
-            Past performance does not guarantee future results. Please trade responsibly and only with funds you can afford to lose. 
-            This platform is provided for educational and technological demonstration purposes.
+            BlackBox Farm provides AI-generated blockchain analytics and research tools designed to improve transparency in on-chain markets. The platform does not provide investment advice, financial recommendations, or trading signals. All information is presented for informational and research purposes only. Cryptocurrency markets are highly speculative and users should conduct their own independent research before making any financial decisions.
           </p>
         </div>
       </div>
