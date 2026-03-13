@@ -79,7 +79,7 @@ export default function Subscriptions() {
   }, []);
 
   return (
-      <div className="min-h-screen bg-background">
+    <SiteLayout>
         {/* Hero */}
         <section className="relative overflow-hidden border-b border-border/40">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-yellow-500/5" />
