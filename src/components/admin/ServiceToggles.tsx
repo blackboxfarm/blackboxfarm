@@ -13,6 +13,7 @@ interface MonitorConfig {
   monitor_is_enabled: boolean;
   enricher_is_enabled: boolean;
   kol_scanner_is_enabled: boolean;
+  community_enricher_is_enabled: boolean;
 }
 
 const SERVICE_CONFIG = [

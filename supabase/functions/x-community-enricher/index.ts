@@ -137,6 +137,21 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
+    // Check if community enricher is enabled
+    const { data: monitorConfig } = await supabase
+      .from('pumpfun_monitor_config')
+      .select('community_enricher_is_enabled')
+      .limit(1)
+      .single();
+
+    if (monitorConfig && monitorConfig.community_enricher_is_enabled === false) {
+      console.log('[x-community-enricher] Service is disabled via admin toggle');
+      return new Response(
+        JSON.stringify({ error: 'X Community Enricher is currently disabled by admin', disabled: true }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { 
       communityUrl, 
       twitterUrl, // Can be either account or community
