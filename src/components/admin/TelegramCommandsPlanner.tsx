@@ -491,7 +491,7 @@ export function TelegramCommandsPlanner() {
                 <div className="bg-amber-500/10 rounded-lg p-4 border border-amber-500/20">
                   <h4 className="text-sm font-semibold text-amber-400 mb-2">🎯 Upsell Triggers</h4>
                   <ul className="text-xs space-y-1 text-muted-foreground">
-                    <li>• /verdict shows color but says "upgrade for reasoning"</li>
+                    <li>• /risk shows color but says "upgrade for reasoning"</li>
                     <li>• /holders lite says "upgrade for full breakdown"</li>
                     <li>• /check teases "dev reputation: 🔒 Pro only"</li>
                     <li>• Rate limit: 5/hr (vs 10 for X Sub)</li>
