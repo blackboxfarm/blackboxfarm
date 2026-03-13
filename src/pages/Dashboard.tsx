@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, Bot, Network, Crown, Settings, ExternalLink } from "lucide-react";
+import { BarChart3, Bot, Network, Crown, Settings, ExternalLink, Hash } from "lucide-react";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTier } from "@/hooks/useUserTier";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { TelegramLinkCode } from "@/components/settings/TelegramLinkCode";
+import { ChannelInstallations } from "@/components/dashboard/ChannelInstallations";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -128,6 +129,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Channel Installations */}
+        <ChannelInstallations />
       </div>
     </SiteLayout>
   );

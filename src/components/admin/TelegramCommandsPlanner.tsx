@@ -218,12 +218,14 @@ export function TelegramCommandsPlanner() {
       </div>
 
       <Tabs value={activeView} onValueChange={setActiveView} className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="matrix">📋 Tier Matrix</TabsTrigger>
           <TabsTrigger value="context">💬 Group vs DM</TabsTrigger>
           <TabsTrigger value="botfather">🤖 BotFather</TabsTrigger>
           <TabsTrigger value="tiers">📊 Tier Breakdown</TabsTrigger>
           <TabsTrigger value="proposed">🆕 Proposed</TabsTrigger>
+          <TabsTrigger value="bubblemap">🫧 Bubble Map Tiers</TabsTrigger>
+          <TabsTrigger value="channels">📡 Channel Config</TabsTrigger>
         </TabsList>
 
         {/* ════════ TIER MATRIX ════════ */}
@@ -525,6 +527,100 @@ export function TelegramCommandsPlanner() {
                       <li>Never show paid content in groups from non-paid users</li>
                     </ol>
                   </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ════════ BUBBLE MAP TIERS ════════ */}
+        <TabsContent value="bubblemap">
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">🫧 Bubble Map — Feature Tiers</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Spidering features gated by subscription tier. Displayed on /bubblepromo and /bubblemap pages.
+              </p>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead compact className="min-w-[140px]">Feature</TableHead>
+                    <TableHead compact className="text-center">Free</TableHead>
+                    <TableHead compact className="text-center">Logged In</TableHead>
+                    <TableHead compact className="text-center">X Sub</TableHead>
+                    <TableHead compact className="text-center">Pro $9.99</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[
+                    { feature: 'Daily Lookups', free: '2', auth: '2', x: '10', pro: '∞' },
+                    { feature: 'Graph Visualization', free: '✅', auth: '✅', x: '✅', pro: '✅' },
+                    { feature: 'Auto-Spider', free: '🔒', auth: '🔒', x: '✅', pro: '✅' },
+                    { feature: 'Find KYC Root', free: '🔒', auth: '🔒', x: '🔒', pro: '✅' },
+                    { feature: 'Find All Tokens', free: '🔒', auth: '🔒', x: '3/day', pro: '✅' },
+                    { feature: 'Deep Spider', free: '🔒', auth: '🔒', x: '🔒', pro: '✅' },
+                    { feature: 'Node Cap', free: '20', auth: '40', x: '80', pro: '∞' },
+                    { feature: 'Dev Wallet Alerts', free: '🔒', auth: '🔒', x: '✅', pro: '✅' },
+                    { feature: 'Export Graph Data', free: '🔒', auth: '🔒', x: '🔒', pro: '✅' },
+                  ].map((row, i) => (
+                    <TableRow key={i}>
+                      <TableCell compact className="font-medium text-xs">{row.feature}</TableCell>
+                      <TableCell compact className="text-center text-xs">{row.free}</TableCell>
+                      <TableCell compact className="text-center text-xs">{row.auth}</TableCell>
+                      <TableCell compact className="text-center text-xs">{row.x}</TableCell>
+                      <TableCell compact className="text-center text-xs">{row.pro}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ════════ CHANNEL CONFIG ════════ */}
+        <TabsContent value="channels">
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">📡 Channel Installation & Config Model</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                One-time 0.25 SOL activation per channel. Each channel has independent config.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                  <h4 className="text-sm font-semibold text-foreground">💳 Activation Flow</h4>
+                  <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                    <li>User creates account on website</li>
+                    <li>Gets registration code, links to bot</li>
+                    <li>Adds bot to channel/group</li>
+                    <li>Bot records installation in dashboard</li>
+                    <li>User generates SOL payment wallet</li>
+                    <li>Sends 0.25 SOL → clicks "Verify Payment"</li>
+                    <li>Bot activates in that channel</li>
+                  </ol>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                  <h4 className="text-sm font-semibold text-foreground">⚙️ Per-Channel Config</h4>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• <span className="text-foreground font-mono">/delay</span> — response delay in ms</li>
+                    <li>• Verbose vs short-form replies</li>
+                    <li>• Admin-only vs all-member commands</li>
+                    <li>• Dev Wallet Alerts toggle</li>
+                    <li>• Each channel independent config</li>
+                  </ul>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                  <h4 className="text-sm font-semibold text-foreground">📋 Rules</h4>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• Kicked bots can be re-added, no re-charge</li>
+                    <li>• One account can manage many channels</li>
+                    <li>• No refunds — lifetime activation</li>
+                    <li>• In-channel: only channel commands</li>
+                    <li>• DM: separate full personal access</li>
+                  </ul>
                 </div>
               </div>
             </CardContent>
