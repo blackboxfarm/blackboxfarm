@@ -33,7 +33,7 @@ interface BotCommand {
   command: string;
   aliases: string[];
   description: string;
-  category: 'meta' | 'analysis' | 'advanced' | 'pro';
+  category: 'meta' | 'analysis' | 'advanced' | 'pro' | 'admin';
   botFatherRegistered: boolean;
   implementedInWebhook: boolean;
   access: Record<string, CmdAccess>;
