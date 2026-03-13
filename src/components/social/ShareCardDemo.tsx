@@ -703,7 +703,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 v.var === '{timesPosted}' || v.var === '{tweetUrl}' ||
                 v.var === '{searchCount}' || v.var === '{timeWindow}' || 
                 v.var === '{uniqueIps}' || v.var === '{triggerType}';
-              const isAIVar = v.var.includes('ai_summary') || v.var.includes('ai_overview') || v.var.includes('lifecycle');
+              const isAIVar = v.var.includes('ai_summary') || v.var.includes('ai_overview') || v.var.includes('lifecycle') || v.var.includes('risk');
               
               return (
                 <Badge 
