@@ -402,7 +402,7 @@ export default function Features() {
                   <MessageSquare className="w-5 h-5 text-primary mt-0.5" />
                   <div>
                     <p className="font-medium text-foreground text-sm">Group Chat Mode</p>
-                    <p className="text-xs text-muted-foreground">Abbreviated summaries, emoji verdicts, one-liners. No spam.</p>
+                    <p className="text-xs text-muted-foreground">Abbreviated summaries, emoji risk signals, one-liners. No spam.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
