@@ -74,6 +74,9 @@ export default function UtilitiesTab() {
       <TabsContent value="solscan-breakdown">
         {activeSubTab === "solscan-breakdown" && <Suspense fallback={<LazyLoader />}><SolscanUsageBreakdown /></Suspense>}
       </TabsContent>
+      <TabsContent value="apify-breakdown">
+        {activeSubTab === "apify-breakdown" && <Suspense fallback={<LazyLoader />}><ApifyUsageBreakdown /></Suspense>}
+      </TabsContent>
     </Tabs>
     </div>
   );
