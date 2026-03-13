@@ -174,7 +174,7 @@ export default function TelegramBot() {
               </div>
               <h3 className="font-bold">Free Account</h3>
               <p className="text-xs text-muted-foreground">
-                /holders (lite) & /verdict (🟢/🔴) — 3 lookups/hour
+                /holders (lite) & /risk (🟢/🔴) — 3 lookups/hour
               </p>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/auth">Sign Up Free</Link>
