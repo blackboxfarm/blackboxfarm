@@ -111,6 +111,10 @@ Health: {healthGrade} ({healthScore}/100)
 
 📈 Lifecycle: {lifecycle}
 
+🔮 Dev Reputation: {dev_rep}
+🐦 X Community: {x_community}
+🌐 Website: {website}
+
 Free report 👉 blackbox.farm/holders?token={ca}`,
 
   bot_holders: `📊 *Holders Report*
