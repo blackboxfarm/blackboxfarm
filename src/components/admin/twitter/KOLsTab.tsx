@@ -84,6 +84,21 @@ export function KOLsTab() {
   const [newKOL, setNewKOL] = useState({ wallet_address: "", twitter_handle: "", display_name: "" });
   const [scanningKolId, setScanningKolId] = useState<string | null>(null);
 
+  // Check if KOL scanner is enabled
+  const { data: scannerEnabled } = useQuery({
+    queryKey: ["kol-scanner-enabled"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("pumpfun_monitor_config" as any)
+        .select("kol_scanner_is_enabled, is_enabled")
+        .limit(1)
+        .single() as any);
+      if (error) return true; // Default to enabled if can't read
+      return data?.is_enabled && data?.kol_scanner_is_enabled;
+    },
+    refetchInterval: 30000,
+  });
+
   // Fetch KOLs from registry
   const { data: kols, isLoading: isLoadingKols } = useQuery({
     queryKey: ["kol-registry"],
