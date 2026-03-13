@@ -84,6 +84,21 @@ export function KOLsTab() {
   const [newKOL, setNewKOL] = useState({ wallet_address: "", twitter_handle: "", display_name: "" });
   const [scanningKolId, setScanningKolId] = useState<string | null>(null);
 
+  // Check if KOL scanner is enabled
+  const { data: scannerEnabled } = useQuery({
+    queryKey: ["kol-scanner-enabled"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("pumpfun_monitor_config" as any)
+        .select("kol_scanner_is_enabled, is_enabled")
+        .limit(1)
+        .single() as any);
+      if (error) return true; // Default to enabled if can't read
+      return data?.is_enabled && data?.kol_scanner_is_enabled;
+    },
+    refetchInterval: 30000,
+  });
+
   // Fetch KOLs from registry
   const { data: kols, isLoading: isLoadingKols } = useQuery({
     queryKey: ["kol-registry"],
@@ -267,6 +282,13 @@ export function KOLsTab() {
 
   return (
     <div className="space-y-6">
+      {/* Scanner disabled warning */}
+      {scannerEnabled === false && (
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 text-sm">
+          <Twitter className="h-4 w-4 shrink-0" />
+          <span>KOL Twitter Scanner is <strong>disabled</strong>. Scan buttons are locked. Enable it in Super Admin → Utilities → Pipeline Services.</span>
+        </div>
+      )}
       {/* Stats */}
       <div className="grid grid-cols-5 gap-4">
         <Card className="bg-card/50">
@@ -378,7 +400,8 @@ export function KOLsTab() {
           <Button 
             variant="outline" 
             onClick={() => scanAllMutation.mutate()}
-            disabled={scanAllMutation.isPending || kolsWithTwitter.length === 0}
+            disabled={scanAllMutation.isPending || kolsWithTwitter.length === 0 || scannerEnabled === false}
+            title={scannerEnabled === false ? "KOL Scanner is disabled" : undefined}
           >
             {scanAllMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -492,7 +515,7 @@ export function KOLsTab() {
                               size="icon"
                               className="h-7 w-7"
                               onClick={() => scanKolMutation.mutate(kol)}
-                              disabled={scanningKolId === kol.id}
+                              disabled={scanningKolId === kol.id || scannerEnabled === false}
                             >
                               {scanningKolId === kol.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />

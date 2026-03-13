@@ -1,0 +1,1 @@
+ALTER TABLE public.pumpfun_monitor_config ADD COLUMN IF NOT EXISTS kol_scanner_is_enabled boolean NOT NULL DEFAULT true;
