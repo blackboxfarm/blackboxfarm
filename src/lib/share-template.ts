@@ -223,6 +223,8 @@ export const TEMPLATE_VARIABLES = [
   { var: '{ai_summary}', desc: 'AI-generated 1-2 sentence interpretation (when enabled)' },
   { var: '{ai_overview}', desc: 'AI-generated multi-paragraph overview (Subscription posts)' },
   { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
+  { var: '{risk}', desc: 'Network risk signal (🟢 STRONG NETWORK, 🟡 SPECULATIVE, 🔴 HIGH RISK)' },
+  { var: '{risk_detail}', desc: 'Risk assessment explanation (1-2 sentences)' },
   // Telegram-specific variables
   { var: '{timesPosted}', desc: 'Number of times token was posted (TG Posted)' },
   { var: '{whaleBar}', desc: 'ASCII bar for whale percentage (TG)' },
