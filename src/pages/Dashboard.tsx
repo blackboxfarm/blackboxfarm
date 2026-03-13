@@ -129,6 +129,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Channel Installations */}
+        <ChannelInstallations />
       </div>
     </SiteLayout>
   );
