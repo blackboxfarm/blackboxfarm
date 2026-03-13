@@ -446,7 +446,11 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{ai_overview\}/g, aiOverview)
     .replace(/\{AI_OVERVIEW\}/g, aiOverview)
     .replace(/\{lifecycle\}/g, lifecycle)
-    .replace(/\{LIFECYCLE\}/g, lifecycle);
+    .replace(/\{LIFECYCLE\}/g, lifecycle)
+    .replace(/\{risk\}/g, risk)
+    .replace(/\{RISK\}/g, risk)
+    .replace(/\{risk_detail\}/g, riskDetail)
+    .replace(/\{RISK_DETAIL\}/g, riskDetail);
 }
 
 // Get share URL with token address
