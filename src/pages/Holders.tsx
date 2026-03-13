@@ -27,15 +27,6 @@ export default function Holders() {
       {/* Telegram WebView Banner */}
       <TelegramWebViewBanner />
 
-      {/* Holders Hero */}
-      <div className="w-full">
-        <img 
-          src={holdersHero} 
-          alt="Holders Intel - Crypto has hands, HOLDER$ shows them" 
-          className="w-full h-auto max-h-48 object-cover object-center"
-        />
-      </div>
-
       {/* Main Content */}
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl">
         <div className="w-full">
