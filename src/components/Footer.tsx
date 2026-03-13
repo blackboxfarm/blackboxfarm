@@ -78,13 +78,13 @@ export function Footer() {
           <div className="space-y-4">
             <h3 className="font-semibold text-sm uppercase tracking-wide">Apps & Services</h3>
             <ul className="space-y-2 text-sm">
-              <li>
+              <li className="hidden">
                 <Link to="/bumpbot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <span>⚡</span>
                   BumpBot
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/volumebot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <span>📊</span>
                   Volume Bot
