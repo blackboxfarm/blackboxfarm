@@ -26,10 +26,11 @@ export function Footer() {
               <span className="font-bold text-lg">BlackBox Farm</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Democratizing DeFi trading with transparent, affordable, and secure automated solutions for the Solana ecosystem.
+              Bringing transparency to on-chain markets through open blockchain intelligence.
+              AI-powered analytics, wallet tracing, and network analysis for the Solana ecosystem.
             </p>
             <div className="flex gap-2">
-              <Badge variant="outline" className="text-xs">DeFi</Badge>
+              <Badge variant="outline" className="text-xs">Blockchain Intel</Badge>
               <Badge variant="outline" className="text-xs">Web3</Badge>
               <Badge variant="outline" className="text-xs">Open Source</Badge>
             </div>
