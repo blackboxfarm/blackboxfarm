@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { SiteLayout } from '@/components/layout/SiteLayout';
 
 const OG_IMAGE_URL = 'https://blackboxfarm.lovable.app/images/holders-intel-og.png';
 
@@ -79,7 +80,7 @@ export default function Subscriptions() {
   }, []);
 
   return (
-      <div className="min-h-screen bg-background">
+    <SiteLayout>
         {/* Hero */}
         <section className="relative overflow-hidden border-b border-border/40">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-yellow-500/5" />
@@ -241,6 +242,6 @@ export default function Subscriptions() {
             </div>
           </div>
         </section>
-      </div>
+    </SiteLayout>
   );
 }

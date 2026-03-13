@@ -67,6 +67,7 @@ const TelegramBot = lazy(() => import("./pages/TelegramBot"));
 const Features = lazy(() => import("./pages/Features"));
 const BubblePromo = lazy(() => import("./pages/BubblePromo"));
 const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,7 @@ const App = () => {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/onboarding" element={<Onboarding />} />
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/admin" element={<SuperAdminRoute><Index /></SuperAdminRoute>} />
                       <Route path="/bb" element={<SuperAdminRoute><BumpBot /></SuperAdminRoute>} />
