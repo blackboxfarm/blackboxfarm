@@ -59,8 +59,8 @@ const TIERS = [
     highlight: false,
     features: [
       { name: "Everything in Signed In", included: true },
-      { name: "AI Analysis & Verdicts", included: true },
-      { name: "Telegram /verdict, /ai", included: true },
+      { name: "AI Analysis & Risk Scores", included: true },
+      { name: "Telegram /risk, /ai", included: true },
       { name: "Bubble Map (good access)", included: true },
       { name: "Dev Wallet Tracing", included: true },
       { name: "KYC Root Discovery", included: "partial" },
