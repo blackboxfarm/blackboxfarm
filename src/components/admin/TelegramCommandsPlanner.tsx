@@ -168,6 +168,63 @@ const COMMANDS: BotCommand[] = [
     groupBehavior: 'Top 3 tickers only — teaser',
     notes: '🆕 PROPOSED — Group engagement driver. Shows trending, no deep analysis.',
   },
+  // ─── ADMIN COMMANDS (Channel/Group only) ───
+  {
+    command: '/delay', aliases: [], description: 'Set bot response delay (ms)', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Admin sets delay in ms so other bots (Phanes, Skeleton) fire first. Usage: /delay 3000',
+    notes: 'Channel admin only. Stored in admin_config.delay_ms. Default 0.',
+  },
+  {
+    command: '/verbose', aliases: [], description: 'Toggle verbose vs short replies', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Toggles between long-form and short-form bot replies in this channel. /verbose on | /verbose off',
+    notes: 'Channel admin only. Stored in admin_config.verbose. Default false (short).',
+  },
+  {
+    command: '/adminonly', aliases: [], description: 'Restrict commands to admins', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'When ON, only group admins can trigger analysis commands. Members see "ask an admin." /adminonly on | off',
+    notes: 'Channel admin only. Stored in admin_config.admin_only_commands. Default false.',
+  },
+  {
+    command: '/devalerts', aliases: [], description: 'Toggle dev wallet launch alerts', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Toggles 🚨 Dev Wallet Alerts — notify channel when a known creator launches a new token. /devalerts on | off',
+    notes: 'Channel admin only. Stored in admin_config.dev_alerts. Requires paid channel.',
+  },
+  {
+    command: '/toggle', aliases: [], description: 'Enable/disable specific commands', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Enable/disable individual commands for this channel. Usage: /toggle quick off | /toggle risk on',
+    notes: 'Channel admin only. Stored in admin_config.disabled_commands[]. Overrides tier access.',
+  },
+  {
+    command: '/channelstatus', aliases: ['/chstatus'], description: 'Show channel bot config', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Shows current config: delay, verbose, admin-only, dev alerts, disabled commands, payment status, install date',
+    notes: 'Channel admin only. Read-only status dump of admin_config + payment status.',
+  },
+  {
+    command: '/setlevel', aliases: [], description: 'Set max analysis tier for channel', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Cap the max tier available in this channel. Usage: /setlevel auth | /setlevel x_subscriber. Prevents Pro commands in public groups.',
+    notes: 'Channel admin only. Stored in admin_config.max_tier. Default: follows user tier.',
+  },
 ];
 
 const BOTFATHER_COMMANDS = [
