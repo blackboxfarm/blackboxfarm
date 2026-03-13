@@ -7471,6 +7471,7 @@ export type Database = {
           buy_slippage_bps: number | null
           buy_wallet_id: string | null
           candidates_found_count: number | null
+          community_enricher_is_enabled: boolean
           created_at: string
           daily_buy_cap: number | null
           daily_buys_today: number | null
@@ -7557,6 +7558,7 @@ export type Database = {
           buy_slippage_bps?: number | null
           buy_wallet_id?: string | null
           candidates_found_count?: number | null
+          community_enricher_is_enabled?: boolean
           created_at?: string
           daily_buy_cap?: number | null
           daily_buys_today?: number | null
@@ -7643,6 +7645,7 @@ export type Database = {
           buy_slippage_bps?: number | null
           buy_wallet_id?: string | null
           candidates_found_count?: number | null
+          community_enricher_is_enabled?: boolean
           created_at?: string
           daily_buy_cap?: number | null
           daily_buys_today?: number | null
