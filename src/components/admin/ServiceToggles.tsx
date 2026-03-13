@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Eye, Sparkles, Shield, Twitter } from "lucide-react";
+import { Eye, Sparkles, Shield, Twitter, Network } from "lucide-react";
 
 interface MonitorConfig {
   id: string;
