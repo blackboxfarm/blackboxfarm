@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SocialIcon } from '@/components/token/SocialIcon';
+import { FarmBanner } from '@/components/FarmBanner';
 import {
   MessageCircle,
   ArrowRight,
@@ -17,6 +18,7 @@ import {
   ExternalLink,
   Lock,
   ChevronRight,
+  Coins,
 } from 'lucide-react';
 
 const commands = [
