@@ -7492,6 +7492,7 @@ export type Database = {
           kill_switch_activated_at: string | null
           kill_switch_active: boolean | null
           kill_switch_reason: string | null
+          kol_scanner_is_enabled: boolean
           last_daily_reset: string | null
           last_poll_at: string | null
           last_prune_at: string | null
@@ -7577,6 +7578,7 @@ export type Database = {
           kill_switch_activated_at?: string | null
           kill_switch_active?: boolean | null
           kill_switch_reason?: string | null
+          kol_scanner_is_enabled?: boolean
           last_daily_reset?: string | null
           last_poll_at?: string | null
           last_prune_at?: string | null
@@ -7662,6 +7664,7 @@ export type Database = {
           kill_switch_activated_at?: string | null
           kill_switch_active?: boolean | null
           kill_switch_reason?: string | null
+          kol_scanner_is_enabled?: boolean
           last_daily_reset?: string | null
           last_poll_at?: string | null
           last_prune_at?: string | null
