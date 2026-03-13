@@ -336,7 +336,7 @@ export function TelegramCommandsPlanner() {
                     <li>User DMs the bot → gets /start welcome</li>
                     <li>User does /register with their code</li>
                     <li>Now unlocked: /quick, /price, /check in groups</li>
-                    <li>Uses /verdict → sees 🟢/🔴 only → "upgrade for full analysis"</li>
+                    <li>Uses /risk → sees 🟢/🔴 only → "upgrade for full analysis"</li>
                     <li>Curiosity → subscribes to X or Pro</li>
                   </ol>
                 </div>
