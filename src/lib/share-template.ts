@@ -223,6 +223,8 @@ export const TEMPLATE_VARIABLES = [
   { var: '{ai_summary}', desc: 'AI-generated 1-2 sentence interpretation (when enabled)' },
   { var: '{ai_overview}', desc: 'AI-generated multi-paragraph overview (Subscription posts)' },
   { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
+  { var: '{risk}', desc: 'Network risk signal (🟢 STRONG NETWORK, 🟡 SPECULATIVE, 🔴 HIGH RISK)' },
+  { var: '{risk_detail}', desc: 'Risk assessment explanation (1-2 sentences)' },
   // Telegram-specific variables
   { var: '{timesPosted}', desc: 'Number of times token was posted (TG Posted)' },
   { var: '{whaleBar}', desc: 'ASCII bar for whale percentage (TG)' },
@@ -257,6 +259,8 @@ export interface TokenShareData {
   aiSummary?: string;
   aiOverview?: string;
   lifecycle?: string;
+  risk?: string;
+  riskDetail?: string;
 }
 
 export interface TemplateRecord {
@@ -415,6 +419,8 @@ export function processTemplate(template: string, data: TokenShareData): string 
   const aiSummary = data.aiSummary ?? '';
   const aiOverview = data.aiOverview ?? '';
   const lifecycle = data.lifecycle ?? '';
+  const risk = data.risk ?? '';
+  const riskDetail = data.riskDetail ?? '';
   
   return template
     .replace(/\{ticker\}/g, data.ticker)
@@ -440,7 +446,11 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{ai_overview\}/g, aiOverview)
     .replace(/\{AI_OVERVIEW\}/g, aiOverview)
     .replace(/\{lifecycle\}/g, lifecycle)
-    .replace(/\{LIFECYCLE\}/g, lifecycle);
+    .replace(/\{LIFECYCLE\}/g, lifecycle)
+    .replace(/\{risk\}/g, risk)
+    .replace(/\{RISK\}/g, risk)
+    .replace(/\{risk_detail\}/g, riskDetail)
+    .replace(/\{RISK_DETAIL\}/g, riskDetail);
 }
 
 // Get share URL with token address

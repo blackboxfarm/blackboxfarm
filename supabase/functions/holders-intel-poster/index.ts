@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -143,6 +144,8 @@ function processTemplate(template: string, data: any): string {
   const aiSummary = data.aiSummary || '';
   const aiOverview = data.aiOverview || '';
   const lifecycle = data.lifecycle || '';
+  const risk = data.risk || '';
+  const riskDetail = data.riskDetail || '';
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
@@ -178,7 +181,11 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{ai_overview\}/g, aiOverview)
     .replace(/\{AI_OVERVIEW\}/g, aiOverview)
     .replace(/\{lifecycle\}/g, lifecycle)
-    .replace(/\{LIFECYCLE\}/g, lifecycle);
+    .replace(/\{LIFECYCLE\}/g, lifecycle)
+    .replace(/\{risk\}/g, risk)
+    .replace(/\{RISK\}/g, risk)
+    .replace(/\{risk_detail\}/g, riskDetail)
+    .replace(/\{RISK_DETAIL\}/g, riskDetail);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
@@ -357,6 +364,9 @@ Deno.serve(async (req) => {
         aiSummary: '',
         aiOverview: '',
         lifecycle: '',
+        // Risk assessment fields (populated below)
+        risk: '',
+        riskDetail: '',
       };
       
       console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}, post #${currentTimesPosted}`);
@@ -412,6 +422,28 @@ Deno.serve(async (req) => {
         } else {
           console.log('[poster] AI summary not available, using empty string');
         }
+      }
+      
+      // Generate network risk assessment (always, lightweight computation)
+      const templateUsesRisk = tweetTemplate.includes('{risk}') || tweetTemplate.includes('{RISK}') ||
+                                tweetTemplate.includes('{risk_detail}') || tweetTemplate.includes('{RISK_DETAIL}');
+      if (templateUsesRisk) {
+        console.log('[poster] Generating network risk assessment...');
+        const riskResult = assessNetworkRisk({
+          healthScore: stats.healthScore,
+          totalHolders: stats.totalHolders,
+          realHolders: stats.realHolders,
+          dustPercentage: stats.dustPercentage,
+          whaleCount: stats.whaleCount,
+          seriousCount: stats.seriousCount,
+          top10Pct: report?.distributionStats?.top10Percentage ?? null,
+          devTrustLevel: report?.devReputation?.trustLevel ?? null,
+          devReputationScore: report?.devReputation?.score ?? null,
+          isBlacklisted: report?.devReputation?.isBlacklisted ?? false,
+        });
+        stats.risk = riskResult.signal;
+        stats.riskDetail = riskResult.detail;
+        console.log(`[poster] Risk: ${riskResult.signal}`);
       }
       
       // Build tweet using the active template from database
