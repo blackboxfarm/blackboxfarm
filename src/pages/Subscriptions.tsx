@@ -241,6 +241,6 @@ export default function Subscriptions() {
             </div>
           </div>
         </section>
-      </div>
+    </SiteLayout>
   );
 }
