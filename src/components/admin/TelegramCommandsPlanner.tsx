@@ -158,7 +158,7 @@ const COMMANDS: BotCommand[] = [
     access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Safety score: LP locked?, mint authority?, freeze authority?',
     groupBehavior: 'Same compact format',
-    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis. Drives curiosity for /verdict.',
+    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis. Drives curiosity for /risk.',
   },
   {
     command: '/top', aliases: [], description: 'Trending tokens right now', category: 'analysis',
