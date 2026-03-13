@@ -30,11 +30,11 @@ const commands = [
     detail: 'Lite for free accounts • Full for X Subscribers+',
   },
   {
-    cmd: '/verdict',
-    desc: 'Instant Buy/Hold signal with position sizing recommendations',
+    cmd: '/risk',
+    desc: 'AI risk & stability assessment with network behavior analysis',
     tier: 'Auth ★',
     tierColor: 'text-green-400',
-    detail: '🟢/🔴 for free • Full sizing for X Subscribers+',
+    detail: '🟢/🔴 for free • Full analysis for X Subscribers+',
   },
   {
     cmd: '/momentum',
