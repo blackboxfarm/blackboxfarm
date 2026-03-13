@@ -88,7 +88,8 @@ const App = () => {
                 <div className="flex-1">
                   <Suspense fallback={<PageLoader />}>
                     <Routes>
-                      <Route path="/" element={<BlackBox />} />
+                      <Route path="/" element={<Home />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/admin" element={<SuperAdminRoute><Index /></SuperAdminRoute>} />
                       <Route path="/bb" element={<SuperAdminRoute><BumpBot /></SuperAdminRoute>} />
