@@ -208,6 +208,20 @@ Deno.serve(async (req) => {
         .eq('community_id', communityId)
         .single();
 
+      // Skip communities with 3+ consecutive failures (likely deleted/private)
+      const failCount = existingCommunity?.failed_scrape_count || 0;
+      if (failCount >= 3) {
+        console.log(`[x-community-enricher] Skipping community ${communityId} - ${failCount} consecutive failures (likely deleted/private)`);
+        return new Response(JSON.stringify({
+          success: false,
+          type: 'community',
+          communityId,
+          skipped: true,
+          reason: `Skipped after ${failCount} consecutive Apify failures. Community likely deleted or private.`,
+          failCount,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       const needsScrape = !existingCommunity || 
         !existingCommunity.last_scraped_at ||
         new Date(existingCommunity.last_scraped_at).getTime() < Date.now() - 24 * 60 * 60 * 1000; // 24h cache
