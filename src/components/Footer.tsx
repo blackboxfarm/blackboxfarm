@@ -96,7 +96,7 @@ export function Footer() {
                   Holders Analysis
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/holders-bot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <span>🤖</span>
                   Holders Bot

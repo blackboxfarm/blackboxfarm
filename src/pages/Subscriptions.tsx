@@ -181,7 +181,7 @@ export default function Subscriptions() {
                   <Badge variant="outline" className="text-xs border-blue-400/30 text-blue-400">Coming Soon</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Get holder analysis, buy/hold verdicts, and momentum scores right in your Telegram DMs. 
+                  Get holder analysis, risk assessments, and momentum scores right in your Telegram DMs. 
                   Your subscription tier carries over automatically.
                 </p>
               </div>

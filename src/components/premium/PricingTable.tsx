@@ -43,7 +43,7 @@ const features: PricingFeature[] = [
   { label: 'Priority Support', free: false, auth: false, xSub: false, pro: false, dev: false, enterprise: true, comingSoon: true },
   // Telegram Bot features
   { label: '🤖 TG Bot: /holders', free: false, auth: 'Lite', xSub: 'Full', pro: 'Full+', dev: 'Full+', enterprise: 'Full+' },
-  { label: '🤖 TG Bot: /verdict', free: false, auth: '🟢/🔴', xSub: '✓ Sizing', pro: '✓ Sizing', dev: '✓ Sizing', enterprise: '✓ Sizing' },
+  { label: '🤖 TG Bot: /risk', free: false, auth: '🟢/🔴', xSub: '✓ Full', pro: '✓ Full', dev: '✓ Full', enterprise: '✓ Full' },
   { label: '🤖 TG Bot: /momentum', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
   { label: '🤖 TG Bot: /oracle', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   { label: '🤖 TG Bot: /wallet', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },

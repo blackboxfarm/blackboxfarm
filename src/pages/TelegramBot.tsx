@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SocialIcon } from '@/components/token/SocialIcon';
+import { FarmBanner } from '@/components/FarmBanner';
 import {
   MessageCircle,
   ArrowRight,
@@ -17,6 +18,7 @@ import {
   ExternalLink,
   Lock,
   ChevronRight,
+  Coins,
 } from 'lucide-react';
 
 const commands = [
@@ -28,11 +30,11 @@ const commands = [
     detail: 'Lite for free accounts • Full for X Subscribers+',
   },
   {
-    cmd: '/verdict',
-    desc: 'Instant Buy/Hold signal with position sizing recommendations',
+    cmd: '/risk',
+    desc: 'AI risk & stability assessment with network behavior analysis',
     tier: 'Auth ★',
     tierColor: 'text-green-400',
-    detail: '🟢/🔴 for free • Full sizing for X Subscribers+',
+    detail: '🟢/🔴 for free • Full analysis for X Subscribers+',
   },
   {
     cmd: '/momentum',
@@ -60,11 +62,11 @@ const commands = [
   },
 ];
 
-const verdictSignals = [
-  { emoji: '🟢', label: 'BUY DEEP LONG', desc: 'Strong chart, healthy holders, good dev. Full position, hold.', color: 'text-green-400' },
-  { emoji: '🟢', label: 'BUY MEDIUM SHORT', desc: 'Decent momentum. Medium position, 2x target.', color: 'text-green-400' },
-  { emoji: '🟡', label: 'BUY SMALL SHORT', desc: 'Speculative. Disposable amount, quick 2x flip.', color: 'text-yellow-400' },
-  { emoji: '🔴', label: 'HOLD / AVOID', desc: 'Weak signals, bad dev, or dump in progress. Skip.', color: 'text-red-400' },
+const riskSignals = [
+  { emoji: '🟢', label: 'STRONG NETWORK', desc: 'Healthy holder distribution, stable wallet behavior, and positive developer history. Signals indicate a strong and stable token structure.', color: 'text-green-400' },
+  { emoji: '🟢', label: 'MODERATE STRENGTH', desc: 'Reasonable holder distribution and acceptable developer signals. Some positive indicators, though network concentration or momentum may be mixed.', color: 'text-green-400' },
+  { emoji: '🟡', label: 'SPECULATIVE NETWORK', desc: 'High volatility or uneven holder distribution detected. Token structure shows speculative characteristics and elevated uncertainty.', color: 'text-yellow-400' },
+  { emoji: '🔴', label: 'HIGH RISK', desc: 'Network analysis detects potential warning signals such as concentrated holders, developer risk flags, or active distribution events.', color: 'text-red-400' },
 ];
 
 export default function TelegramBot() {
@@ -74,6 +76,7 @@ export default function TelegramBot() {
 
   return (
     <div className="min-h-screen bg-background">
+      <FarmBanner />
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-border/40">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-cyan-500/5" />
@@ -136,16 +139,19 @@ export default function TelegramBot() {
         </div>
       </section>
 
-      {/* Verdict System */}
+      {/* Risk System */}
       <section className="mx-auto max-w-5xl px-4 pb-16">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold mb-2">The <code className="text-primary">/verdict</code> System</h2>
-          <p className="text-sm text-muted-foreground">
-            AI combines momentum + holder health + dev reputation into one actionable signal.
+          <h2 className="text-2xl font-bold mb-2">The <code className="text-primary">/risk</code> System</h2>
+          <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
+            AI evaluates holder distribution, wallet network behavior, developer history, and market momentum to generate a risk and stability assessment for each token.
+          </p>
+          <p className="text-xs text-muted-foreground/70 mt-2 max-w-xl mx-auto">
+            These indicators help users quickly understand token health and network behavior.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl mx-auto">
-          {verdictSignals.map((v) => (
+          {riskSignals.map((v) => (
             <div key={v.label} className="border border-border/50 rounded-lg p-4 bg-card/30">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xl">{v.emoji}</span>
@@ -168,7 +174,7 @@ export default function TelegramBot() {
               </div>
               <h3 className="font-bold">Free Account</h3>
               <p className="text-xs text-muted-foreground">
-                /holders (lite) & /verdict (🟢/🔴) — 3 lookups/hour
+                /holders (lite) & /risk (🟢/🔴) — 3 lookups/hour
               </p>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/auth">Sign Up Free</Link>
@@ -182,7 +188,7 @@ export default function TelegramBot() {
               </div>
               <h3 className="font-bold">X Subscriber</h3>
               <p className="text-xs text-muted-foreground">
-                Full /holders, /momentum, /verdict sizing, /alerts — 10 lookups/hour
+                Full /holders, /momentum, /risk analysis, /alerts — 10 lookups/hour
               </p>
               <Button variant="outline" size="sm" className="border-blue-500/30 text-blue-400" asChild>
                 <a href="https://x.com/holdersintel" target="_blank" rel="noopener noreferrer">
@@ -231,6 +237,69 @@ export default function TelegramBot() {
             </a>
           </Button>
         </div>
+      </section>
+
+      {/* For Group & Channel Admins */}
+      <section className="mx-auto max-w-5xl px-4 pb-16">
+        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-amber-500" />
+              For Group & Channel Admins
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">
+              Supercharge your crypto community with real-time holder analysis. Install the Holders Bot 
+              in your Telegram Group or Channel and give your members instant access to token due diligence.
+            </p>
+            
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  Community Benefits
+                </h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Members can verify tokens before buying</li>
+                  <li>• Reduce scam victims in your community</li>
+                  <li>• Add value that sets your group apart</li>
+                  <li>• Real-time analysis without leaving Telegram</li>
+                </ul>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-blue-500" />
+                  How It Works
+                </h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Any member posts a token address</li>
+                  <li>• Bot replies with holder analysis</li>
+                  <li>• Shows distribution, risks, and health score</li>
+                  <li>• Links to full report on BlackBox Farm</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div className="bg-background/50 rounded-lg p-4 border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-primary" />
+                    One-Time Installation Fee
+                  </h4>
+                  <p className="text-sm text-muted-foreground">Lifetime access for your group/channel</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-primary">0.20 SOL</div>
+                  <p className="text-xs text-muted-foreground">No monthly fees</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </section>
     </div>
   );

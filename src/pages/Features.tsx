@@ -59,8 +59,8 @@ const TIERS = [
     highlight: false,
     features: [
       { name: "Everything in Signed In", included: true },
-      { name: "AI Analysis & Verdicts", included: true },
-      { name: "Telegram /verdict, /ai", included: true },
+      { name: "AI Analysis & Risk Scores", included: true },
+      { name: "Telegram /risk, /ai", included: true },
       { name: "Bubble Map (good access)", included: true },
       { name: "Dev Wallet Tracing", included: true },
       { name: "KYC Root Discovery", included: "partial" },
@@ -109,11 +109,11 @@ const PRODUCT_PILLARS = [
     icon: <Bot className="w-8 h-8 text-primary" />,
     title: "Telegram Bot",
     subtitle: "@holdersintel_bot — Intel on demand",
-    description: "Query any Solana token directly from Telegram. Fast commands for traders, deep analysis for researchers, AI verdicts for decision-makers. Works in DMs and group chats with tiered access.",
+    description: "Query any Solana token directly from Telegram. Fast commands for traders, deep analysis for researchers, AI risk assessments for decision-makers. Works in DMs and group chats with tiered access.",
     features: [
       "/quick — Instant snapshot (free)",
       "/holders — Full holder breakdown",
-      "/verdict — AI-powered buy/hold/avoid signal",
+      "/risk — AI-powered risk & stability assessment",
       "/ai — Deep narrative analysis",
       "/wallet — Dev wallet trace & history",
       "Group chat mode with abbreviated intel",
@@ -166,8 +166,8 @@ const UNIQUE_SIGNALS = [
   },
   {
     icon: <Target className="w-6 h-6" />,
-    title: "AI Verdict Engine",
-    description: "Multi-factor AI analysis considers holder distribution, dev reputation, liquidity depth, and social signals to deliver actionable verdicts.",
+    title: "AI Risk Engine",
+    description: "Multi-factor AI analysis considers holder distribution, dev reputation, liquidity depth, and social signals to deliver actionable risk assessments.",
   },
 ];
 
@@ -402,7 +402,7 @@ export default function Features() {
                   <MessageSquare className="w-5 h-5 text-primary mt-0.5" />
                   <div>
                     <p className="font-medium text-foreground text-sm">Group Chat Mode</p>
-                    <p className="text-xs text-muted-foreground">Abbreviated summaries, emoji verdicts, one-liners. No spam.</p>
+                    <p className="text-xs text-muted-foreground">Abbreviated summaries, emoji risk signals, one-liners. No spam.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -439,14 +439,14 @@ export default function Features() {
               </div>
               <div className="p-4 font-mono text-xs space-y-3 text-foreground/80">
                 <div>
-                  <span className="text-primary">/verdict</span>{" "}
+                  <span className="text-primary">/risk</span>{" "}
                   <span className="text-muted-foreground">7xKXtg...pump</span>
                 </div>
                 <div className="border-l-2 border-primary/30 pl-3 space-y-1">
                   <p>📊 <span className="text-foreground">$EXAMPLE</span> (Example Token)</p>
                   <p>💰 Market Cap: $1.2M</p>
                   <p>🏆 Stability: <span className="text-primary">72/100</span></p>
-                  <p>🎯 Verdict: <span className="text-primary font-bold">CAUTIOUS HOLD</span></p>
+                  <p>🎯 Risk: <span className="text-primary font-bold">MODERATE STRENGTH</span></p>
                   <p className="text-muted-foreground">━━━━━━━━━━━━━━━━</p>
                   <p>💬 Token shows healthy distribution with 68% in small wallets. Dev wallet inactive 14d. One flagged holder from reputation DB. Moderate concentration in top 10.</p>
                 </div>

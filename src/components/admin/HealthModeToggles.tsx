@@ -17,7 +17,7 @@ const MEDIUM_CONFIG: Record<string, { label: string; icon: React.ReactNode; desc
   telegram_bot: {
     label: "Telegram Bot",
     icon: <Bot className="h-4 w-4" />,
-    description: "/holders, /verdict, /ca commands",
+    description: "/holders, /risk, /ca commands",
   },
   holders_page: {
     label: "/holders Page",

@@ -97,12 +97,12 @@ const COMMANDS: BotCommand[] = [
     notes: 'Best candidate for Group+ freebie — fast, useful, not too revealing.',
   },
   {
-    command: '/verdict', aliases: ['/v'], description: 'Buy/Hold signal with sizing', category: 'analysis',
+    command: '/risk', aliases: ['/r'], description: 'Risk & stability assessment', category: 'analysis',
     botFatherRegistered: true, implementedInWebhook: true,
     access: { free: '🔒', auth: 'lite', group_plus: 'lite', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Full: verdict + reasoning + sizing rec. Lite: emoji only (🟢/🔴).',
-    groupBehavior: 'Lite verdict in group (emoji + one line). Full via DM only.',
-    notes: 'Auth/Group+ sees color emoji only. X Sub+ sees full reasoning + sizing.',
+    dmBehavior: 'Full: risk assessment + reasoning. Lite: emoji only (🟢/🔴).',
+    groupBehavior: 'Lite risk signal in group (emoji + one line). Full via DM only.',
+    notes: 'Auth/Group+ sees color emoji only. X Sub+ sees full reasoning.',
   },
   {
     command: '/ai', aliases: [], description: 'Descriptive AI analysis snapshot', category: 'analysis',
@@ -158,7 +158,7 @@ const COMMANDS: BotCommand[] = [
     access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Safety score: LP locked?, mint authority?, freeze authority?',
     groupBehavior: 'Same compact format',
-    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis. Drives curiosity for /verdict.',
+    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis. Drives curiosity for /risk.',
   },
   {
     command: '/top', aliases: [], description: 'Trending tokens right now', category: 'analysis',
@@ -336,7 +336,7 @@ export function TelegramCommandsPlanner() {
                     <li>User DMs the bot → gets /start welcome</li>
                     <li>User does /register with their code</li>
                     <li>Now unlocked: /quick, /price, /check in groups</li>
-                    <li>Uses /verdict → sees 🟢/🔴 only → "upgrade for full analysis"</li>
+                    <li>Uses /risk → sees 🟢/🔴 only → "upgrade for full analysis"</li>
                     <li>Curiosity → subscribes to X or Pro</li>
                   </ol>
                 </div>
@@ -472,7 +472,7 @@ export function TelegramCommandsPlanner() {
                     <li>• /quick — Fast stats (holder count, health, top10%)</li>
                     <li>• /price — Price + mcap + 24h (DexScreener)</li>
                     <li>• /check — Quick rug safety score</li>
-                    <li>• /verdict — Emoji only (🟢/🔴) no reasoning</li>
+                    <li>• /risk — Emoji only (🟢/🔴) no reasoning</li>
                     <li>• /ca — Short condensed report</li>
                     <li>• /top — Trending tickers (top 3 in group)</li>
                   </ul>
@@ -491,7 +491,7 @@ export function TelegramCommandsPlanner() {
                 <div className="bg-amber-500/10 rounded-lg p-4 border border-amber-500/20">
                   <h4 className="text-sm font-semibold text-amber-400 mb-2">🎯 Upsell Triggers</h4>
                   <ul className="text-xs space-y-1 text-muted-foreground">
-                    <li>• /verdict shows color but says "upgrade for reasoning"</li>
+                    <li>• /risk shows color but says "upgrade for reasoning"</li>
                     <li>• /holders lite says "upgrade for full breakdown"</li>
                     <li>• /check teases "dev reputation: 🔒 Pro only"</li>
                     <li>• Rate limit: 5/hr (vs 10 for X Sub)</li>
