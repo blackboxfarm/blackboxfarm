@@ -124,6 +124,14 @@ export default function TelegramBot() {
                 Different subscription levels unlock different command tiers, from free quick scans to full AI narrative reports and dev reputation analysis.{' '}
                 <Link to="/subscriptions" className="text-primary hover:underline">View available tiers →</Link>
               </p>
+              <div className="pt-1">
+                <Button size="sm" className="gap-2" asChild>
+                  <a href="#channel-admins">
+                    <Crown className="w-3.5 h-3.5" />
+                    Channel Admins Info
+                  </a>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
