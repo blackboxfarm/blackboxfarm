@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useUserTier } from '@/hooks/useUserTier';
 import { useAuth } from '@/hooks/useAuth';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
+import { SiteLayout } from '@/components/layout/SiteLayout';
 
 export default function Pricing() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,7 +26,7 @@ export default function Pricing() {
   }, [searchParams]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <SiteLayout>
       <div className="mx-auto max-w-6xl px-4 py-12 space-y-8">
         {/* Header */}
         <div className="text-center space-y-3">
@@ -49,33 +50,24 @@ export default function Pricing() {
           </div>
         </div>
 
-        {/* Pricing Table */}
         <PricingTable />
 
-        {/* Telegram Bot Link */}
         {user && (
           <div className="max-w-md mx-auto">
             <TelegramLinkCode />
           </div>
         )}
 
-        {/* Billing notice */}
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/70">
           <span>
             Billing powered by Stripe under{' '}
-            <a
-              href="https://systemreset.ca"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-muted-foreground"
-            >
+            <a href="https://systemreset.ca" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">
               System Reset
             </a>
             , our parent company.
           </span>
         </div>
 
-        {/* FAQ */}
         <div className="max-w-2xl mx-auto space-y-4 text-sm">
           <h2 className="text-xl font-semibold text-center">Frequently Asked Questions</h2>
           <div className="space-y-3">
@@ -102,6 +94,6 @@ export default function Pricing() {
           </div>
         </div>
       </div>
-    </div>
+    </SiteLayout>
   );
 }
