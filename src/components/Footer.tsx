@@ -30,9 +30,9 @@ export function Footer() {
               AI-powered analytics, wallet tracing, and network analysis for the Solana ecosystem.
             </p>
             <div className="flex gap-2">
-              <Badge variant="outline" className="text-xs">Blockchain Intel</Badge>
-              <Badge variant="outline" className="text-xs">Web3</Badge>
-              <Badge variant="outline" className="text-xs">Open Source</Badge>
+              <Badge variant="outline" className="text-xs">On-Chain AI</Badge>
+              <Badge variant="outline" className="text-xs">Social ID Trace</Badge>
+              <Badge variant="outline" className="text-xs">Launch Tracking</Badge>
             </div>
           </div>
 
