@@ -515,7 +515,7 @@ export function KOLsTab() {
                               size="icon"
                               className="h-7 w-7"
                               onClick={() => scanKolMutation.mutate(kol)}
-                              disabled={scanningKolId === kol.id}
+                              disabled={scanningKolId === kol.id || scannerEnabled === false}
                             >
                               {scanningKolId === kol.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
