@@ -14,6 +14,7 @@ interface MonitorConfig {
   enricher_is_enabled: boolean;
   kol_scanner_is_enabled: boolean;
   community_enricher_is_enabled: boolean;
+  social_mesh_linker_is_enabled: boolean;
 }
 
 const SERVICE_CONFIG = [

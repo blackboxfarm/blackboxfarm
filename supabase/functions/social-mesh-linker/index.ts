@@ -156,6 +156,21 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Check if social mesh linker is enabled
+    const { data: monitorConfig } = await supabase
+      .from('pumpfun_monitor_config')
+      .select('social_mesh_linker_is_enabled')
+      .limit(1)
+      .single();
+
+    if (monitorConfig && monitorConfig.social_mesh_linker_is_enabled === false) {
+      console.log('[social-mesh-linker] Service is disabled via admin toggle');
+      return new Response(
+        JSON.stringify({ message: 'Social Mesh Linker is disabled by admin', disabled: true, linked: 0 }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Get tokens with socials that haven't been mesh-linked yet
     const { data: tokens, error: fetchErr } = await supabase
       .from("pumpfun_watchlist")
