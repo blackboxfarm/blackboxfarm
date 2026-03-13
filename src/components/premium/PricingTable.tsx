@@ -75,6 +75,7 @@ export function PricingTable() {
   const { tierInfo } = useUserTier();
   const navigate = useNavigate();
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [xSubBillingCycle, setXSubBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingCheckoutTier, setPendingCheckoutTier] = useState<'pro' | 'dev' | 'enterprise' | null>(null);
@@ -85,7 +86,15 @@ export function PricingTable() {
     try {
       const isXSub = tierInfo.isXSubscriber;
       const stripeConfig = STRIPE_TIERS[tierKey];
-      const priceId = isXSub ? stripeConfig.x_sub_price_id : stripeConfig.price_id;
+      let priceId: string;
+
+      if (isXSub && tierKey === 'pro' && xSubBillingCycle === 'yearly' && 'x_sub_yearly_price_id' in stripeConfig) {
+        priceId = stripeConfig.x_sub_yearly_price_id;
+      } else if (isXSub) {
+        priceId = stripeConfig.x_sub_price_id;
+      } else {
+        priceId = stripeConfig.price_id;
+      }
 
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { priceId },
@@ -101,11 +110,10 @@ export function PricingTable() {
     } finally {
       setLoadingTier(null);
     }
-  }, [tierInfo.isXSubscriber]);
+  }, [tierInfo.isXSubscriber, xSubBillingCycle]);
 
   const handleCheckout = async (tierKey: 'pro' | 'dev' | 'enterprise') => {
     if (!user) {
-      // Store which tier they wanted, then show auth modal
       setPendingCheckoutTier(tierKey);
       setShowAuthModal(true);
       return;
@@ -115,9 +123,7 @@ export function PricingTable() {
 
   const handleAuthModalClose = () => {
     setShowAuthModal(false);
-    // If user just authenticated and had a pending checkout, continue it
     if (pendingCheckoutTier) {
-      // Small delay to let auth state propagate
       const tier = pendingCheckoutTier;
       setPendingCheckoutTier(null);
       setTimeout(async () => {
@@ -145,12 +151,18 @@ export function PricingTable() {
     }
   };
 
+  // Discount calculation for X Sub yearly: $4/mo × 12 = $48/yr, yearly = $38.99, save 19%
+  const xSubMonthlyAnnualized = 4.0 * 12; // $48
+  const xSubYearlyPrice = 38.99;
+  const xSubYearlySavingsPct = Math.round(((xSubMonthlyAnnualized - xSubYearlyPrice) / xSubMonthlyAnnualized) * 100);
+
   const tiers = [
     {
       key: 'free',
       name: 'Free',
       price: '$0',
       xPrice: null,
+      xYearlyPrice: null,
       description: 'Basic token analysis',
       icon: null,
       highlight: false,
@@ -163,6 +175,7 @@ export function PricingTable() {
       name: 'Free Account',
       price: '$0',
       xPrice: null,
+      xYearlyPrice: null,
       description: 'AI analysis & alerts',
       icon: null,
       highlight: false,
@@ -175,6 +188,7 @@ export function PricingTable() {
       name: 'X Subscriber',
       price: 'Included',
       xPrice: null,
+      xYearlyPrice: null,
       description: 'Via @holdersintel X subscription',
       icon: <Sparkles className="h-4 w-4" />,
       highlight: false,
@@ -186,7 +200,8 @@ export function PricingTable() {
       key: 'pro',
       name: 'Pro',
       price: '$9.99',
-      xPrice: '$7.99',
+      xPrice: '$4.00',
+      xYearlyPrice: '$38.99',
       description: 'Complete analysis suite',
       icon: <Crown className="h-4 w-4" />,
       highlight: true,
@@ -199,6 +214,7 @@ export function PricingTable() {
       name: 'Developer',
       price: '$29.99',
       xPrice: '$22.99',
+      xYearlyPrice: null,
       description: 'API access & automation',
       icon: <Zap className="h-4 w-4" />,
       highlight: false,
@@ -211,6 +227,7 @@ export function PricingTable() {
       name: 'Enterprise',
       price: '$49.99',
       xPrice: '$39.99',
+      xYearlyPrice: null,
       description: 'Team & white-label',
       icon: <Users className="h-4 w-4" />,
       highlight: false,
@@ -279,6 +296,7 @@ export function PricingTable() {
         {tiers.map((tier) => {
           const isCurrent = tierInfo.tierKey === tier.key;
           const isLoading = loadingTier === tier.key;
+          const showXSubToggle = tier.key === 'pro' && tier.xYearlyPrice && tierInfo.isXSubscriber;
           return (
             <Card
               key={tier.key}
@@ -298,14 +316,72 @@ export function PricingTable() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <span className="text-3xl font-bold">{tier.price}</span>
-                  {tier.price !== '$0' && tier.price !== 'Included' && (
-                    <span className="text-sm text-muted-foreground">/mo</span>
-                  )}
-                  {tier.xPrice && (
-                    <p className="text-xs text-blue-400 mt-0.5">
-                      {tier.xPrice}/mo for X Subscribers
-                    </p>
+                  {/* Price display */}
+                  {showXSubToggle ? (
+                    <>
+                      {/* X Subscriber billing cycle toggle */}
+                      <div className="flex items-center gap-1 mb-2 bg-muted/50 rounded-lg p-0.5">
+                        <button
+                          onClick={() => setXSubBillingCycle('monthly')}
+                          className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-colors ${
+                            xSubBillingCycle === 'monthly'
+                              ? 'bg-background text-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          Monthly
+                        </button>
+                        <button
+                          onClick={() => setXSubBillingCycle('yearly')}
+                          className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-colors ${
+                            xSubBillingCycle === 'yearly'
+                              ? 'bg-background text-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          Yearly
+                          <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 border-green-500/50 text-green-400">
+                            -{xSubYearlySavingsPct}%
+                          </Badge>
+                        </button>
+                      </div>
+                      {xSubBillingCycle === 'monthly' ? (
+                        <>
+                          <span className="text-3xl font-bold">{tier.xPrice}</span>
+                          <span className="text-sm text-muted-foreground">/mo</span>
+                          <p className="text-xs text-muted-foreground line-through mt-0.5">{tier.price}/mo regular</p>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-3xl font-bold">{tier.xYearlyPrice}</span>
+                          <span className="text-sm text-muted-foreground">/year</span>
+                          <p className="text-xs text-green-400 mt-0.5">
+                            ≈ ${(xSubYearlyPrice / 12).toFixed(2)}/mo · Save ${(xSubMonthlyAnnualized - xSubYearlyPrice).toFixed(2)}/yr
+                          </p>
+                        </>
+                      )}
+                      <p className="text-[10px] text-blue-400 mt-1">
+                        <Sparkles className="h-2.5 w-2.5 inline mr-0.5" />
+                        X Subscriber exclusive pricing
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-3xl font-bold">{tier.price}</span>
+                      {tier.price !== '$0' && tier.price !== 'Included' && (
+                        <span className="text-sm text-muted-foreground">/mo</span>
+                      )}
+                      {tier.xPrice && (
+                        <p className="text-xs text-blue-400 mt-0.5">
+                          {tier.xPrice}/mo for X Subscribers
+                          {tier.xYearlyPrice && (
+                            <span className="block text-[10px]">
+                              or {tier.xYearlyPrice}/yr (save {xSubYearlySavingsPct}%)
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
 
