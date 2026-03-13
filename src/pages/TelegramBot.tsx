@@ -19,6 +19,7 @@ import {
   Lock,
   ChevronRight,
   Coins,
+  Settings,
 } from 'lucide-react';
 
 const commands = [
