@@ -316,6 +316,7 @@ export default function TelegramBot() {
                   <li>• Toggle commands for members vs. admins only</li>
                   <li>• Switch between long-form and short-form replies per command</li>
                   <li>• Control which analysis tiers are available in your group</li>
+                  <li>• <span className="text-foreground font-medium">🚨 Dev Wallet Alerts</span> — get notified when a known creator launches a new token, with reputation score &amp; rug history</li>
                 </ul>
               </div>
             </div>
