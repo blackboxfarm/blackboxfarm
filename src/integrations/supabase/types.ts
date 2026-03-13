@@ -2018,6 +2018,98 @@ export type Database = {
           },
         ]
       }
+      channel_installations: {
+        Row: {
+          admin_config: Json
+          chat_id: number
+          chat_title: string | null
+          chat_type: string
+          id: string
+          installed_at: string
+          is_active: boolean
+          is_paid: boolean
+          kicked: boolean
+          paid_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_config?: Json
+          chat_id: number
+          chat_title?: string | null
+          chat_type?: string
+          id?: string
+          installed_at?: string
+          is_active?: boolean
+          is_paid?: boolean
+          kicked?: boolean
+          paid_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_config?: Json
+          chat_id?: number
+          chat_title?: string | null
+          chat_type?: string
+          id?: string
+          installed_at?: string
+          is_active?: boolean
+          is_paid?: boolean
+          kicked?: boolean
+          paid_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      channel_payment_wallets: {
+        Row: {
+          created_at: string
+          current_balance: number
+          id: string
+          installation_id: string
+          is_paid: boolean
+          pubkey: string
+          required_sol: number
+          secret_key_encrypted: string
+          updated_at: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          current_balance?: number
+          id?: string
+          installation_id: string
+          is_paid?: boolean
+          pubkey: string
+          required_sol?: number
+          secret_key_encrypted: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          current_balance?: number
+          id?: string
+          installation_id?: string
+          is_paid?: boolean
+          pubkey?: string
+          required_sol?: number
+          secret_key_encrypted?: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_payment_wallets_installation_id_fkey"
+            columns: ["installation_id"]
+            isOneToOne: true
+            referencedRelation: "channel_installations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coingecko_error_alerts: {
         Row: {
           context: string | null
