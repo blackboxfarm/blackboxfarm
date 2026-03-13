@@ -364,6 +364,9 @@ Deno.serve(async (req) => {
         aiSummary: '',
         aiOverview: '',
         lifecycle: '',
+        // Risk assessment fields (populated below)
+        risk: '',
+        riskDetail: '',
       };
       
       console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}, post #${currentTimesPosted}`);
