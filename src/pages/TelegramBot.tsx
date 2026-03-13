@@ -188,7 +188,7 @@ export default function TelegramBot() {
               </div>
               <h3 className="font-bold">X Subscriber</h3>
               <p className="text-xs text-muted-foreground">
-                Full /holders, /momentum, /verdict sizing, /alerts — 10 lookups/hour
+                Full /holders, /momentum, /risk analysis, /alerts — 10 lookups/hour
               </p>
               <Button variant="outline" size="sm" className="border-blue-500/30 text-blue-400" asChild>
                 <a href="https://x.com/holdersintel" target="_blank" rel="noopener noreferrer">
