@@ -36,6 +36,7 @@ const MeshGraphVisualizer = () => {
   const [ctoChecked, setCtoChecked] = useState<Set<string>>(new Set());
 
   const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
+  const { snapshot: apifySnapshot, startTracking: startApifyTracking, stopTracking: stopApifyTracking, resetTracking: resetApifyTracking } = useApifyCreditTracker();
   const holdings = useBubbleMapHoldings();
   const { detectCTO, buildCTORedFlag } = useCTODetection();
 
