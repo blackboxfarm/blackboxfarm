@@ -972,7 +972,56 @@ const MeshGraphVisualizer = () => {
             </div>
           )}
 
-          {/* Spider Status Banner */}
+          {/* Apify Credit Counter */}
+          {apifySnapshot.isTracking && (
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 text-orange-400" />
+                  <span className="text-xs font-medium text-orange-400">Apify Credits (Live)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-bold text-orange-300">
+                    {apifySnapshot.totalCalls}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">runs</span>
+                  <span className="font-mono text-xs text-orange-400">
+                    ~${apifySnapshot.estimatedCostUsd.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              
+              {apifySnapshot.callLog.length > 0 && (
+                <div className="max-h-24 overflow-y-auto space-y-0.5">
+                  {apifySnapshot.callLog.slice(-6).map((call, i) => (
+                    <div key={i} className="flex items-center justify-between text-[9px] font-mono text-muted-foreground">
+                      <span className="truncate max-w-[180px]">{call.functionName}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-orange-400">{call.credits}cr</span>
+                        <span>{(call.responseMs / 1000).toFixed(1)}s</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">
+                  Session: {Math.round((Date.now() - apifySnapshot.sessionStart) / 1000)}s
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => { stopApifyTracking(); resetApifyTracking(); }}
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+          )}
+
+
           {spiderStatus.active && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
