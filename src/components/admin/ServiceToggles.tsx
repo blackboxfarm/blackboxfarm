@@ -62,7 +62,7 @@ export function ServiceToggles() {
     queryFn: async () => {
       const { data, error } = await (supabase
         .from("pumpfun_monitor_config" as any)
-        .select("id, is_enabled, monitor_is_enabled, enricher_is_enabled, kol_scanner_is_enabled")
+        .select("id, is_enabled, monitor_is_enabled, enricher_is_enabled, kol_scanner_is_enabled, community_enricher_is_enabled")
         .limit(1)
         .single() as any);
       if (error) throw error;
