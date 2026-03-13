@@ -59,7 +59,13 @@ function extractTwitterUsername(url: string): string | null {
   return null;
 }
 
-async function fetchCommunityMembers(communityId: string, apifyApiKey: string): Promise<ApifyCommunityMember[]> {
+interface FetchResult {
+  members: ApifyCommunityMember[];
+  httpStatus: number;
+  errorBody?: string;
+}
+
+async function fetchCommunityMembers(communityId: string, apifyApiKey: string): Promise<FetchResult> {
   const { createApiLogger } = await import("../_shared/api-logger.ts");
   const logger = createApiLogger({
     serviceName: 'apify',
@@ -72,7 +78,6 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
   try {
     console.log(`Fetching X Community members for community ${communityId}...`);
     
-    // Use Apify Twitter X Community Member Scraper
     const response = await fetch(
       `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`,
       {
@@ -80,7 +85,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId: communityId,
-          maxItems: 100, // Get admins/mods + some members
+          maxItems: 100,
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ["RESIDENTIAL"]
@@ -92,16 +97,17 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
     await logger.complete(response.status);
 
     if (!response.ok) {
-      console.error(`Apify API error: ${response.status}`);
-      return [];
+      const errorBody = await response.text().catch(() => '');
+      console.error(`Apify API error ${response.status} for community ${communityId}: ${errorBody.slice(0, 200)}`);
+      return { members: [], httpStatus: response.status, errorBody: errorBody.slice(0, 300) };
     }
 
     const data = await response.json();
-    return data || [];
+    return { members: data || [], httpStatus: response.status };
   } catch (error) {
     await logger.fail(error instanceof Error ? error.message : String(error));
     console.error('Failed to fetch community members:', error);
-    return [];
+    return { members: [], httpStatus: 0, errorBody: String(error) };
   }
 }
 
