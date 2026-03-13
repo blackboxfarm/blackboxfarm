@@ -229,6 +229,9 @@ export const TEMPLATE_VARIABLES = [
   { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
   { var: '{risk}', desc: 'Network risk signal (🟢 STRONG NETWORK, 🟡 SPECULATIVE, 🔴 HIGH RISK)' },
   { var: '{risk_detail}', desc: 'Risk assessment explanation (1-2 sentences)' },
+  { var: '{dev_rep}', desc: 'Dev reputation summary (e.g. ✅ Trusted (82/100) or 🚩 Suspicious (23/100))' },
+  { var: '{x_community}', desc: 'X Community link from DexScreener (if exists)' },
+  { var: '{website}', desc: 'Website URL from DexScreener (if exists)' },
   // Telegram-specific variables
   { var: '{timesPosted}', desc: 'Number of times token was posted (TG Posted)' },
   { var: '{whaleBar}', desc: 'ASCII bar for whale percentage (TG)' },
