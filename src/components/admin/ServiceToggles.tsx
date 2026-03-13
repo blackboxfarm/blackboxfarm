@@ -5,13 +5,14 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Eye, Sparkles, Shield } from "lucide-react";
+import { Eye, Sparkles, Shield, Twitter } from "lucide-react";
 
 interface MonitorConfig {
   id: string;
   is_enabled: boolean;
   monitor_is_enabled: boolean;
   enricher_is_enabled: boolean;
+  kol_scanner_is_enabled: boolean;
 }
 
 const SERVICE_CONFIG = [
@@ -28,6 +29,13 @@ const SERVICE_CONFIG = [
     icon: <Sparkles className="h-4 w-4" />,
     description: "Triages pending_triage tokens (5/run). Runs RugCheck, bundle/authority/bump analysis, blacklist mesh.",
     emoji: "🔬",
+  },
+  {
+    field: "kol_scanner_is_enabled" as const,
+    label: "KOL Twitter Scanner",
+    icon: <Twitter className="h-4 w-4" />,
+    description: "Apify-powered KOL timeline scraping. Uses paid compute units per scan. Disable to save Apify credits.",
+    emoji: "🐦",
   },
   {
     field: "is_enabled" as const,
