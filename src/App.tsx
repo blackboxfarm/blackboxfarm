@@ -15,7 +15,9 @@ import { useDomainRedirect } from "@/hooks/useDomainRedirect";
 import { SuperAdminRoute } from "@/components/guards/SuperAdminRoute";
 
 // Lazy load all pages for code splitting
+const Home = lazy(() => import("./pages/Home"));
 const BlackBox = lazy(() => import("./pages/BlackBox"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Index = lazy(() => import("./pages/Index"));
 const BumpBot = lazy(() => import("./pages/BumpBot"));
 const Auth = lazy(() => import("./pages/Auth"));
