@@ -218,12 +218,14 @@ export function TelegramCommandsPlanner() {
       </div>
 
       <Tabs value={activeView} onValueChange={setActiveView} className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="matrix">📋 Tier Matrix</TabsTrigger>
           <TabsTrigger value="context">💬 Group vs DM</TabsTrigger>
           <TabsTrigger value="botfather">🤖 BotFather</TabsTrigger>
           <TabsTrigger value="tiers">📊 Tier Breakdown</TabsTrigger>
           <TabsTrigger value="proposed">🆕 Proposed</TabsTrigger>
+          <TabsTrigger value="bubblemap">🫧 Bubble Map Tiers</TabsTrigger>
+          <TabsTrigger value="channels">📡 Channel Config</TabsTrigger>
         </TabsList>
 
         {/* ════════ TIER MATRIX ════════ */}
