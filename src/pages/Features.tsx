@@ -439,14 +439,14 @@ export default function Features() {
               </div>
               <div className="p-4 font-mono text-xs space-y-3 text-foreground/80">
                 <div>
-                  <span className="text-primary">/verdict</span>{" "}
+                  <span className="text-primary">/risk</span>{" "}
                   <span className="text-muted-foreground">7xKXtg...pump</span>
                 </div>
                 <div className="border-l-2 border-primary/30 pl-3 space-y-1">
                   <p>📊 <span className="text-foreground">$EXAMPLE</span> (Example Token)</p>
                   <p>💰 Market Cap: $1.2M</p>
                   <p>🏆 Stability: <span className="text-primary">72/100</span></p>
-                  <p>🎯 Verdict: <span className="text-primary font-bold">CAUTIOUS HOLD</span></p>
+                  <p>🎯 Risk: <span className="text-primary font-bold">MODERATE STRENGTH</span></p>
                   <p className="text-muted-foreground">━━━━━━━━━━━━━━━━</p>
                   <p>💬 Token shows healthy distribution with 68% in small wallets. Dev wallet inactive 14d. One flagged holder from reputation DB. Moderate concentration in top 10.</p>
                 </div>

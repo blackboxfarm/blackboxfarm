@@ -238,6 +238,69 @@ export default function TelegramBot() {
           </Button>
         </div>
       </section>
+
+      {/* For Group & Channel Admins */}
+      <section className="mx-auto max-w-5xl px-4 pb-16">
+        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-amber-500" />
+              For Group & Channel Admins
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">
+              Supercharge your crypto community with real-time holder analysis. Install the Holders Bot 
+              in your Telegram Group or Channel and give your members instant access to token due diligence.
+            </p>
+            
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  Community Benefits
+                </h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Members can verify tokens before buying</li>
+                  <li>• Reduce scam victims in your community</li>
+                  <li>• Add value that sets your group apart</li>
+                  <li>• Real-time analysis without leaving Telegram</li>
+                </ul>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-blue-500" />
+                  How It Works
+                </h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Any member posts a token address</li>
+                  <li>• Bot replies with holder analysis</li>
+                  <li>• Shows distribution, risks, and health score</li>
+                  <li>• Links to full report on BlackBox Farm</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div className="bg-background/50 rounded-lg p-4 border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-primary" />
+                    One-Time Installation Fee
+                  </h4>
+                  <p className="text-sm text-muted-foreground">Lifetime access for your group/channel</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-primary">0.20 SOL</div>
+                  <p className="text-xs text-muted-foreground">No monthly fees</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

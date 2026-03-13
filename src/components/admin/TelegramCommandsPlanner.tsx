@@ -97,12 +97,12 @@ const COMMANDS: BotCommand[] = [
     notes: 'Best candidate for Group+ freebie — fast, useful, not too revealing.',
   },
   {
-    command: '/verdict', aliases: ['/v'], description: 'Buy/Hold signal with sizing', category: 'analysis',
+    command: '/risk', aliases: ['/r'], description: 'Risk & stability assessment', category: 'analysis',
     botFatherRegistered: true, implementedInWebhook: true,
     access: { free: '🔒', auth: 'lite', group_plus: 'lite', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Full: verdict + reasoning + sizing rec. Lite: emoji only (🟢/🔴).',
-    groupBehavior: 'Lite verdict in group (emoji + one line). Full via DM only.',
-    notes: 'Auth/Group+ sees color emoji only. X Sub+ sees full reasoning + sizing.',
+    dmBehavior: 'Full: risk assessment + reasoning. Lite: emoji only (🟢/🔴).',
+    groupBehavior: 'Lite risk signal in group (emoji + one line). Full via DM only.',
+    notes: 'Auth/Group+ sees color emoji only. X Sub+ sees full reasoning.',
   },
   {
     command: '/ai', aliases: [], description: 'Descriptive AI analysis snapshot', category: 'analysis',
