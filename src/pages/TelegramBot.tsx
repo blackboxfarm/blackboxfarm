@@ -278,7 +278,7 @@ export default function TelegramBot() {
               in your Telegram Group or Channel and give your members instant access to token due diligence.
             </p>
             
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <h4 className="font-semibold flex items-center gap-2">
                   <Zap className="h-4 w-4 text-amber-500" />
@@ -302,6 +302,19 @@ export default function TelegramBot() {
                   <li>• Bot replies with holder analysis</li>
                   <li>• Shows distribution, risks, and health score</li>
                   <li>• Links to full report on BlackBox Farm</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-primary" />
+                  Granular Config
+                </h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• <span className="text-foreground font-medium">/delay</span> — set response delay (ms) so standard bots (Phanes, Skeleton, etc.) fire first</li>
+                  <li>• Toggle commands for members vs. admins only</li>
+                  <li>• Switch between long-form and short-form replies per command</li>
+                  <li>• Control which analysis tiers are available in your group</li>
                 </ul>
               </div>
             </div>
