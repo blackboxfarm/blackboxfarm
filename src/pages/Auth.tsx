@@ -76,7 +76,7 @@ export default function AuthPage() {
                 </h1>
               </div>
               <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
-                Putting the needle in the Haystack - Bumps for the whole Fam!
+                Putting the needle in the haystack — follow the wallets.
               </p>
               <div className="flex justify-center md:hidden space-x-3">
                 <AuthButton />
