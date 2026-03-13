@@ -109,13 +109,13 @@ export function Footer() {
                   <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-400/30 text-blue-400">Soon</Badge>
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/adverts" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <span>📢</span>
                   Marketing
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/security" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <span>🔒</span>
                   Security
