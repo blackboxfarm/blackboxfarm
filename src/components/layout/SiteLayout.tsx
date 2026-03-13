@@ -146,8 +146,8 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
 
       {/* Auth Modal */}
       <AuthModal 
-        open={showAuthModal} 
-        onOpenChange={setShowAuthModal}
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)}
         defaultTab={authModalTab}
       />
     </div>
