@@ -15,7 +15,9 @@ const logStep = (step: string, details?: any) => {
 // Map Stripe product IDs to tier keys
 const PRODUCT_TO_TIER: Record<string, string> = {
   "prod_U5rCqUTB2ivf09": "pro",
-  "prod_U5rC0vzkGA6sfq": "pro",        // x_sub variant
+  "prod_U5rC0vzkGA6sfq": "pro",        // x_sub monthly (legacy)
+  "prod_U8qZhEROQW6Iiu": "pro",        // x_sub monthly ($4/mo)
+  "prod_U8qZ9TNN4LLryZ": "pro",        // x_sub yearly ($38.99/yr)
   "prod_U5rCvewEcZZetf": "dev",
   "prod_U5rCsGpO4RKofP": "dev",        // x_sub variant
   "prod_U5rCyXbfyw6nd6": "enterprise",
