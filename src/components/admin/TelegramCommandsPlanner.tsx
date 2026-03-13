@@ -472,7 +472,7 @@ export function TelegramCommandsPlanner() {
                     <li>• /quick — Fast stats (holder count, health, top10%)</li>
                     <li>• /price — Price + mcap + 24h (DexScreener)</li>
                     <li>• /check — Quick rug safety score</li>
-                    <li>• /verdict — Emoji only (🟢/🔴) no reasoning</li>
+                    <li>• /risk — Emoji only (🟢/🔴) no reasoning</li>
                     <li>• /ca — Short condensed report</li>
                     <li>• /top — Trending tickers (top 3 in group)</li>
                   </ul>
