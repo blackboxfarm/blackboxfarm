@@ -332,7 +332,7 @@ export default function TelegramBot() {
                   <p className="text-sm text-muted-foreground">Lifetime access for your group/channel</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-primary">0.20 SOL</div>
+                  <div className="text-2xl font-bold text-primary">0.25 SOL</div>
                   <p className="text-xs text-muted-foreground">No monthly fees</p>
                 </div>
               </div>
