@@ -146,6 +146,9 @@ function processTemplate(template: string, data: any): string {
   const lifecycle = data.lifecycle || '';
   const risk = data.risk || '';
   const riskDetail = data.riskDetail || '';
+  const devRep = data.devRep || 'Unknown';
+  const xCommunity = data.xCommunity || 'N/A';
+  const website = data.website || 'N/A';
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
@@ -185,7 +188,13 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{risk\}/g, risk)
     .replace(/\{RISK\}/g, risk)
     .replace(/\{risk_detail\}/g, riskDetail)
-    .replace(/\{RISK_DETAIL\}/g, riskDetail);
+    .replace(/\{RISK_DETAIL\}/g, riskDetail)
+    .replace(/\{dev_rep\}/g, devRep)
+    .replace(/\{DEV_REP\}/g, devRep)
+    .replace(/\{x_community\}/g, xCommunity)
+    .replace(/\{X_COMMUNITY\}/g, xCommunity)
+    .replace(/\{website\}/g, website)
+    .replace(/\{WEBSITE\}/g, website);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
