@@ -431,6 +431,9 @@ export function processTemplate(template: string, data: TokenShareData): string 
   const lifecycle = data.lifecycle ?? '';
   const risk = data.risk ?? '';
   const riskDetail = data.riskDetail ?? '';
+  const devRep = data.devRep ?? 'Unknown';
+  const xCommunity = data.xCommunity ?? 'N/A';
+  const website = data.website ?? 'N/A';
   
   return template
     .replace(/\{ticker\}/g, data.ticker)
