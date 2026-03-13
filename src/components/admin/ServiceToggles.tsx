@@ -40,6 +40,13 @@ const SERVICE_CONFIG = [
     emoji: "🏘️",
   },
   {
+    field: "social_mesh_linker_is_enabled" as const,
+    label: "Social Mesh Linker",
+    icon: <Network className="h-4 w-4" />,
+    description: "Background cron (10min). Auto-links Twitter, Telegram, website socials to creator wallets in reputation mesh. Triggers x-community-enricher for communities.",
+    emoji: "🔗",
+  },
+  {
     field: "kol_scanner_is_enabled" as const,
     label: "KOL Twitter Scanner",
     icon: <Twitter className="h-4 w-4" />,
