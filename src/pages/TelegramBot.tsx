@@ -108,6 +108,23 @@ export default function TelegramBot() {
                 </Link>
               </Button>
             </div>
+
+            {/* Account Linking Info */}
+            <div className="mt-8 max-w-xl mx-auto rounded-lg border border-border/50 bg-card/50 backdrop-blur-sm p-5 text-left space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Shield className="w-4 h-4 text-primary" />
+                Private Account Linking
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                The Holders Intel Bot links securely with your Telegram account using a unique <span className="text-foreground font-medium">Bot Registration Code</span> from your{' '}
+                <Link to="/dashboard" className="text-primary hover:underline">Account Dashboard</Link>. 
+                No personal data is shared — just a private code to unlock your tier.
+              </p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Different subscription levels unlock different command tiers, from free quick scans to full AI narrative reports and dev reputation analysis.{' '}
+                <Link to="/subscriptions" className="text-primary hover:underline">View available tiers →</Link>
+              </p>
+            </div>
           </div>
         </div>
       </section>
