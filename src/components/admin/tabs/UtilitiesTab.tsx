@@ -38,6 +38,7 @@ export default function UtilitiesTab() {
         <TabsTrigger value="housekeeping">🧹 Housekeeping</TabsTrigger>
         <TabsTrigger value="helius-breakdown">📊 Helius Usage</TabsTrigger>
         <TabsTrigger value="solscan-breakdown">🔎 Solscan Usage</TabsTrigger>
+        <TabsTrigger value="apify-breakdown">🤖 Apify Usage</TabsTrigger>
       </TabsList>
 
       <TabsContent value="api-resources">
