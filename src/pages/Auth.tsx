@@ -31,13 +31,21 @@ export default function AuthPage() {
     }
   }, [location.search, user]);
 
-  // If we have a next= param and the user is authenticated, take them there automatically
+  // If the user is authenticated, redirect them appropriately
   useEffect(() => {
     if (!user) return;
     const sp = new URLSearchParams(location.search);
     const next = sp.get('next');
     if (next) {
       navigate(next, { replace: true });
+      return;
+    }
+    // Check if onboarding is completed
+    const onboardingDone = localStorage.getItem('bbx_onboarding_done');
+    if (onboardingDone) {
+      navigate('/dashboard', { replace: true });
+    } else {
+      navigate('/onboarding', { replace: true });
     }
   }, [location.search, navigate, user]);
 

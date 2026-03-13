@@ -91,6 +91,7 @@ const App = () => {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/onboarding" element={<Onboarding />} />
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/admin" element={<SuperAdminRoute><Index /></SuperAdminRoute>} />
                       <Route path="/bb" element={<SuperAdminRoute><BumpBot /></SuperAdminRoute>} />

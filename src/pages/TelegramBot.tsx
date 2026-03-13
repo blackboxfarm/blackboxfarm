@@ -300,6 +300,6 @@ export default function TelegramBot() {
           </CardContent>
         </Card>
       </section>
-    </div>
+    </SiteLayout>
   );
 }

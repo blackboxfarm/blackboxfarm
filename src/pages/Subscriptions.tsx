@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { SiteLayout } from '@/components/layout/SiteLayout';
 
 const OG_IMAGE_URL = 'https://blackboxfarm.lovable.app/images/holders-intel-og.png';
 
