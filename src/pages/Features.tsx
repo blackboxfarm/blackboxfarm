@@ -109,11 +109,11 @@ const PRODUCT_PILLARS = [
     icon: <Bot className="w-8 h-8 text-primary" />,
     title: "Telegram Bot",
     subtitle: "@holdersintel_bot — Intel on demand",
-    description: "Query any Solana token directly from Telegram. Fast commands for traders, deep analysis for researchers, AI verdicts for decision-makers. Works in DMs and group chats with tiered access.",
+    description: "Query any Solana token directly from Telegram. Fast commands for traders, deep analysis for researchers, AI risk assessments for decision-makers. Works in DMs and group chats with tiered access.",
     features: [
       "/quick — Instant snapshot (free)",
       "/holders — Full holder breakdown",
-      "/verdict — AI-powered buy/hold/avoid signal",
+      "/risk — AI-powered risk & stability assessment",
       "/ai — Deep narrative analysis",
       "/wallet — Dev wallet trace & history",
       "Group chat mode with abbreviated intel",
