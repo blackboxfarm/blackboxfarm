@@ -67,6 +67,7 @@ const TelegramBot = lazy(() => import("./pages/TelegramBot"));
 const Features = lazy(() => import("./pages/Features"));
 const BubblePromo = lazy(() => import("./pages/BubblePromo"));
 const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 
 const queryClient = new QueryClient();
 
