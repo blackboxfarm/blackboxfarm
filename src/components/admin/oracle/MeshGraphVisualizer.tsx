@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode, RedFlag } from "@/hooks/useMeshGraph";
 import { useHeliusCreditTracker } from "@/hooks/useHeliusCreditTracker";
+import { useApifyCreditTracker } from "@/hooks/useApifyCreditTracker";
 import { useBubbleMapHoldings } from "@/hooks/useBubbleMapHoldings";
 import { useCTODetection } from "@/hooks/useCTODetection";
 import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users, Zap, Gauge, Unlock, PieChart, Eye, EyeOff } from "lucide-react";
@@ -35,6 +36,7 @@ const MeshGraphVisualizer = () => {
   const [ctoChecked, setCtoChecked] = useState<Set<string>>(new Set());
 
   const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
+  const { snapshot: apifySnapshot, startTracking: startApifyTracking, stopTracking: stopApifyTracking, resetTracking: resetApifyTracking } = useApifyCreditTracker();
   const holdings = useBubbleMapHoldings();
   const { detectCTO, buildCTORedFlag } = useCTODetection();
 
@@ -144,10 +146,12 @@ const MeshGraphVisualizer = () => {
     // Start credit tracking on new search
     resetTracking();
     startTracking();
+    resetApifyTracking();
+    startApifyTracking();
     // Reset node cap
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
-  }, [searchInput, focusOnEntity, resetView, startTracking, stopTracking, resetTracking]);
+  }, [searchInput, focusOnEntity, resetView, startTracking, stopTracking, resetTracking, startApifyTracking, resetApifyTracking]);
 
   // Auto-spider: when focused entity returns 0 results
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
@@ -968,7 +972,56 @@ const MeshGraphVisualizer = () => {
             </div>
           )}
 
-          {/* Spider Status Banner */}
+          {/* Apify Credit Counter */}
+          {apifySnapshot.isTracking && (
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 text-orange-400" />
+                  <span className="text-xs font-medium text-orange-400">Apify Credits (Live)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-bold text-orange-300">
+                    {apifySnapshot.totalCalls}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">runs</span>
+                  <span className="font-mono text-xs text-orange-400">
+                    ~${apifySnapshot.estimatedCostUsd.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              
+              {apifySnapshot.callLog.length > 0 && (
+                <div className="max-h-24 overflow-y-auto space-y-0.5">
+                  {apifySnapshot.callLog.slice(-6).map((call, i) => (
+                    <div key={i} className="flex items-center justify-between text-[9px] font-mono text-muted-foreground">
+                      <span className="truncate max-w-[180px]">{call.functionName}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-orange-400">{call.credits}cr</span>
+                        <span>{(call.responseMs / 1000).toFixed(1)}s</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">
+                  Session: {Math.round((Date.now() - apifySnapshot.sessionStart) / 1000)}s
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => { stopApifyTracking(); resetApifyTracking(); }}
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+          )}
+
+
           {spiderStatus.active && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
