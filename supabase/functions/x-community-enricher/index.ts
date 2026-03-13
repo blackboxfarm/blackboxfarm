@@ -240,7 +240,33 @@ Deno.serve(async (req) => {
 
       if (needsScrape && apifyApiKey) {
         console.log('Fetching fresh community data from Apify...');
-        const members = await fetchCommunityMembers(communityId, apifyApiKey);
+        const fetchResult = await fetchCommunityMembers(communityId, apifyApiKey);
+        const members = fetchResult.members;
+        
+        // If Apify returned an error (400/500), track the failure and stop
+        if (fetchResult.httpStatus >= 400 || (fetchResult.httpStatus === 0 && fetchResult.errorBody)) {
+          const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
+          console.warn(`[x-community-enricher] Apify ${fetchResult.httpStatus} for community ${communityId} (fail #${newFailCount}): ${fetchResult.errorBody?.slice(0, 100)}`);
+          
+          // Update fail count and set last_scraped_at to prevent immediate retry
+          await supabase.from('x_communities').upsert({
+            community_id: communityId,
+            community_url: urlToProcess,
+            failed_scrape_count: newFailCount,
+            scrape_status: `error_${fetchResult.httpStatus}`,
+            last_scraped_at: new Date().toISOString(), // Prevents retry for 24h
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'community_id' });
+          
+          return new Response(JSON.stringify({
+            success: false,
+            type: 'community',
+            communityId,
+            error: `Apify returned ${fetchResult.httpStatus}`,
+            failCount: newFailCount,
+            willRetryAfter: newFailCount >= 3 ? 'never (max failures reached)' : '24h',
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
         
         // Validate if community still exists
         const existenceCheck = await validateCommunityExists(communityId, members);
@@ -248,7 +274,6 @@ Deno.serve(async (req) => {
         if (existenceCheck.isDeleted) {
           console.warn(`[X Community Enricher] Community ${communityId} appears DELETED`);
           
-          // Update database with deletion status
           const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
           await supabase.from('x_communities').update({
             is_deleted: true,
@@ -256,9 +281,9 @@ Deno.serve(async (req) => {
             scrape_status: 'deleted',
             failed_scrape_count: newFailCount,
             last_existence_check_at: new Date().toISOString(),
+            last_scraped_at: new Date().toISOString(),
           }).eq('community_id', communityId);
           
-          // Send alert if not already sent
           if (!existingCommunity?.deletion_alert_sent) {
             const alertInfo: CommunityAlertInfo = {
               communityId,
