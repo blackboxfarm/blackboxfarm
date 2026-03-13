@@ -181,7 +181,11 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{ai_overview\}/g, aiOverview)
     .replace(/\{AI_OVERVIEW\}/g, aiOverview)
     .replace(/\{lifecycle\}/g, lifecycle)
-    .replace(/\{LIFECYCLE\}/g, lifecycle);
+    .replace(/\{LIFECYCLE\}/g, lifecycle)
+    .replace(/\{risk\}/g, risk)
+    .replace(/\{RISK\}/g, risk)
+    .replace(/\{risk_detail\}/g, riskDetail)
+    .replace(/\{RISK_DETAIL\}/g, riskDetail);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
