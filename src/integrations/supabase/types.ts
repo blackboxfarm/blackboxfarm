@@ -7538,6 +7538,7 @@ export type Database = {
           signal_strong_holder_threshold: number | null
           signal_strong_rugcheck_threshold: number | null
           signal_strong_volume_threshold_sol: number | null
+          social_mesh_linker_is_enabled: boolean
           soft_reject_resurrection_minutes: number | null
           tokens_processed_count: number | null
           updated_at: string
@@ -7625,6 +7626,7 @@ export type Database = {
           signal_strong_holder_threshold?: number | null
           signal_strong_rugcheck_threshold?: number | null
           signal_strong_volume_threshold_sol?: number | null
+          social_mesh_linker_is_enabled?: boolean
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string
@@ -7712,6 +7714,7 @@ export type Database = {
           signal_strong_holder_threshold?: number | null
           signal_strong_rugcheck_threshold?: number | null
           signal_strong_volume_threshold_sol?: number | null
+          social_mesh_linker_is_enabled?: boolean
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string

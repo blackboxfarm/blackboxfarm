@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Eye, Sparkles, Shield, Twitter } from "lucide-react";
+import { Eye, Sparkles, Shield, Twitter, Network } from "lucide-react";
 
 interface MonitorConfig {
   id: string;
@@ -14,6 +14,7 @@ interface MonitorConfig {
   enricher_is_enabled: boolean;
   kol_scanner_is_enabled: boolean;
   community_enricher_is_enabled: boolean;
+  social_mesh_linker_is_enabled: boolean;
 }
 
 const SERVICE_CONFIG = [
@@ -39,6 +40,13 @@ const SERVICE_CONFIG = [
     emoji: "🏘️",
   },
   {
+    field: "social_mesh_linker_is_enabled" as const,
+    label: "Social Mesh Linker",
+    icon: <Network className="h-4 w-4" />,
+    description: "Background cron (10min). Auto-links Twitter, Telegram, website socials to creator wallets in reputation mesh. Triggers x-community-enricher for communities.",
+    emoji: "🔗",
+  },
+  {
     field: "kol_scanner_is_enabled" as const,
     label: "KOL Twitter Scanner",
     icon: <Twitter className="h-4 w-4" />,
@@ -62,7 +70,7 @@ export function ServiceToggles() {
     queryFn: async () => {
       const { data, error } = await (supabase
         .from("pumpfun_monitor_config" as any)
-        .select("id, is_enabled, monitor_is_enabled, enricher_is_enabled, kol_scanner_is_enabled, community_enricher_is_enabled")
+        .select("id, is_enabled, monitor_is_enabled, enricher_is_enabled, kol_scanner_is_enabled, community_enricher_is_enabled, social_mesh_linker_is_enabled")
         .limit(1)
         .single() as any);
       if (error) throw error;
