@@ -59,7 +59,13 @@ function extractTwitterUsername(url: string): string | null {
   return null;
 }
 
-async function fetchCommunityMembers(communityId: string, apifyApiKey: string): Promise<ApifyCommunityMember[]> {
+interface FetchResult {
+  members: ApifyCommunityMember[];
+  httpStatus: number;
+  errorBody?: string;
+}
+
+async function fetchCommunityMembers(communityId: string, apifyApiKey: string): Promise<FetchResult> {
   const { createApiLogger } = await import("../_shared/api-logger.ts");
   const logger = createApiLogger({
     serviceName: 'apify',
@@ -72,7 +78,6 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
   try {
     console.log(`Fetching X Community members for community ${communityId}...`);
     
-    // Use Apify Twitter X Community Member Scraper
     const response = await fetch(
       `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`,
       {
@@ -80,7 +85,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId: communityId,
-          maxItems: 100, // Get admins/mods + some members
+          maxItems: 100,
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ["RESIDENTIAL"]
@@ -92,16 +97,17 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
     await logger.complete(response.status);
 
     if (!response.ok) {
-      console.error(`Apify API error: ${response.status}`);
-      return [];
+      const errorBody = await response.text().catch(() => '');
+      console.error(`Apify API error ${response.status} for community ${communityId}: ${errorBody.slice(0, 200)}`);
+      return { members: [], httpStatus: response.status, errorBody: errorBody.slice(0, 300) };
     }
 
     const data = await response.json();
-    return data || [];
+    return { members: data || [], httpStatus: response.status };
   } catch (error) {
     await logger.fail(error instanceof Error ? error.message : String(error));
     console.error('Failed to fetch community members:', error);
-    return [];
+    return { members: [], httpStatus: 0, errorBody: String(error) };
   }
 }
 
@@ -208,6 +214,20 @@ Deno.serve(async (req) => {
         .eq('community_id', communityId)
         .single();
 
+      // Skip communities with 3+ consecutive failures (likely deleted/private)
+      const failCount = existingCommunity?.failed_scrape_count || 0;
+      if (failCount >= 3) {
+        console.log(`[x-community-enricher] Skipping community ${communityId} - ${failCount} consecutive failures (likely deleted/private)`);
+        return new Response(JSON.stringify({
+          success: false,
+          type: 'community',
+          communityId,
+          skipped: true,
+          reason: `Skipped after ${failCount} consecutive Apify failures. Community likely deleted or private.`,
+          failCount,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       const needsScrape = !existingCommunity || 
         !existingCommunity.last_scraped_at ||
         new Date(existingCommunity.last_scraped_at).getTime() < Date.now() - 24 * 60 * 60 * 1000; // 24h cache
@@ -220,7 +240,33 @@ Deno.serve(async (req) => {
 
       if (needsScrape && apifyApiKey) {
         console.log('Fetching fresh community data from Apify...');
-        const members = await fetchCommunityMembers(communityId, apifyApiKey);
+        const fetchResult = await fetchCommunityMembers(communityId, apifyApiKey);
+        const members = fetchResult.members;
+        
+        // If Apify returned an error (400/500), track the failure and stop
+        if (fetchResult.httpStatus >= 400 || (fetchResult.httpStatus === 0 && fetchResult.errorBody)) {
+          const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
+          console.warn(`[x-community-enricher] Apify ${fetchResult.httpStatus} for community ${communityId} (fail #${newFailCount}): ${fetchResult.errorBody?.slice(0, 100)}`);
+          
+          // Update fail count and set last_scraped_at to prevent immediate retry
+          await supabase.from('x_communities').upsert({
+            community_id: communityId,
+            community_url: urlToProcess,
+            failed_scrape_count: newFailCount,
+            scrape_status: `error_${fetchResult.httpStatus}`,
+            last_scraped_at: new Date().toISOString(), // Prevents retry for 24h
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'community_id' });
+          
+          return new Response(JSON.stringify({
+            success: false,
+            type: 'community',
+            communityId,
+            error: `Apify returned ${fetchResult.httpStatus}`,
+            failCount: newFailCount,
+            willRetryAfter: newFailCount >= 3 ? 'never (max failures reached)' : '24h',
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
         
         // Validate if community still exists
         const existenceCheck = await validateCommunityExists(communityId, members);
@@ -228,7 +274,6 @@ Deno.serve(async (req) => {
         if (existenceCheck.isDeleted) {
           console.warn(`[X Community Enricher] Community ${communityId} appears DELETED`);
           
-          // Update database with deletion status
           const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
           await supabase.from('x_communities').update({
             is_deleted: true,
@@ -236,9 +281,9 @@ Deno.serve(async (req) => {
             scrape_status: 'deleted',
             failed_scrape_count: newFailCount,
             last_existence_check_at: new Date().toISOString(),
+            last_scraped_at: new Date().toISOString(),
           }).eq('community_id', communityId);
           
-          // Send alert if not already sent
           if (!existingCommunity?.deletion_alert_sent) {
             const alertInfo: CommunityAlertInfo = {
               communityId,
