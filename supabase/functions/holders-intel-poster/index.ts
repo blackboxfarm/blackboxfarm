@@ -424,6 +424,28 @@ Deno.serve(async (req) => {
         }
       }
       
+      // Generate network risk assessment (always, lightweight computation)
+      const templateUsesRisk = tweetTemplate.includes('{risk}') || tweetTemplate.includes('{RISK}') ||
+                                tweetTemplate.includes('{risk_detail}') || tweetTemplate.includes('{RISK_DETAIL}');
+      if (templateUsesRisk) {
+        console.log('[poster] Generating network risk assessment...');
+        const riskResult = assessNetworkRisk({
+          healthScore: stats.healthScore,
+          totalHolders: stats.totalHolders,
+          realHolders: stats.realHolders,
+          dustPercentage: stats.dustPercentage,
+          whaleCount: stats.whaleCount,
+          seriousCount: stats.seriousCount,
+          top10Pct: report?.distributionStats?.top10Percentage ?? null,
+          devTrustLevel: report?.devReputation?.trustLevel ?? null,
+          devReputationScore: report?.devReputation?.score ?? null,
+          isBlacklisted: report?.devReputation?.isBlacklisted ?? false,
+        });
+        stats.risk = riskResult.signal;
+        stats.riskDetail = riskResult.detail;
+        console.log(`[poster] Risk: ${riskResult.signal}`);
+      }
+      
       // Build tweet using the active template from database
       const tweetText = processTemplate(tweetTemplate, stats);
 
