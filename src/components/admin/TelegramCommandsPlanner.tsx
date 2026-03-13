@@ -239,6 +239,7 @@ const categoryLabels: Record<string, { label: string; emoji: string }> = {
   analysis: { label: 'Analysis (Auth+)', emoji: '📊' },
   advanced: { label: 'Advanced (X Sub+)', emoji: '🔥' },
   pro: { label: 'Pro Intelligence', emoji: '💎' },
+  admin: { label: 'Channel Admin', emoji: '🛡️' },
 };
 
 const TierBadge = ({ tier }: { tier: typeof TIERS[0] }) => (
