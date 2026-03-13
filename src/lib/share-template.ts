@@ -259,6 +259,8 @@ export interface TokenShareData {
   aiSummary?: string;
   aiOverview?: string;
   lifecycle?: string;
+  risk?: string;
+  riskDetail?: string;
 }
 
 export interface TemplateRecord {
