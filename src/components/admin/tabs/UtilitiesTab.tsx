@@ -16,6 +16,7 @@ const ApiResourceManager = lazy(() => import("@/components/admin/ApiResourceMana
 const DatabaseHousekeeping = lazy(() => import("@/components/admin/DatabaseHousekeeping").then(m => ({ default: m.DatabaseHousekeeping })));
 const HeliusUsageBreakdown = lazy(() => import("@/components/admin/HeliusUsageBreakdown").then(m => ({ default: m.HeliusUsageBreakdown })));
 const SolscanUsageBreakdown = lazy(() => import("@/components/admin/SolscanUsageBreakdown").then(m => ({ default: m.SolscanUsageBreakdown })));
+const ApifyUsageBreakdown = lazy(() => import("@/components/admin/ApifyUsageBreakdown").then(m => ({ default: m.ApifyUsageBreakdown })));
 
 export default function UtilitiesTab() {
   const [activeSubTab, setActiveSubTab] = useState("api-resources");
