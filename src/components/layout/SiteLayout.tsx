@@ -60,7 +60,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
                 onClick={() => navigate("/super-admin")}
                 variant="outline"
                 size="sm"
-                className="border-yellow-400 text-yellow-600 hover:bg-yellow-50"
+                className="border-primary/50 text-primary hover:bg-primary/10"
               >
                 <Shield className="mr-2 h-4 w-4" />
                 Super Admin
