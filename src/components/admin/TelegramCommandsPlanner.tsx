@@ -33,7 +33,7 @@ interface BotCommand {
   command: string;
   aliases: string[];
   description: string;
-  category: 'meta' | 'analysis' | 'advanced' | 'pro';
+  category: 'meta' | 'analysis' | 'advanced' | 'pro' | 'admin';
   botFatherRegistered: boolean;
   implementedInWebhook: boolean;
   access: Record<string, CmdAccess>;
@@ -168,6 +168,63 @@ const COMMANDS: BotCommand[] = [
     groupBehavior: 'Top 3 tickers only — teaser',
     notes: '🆕 PROPOSED — Group engagement driver. Shows trending, no deep analysis.',
   },
+  // ─── ADMIN COMMANDS (Channel/Group only) ───
+  {
+    command: '/delay', aliases: [], description: 'Set bot response delay (ms)', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Admin sets delay in ms so other bots (Phanes, Skeleton) fire first. Usage: /delay 3000',
+    notes: 'Channel admin only. Stored in admin_config.delay_ms. Default 0.',
+  },
+  {
+    command: '/verbose', aliases: [], description: 'Toggle verbose vs short replies', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Toggles between long-form and short-form bot replies in this channel. /verbose on | /verbose off',
+    notes: 'Channel admin only. Stored in admin_config.verbose. Default false (short).',
+  },
+  {
+    command: '/adminonly', aliases: [], description: 'Restrict commands to admins', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'When ON, only group admins can trigger analysis commands. Members see "ask an admin." /adminonly on | off',
+    notes: 'Channel admin only. Stored in admin_config.admin_only_commands. Default false.',
+  },
+  {
+    command: '/devalerts', aliases: [], description: 'Toggle dev wallet launch alerts', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Toggles 🚨 Dev Wallet Alerts — notify channel when a known creator launches a new token. /devalerts on | off',
+    notes: 'Channel admin only. Stored in admin_config.dev_alerts. Requires paid channel.',
+  },
+  {
+    command: '/toggle', aliases: [], description: 'Enable/disable specific commands', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Enable/disable individual commands for this channel. Usage: /toggle quick off | /toggle risk on',
+    notes: 'Channel admin only. Stored in admin_config.disabled_commands[]. Overrides tier access.',
+  },
+  {
+    command: '/channelstatus', aliases: ['/chstatus'], description: 'Show channel bot config', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Shows current config: delay, verbose, admin-only, dev alerts, disabled commands, payment status, install date',
+    notes: 'Channel admin only. Read-only status dump of admin_config + payment status.',
+  },
+  {
+    command: '/setlevel', aliases: [], description: 'Set max analysis tier for channel', category: 'admin',
+    botFatherRegistered: false, implementedInWebhook: false,
+    access: { free: '—', auth: '—', group_plus: '—', x_subscriber: '—', pro: '—', dev: '—', enterprise: '—' },
+    dmBehavior: 'N/A — admin-only, group context',
+    groupBehavior: 'Cap the max tier available in this channel. Usage: /setlevel auth | /setlevel x_subscriber. Prevents Pro commands in public groups.',
+    notes: 'Channel admin only. Stored in admin_config.max_tier. Default: follows user tier.',
+  },
 ];
 
 const BOTFATHER_COMMANDS = [
@@ -182,6 +239,7 @@ const categoryLabels: Record<string, { label: string; emoji: string }> = {
   analysis: { label: 'Analysis (Auth+)', emoji: '📊' },
   advanced: { label: 'Advanced (X Sub+)', emoji: '🔥' },
   pro: { label: 'Pro Intelligence', emoji: '💎' },
+  admin: { label: 'Channel Admin', emoji: '🛡️' },
 };
 
 const TierBadge = ({ tier }: { tier: typeof TIERS[0] }) => (
@@ -225,6 +283,7 @@ export function TelegramCommandsPlanner() {
           <TabsTrigger value="tiers">📊 Tier Breakdown</TabsTrigger>
           <TabsTrigger value="proposed">🆕 Proposed</TabsTrigger>
           <TabsTrigger value="bubblemap">🫧 Bubble Map Tiers</TabsTrigger>
+          <TabsTrigger value="admin-cmds">🛡️ Admin Commands</TabsTrigger>
           <TabsTrigger value="channels">📡 Channel Config</TabsTrigger>
         </TabsList>
 
@@ -253,7 +312,7 @@ export function TelegramCommandsPlanner() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(['meta', 'analysis', 'advanced', 'pro'] as const).map(cat => (
+                  {(['meta', 'analysis', 'advanced', 'pro', 'admin'] as const).map(cat => (
                     <React.Fragment key={cat}>
                       <TableRow className="bg-muted/30">
                         <TableCell compact colSpan={TIERS.length + 1} className="font-semibold text-foreground">
@@ -575,6 +634,70 @@ export function TelegramCommandsPlanner() {
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ════════ ADMIN COMMANDS ════════ */}
+        <TabsContent value="admin-cmds">
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">🛡️ Channel Admin Commands</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                These commands are only usable by the channel/group admin who installed the bot. They configure bot behavior per-channel.
+                All settings are stored in the <code className="text-foreground">admin_config</code> JSON column on <code className="text-foreground">channel_installations</code>.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {COMMANDS.filter(c => c.category === 'admin').map(cmd => (
+                <div key={cmd.command} className="bg-muted/30 rounded-lg p-4 border border-border/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <code className="text-sm font-bold text-primary">{cmd.command}</code>
+                    {cmd.aliases.length > 0 && (
+                      <span className="text-xs text-muted-foreground">({cmd.aliases.join(', ')})</span>
+                    )}
+                    <Badge variant="outline" className="text-[9px] ml-auto border-amber-500/30 text-amber-400">
+                      admin only
+                    </Badge>
+                    <Badge variant="outline" className="text-[9px] border-pink-400/30 text-pink-400">
+                      planned
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-1">{cmd.description}</p>
+                  <p className="text-xs text-foreground">{cmd.groupBehavior}</p>
+                  {cmd.notes && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-1 italic">{cmd.notes}</p>
+                  )}
+                </div>
+              ))}
+
+              <Separator />
+
+              <div className="bg-muted/30 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-foreground mb-2">🔐 Admin Detection Logic</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-muted-foreground">
+                  <div>
+                    <p className="font-semibold text-foreground mb-1">How Bot Knows Who's Admin:</p>
+                    <ol className="list-decimal list-inside space-y-0.5">
+                      <li>Bot calls <code className="text-foreground">getChatAdministrators</code> on the group</li>
+                      <li>Checks if sender's <code className="text-foreground">telegram_user_id</code> is in admin list</li>
+                      <li>Cross-references with <code className="text-foreground">channel_installations.user_id</code></li>
+                      <li>Only the installer OR group admins can use admin commands</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground mb-1">admin_config JSON Shape:</p>
+                    <pre className="bg-background/50 rounded p-2 text-[10px] whitespace-pre-wrap">{`{
+  "delay_ms": 3000,
+  "verbose": false,
+  "admin_only_commands": false,
+  "dev_alerts": true,
+  "disabled_commands": ["top"],
+  "max_tier": "x_subscriber"
+}`}</pre>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
