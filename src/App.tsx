@@ -15,7 +15,9 @@ import { useDomainRedirect } from "@/hooks/useDomainRedirect";
 import { SuperAdminRoute } from "@/components/guards/SuperAdminRoute";
 
 // Lazy load all pages for code splitting
+const Home = lazy(() => import("./pages/Home"));
 const BlackBox = lazy(() => import("./pages/BlackBox"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Index = lazy(() => import("./pages/Index"));
 const BumpBot = lazy(() => import("./pages/BumpBot"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -86,7 +88,8 @@ const App = () => {
                 <div className="flex-1">
                   <Suspense fallback={<PageLoader />}>
                     <Routes>
-                      <Route path="/" element={<BlackBox />} />
+                      <Route path="/" element={<Home />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/admin" element={<SuperAdminRoute><Index /></SuperAdminRoute>} />
                       <Route path="/bb" element={<SuperAdminRoute><BumpBot /></SuperAdminRoute>} />
