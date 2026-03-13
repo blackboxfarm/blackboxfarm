@@ -268,6 +268,9 @@ export interface TokenShareData {
   lifecycle?: string;
   risk?: string;
   riskDetail?: string;
+  devRep?: string;
+  xCommunity?: string;
+  website?: string;
 }
 
 export interface TemplateRecord {
