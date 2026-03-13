@@ -75,8 +75,7 @@ export default function TelegramBot() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
-      <FarmBanner />
+    <SiteLayout>
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-border/40">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-cyan-500/5" />
