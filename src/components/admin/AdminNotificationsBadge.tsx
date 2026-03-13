@@ -175,6 +175,30 @@ export function AdminNotificationsBadge() {
                   <p className="text-xs text-muted-foreground whitespace-pre-line line-clamp-2">
                     {notification.message}
                   </p>
+                  {notification.metadata && Object.keys(notification.metadata).length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {(notification.metadata as Record<string, unknown>).email && (
+                        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                          📧 {String((notification.metadata as Record<string, unknown>).email)}
+                        </span>
+                      )}
+                      {(notification.metadata as Record<string, unknown>).provider && (
+                        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                          🔐 {String((notification.metadata as Record<string, unknown>).provider)}
+                        </span>
+                      )}
+                      {(notification.metadata as Record<string, unknown>).tier && (
+                        <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded text-primary font-medium">
+                          ⭐ {String((notification.metadata as Record<string, unknown>).tier).toUpperCase()}
+                        </span>
+                      )}
+                      {(notification.metadata as Record<string, unknown>).amount && (
+                        <span className="text-[10px] bg-green-500/20 px-1.5 py-0.5 rounded text-green-500 font-medium">
+                          💰 {String((notification.metadata as Record<string, unknown>).amount)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground/70 mt-1">
                     {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                   </p>
