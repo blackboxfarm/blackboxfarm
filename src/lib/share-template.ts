@@ -111,6 +111,10 @@ Health: {healthGrade} ({healthScore}/100)
 
 📈 Lifecycle: {lifecycle}
 
+🔮 Dev Reputation: {dev_rep}
+🐦 X Community: {x_community}
+🌐 Website: {website}
+
 Free report 👉 blackbox.farm/holders?token={ca}`,
 
   bot_holders: `📊 *Holders Report*
@@ -225,6 +229,9 @@ export const TEMPLATE_VARIABLES = [
   { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
   { var: '{risk}', desc: 'Network risk signal (🟢 STRONG NETWORK, 🟡 SPECULATIVE, 🔴 HIGH RISK)' },
   { var: '{risk_detail}', desc: 'Risk assessment explanation (1-2 sentences)' },
+  { var: '{dev_rep}', desc: 'Dev reputation summary (e.g. ✅ Trusted (82/100) or 🚩 Suspicious (23/100))' },
+  { var: '{x_community}', desc: 'X Community link from DexScreener (if exists)' },
+  { var: '{website}', desc: 'Website URL from DexScreener (if exists)' },
   // Telegram-specific variables
   { var: '{timesPosted}', desc: 'Number of times token was posted (TG Posted)' },
   { var: '{whaleBar}', desc: 'ASCII bar for whale percentage (TG)' },
@@ -261,6 +268,9 @@ export interface TokenShareData {
   lifecycle?: string;
   risk?: string;
   riskDetail?: string;
+  devRep?: string;
+  xCommunity?: string;
+  website?: string;
 }
 
 export interface TemplateRecord {
@@ -421,6 +431,9 @@ export function processTemplate(template: string, data: TokenShareData): string 
   const lifecycle = data.lifecycle ?? '';
   const risk = data.risk ?? '';
   const riskDetail = data.riskDetail ?? '';
+  const devRep = data.devRep ?? 'Unknown';
+  const xCommunity = data.xCommunity ?? 'N/A';
+  const website = data.website ?? 'N/A';
   
   return template
     .replace(/\{ticker\}/g, data.ticker)
@@ -450,7 +463,13 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{risk\}/g, risk)
     .replace(/\{RISK\}/g, risk)
     .replace(/\{risk_detail\}/g, riskDetail)
-    .replace(/\{RISK_DETAIL\}/g, riskDetail);
+    .replace(/\{RISK_DETAIL\}/g, riskDetail)
+    .replace(/\{dev_rep\}/g, devRep)
+    .replace(/\{DEV_REP\}/g, devRep)
+    .replace(/\{x_community\}/g, xCommunity)
+    .replace(/\{X_COMMUNITY\}/g, xCommunity)
+    .replace(/\{website\}/g, website)
+    .replace(/\{WEBSITE\}/g, website);
 }
 
 // Get share URL with token address

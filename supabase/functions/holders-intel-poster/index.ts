@@ -146,6 +146,9 @@ function processTemplate(template: string, data: any): string {
   const lifecycle = data.lifecycle || '';
   const risk = data.risk || '';
   const riskDetail = data.riskDetail || '';
+  const devRep = data.devRep || 'Unknown';
+  const xCommunity = data.xCommunity || 'N/A';
+  const website = data.website || 'N/A';
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
@@ -185,7 +188,13 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{risk\}/g, risk)
     .replace(/\{RISK\}/g, risk)
     .replace(/\{risk_detail\}/g, riskDetail)
-    .replace(/\{RISK_DETAIL\}/g, riskDetail);
+    .replace(/\{RISK_DETAIL\}/g, riskDetail)
+    .replace(/\{dev_rep\}/g, devRep)
+    .replace(/\{DEV_REP\}/g, devRep)
+    .replace(/\{x_community\}/g, xCommunity)
+    .replace(/\{X_COMMUNITY\}/g, xCommunity)
+    .replace(/\{website\}/g, website)
+    .replace(/\{WEBSITE\}/g, website);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
@@ -367,7 +376,59 @@ Deno.serve(async (req) => {
         // Risk assessment fields (populated below)
         risk: '',
         riskDetail: '',
+        // Mint info fields (populated below from report socials + dev reputation)
+        devRep: 'Unknown',
+        xCommunity: 'N/A',
+        website: 'N/A',
       };
+      
+      // Extract socials from report (DexScreener data)
+      if (report?.socials) {
+        if (report.socials.twitter) {
+          // Check if it's a community URL (contains /i/communities/)
+          const twitterUrl = report.socials.twitter;
+          if (twitterUrl.includes('/i/communities/') || twitterUrl.includes('community')) {
+            stats.xCommunity = twitterUrl;
+          } else {
+            stats.xCommunity = twitterUrl;
+          }
+        }
+        if (report.socials.website) {
+          stats.website = report.socials.website;
+        }
+      }
+      
+      // Fetch dev reputation from dev_wallet_reputation table
+      const creatorWallet = report?.creatorInfo?.wallet || report?.potentialDevWallet;
+      if (creatorWallet) {
+        try {
+          const { data: devRepData } = await supabase
+            .from('dev_wallet_reputation')
+            .select('reputation_score, trust_level, tokens_rugged, tokens_successful, total_tokens_launched')
+            .eq('wallet_address', creatorWallet)
+            .maybeSingle();
+          
+          if (devRepData) {
+            const score = Math.round(devRepData.reputation_score || 0);
+            const level = devRepData.trust_level || 'unknown';
+            const emoji = level === 'trusted' ? '✅' : 
+                          level === 'neutral' ? '⚖️' :
+                          level === 'suspicious' ? '⚠️' :
+                          level === 'scammer' ? '🚩' : '❓';
+            const rugs = devRepData.tokens_rugged || 0;
+            const wins = devRepData.tokens_successful || 0;
+            const total = devRepData.total_tokens_launched || 0;
+            
+            stats.devRep = `${emoji} ${level.charAt(0).toUpperCase() + level.slice(1)} (${score}/100) | ${total} tokens, ${wins} wins, ${rugs} rugs`;
+            console.log(`[poster] Dev reputation: ${stats.devRep}`);
+          } else {
+            stats.devRep = '❓ No history found';
+            console.log('[poster] No dev reputation data found');
+          }
+        } catch (devErr) {
+          console.warn('[poster] Dev reputation lookup failed:', devErr);
+        }
+      }
       
       console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}, post #${currentTimesPosted}`);
       
