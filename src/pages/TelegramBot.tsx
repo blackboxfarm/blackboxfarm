@@ -264,7 +264,7 @@ export default function TelegramBot() {
       </section>
 
       {/* For Group & Channel Admins */}
-      <section className="mx-auto max-w-5xl px-4 pb-16">
+      <section id="channel-admins" className="mx-auto max-w-5xl px-4 pb-16 scroll-mt-20">
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
