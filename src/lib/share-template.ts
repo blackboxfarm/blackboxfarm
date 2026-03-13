@@ -419,6 +419,8 @@ export function processTemplate(template: string, data: TokenShareData): string 
   const aiSummary = data.aiSummary ?? '';
   const aiOverview = data.aiOverview ?? '';
   const lifecycle = data.lifecycle ?? '';
+  const risk = data.risk ?? '';
+  const riskDetail = data.riskDetail ?? '';
   
   return template
     .replace(/\{ticker\}/g, data.ticker)
