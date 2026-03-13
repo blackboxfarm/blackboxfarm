@@ -146,10 +146,12 @@ const MeshGraphVisualizer = () => {
     // Start credit tracking on new search
     resetTracking();
     startTracking();
+    resetApifyTracking();
+    startApifyTracking();
     // Reset node cap
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
-  }, [searchInput, focusOnEntity, resetView, startTracking, stopTracking, resetTracking]);
+  }, [searchInput, focusOnEntity, resetView, startTracking, stopTracking, resetTracking, startApifyTracking, resetApifyTracking]);
 
   // Auto-spider: when focused entity returns 0 results
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
