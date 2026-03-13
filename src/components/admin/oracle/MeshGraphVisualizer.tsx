@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode, RedFlag } from "@/hooks/useMeshGraph";
 import { useHeliusCreditTracker } from "@/hooks/useHeliusCreditTracker";
+import { useApifyCreditTracker } from "@/hooks/useApifyCreditTracker";
 import { useBubbleMapHoldings } from "@/hooks/useBubbleMapHoldings";
 import { useCTODetection } from "@/hooks/useCTODetection";
 import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Users, Zap, Gauge, Unlock, PieChart, Eye, EyeOff } from "lucide-react";
