@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SocialIcon } from '@/components/token/SocialIcon';
-import { FarmBanner } from '@/components/FarmBanner';
+import { SiteLayout } from '@/components/layout/SiteLayout';
 import {
   MessageCircle,
   ArrowRight,
