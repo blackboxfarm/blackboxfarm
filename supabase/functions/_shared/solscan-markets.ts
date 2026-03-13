@@ -15,11 +15,10 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
     verifiedLPSource: null
   };
 
-  const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY');
-  if (!solscanApiKey) {
-    console.log('[Solscan] No API key found, skipping');
-    return result;
-  }
+  // DISABLED: Solscan Pro API returns 401 — demoted per Helius migration.
+  // Re-enable when API key is upgraded or replaced.
+  console.log('[Solscan] DISABLED — skipping all Solscan API calls');
+  return result;
 
   try {
     console.log('[Solscan] Fetching ALL token markets...');
