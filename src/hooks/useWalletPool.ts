@@ -51,8 +51,7 @@ async function saveWalletToDatabase(wallet: StoredWallet): Promise<boolean> {
     }
     
     const { error } = await supabase.from('wallet_pools').insert({
-      secret_key: '***', // Legacy column - no longer used for decryption
-      secret_key_encrypted: wallet.secretBase58, // Edge functions read from this column
+      secret_key_encrypted: wallet.secretBase58,
       pubkey: wallet.pubkey,
       user_id: user.id,
       is_active: true
