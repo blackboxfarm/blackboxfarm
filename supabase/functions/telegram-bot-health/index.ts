@@ -48,6 +48,9 @@ async function callTelegram(botToken: string, method: string, body?: Record<stri
 }
 
 Deno.serve(async (req) => {
+  const t0 = Date.now();
+  console.log("[telegram-bot-health] ▶ incoming request", req.method);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -61,11 +64,13 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !serviceRoleKey) {
+      console.error("[telegram-bot-health] ✗ missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
       return json({ success: false, error: "Server misconfiguration: missing Supabase environment variables" }, 500);
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
+      console.warn("[telegram-bot-health] ✗ no Bearer token");
       return json({ success: false, error: "Unauthorized" }, 401);
     }
 
@@ -78,21 +83,29 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
+      console.warn("[telegram-bot-health] ✗ auth failed:", userError?.message || "no user");
       return json({ success: false, error: "Unauthorized" }, 401);
     }
 
+    console.log("[telegram-bot-health] ✓ authenticated user:", user.id);
+
     const { data: isSuperAdmin, error: superAdminError } = await supabase.rpc("is_super_admin", { _user_id: user.id });
     if (superAdminError || !isSuperAdmin) {
+      console.warn("[telegram-bot-health] ✗ not super admin:", superAdminError?.message || "denied");
       return json({ success: false, error: "Super admin access required" }, 403);
     }
 
+    console.log("[telegram-bot-health] ✓ super admin confirmed");
+
     const body = await req.json().catch(() => ({}));
     const action = (body.action as Action) || "status";
+    console.log("[telegram-bot-health] action:", action);
 
     const botToken = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
     const expectedWebhookUrl = `${supabaseUrl}/functions/v1/holdersintel-bot-webhook`;
 
     if (!botToken) {
+      console.error("[telegram-bot-health] ✗ TELEGRAM_HOLDERSINTEL_BOT_TOKEN not set");
       return json({
         success: true,
         action,
@@ -103,14 +116,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    console.log("[telegram-bot-health] ✓ bot token present (length:", botToken.length, ")");
+
     if (action === "repair_webhook") {
+      console.log("[telegram-bot-health] → setWebhook to:", expectedWebhookUrl);
       const setWebhook = await callTelegram(botToken, "setWebhook", {
         url: expectedWebhookUrl,
         drop_pending_updates: true,
         allowed_updates: ["message", "my_chat_member"],
       });
 
+      console.log("[telegram-bot-health] setWebhook response:", JSON.stringify(setWebhook));
+
       if (!setWebhook.ok) {
+        console.error("[telegram-bot-health] ✗ setWebhook failed:", setWebhook.description);
         return json({
           success: false,
           action,
@@ -120,12 +139,18 @@ Deno.serve(async (req) => {
           telegramCode: setWebhook.error_code || null,
         }, 500);
       }
+
+      console.log("[telegram-bot-health] ✓ webhook repaired");
     }
 
+    console.log("[telegram-bot-health] → calling getMe + getWebhookInfo...");
     const [meInfo, webhookInfo] = await Promise.all([
       callTelegram(botToken, "getMe"),
       callTelegram(botToken, "getWebhookInfo"),
     ]);
+
+    console.log("[telegram-bot-health] getMe:", JSON.stringify(meInfo));
+    console.log("[telegram-bot-health] getWebhookInfo:", JSON.stringify(webhookInfo));
 
     const issues: string[] = [];
 
@@ -156,6 +181,9 @@ Deno.serve(async (req) => {
 
     const status = issues.length === 0 ? "healthy" : (issues.some(issue => issue.toLowerCase().includes("failed") || issue.toLowerCase().includes("missing")) ? "critical" : "warning");
 
+    const elapsed = Date.now() - t0;
+    console.log(`[telegram-bot-health] ✓ done in ${elapsed}ms — status: ${status}, issues: ${issues.length}`);
+
     return json({
       success: true,
       action,
@@ -185,7 +213,7 @@ Deno.serve(async (req) => {
           : "Use repair_webhook action to reset webhook and clear stale pending updates",
     });
   } catch (error: any) {
-    console.error("[telegram-bot-health] error:", error);
+    console.error("[telegram-bot-health] ✗ unhandled error:", error?.message, error?.stack);
     return json({ success: false, error: error?.message || "Unexpected error" }, 500);
   }
 });
