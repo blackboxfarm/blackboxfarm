@@ -446,7 +446,14 @@ async function handleHelp(chatId: number, telegramUserId: string) {
 
   cmds += `*Group Admin — Alerts ⚙️*\n` +
     `${unlocked} /alerts — Manage group alert feeds\n` +
-    `  _Types: dex · mint · rug · whale · news · kol_\n`;
+    `  _Types: dex · mint · rug · whale · news · kol_\n\n`;
+
+  cmds += `*Channel Management (DM only) 📡*\n` +
+    `${check("auth")} /add — Add bot to your channel/group\n` +
+    `${check("auth")} /channels (/ch) — List & manage installations\n` +
+    `${check("auth")} /config — Configure channel settings\n` +
+    `  _Usage: /config delay 3000 · verbose on · admin\\_only on · dev\\_alerts on_\n` +
+    `${check("auth")} /payment (/pay) — View/generate payment wallet\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
     `★ = Tier required | ${unlocked} = Available | ${locked} = Locked\n` +
