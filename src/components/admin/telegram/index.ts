@@ -9,5 +9,6 @@ export { KingOfTheHill } from './KingOfTheHill';
 export { WhosOnFirst } from './WhosOnFirst';
 export { SignalAnalysisDashboard } from './SignalAnalysisDashboard';
 export { WhaleLeaderboard } from './WhaleLeaderboard';
+export { TelegramBotApiStatusCard } from './TelegramBotApiStatusCard';
 export { default as TelegramTargetManager } from './TelegramTargetManager';
 export type { TelegramTarget } from './TelegramTargetManager';
