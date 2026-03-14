@@ -60,11 +60,20 @@ const showBrowserNotification = (title: string, message: string, type: string) =
 };
 
 export function AdminNotificationsBadge() {
+  const { toast } = useToast();
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabCategory>('signups');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const copyAuditPrompt = useCallback((notification: AdminNotification) => {
+    const meta = notification.metadata ? JSON.stringify(notification.metadata, null, 2) : 'none';
+    const prompt = `Explain this audit alert from my admin dashboard:\n\nTitle: ${notification.title}\nMessage: ${notification.message}\nType: ${notification.notification_type}\nMetadata: ${meta}\n\nWhat does this mean, what caused it, and what should I do about it?`;
+    navigator.clipboard.writeText(prompt).then(() => {
+      toast({ title: 'Copied to clipboard', description: 'Paste into chat to get an explanation' });
+    });
+  }, [toast]);
 
   const fetchNotifications = useCallback(async () => {
     const { data, error } = await (supabase
