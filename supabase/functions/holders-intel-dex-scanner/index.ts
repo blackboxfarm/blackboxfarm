@@ -372,6 +372,9 @@ Deno.serve(async (req) => {
       } else {
         console.log(`[dex-scanner] Queued: ${trigger.symbol} (${trigger.triggerType}) → "${triggerConfig.comment}"`);
         queuedCount++;
+        
+        // Broadcast to channels with dex alerts enabled
+        await broadcastDexAlert(supabase, trigger);
       }
     }
     
