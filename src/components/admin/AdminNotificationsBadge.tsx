@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -59,11 +60,20 @@ const showBrowserNotification = (title: string, message: string, type: string) =
 };
 
 export function AdminNotificationsBadge() {
+  const { toast } = useToast();
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabCategory>('signups');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const copyAuditPrompt = useCallback((notification: AdminNotification) => {
+    const meta = notification.metadata ? JSON.stringify(notification.metadata, null, 2) : 'none';
+    const prompt = `Explain this audit alert from my admin dashboard:\n\nTitle: ${notification.title}\nMessage: ${notification.message}\nType: ${notification.notification_type}\nMetadata: ${meta}\n\nWhat does this mean, what caused it, and what should I do about it?`;
+    navigator.clipboard.writeText(prompt).then(() => {
+      toast({ title: 'Copied to clipboard', description: 'Paste into chat to get an explanation' });
+    });
+  }, [toast]);
 
   const fetchNotifications = useCallback(async () => {
     const { data, error } = await (supabase
@@ -150,7 +160,7 @@ export function AdminNotificationsBadge() {
     }
   };
 
-  const renderNotificationList = (items: AdminNotification[]) => (
+  const renderNotificationList = (items: AdminNotification[], category?: TabCategory) => (
     <ScrollArea className="h-[350px]">
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
@@ -203,11 +213,24 @@ export function AdminNotificationsBadge() {
                     {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                   </p>
                 </div>
-                {!notification.is_read && (
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => markAsRead(notification.id)}>
-                    <Check className="h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  {category === 'audit' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-primary"
+                      onClick={() => copyAuditPrompt(notification)}
+                      title="Copy prompt to ask about this alert"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {!notification.is_read && (
+                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => markAsRead(notification.id)}>
+                      <Check className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -280,13 +303,13 @@ export function AdminNotificationsBadge() {
           </TabsList>
 
           <TabsContent value="signups" className="mt-0">
-            {renderNotificationList(signupNotifs)}
+            {renderNotificationList(signupNotifs, 'signups')}
           </TabsContent>
           <TabsContent value="transactions" className="mt-0">
-            {renderNotificationList(transactionNotifs)}
+            {renderNotificationList(transactionNotifs, 'transactions')}
           </TabsContent>
           <TabsContent value="audit" className="mt-0">
-            {renderNotificationList(auditNotifs)}
+            {renderNotificationList(auditNotifs, 'audit')}
           </TabsContent>
         </Tabs>
       </PopoverContent>
