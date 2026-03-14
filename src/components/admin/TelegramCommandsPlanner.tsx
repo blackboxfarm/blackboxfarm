@@ -601,11 +601,8 @@ export function TelegramCommandsPlanner() {
                   <h4 className="text-sm font-semibold text-green-400 mb-2">✅ Group+ Gets</h4>
                   <ul className="text-xs space-y-1 text-muted-foreground">
                     <li>• /quick — Fast stats (holder count, health, top10%)</li>
-                    <li>• /price — Price + mcap + 24h (DexScreener)</li>
-                    <li>• /check — Quick rug safety score</li>
                     <li>• /risk — Emoji only (🟢/🔴) no reasoning</li>
                     <li>• /ca — Short condensed report</li>
-                    <li>• /top — Trending tickers (top 3 in group)</li>
                   </ul>
                 </div>
                 <div className="bg-red-500/10 rounded-lg p-4 border border-red-500/20">
