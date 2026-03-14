@@ -2604,8 +2604,12 @@ serve(async (req) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
+  let fallbackChatId: number | null = null;
+  let fallbackMessageId: number | undefined;
+  let fallbackCommand = "";
+
   try {
-    const update = await req.json();
+    const update: any = await req.json();
 
     // ─── Handle my_chat_member events (bot added/removed from groups) ───
     if (update.my_chat_member) {
@@ -2631,6 +2635,20 @@ serve(async (req) => {
     const [rawCommand, ...argParts] = text.split(/\s+/);
     const command = rawCommand.toLowerCase().replace(/@\w+$/, "");
     const args = argParts.join(" ");
+
+    fallbackChatId = chatId;
+    fallbackMessageId = messageId;
+    fallbackCommand = command;
+
+    console.log("[bot] incoming command", JSON.stringify({
+      updateId: update.update_id ?? null,
+      chatId,
+      chatType,
+      telegramUserId,
+      command,
+      argsLength: args.length,
+      isGroupChat,
+    }));
 
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/risk', '/r', '/quick', '/q', '/alerts'];
