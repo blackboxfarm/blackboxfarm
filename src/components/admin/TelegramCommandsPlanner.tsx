@@ -205,9 +205,10 @@ const COMMANDS: BotCommand[] = [
 
 const BOTFATHER_COMMANDS = [
   'start', 'register', 'status', 'help',
-  'holders', 'ca', 'quick', 'verdict', 'ai',
+  'holders', 'ca', 'quick', 'risk', 'ai',
   'momentum', 'alerts',
   'oracle', 'wallet',
+  'add', 'channels',
 ];
 
 const categoryLabels: Record<string, { label: string; emoji: string }> = {
