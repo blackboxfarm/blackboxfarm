@@ -115,14 +115,33 @@ function fallbackVerdict(momentumScore: number, healthScore: number, phase: Toke
 
 // ─── Helpers ───
 
-async function sendMessage(chatId: number, text: string, parseMode = "Markdown") {
+async function sendMessage(chatId: number, text: string, parseMode = "Markdown", replyToMessageId?: number) {
   const trimmed = text.length > 4090 ? text.slice(0, 4090) + "..." : text;
+  const body: Record<string, unknown> = { chat_id: chatId, text: trimmed, parse_mode: parseMode, disable_web_page_preview: true };
+  if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
   const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text: trimmed, parse_mode: parseMode, disable_web_page_preview: true }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) console.error("[bot] sendMessage failed:", await res.text());
+}
+
+/** For advanced commands in group chats: reply "check DMs" in group, send report via DM */
+async function groupDMRedirect(
+  groupChatId: number,
+  telegramUserId: string,
+  commandName: string,
+  messageId?: number
+): Promise<boolean> {
+  // Send DM-redirect notice in the group (reply to the user's message)
+  await sendMessage(
+    groupChatId,
+    `📬 *${commandName}* report sent to your DMs!\n_Open a private chat with me for the full analysis._`,
+    "Markdown",
+    messageId
+  );
+  return true;
 }
 
 async function getLinkedUser(telegramUserId: string) {
@@ -1337,7 +1356,7 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
   await logUsage(telegramUserId, "/oracle", ca);
 
   const data = await invokeFunction("oracle-unified-lookup", { input: ca });
-  if (!data) {
+  if (!data || !data.found) {
     await sendMessage(chatId, `❌ Could not fetch developer data. Token may not be tracked yet.`);
     return;
   }
@@ -1357,36 +1376,125 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
 
   let msg = `🔮 *Oracle Report*\n\n`;
 
-  if (data.developer || data.creator) {
-    const dev = data.developer || data.creator;
-    if (dev.address) msg += `👤 Dev: \`${dev.address.slice(0, 8)}...${dev.address.slice(-6)}\`\n`;
-    if (dev.reputation_score != null) {
-      msg += `📊 Rep Score: *${dev.reputation_score}/100*\n`;
-      if (oraclePhase) {
-        msg += `💡 _${contextualizeDevRep(dev.reputation_score, oraclePhase)}_\n`;
+  // Profile info (from oracle-unified-lookup response format)
+  const profile = data.profile;
+  const resolvedWallet = data.resolvedWallet || profile?.masterWallet || null;
+
+  if (resolvedWallet) {
+    msg += `👤 Dev: \`${resolvedWallet.slice(0, 8)}...${resolvedWallet.slice(-6)}\`\n`;
+  }
+  if (profile?.displayName && profile.displayName !== 'Unknown') {
+    msg += `🏷 Name: *${profile.displayName}*\n`;
+  }
+  if (profile?.kycVerified) {
+    msg += `✅ KYC Verified\n`;
+  }
+
+  // Score
+  if (data.score != null) {
+    const scoreEmoji = data.score >= 60 ? '🟢' : data.score >= 35 ? '🟡' : '🔴';
+    msg += `${scoreEmoji} Rep Score: *${data.score}/100*\n`;
+    if (oraclePhase) {
+      msg += `💡 _${contextualizeDevRep(data.score, oraclePhase)}_\n`;
+    }
+  }
+
+  // Traffic light
+  if (data.trafficLight && data.trafficLight !== 'UNKNOWN') {
+    const tlEmoji: Record<string, string> = { RED: '🔴', YELLOW: '🟡', GREEN: '🟢', BLUE: '🔵' };
+    msg += `🚦 Signal: *${data.trafficLight}* ${tlEmoji[data.trafficLight] || ''}\n`;
+  }
+
+  // Stats
+  const stats = data.stats;
+  if (stats) {
+    if (stats.totalTokens != null) msg += `🪙 Tokens Created: *${stats.totalTokens}*\n`;
+    if (stats.successfulTokens != null && stats.successfulTokens > 0) msg += `✅ Successful: *${stats.successfulTokens}*\n`;
+    if (stats.rugPulls != null && stats.rugPulls > 0) msg += `🚩 Rug Pulls: *${stats.rugPulls}*\n`;
+    if (stats.slowDrains != null && stats.slowDrains > 0) msg += `🐌 Slow Drains: *${stats.slowDrains}*\n`;
+    if (stats.failedTokens != null && stats.failedTokens > 0) msg += `💀 Failed: *${stats.failedTokens}*\n`;
+    if (stats.avgLifespanHours != null && stats.avgLifespanHours > 0) {
+      const lifespan = stats.avgLifespanHours >= 24
+        ? `${(stats.avgLifespanHours / 24).toFixed(1)}d`
+        : `${stats.avgLifespanHours.toFixed(0)}h`;
+      msg += `⏱ Avg Lifespan: *${lifespan}*\n`;
+    }
+  }
+
+  // Score breakdown (for Pro users)
+  if (data.scoreBreakdown) {
+    const sb = data.scoreBreakdown;
+    msg += `\n📊 *Score Breakdown:*\n`;
+    msg += `Base: ${sb.base}`;
+    if (sb.rugPullPenalty) msg += ` | Rug: ${sb.rugPullPenalty}`;
+    if (sb.successBonus) msg += ` | Success: +${sb.successBonus}`;
+    if (sb.blacklistPenalty) msg += ` | Blacklist: ${sb.blacklistPenalty}`;
+    if (sb.whitelistBonus) msg += ` | Whitelist: +${sb.whitelistBonus}`;
+    msg += `\n`;
+  }
+
+  // Blacklist/Whitelist status
+  if (data.blacklistStatus?.isBlacklisted) {
+    msg += `\n🚨 *BLACKLISTED*: ${data.blacklistStatus.reason || 'No reason given'}\n`;
+  }
+  if (data.whitelistStatus?.isWhitelisted) {
+    msg += `\n✅ *WHITELISTED*: ${data.whitelistStatus.reason || 'Verified clean'}\n`;
+  }
+
+  // Network / Mesh connections
+  const network = data.network;
+  if (network) {
+    const meshItems: string[] = [];
+
+    if (network.linkedXAccounts?.length) {
+      for (const x of network.linkedXAccounts.slice(0, 3)) {
+        meshItems.push(`𝕏 [${x}](https://x.com/${x.replace('@', '')})`);
       }
     }
-    if (dev.total_tokens != null) msg += `🪙 Tokens Created: *${dev.total_tokens}*\n`;
-    if (dev.rug_count != null) msg += `🚩 Rugs: *${dev.rug_count}*\n`;
-    if (dev.avg_lifespan) msg += `⏱ Avg Lifespan: *${dev.avg_lifespan}*\n`;
-    if (dev.classification) msg += `🏷 Class: *${dev.classification}*\n`;
-  }
+    if (network.linkedWallets?.length) {
+      for (const w of network.linkedWallets.slice(0, 3)) {
+        meshItems.push(`💼 \`${w.slice(0, 6)}...${w.slice(-4)}\``);
+      }
+    }
+    if (network.sharedMods?.length) {
+      meshItems.push(`👥 ${network.sharedMods.length} shared mod(s)`);
+    }
+    if (network.devTeam?.name) {
+      meshItems.push(`🏢 Team: ${network.devTeam.name}`);
+    }
 
-  if (data.verdict || data.risk_level) {
-    const risk = data.verdict || data.risk_level;
-    const riskEmoji = risk === 'safe' || risk === 'low' ? '🟢' : risk === 'medium' ? '🟡' : '🔴';
-    msg += `\n${riskEmoji} Risk: *${risk.toUpperCase()}*\n`;
-  }
+    if (meshItems.length > 0) {
+      msg += `\n🕸 *Network Mesh:*\n`;
+      for (const item of meshItems) {
+        msg += `• ${item}\n`;
+      }
+    }
 
-  if (data.mesh_connections?.length) {
-    msg += `\n🕸 *Mesh Connections:*\n`;
-    for (const c of data.mesh_connections.slice(0, 5)) {
-      msg += `• ${c.relationship || c.type}: ${c.target || c.linked_id || "?"}\n`;
+    if (network.meshLinks?.length) {
+      const additionalLinks = network.meshLinks.filter((l: any) =>
+        l.relationship !== 'funded_by'
+      ).slice(0, 5);
+      if (additionalLinks.length > 0) {
+        msg += `\n🔗 *Mesh Links:*\n`;
+        for (const l of additionalLinks) {
+          msg += `• ${l.relationship}: \`${typeof l.linkedId === 'string' && l.linkedId.length > 16 ? l.linkedId.slice(0, 8) + '...' : l.linkedId}\` (${Math.round(l.confidence * 100)}%)\n`;
+        }
+      }
     }
   }
 
-  if (data.summary) {
-    msg += `\n💡 ${data.summary.slice(0, 400)}`;
+  // Token history
+  if (data.tokenHistory?.length) {
+    msg += `\n🪙 *Recent Tokens:*\n`;
+    for (const t of data.tokenHistory.slice(0, 5)) {
+      const outcomeEmoji = t.outcome === 'success' ? '✅' : t.outcome === 'rug_pull' ? '🚩' : t.outcome === 'slow_drain' ? '🐌' : '❓';
+      msg += `• ${outcomeEmoji} $${t.symbol || '???'} — ${t.outcome}${t.isActive ? ' (active)' : ''}\n`;
+    }
+  }
+
+  // Recommendation
+  if (data.recommendation) {
+    msg += `\n💡 *${data.recommendation}*\n`;
   }
 
   msg += TAGLINE;
@@ -1430,15 +1538,16 @@ async function resolveWalletAddress(
     return { wallet: lifecycle.creator_wallet, isToken: true, tokenLabel: label };
   }
 
-  const linkerData = await invokeFunction("token-creator-linker", { tokenMint: addr });
-  if (linkerData?.creatorWallet) {
-    const label = linkerData.symbol || linkerData.name || addr.slice(0, 8);
+  const linkerData = await invokeFunction("token-creator-linker", { tokenMints: [addr] });
+  const linkerResult = linkerData?.results?.[0] || linkerData;
+  if (linkerResult?.creatorWallet) {
+    const label = linkerResult.symbol || linkerResult.name || addr.slice(0, 8);
     await sendMessage(chatId,
       `🔍 Resolved *token mint* on-chain (${label})\n` +
-      `🏗 Creator: \`${linkerData.creatorWallet.slice(0, 8)}...${linkerData.creatorWallet.slice(-6)}\`\n` +
+      `🏗 Creator: \`${linkerResult.creatorWallet.slice(0, 8)}...${linkerResult.creatorWallet.slice(-6)}\`\n` +
       `Proceeding with dev wallet analysis...`
     );
-    return { wallet: linkerData.creatorWallet, isToken: true, tokenLabel: label };
+    return { wallet: linkerResult.creatorWallet, isToken: true, tokenLabel: label };
   }
 
   return { wallet: addr, isToken: false, tokenLabel: null };
@@ -1472,6 +1581,10 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
     return;
   }
 
+  // wallet-behavior-analysis returns { profile, token_history }
+  const profile = data.profile || {};
+  const tokenHistory = data.token_history || [];
+
   let msg = `🔎 *Wallet Analysis*\n\n`;
   if (resolved.isToken) {
     msg += `🪙 Token: *${resolved.tokenLabel}*\n`;
@@ -1480,22 +1593,43 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
     msg += `📍 \`${walletAddr.slice(0, 8)}...${walletAddr.slice(-6)}\`\n\n`;
   }
 
-  if (data.classification) msg += `🏷 Type: *${data.classification}*\n`;
-  if (data.total_transactions != null) msg += `📊 Total Txns: *${data.total_transactions}*\n`;
-  if (data.win_rate != null) msg += `🎯 Win Rate: *${(data.win_rate * 100).toFixed(1)}%*\n`;
-  if (data.total_pnl != null) msg += `💰 PnL: *${data.total_pnl >= 0 ? '+' : ''}${data.total_pnl.toFixed(4)} SOL*\n`;
-  if (data.avg_hold_time) msg += `⏱ Avg Hold: *${data.avg_hold_time}*\n`;
-  if (data.tokens_traded != null) msg += `🪙 Tokens: *${data.tokens_traded}*\n`;
-
-  if (data.risk_flags?.length) {
-    msg += `\n🚩 *Risk Flags:*\n`;
-    for (const f of data.risk_flags.slice(0, 5)) {
-      msg += `• ${f}\n`;
-    }
+  // Smart money score
+  if (profile.smart_money_score != null) {
+    const smEmoji = profile.smart_money_score >= 65 ? '🟢' : profile.smart_money_score >= 40 ? '🟡' : '🔴';
+    msg += `${smEmoji} Smart Money Score: *${profile.smart_money_score}/100*\n`;
   }
 
-  if (data.summary) {
-    msg += `\n💡 ${data.summary.slice(0, 400)}`;
+  if (profile.total_tokens_traded != null) msg += `🪙 Tokens Traded: *${profile.total_tokens_traded}*\n`;
+  if (profile.early_entry_count != null && profile.early_entry_count > 0) msg += `🎯 Early Entries: *${profile.early_entry_count}*\n`;
+  if (profile.diamond_hands_count != null && profile.diamond_hands_count > 0) msg += `💎 Diamond Hands: *${profile.diamond_hands_count}*\n`;
+  if (profile.paper_hands_count != null && profile.paper_hands_count > 0) msg += `📄 Paper Hands: *${profile.paper_hands_count}*\n`;
+  if (profile.total_realized_pnl != null && profile.total_realized_pnl !== 0) {
+    msg += `💰 Realized PnL: *${profile.total_realized_pnl >= 0 ? '+' : ''}${profile.total_realized_pnl.toFixed(4)} SOL*\n`;
+  }
+
+  if (profile.last_analyzed_at) {
+    const analyzedAt = new Date(profile.last_analyzed_at);
+    const minutesAgo = Math.floor((Date.now() - analyzedAt.getTime()) / 60000);
+    msg += `\n🕐 Last analyzed: *${minutesAgo < 60 ? minutesAgo + 'm ago' : Math.floor(minutesAgo / 60) + 'h ago'}*\n`;
+  }
+
+  // Behavior classification based on scores
+  const score = profile.smart_money_score ?? 50;
+  let classification = 'Unknown';
+  if (score >= 75) classification = '🐋 Smart Money / Early Adopter';
+  else if (score >= 60) classification = '💼 Experienced Trader';
+  else if (score >= 45) classification = '👤 Average Trader';
+  else if (score >= 30) classification = '🎰 Speculative / Gambler';
+  else classification = '⚠️ High-Risk / Bot-like';
+  msg += `\n🏷 Classification: *${classification}*\n`;
+
+  // Token history context
+  if (tokenHistory.length > 0) {
+    msg += `\n📜 *Token Activity:*\n`;
+    for (const th of tokenHistory.slice(0, 5)) {
+      const mintShort = th.token_mint ? `${th.token_mint.slice(0, 6)}...` : '?';
+      msg += `• \`${mintShort}\` — Entry: ${th.entry_date ? new Date(th.entry_date).toLocaleDateString() : '?'}\n`;
+    }
   }
 
   msg += TAGLINE;
@@ -1754,86 +1888,148 @@ serve(async (req) => {
     const chatType = message.chat.type;
     const isGroupChat = chatType === 'group' || chatType === 'supergroup';
     const telegramUserId = String(message.from.id);
+    const dmChatId = Number(telegramUserId); // user's DM chat ID = their telegram user ID
     const username = message.from.username || null;
     const text = message.text.trim();
+    const messageId = message.message_id;
 
     const [rawCommand, ...argParts] = text.split(/\s+/);
     const command = rawCommand.toLowerCase().replace(/@\w+$/, "");
     const args = argParts.join(" ");
 
-    switch (command) {
-      case "/start":
-        await handleStart(chatId, telegramUserId, username);
-        break;
-      case "/register":
-        await handleRegister(chatId, telegramUserId, username, args);
-        break;
-      case "/status":
-        await handleStatus(chatId, telegramUserId);
-        break;
-      case "/help":
-        await handleHelp(chatId, telegramUserId);
-        break;
-      case "/risk":
-      case "/r":
-        await handleRisk(chatId, telegramUserId, args, isGroupChat);
-        break;
-      case "/dev":
-      case "/d":
-        await handleDev(chatId, telegramUserId, args);
-        break;
-      case "/insiders":
-      case "/i":
-        await handleInsiders(chatId, telegramUserId, args);
-        break;
-      case "/concentration":
-        await handleConcentration(chatId, telegramUserId, args);
-        break;
-      case "/compare":
-      case "/cmp":
-        await handleCompare(chatId, telegramUserId, args);
-        break;
-      case "/holders":
-        await handleHolders(chatId, telegramUserId, args, isGroupChat);
-        break;
-      case "/ca":
-        await handleCA(chatId, telegramUserId, args);
-        break;
-      case "/quick":
-      case "/q":
-        await handleQuick(chatId, telegramUserId, args);
-        break;
-      case "/ai":
-        await handleAI(chatId, telegramUserId, args);
-        break;
-      case "/momentum":
-      case "/m":
-        await handleMomentum(chatId, telegramUserId, args);
-        break;
-      case "/oracle":
-      case "/o":
-        await handleOracle(chatId, telegramUserId, args);
-        break;
-      case "/wallet":
-      case "/w":
-        await handleWallet(chatId, telegramUserId, args);
-        break;
-      case "/alerts":
-        await handleAlerts(chatId, telegramUserId);
-        break;
-      default:
-        // Auto-detect registration codes
-        if (/^BF-[A-Z0-9]{6}$/i.test(text)) {
-          await handleRegister(chatId, telegramUserId, username, text);
+    // Commands that are allowed to reply publicly in groups
+    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/risk', '/r', '/quick', '/q'];
+
+    // If in a group chat and command is NOT in the public list, redirect to DM
+    if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
+      // Send "check your DMs" in the group
+      const cmdLabel = command.replace('/', '').toUpperCase();
+      await groupDMRedirect(chatId, telegramUserId, cmdLabel, messageId);
+      // Execute the command but send output to the user's DM
+      try {
+        switch (command) {
+          case "/dev":
+          case "/d":
+            await handleDev(dmChatId, telegramUserId, args);
+            break;
+          case "/insiders":
+          case "/i":
+            await handleInsiders(dmChatId, telegramUserId, args);
+            break;
+          case "/concentration":
+            await handleConcentration(dmChatId, telegramUserId, args);
+            break;
+          case "/compare":
+          case "/cmp":
+            await handleCompare(dmChatId, telegramUserId, args);
+            break;
+          case "/holders":
+            await handleHolders(dmChatId, telegramUserId, args, false);
+            break;
+          case "/ca":
+            await handleCA(dmChatId, telegramUserId, args);
+            break;
+          case "/ai":
+            await handleAI(dmChatId, telegramUserId, args);
+            break;
+          case "/momentum":
+          case "/m":
+            await handleMomentum(dmChatId, telegramUserId, args);
+            break;
+          case "/oracle":
+          case "/o":
+            await handleOracle(dmChatId, telegramUserId, args);
+            break;
+          case "/wallet":
+          case "/w":
+            await handleWallet(dmChatId, telegramUserId, args);
+            break;
+          case "/alerts":
+            await handleAlerts(dmChatId, telegramUserId);
+            break;
+          default:
+            break;
         }
-        // Auto-detect Solana CAs in group chats (passive scan with 3s delay)
-        else if (isGroupChat) {
-          const detectedCA = looksLikeSolanaCA(text);
-          if (detectedCA) {
-            await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
+      } catch (dmErr) {
+        console.error("[bot] DM redirect failed:", dmErr);
+        await sendMessage(chatId, `⚠️ Couldn't send DM. Make sure you've started a private chat with me first by messaging @holdersintel\\_bot directly.`, "Markdown", messageId);
+      }
+    } else {
+      // DM context or public-allowed group commands
+      switch (command) {
+        case "/start":
+          await handleStart(chatId, telegramUserId, username);
+          break;
+        case "/register":
+          await handleRegister(chatId, telegramUserId, username, args);
+          break;
+        case "/status":
+          await handleStatus(chatId, telegramUserId);
+          break;
+        case "/help":
+          await handleHelp(chatId, telegramUserId);
+          break;
+        case "/risk":
+        case "/r":
+          await handleRisk(chatId, telegramUserId, args, isGroupChat);
+          break;
+        case "/dev":
+        case "/d":
+          await handleDev(chatId, telegramUserId, args);
+          break;
+        case "/insiders":
+        case "/i":
+          await handleInsiders(chatId, telegramUserId, args);
+          break;
+        case "/concentration":
+          await handleConcentration(chatId, telegramUserId, args);
+          break;
+        case "/compare":
+        case "/cmp":
+          await handleCompare(chatId, telegramUserId, args);
+          break;
+        case "/holders":
+          await handleHolders(chatId, telegramUserId, args, isGroupChat);
+          break;
+        case "/ca":
+          await handleCA(chatId, telegramUserId, args);
+          break;
+        case "/quick":
+        case "/q":
+          await handleQuick(chatId, telegramUserId, args);
+          break;
+        case "/ai":
+          await handleAI(chatId, telegramUserId, args);
+          break;
+        case "/momentum":
+        case "/m":
+          await handleMomentum(chatId, telegramUserId, args);
+          break;
+        case "/oracle":
+        case "/o":
+          await handleOracle(chatId, telegramUserId, args);
+          break;
+        case "/wallet":
+        case "/w":
+          await handleWallet(chatId, telegramUserId, args);
+          break;
+        case "/alerts":
+          await handleAlerts(chatId, telegramUserId);
+          break;
+        default:
+          // Auto-detect registration codes
+          if (/^BF-[A-Z0-9]{6}$/i.test(text)) {
+            await handleRegister(chatId, telegramUserId, username, text);
           }
-        }
-        break;
+          // Auto-detect Solana CAs in group chats (passive scan with 3s delay)
+          else if (isGroupChat) {
+            const detectedCA = looksLikeSolanaCA(text);
+            if (detectedCA) {
+              await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
+            }
+          }
+          break;
+      }
     }
   } catch (err) {
     console.error("[bot] Webhook error:", err);
