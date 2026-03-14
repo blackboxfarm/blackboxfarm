@@ -2522,11 +2522,14 @@ serve(async (req) => {
 
   try {
     const update = await req.json();
-    const message = update.message;
 
-    if (!message?.text || !message.from) {
+    // ─── Handle my_chat_member events (bot added/removed from groups) ───
+    if (update.my_chat_member) {
+      await handleMyChatMember(update);
       return new Response("OK");
     }
+
+    const message = update.message;
 
     const chatId = message.chat.id;
     const chatType = message.chat.type;
