@@ -1,0 +1,1 @@
+ALTER TABLE public.trading_positions RENAME COLUMN owner_secret TO owner_secret_encrypted;
