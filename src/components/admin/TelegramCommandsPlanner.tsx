@@ -343,11 +343,71 @@ export function TelegramCommandsPlanner() {
 
         {/* ════════ GROUP vs DM ════════ */}
         <TabsContent value="context">
+          {/* Three-layer model */}
+          <Card className="bg-card border-border mb-4">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">🧅 Three-Layer Group Behavior Model</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                The bot responds differently in groups depending on WHO triggered it and HOW.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-emerald-500/10 rounded-lg p-4 border border-emerald-500/20 space-y-2">
+                  <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                    👁️ Layer 1: Auto-Detect (Anyone)
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Bot watches ALL messages for Solana contract addresses. When detected, it auto-responds with a brief result after the configured delay (default 2000ms).
+                  </p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                    <li>• No command needed — just paste a CA</li>
+                    <li>• Works for ANY user, subscriber or not</li>
+                    <li>• Brief format: $TICKER | mcap | holders | 🟢/🔴</li>
+                    <li>• Respects <code className="text-foreground">delay_ms</code> so Phanes/Skeleton fire first</li>
+                    <li>• Admin can toggle on/off via <code className="text-foreground">/config</code> in DM</li>
+                  </ul>
+                </div>
+                <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20 space-y-2">
+                  <h4 className="text-sm font-semibold text-blue-400 flex items-center gap-2">
+                    👤 Layer 2: User Commands (Members)
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Any group member can use allowed commands (/quick, /price, /risk, etc). Depth depends on their personal subscription tier, but response is always abbreviated for groups.
+                  </p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                    <li>• Requires command (e.g. <code className="text-foreground">/quick CA</code>)</li>
+                    <li>• User doesn't need to be a subscriber</li>
+                    <li>• Unregistered users get "register for more" upsell</li>
+                    <li>• Admin can restrict to admin-only via <code className="text-foreground">admin_only_commands</code></li>
+                    <li>• Verbose/abbreviated controlled by admin config</li>
+                    <li>• Admin can disable specific commands via <code className="text-foreground">/toggle</code></li>
+                  </ul>
+                </div>
+                <div className="bg-amber-500/10 rounded-lg p-4 border border-amber-500/20 space-y-2">
+                  <h4 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+                    🛡️ Layer 3: Admin-Only (Installer)
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Certain commands only respond to the channel admin (the subscriber who installed the bot). Others are DM-only for config.
+                  </p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                    <li>• <code className="text-foreground">/status</code> in group → admin sees channel config</li>
+                    <li>• All config commands → DM only (never in group)</li>
+                    <li>• Non-admins see nothing when trying admin commands</li>
+                    <li>• Admin identity checked via <code className="text-foreground">getChatAdministrators</code></li>
+                    <li>• Cross-referenced with <code className="text-foreground">channel_installations.user_id</code></li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="bg-card border-border">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Group Chat vs Direct Message Behavior</CardTitle>
+              <CardTitle className="text-base">Command × Context × Access Level</CardTitle>
               <p className="text-xs text-muted-foreground">
-                How each command responds differently based on chat context. Group chats get abbreviated responses to avoid spam.
+                👁️ auto = passive detection | 👤 user = any member | 🛡️ admin = installer only | 📩 dm-only = not available in groups
               </p>
             </CardHeader>
             <CardContent>
@@ -355,20 +415,34 @@ export function TelegramCommandsPlanner() {
                 <TableHeader>
                   <TableRow>
                     <TableHead compact className="min-w-[100px]">Command</TableHead>
-                    <TableHead compact className="min-w-[250px]">📩 DM Behavior</TableHead>
-                    <TableHead compact className="min-w-[250px]">👥 Group Behavior</TableHead>
-                    <TableHead compact className="min-w-[200px]">Notes</TableHead>
+                    <TableHead compact className="min-w-[80px]">Group Access</TableHead>
+                    <TableHead compact className="min-w-[220px]">📩 DM Behavior</TableHead>
+                    <TableHead compact className="min-w-[220px]">👥 Group Behavior</TableHead>
+                    <TableHead compact className="min-w-[180px]">Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {COMMANDS.map(cmd => (
-                    <TableRow key={cmd.command} className={!cmd.implementedInWebhook ? 'opacity-60' : ''}>
-                      <TableCell compact className="font-mono text-xs font-semibold">{cmd.command}</TableCell>
-                      <TableCell compact className="text-xs">{cmd.dmBehavior}</TableCell>
-                      <TableCell compact className="text-xs">{cmd.groupBehavior}</TableCell>
-                      <TableCell compact className="text-xs text-muted-foreground">{cmd.notes || '—'}</TableCell>
-                    </TableRow>
-                  ))}
+                  {COMMANDS.map(cmd => {
+                    const levelStyles: Record<GroupAccessLevel, { label: string; className: string }> = {
+                      auto: { label: '👁️ Auto', className: 'text-emerald-400' },
+                      anyone: { label: '🌐 Anyone', className: 'text-green-400' },
+                      user: { label: '👤 Member', className: 'text-blue-400' },
+                      admin: { label: '🛡️ Admin', className: 'text-amber-400' },
+                      'dm-only': { label: '📩 DM Only', className: 'text-muted-foreground' },
+                    };
+                    const level = levelStyles[cmd.groupAccessLevel];
+                    return (
+                      <TableRow key={cmd.command} className={!cmd.implementedInWebhook ? 'opacity-60' : ''}>
+                        <TableCell compact className="font-mono text-xs font-semibold">{cmd.command}</TableCell>
+                        <TableCell compact className="text-xs">
+                          <span className={level.className}>{level.label}</span>
+                        </TableCell>
+                        <TableCell compact className="text-xs">{cmd.dmBehavior}</TableCell>
+                        <TableCell compact className="text-xs">{cmd.groupBehavior}</TableCell>
+                        <TableCell compact className="text-xs text-muted-foreground">{cmd.notes || '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -383,22 +457,23 @@ export function TelegramCommandsPlanner() {
                 <div className="bg-muted/30 rounded-lg p-4 space-y-2">
                   <h4 className="font-semibold text-foreground">👤 User Journey in Group</h4>
                   <ol className="list-decimal list-inside text-xs text-muted-foreground space-y-1">
-                    <li>User sees bot reply to someone's /quick in a group</li>
+                    <li>Someone pastes a CA → bot auto-responds with brief stats</li>
+                    <li>User sees the value, tries /quick → gets one-liner</li>
+                    <li>User tries /risk → sees 🟢/🔴 only → "DM me for full analysis"</li>
                     <li>User DMs the bot → gets /start welcome</li>
                     <li>User does /register with their code</li>
-                    <li>Now unlocked: /quick, /price, /check in groups</li>
-                    <li>Uses /risk → sees 🟢/🔴 only → "upgrade for full analysis"</li>
-                    <li>Curiosity → subscribes to X or Pro</li>
+                    <li>Now gets deeper results. Curiosity → subscribes.</li>
                   </ol>
                 </div>
                 <div className="bg-muted/30 rounded-lg p-4 space-y-2">
                   <h4 className="font-semibold text-foreground">🛡️ Group Admin Value</h4>
                   <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
-                    <li>Bot adds value to their group for free</li>
-                    <li>Members get /quick and /check without leaving</li>
-                    <li>Premium commands tease but don't reveal</li>
-                    <li>Group admin gets exposure credit / referral?</li>
+                    <li>Bot auto-responds to CAs — no commands needed</li>
+                    <li>Members get instant value without setup</li>
+                    <li>Admin configures everything via DM (clean group)</li>
+                    <li>Delay setting lets other bots post first</li>
                     <li>Bot never posts paywalled content in group</li>
+                    <li>Admin can restrict to admin-only if group gets noisy</li>
                   </ul>
                 </div>
               </div>
