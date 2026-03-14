@@ -16,12 +16,33 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // ─── Auth validation: derive user from JWT, never trust caller-supplied user_id ───
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+
+    const anonClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await anonClient.auth.getUser(token);
+    if (claimsError || !claimsData?.user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+
+    const authenticatedUserId = claimsData.user.id;
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { opportunity_id, user_id }: ExecuteTradeRequest = await req.json();
+    const { opportunity_id }: ExecuteTradeRequest = await req.json();
+    const user_id = authenticatedUserId; // Always use the authenticated user's ID
 
     console.log(`Executing trade for opportunity ${opportunity_id}, user ${user_id}`);
 
