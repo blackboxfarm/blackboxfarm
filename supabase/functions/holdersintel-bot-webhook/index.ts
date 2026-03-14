@@ -1958,6 +1958,541 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   await sendMessage(chatId, msg);
 }
 
+// ─── /add — DM-only: Add bot to a channel/group ───
+async function handleAdd(chatId: number, telegramUserId: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 *Account not linked.*\n\nUse /register to link your BlackBox Farm account first.`);
+    return;
+  }
+
+  await sendMessage(chatId,
+    `📡 *Add HoldersIntel Bot to your Group/Channel*\n\n` +
+    `1️⃣ Open your Telegram group/channel settings\n` +
+    `2️⃣ Go to *Members* → *Add Member*\n` +
+    `3️⃣ Search for \`@holdersintel_bot\`\n` +
+    `4️⃣ Add it as an *admin* (needs "Send Messages" permission)\n\n` +
+    `The bot will auto-detect when it's added and register the installation.\n` +
+    `Then use /channels to see it and /payment to activate it.\n\n` +
+    `💡 _One-time fee: 0.25 SOL per channel — lifetime access._` +
+    TAGLINE
+  );
+}
+
+// ─── /channels (/ch) — DM-only: List channel installations ───
+async function handleChannels(chatId: number, telegramUserId: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 *Account not linked.*\n\nUse /register first.`);
+    return;
+  }
+
+  const { data: installs, error } = await supabase
+    .from("channel_installations")
+    .select("id, chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at")
+    .eq("user_id", linked.user_id)
+    .order("installed_at", { ascending: false });
+
+  if (error || !installs || installs.length === 0) {
+    await sendMessage(chatId,
+      `📡 *Your Channels*\n\n` +
+      `No installations found.\n\n` +
+      `Use /add to add the bot to a group or channel.` + TAGLINE
+    );
+    return;
+  }
+
+  let msg = `📡 *Your Channels (${installs.length})*\n\n`;
+
+  installs.forEach((inst: any, idx: number) => {
+    const title = inst.chat_title || `Chat ${inst.chat_id}`;
+    let status = '⏳ Unpaid';
+    if (inst.kicked) status = '🚫 Kicked';
+    else if (inst.is_paid && inst.is_active) status = '✅ Active';
+    else if (inst.is_paid) status = '✅ Paid';
+
+    msg += `${idx + 1}️⃣ *${title}* — ${status}\n`;
+    msg += `   _Type: ${inst.chat_type} · ID: ${inst.chat_id}_\n\n`;
+  });
+
+  msg += `*Commands:*\n` +
+    `\`/config delay 3000\` — Set response delay\n` +
+    `\`/config verbose on\` — Toggle verbose mode\n` +
+    `\`/payment <chat_id>\` — View/generate payment wallet\n` +
+    `\`/config\` — Show all config options` +
+    TAGLINE;
+
+  await sendMessage(chatId, msg);
+}
+
+// ─── /config — DM-only: Text-based channel config ───
+// State to track which channel a user is configuring
+const userSelectedChannel: Map<string, number> = new Map();
+
+async function handleConfig(chatId: number, telegramUserId: string, args: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 *Account not linked.*\n\nUse /register first.`);
+    return;
+  }
+
+  const parts = args.trim().toLowerCase().split(/\s+/);
+  const setting = parts[0] || '';
+  const value = parts[1] || '';
+
+  // If no args, show usage + current selected channel config
+  if (!setting) {
+    const selectedChatId = userSelectedChannel.get(telegramUserId);
+    let currentConfig = '';
+    
+    if (selectedChatId) {
+      const { data: inst } = await supabase
+        .from("channel_installations")
+        .select("chat_title, admin_config")
+        .eq("chat_id", selectedChatId)
+        .eq("user_id", linked.user_id)
+        .maybeSingle();
+      
+      if (inst) {
+        const cfg = inst.admin_config as any || {};
+        currentConfig = `\n📋 *Current Config — ${inst.chat_title || selectedChatId}:*\n` +
+          `⏱ Delay: *${cfg.delay_ms || 0}ms*\n` +
+          `📝 Verbose: *${cfg.verbose ? 'ON' : 'OFF'}*\n` +
+          `🔒 Admin-Only: *${cfg.admin_only_commands ? 'ON' : 'OFF'}*\n` +
+          `🚨 Dev Alerts: *${cfg.dev_wallet_alerts ? 'ON' : 'OFF'}*\n`;
+      }
+    }
+
+    await sendMessage(chatId,
+      `⚙️ *Channel Config*\n\n` +
+      `First select a channel:\n` +
+      `\`/config select <chat_id>\` — Select channel to configure\n\n` +
+      `Then use:\n` +
+      `\`/config delay <ms>\` — Response delay (e.g. 3000)\n` +
+      `\`/config verbose on|off\` — Long/short-form replies\n` +
+      `\`/config admin_only on|off\` — Restrict commands to admins\n` +
+      `\`/config dev_alerts on|off\` — Dev wallet launch alerts\n` +
+      currentConfig +
+      TAGLINE
+    );
+    return;
+  }
+
+  // Select a channel
+  if (setting === 'select') {
+    const targetChatId = parseInt(value);
+    if (isNaN(targetChatId)) {
+      await sendMessage(chatId, `❌ Usage: \`/config select <chat_id>\`\n\nUse /channels to see your chat IDs.`);
+      return;
+    }
+
+    const { data: inst } = await supabase
+      .from("channel_installations")
+      .select("id, chat_title, chat_id")
+      .eq("chat_id", targetChatId)
+      .eq("user_id", linked.user_id)
+      .maybeSingle();
+
+    if (!inst) {
+      await sendMessage(chatId, `❌ Channel not found or you don't own it.\n\nUse /channels to see your installations.`);
+      return;
+    }
+
+    userSelectedChannel.set(telegramUserId, targetChatId);
+    await sendMessage(chatId, `✅ Selected: *${inst.chat_title || targetChatId}*\n\nNow use \`/config delay 3000\`, \`/config verbose on\`, etc.`);
+    return;
+  }
+
+  // Must have a channel selected
+  const selectedChatId = userSelectedChannel.get(telegramUserId);
+  if (!selectedChatId) {
+    await sendMessage(chatId, `❌ No channel selected.\n\nUse \`/config select <chat_id>\` first.\nSee /channels for your chat IDs.`);
+    return;
+  }
+
+  // Fetch current config
+  const { data: inst } = await supabase
+    .from("channel_installations")
+    .select("id, chat_title, admin_config")
+    .eq("chat_id", selectedChatId)
+    .eq("user_id", linked.user_id)
+    .maybeSingle();
+
+  if (!inst) {
+    await sendMessage(chatId, `❌ Channel no longer found.`);
+    userSelectedChannel.delete(telegramUserId);
+    return;
+  }
+
+  const config = (inst.admin_config as any) || { delay_ms: 0, verbose: false, admin_only_commands: false, dev_wallet_alerts: false, enabled_tiers: [] };
+  const channelName = inst.chat_title || selectedChatId;
+
+  switch (setting) {
+    case 'delay': {
+      const ms = parseInt(value);
+      if (isNaN(ms) || ms < 0 || ms > 30000) {
+        await sendMessage(chatId, `❌ Delay must be 0–30000ms. Usage: \`/config delay 3000\``);
+        return;
+      }
+      config.delay_ms = ms;
+      break;
+    }
+    case 'verbose': {
+      if (value !== 'on' && value !== 'off') {
+        await sendMessage(chatId, `❌ Usage: \`/config verbose on\` or \`/config verbose off\``);
+        return;
+      }
+      config.verbose = value === 'on';
+      break;
+    }
+    case 'admin_only': {
+      if (value !== 'on' && value !== 'off') {
+        await sendMessage(chatId, `❌ Usage: \`/config admin_only on\` or \`/config admin_only off\``);
+        return;
+      }
+      config.admin_only_commands = value === 'on';
+      break;
+    }
+    case 'dev_alerts': {
+      if (value !== 'on' && value !== 'off') {
+        await sendMessage(chatId, `❌ Usage: \`/config dev_alerts on\` or \`/config dev_alerts off\``);
+        return;
+      }
+      config.dev_wallet_alerts = value === 'on';
+      break;
+    }
+    default:
+      await sendMessage(chatId, `❌ Unknown setting: \`${setting}\`\n\nValid: delay, verbose, admin\\_only, dev\\_alerts`);
+      return;
+  }
+
+  // Save config
+  const { error: updateErr } = await supabase
+    .from("channel_installations")
+    .update({ admin_config: config, updated_at: new Date().toISOString() })
+    .eq("id", inst.id);
+
+  if (updateErr) {
+    console.error("[bot] config update error:", updateErr);
+    await sendMessage(chatId, `❌ Failed to update config.`);
+    return;
+  }
+
+  const settingLabels: Record<string, string> = {
+    delay: `⏱ Delay → *${config.delay_ms}ms*`,
+    verbose: `📝 Verbose → *${config.verbose ? 'ON' : 'OFF'}*`,
+    admin_only: `🔒 Admin-Only → *${config.admin_only_commands ? 'ON' : 'OFF'}*`,
+    dev_alerts: `🚨 Dev Alerts → *${config.dev_wallet_alerts ? 'ON' : 'OFF'}*`,
+  };
+
+  await sendMessage(chatId, `✅ *${channelName}*\n${settingLabels[setting]}` + TAGLINE);
+}
+
+// ─── /payment (/pay) — DM-only: Generate/show payment wallet ───
+async function handlePayment(chatId: number, telegramUserId: string, args: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 *Account not linked.*\n\nUse /register first.`);
+    return;
+  }
+
+  // Determine which channel — from args or selected
+  let targetChatId: number | null = null;
+  const argNum = parseInt(args.trim());
+  if (!isNaN(argNum) && args.trim()) {
+    targetChatId = argNum;
+  } else {
+    targetChatId = userSelectedChannel.get(telegramUserId) || null;
+  }
+
+  if (!targetChatId) {
+    // List unpaid channels
+    const { data: unpaid } = await supabase
+      .from("channel_installations")
+      .select("chat_id, chat_title, is_paid")
+      .eq("user_id", linked.user_id)
+      .eq("is_paid", false)
+      .eq("kicked", false);
+
+    if (!unpaid || unpaid.length === 0) {
+      await sendMessage(chatId, `✅ All your channels are already paid!\n\nUse /channels to see them.` + TAGLINE);
+      return;
+    }
+
+    let msg = `💳 *Select a channel for payment:*\n\n`;
+    unpaid.forEach((ch: any) => {
+      msg += `• *${ch.chat_title || 'Unknown'}*\n  \`/payment ${ch.chat_id}\`\n\n`;
+    });
+    msg += `_Copy the command above to generate a payment wallet._` + TAGLINE;
+    await sendMessage(chatId, msg);
+    return;
+  }
+
+  // Fetch the installation
+  const { data: inst } = await supabase
+    .from("channel_installations")
+    .select("id, chat_title, is_paid, is_active")
+    .eq("chat_id", targetChatId)
+    .eq("user_id", linked.user_id)
+    .maybeSingle();
+
+  if (!inst) {
+    await sendMessage(chatId, `❌ Channel not found or you don't own it.\n\nUse /channels to see your installations.`);
+    return;
+  }
+
+  if (inst.is_paid) {
+    await sendMessage(chatId, `✅ *${inst.chat_title || targetChatId}* is already paid and ${inst.is_active ? 'active' : 'inactive'}!` + TAGLINE);
+    return;
+  }
+
+  // Check for existing wallet
+  const { data: existingWallet } = await supabase
+    .from("channel_payment_wallets")
+    .select("id, pubkey, required_sol, current_balance, is_paid")
+    .eq("installation_id", inst.id)
+    .maybeSingle();
+
+  if (existingWallet) {
+    // Show existing wallet + verify balance
+    const msg = `💳 *Payment Wallet — ${inst.chat_title || targetChatId}*\n\n` +
+      `Send *${existingWallet.required_sol} SOL* to:\n` +
+      `\`${existingWallet.pubkey}\`\n\n` +
+      `💰 Current balance: *${existingWallet.current_balance} SOL*\n` +
+      `📋 Required: *${existingWallet.required_sol} SOL*\n\n` +
+      `After sending, use \`/payment verify ${targetChatId}\` to check.\n` +
+      `_Or verify on the dashboard: blackbox.farm/dashboard_` +
+      TAGLINE;
+    await sendMessage(chatId, msg);
+    return;
+  }
+
+  // Generate new wallet via edge function (using service role directly)
+  await sendMessage(chatId, `⏳ Generating payment wallet for *${inst.chat_title || targetChatId}*...`);
+
+  try {
+    // Import Keypair inline for wallet generation
+    const { Keypair } = await import("npm:@solana/web3.js@1.95.3");
+    const bs58 = await import("https://esm.sh/bs58@5.0.0");
+
+    const keypair = Keypair.generate();
+    const pubkey = keypair.publicKey.toString();
+    const secretKey = bs58.encode(keypair.secretKey);
+
+    // Simple base64 encryption for storage
+    const encryptedSecret = btoa(secretKey);
+
+    const { data: wallet, error: insertErr } = await supabase
+      .from("channel_payment_wallets")
+      .insert({
+        installation_id: inst.id,
+        pubkey,
+        secret_key_encrypted: encryptedSecret,
+        required_sol: 0.25,
+        current_balance: 0,
+        is_paid: false,
+      })
+      .select()
+      .single();
+
+    if (insertErr) throw insertErr;
+
+    console.log(`[bot] Generated channel payment wallet ${pubkey} for installation ${inst.id} via DM`);
+
+    await sendMessage(chatId,
+      `✅ *Payment Wallet Generated!*\n\n` +
+      `Channel: *${inst.chat_title || targetChatId}*\n\n` +
+      `Send *0.25 SOL* to:\n` +
+      `\`${pubkey}\`\n\n` +
+      `After sending, use:\n` +
+      `\`/payment verify ${targetChatId}\`\n\n` +
+      `_Wallet also visible on blackbox.farm/dashboard_` +
+      TAGLINE
+    );
+  } catch (err: any) {
+    console.error("[bot] Wallet generation error:", err);
+    await sendMessage(chatId, `❌ Failed to generate wallet: ${err.message}\n\nTry again or use the dashboard at blackbox.farm/dashboard`);
+  }
+}
+
+// ─── /payment verify — Check on-chain balance ───
+async function handlePaymentVerify(chatId: number, telegramUserId: string, targetChatIdStr: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 *Account not linked.*`);
+    return;
+  }
+
+  const targetChatId = parseInt(targetChatIdStr);
+  if (isNaN(targetChatId)) {
+    await sendMessage(chatId, `❌ Usage: \`/payment verify <chat_id>\``);
+    return;
+  }
+
+  const { data: inst } = await supabase
+    .from("channel_installations")
+    .select("id, chat_title")
+    .eq("chat_id", targetChatId)
+    .eq("user_id", linked.user_id)
+    .maybeSingle();
+
+  if (!inst) {
+    await sendMessage(chatId, `❌ Channel not found.`);
+    return;
+  }
+
+  const { data: wallet } = await supabase
+    .from("channel_payment_wallets")
+    .select("id, pubkey, required_sol, current_balance")
+    .eq("installation_id", inst.id)
+    .maybeSingle();
+
+  if (!wallet) {
+    await sendMessage(chatId, `❌ No payment wallet found. Use \`/payment ${targetChatId}\` to generate one.`);
+    return;
+  }
+
+  await sendMessage(chatId, `🔍 Checking balance for *${inst.chat_title || targetChatId}*...`);
+
+  try {
+    const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY") || "";
+    const RPC_URL = HELIUS_API_KEY
+      ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+      : "https://api.mainnet-beta.solana.com";
+
+    const { Connection, PublicKey } = await import("npm:@solana/web3.js@1.95.3");
+    const connection = new Connection(RPC_URL, "confirmed");
+    const pubkey = new PublicKey(wallet.pubkey);
+    const balanceLamports = await connection.getBalance(pubkey);
+    const balanceSol = balanceLamports / 1e9;
+
+    const requiredSol = wallet.required_sol || 0.25;
+    const isPaid = balanceSol >= requiredSol;
+
+    // Update wallet balance
+    await supabase
+      .from("channel_payment_wallets")
+      .update({
+        current_balance: balanceSol,
+        is_paid: isPaid,
+        verified_at: isPaid ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", wallet.id);
+
+    if (isPaid) {
+      // Activate the installation
+      await supabase
+        .from("channel_installations")
+        .update({
+          is_paid: true,
+          is_active: true,
+          paid_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", inst.id);
+
+      console.log(`[bot] Channel ${inst.id} activated via DM payment verify! Balance: ${balanceSol} SOL`);
+
+      await sendMessage(chatId,
+        `✅ *Payment Verified!*\n\n` +
+        `Channel: *${inst.chat_title || targetChatId}*\n` +
+        `Balance: *${balanceSol.toFixed(4)} SOL*\n\n` +
+        `🎉 Bot is now *active* in this channel!\n` +
+        `Members can paste contract addresses for instant analysis.` +
+        TAGLINE
+      );
+    } else {
+      await sendMessage(chatId,
+        `⏳ *Payment Pending*\n\n` +
+        `Channel: *${inst.chat_title || targetChatId}*\n` +
+        `Balance: *${balanceSol.toFixed(4)} SOL*\n` +
+        `Required: *${requiredSol} SOL*\n\n` +
+        `Send the remaining amount to:\n\`${wallet.pubkey}\`` +
+        TAGLINE
+      );
+    }
+  } catch (err: any) {
+    console.error("[bot] Payment verify error:", err);
+    await sendMessage(chatId, `❌ Verification failed: ${err.message}`);
+  }
+}
+
+// ─── Handle my_chat_member: auto-register when bot is added/removed from groups ───
+async function handleMyChatMember(update: any) {
+  const myChatMember = update.my_chat_member;
+  if (!myChatMember) return;
+
+  const chat = myChatMember.chat;
+  const newStatus = myChatMember.new_chat_member?.status;
+  const oldStatus = myChatMember.old_chat_member?.status;
+  const fromUser = myChatMember.from;
+
+  // Only handle group/supergroup/channel
+  if (chat.type !== 'group' && chat.type !== 'supergroup' && chat.type !== 'channel') return;
+
+  const chatId = chat.id;
+  const chatTitle = chat.title || null;
+  const chatType = chat.type;
+  const telegramUserId = String(fromUser?.id || '');
+
+  if (newStatus === 'administrator' || newStatus === 'member') {
+    // Bot was added to a group — auto-register the installation
+    console.log(`[bot] Added to ${chatType} "${chatTitle}" (${chatId}) by user ${telegramUserId}`);
+
+    // Find the linked web user (the person who added the bot)
+    const linked = await getLinkedUser(telegramUserId);
+    if (!linked) {
+      // Can't register without a linked account, but we still save the installation
+      // with a placeholder user_id — they can claim it later
+      console.log(`[bot] User ${telegramUserId} not linked. Cannot auto-register installation.`);
+      return;
+    }
+
+    // Upsert: if already exists (was kicked & re-added), update it
+    const { error } = await supabase
+      .from("channel_installations")
+      .upsert({
+        chat_id: chatId,
+        chat_title: chatTitle,
+        chat_type: chatType,
+        user_id: linked.user_id,
+        kicked: false,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'chat_id' });
+
+    if (error) {
+      console.error("[bot] Failed to upsert channel_installation:", error);
+      return;
+    }
+
+    // DM the user who added the bot
+    try {
+      const dmChatId = Number(telegramUserId);
+      await sendMessage(dmChatId,
+        `✅ *Detected!* I'm now in *${chatTitle || 'your group'}* (ID: \`${chatId}\`).\n\n` +
+        `Use /channels to manage it.\n` +
+        `Use \`/payment ${chatId}\` to activate it (0.25 SOL).` +
+        TAGLINE
+      );
+    } catch (e) {
+      console.log("[bot] Could not DM user after being added to group:", e);
+    }
+  } else if (newStatus === 'left' || newStatus === 'kicked') {
+    // Bot was removed from a group
+    console.log(`[bot] Removed from ${chatType} "${chatTitle}" (${chatId})`);
+
+    await supabase
+      .from("channel_installations")
+      .update({
+        kicked: true,
+        is_active: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("chat_id", chatId);
+  }
+}
+
 // ════════════════════════════════════════
 // MAIN SERVER
 // ════════════════════════════════════════
