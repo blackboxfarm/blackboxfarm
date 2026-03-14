@@ -65,7 +65,7 @@ interface Position {
   quantity_ui: number;
   entry_timestamp: string;
   owner_pubkey: string;
-  owner_secret: string;
+  owner_secret_encrypted: string;
   status: string;
 }
 
