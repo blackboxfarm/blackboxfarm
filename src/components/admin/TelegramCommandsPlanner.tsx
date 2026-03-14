@@ -619,10 +619,10 @@ export function TelegramCommandsPlanner() {
         <TabsContent value="admin-cmds">
           <Card className="bg-card border-border">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">🛡️ Channel Admin Commands</CardTitle>
+              <CardTitle className="text-base">🛡️ DM-Only Channel Management</CardTitle>
               <p className="text-xs text-muted-foreground">
-                These commands are only usable by the channel/group admin who installed the bot. They configure bot behavior per-channel.
-                All settings are stored in the <code className="text-foreground">admin_config</code> JSON column on <code className="text-foreground">channel_installations</code>.
+                All channel admin config happens in DM with the bot — never in public groups.
+                No admin commands are exposed in-channel. This keeps groups clean and prevents config leaks.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -633,15 +633,15 @@ export function TelegramCommandsPlanner() {
                     {cmd.aliases.length > 0 && (
                       <span className="text-xs text-muted-foreground">({cmd.aliases.join(', ')})</span>
                     )}
-                    <Badge variant="outline" className="text-[9px] ml-auto border-amber-500/30 text-amber-400">
-                      admin only
+                    <Badge variant="outline" className="text-[9px] ml-auto border-blue-500/30 text-blue-400">
+                      DM only
                     </Badge>
                     <Badge variant="outline" className="text-[9px] border-pink-400/30 text-pink-400">
                       planned
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mb-1">{cmd.description}</p>
-                  <p className="text-xs text-foreground">{cmd.groupBehavior}</p>
+                  <p className="text-xs text-foreground">{cmd.dmBehavior}</p>
                   {cmd.notes && (
                     <p className="text-[10px] text-muted-foreground/70 mt-1 italic">{cmd.notes}</p>
                   )}
@@ -651,29 +651,71 @@ export function TelegramCommandsPlanner() {
               <Separator />
 
               <div className="bg-muted/30 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-foreground mb-2">🔐 Admin Detection Logic</h4>
+                <h4 className="text-sm font-semibold text-foreground mb-3">📱 DM Config Flow (User Experience)</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-muted-foreground">
-                  <div>
-                    <p className="font-semibold text-foreground mb-1">How Bot Knows Who's Admin:</p>
-                    <ol className="list-decimal list-inside space-y-0.5">
-                      <li>Bot calls <code className="text-foreground">getChatAdministrators</code> on the group</li>
-                      <li>Checks if sender's <code className="text-foreground">telegram_user_id</code> is in admin list</li>
-                      <li>Cross-references with <code className="text-foreground">channel_installations.user_id</code></li>
-                      <li>Only the installer OR group admins can use admin commands</li>
-                    </ol>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Step 1: /add</p>
+                      <div className="bg-background/50 rounded p-2 text-[10px] space-y-1">
+                        <p>User: <code className="text-primary">/add</code></p>
+                        <p>Bot: "Add me as admin to your channel/group, then send me the group name or forward a message from it."</p>
+                        <p>User: <em>adds bot to "Solana Alpha Chat"</em></p>
+                        <p>Bot: "✅ Detected! I'm now in <strong>Solana Alpha Chat</strong> (ID: -100xxx). Use /channels to manage it."</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Step 2: /channels</p>
+                      <div className="bg-background/50 rounded p-2 text-[10px] space-y-1">
+                        <p>User: <code className="text-primary">/channels</code></p>
+                        <p>Bot:</p>
+                        <p className="pl-2">📡 Your Channels:</p>
+                        <p className="pl-2">1️⃣ Solana Alpha Chat — ⏳ Unpaid</p>
+                        <p className="pl-2">2️⃣ Degen Traders — ✅ Active</p>
+                        <p className="pl-2"><em>Tap a number to configure</em></p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-foreground mb-1">admin_config JSON Shape:</p>
-                    <pre className="bg-background/50 rounded p-2 text-[10px] whitespace-pre-wrap">{`{
+                  <div className="space-y-3">
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Step 3: Select → /config</p>
+                      <div className="bg-background/50 rounded p-2 text-[10px] space-y-1">
+                        <p>User taps: <code className="text-primary">1</code></p>
+                        <p>Bot shows inline keyboard:</p>
+                        <p className="pl-2 font-mono">⚙️ Config: Solana Alpha Chat</p>
+                        <p className="pl-2 font-mono">[⏱ Delay: 0ms] [📝 Verbose: Off]</p>
+                        <p className="pl-2 font-mono">[🔒 Admin-Only: Off] [🚨 Dev Alerts: Off]</p>
+                        <p className="pl-2 font-mono">[📋 Toggle Commands] [📊 Max Tier: Auto]</p>
+                        <p className="pl-2 font-mono">[💳 Payment Status]</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Step 4: Inline Button Taps</p>
+                      <div className="bg-background/50 rounded p-2 text-[10px] space-y-1">
+                        <p>User taps <code className="text-primary">[⏱ Delay: 0ms]</code></p>
+                        <p>Bot: "Enter delay in ms (e.g. 3000):"</p>
+                        <p>User: <code className="text-primary">3000</code></p>
+                        <p>Bot: "✅ Delay set to 3000ms for Solana Alpha Chat"</p>
+                        <p className="italic mt-1">Returns to config menu</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-muted/30 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-foreground mb-2">📦 admin_config JSON Shape</h4>
+                <pre className="bg-background/50 rounded p-2 text-[10px] whitespace-pre-wrap">{`{
   "delay_ms": 3000,
   "verbose": false,
   "admin_only_commands": false,
   "dev_alerts": true,
-  "disabled_commands": ["top"],
+  "disabled_commands": ["top", "ai"],
   "max_tier": "x_subscriber"
 }`}</pre>
-                  </div>
-                </div>
+                <p className="text-[10px] text-muted-foreground mt-2">
+                  Stored per channel in <code className="text-foreground">channel_installations.admin_config</code>. 
+                  Bot reads this config on every in-channel command to determine response behavior.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -685,7 +727,7 @@ export function TelegramCommandsPlanner() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">📡 Channel Installation & Config Model</CardTitle>
               <p className="text-xs text-muted-foreground">
-                One-time 0.25 SOL activation per channel. Each channel has independent config.
+                One-time 0.25 SOL activation per channel. All management via DM — no admin commands in groups.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -693,23 +735,26 @@ export function TelegramCommandsPlanner() {
                 <div className="bg-muted/30 rounded-lg p-4 space-y-2">
                   <h4 className="text-sm font-semibold text-foreground">💳 Activation Flow</h4>
                   <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
-                    <li>User creates account on website</li>
-                    <li>Gets registration code, links to bot</li>
-                    <li>Adds bot to channel/group</li>
-                    <li>Bot records installation in dashboard</li>
-                    <li>User generates SOL payment wallet</li>
-                    <li>Sends 0.25 SOL → clicks "Verify Payment"</li>
-                    <li>Bot activates in that channel</li>
+                    <li>User creates website account & registers with bot via DM</li>
+                    <li>User runs <code className="text-foreground font-mono">/add</code> in DM</li>
+                    <li>Adds bot as admin to their channel/group</li>
+                    <li>Bot auto-detects and registers the installation</li>
+                    <li>User runs <code className="text-foreground font-mono">/channels</code> → selects channel</li>
+                    <li>Taps <code className="text-foreground font-mono">[💳 Payment]</code> → gets SOL wallet</li>
+                    <li>Sends 0.25 SOL → taps "Verify Payment"</li>
+                    <li>Bot activates in that channel ✅</li>
                   </ol>
                 </div>
                 <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-                  <h4 className="text-sm font-semibold text-foreground">⚙️ Per-Channel Config</h4>
+                  <h4 className="text-sm font-semibold text-foreground">⚙️ Per-Channel Config (via DM)</h4>
                   <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>• <span className="text-foreground font-mono">/delay</span> — response delay in ms</li>
-                    <li>• Verbose vs short-form replies</li>
-                    <li>• Admin-only vs all-member commands</li>
-                    <li>• Dev Wallet Alerts toggle</li>
-                    <li>• Each channel independent config</li>
+                    <li>• <span className="text-foreground font-mono">Delay</span> — response delay so other bots fire first</li>
+                    <li>• <span className="text-foreground font-mono">Verbose</span> — long-form vs short-form replies</li>
+                    <li>• <span className="text-foreground font-mono">Admin-Only</span> — restrict commands to group admins</li>
+                    <li>• <span className="text-foreground font-mono">Dev Alerts</span> — 🚨 new token launch alerts</li>
+                    <li>• <span className="text-foreground font-mono">Toggle Commands</span> — enable/disable per command</li>
+                    <li>• <span className="text-foreground font-mono">Max Tier</span> — cap analysis depth in channel</li>
+                    <li>• All config via inline keyboard in DM, never in-channel</li>
                   </ul>
                 </div>
                 <div className="bg-muted/30 rounded-lg p-4 space-y-2">
@@ -718,8 +763,10 @@ export function TelegramCommandsPlanner() {
                     <li>• Kicked bots can be re-added, no re-charge</li>
                     <li>• One account can manage many channels</li>
                     <li>• No refunds — lifetime activation</li>
-                    <li>• In-channel: only channel commands</li>
-                    <li>• DM: separate full personal access</li>
+                    <li>• In-channel: only analysis commands (per config)</li>
+                    <li>• DM: personal access + channel management</li>
+                    <li>• No admin commands exposed in public groups</li>
+                    <li>• Dashboard also shows channels (read/pay)</li>
                   </ul>
                 </div>
               </div>
