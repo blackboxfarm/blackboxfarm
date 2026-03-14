@@ -246,6 +246,7 @@ const AccessCell = ({ access }: { access: CmdAccess }) => {
     '✅ (DM)': 'text-blue-400',
     '✅ (short)': 'text-cyan-400',
     '🆕': 'text-pink-400 font-bold',
+    '👁️': 'text-emerald-400 font-bold',
   };
   return <span className={styles[access] || 'text-foreground'}>{access}</span>;
 };
