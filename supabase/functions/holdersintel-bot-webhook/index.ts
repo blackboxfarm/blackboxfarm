@@ -24,7 +24,10 @@ const RATE_LIMITS: Record<string, number> = {
   auth: 3, x_subscriber: 10, pro: 25, dev: 50, enterprise: 100,
 };
 
-// ─── AI Verdict System ───
+// ─── Tagline appended to every analytical reply ───
+const TAGLINE = `\n\n🌐 [blackboxfarm.lovable.app/tgbot](https://blackboxfarm.lovable.app/tgbot)`;
+
+// ─── AI Verdict System (retained internally, removed from UI) ───
 
 const VERDICT_SYSTEM_PROMPT = `You are a crypto trading analyst for Solana memecoins. Given token metrics, produce a single actionable trading verdict.
 
@@ -104,7 +107,6 @@ function fallbackVerdict(momentumScore: number, healthScore: number, phase: Toke
     if (momentumScore >= 40) return { verdict: 'BUY SMALL SHORT', emoji: '🟡', description: 'Speculative. Small amount.' };
     return { verdict: 'HOLD / AVOID', emoji: '🔴', description: 'Weak signals.' };
   }
-  // mature / unknown
   if (momentumScore >= 70 && healthScore >= 60) return { verdict: 'BUY DEEP LONG', emoji: '🟢', description: 'Strong chart, healthy holders on mature token.' };
   if (momentumScore >= 55 && healthScore >= 40) return { verdict: 'BUY MEDIUM SHORT', emoji: '🟢', description: 'Decent momentum. Target 2x.' };
   if (momentumScore >= 40) return { verdict: 'BUY SMALL SHORT', emoji: '🟡', description: 'Speculative. Small amount.' };
@@ -114,7 +116,6 @@ function fallbackVerdict(momentumScore: number, healthScore: number, phase: Toke
 // ─── Helpers ───
 
 async function sendMessage(chatId: number, text: string, parseMode = "Markdown") {
-  // Telegram limit is 4096 chars
   const trimmed = text.length > 4090 ? text.slice(0, 4090) + "..." : text;
   const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
@@ -206,7 +207,6 @@ async function gateCheck(
     );
     return null;
   }
-  // Rate limit
   const allowed = await checkRateLimit(telegramUserId, commandName, tier);
   if (!allowed) {
     await sendMessage(chatId,
@@ -229,6 +229,41 @@ function extractCA(args: string): string | null {
 function bar(pct: number, width = 10): string {
   const filled = Math.round((pct / 100) * width);
   return "█".repeat(filled) + "░".repeat(width - filled);
+}
+
+// ─── Format helpers ───
+function fmtMcap(mcap: number | null): string | null {
+  if (!mcap) return null;
+  return mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`;
+}
+
+function tokenHeaderLine(symbol: string | null, name: string | null, mcap: number | null): string {
+  const label = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const mcapStr = fmtMcap(mcap);
+  return `🪙 *${label}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}`;
+}
+
+// ─── Check if group chat has an activated (paid) channel installation ───
+async function isGroupActivated(chatId: number): Promise<boolean> {
+  const { data } = await supabase
+    .from("channel_installations")
+    .select("id")
+    .eq("chat_id", chatId)
+    .eq("is_paid", true)
+    .eq("is_active", true)
+    .eq("kicked", false)
+    .maybeSingle();
+  return !!data;
+}
+
+// ─── Solana address detection regex ───
+const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function looksLikeSolanaCA(text: string): string | null {
+  const trimmed = text.trim();
+  // Only if the entire message is a single CA (no command prefix)
+  if (SOLANA_ADDR_RE.test(trimmed)) return trimmed;
+  return null;
 }
 
 // ════════════════════════════════════════
@@ -365,14 +400,18 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${unlocked} /help — This message\n\n`;
 
   cmds += `*Analysis — Auth ★*\n` +
+    `${check("auth")} /risk (/r) \`CA\` — Composite risk & stability assessment\n` +
     `${check("auth")} /holders \`CA\` — Holder distribution analysis\n` +
-    `${check("auth")} /verdict (/v) \`CA\` — Buy/Hold signal with sizing\n` +
+    `${check("auth")} /concentration \`CA\` — Detailed holder % breakdown\n` +
+    `${check("auth")} /dev (/d) \`CA\` — Developer intel & social doxxing\n` +
     `${check("auth")} /ca \`CA\` — Default holder analysis for a token\n` +
     `${check("auth")} /quick (/q) \`CA\` — Fast holder count & key stats\n` +
     `${check("auth")} /ai \`CA\` — Descriptive AI analysis snapshot\n\n`;
 
   cmds += `*Advanced — X Subscriber ★★*\n` +
     `${check("x_subscriber")} /momentum (/m) \`CA\` — Volume & price momentum scoring\n` +
+    `${check("x_subscriber")} /insiders (/i) \`CA\` — Insider cluster & bundling pre-check\n` +
+    `${check("x_subscriber")} /compare (/cmp) \`CA CA\` — Side-by-side token comparison\n` +
     `${check("x_subscriber")} /alerts — Manage alert preferences\n`;
   if (!hasTier(tier, "x_subscriber")) {
     cmds += `  _↑ Unlock with X Subscriber ($3.99/mo)_\n`;
@@ -380,7 +419,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   cmds += `\n`;
 
   cmds += `*Pro Intelligence — Pro ★★★*\n` +
-    `${check("pro")} /oracle (/o) \`CA\` — Developer reputation lookup\n` +
+    `${check("pro")} /oracle (/o) \`CA\` — Full developer reputation mesh\n` +
     `${check("pro")} /wallet (/w) \`ADDR\` — Wallet behavior analysis\n`;
   if (!hasTier(tier, "pro")) {
     cmds += `  _↑ Unlock with Pro ($9.99/mo)_\n`;
@@ -391,9 +430,566 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `_Shortforms shown in parentheses_\n\n` +
     `📊 Your tier: *${tier.toUpperCase()}*\n` +
     `📈 Rate limit: *${RATE_LIMITS[tier] ?? 3}* lookups/hr\n\n` +
-    `🚀 Upgrade: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)`;
+    `🚀 Upgrade: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)` +
+    TAGLINE;
 
   await sendMessage(chatId, cmds);
+}
+
+// ─── /risk CA — Composite Risk & Stability Assessment ───
+async function handleRisk(chatId: number, telegramUserId: string, args: string, isGroupChat = false) {
+  const ca = extractCA(args);
+  if (!ca) {
+    await sendMessage(chatId, `❌ Usage: \`/risk <token_address>\``);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "auth", "/risk");
+  if (!gate) return;
+
+  await sendMessage(chatId, `🛡 Assessing risk for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await logUsage(telegramUserId, "/risk", ca);
+
+  // Parallel: holders + oracle + momentum
+  const [holdersData, oracleData, momentumData] = await Promise.all([
+    invokeFunction("bagless-holders-report", { tokenMint: ca }),
+    invokeFunction("oracle-unified-lookup", { input: ca }),
+    invokeFunction("token-momentum-analyzer", { tokenMint: ca }),
+  ]);
+
+  if (!holdersData && !oracleData && !momentumData) {
+    await sendMessage(chatId, `❌ Could not fetch data for this token.`);
+    return;
+  }
+
+  const symbol = holdersData?.symbol || holdersData?.tokenSymbol || null;
+  const name = holdersData?.name || holdersData?.tokenName || null;
+  const mcap = holdersData?.marketCap || momentumData?.metrics?.market_cap || null;
+  const healthScore = holdersData?.healthScore?.score ?? holdersData?.stabilityScore ?? null;
+  const healthPhase = holdersData?.healthScore?.phase || null;
+  const top10Pct = holdersData?.distributionStats?.top10Percentage ?? null;
+  const totalHolders = holdersData?.realHolders ?? holdersData?.totalHolders ?? null;
+  const momentumScore = momentumData?.momentum_score ?? null;
+
+  // Dev risk
+  const dev = oracleData?.developer || oracleData?.creator || null;
+  const devScore = dev?.reputation_score ?? null;
+  const rugCount = dev?.rug_count ?? 0;
+  const devClass = dev?.classification || null;
+
+  // Insider/cluster data from holders report
+  const insiderPct = holdersData?.insiderData?.totalInsiderPercentage ?? null;
+  const bundledPct = holdersData?.insiderData?.bundledPercentage ?? null;
+  const clusterCount = holdersData?.insiderData?.clusters?.length ?? 0;
+
+  // Determine risk signals
+  const signals: string[] = [];
+  let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' = 'LOW';
+  let riskEmoji = '🟢';
+
+  // Dev risk signals
+  if (rugCount > 0) { signals.push(`🔴 Dev has ${rugCount} prior rug(s)`); riskLevel = 'HIGH'; }
+  if (devClass === 'serial_rugger' || devClass === 'scammer') { signals.push(`🔴 Dev classified: ${devClass}`); riskLevel = 'CRITICAL'; }
+  else if (devScore != null && devScore < 30) { signals.push(`🔴 Dev reputation: ${devScore}/100`); if (riskLevel !== 'CRITICAL') riskLevel = 'HIGH'; }
+  else if (devScore != null && devScore < 50) { signals.push(`🟡 Dev reputation: ${devScore}/100`); if (riskLevel === 'LOW') riskLevel = 'MODERATE'; }
+  else if (devScore != null) { signals.push(`🟢 Dev reputation: ${devScore}/100`); }
+
+  // Concentration signals
+  if (top10Pct != null && top10Pct > 50) { signals.push(`🔴 Top 10% holds ${top10Pct.toFixed(1)}%`); if (riskLevel === 'LOW') riskLevel = 'HIGH'; }
+  else if (top10Pct != null && top10Pct > 35) { signals.push(`🟡 Top 10% holds ${top10Pct.toFixed(1)}%`); if (riskLevel === 'LOW') riskLevel = 'MODERATE'; }
+  else if (top10Pct != null) { signals.push(`🟢 Top 10% holds ${top10Pct.toFixed(1)}%`); }
+
+  // Insider/cluster signals
+  if (bundledPct != null && bundledPct > 10) { signals.push(`🔴 Bundled insiders: ${bundledPct.toFixed(1)}% supply`); if (riskLevel === 'LOW' || riskLevel === 'MODERATE') riskLevel = 'HIGH'; }
+  else if (clusterCount > 3) { signals.push(`🟡 ${clusterCount} wallet clusters detected`); if (riskLevel === 'LOW') riskLevel = 'MODERATE'; }
+
+  // Health signals
+  if (healthScore != null && healthScore < 30) { signals.push(`🔴 Health: ${healthScore}/100`); if (riskLevel === 'LOW') riskLevel = 'HIGH'; }
+  else if (healthScore != null && healthScore < 50) { signals.push(`🟡 Health: ${healthScore}/100`); if (riskLevel === 'LOW') riskLevel = 'MODERATE'; }
+  else if (healthScore != null) { signals.push(`🟢 Health: ${healthScore}/100`); }
+
+  // Momentum signals
+  if (momentumScore != null && momentumScore < 25) { signals.push(`🔴 Momentum: ${momentumScore}/100`); }
+  else if (momentumScore != null && momentumScore < 45) { signals.push(`🟡 Momentum: ${momentumScore}/100`); }
+  else if (momentumScore != null) { signals.push(`🟢 Momentum: ${momentumScore}/100`); }
+
+  // Set emoji based on final risk level
+  if (riskLevel === 'CRITICAL') riskEmoji = '🚨';
+  else if (riskLevel === 'HIGH') riskEmoji = '🔴';
+  else if (riskLevel === 'MODERATE') riskEmoji = '🟡';
+  else riskEmoji = '🟢';
+
+  const riskLabels: Record<string, string> = {
+    LOW: 'STRONG NETWORK',
+    MODERATE: 'MODERATE STRENGTH',
+    HIGH: 'SPECULATIVE NETWORK',
+    CRITICAL: 'HIGH RISK',
+  };
+
+  const isLite = !hasTier(gate.tier, "x_subscriber");
+
+  let msg = `\`${ca}\`\n` +
+    `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
+    `${riskEmoji} *${riskLabels[riskLevel]}*\n\n`;
+
+  if (isLite) {
+    // Auth tier: score + top 3 signals only
+    msg += `🛡 *Risk Assessment*\n\n`;
+    for (const s of signals.slice(0, 3)) {
+      msg += `${s}\n`;
+    }
+    if (signals.length > 3) msg += `_...and ${signals.length - 3} more signals_\n`;
+    msg += `\n_Upgrade to X Subscriber for full risk breakdown._` + TAGLINE;
+  } else {
+    // Full breakdown for X Sub+
+    msg += `🛡 *Risk Assessment*\n\n`;
+    for (const s of signals) {
+      msg += `${s}\n`;
+    }
+    if (totalHolders) msg += `\n👥 Holders: *${totalHolders}*`;
+    if (healthPhase) msg += ` (${healthPhase.replace('_', ' ')})`;
+    msg += `\n`;
+
+    // AI risk narrative for Pro+
+    if (hasTier(gate.tier, "pro")) {
+      try {
+        const useAI = await getHealthMode('telegram_bot');
+        if (useAI) {
+          const aiData = await invokeFunction("token-ai-interpreter", { tokenMint: ca, reportData: holdersData });
+          if (aiData?.interpretation?.abbreviated_summary) {
+            msg += `\n🧠 *AI Assessment:*\n_${aiData.interpretation.abbreviated_summary.slice(0, 400)}_\n`;
+          }
+        }
+      } catch (_) {}
+    }
+    msg += TAGLINE;
+  }
+
+  await sendMessage(chatId, msg);
+}
+
+// ─── /dev CA — Developer Intel & Social Doxxing ───
+async function handleDev(chatId: number, telegramUserId: string, args: string) {
+  const ca = extractCA(args);
+  if (!ca) {
+    await sendMessage(chatId, `❌ Usage: \`/dev <token_address>\``);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "auth", "/dev");
+  if (!gate) return;
+
+  await sendMessage(chatId, `🏗 Looking up developer for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await logUsage(telegramUserId, "/dev", ca);
+
+  const data = await invokeFunction("oracle-unified-lookup", { input: ca });
+  if (!data) {
+    await sendMessage(chatId, `❌ Could not resolve developer for this token.`);
+    return;
+  }
+
+  const dev = data.developer || data.creator || null;
+  if (!dev) {
+    await sendMessage(chatId, `❌ No developer profile found for this token.`);
+    return;
+  }
+
+  const isFullAccess = hasTier(gate.tier, "x_subscriber");
+
+  let msg = `🏗 *Dev Intel Report*\n\n`;
+
+  // Dev wallet
+  if (dev.address) msg += `👤 Wallet: \`${dev.address.slice(0, 8)}...${dev.address.slice(-6)}\`\n`;
+
+  // Rep score with color
+  if (dev.reputation_score != null) {
+    const scoreEmoji = dev.reputation_score >= 60 ? '🟢' : dev.reputation_score >= 35 ? '🟡' : '🔴';
+    msg += `${scoreEmoji} Reputation: *${dev.reputation_score}/100*\n`;
+  }
+
+  // Classification
+  if (dev.classification) {
+    const classEmoji: Record<string, string> = {
+      'trusted': '✅', 'verified': '🔵', 'neutral': '⚪', 'suspicious': '🟡',
+      'scammer': '🔴', 'serial_rugger': '🚨', 'unknown': '❓',
+    };
+    msg += `🏷 Class: *${dev.classification}* ${classEmoji[dev.classification] || ''}\n`;
+  }
+
+  // Token history
+  if (dev.total_tokens != null) msg += `🪙 Tokens Created: *${dev.total_tokens}*\n`;
+  if (dev.rug_count != null && dev.rug_count > 0) msg += `🚩 Rug Pulls: *${dev.rug_count}*\n`;
+  if (dev.failed_tokens != null && dev.failed_tokens > 0) msg += `💀 Failed: *${dev.failed_tokens}*\n`;
+
+  // Performance stats
+  if (dev.avg_lifespan) msg += `⏱ Avg Token Lifespan: *${dev.avg_lifespan}*\n`;
+  if (dev.top_10_count != null || dev.tokens_in_top_10_count != null) {
+    const t10 = dev.top_10_count ?? dev.tokens_in_top_10_count ?? 0;
+    msg += `🏆 Hit Top 10: *${t10}* tokens\n`;
+  }
+  if (dev.integrity_score != null) msg += `🔒 Integrity: *${dev.integrity_score}/100*\n`;
+
+  // Social doxxing — the key differentiator
+  msg += `\n🔗 *Social Links*\n`;
+  let hasSocial = false;
+
+  if (data.social_links || data.mesh_connections?.length) {
+    const socials = data.social_links || {};
+    if (socials.twitter || socials.x) {
+      msg += `𝕏 Twitter: [${socials.twitter || socials.x}](https://x.com/${(socials.twitter || socials.x).replace('@', '')})\n`;
+      hasSocial = true;
+    }
+    if (socials.telegram) {
+      msg += `📱 Telegram: ${socials.telegram}\n`;
+      hasSocial = true;
+    }
+    if (socials.website) {
+      msg += `🌐 Website: ${socials.website}\n`;
+      hasSocial = true;
+    }
+
+    // Mesh connections for social doxxing
+    if (isFullAccess && data.mesh_connections?.length) {
+      const socialMesh = data.mesh_connections.filter((c: any) =>
+        c.relationship === 'same_kyc_root' || c.relationship === 'same_team' ||
+        c.source_type === 'twitter' || c.source_type === 'x_account' ||
+        c.linked_type === 'twitter' || c.linked_type === 'x_account'
+      );
+      if (socialMesh.length > 0) {
+        msg += `\n🕸 *Identity Mesh:*\n`;
+        for (const c of socialMesh.slice(0, 5)) {
+          const rel = c.relationship || c.type || 'linked';
+          const target = c.target || c.linked_id || '?';
+          msg += `• ${rel}: \`${typeof target === 'string' && target.length > 16 ? target.slice(0, 8) + '...' + target.slice(-6) : target}\`\n`;
+        }
+        hasSocial = true;
+      }
+    }
+  }
+
+  if (!hasSocial) {
+    msg += `_No social accounts linked to this developer._\n`;
+  }
+
+  // Funded-by chain (Pro+)
+  if (isFullAccess && data.mesh_connections?.length) {
+    const fundedBy = data.mesh_connections.filter((c: any) => c.relationship === 'funded_by');
+    if (fundedBy.length > 0) {
+      msg += `\n💰 *Funding Chain:*\n`;
+      for (const f of fundedBy.slice(0, 3)) {
+        const src = f.source_id || f.source || '?';
+        msg += `• Funded by: \`${typeof src === 'string' && src.length > 16 ? src.slice(0, 8) + '...' + src.slice(-6) : src}\`\n`;
+      }
+    }
+  }
+
+  if (!isFullAccess) {
+    msg += `\n_Upgrade to X Subscriber for full social mesh & funding chains._`;
+  }
+
+  // Token phase context
+  try {
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+    if (dexRes.ok) {
+      const dexJson = await dexRes.json();
+      const pair = dexJson?.pairs?.[0];
+      if (pair && dev.reputation_score != null) {
+        const pr = detectTokenPhase({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null, dexId: pair.dexId || null });
+        msg += `\n💡 _${contextualizeDevRep(dev.reputation_score, pr.phase)}_\n`;
+      }
+    }
+  } catch (_) {}
+
+  msg += TAGLINE;
+  await sendMessage(chatId, msg);
+}
+
+// ─── /insiders CA — Insider Cluster & Bundling Pre-Check ───
+async function handleInsiders(chatId: number, telegramUserId: string, args: string) {
+  const ca = extractCA(args);
+  if (!ca) {
+    await sendMessage(chatId, `❌ Usage: \`/insiders <token_address>\``);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "x_subscriber", "/insiders");
+  if (!gate) return;
+
+  await sendMessage(chatId, `🕵️ Scanning insider clusters for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await logUsage(telegramUserId, "/insiders", ca);
+
+  // Check token maturity first — skip detailed insider analysis for mature tokens
+  let tokenAge: number | null = null;
+  let tokenMcap: number | null = null;
+  let tokenSymbol: string | null = null;
+  let tokenName: string | null = null;
+
+  try {
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+    if (dexRes.ok) {
+      const dexJson = await dexRes.json();
+      const pair = dexJson?.pairs?.[0];
+      if (pair) {
+        if (pair.pairCreatedAt) {
+          tokenAge = (Date.now() - new Date(pair.pairCreatedAt).getTime()) / (1000 * 60 * 60); // hours
+        }
+        tokenMcap = pair.marketCap || pair.fdv || null;
+        tokenSymbol = pair.baseToken?.symbol || null;
+        tokenName = pair.baseToken?.name || null;
+      }
+    }
+  } catch (_) {}
+
+  // Maturity skip: if token is >72h old AND mcap >500k, insider bundling data is stale
+  if (tokenAge != null && tokenAge > 72 && tokenMcap != null && tokenMcap > 500_000) {
+    await sendMessage(chatId,
+      `\`${ca}\`\n` +
+      `${tokenHeaderLine(tokenSymbol, tokenName, tokenMcap)}\n\n` +
+      `ℹ️ *Insider Pre-Check Skipped*\n\n` +
+      `This token is *${Math.floor(tokenAge / 24)}d old* with *${fmtMcap(tokenMcap)}* MCap.\n` +
+      `Early-stage insider bundling data is no longer actionable at this maturity.\n\n` +
+      `Use /holders for current distribution or /risk for overall assessment.` +
+      TAGLINE
+    );
+    return;
+  }
+
+  // Fetch holder data (includes insider/cluster analysis)
+  const holdersData = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+  if (!holdersData || holdersData.error) {
+    await sendMessage(chatId, `❌ Could not fetch insider data for this token.`);
+    return;
+  }
+
+  const symbol = tokenSymbol || holdersData?.symbol || holdersData?.tokenSymbol || null;
+  const name = tokenName || holdersData?.name || holdersData?.tokenName || null;
+  const mcap = tokenMcap || holdersData?.marketCap || null;
+
+  const insiderData = holdersData?.insiderData || {};
+  const clusters = insiderData.clusters || [];
+  const topInsiders = insiderData.topInsiders || [];
+  const bundledWallets = insiderData.bundledWallets || [];
+  const totalInsiderPct = insiderData.totalInsiderPercentage ?? 0;
+  const bundledPct = insiderData.bundledPercentage ?? 0;
+  const warnings = insiderData.warnings || [];
+
+  let msg = `\`${ca}\`\n` +
+    `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
+    `🕵️ *Insider Cluster Report*\n\n`;
+
+  if (!insiderData.hasInsiders && topInsiders.length === 0 && clusters.length === 0) {
+    msg += `✅ *No insider clusters detected.*\n` +
+      `No bundled wallets or coordinated buying patterns found.\n`;
+  } else {
+    // Summary stats
+    msg += `📊 Insider wallets: *${insiderData.insiderCount || topInsiders.length}*\n`;
+    msg += `📊 Total insider supply: *${totalInsiderPct.toFixed(1)}%*\n`;
+    if (bundledPct > 0) msg += `🔗 Bundled wallets: *${bundledWallets.length}* (${bundledPct.toFixed(1)}% supply)\n`;
+    if (clusters.length > 0) msg += `🕸 Wallet clusters: *${clusters.length}*\n`;
+    msg += `\n`;
+
+    // Risk assessment
+    if (bundledPct > 15 || totalInsiderPct > 30) {
+      msg += `🚨 *CABAL ALERT — High insider concentration*\n`;
+    } else if (bundledPct > 5 || totalInsiderPct > 15) {
+      msg += `🟡 *Moderate insider presence*\n`;
+    } else {
+      msg += `🟢 *Low insider footprint*\n`;
+    }
+    msg += `\n`;
+
+    // Top insiders
+    if (topInsiders.length > 0) {
+      msg += `*Top Insiders:*\n`;
+      for (const ins of topInsiders.slice(0, 5)) {
+        const walletShort = ins.wallet ? `${ins.wallet.slice(0, 6)}...${ins.wallet.slice(-4)}` : '?';
+        const typeTag = ins.insiderType ? ` [${ins.insiderType}]` : '';
+        msg += `• \`${walletShort}\` — ${ins.percentage.toFixed(2)}%${typeTag}\n`;
+      }
+      msg += `\n`;
+    }
+
+    // Cluster details (X Sub gets summary, Pro gets expansion)
+    if (clusters.length > 0 && hasTier(gate.tier, "pro")) {
+      msg += `*Cluster Details:*\n`;
+      for (const cl of clusters.slice(0, 3)) {
+        msg += `🔗 Cluster: ${cl.wallets?.length || 0} wallets, ${(cl.totalPercentage || 0).toFixed(1)}% supply [${cl.clusterType || 'connected'}]\n`;
+      }
+      msg += `\n`;
+    }
+
+    // Warnings
+    if (warnings.length > 0) {
+      msg += `*⚠️ Warnings:*\n`;
+      for (const w of warnings) {
+        msg += `• ${w}\n`;
+      }
+    }
+  }
+
+  msg += TAGLINE;
+  await sendMessage(chatId, msg);
+}
+
+// ─── /concentration CA — Detailed Holder Percentage Breakdown ───
+async function handleConcentration(chatId: number, telegramUserId: string, args: string) {
+  const ca = extractCA(args);
+  if (!ca) {
+    await sendMessage(chatId, `❌ Usage: \`/concentration <token_address>\``);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "auth", "/concentration");
+  if (!gate) return;
+
+  await sendMessage(chatId, `📊 Analyzing concentration for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await logUsage(telegramUserId, "/concentration", ca);
+
+  const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+  if (!data || data.error) {
+    await sendMessage(chatId, `❌ Could not fetch holder data.`);
+    return;
+  }
+
+  const symbol = data.symbol || data.tokenSymbol || null;
+  const name = data.name || data.tokenName || null;
+  const mcap = data.marketCap || null;
+  const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
+  const dist = data.distributionStats || {};
+
+  let msg = `\`${ca}\`\n` +
+    `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
+    `📊 *Concentration Breakdown*\n\n` +
+    `👥 Total Holders: *${totalHolders}*\n\n`;
+
+  // Percentage tiers
+  const pctLevels = [
+    { label: 'Top 1 holder', key: 'top1Percentage' },
+    { label: 'Top 5 holders', key: 'top5Percentage' },
+    { label: 'Top 10 holders', key: 'top10HoldersPct' },
+    { label: 'Top 10%', key: 'top10Percentage' },
+    { label: 'Top 25%', key: 'top25Percentage' },
+    { label: 'Top 50%', key: 'top50Percentage' },
+  ];
+
+  msg += `*Supply Distribution:*\n`;
+  for (const level of pctLevels) {
+    const val = dist[level.key];
+    if (val != null) {
+      msg += `${bar(val)} ${level.label}: *${val.toFixed(1)}%*\n`;
+    }
+  }
+
+  // Simple tiers (whale/serious/retail/dust)
+  const tiers = data.simpleTiers;
+  if (tiers && typeof tiers === 'object') {
+    msg += `\n*Holder Categories:*\n`;
+    const tierOrder = ['whales', 'serious', 'retail', 'dust'];
+    const tierEmojis: Record<string, string> = { whales: '🐋', serious: '💼', retail: '👤', dust: '🌫' };
+    const tierLabels: Record<string, string> = { whales: 'Whales (>2%)', serious: 'Serious (0.5-2%)', retail: 'Retail (0.01-0.5%)', dust: 'Dust (<0.01%)' };
+    for (const key of tierOrder) {
+      const t = tiers[key];
+      if (t) {
+        const pct = t.percentage ?? 0;
+        const count = t.count ?? 0;
+        msg += `${tierEmojis[key] || '•'} ${bar(pct)} ${tierLabels[key] || key}: *${pct.toFixed(1)}%* (${count})\n`;
+      }
+    }
+  }
+
+  // LP
+  if (data.lpPercentageOfSupply != null) {
+    msg += `\n🔒 LP: *${data.lpPercentageOfSupply.toFixed(1)}%* of supply\n`;
+  }
+  if (data.circulatingSupply?.percentage != null) {
+    msg += `♻️ Circulating: *${data.circulatingSupply.percentage.toFixed(1)}%*\n`;
+  }
+
+  // Health context
+  const health = data.healthScore?.score ?? data.stabilityScore ?? null;
+  if (health != null) {
+    const hEmoji = health >= 60 ? '🟢' : health >= 40 ? '🟡' : '🔴';
+    msg += `\n${hEmoji} Health Score: *${health}/100*\n`;
+  }
+
+  msg += TAGLINE;
+  await sendMessage(chatId, msg);
+}
+
+// ─── /compare CA CA — Side-by-Side Token Comparison ───
+async function handleCompare(chatId: number, telegramUserId: string, args: string) {
+  const parts = args.trim().split(/\s+/);
+  if (parts.length < 2 || parts[0].length < 30 || parts[1].length < 30) {
+    await sendMessage(chatId, `❌ Usage: \`/compare <CA1> <CA2>\`\n\nCompare two tokens side by side.`);
+    return;
+  }
+
+  const gate = await gateCheck(chatId, telegramUserId, "x_subscriber", "/compare");
+  if (!gate) return;
+
+  const ca1 = parts[0];
+  const ca2 = parts[1];
+
+  await sendMessage(chatId, `⚖️ Comparing tokens...\n\`${ca1.slice(0, 8)}...${ca1.slice(-6)}\` vs \`${ca2.slice(0, 8)}...${ca2.slice(-6)}\``);
+  await logUsage(telegramUserId, "/compare", `${ca1}|${ca2}`);
+
+  // Parallel fetch for both tokens — holders + momentum only (no oracle to save resources)
+  const [h1, h2, m1, m2] = await Promise.all([
+    invokeFunction("bagless-holders-report", { tokenMint: ca1 }),
+    invokeFunction("bagless-holders-report", { tokenMint: ca2 }),
+    invokeFunction("token-momentum-analyzer", { tokenMint: ca1 }),
+    invokeFunction("token-momentum-analyzer", { tokenMint: ca2 }),
+  ]);
+
+  if (!h1 && !m1) {
+    await sendMessage(chatId, `❌ Could not fetch data for token 1.`);
+    return;
+  }
+  if (!h2 && !m2) {
+    await sendMessage(chatId, `❌ Could not fetch data for token 2.`);
+    return;
+  }
+
+  const sym1 = h1?.symbol || h1?.tokenSymbol || ca1.slice(0, 6);
+  const sym2 = h2?.symbol || h2?.tokenSymbol || ca2.slice(0, 6);
+  const health1 = h1?.healthScore?.score ?? h1?.stabilityScore ?? '?';
+  const health2 = h2?.healthScore?.score ?? h2?.stabilityScore ?? '?';
+  const mom1 = m1?.momentum_score ?? '?';
+  const mom2 = m2?.momentum_score ?? '?';
+  const holders1 = h1?.realHolders ?? h1?.totalHolders ?? '?';
+  const holders2 = h2?.realHolders ?? h2?.totalHolders ?? '?';
+  const mcap1 = h1?.marketCap || m1?.metrics?.market_cap || null;
+  const mcap2 = h2?.marketCap || m2?.metrics?.market_cap || null;
+  const top10_1 = h1?.distributionStats?.top10Percentage ?? null;
+  const top10_2 = h2?.distributionStats?.top10Percentage ?? null;
+
+  const pad = (s: string, n: number) => s.padEnd(n).slice(0, n);
+
+  let msg = `⚖️ *Token Comparison*\n\n`;
+  msg += `\`${pad('', 12)} ${pad('$' + sym1, 10)} ${pad('$' + sym2, 10)}\`\n`;
+  msg += `\`${pad('Health', 12)} ${pad(String(health1), 10)} ${pad(String(health2), 10)}\`\n`;
+  msg += `\`${pad('Momentum', 12)} ${pad(String(mom1), 10)} ${pad(String(mom2), 10)}\`\n`;
+  msg += `\`${pad('Holders', 12)} ${pad(String(holders1), 10)} ${pad(String(holders2), 10)}\`\n`;
+  if (mcap1 || mcap2) {
+    msg += `\`${pad('MCap', 12)} ${pad(fmtMcap(mcap1) || '?', 10)} ${pad(fmtMcap(mcap2) || '?', 10)}\`\n`;
+  }
+  if (top10_1 != null || top10_2 != null) {
+    msg += `\`${pad('Top 10%', 12)} ${pad(top10_1 != null ? top10_1.toFixed(1) + '%' : '?', 10)} ${pad(top10_2 != null ? top10_2.toFixed(1) + '%' : '?', 10)}\`\n`;
+  }
+
+  // Quick winner call
+  const score1 = (typeof health1 === 'number' ? health1 : 0) + (typeof mom1 === 'number' ? mom1 : 0);
+  const score2 = (typeof health2 === 'number' ? health2 : 0) + (typeof mom2 === 'number' ? mom2 : 0);
+  if (score1 > score2 + 10) {
+    msg += `\n📍 *$${sym1}* has stronger combined signals.`;
+  } else if (score2 > score1 + 10) {
+    msg += `\n📍 *$${sym2}* has stronger combined signals.`;
+  } else {
+    msg += `\n📍 Both tokens show *similar strength*.`;
+  }
+
+  msg += TAGLINE;
+  await sendMessage(chatId, msg);
 }
 
 // ─── /holders CA ───
@@ -410,7 +1006,6 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   await sendMessage(chatId, `🔍 Analyzing holders for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/holders", ca);
 
-  // Fetch fresh holder data from the main analysis function (same as the web app)
   const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
   if (!data || data.error) {
     await sendMessage(chatId, `❌ Could not fetch holder data. Token may not be indexed yet.\n\n_Error: ${data?.error || 'No response from analysis engine'}_`);
@@ -419,24 +1014,17 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
 
   const isLite = !hasTier(gate.tier, "x_subscriber");
 
-  // Extract key metrics from bagless-holders-report response
   const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
   const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
   const healthPhase = data.healthScore?.phase || null;
   const phaseLabel = healthPhase ? ` (${healthPhase.replace('_', ' ')})` : '';
   const top10Pct = data.distributionStats?.top10Percentage ?? "?";
-  const tokenSymbol = data.symbol || data.tokenSymbol || null;
-  const tokenName = data.name || data.tokenName || null;
+  const symbol = data.symbol || data.tokenSymbol || null;
+  const name = data.name || data.tokenName || null;
   const mcap = data.marketCap || null;
 
-  const symbol = tokenSymbol || null;
-  const name = tokenName || null;
-  const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
-  const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
-
-  // Header with token info
   let header = `\`${ca}\`\n` +
-    `🪙 *${tokenHeader}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}\n\n`;
+    `${tokenHeaderLine(symbol, name, mcap)}\n\n`;
 
   if (isLite) {
     await sendMessage(chatId,
@@ -445,12 +1033,12 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
       `👥 Holders: *${totalHolders}*\n` +
       `❤️ Health: *${healthScore}/100*${phaseLabel}\n` +
       `🏦 Top 10% hold: *${typeof top10Pct === 'number' ? top10Pct.toFixed(1) + '%' : top10Pct}*\n\n` +
-      `_Upgrade to X Subscriber for full breakdown._`
+      `_Upgrade to X Subscriber for full breakdown._` +
+      TAGLINE
     );
     return;
   }
 
-  // Full breakdown for X Sub+
   let msg = header;
   msg += `📊 *Holders Report*\n\n`;
   msg += `👥 Total: *${totalHolders}*\n`;
@@ -458,7 +1046,6 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   if (typeof top10Pct === 'number') msg += `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n`;
   msg += `\n`;
 
-  // Simple tier distribution from bagless-holders-report
   const tiers = data.simpleTiers;
   if (tiers && typeof tiers === 'object') {
     msg += `*Distribution:*\n`;
@@ -475,17 +1062,13 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
     }
   }
 
-  // LP info
   if (data.lpPercentageOfSupply != null) {
     msg += `\n🔒 LP: *${data.lpPercentageOfSupply.toFixed(1)}%* of supply\n`;
   }
-
-  // Circulating supply
   if (data.circulatingSupply?.percentage != null) {
     msg += `♻️ Circulating: *${data.circulatingSupply.percentage.toFixed(1)}%*\n`;
   }
 
-  // AI-enhanced health interpretation (if AI mode enabled)
   try {
     const useAI = await getHealthMode('telegram_bot');
     if (useAI) {
@@ -494,7 +1077,6 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
         const interp = aiData.interpretation;
         msg += `\n🧠 *AI Health Analysis*\n`;
         if (interp.lifecycle) msg += `📍 Stage: *${interp.lifecycle.stage}* (${interp.lifecycle.confidence})\n`;
-        // Use abbreviated_summary for group chats, full status_overview for DMs
         if (isGroupChat && interp.abbreviated_summary) {
           msg += `💬 ${interp.abbreviated_summary}\n`;
         } else if (interp.status_overview) {
@@ -504,9 +1086,9 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
     }
   } catch (aiErr) {
     console.error('[holders] AI health enhancement failed:', aiErr);
-    // Continue without AI — basic report already built
   }
 
+  msg += TAGLINE;
   await sendMessage(chatId, msg);
 }
 
@@ -545,7 +1127,6 @@ async function handleMomentum(chatId: number, telegramUserId: string, args: stri
   if (m.buy_sell_ratio_5m != null) msg += `⚖️ Buy/Sell: ${m.buy_sell_ratio_5m.toFixed(2)}x\n`;
   if (m.age_minutes != null) msg += `🕰 Age: ${m.age_minutes < 60 ? m.age_minutes + 'm' : Math.floor(m.age_minutes / 60) + 'h'}\n`;
 
-  // Signals
   if (data.signals?.length) {
     msg += `\n*Signals:*\n`;
     for (const s of data.signals.slice(0, 5)) {
@@ -554,10 +1135,11 @@ async function handleMomentum(chatId: number, telegramUserId: string, args: stri
     }
   }
 
+  msg += TAGLINE;
   await sendMessage(chatId, msg);
 }
 
-// ─── /verdict CA ───
+// ─── /verdict CA (RETAINED INTERNALLY — removed from UI/help) ───
 async function handleVerdict(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -571,7 +1153,6 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   await sendMessage(chatId, `⚡ Generating verdict for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/verdict", ca);
 
-  // Fetch momentum + holders + DexScreener metadata in parallel
   const [momentumData, holdersData, dexData] = await Promise.all([
     invokeFunction("token-momentum-analyzer", { tokenMint: ca }),
     invokeFunction("bagless-holders-report", { tokenMint: ca }),
@@ -586,15 +1167,13 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
   const verdictPhase = (holdersData?.healthScore?.phase || momentumData?.phase || null) as TokenPhase | null;
   const verdictPhaseLabel = verdictPhase ? ` (${verdictPhase.replace('_', ' ')})` : '';
 
-  // Extract token info — try multiple sources
-  const tokenSymbol = momentumData?.metrics?.symbol 
-    || holdersData?.symbol || holdersData?.token_symbol 
+  const tokenSymbol = momentumData?.metrics?.symbol
+    || holdersData?.symbol || holdersData?.token_symbol
     || dexData?.baseToken?.symbol || null;
-  const tokenName = momentumData?.metrics?.name 
-    || holdersData?.name || holdersData?.token_name 
+  const tokenName = momentumData?.metrics?.name
+    || holdersData?.name || holdersData?.token_name
     || dexData?.baseToken?.name || null;
 
-  // Format header: $TICKER (Name)
   let tokenHeader: string;
   if (tokenSymbol && tokenName) {
     tokenHeader = `$${tokenSymbol} (${tokenName})`;
@@ -620,13 +1199,9 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     return;
   }
 
-  // Full verdict with AI-driven synthesis
-  
-  // Get mcap from momentum data or DexScreener
   const mcap = momentumData?.metrics?.market_cap || (dexData?.marketCap) || (dexData?.fdv) || null;
-  const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
+  const mcapStr = fmtMcap(mcap);
 
-  // Build AI verdict prompt with all available data
   const aiVerdictPrompt = buildVerdictPrompt({
     tokenSymbol: tokenSymbol || 'Unknown',
     tokenName: tokenName || 'Unknown',
@@ -701,8 +1276,6 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     description = parsed.description || 'Unable to generate detailed assessment.';
     aiReasoning = parsed.reasoning || '';
 
-    // Phase safety caps — AI should respect these, but enforce as guardrail
-    const isEarlyPhase = verdictPhase === 'on_curve' || verdictPhase === 'newborn' || verdictPhase === 'early' || verdictPhase === 'adolescent';
     const isFreshPhase = verdictPhase === 'newborn' || verdictPhase === 'early' || verdictPhase === 'adolescent';
     if (verdictPhase === 'on_curve' && ['BUY DEEP LONG', 'BUY MEDIUM SHORT'].includes(verdict)) {
       verdict = 'WATCH CURVE — SMALL SHORT';
@@ -713,7 +1286,6 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     }
   } catch (aiErr) {
     console.error('[verdict] AI fallback:', aiErr);
-    // Fallback to rule-based logic
     const fb = fallbackVerdict(momentumScore, healthScore, verdictPhase);
     verdict = fb.verdict;
     emoji = fb.emoji;
@@ -770,7 +1342,6 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
     return;
   }
 
-  // Get token phase for contextualizing dev rep
   let oraclePhase: TokenPhase | null = null;
   try {
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
@@ -791,7 +1362,6 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
     if (dev.address) msg += `👤 Dev: \`${dev.address.slice(0, 8)}...${dev.address.slice(-6)}\`\n`;
     if (dev.reputation_score != null) {
       msg += `📊 Rep Score: *${dev.reputation_score}/100*\n`;
-      // Contextualize dev rep against token phase
       if (oraclePhase) {
         msg += `💡 _${contextualizeDevRep(dev.reputation_score, oraclePhase)}_\n`;
       }
@@ -819,6 +1389,7 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
     msg += `\n💡 ${data.summary.slice(0, 400)}`;
   }
 
+  msg += TAGLINE;
   await sendMessage(chatId, msg);
 }
 
@@ -827,10 +1398,6 @@ async function resolveWalletAddress(
   chatId: number,
   addr: string
 ): Promise<{ wallet: string; isToken: boolean; tokenLabel: string | null } | null> {
-  // Strategy: try to look up the address as a token mint first.
-  // Check our DB tables, then fall back to the token-creator-linker edge function.
-
-  // 1) Check developer_tokens table for a known creator
   const { data: devToken } = await supabase
     .from("developer_tokens")
     .select("creator_wallet, token_symbol, token_name")
@@ -847,7 +1414,6 @@ async function resolveWalletAddress(
     return { wallet: devToken.creator_wallet, isToken: true, tokenLabel: label };
   }
 
-  // 2) Check token_lifecycle table
   const { data: lifecycle } = await supabase
     .from("token_lifecycle")
     .select("creator_wallet, symbol, name")
@@ -864,7 +1430,6 @@ async function resolveWalletAddress(
     return { wallet: lifecycle.creator_wallet, isToken: true, tokenLabel: label };
   }
 
-  // 3) Try token-creator-linker edge function (on-chain resolution)
   const linkerData = await invokeFunction("token-creator-linker", { tokenMint: addr });
   if (linkerData?.creatorWallet) {
     const label = linkerData.symbol || linkerData.name || addr.slice(0, 8);
@@ -876,7 +1441,6 @@ async function resolveWalletAddress(
     return { wallet: linkerData.creatorWallet, isToken: true, tokenLabel: label };
   }
 
-  // 4) Not found as a token — treat as a wallet address
   return { wallet: addr, isToken: false, tokenLabel: null };
 }
 
@@ -893,7 +1457,6 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
 
   await sendMessage(chatId, `🔎 Resolving \`${addr.slice(0, 8)}...${addr.slice(-6)}\`...`);
 
-  // Resolve: if it's a token mint, find the creator wallet
   const resolved = await resolveWalletAddress(chatId, addr);
   if (!resolved) {
     await sendMessage(chatId, `❌ Could not resolve this address. Please check it's a valid Solana address.`);
@@ -935,10 +1498,11 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
     msg += `\n💡 ${data.summary.slice(0, 400)}`;
   }
 
+  msg += TAGLINE;
   await sendMessage(chatId, msg);
 }
 
-// ─── /ca CA — Quick snapshot: holder count, health, top 10%, MCap ───
+// ─── /ca CA — Quick snapshot ───
 async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -952,7 +1516,6 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   await sendMessage(chatId, `🔍 Quick snapshot for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/ca", ca);
 
-  // Fresh pull from bagless-holders-report (already includes DexScreener data)
   const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
 
   if (!data || data.error) {
@@ -968,21 +1531,20 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const symbol = data.symbol || data.tokenSymbol || null;
   const name = data.name || data.tokenName || null;
   const mcap = data.marketCap || null;
-  const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
-  const mcapStr = mcap ? (mcap >= 1_000_000 ? `$${(mcap / 1_000_000).toFixed(2)}M` : `$${(mcap / 1000).toFixed(1)}K`) : null;
 
   await sendMessage(chatId,
     `\`${ca}\`\n` +
-    `🪙 *${tokenHeader}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}\n\n` +
+    `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
     `📊 *Quick Snapshot*\n\n` +
     `👥 Holders: *${totalHolders}*\n` +
     `❤️ Health: *${healthScore}/100*${phaseLabel}\n` +
     `${top10Pct != null ? `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n` : ''}` +
-    `\n_Use /holders for full breakdown or /ai for AI analysis._`
+    `\n_Use /holders for full breakdown or /ai for AI analysis._` +
+    TAGLINE
   );
 }
 
-// ─── /quick (/q) CA — Fastest stats: holder count, health, top 10% ───
+// ─── /quick (/q) CA ───
 async function handleQuick(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -996,7 +1558,6 @@ async function handleQuick(chatId: number, telegramUserId: string, args: string)
   await sendMessage(chatId, `⚡ Quick lookup for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/quick", ca);
 
-  // Fresh pull — minimal data needed
   const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
   if (!data || data.error) {
     await sendMessage(chatId, `❌ Could not fetch data for this token.`);
@@ -1014,11 +1575,12 @@ async function handleQuick(chatId: number, telegramUserId: string, args: string)
     `👥 Holders: *${holders}*\n` +
     `❤️ Health: *${health}/100*${qPhaseLabel}\n` +
     `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
-    `\n_Use /holders for full breakdown or /ai for AI analysis._`
+    `\n_Use /holders for full breakdown or /ai for AI analysis._` +
+    TAGLINE
   );
 }
 
-// ─── /ai CA — AI narrative summary only ───
+// ─── /ai CA — AI narrative summary ───
 async function handleAI(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -1032,18 +1594,16 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
   await sendMessage(chatId, `🤖 Generating AI analysis for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/ai", ca);
 
-  // Step 1: Fresh holder data pull
   const reportData = await invokeFunction("bagless-holders-report", { tokenMint: ca });
   if (!reportData || reportData.error) {
     await sendMessage(chatId, `❌ Could not fetch holder data for AI analysis.`);
     return;
   }
 
-  // Step 2: Pass fresh data to AI interpreter
-  const data = await invokeFunction("token-ai-interpreter", { 
-    tokenMint: ca, 
+  const data = await invokeFunction("token-ai-interpreter", {
+    tokenMint: ca,
     reportData: reportData,
-    forceRefresh: true 
+    forceRefresh: true,
   });
 
   if (!data) {
@@ -1051,7 +1611,6 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
     return;
   }
 
-  // Get token metadata for header
   let symbol = reportData.symbol || reportData.tokenSymbol || null;
   let name = reportData.name || reportData.tokenName || null;
   if (!symbol) {
@@ -1065,9 +1624,9 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
       }
     } catch (_) {}
   }
-  const tokenHeader = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const thdr = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
 
-  let msg = `\`${ca}\`\n🪙 *${tokenHeader}*\n\n🤖 *AI Analysis*\n\n`;
+  let msg = `\`${ca}\`\n🪙 *${thdr}*\n\n🤖 *AI Analysis*\n\n`;
 
   if (data.interpretation?.status_overview) {
     msg += `${data.interpretation.status_overview}\n\n`;
@@ -1092,6 +1651,7 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
     }
   }
 
+  msg += TAGLINE;
   await sendMessage(chatId, msg);
 }
 
@@ -1107,8 +1667,52 @@ async function handleAlerts(chatId: number, telegramUserId: string) {
     `• Set price alerts for specific tokens\n` +
     `• Get notified on whale movements\n` +
     `• Receive daily digest reports\n\n` +
-    `For now, you receive tier-based broadcasts automatically.`
+    `For now, you receive tier-based broadcasts automatically.` +
+    TAGLINE
   );
+}
+
+// ─── Group Chat Auto-Scan: detect pasted CAs and fire mini /risk ───
+async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: string) {
+  // Check if this group has an activated (paid) installation
+  const activated = await isGroupActivated(chatId);
+  if (!activated) return; // silently ignore unactivated groups
+
+  // 3-second delay — let other bots (Phanes, BubbleMaps, etc.) reply first
+  await new Promise(resolve => setTimeout(resolve, 3000));
+
+  // Fire a minimalist risk snippet (no gate check — this is a passive feature for activated groups)
+  await logUsage(telegramUserId, "/autoscan", ca);
+
+  const holdersData = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+  if (!holdersData || holdersData.error) return; // silently fail
+
+  const symbol = holdersData?.symbol || holdersData?.tokenSymbol || null;
+  const name = holdersData?.name || holdersData?.tokenName || null;
+  const health = holdersData?.healthScore?.score ?? holdersData?.stabilityScore ?? null;
+  const top10 = holdersData?.distributionStats?.top10Percentage ?? null;
+  const mcap = holdersData?.marketCap || null;
+  const holders = holdersData?.realHolders ?? holdersData?.totalHolders ?? null;
+
+  // Determine quick risk signal
+  let riskEmoji = '🟢';
+  let riskLabel = 'STABLE';
+  if (health != null) {
+    if (health < 30) { riskEmoji = '🔴'; riskLabel = 'HIGH RISK'; }
+    else if (health < 50) { riskEmoji = '🟡'; riskLabel = 'MODERATE'; }
+  }
+
+  const tokenLabel = symbol ? `$${symbol}` : ca.slice(0, 8) + '...';
+
+  const msg = `🔍 *${tokenLabel}* ${riskEmoji} ${riskLabel}\n` +
+    `${health != null ? `❤️ ${health}/100` : ''}` +
+    `${holders ? ` · 👥 ${holders}` : ''}` +
+    `${top10 != null ? ` · 🏦 ${top10.toFixed(0)}%` : ''}` +
+    `${mcap ? ` · 💰 ${fmtMcap(mcap)}` : ''}\n` +
+    `→ /risk \`${ca}\` for full report` +
+    TAGLINE;
+
+  await sendMessage(chatId, msg);
 }
 
 // ════════════════════════════════════════
@@ -1147,7 +1751,7 @@ serve(async (req) => {
     }
 
     const chatId = message.chat.id;
-    const chatType = message.chat.type; // 'private', 'group', or 'supergroup'
+    const chatType = message.chat.type;
     const isGroupChat = chatType === 'group' || chatType === 'supergroup';
     const telegramUserId = String(message.from.id);
     const username = message.from.username || null;
@@ -1170,6 +1774,25 @@ serve(async (req) => {
       case "/help":
         await handleHelp(chatId, telegramUserId);
         break;
+      case "/risk":
+      case "/r":
+        await handleRisk(chatId, telegramUserId, args, isGroupChat);
+        break;
+      case "/dev":
+      case "/d":
+        await handleDev(chatId, telegramUserId, args);
+        break;
+      case "/insiders":
+      case "/i":
+        await handleInsiders(chatId, telegramUserId, args);
+        break;
+      case "/concentration":
+        await handleConcentration(chatId, telegramUserId, args);
+        break;
+      case "/compare":
+      case "/cmp":
+        await handleCompare(chatId, telegramUserId, args);
+        break;
       case "/holders":
         await handleHolders(chatId, telegramUserId, args, isGroupChat);
         break;
@@ -1187,10 +1810,6 @@ serve(async (req) => {
       case "/m":
         await handleMomentum(chatId, telegramUserId, args);
         break;
-      case "/verdict":
-      case "/v":
-        await handleVerdict(chatId, telegramUserId, args);
-        break;
       case "/oracle":
       case "/o":
         await handleOracle(chatId, telegramUserId, args);
@@ -1206,6 +1825,13 @@ serve(async (req) => {
         // Auto-detect registration codes
         if (/^BF-[A-Z0-9]{6}$/i.test(text)) {
           await handleRegister(chatId, telegramUserId, username, text);
+        }
+        // Auto-detect Solana CAs in group chats (passive scan with 3s delay)
+        else if (isGroupChat) {
+          const detectedCA = looksLikeSolanaCA(text);
+          if (detectedCA) {
+            await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
+          }
         }
         break;
     }
