@@ -155,31 +155,6 @@ const COMMANDS: BotCommand[] = [
     dmBehavior: 'Full wallet behavioral analysis',
     groupBehavior: 'Redirect to DM — sensitive data',
   },
-  // PROPOSED GROUP+ COMMANDS
-  {
-    command: '/price', aliases: ['/p'], description: 'Quick price + mcap check', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'anyone',
-    access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Price, mcap, 24h change',
-    groupBehavior: 'Same — safe for groups. Anyone can use.',
-    notes: '🆕 PROPOSED — Great group freebie. Pulls from DexScreener. No deep intel leaked.',
-  },
-  {
-    command: '/check', aliases: ['/c'], description: 'Quick safety check (rug score)', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'user',
-    access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Safety score: LP locked?, mint authority?, freeze authority?',
-    groupBehavior: 'Same compact format',
-    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis.',
-  },
-  {
-    command: '/top', aliases: [], description: 'Trending tokens right now', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'user',
-    access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Top 5 trending by momentum',
-    groupBehavior: 'Top 3 tickers only — teaser',
-    notes: '🆕 PROPOSED — Group engagement driver.',
-  },
   // ─── DM-ONLY ADMIN / CHANNEL MANAGEMENT COMMANDS ───
   {
     command: '/add', aliases: [], description: 'Add bot to a channel/group', category: 'admin',
