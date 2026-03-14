@@ -536,7 +536,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${check("auth")} /add — Add bot to your channel/group\n` +
     `${check("auth")} /channels (/ch) — List & manage installations\n` +
     `${check("auth")} /config — Configure channel settings\n` +
-    `  _Usage: /config delay 3000 · verbose on · admin\\_only on · dev\\_alerts on_\n` +
+    `  _Usage: /config delay 3000 · verbose on · admin-only on · dev-alerts on_\n` +
     `${check("auth")} /payment (/pay) — View/generate payment wallet\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
