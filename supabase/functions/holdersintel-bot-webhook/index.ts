@@ -764,7 +764,7 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
   await sendMessage(chatId, `🔮 Looking up developer reputation for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/oracle", ca);
 
-  const data = await invokeFunction("oracle-unified-lookup", { tokenMint: ca });
+  const data = await invokeFunction("oracle-unified-lookup", { input: ca });
   if (!data) {
     await sendMessage(chatId, `❌ Could not fetch developer data. Token may not be tracked yet.`);
     return;
@@ -903,7 +903,7 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
   const walletAddr = resolved.wallet;
   await logUsage(telegramUserId, "/wallet", addr);
 
-  const data = await invokeFunction("wallet-behavior-analysis", { walletAddress: walletAddr });
+  const data = await invokeFunction("wallet-behavior-analysis", { wallet_address: walletAddr });
   if (!data) {
     await sendMessage(chatId, `❌ Could not analyze wallet. It may have no recent activity.`);
     return;
