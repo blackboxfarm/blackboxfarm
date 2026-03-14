@@ -433,7 +433,9 @@ export function TelegramCommandsPlanner() {
             </CardContent>
           </Card>
 
-
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Command × Context × Access Level</CardTitle>
               <p className="text-xs text-muted-foreground">
                 👁️ auto = passive detection | 👤 user = any member | 🛡️ admin = installer only | 📩 dm-only = not available in groups
               </p>
