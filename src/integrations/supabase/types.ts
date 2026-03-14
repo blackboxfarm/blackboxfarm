@@ -12142,7 +12142,7 @@ export type Database = {
           id: string
           lot_id: string
           owner_pubkey: string
-          owner_secret: string
+          owner_secret_encrypted: string
           quantity_raw: number
           quantity_ui: number
           session_id: string | null
@@ -12157,7 +12157,7 @@ export type Database = {
           id?: string
           lot_id: string
           owner_pubkey: string
-          owner_secret: string
+          owner_secret_encrypted: string
           quantity_raw: number
           quantity_ui: number
           session_id?: string | null
@@ -12172,7 +12172,7 @@ export type Database = {
           id?: string
           lot_id?: string
           owner_pubkey?: string
-          owner_secret?: string
+          owner_secret_encrypted?: string
           quantity_raw?: number
           quantity_ui?: number
           session_id?: string | null
