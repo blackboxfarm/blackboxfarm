@@ -1888,86 +1888,148 @@ serve(async (req) => {
     const chatType = message.chat.type;
     const isGroupChat = chatType === 'group' || chatType === 'supergroup';
     const telegramUserId = String(message.from.id);
+    const dmChatId = Number(telegramUserId); // user's DM chat ID = their telegram user ID
     const username = message.from.username || null;
     const text = message.text.trim();
+    const messageId = message.message_id;
 
     const [rawCommand, ...argParts] = text.split(/\s+/);
     const command = rawCommand.toLowerCase().replace(/@\w+$/, "");
     const args = argParts.join(" ");
 
-    switch (command) {
-      case "/start":
-        await handleStart(chatId, telegramUserId, username);
-        break;
-      case "/register":
-        await handleRegister(chatId, telegramUserId, username, args);
-        break;
-      case "/status":
-        await handleStatus(chatId, telegramUserId);
-        break;
-      case "/help":
-        await handleHelp(chatId, telegramUserId);
-        break;
-      case "/risk":
-      case "/r":
-        await handleRisk(chatId, telegramUserId, args, isGroupChat);
-        break;
-      case "/dev":
-      case "/d":
-        await handleDev(chatId, telegramUserId, args);
-        break;
-      case "/insiders":
-      case "/i":
-        await handleInsiders(chatId, telegramUserId, args);
-        break;
-      case "/concentration":
-        await handleConcentration(chatId, telegramUserId, args);
-        break;
-      case "/compare":
-      case "/cmp":
-        await handleCompare(chatId, telegramUserId, args);
-        break;
-      case "/holders":
-        await handleHolders(chatId, telegramUserId, args, isGroupChat);
-        break;
-      case "/ca":
-        await handleCA(chatId, telegramUserId, args);
-        break;
-      case "/quick":
-      case "/q":
-        await handleQuick(chatId, telegramUserId, args);
-        break;
-      case "/ai":
-        await handleAI(chatId, telegramUserId, args);
-        break;
-      case "/momentum":
-      case "/m":
-        await handleMomentum(chatId, telegramUserId, args);
-        break;
-      case "/oracle":
-      case "/o":
-        await handleOracle(chatId, telegramUserId, args);
-        break;
-      case "/wallet":
-      case "/w":
-        await handleWallet(chatId, telegramUserId, args);
-        break;
-      case "/alerts":
-        await handleAlerts(chatId, telegramUserId);
-        break;
-      default:
-        // Auto-detect registration codes
-        if (/^BF-[A-Z0-9]{6}$/i.test(text)) {
-          await handleRegister(chatId, telegramUserId, username, text);
+    // Commands that are allowed to reply publicly in groups
+    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/risk', '/r', '/quick', '/q'];
+
+    // If in a group chat and command is NOT in the public list, redirect to DM
+    if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
+      // Send "check your DMs" in the group
+      const cmdLabel = command.replace('/', '').toUpperCase();
+      await groupDMRedirect(chatId, telegramUserId, cmdLabel, messageId);
+      // Execute the command but send output to the user's DM
+      try {
+        switch (command) {
+          case "/dev":
+          case "/d":
+            await handleDev(dmChatId, telegramUserId, args);
+            break;
+          case "/insiders":
+          case "/i":
+            await handleInsiders(dmChatId, telegramUserId, args);
+            break;
+          case "/concentration":
+            await handleConcentration(dmChatId, telegramUserId, args);
+            break;
+          case "/compare":
+          case "/cmp":
+            await handleCompare(dmChatId, telegramUserId, args);
+            break;
+          case "/holders":
+            await handleHolders(dmChatId, telegramUserId, args, false);
+            break;
+          case "/ca":
+            await handleCA(dmChatId, telegramUserId, args);
+            break;
+          case "/ai":
+            await handleAI(dmChatId, telegramUserId, args);
+            break;
+          case "/momentum":
+          case "/m":
+            await handleMomentum(dmChatId, telegramUserId, args);
+            break;
+          case "/oracle":
+          case "/o":
+            await handleOracle(dmChatId, telegramUserId, args);
+            break;
+          case "/wallet":
+          case "/w":
+            await handleWallet(dmChatId, telegramUserId, args);
+            break;
+          case "/alerts":
+            await handleAlerts(dmChatId, telegramUserId);
+            break;
+          default:
+            break;
         }
-        // Auto-detect Solana CAs in group chats (passive scan with 3s delay)
-        else if (isGroupChat) {
-          const detectedCA = looksLikeSolanaCA(text);
-          if (detectedCA) {
-            await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
+      } catch (dmErr) {
+        console.error("[bot] DM redirect failed:", dmErr);
+        await sendMessage(chatId, `⚠️ Couldn't send DM. Make sure you've started a private chat with me first by messaging @holdersintel\\_bot directly.`, "Markdown", messageId);
+      }
+    } else {
+      // DM context or public-allowed group commands
+      switch (command) {
+        case "/start":
+          await handleStart(chatId, telegramUserId, username);
+          break;
+        case "/register":
+          await handleRegister(chatId, telegramUserId, username, args);
+          break;
+        case "/status":
+          await handleStatus(chatId, telegramUserId);
+          break;
+        case "/help":
+          await handleHelp(chatId, telegramUserId);
+          break;
+        case "/risk":
+        case "/r":
+          await handleRisk(chatId, telegramUserId, args, isGroupChat);
+          break;
+        case "/dev":
+        case "/d":
+          await handleDev(chatId, telegramUserId, args);
+          break;
+        case "/insiders":
+        case "/i":
+          await handleInsiders(chatId, telegramUserId, args);
+          break;
+        case "/concentration":
+          await handleConcentration(chatId, telegramUserId, args);
+          break;
+        case "/compare":
+        case "/cmp":
+          await handleCompare(chatId, telegramUserId, args);
+          break;
+        case "/holders":
+          await handleHolders(chatId, telegramUserId, args, isGroupChat);
+          break;
+        case "/ca":
+          await handleCA(chatId, telegramUserId, args);
+          break;
+        case "/quick":
+        case "/q":
+          await handleQuick(chatId, telegramUserId, args);
+          break;
+        case "/ai":
+          await handleAI(chatId, telegramUserId, args);
+          break;
+        case "/momentum":
+        case "/m":
+          await handleMomentum(chatId, telegramUserId, args);
+          break;
+        case "/oracle":
+        case "/o":
+          await handleOracle(chatId, telegramUserId, args);
+          break;
+        case "/wallet":
+        case "/w":
+          await handleWallet(chatId, telegramUserId, args);
+          break;
+        case "/alerts":
+          await handleAlerts(chatId, telegramUserId);
+          break;
+        default:
+          // Auto-detect registration codes
+          if (/^BF-[A-Z0-9]{6}$/i.test(text)) {
+            await handleRegister(chatId, telegramUserId, username, text);
           }
-        }
-        break;
+          // Auto-detect Solana CAs in group chats (passive scan with 3s delay)
+          else if (isGroupChat) {
+            const detectedCA = looksLikeSolanaCA(text);
+            if (detectedCA) {
+              await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
+            }
+          }
+          break;
+      }
     }
   } catch (err) {
     console.error("[bot] Webhook error:", err);
