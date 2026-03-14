@@ -2594,6 +2594,24 @@ serve(async (req) => {
           case "/alerts":
             await handleAlerts(dmChatId, telegramUserId, args, false);
             break;
+          case "/add":
+            await handleAdd(dmChatId, telegramUserId);
+            break;
+          case "/channels":
+          case "/ch":
+            await handleChannels(dmChatId, telegramUserId);
+            break;
+          case "/config":
+            await handleConfig(dmChatId, telegramUserId, args);
+            break;
+          case "/payment":
+          case "/pay":
+            if (args.trim().startsWith('verify')) {
+              await handlePaymentVerify(dmChatId, telegramUserId, args.replace(/^verify\s*/i, ''));
+            } else {
+              await handlePayment(dmChatId, telegramUserId, args);
+            }
+            break;
           default:
             break;
         }
