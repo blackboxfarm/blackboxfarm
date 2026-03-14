@@ -1581,6 +1581,10 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
     return;
   }
 
+  // wallet-behavior-analysis returns { profile, token_history }
+  const profile = data.profile || {};
+  const tokenHistory = data.token_history || [];
+
   let msg = `🔎 *Wallet Analysis*\n\n`;
   if (resolved.isToken) {
     msg += `🪙 Token: *${resolved.tokenLabel}*\n`;
@@ -1589,22 +1593,43 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
     msg += `📍 \`${walletAddr.slice(0, 8)}...${walletAddr.slice(-6)}\`\n\n`;
   }
 
-  if (data.classification) msg += `🏷 Type: *${data.classification}*\n`;
-  if (data.total_transactions != null) msg += `📊 Total Txns: *${data.total_transactions}*\n`;
-  if (data.win_rate != null) msg += `🎯 Win Rate: *${(data.win_rate * 100).toFixed(1)}%*\n`;
-  if (data.total_pnl != null) msg += `💰 PnL: *${data.total_pnl >= 0 ? '+' : ''}${data.total_pnl.toFixed(4)} SOL*\n`;
-  if (data.avg_hold_time) msg += `⏱ Avg Hold: *${data.avg_hold_time}*\n`;
-  if (data.tokens_traded != null) msg += `🪙 Tokens: *${data.tokens_traded}*\n`;
-
-  if (data.risk_flags?.length) {
-    msg += `\n🚩 *Risk Flags:*\n`;
-    for (const f of data.risk_flags.slice(0, 5)) {
-      msg += `• ${f}\n`;
-    }
+  // Smart money score
+  if (profile.smart_money_score != null) {
+    const smEmoji = profile.smart_money_score >= 65 ? '🟢' : profile.smart_money_score >= 40 ? '🟡' : '🔴';
+    msg += `${smEmoji} Smart Money Score: *${profile.smart_money_score}/100*\n`;
   }
 
-  if (data.summary) {
-    msg += `\n💡 ${data.summary.slice(0, 400)}`;
+  if (profile.total_tokens_traded != null) msg += `🪙 Tokens Traded: *${profile.total_tokens_traded}*\n`;
+  if (profile.early_entry_count != null && profile.early_entry_count > 0) msg += `🎯 Early Entries: *${profile.early_entry_count}*\n`;
+  if (profile.diamond_hands_count != null && profile.diamond_hands_count > 0) msg += `💎 Diamond Hands: *${profile.diamond_hands_count}*\n`;
+  if (profile.paper_hands_count != null && profile.paper_hands_count > 0) msg += `📄 Paper Hands: *${profile.paper_hands_count}*\n`;
+  if (profile.total_realized_pnl != null && profile.total_realized_pnl !== 0) {
+    msg += `💰 Realized PnL: *${profile.total_realized_pnl >= 0 ? '+' : ''}${profile.total_realized_pnl.toFixed(4)} SOL*\n`;
+  }
+
+  if (profile.last_analyzed_at) {
+    const analyzedAt = new Date(profile.last_analyzed_at);
+    const minutesAgo = Math.floor((Date.now() - analyzedAt.getTime()) / 60000);
+    msg += `\n🕐 Last analyzed: *${minutesAgo < 60 ? minutesAgo + 'm ago' : Math.floor(minutesAgo / 60) + 'h ago'}*\n`;
+  }
+
+  // Behavior classification based on scores
+  const score = profile.smart_money_score ?? 50;
+  let classification = 'Unknown';
+  if (score >= 75) classification = '🐋 Smart Money / Early Adopter';
+  else if (score >= 60) classification = '💼 Experienced Trader';
+  else if (score >= 45) classification = '👤 Average Trader';
+  else if (score >= 30) classification = '🎰 Speculative / Gambler';
+  else classification = '⚠️ High-Risk / Bot-like';
+  msg += `\n🏷 Classification: *${classification}*\n`;
+
+  // Token history context
+  if (tokenHistory.length > 0) {
+    msg += `\n📜 *Token Activity:*\n`;
+    for (const th of tokenHistory.slice(0, 5)) {
+      const mintShort = th.token_mint ? `${th.token_mint.slice(0, 6)}...` : '?';
+      msg += `• \`${mintShort}\` — Entry: ${th.entry_date ? new Date(th.entry_date).toLocaleDateString() : '?'}\n`;
+    }
   }
 
   msg += TAGLINE;
