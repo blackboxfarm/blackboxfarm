@@ -1538,15 +1538,16 @@ async function resolveWalletAddress(
     return { wallet: lifecycle.creator_wallet, isToken: true, tokenLabel: label };
   }
 
-  const linkerData = await invokeFunction("token-creator-linker", { tokenMint: addr });
-  if (linkerData?.creatorWallet) {
-    const label = linkerData.symbol || linkerData.name || addr.slice(0, 8);
+  const linkerData = await invokeFunction("token-creator-linker", { tokenMints: [addr] });
+  const linkerResult = linkerData?.results?.[0] || linkerData;
+  if (linkerResult?.creatorWallet) {
+    const label = linkerResult.symbol || linkerResult.name || addr.slice(0, 8);
     await sendMessage(chatId,
       `🔍 Resolved *token mint* on-chain (${label})\n` +
-      `🏗 Creator: \`${linkerData.creatorWallet.slice(0, 8)}...${linkerData.creatorWallet.slice(-6)}\`\n` +
+      `🏗 Creator: \`${linkerResult.creatorWallet.slice(0, 8)}...${linkerResult.creatorWallet.slice(-6)}\`\n` +
       `Proceeding with dev wallet analysis...`
     );
-    return { wallet: linkerData.creatorWallet, isToken: true, tokenLabel: label };
+    return { wallet: linkerResult.creatorWallet, isToken: true, tokenLabel: label };
   }
 
   return { wallet: addr, isToken: false, tokenLabel: null };
