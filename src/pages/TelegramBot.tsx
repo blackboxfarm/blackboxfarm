@@ -20,7 +20,11 @@ import {
   ChevronRight,
   Coins,
   Settings,
+  Monitor,
+  Smartphone,
+  Server,
 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 const commands = [
   {
@@ -335,6 +339,175 @@ export default function TelegramBot() {
                   <div className="text-2xl font-bold text-primary">0.25 SOL</div>
                   <p className="text-xs text-muted-foreground">No monthly fees</p>
                 </div>
+              </div>
+            </div>
+
+            {/* Anchor Buttons */}
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => document.getElementById('dm-management')?.scrollIntoView({ behavior: 'smooth' })}>
+                <Monitor className="h-3.5 w-3.5" />
+                DM-Only Channel Management
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => document.getElementById('dm-config-flow')?.scrollIntoView({ behavior: 'smooth' })}>
+                <Smartphone className="h-3.5 w-3.5" />
+                DM Config Flow
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => document.getElementById('channel-config-model')?.scrollIntoView({ behavior: 'smooth' })}>
+                <Server className="h-3.5 w-3.5" />
+                Channel Config Model
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ══════ DM-Only Channel Management ══════ */}
+      <section id="dm-management" className="mx-auto max-w-5xl px-4 pb-12 scroll-mt-20">
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              DM-Only Channel Management
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              All channel admin config happens in DM with the bot — never in public groups.
+              No admin commands are exposed in-channel. This keeps groups clean and prevents config leaks.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[
+              { cmd: '/add', desc: 'Add bot to a channel/group', detail: 'Guides subscriber through adding bot to a channel. Bot generates invite link or instructs user to add @holdersintel_bot as admin. Once added, bot detects the group and registers it in channel_installations.', note: 'DM only. Any registered user can install bot in channels.' },
+              { cmd: '/channels', aliases: '/ch', desc: 'List & manage installed channels', detail: 'Shows numbered list of all channels this user has the bot installed in, with status (✅ paid / ⏳ unpaid / 🚫 kicked). User taps a number to enter config mode for that channel.', note: 'DM only. Entry point for all per-channel config.' },
+              { cmd: '/config', desc: 'Configure selected channel settings', detail: 'After selecting a channel via /channels, shows interactive config menu with inline keyboard buttons: Delay (ms), Verbose On/Off, Admin-Only On/Off, Dev Alerts On/Off, Toggle Commands, Set Max Tier, Auto-CA On/Off. Each button updates admin_config and confirms.', note: 'DM only. Uses Telegram inline keyboard for interactive config.' },
+              { cmd: '/payment', aliases: '/pay', desc: 'View/generate SOL payment wallet', detail: 'Shows SOL wallet address for selected channel. If none exists, generates one. Displays: wallet address (copyable), required amount (0.25 SOL), current balance, payment status.', note: 'DM only. Wallet generated per channel_installations row.' },
+            ].map(item => (
+              <div key={item.cmd} className="bg-muted/30 rounded-lg p-4 border border-border/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <code className="text-sm font-bold text-primary">{item.cmd}</code>
+                  {item.aliases && <span className="text-xs text-muted-foreground">({item.aliases})</span>}
+                  <Badge variant="outline" className="text-[9px] ml-auto border-blue-500/30 text-blue-400">DM only</Badge>
+                </div>
+                <p className="text-xs font-medium text-foreground mb-1">{item.desc}</p>
+                <p className="text-xs text-muted-foreground">{item.detail}</p>
+                {item.note && <p className="text-[10px] text-muted-foreground/70 mt-1 italic">{item.note}</p>}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ══════ DM Config Flow ══════ */}
+      <section id="dm-config-flow" className="mx-auto max-w-5xl px-4 pb-12 scroll-mt-20">
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-primary" />
+              DM Config Flow (User Experience)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-muted-foreground">
+              <div className="space-y-3">
+                <div>
+                  <p className="font-semibold text-foreground mb-1">Step 1: /add</p>
+                  <div className="bg-muted/30 rounded p-2 text-[10px] space-y-1 border border-border/50">
+                    <p>User: <code className="text-primary">/add</code></p>
+                    <p>Bot: "Add me as admin to your channel/group, then send me the group name or forward a message from it."</p>
+                    <p>User: <em>adds bot to "Solana Alpha Chat"</em></p>
+                    <p>Bot: "✅ Detected! I'm now in <strong className="text-foreground">Solana Alpha Chat</strong> (ID: -100xxx). Use /channels to manage it."</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground mb-1">Step 2: /channels</p>
+                  <div className="bg-muted/30 rounded p-2 text-[10px] space-y-1 border border-border/50">
+                    <p>User: <code className="text-primary">/channels</code></p>
+                    <p>Bot:</p>
+                    <p className="pl-2">📡 Your Channels:</p>
+                    <p className="pl-2">1️⃣ Solana Alpha Chat — ⏳ Unpaid</p>
+                    <p className="pl-2">2️⃣ Degen Traders — ✅ Active</p>
+                    <p className="pl-2"><em>Tap a number to configure</em></p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="font-semibold text-foreground mb-1">Step 3: Select → /config</p>
+                  <div className="bg-muted/30 rounded p-2 text-[10px] space-y-1 border border-border/50">
+                    <p>User taps: <code className="text-primary">1</code></p>
+                    <p>Bot shows inline keyboard:</p>
+                    <p className="pl-2 font-mono">⚙️ Config: Solana Alpha Chat</p>
+                    <p className="pl-2 font-mono">[⏱ Delay: 0ms] [📝 Verbose: Off]</p>
+                    <p className="pl-2 font-mono">[🔒 Admin-Only: Off] [🚨 Dev Alerts: Off]</p>
+                    <p className="pl-2 font-mono">[📋 Toggle Commands] [📊 Max Tier: Auto]</p>
+                    <p className="pl-2 font-mono">[💳 Payment Status]</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground mb-1">Step 4: Inline Button Taps</p>
+                  <div className="bg-muted/30 rounded p-2 text-[10px] space-y-1 border border-border/50">
+                    <p>User taps <code className="text-primary">[⏱ Delay: 0ms]</code></p>
+                    <p>Bot: "Enter delay in ms (e.g. 3000):"</p>
+                    <p>User: <code className="text-primary">3000</code></p>
+                    <p>Bot: "✅ Delay set to 3000ms for Solana Alpha Chat"</p>
+                    <p className="italic mt-1">Returns to config menu</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ══════ Channel Config Model ══════ */}
+      <section id="channel-config-model" className="mx-auto max-w-5xl px-4 pb-16 scroll-mt-20">
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Server className="h-4 w-4 text-primary" />
+              Channel Installation & Config Model
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              One-time 0.25 SOL activation per channel. All management via DM — no admin commands in groups.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-muted/30 rounded-lg p-4 space-y-2 border border-border/50">
+                <h4 className="text-sm font-semibold text-foreground">💳 Activation Flow</h4>
+                <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                  <li>User creates website account & registers with bot via DM</li>
+                  <li>User runs <code className="text-foreground font-mono">/add</code> in DM</li>
+                  <li>Adds bot as admin to their channel/group</li>
+                  <li>Bot auto-detects and registers the installation</li>
+                  <li>User runs <code className="text-foreground font-mono">/channels</code> → selects channel</li>
+                  <li>Taps <code className="text-foreground font-mono">[💳 Payment]</code> → gets SOL wallet</li>
+                  <li>Sends 0.25 SOL → taps "Verify Payment"</li>
+                  <li>Bot activates in that channel ✅</li>
+                </ol>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-4 space-y-2 border border-border/50">
+                <h4 className="text-sm font-semibold text-foreground">⚙️ Per-Channel Config (via DM)</h4>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li>• <span className="text-foreground font-mono">Delay</span> — response delay so other bots fire first</li>
+                  <li>• <span className="text-foreground font-mono">Verbose</span> — long-form vs short-form replies</li>
+                  <li>• <span className="text-foreground font-mono">Admin-Only</span> — restrict commands to group admins</li>
+                  <li>• <span className="text-foreground font-mono">Dev Alerts</span> — 🚨 new token launch alerts</li>
+                  <li>• <span className="text-foreground font-mono">Toggle Commands</span> — enable/disable per command</li>
+                  <li>• <span className="text-foreground font-mono">Max Tier</span> — cap analysis depth in channel</li>
+                  <li>• All config via inline keyboard in DM, never in-channel</li>
+                </ul>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-4 space-y-2 border border-border/50">
+                <h4 className="text-sm font-semibold text-foreground">📋 Rules</h4>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li>• Kicked bots can be re-added, no re-charge</li>
+                  <li>• One account can manage many channels</li>
+                  <li>• No refunds — lifetime activation</li>
+                  <li>• In-channel: only analysis commands (per config)</li>
+                  <li>• DM: personal access + channel management</li>
+                  <li>• No admin commands exposed in public groups</li>
+                  <li>• Dashboard also shows channels (read/pay)</li>
+                </ul>
               </div>
             </div>
           </CardContent>
