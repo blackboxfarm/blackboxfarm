@@ -430,8 +430,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   cmds += `*Advanced — X Subscriber ★★*\n` +
     `${check("x_subscriber")} /momentum (/m) \`CA\` — Volume & price momentum scoring\n` +
     `${check("x_subscriber")} /insiders (/i) \`CA\` — Insider cluster & bundling pre-check\n` +
-    `${check("x_subscriber")} /compare (/cmp) \`CA CA\` — Side-by-side token comparison\n` +
-    `${check("x_subscriber")} /alerts — Manage alert preferences\n`;
+    `${check("x_subscriber")} /compare (/cmp) \`CA CA\` — Side-by-side token comparison\n`;
   if (!hasTier(tier, "x_subscriber")) {
     cmds += `  _↑ Unlock with X Subscriber ($3.99/mo)_\n`;
   }
@@ -443,6 +442,11 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   if (!hasTier(tier, "pro")) {
     cmds += `  _↑ Unlock with Pro ($9.99/mo)_\n`;
   }
+  cmds += `\n`;
+
+  cmds += `*Group Admin — Alerts ⚙️*\n` +
+    `${unlocked} /alerts — Manage group alert feeds\n` +
+    `  _Types: dex · mint · rug · whale · news · kol_\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
     `★ = Tier required | ${unlocked} = Available | ${locked} = Locked\n` +

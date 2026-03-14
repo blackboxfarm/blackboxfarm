@@ -621,7 +621,7 @@ export function TelegramCommandsPlanner() {
                   <ul className="text-xs space-y-1 text-muted-foreground">
                     <li>• /risk shows color but says "upgrade for reasoning"</li>
                     <li>• /holders lite says "upgrade for full breakdown"</li>
-                    <li>• /check teases "dev reputation: 🔒 Pro only"</li>
+                    <li>• /risk teases "dev reputation: 🔒 Pro only"</li>
                     <li>• Rate limit: 5/hr (vs 10 for X Sub)</li>
                     <li>• Every locked command shows upgrade link</li>
                     <li>• Weekly digest DM: "You searched 12 tokens this week..."</li>
