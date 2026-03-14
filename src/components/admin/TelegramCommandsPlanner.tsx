@@ -403,9 +403,37 @@ export function TelegramCommandsPlanner() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Command × Context × Access Level</CardTitle>
+          <Card className="bg-card border-border mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">🔗 Response Footer Tagline</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Every bot response (auto-detect, commands, DM reports) ends with a small, unobtrusive tagline linking to the features page. Keeps it subtle — one line, muted, always last.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
+                  <p className="text-[10px] text-muted-foreground mb-1 font-semibold">Abbreviated (groups):</p>
+                  <pre className="bg-background/50 rounded p-2 text-[10px] whitespace-pre-wrap font-mono">{`$TICKER | $4.2K mcap | 847 holders | 🟢
+
+━━━━━━━━━━━━━━━━━━━
+🔍 holdersintel.com/features`}</pre>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
+                  <p className="text-[10px] text-muted-foreground mb-1 font-semibold">Verbose / DM:</p>
+                  <pre className="bg-background/50 rounded p-2 text-[10px] whitespace-pre-wrap font-mono">{`[full report content...]
+
+━━━━━━━━━━━━━━━━━━━
+🔍 See all features → holdersintel.com/features`}</pre>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground italic">
+                HTML: <code className="text-foreground">{`<a href="https://holdersintel.com/features">🔍 See all features</a>`}</code> — uses parse_mode HTML. Link is subtle, not promotional.
+              </p>
+            </CardContent>
+          </Card>
+
+
               <p className="text-xs text-muted-foreground">
                 👁️ auto = passive detection | 👤 user = any member | 🛡️ admin = installer only | 📩 dm-only = not available in groups
               </p>
