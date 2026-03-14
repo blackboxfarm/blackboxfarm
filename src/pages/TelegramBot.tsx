@@ -20,7 +20,11 @@ import {
   ChevronRight,
   Coins,
   Settings,
+  Monitor,
+  Smartphone,
+  Server,
 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 const commands = [
   {
