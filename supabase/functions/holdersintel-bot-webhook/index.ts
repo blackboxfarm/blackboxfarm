@@ -903,7 +903,7 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
   const walletAddr = resolved.wallet;
   await logUsage(telegramUserId, "/wallet", addr);
 
-  const data = await invokeFunction("wallet-behavior-analysis", { walletAddress: walletAddr });
+  const data = await invokeFunction("wallet-behavior-analysis", { wallet_address: walletAddr });
   if (!data) {
     await sendMessage(chatId, `❌ Could not analyze wallet. It may have no recent activity.`);
     return;
