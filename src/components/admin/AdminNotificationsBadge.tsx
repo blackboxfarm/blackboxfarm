@@ -160,7 +160,7 @@ export function AdminNotificationsBadge() {
     }
   };
 
-  const renderNotificationList = (items: AdminNotification[]) => (
+  const renderNotificationList = (items: AdminNotification[], category?: TabCategory) => (
     <ScrollArea className="h-[350px]">
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
@@ -213,11 +213,24 @@ export function AdminNotificationsBadge() {
                     {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                   </p>
                 </div>
-                {!notification.is_read && (
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => markAsRead(notification.id)}>
-                    <Check className="h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  {category === 'audit' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-primary"
+                      onClick={() => copyAuditPrompt(notification)}
+                      title="Copy prompt to ask about this alert"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {!notification.is_read && (
+                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => markAsRead(notification.id)}>
+                      <Check className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
