@@ -155,31 +155,6 @@ const COMMANDS: BotCommand[] = [
     dmBehavior: 'Full wallet behavioral analysis',
     groupBehavior: 'Redirect to DM — sensitive data',
   },
-  // PROPOSED GROUP+ COMMANDS
-  {
-    command: '/price', aliases: ['/p'], description: 'Quick price + mcap check', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'anyone',
-    access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Price, mcap, 24h change',
-    groupBehavior: 'Same — safe for groups. Anyone can use.',
-    notes: '🆕 PROPOSED — Great group freebie. Pulls from DexScreener. No deep intel leaked.',
-  },
-  {
-    command: '/check', aliases: ['/c'], description: 'Quick safety check (rug score)', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'user',
-    access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Safety score: LP locked?, mint authority?, freeze authority?',
-    groupBehavior: 'Same compact format',
-    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis.',
-  },
-  {
-    command: '/top', aliases: [], description: 'Trending tokens right now', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'user',
-    access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Top 5 trending by momentum',
-    groupBehavior: 'Top 3 tickers only — teaser',
-    notes: '🆕 PROPOSED — Group engagement driver.',
-  },
   // ─── DM-ONLY ADMIN / CHANNEL MANAGEMENT COMMANDS ───
   {
     command: '/add', aliases: [], description: 'Add bot to a channel/group', category: 'admin',
@@ -373,7 +348,7 @@ export function TelegramCommandsPlanner() {
                     👤 Layer 2: User Commands (Members)
                   </h4>
                   <p className="text-xs text-muted-foreground">
-                    Any group member can use allowed commands (/quick, /price, /risk, etc). Depth depends on their personal subscription tier, but response is always abbreviated for groups.
+                    Any group member can use allowed commands (/quick, /risk, etc). Depth depends on their personal subscription tier, but response is always abbreviated for groups.
                   </p>
                   <ul className="text-[10px] text-muted-foreground space-y-0.5">
                     <li>• Requires command (e.g. <code className="text-foreground">/quick CA</code>)</li>
@@ -626,11 +601,8 @@ export function TelegramCommandsPlanner() {
                   <h4 className="text-sm font-semibold text-green-400 mb-2">✅ Group+ Gets</h4>
                   <ul className="text-xs space-y-1 text-muted-foreground">
                     <li>• /quick — Fast stats (holder count, health, top10%)</li>
-                    <li>• /price — Price + mcap + 24h (DexScreener)</li>
-                    <li>• /check — Quick rug safety score</li>
                     <li>• /risk — Emoji only (🟢/🔴) no reasoning</li>
                     <li>• /ca — Short condensed report</li>
-                    <li>• /top — Trending tickers (top 3 in group)</li>
                   </ul>
                 </div>
                 <div className="bg-red-500/10 rounded-lg p-4 border border-red-500/20">
@@ -649,7 +621,7 @@ export function TelegramCommandsPlanner() {
                   <ul className="text-xs space-y-1 text-muted-foreground">
                     <li>• /risk shows color but says "upgrade for reasoning"</li>
                     <li>• /holders lite says "upgrade for full breakdown"</li>
-                    <li>• /check teases "dev reputation: 🔒 Pro only"</li>
+                    <li>• /risk teases "dev reputation: 🔒 Pro only"</li>
                     <li>• Rate limit: 5/hr (vs 10 for X Sub)</li>
                     <li>• Every locked command shows upgrade link</li>
                     <li>• Weekly digest DM: "You searched 12 tokens this week..."</li>
