@@ -2838,6 +2838,19 @@ serve(async (req) => {
     }
   } catch (err) {
     console.error("[bot] Webhook error:", err);
+
+    if (fallbackChatId) {
+      try {
+        await sendMessage(
+          fallbackChatId,
+          `⚠️ Internal error while handling \`${fallbackCommand || "your command"}\`. Please try again in a moment.`,
+          "Markdown",
+          fallbackMessageId
+        );
+      } catch (notifyErr) {
+        console.error("[bot] failed to send fallback error message:", notifyErr);
+      }
+    }
   }
 
   return new Response("OK");
