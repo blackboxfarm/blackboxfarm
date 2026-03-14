@@ -2506,7 +2506,7 @@ serve(async (req) => {
       const res = await fetch(`${TELEGRAM_API}/setWebhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: webhookUrl }),
+        body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message", "my_chat_member"] }),
       });
       const data = await res.json();
       return new Response(JSON.stringify(data), {
