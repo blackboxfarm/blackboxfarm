@@ -27,7 +27,8 @@ const RATE_LIMITS: Record<string, number> = {
   enterprise: 100,
 };
 
-type CmdAccess = '✅' | '🔒' | 'lite' | '—' | '✅ (DM)' | '✅ (short)' | '🆕';
+type CmdAccess = '✅' | '🔒' | 'lite' | '—' | '✅ (DM)' | '✅ (short)' | '🆕' | '👁️';
+type GroupAccessLevel = 'anyone' | 'user' | 'admin' | 'dm-only' | 'auto';
 
 interface BotCommand {
   command: string;
@@ -39,6 +40,7 @@ interface BotCommand {
   access: Record<string, CmdAccess>;
   dmBehavior: string;
   groupBehavior: string;
+  groupAccessLevel: GroupAccessLevel; // who can trigger this in a group
   notes?: string;
 }
 
@@ -46,36 +48,46 @@ const COMMANDS: BotCommand[] = [
   // META
   {
     command: '/start', aliases: [], description: 'Welcome & setup', category: 'meta',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'anyone',
     access: { free: '✅', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full welcome with registration steps',
     groupBehavior: 'Short welcome, link to DM',
   },
   {
     command: '/register', aliases: [], description: 'Link BlackBox Farm account', category: 'meta',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'dm-only',
     access: { free: '✅', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full registration flow with code validation',
     groupBehavior: 'Redirect to DM — "DM me to register"',
   },
   {
     command: '/status', aliases: [], description: 'Check subscription tier & usage', category: 'meta',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'admin',
     access: { free: '✅', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full status with tier, rate limits, linked date',
-    groupBehavior: 'Short status — tier badge only',
+    groupBehavior: 'Admin only — shows channel payment status, install date, config summary. Non-admins see nothing.',
+    notes: 'In groups: admin-only to avoid spam. In DM: shows personal subscription status.',
   },
   {
     command: '/help', aliases: [], description: 'Show available commands per tier', category: 'meta',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'anyone',
     access: { free: '✅', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full command list with ✅/🔒 per tier + upsell links',
-    groupBehavior: 'Abbreviated list, link to DM for full menu',
+    groupBehavior: 'Abbreviated list of commands available in this group, link to DM for full menu',
+  },
+  // AUTO-DETECT (not a command — passive behavior)
+  {
+    command: '(auto-detect CA)', aliases: [], description: 'Auto-respond to pasted contract addresses', category: 'analysis',
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'auto',
+    access: { free: '👁️', auth: '👁️', group_plus: '👁️', x_subscriber: '👁️', pro: '👁️', dev: '👁️', enterprise: '👁️' },
+    dmBehavior: 'Full analysis based on user tier (same as /ca)',
+    groupBehavior: 'Auto-responds to any message containing a valid Solana CA. Brief format: ticker, mcap, holder count, risk emoji. Respects admin delay_ms setting (default 2000ms). No command needed — anyone pastes, bot replies.',
+    notes: '🆕 PASSIVE — Not a command. Bot watches all messages for base58 addresses, validates on-chain, responds with abbreviated result. Configurable via admin /config (delay, on/off, verbose).',
   },
   // ANALYSIS - Auth tier
   {
     command: '/holders', aliases: [], description: 'Holder distribution analysis', category: 'analysis',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'user',
     access: { free: '🔒', auth: 'lite', group_plus: 'lite', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full: tier bars, LP%, health, AI analysis. Lite: count + top10% + score only.',
     groupBehavior: 'Abbreviated summary (ai_summary). Full sent to DM.',
@@ -83,14 +95,14 @@ const COMMANDS: BotCommand[] = [
   },
   {
     command: '/ca', aliases: [], description: 'Default condensed holder analysis', category: 'analysis',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'user',
     access: { free: '🔒', auth: '✅', group_plus: '✅ (short)', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Condensed report with key stats',
     groupBehavior: 'Same condensed format — safe for group display',
   },
   {
     command: '/quick', aliases: ['/q'], description: 'Fast holder count & key stats', category: 'analysis',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'user',
     access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'One-liner: holders, health, top10%',
     groupBehavior: 'Same one-liner — ideal for groups',
@@ -98,7 +110,7 @@ const COMMANDS: BotCommand[] = [
   },
   {
     command: '/risk', aliases: ['/r'], description: 'Risk & stability assessment', category: 'analysis',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'user',
     access: { free: '🔒', auth: 'lite', group_plus: 'lite', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full: risk assessment + reasoning. Lite: emoji only (🟢/🔴).',
     groupBehavior: 'Lite risk signal in group (emoji + one line). Full via DM only.',
@@ -106,39 +118,39 @@ const COMMANDS: BotCommand[] = [
   },
   {
     command: '/ai', aliases: [], description: 'Descriptive AI analysis snapshot', category: 'analysis',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'dm-only',
     access: { free: '🔒', auth: '✅', group_plus: '🔒', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full AI narrative analysis',
     groupBehavior: 'Redirect to DM — too long for group',
-    notes: 'Group+ does NOT get this — it\'s an upsell driver.',
+    notes: 'Group+ does NOT get this — it\'s an upsell driver. Always DM-only in groups.',
   },
   // ADVANCED - X Sub tier
   {
     command: '/momentum', aliases: ['/m'], description: 'Volume & price momentum scoring', category: 'advanced',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'user',
     access: { free: '🔒', auth: '🔒', group_plus: '🔒', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full momentum breakdown: score, signals, volume, buy/sell ratio',
     groupBehavior: 'Score + action only. Details via DM.',
   },
   {
     command: '/alerts', aliases: [], description: 'Manage alert preferences', category: 'advanced',
-    botFatherRegistered: true, implementedInWebhook: false,
+    botFatherRegistered: true, implementedInWebhook: false, groupAccessLevel: 'dm-only',
     access: { free: '🔒', auth: '🔒', group_plus: '🔒', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Alert config menu',
     groupBehavior: 'Redirect to DM',
-    notes: 'NOT YET IMPLEMENTED in webhook. Planned.',
+    notes: 'NOT YET IMPLEMENTED in webhook. Planned. Always DM-only.',
   },
   // PRO
   {
     command: '/oracle', aliases: ['/o'], description: 'Developer reputation lookup', category: 'pro',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'user',
     access: { free: '🔒', auth: '🔒', group_plus: '🔒', x_subscriber: '🔒', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full dev reputation mesh: history, linked wallets, trust score',
     groupBehavior: 'Trust badge only (🟢/🟡/🔴). Full via DM.',
   },
   {
     command: '/wallet', aliases: ['/w'], description: 'Wallet behavior analysis', category: 'pro',
-    botFatherRegistered: true, implementedInWebhook: true,
+    botFatherRegistered: true, implementedInWebhook: true, groupAccessLevel: 'dm-only',
     access: { free: '🔒', auth: '🔒', group_plus: '🔒', x_subscriber: '🔒', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Full wallet behavioral analysis',
     groupBehavior: 'Redirect to DM — sensitive data',
@@ -146,60 +158,60 @@ const COMMANDS: BotCommand[] = [
   // PROPOSED GROUP+ COMMANDS
   {
     command: '/price', aliases: ['/p'], description: 'Quick price + mcap check', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false,
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'anyone',
     access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Price, mcap, 24h change',
-    groupBehavior: 'Same — safe for groups',
+    groupBehavior: 'Same — safe for groups. Anyone can use.',
     notes: '🆕 PROPOSED — Great group freebie. Pulls from DexScreener. No deep intel leaked.',
   },
   {
     command: '/check', aliases: ['/c'], description: 'Quick safety check (rug score)', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false,
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'user',
     access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Safety score: LP locked?, mint authority?, freeze authority?',
     groupBehavior: 'Same compact format',
-    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis. Drives curiosity for /risk.',
+    notes: '🆕 PROPOSED — Group+ exclusive. Quick rug check without full analysis.',
   },
   {
     command: '/top', aliases: [], description: 'Trending tokens right now', category: 'analysis',
-    botFatherRegistered: false, implementedInWebhook: false,
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'user',
     access: { free: '🔒', auth: '🔒', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Top 5 trending by momentum',
     groupBehavior: 'Top 3 tickers only — teaser',
-    notes: '🆕 PROPOSED — Group engagement driver. Shows trending, no deep analysis.',
+    notes: '🆕 PROPOSED — Group engagement driver.',
   },
   // ─── DM-ONLY ADMIN / CHANNEL MANAGEMENT COMMANDS ───
   {
     command: '/add', aliases: [], description: 'Add bot to a channel/group', category: 'admin',
-    botFatherRegistered: false, implementedInWebhook: false,
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'dm-only',
     access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Guides subscriber through adding bot to a channel. Bot generates invite link or instructs user to add @holdersintel_bot as admin. Once added, bot detects the group and registers it in channel_installations.',
     groupBehavior: 'N/A — DM only. Bot replies: "DM me to manage channels."',
-    notes: 'DM only. Any registered user can install bot in channels. Each channel appears in /channels list after install.',
+    notes: 'DM only. Any registered user can install bot in channels.',
   },
   {
     command: '/channels', aliases: ['/ch'], description: 'List & manage installed channels', category: 'admin',
-    botFatherRegistered: false, implementedInWebhook: false,
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'dm-only',
     access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
     dmBehavior: 'Shows numbered list of all channels this user has the bot installed in, with status (✅ paid / ⏳ unpaid / 🚫 kicked). User taps a number to enter config mode for that channel.',
     groupBehavior: 'N/A — DM only',
-    notes: 'DM only. Entry point for all per-channel config. Replaces in-channel admin commands entirely.',
+    notes: 'DM only. Entry point for all per-channel config.',
   },
   {
     command: '/config', aliases: [], description: 'Configure selected channel settings', category: 'admin',
-    botFatherRegistered: false, implementedInWebhook: false,
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'dm-only',
     access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'After selecting a channel via /channels, shows interactive config menu with inline keyboard buttons: Delay (ms), Verbose On/Off, Admin-Only On/Off, Dev Alerts On/Off, Toggle Commands, Set Max Tier. Each button updates admin_config and confirms.',
+    dmBehavior: 'After selecting a channel via /channels, shows interactive config menu with inline keyboard buttons: Delay (ms), Verbose On/Off, Admin-Only On/Off, Dev Alerts On/Off, Toggle Commands, Set Max Tier, Auto-CA On/Off. Each button updates admin_config and confirms.',
     groupBehavior: 'N/A — DM only',
-    notes: 'DM only. Uses Telegram inline keyboard for interactive config. Requires active channel selection from /channels.',
+    notes: 'DM only. Uses Telegram inline keyboard for interactive config.',
   },
   {
     command: '/payment', aliases: ['/pay'], description: 'View/generate SOL payment wallet', category: 'admin',
-    botFatherRegistered: false, implementedInWebhook: false,
+    botFatherRegistered: false, implementedInWebhook: false, groupAccessLevel: 'dm-only',
     access: { free: '🔒', auth: '✅', group_plus: '✅', x_subscriber: '✅', pro: '✅', dev: '✅', enterprise: '✅' },
-    dmBehavior: 'Shows SOL wallet address for selected channel. If none exists, generates one. Displays: wallet address (copyable), required amount (0.25 SOL), current balance, payment status. "Verify Payment" button to check on-chain.',
+    dmBehavior: 'Shows SOL wallet address for selected channel. If none exists, generates one. Displays: wallet address (copyable), required amount (0.25 SOL), current balance, payment status.',
     groupBehavior: 'N/A — DM only',
-    notes: 'DM only. Wallet generated per channel_installations row. Balance checked on-chain via Helius RPC on verify click.',
+    notes: 'DM only. Wallet generated per channel_installations row.',
   },
 ];
 
@@ -234,6 +246,7 @@ const AccessCell = ({ access }: { access: CmdAccess }) => {
     '✅ (DM)': 'text-blue-400',
     '✅ (short)': 'text-cyan-400',
     '🆕': 'text-pink-400 font-bold',
+    '👁️': 'text-emerald-400 font-bold',
   };
   return <span className={styles[access] || 'text-foreground'}>{access}</span>;
 };
@@ -330,11 +343,71 @@ export function TelegramCommandsPlanner() {
 
         {/* ════════ GROUP vs DM ════════ */}
         <TabsContent value="context">
+          {/* Three-layer model */}
+          <Card className="bg-card border-border mb-4">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">🧅 Three-Layer Group Behavior Model</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                The bot responds differently in groups depending on WHO triggered it and HOW.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-emerald-500/10 rounded-lg p-4 border border-emerald-500/20 space-y-2">
+                  <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                    👁️ Layer 1: Auto-Detect (Anyone)
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Bot watches ALL messages for Solana contract addresses. When detected, it auto-responds with a brief result after the configured delay (default 2000ms).
+                  </p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                    <li>• No command needed — just paste a CA</li>
+                    <li>• Works for ANY user, subscriber or not</li>
+                    <li>• Brief format: $TICKER | mcap | holders | 🟢/🔴</li>
+                    <li>• Respects <code className="text-foreground">delay_ms</code> so Phanes/Skeleton fire first</li>
+                    <li>• Admin can toggle on/off via <code className="text-foreground">/config</code> in DM</li>
+                  </ul>
+                </div>
+                <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20 space-y-2">
+                  <h4 className="text-sm font-semibold text-blue-400 flex items-center gap-2">
+                    👤 Layer 2: User Commands (Members)
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Any group member can use allowed commands (/quick, /price, /risk, etc). Depth depends on their personal subscription tier, but response is always abbreviated for groups.
+                  </p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                    <li>• Requires command (e.g. <code className="text-foreground">/quick CA</code>)</li>
+                    <li>• User doesn't need to be a subscriber</li>
+                    <li>• Unregistered users get "register for more" upsell</li>
+                    <li>• Admin can restrict to admin-only via <code className="text-foreground">admin_only_commands</code></li>
+                    <li>• Verbose/abbreviated controlled by admin config</li>
+                    <li>• Admin can disable specific commands via <code className="text-foreground">/toggle</code></li>
+                  </ul>
+                </div>
+                <div className="bg-amber-500/10 rounded-lg p-4 border border-amber-500/20 space-y-2">
+                  <h4 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+                    🛡️ Layer 3: Admin-Only (Installer)
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Certain commands only respond to the channel admin (the subscriber who installed the bot). Others are DM-only for config.
+                  </p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                    <li>• <code className="text-foreground">/status</code> in group → admin sees channel config</li>
+                    <li>• All config commands → DM only (never in group)</li>
+                    <li>• Non-admins see nothing when trying admin commands</li>
+                    <li>• Admin identity checked via <code className="text-foreground">getChatAdministrators</code></li>
+                    <li>• Cross-referenced with <code className="text-foreground">channel_installations.user_id</code></li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="bg-card border-border">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Group Chat vs Direct Message Behavior</CardTitle>
+              <CardTitle className="text-base">Command × Context × Access Level</CardTitle>
               <p className="text-xs text-muted-foreground">
-                How each command responds differently based on chat context. Group chats get abbreviated responses to avoid spam.
+                👁️ auto = passive detection | 👤 user = any member | 🛡️ admin = installer only | 📩 dm-only = not available in groups
               </p>
             </CardHeader>
             <CardContent>
@@ -342,20 +415,34 @@ export function TelegramCommandsPlanner() {
                 <TableHeader>
                   <TableRow>
                     <TableHead compact className="min-w-[100px]">Command</TableHead>
-                    <TableHead compact className="min-w-[250px]">📩 DM Behavior</TableHead>
-                    <TableHead compact className="min-w-[250px]">👥 Group Behavior</TableHead>
-                    <TableHead compact className="min-w-[200px]">Notes</TableHead>
+                    <TableHead compact className="min-w-[80px]">Group Access</TableHead>
+                    <TableHead compact className="min-w-[220px]">📩 DM Behavior</TableHead>
+                    <TableHead compact className="min-w-[220px]">👥 Group Behavior</TableHead>
+                    <TableHead compact className="min-w-[180px]">Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {COMMANDS.map(cmd => (
-                    <TableRow key={cmd.command} className={!cmd.implementedInWebhook ? 'opacity-60' : ''}>
-                      <TableCell compact className="font-mono text-xs font-semibold">{cmd.command}</TableCell>
-                      <TableCell compact className="text-xs">{cmd.dmBehavior}</TableCell>
-                      <TableCell compact className="text-xs">{cmd.groupBehavior}</TableCell>
-                      <TableCell compact className="text-xs text-muted-foreground">{cmd.notes || '—'}</TableCell>
-                    </TableRow>
-                  ))}
+                  {COMMANDS.map(cmd => {
+                    const levelStyles: Record<GroupAccessLevel, { label: string; className: string }> = {
+                      auto: { label: '👁️ Auto', className: 'text-emerald-400' },
+                      anyone: { label: '🌐 Anyone', className: 'text-green-400' },
+                      user: { label: '👤 Member', className: 'text-blue-400' },
+                      admin: { label: '🛡️ Admin', className: 'text-amber-400' },
+                      'dm-only': { label: '📩 DM Only', className: 'text-muted-foreground' },
+                    };
+                    const level = levelStyles[cmd.groupAccessLevel];
+                    return (
+                      <TableRow key={cmd.command} className={!cmd.implementedInWebhook ? 'opacity-60' : ''}>
+                        <TableCell compact className="font-mono text-xs font-semibold">{cmd.command}</TableCell>
+                        <TableCell compact className="text-xs">
+                          <span className={level.className}>{level.label}</span>
+                        </TableCell>
+                        <TableCell compact className="text-xs">{cmd.dmBehavior}</TableCell>
+                        <TableCell compact className="text-xs">{cmd.groupBehavior}</TableCell>
+                        <TableCell compact className="text-xs text-muted-foreground">{cmd.notes || '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -370,22 +457,23 @@ export function TelegramCommandsPlanner() {
                 <div className="bg-muted/30 rounded-lg p-4 space-y-2">
                   <h4 className="font-semibold text-foreground">👤 User Journey in Group</h4>
                   <ol className="list-decimal list-inside text-xs text-muted-foreground space-y-1">
-                    <li>User sees bot reply to someone's /quick in a group</li>
+                    <li>Someone pastes a CA → bot auto-responds with brief stats</li>
+                    <li>User sees the value, tries /quick → gets one-liner</li>
+                    <li>User tries /risk → sees 🟢/🔴 only → "DM me for full analysis"</li>
                     <li>User DMs the bot → gets /start welcome</li>
                     <li>User does /register with their code</li>
-                    <li>Now unlocked: /quick, /price, /check in groups</li>
-                    <li>Uses /risk → sees 🟢/🔴 only → "upgrade for full analysis"</li>
-                    <li>Curiosity → subscribes to X or Pro</li>
+                    <li>Now gets deeper results. Curiosity → subscribes.</li>
                   </ol>
                 </div>
                 <div className="bg-muted/30 rounded-lg p-4 space-y-2">
                   <h4 className="font-semibold text-foreground">🛡️ Group Admin Value</h4>
                   <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
-                    <li>Bot adds value to their group for free</li>
-                    <li>Members get /quick and /check without leaving</li>
-                    <li>Premium commands tease but don't reveal</li>
-                    <li>Group admin gets exposure credit / referral?</li>
+                    <li>Bot auto-responds to CAs — no commands needed</li>
+                    <li>Members get instant value without setup</li>
+                    <li>Admin configures everything via DM (clean group)</li>
+                    <li>Delay setting lets other bots post first</li>
                     <li>Bot never posts paywalled content in group</li>
+                    <li>Admin can restrict to admin-only if group gets noisy</li>
                   </ul>
                 </div>
               </div>
