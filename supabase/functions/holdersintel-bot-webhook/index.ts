@@ -25,7 +25,7 @@ const RATE_LIMITS: Record<string, number> = {
 };
 
 // ─── Tagline appended to every analytical reply ───
-const TAGLINE = `\n\n🌐 [blackboxfarm.lovable.app/tgbot](https://blackboxfarm.lovable.app/tgbot)`;
+const TAGLINE = `\n\n🌐 [blackbox.farm/tgbot](https://blackbox.farm/tgbot)`;
 
 // ─── AI Verdict System (retained internally, removed from UI) ───
 
