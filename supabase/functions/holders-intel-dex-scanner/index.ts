@@ -205,6 +205,56 @@ async function detectTriggers(token: BoostToken): Promise<DetectedTrigger[]> {
   return triggers;
 }
 
+// Broadcast a DEX trigger alert to all channels with dex alerts enabled
+async function broadcastDexAlert(supabase: any, trigger: DetectedTrigger): Promise<void> {
+  try {
+    // Find all channels with dex alerts enabled
+    const { data: alertConfigs } = await supabase
+      .from('channel_alert_config')
+      .select('chat_id')
+      .eq('alert_type', 'dex')
+      .eq('is_enabled', true);
+
+    if (!alertConfigs || alertConfigs.length === 0) return;
+
+    const triggerConfig = TRIGGER_CONFIGS[trigger.triggerType];
+    const boostLabel = trigger.boostCount ? ` (${trigger.boostCount}x)` : '';
+    const message = `🚀${triggerConfig.comment}${boostLabel}\n` +
+      `$${trigger.symbol} (${trigger.name})\n` +
+      `CA: \`${trigger.tokenMint}\``;
+
+    const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
+    if (!BOT_TOKEN) {
+      console.log('[dex-scanner] No bot token, skipping TG broadcast');
+      return;
+    }
+
+    for (const config of alertConfigs) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: config.chat_id,
+            text: message,
+            parse_mode: "Markdown",
+            disable_web_page_preview: true,
+          }),
+        });
+        if (!res.ok) console.error(`[dex-scanner] TG send failed for ${config.chat_id}:`, await res.text());
+        // Rate limit: 1 msg per second for groups
+        await delay(1100);
+      } catch (e) {
+        console.error(`[dex-scanner] TG broadcast error for ${config.chat_id}:`, e);
+      }
+    }
+
+    console.log(`[dex-scanner] Broadcasted ${trigger.symbol} alert to ${alertConfigs.length} channel(s)`);
+  } catch (err) {
+    console.error('[dex-scanner] broadcastDexAlert error:', err);
+  }
+}
+
 // Add a small delay between API calls to respect rate limits
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
