@@ -164,8 +164,7 @@ const executeEmergencySell = async (session: TradingSession, position: Position)
         feeOverrideMicroLamports: session.config.feeOverrideMicroLamports
       },
       headers: {
-        // Use the database-level decryption function to get the actual secret
-        'x-owner-secret': position.owner_secret, // This is now automatically decrypted by our DB functions
+        'x-owner-secret': position.owner_secret_encrypted,
         'x-function-token': Deno.env.get('FUNCTION_TOKEN') || ''
       }
     });
