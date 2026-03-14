@@ -1789,19 +1789,116 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
   await sendMessage(chatId, msg);
 }
 
-// ─── /alerts ───
-async function handleAlerts(chatId: number, telegramUserId: string) {
-  const gate = await gateCheck(chatId, telegramUserId, "x_subscriber", "/alerts");
-  if (!gate) return;
+// ─── Alert type definitions ───
+const ALERT_TYPES: Record<string, { emoji: string; label: string; description: string }> = {
+  dex: { emoji: '🚀', label: 'DEX Alerts', description: 'Boost 50+/100+, Dex Paid, CTO, Ads triggers' },
+  mint: { emoji: '🧪', label: 'Dev Mint Alerts', description: 'New mints from monitored dev wallets' },
+  rug: { emoji: '⚠️', label: 'Rug / Blacklist', description: 'Rug pulls & blacklisted dev warnings' },
+  whale: { emoji: '🐋', label: 'Whale Movement', description: 'Large holder concentration shifts' },
+  news: { emoji: '📰', label: 'Crypto News', description: 'Viral crypto newswire alerts' },
+};
+
+// Check if a Telegram user is an admin of the given group chat
+async function isTelegramGroupAdmin(chatId: number, userId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${TELEGRAM_API}/getChatMember`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, user_id: Number(userId) }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const status = data?.result?.status;
+    return status === 'administrator' || status === 'creator';
+  } catch {
+    return false;
+  }
+}
+
+// ─── /alerts — Group Admin Configuration ───
+async function handleAlerts(chatId: number, telegramUserId: string, args: string, isGroupChat: boolean) {
+  // Must be used in a group chat
+  if (!isGroupChat) {
+    await sendMessage(chatId,
+      `🔔 *Alert Configuration*\n\n` +
+      `This command configures alerts for a *group/channel*.\n` +
+      `Use it inside your group chat, not in DMs.\n\n` +
+      `*Available types:*\n` +
+      Object.entries(ALERT_TYPES).map(([key, t]) => `${t.emoji} \`${key}\` — ${t.description}`).join('\n') +
+      TAGLINE
+    );
+    return;
+  }
+
+  // Must be activated group
+  const activated = await isGroupActivated(chatId);
+  if (!activated) {
+    await sendMessage(chatId,
+      `🔒 *Channel not activated.*\n\nThis group needs a paid activation to use alert feeds.\n` +
+      `Visit [blackbox.farm/tgbot](https://blackbox.farm/tgbot) to activate.` + TAGLINE
+    );
+    return;
+  }
+
+  // Must be a TG group admin
+  const isAdmin = await isTelegramGroupAdmin(chatId, telegramUserId);
+  if (!isAdmin) {
+    await sendMessage(chatId, `🔒 Only *group admins* can configure alerts.` + TAGLINE);
+    return;
+  }
+
+  const parts = args.trim().toLowerCase().split(/\s+/);
+  const alertType = parts[0] || '';
+  const action = parts[1] || '';
+
+  // Toggle a specific alert type
+  if (alertType && ALERT_TYPES[alertType] && (action === 'on' || action === 'off')) {
+    const isEnabled = action === 'on';
+    const { error } = await supabase
+      .from('channel_alert_config')
+      .upsert({
+        chat_id: chatId,
+        alert_type: alertType,
+        is_enabled: isEnabled,
+        enabled_by: telegramUserId,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'chat_id,alert_type' });
+
+    if (error) {
+      console.error('[bot] alerts upsert error:', error);
+      await sendMessage(chatId, `❌ Failed to update alert config.` + TAGLINE);
+      return;
+    }
+
+    const typeInfo = ALERT_TYPES[alertType];
+    await sendMessage(chatId,
+      `${typeInfo.emoji} *${typeInfo.label}* ${isEnabled ? '✅ ENABLED' : '⏸️ DISABLED'}\n` +
+      `_${typeInfo.description}_` + TAGLINE
+    );
+    return;
+  }
+
+  // Show current config
+  const { data: configs } = await supabase
+    .from('channel_alert_config')
+    .select('alert_type, is_enabled')
+    .eq('chat_id', chatId);
+
+  const configMap = new Map((configs || []).map((c: any) => [c.alert_type, c.is_enabled]));
+
+  const lines = Object.entries(ALERT_TYPES).map(([key, t]) => {
+    const enabled = configMap.get(key);
+    const status = enabled === true ? '✅ ON' : enabled === false ? '⏸️ OFF' : '⬜ Not set';
+    return `${t.emoji} \`${key}\` — ${status}\n   _${t.description}_`;
+  });
 
   await sendMessage(chatId,
-    `🔔 *Alert Preferences*\n\n` +
-    `Alert management is coming soon!\n\n` +
-    `You'll be able to:\n` +
-    `• Set price alerts for specific tokens\n` +
-    `• Get notified on whale movements\n` +
-    `• Receive daily digest reports\n\n` +
-    `For now, you receive tier-based broadcasts automatically.` +
+    `🔔 *Alert Configuration*\n\n` +
+    lines.join('\n\n') +
+    `\n\n*Usage:*\n` +
+    `\`/alerts dex on\` — Enable DEX alerts\n` +
+    `\`/alerts mint off\` — Disable mint alerts\n` +
+    `\`/alerts\` — Show current config` +
     TAGLINE
   );
 }
@@ -1898,7 +1995,7 @@ serve(async (req) => {
     const args = argParts.join(" ");
 
     // Commands that are allowed to reply publicly in groups
-    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/risk', '/r', '/quick', '/q'];
+    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/risk', '/r', '/quick', '/q', '/alerts'];
 
     // If in a group chat and command is NOT in the public list, redirect to DM
     if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
@@ -1945,7 +2042,7 @@ serve(async (req) => {
             await handleWallet(dmChatId, telegramUserId, args);
             break;
           case "/alerts":
-            await handleAlerts(dmChatId, telegramUserId);
+            await handleAlerts(dmChatId, telegramUserId, args, false);
             break;
           default:
             break;
@@ -2014,7 +2111,7 @@ serve(async (req) => {
           await handleWallet(chatId, telegramUserId, args);
           break;
         case "/alerts":
-          await handleAlerts(chatId, telegramUserId);
+          await handleAlerts(chatId, telegramUserId, args, isGroupChat);
           break;
         default:
           // Auto-detect registration codes
