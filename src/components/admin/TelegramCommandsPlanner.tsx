@@ -348,7 +348,7 @@ export function TelegramCommandsPlanner() {
                     👤 Layer 2: User Commands (Members)
                   </h4>
                   <p className="text-xs text-muted-foreground">
-                    Any group member can use allowed commands (/quick, /price, /risk, etc). Depth depends on their personal subscription tier, but response is always abbreviated for groups.
+                    Any group member can use allowed commands (/quick, /risk, etc). Depth depends on their personal subscription tier, but response is always abbreviated for groups.
                   </p>
                   <ul className="text-[10px] text-muted-foreground space-y-0.5">
                     <li>• Requires command (e.g. <code className="text-foreground">/quick CA</code>)</li>
