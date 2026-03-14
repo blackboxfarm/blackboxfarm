@@ -303,13 +303,13 @@ export function AdminNotificationsBadge() {
           </TabsList>
 
           <TabsContent value="signups" className="mt-0">
-            {renderNotificationList(signupNotifs)}
+            {renderNotificationList(signupNotifs, 'signups')}
           </TabsContent>
           <TabsContent value="transactions" className="mt-0">
-            {renderNotificationList(transactionNotifs)}
+            {renderNotificationList(transactionNotifs, 'transactions')}
           </TabsContent>
           <TabsContent value="audit" className="mt-0">
-            {renderNotificationList(auditNotifs)}
+            {renderNotificationList(auditNotifs, 'audit')}
           </TabsContent>
         </Tabs>
       </PopoverContent>
