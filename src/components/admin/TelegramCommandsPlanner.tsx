@@ -27,7 +27,8 @@ const RATE_LIMITS: Record<string, number> = {
   enterprise: 100,
 };
 
-type CmdAccess = '✅' | '🔒' | 'lite' | '—' | '✅ (DM)' | '✅ (short)' | '🆕';
+type CmdAccess = '✅' | '🔒' | 'lite' | '—' | '✅ (DM)' | '✅ (short)' | '🆕' | '👁️';
+type GroupAccessLevel = 'anyone' | 'user' | 'admin' | 'dm-only' | 'auto';
 
 interface BotCommand {
   command: string;
@@ -39,6 +40,7 @@ interface BotCommand {
   access: Record<string, CmdAccess>;
   dmBehavior: string;
   groupBehavior: string;
+  groupAccessLevel: GroupAccessLevel; // who can trigger this in a group
   notes?: string;
 }
 
