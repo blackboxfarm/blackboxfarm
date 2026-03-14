@@ -1356,7 +1356,7 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
   await logUsage(telegramUserId, "/oracle", ca);
 
   const data = await invokeFunction("oracle-unified-lookup", { input: ca });
-  if (!data) {
+  if (!data || !data.found) {
     await sendMessage(chatId, `❌ Could not fetch developer data. Token may not be tracked yet.`);
     return;
   }
@@ -1376,36 +1376,125 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
 
   let msg = `🔮 *Oracle Report*\n\n`;
 
-  if (data.developer || data.creator) {
-    const dev = data.developer || data.creator;
-    if (dev.address) msg += `👤 Dev: \`${dev.address.slice(0, 8)}...${dev.address.slice(-6)}\`\n`;
-    if (dev.reputation_score != null) {
-      msg += `📊 Rep Score: *${dev.reputation_score}/100*\n`;
-      if (oraclePhase) {
-        msg += `💡 _${contextualizeDevRep(dev.reputation_score, oraclePhase)}_\n`;
+  // Profile info (from oracle-unified-lookup response format)
+  const profile = data.profile;
+  const resolvedWallet = data.resolvedWallet || profile?.masterWallet || null;
+
+  if (resolvedWallet) {
+    msg += `👤 Dev: \`${resolvedWallet.slice(0, 8)}...${resolvedWallet.slice(-6)}\`\n`;
+  }
+  if (profile?.displayName && profile.displayName !== 'Unknown') {
+    msg += `🏷 Name: *${profile.displayName}*\n`;
+  }
+  if (profile?.kycVerified) {
+    msg += `✅ KYC Verified\n`;
+  }
+
+  // Score
+  if (data.score != null) {
+    const scoreEmoji = data.score >= 60 ? '🟢' : data.score >= 35 ? '🟡' : '🔴';
+    msg += `${scoreEmoji} Rep Score: *${data.score}/100*\n`;
+    if (oraclePhase) {
+      msg += `💡 _${contextualizeDevRep(data.score, oraclePhase)}_\n`;
+    }
+  }
+
+  // Traffic light
+  if (data.trafficLight && data.trafficLight !== 'UNKNOWN') {
+    const tlEmoji: Record<string, string> = { RED: '🔴', YELLOW: '🟡', GREEN: '🟢', BLUE: '🔵' };
+    msg += `🚦 Signal: *${data.trafficLight}* ${tlEmoji[data.trafficLight] || ''}\n`;
+  }
+
+  // Stats
+  const stats = data.stats;
+  if (stats) {
+    if (stats.totalTokens != null) msg += `🪙 Tokens Created: *${stats.totalTokens}*\n`;
+    if (stats.successfulTokens != null && stats.successfulTokens > 0) msg += `✅ Successful: *${stats.successfulTokens}*\n`;
+    if (stats.rugPulls != null && stats.rugPulls > 0) msg += `🚩 Rug Pulls: *${stats.rugPulls}*\n`;
+    if (stats.slowDrains != null && stats.slowDrains > 0) msg += `🐌 Slow Drains: *${stats.slowDrains}*\n`;
+    if (stats.failedTokens != null && stats.failedTokens > 0) msg += `💀 Failed: *${stats.failedTokens}*\n`;
+    if (stats.avgLifespanHours != null && stats.avgLifespanHours > 0) {
+      const lifespan = stats.avgLifespanHours >= 24
+        ? `${(stats.avgLifespanHours / 24).toFixed(1)}d`
+        : `${stats.avgLifespanHours.toFixed(0)}h`;
+      msg += `⏱ Avg Lifespan: *${lifespan}*\n`;
+    }
+  }
+
+  // Score breakdown (for Pro users)
+  if (data.scoreBreakdown) {
+    const sb = data.scoreBreakdown;
+    msg += `\n📊 *Score Breakdown:*\n`;
+    msg += `Base: ${sb.base}`;
+    if (sb.rugPullPenalty) msg += ` | Rug: ${sb.rugPullPenalty}`;
+    if (sb.successBonus) msg += ` | Success: +${sb.successBonus}`;
+    if (sb.blacklistPenalty) msg += ` | Blacklist: ${sb.blacklistPenalty}`;
+    if (sb.whitelistBonus) msg += ` | Whitelist: +${sb.whitelistBonus}`;
+    msg += `\n`;
+  }
+
+  // Blacklist/Whitelist status
+  if (data.blacklistStatus?.isBlacklisted) {
+    msg += `\n🚨 *BLACKLISTED*: ${data.blacklistStatus.reason || 'No reason given'}\n`;
+  }
+  if (data.whitelistStatus?.isWhitelisted) {
+    msg += `\n✅ *WHITELISTED*: ${data.whitelistStatus.reason || 'Verified clean'}\n`;
+  }
+
+  // Network / Mesh connections
+  const network = data.network;
+  if (network) {
+    const meshItems: string[] = [];
+
+    if (network.linkedXAccounts?.length) {
+      for (const x of network.linkedXAccounts.slice(0, 3)) {
+        meshItems.push(`𝕏 [${x}](https://x.com/${x.replace('@', '')})`);
       }
     }
-    if (dev.total_tokens != null) msg += `🪙 Tokens Created: *${dev.total_tokens}*\n`;
-    if (dev.rug_count != null) msg += `🚩 Rugs: *${dev.rug_count}*\n`;
-    if (dev.avg_lifespan) msg += `⏱ Avg Lifespan: *${dev.avg_lifespan}*\n`;
-    if (dev.classification) msg += `🏷 Class: *${dev.classification}*\n`;
-  }
+    if (network.linkedWallets?.length) {
+      for (const w of network.linkedWallets.slice(0, 3)) {
+        meshItems.push(`💼 \`${w.slice(0, 6)}...${w.slice(-4)}\``);
+      }
+    }
+    if (network.sharedMods?.length) {
+      meshItems.push(`👥 ${network.sharedMods.length} shared mod(s)`);
+    }
+    if (network.devTeam?.name) {
+      meshItems.push(`🏢 Team: ${network.devTeam.name}`);
+    }
 
-  if (data.verdict || data.risk_level) {
-    const risk = data.verdict || data.risk_level;
-    const riskEmoji = risk === 'safe' || risk === 'low' ? '🟢' : risk === 'medium' ? '🟡' : '🔴';
-    msg += `\n${riskEmoji} Risk: *${risk.toUpperCase()}*\n`;
-  }
+    if (meshItems.length > 0) {
+      msg += `\n🕸 *Network Mesh:*\n`;
+      for (const item of meshItems) {
+        msg += `• ${item}\n`;
+      }
+    }
 
-  if (data.mesh_connections?.length) {
-    msg += `\n🕸 *Mesh Connections:*\n`;
-    for (const c of data.mesh_connections.slice(0, 5)) {
-      msg += `• ${c.relationship || c.type}: ${c.target || c.linked_id || "?"}\n`;
+    if (network.meshLinks?.length) {
+      const additionalLinks = network.meshLinks.filter((l: any) =>
+        l.relationship !== 'funded_by'
+      ).slice(0, 5);
+      if (additionalLinks.length > 0) {
+        msg += `\n🔗 *Mesh Links:*\n`;
+        for (const l of additionalLinks) {
+          msg += `• ${l.relationship}: \`${typeof l.linkedId === 'string' && l.linkedId.length > 16 ? l.linkedId.slice(0, 8) + '...' : l.linkedId}\` (${Math.round(l.confidence * 100)}%)\n`;
+        }
+      }
     }
   }
 
-  if (data.summary) {
-    msg += `\n💡 ${data.summary.slice(0, 400)}`;
+  // Token history
+  if (data.tokenHistory?.length) {
+    msg += `\n🪙 *Recent Tokens:*\n`;
+    for (const t of data.tokenHistory.slice(0, 5)) {
+      const outcomeEmoji = t.outcome === 'success' ? '✅' : t.outcome === 'rug_pull' ? '🚩' : t.outcome === 'slow_drain' ? '🐌' : '❓';
+      msg += `• ${outcomeEmoji} $${t.symbol || '???'} — ${t.outcome}${t.isActive ? ' (active)' : ''}\n`;
+    }
+  }
+
+  // Recommendation
+  if (data.recommendation) {
+    msg += `\n💡 *${data.recommendation}*\n`;
   }
 
   msg += TAGLINE;
