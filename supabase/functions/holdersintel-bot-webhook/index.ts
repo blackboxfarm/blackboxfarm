@@ -1795,6 +1795,7 @@ const ALERT_TYPES: Record<string, { emoji: string; label: string; description: s
   mint: { emoji: '🧪', label: 'Dev Mint Alerts', description: 'New mints from monitored dev wallets' },
   rug: { emoji: '⚠️', label: 'Rug / Blacklist', description: 'Rug pulls & blacklisted dev warnings' },
   whale: { emoji: '🐋', label: 'Whale Movement', description: 'Large holder concentration shifts' },
+  kol: { emoji: '🎯', label: 'KOL Mentions', description: 'Top KOLs posting $ticker on X (Apify scanner)' },
   news: { emoji: '📰', label: 'Crypto News', description: 'Viral crypto newswire alerts' },
 };
 
