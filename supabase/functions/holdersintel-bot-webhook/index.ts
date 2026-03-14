@@ -2042,7 +2042,7 @@ serve(async (req) => {
             await handleWallet(dmChatId, telegramUserId, args);
             break;
           case "/alerts":
-            await handleAlerts(dmChatId, telegramUserId);
+            await handleAlerts(dmChatId, telegramUserId, args, false);
             break;
           default:
             break;
