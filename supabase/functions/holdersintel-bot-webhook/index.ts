@@ -115,16 +115,100 @@ function fallbackVerdict(momentumScore: number, healthScore: number, phase: Toke
 
 // ─── Helpers ───
 
+const TELEGRAM_MAX_MESSAGE_LENGTH = 3800;
+
+function splitMessage(text: string, maxLength = TELEGRAM_MAX_MESSAGE_LENGTH): string[] {
+  if (text.length <= maxLength) return [text];
+
+  const lines = text.split("\n");
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const line of lines) {
+    const segment = current ? `\n${line}` : line;
+
+    if ((current + segment).length <= maxLength) {
+      current += segment;
+      continue;
+    }
+
+    if (current) chunks.push(current);
+
+    if (line.length <= maxLength) {
+      current = line;
+      continue;
+    }
+
+    for (let i = 0; i < line.length; i += maxLength) {
+      chunks.push(line.slice(i, i + maxLength));
+    }
+    current = "";
+  }
+
+  if (current) chunks.push(current);
+  return chunks.length > 0 ? chunks : [text.slice(0, maxLength)];
+}
+
+function toPlainText(text: string): string {
+  return text
+    .replace(/\\_/g, "_")
+    .replace(/[`*_~]/g, "")
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function sendMessage(chatId: number, text: string, parseMode = "Markdown", replyToMessageId?: number) {
-  const trimmed = text.length > 4090 ? text.slice(0, 4090) + "..." : text;
-  const body: Record<string, unknown> = { chat_id: chatId, text: trimmed, parse_mode: parseMode, disable_web_page_preview: true };
-  if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
-  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) console.error("[bot] sendMessage failed:", await res.text());
+  const chunks = splitMessage(text);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text: chunk,
+      parse_mode: parseMode,
+      disable_web_page_preview: true,
+    };
+
+    if (replyToMessageId && i === 0) body.reply_to_message_id = replyToMessageId;
+
+    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) continue;
+
+    const errorText = await res.text();
+    console.error(
+      `[bot] sendMessage failed (chat:${chatId}, parse:${parseMode}, chunk:${i + 1}/${chunks.length}, len:${chunk.length}):`,
+      errorText
+    );
+
+    const shouldRetryWithoutMarkdown = parseMode === "Markdown" && /can't parse entities|parse entities/i.test(errorText);
+    if (!shouldRetryWithoutMarkdown) continue;
+
+    const fallbackBody: Record<string, unknown> = {
+      chat_id: chatId,
+      text: toPlainText(chunk),
+      disable_web_page_preview: true,
+    };
+
+    if (replyToMessageId && i === 0) fallbackBody.reply_to_message_id = replyToMessageId;
+
+    const fallbackRes = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fallbackBody),
+    });
+
+    if (!fallbackRes.ok) {
+      console.error(`[bot] fallback plain-text send failed (chat:${chatId}):`, await fallbackRes.text());
+    } else {
+      console.log(`[bot] recovered from Markdown parse error via plain-text fallback (chat:${chatId})`);
+    }
+  }
 }
 
 /** For advanced commands in group chats: reply "check DMs" in group, send report via DM */
@@ -452,7 +536,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${check("auth")} /add — Add bot to your channel/group\n` +
     `${check("auth")} /channels (/ch) — List & manage installations\n` +
     `${check("auth")} /config — Configure channel settings\n` +
-    `  _Usage: /config delay 3000 · verbose on · admin\\_only on · dev\\_alerts on_\n` +
+    `  _Usage: /config delay 3000 · verbose on · admin-only on · dev-alerts on_\n` +
     `${check("auth")} /payment (/pay) — View/generate payment wallet\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
@@ -2520,8 +2604,12 @@ serve(async (req) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
+  let fallbackChatId: number | null = null;
+  let fallbackMessageId: number | undefined;
+  let fallbackCommand = "";
+
   try {
-    const update = await req.json();
+    const update: any = await req.json();
 
     // ─── Handle my_chat_member events (bot added/removed from groups) ───
     if (update.my_chat_member) {
@@ -2547,6 +2635,20 @@ serve(async (req) => {
     const [rawCommand, ...argParts] = text.split(/\s+/);
     const command = rawCommand.toLowerCase().replace(/@\w+$/, "");
     const args = argParts.join(" ");
+
+    fallbackChatId = chatId;
+    fallbackMessageId = messageId;
+    fallbackCommand = command;
+
+    console.log("[bot] incoming command", JSON.stringify({
+      updateId: update.update_id ?? null,
+      chatId,
+      chatType,
+      telegramUserId,
+      command,
+      argsLength: args.length,
+      isGroupChat,
+    }));
 
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/risk', '/r', '/quick', '/q', '/alerts'];
@@ -2736,6 +2838,19 @@ serve(async (req) => {
     }
   } catch (err) {
     console.error("[bot] Webhook error:", err);
+
+    if (fallbackChatId) {
+      try {
+        await sendMessage(
+          fallbackChatId,
+          `⚠️ Internal error while handling \`${fallbackCommand || "your command"}\`. Please try again in a moment.`,
+          "Markdown",
+          fallbackMessageId
+        );
+      } catch (notifyErr) {
+        console.error("[bot] failed to send fallback error message:", notifyErr);
+      }
+    }
   }
 
   return new Response("OK");
