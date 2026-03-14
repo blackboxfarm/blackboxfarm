@@ -115,14 +115,33 @@ function fallbackVerdict(momentumScore: number, healthScore: number, phase: Toke
 
 // ─── Helpers ───
 
-async function sendMessage(chatId: number, text: string, parseMode = "Markdown") {
+async function sendMessage(chatId: number, text: string, parseMode = "Markdown", replyToMessageId?: number) {
   const trimmed = text.length > 4090 ? text.slice(0, 4090) + "..." : text;
+  const body: Record<string, unknown> = { chat_id: chatId, text: trimmed, parse_mode: parseMode, disable_web_page_preview: true };
+  if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
   const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text: trimmed, parse_mode: parseMode, disable_web_page_preview: true }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) console.error("[bot] sendMessage failed:", await res.text());
+}
+
+/** For advanced commands in group chats: reply "check DMs" in group, send report via DM */
+async function groupDMRedirect(
+  groupChatId: number,
+  telegramUserId: string,
+  commandName: string,
+  messageId?: number
+): Promise<boolean> {
+  // Send DM-redirect notice in the group (reply to the user's message)
+  await sendMessage(
+    groupChatId,
+    `📬 *${commandName}* report sent to your DMs!\n_Open a private chat with me for the full analysis._`,
+    "Markdown",
+    messageId
+  );
+  return true;
 }
 
 async function getLinkedUser(telegramUserId: string) {
