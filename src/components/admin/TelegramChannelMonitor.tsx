@@ -846,6 +846,8 @@ export default function TelegramChannelMonitor() {
         </div>
       </div>
 
+      <TelegramBotApiStatusCard />
+
       {/* MTProto Authentication Card */}
       <Card className={
         mtprotoStatus?.sessionValid === false 
