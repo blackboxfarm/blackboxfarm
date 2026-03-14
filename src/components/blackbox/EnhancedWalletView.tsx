@@ -144,12 +144,12 @@ export function EnhancedWalletView() {
       } else if (wallet.wallet_type === 'pool') {
         const { data: walletData, error } = await supabase
           .from('wallet_pools')
-          .select('secret_key')
+          .select('secret_key_encrypted')
           .eq('pubkey', pubkey)
           .single();
         
-        if (error || !walletData) throw new Error('Failed to get wallet secret');
-        secretKeyEncrypted = walletData.secret_key;
+        if (error || !walletData?.secret_key_encrypted) throw new Error('Failed to get wallet secret');
+        secretKeyEncrypted = walletData.secret_key_encrypted;
       } else if (wallet.wallet_type === 'super_admin') {
         const { data: walletData, error } = await supabase
           .from('super_admin_wallets')
