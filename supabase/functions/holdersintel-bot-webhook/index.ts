@@ -2531,6 +2531,10 @@ serve(async (req) => {
 
     const message = update.message;
 
+    if (!message?.text || !message.from) {
+      return new Response("OK");
+    }
+
     const chatId = message.chat.id;
     const chatType = message.chat.type;
     const isGroupChat = chatType === 'group' || chatType === 'supergroup';
