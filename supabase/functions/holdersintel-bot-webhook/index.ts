@@ -2111,7 +2111,7 @@ serve(async (req) => {
           await handleWallet(chatId, telegramUserId, args);
           break;
         case "/alerts":
-          await handleAlerts(chatId, telegramUserId);
+          await handleAlerts(chatId, telegramUserId, args, isGroupChat);
           break;
         default:
           // Auto-detect registration codes
