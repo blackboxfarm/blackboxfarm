@@ -2681,6 +2681,40 @@ serve(async (req) => {
         case "/alerts":
           await handleAlerts(chatId, telegramUserId, args, isGroupChat);
           break;
+        case "/add":
+          if (isGroupChat) {
+            await sendMessage(chatId, `📬 DM me to use /add — channel management is DM-only.`, "Markdown", messageId);
+          } else {
+            await handleAdd(chatId, telegramUserId);
+          }
+          break;
+        case "/channels":
+        case "/ch":
+          if (isGroupChat) {
+            await sendMessage(chatId, `📬 DM me to use /channels.`, "Markdown", messageId);
+          } else {
+            await handleChannels(chatId, telegramUserId);
+          }
+          break;
+        case "/config":
+          if (isGroupChat) {
+            await sendMessage(chatId, `📬 DM me to use /config — channel settings are managed privately.`, "Markdown", messageId);
+          } else {
+            await handleConfig(chatId, telegramUserId, args);
+          }
+          break;
+        case "/payment":
+        case "/pay":
+          if (isGroupChat) {
+            await sendMessage(chatId, `📬 DM me to use /payment.`, "Markdown", messageId);
+          } else {
+            if (args.trim().startsWith('verify')) {
+              await handlePaymentVerify(chatId, telegramUserId, args.replace(/^verify\s*/i, ''));
+            } else {
+              await handlePayment(chatId, telegramUserId, args);
+            }
+          }
+          break;
         default:
           // Auto-detect registration codes
           if (/^BF-[A-Z0-9]{6}$/i.test(text)) {
