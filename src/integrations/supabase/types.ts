@@ -2018,6 +2018,36 @@ export type Database = {
           },
         ]
       }
+      channel_alert_config: {
+        Row: {
+          alert_type: string
+          chat_id: number
+          created_at: string
+          enabled_by: string | null
+          id: string
+          is_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          alert_type: string
+          chat_id: number
+          created_at?: string
+          enabled_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          alert_type?: string
+          chat_id?: number
+          created_at?: string
+          enabled_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       channel_installations: {
         Row: {
           admin_config: Json
