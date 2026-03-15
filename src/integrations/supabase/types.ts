@@ -11361,6 +11361,7 @@ export type Database = {
       token_lifecycle: {
         Row: {
           active_boosts: number | null
+          ath_24h_usd: number | null
           created_at: string | null
           creator_wallet: string | null
           current_status: string | null
@@ -11394,6 +11395,7 @@ export type Database = {
         }
         Insert: {
           active_boosts?: number | null
+          ath_24h_usd?: number | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
@@ -11427,6 +11429,7 @@ export type Database = {
         }
         Update: {
           active_boosts?: number | null
+          ath_24h_usd?: number | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
@@ -13883,6 +13886,7 @@ export type Database = {
       }
       master_token_directory: {
         Row: {
+          ath_24h_usd: number | null
           community_admin_handles: string[] | null
           community_mod_handles: string[] | null
           created_at: string | null
