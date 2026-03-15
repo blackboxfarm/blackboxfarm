@@ -13885,6 +13885,7 @@ export type Database = {
         Row: {
           community_admin_handles: string[] | null
           community_mod_handles: string[] | null
+          created_at: string | null
           creator_wallet: string | null
           dev_auto_blacklisted: boolean | null
           dev_is_legitimate_builder: boolean | null
