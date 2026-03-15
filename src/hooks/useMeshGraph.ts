@@ -212,6 +212,25 @@ export function useMeshGraph(initialEntityId?: string) {
   const autoDiscoverCommunity = useCallback(async (tokenMint: string, walletAddress?: string) => {
     try {
       console.log(`[MeshSpider] Auto-discovering X Community for token ${tokenMint.slice(0, 12)}...`);
+
+      // Cache-first: if this token already has a recently scraped community, skip external fetches
+      const { data: cachedCommunities } = await supabase
+        .from('x_communities')
+        .select('community_id, last_scraped_at, scrape_status, admin_usernames, moderator_usernames')
+        .contains('linked_token_mints', [tokenMint])
+        .order('last_scraped_at', { ascending: false })
+        .limit(1);
+
+      const cachedCommunity = cachedCommunities?.[0];
+      const hasRecentCommunityCache = !!cachedCommunity?.last_scraped_at &&
+        (Date.now() - new Date(cachedCommunity.last_scraped_at).getTime()) < (24 * 60 * 60 * 1000);
+      const hasStoredStaff = ((cachedCommunity?.admin_usernames?.length || 0) + (cachedCommunity?.moderator_usernames?.length || 0)) > 0;
+
+      if (cachedCommunity && hasRecentCommunityCache && cachedCommunity.scrape_status === 'complete' && hasStoredStaff) {
+        console.log(`[MeshSpider] Cache hit for token ${tokenMint.slice(0, 8)} — skipping DexScreener/X Community scrape`);
+        return;
+      }
+
       const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
       if (!dexRes.ok) return;
       const dexData = await dexRes.json();
