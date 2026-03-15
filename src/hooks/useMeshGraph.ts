@@ -173,8 +173,11 @@ export function useMeshGraph(initialEntityId?: string) {
       // 2-hop: for wallet entities, also fetch links for their direct neighbors
       const hop1Ids = new Set<string>();
       for (const link of allLinks) {
-        if (link.source_type === 'wallet' || link.linked_type === 'wallet' ||
-            link.source_type === 'kyc_root' || link.linked_type === 'kyc_root') {
+        if (
+          link.source_type === 'wallet' || link.linked_type === 'wallet' ||
+          link.source_type === 'kyc_root' || link.linked_type === 'kyc_root' ||
+          link.source_type === 'x_community' || link.linked_type === 'x_community'
+        ) {
           hop1Ids.add(link.source_id);
           hop1Ids.add(link.linked_id);
         }
@@ -209,6 +212,25 @@ export function useMeshGraph(initialEntityId?: string) {
   const autoDiscoverCommunity = useCallback(async (tokenMint: string, walletAddress?: string) => {
     try {
       console.log(`[MeshSpider] Auto-discovering X Community for token ${tokenMint.slice(0, 12)}...`);
+
+      // Cache-first: if this token already has a recently scraped community, skip external fetches
+      const { data: cachedCommunities } = await supabase
+        .from('x_communities')
+        .select('community_id, last_scraped_at, scrape_status, admin_usernames, moderator_usernames')
+        .contains('linked_token_mints', [tokenMint])
+        .order('last_scraped_at', { ascending: false })
+        .limit(1);
+
+      const cachedCommunity = cachedCommunities?.[0];
+      const hasRecentCommunityCache = !!cachedCommunity?.last_scraped_at &&
+        (Date.now() - new Date(cachedCommunity.last_scraped_at).getTime()) < (24 * 60 * 60 * 1000);
+      const hasStoredStaff = ((cachedCommunity?.admin_usernames?.length || 0) + (cachedCommunity?.moderator_usernames?.length || 0)) > 0;
+
+      if (cachedCommunity && hasRecentCommunityCache && cachedCommunity.scrape_status === 'complete' && hasStoredStaff) {
+        console.log(`[MeshSpider] Cache hit for token ${tokenMint.slice(0, 8)} — skipping DexScreener/X Community scrape`);
+        return;
+      }
+
       const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
       if (!dexRes.ok) return;
       const dexData = await dexRes.json();
@@ -273,20 +295,67 @@ export function useMeshGraph(initialEntityId?: string) {
 
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
+    const normalizedInput = input.trim();
+    const now = Date.now();
+
+    // Cache-first: if recent mesh links already exist, skip expensive external spider calls
+    const FRESH_CACHE_MS = 10 * 60 * 1000; // 10 min
+    try {
+      const [sourceLinksRes, linkedLinksRes] = await Promise.all([
+        supabase
+          .from('reputation_mesh')
+          .select('id, discovered_at')
+          .eq('source_id', normalizedInput)
+          .order('discovered_at', { ascending: false })
+          .limit(25),
+        supabase
+          .from('reputation_mesh')
+          .select('id, discovered_at')
+          .eq('linked_id', normalizedInput)
+          .order('discovered_at', { ascending: false })
+          .limit(25),
+      ]);
+
+      const merged = [...(sourceLinksRes.data || []), ...(linkedLinksRes.data || [])];
+      const deduped = Array.from(new Map(merged.map((r: any) => [r.id, r])).values()) as Array<{ id: string; discovered_at: string | null }>;
+      const latestDiscovery = deduped.reduce((latest, row) => {
+        if (!row.discovered_at) return latest;
+        const ts = new Date(row.discovered_at).getTime();
+        return ts > latest ? ts : latest;
+      }, 0);
+
+      if (deduped.length > 0 && latestDiscovery > 0 && (now - latestDiscovery) < FRESH_CACHE_MS) {
+        const ageSec = Math.max(1, Math.floor((now - latestDiscovery) / 1000));
+        setSpiderStatus({
+          active: false,
+          stage: '',
+          diagnostics: [
+            `✅ Cache hit: ${deduped.length} mesh links already in DB`,
+            `Newest link age: ${ageSec}s`,
+            'Skipped external spider to avoid duplicate API credits',
+          ],
+          recommendation: 'Loaded from database cache.',
+        });
+        refetch();
+        return;
+      }
+    } catch (cacheErr) {
+      console.warn('[MeshSpider] Cache pre-check failed, continuing with spider:', cacheErr);
+    }
+
     // Cooldown-based retry: 2 immediate attempts, then reset after 5 minutes
     const COOLDOWN_MS = 5 * 60 * 1000;
     const MAX_IMMEDIATE = 2;
-    const record = spiderAttemptsRef.current.get(input);
-    const now = Date.now();
-    
+    const record = spiderAttemptsRef.current.get(normalizedInput);
+
     if (record) {
       const timeSince = now - record.lastAttempt;
       if (timeSince > COOLDOWN_MS) {
         // Reset after cooldown
-        spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
+        spiderAttemptsRef.current.set(normalizedInput, { count: 1, lastAttempt: now });
       } else if (record.count >= MAX_IMMEDIATE) {
         const remainingMin = Math.ceil((COOLDOWN_MS - timeSince) / 60000);
-        console.log(`[MeshSpider] Cooldown active for ${input}, ${remainingMin}min remaining`);
+        console.log(`[MeshSpider] Cooldown active for ${normalizedInput}, ${remainingMin}min remaining`);
         setSpiderStatus({
           active: false,
           stage: '',
@@ -295,20 +364,20 @@ export function useMeshGraph(initialEntityId?: string) {
         });
         return;
       } else {
-        spiderAttemptsRef.current.set(input, { count: record.count + 1, lastAttempt: now });
+        spiderAttemptsRef.current.set(normalizedInput, { count: record.count + 1, lastAttempt: now });
       }
     } else {
-      spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
+      spiderAttemptsRef.current.set(normalizedInput, { count: 1, lastAttempt: now });
     }
 
     setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
-    console.log('[MeshSpider] Starting spider:', { input: input.slice(0, 16), scanMode });
+    console.log('[MeshSpider] Starting spider:', { input: normalizedInput.slice(0, 16), scanMode });
 
     try {
       setSpiderStatus({ active: true, stage: '🔍 Resolving entity type & wallet...' });
 
       const { data, error } = await supabase.functions.invoke('oracle-unified-lookup', {
-        body: { input, scanMode },
+        body: { input: normalizedInput, scanMode },
       });
 
       if (error) {
@@ -370,12 +439,12 @@ export function useMeshGraph(initialEntityId?: string) {
 
         // ═══ AUTO-DISCOVER X COMMUNITY ═══
         // If input is a token mint, discover its X Community + admins/mods
-        const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input.trim());
+        const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
         if (isBase58) {
           // Input could be token or wallet. Try community discovery for input as token,
           // and also for any tokens discovered in the spider result
           const tokensToCheck = new Set<string>();
-          tokensToCheck.add(input.trim());
+          tokensToCheck.add(normalizedInput);
           
           // Also add tokens from the spider result's token history
           if (result.tokenHistory) {
@@ -418,8 +487,6 @@ export function useMeshGraph(initialEntityId?: string) {
   }, [refetch, autoDiscoverCommunity]);
 
   const focusOnEntity = useCallback((id: string, type: string) => {
-    // Reset spider attempts for new searches
-    spiderAttemptsRef.current.clear();
     setFocusedEntity({ id, type });
     setExpandedEntities(new Set([id]));
     setSpiderStatus({ active: false, stage: '' }); // Clear previous errors
