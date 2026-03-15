@@ -266,7 +266,9 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{x_community\}/g, xCommunity)
     .replace(/\{X_COMMUNITY\}/g, xCommunity)
     .replace(/\{website\}/g, website)
-    .replace(/\{WEBSITE\}/g, website);
+    .replace(/\{WEBSITE\}/g, website)
+    .replace(/\{ath_24h\}/g, data.ath24h != null ? `$${Number(data.ath24h).toFixed(6)}` : 'N/A')
+    .replace(/\{ATH_24H\}/g, data.ath24h != null ? `$${Number(data.ath24h).toFixed(6)}` : 'N/A');
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {

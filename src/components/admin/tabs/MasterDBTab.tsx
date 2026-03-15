@@ -189,6 +189,7 @@ export default function MasterDBTab() {
                 <TableHead>Mods</TableHead>
                 <TableHead>Mesh X</TableHead>
                 <TableHead>Websites</TableHead>
+                <TableHead>ATH 24h</TableHead>
                 <TableHead>Posted</TableHead>
               </TableRow>
             </TableHeader>
