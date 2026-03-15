@@ -295,20 +295,67 @@ export function useMeshGraph(initialEntityId?: string) {
 
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
+    const normalizedInput = input.trim();
+    const now = Date.now();
+
+    // Cache-first: if recent mesh links already exist, skip expensive external spider calls
+    const FRESH_CACHE_MS = 10 * 60 * 1000; // 10 min
+    try {
+      const [sourceLinksRes, linkedLinksRes] = await Promise.all([
+        supabase
+          .from('reputation_mesh')
+          .select('id, discovered_at')
+          .eq('source_id', normalizedInput)
+          .order('discovered_at', { ascending: false })
+          .limit(25),
+        supabase
+          .from('reputation_mesh')
+          .select('id, discovered_at')
+          .eq('linked_id', normalizedInput)
+          .order('discovered_at', { ascending: false })
+          .limit(25),
+      ]);
+
+      const merged = [...(sourceLinksRes.data || []), ...(linkedLinksRes.data || [])];
+      const deduped = Array.from(new Map(merged.map((r: any) => [r.id, r])).values()) as Array<{ id: string; discovered_at: string | null }>;
+      const latestDiscovery = deduped.reduce((latest, row) => {
+        if (!row.discovered_at) return latest;
+        const ts = new Date(row.discovered_at).getTime();
+        return ts > latest ? ts : latest;
+      }, 0);
+
+      if (deduped.length > 0 && latestDiscovery > 0 && (now - latestDiscovery) < FRESH_CACHE_MS) {
+        const ageSec = Math.max(1, Math.floor((now - latestDiscovery) / 1000));
+        setSpiderStatus({
+          active: false,
+          stage: '',
+          diagnostics: [
+            `✅ Cache hit: ${deduped.length} mesh links already in DB`,
+            `Newest link age: ${ageSec}s`,
+            'Skipped external spider to avoid duplicate API credits',
+          ],
+          recommendation: 'Loaded from database cache.',
+        });
+        refetch();
+        return;
+      }
+    } catch (cacheErr) {
+      console.warn('[MeshSpider] Cache pre-check failed, continuing with spider:', cacheErr);
+    }
+
     // Cooldown-based retry: 2 immediate attempts, then reset after 5 minutes
     const COOLDOWN_MS = 5 * 60 * 1000;
     const MAX_IMMEDIATE = 2;
-    const record = spiderAttemptsRef.current.get(input);
-    const now = Date.now();
-    
+    const record = spiderAttemptsRef.current.get(normalizedInput);
+
     if (record) {
       const timeSince = now - record.lastAttempt;
       if (timeSince > COOLDOWN_MS) {
         // Reset after cooldown
-        spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
+        spiderAttemptsRef.current.set(normalizedInput, { count: 1, lastAttempt: now });
       } else if (record.count >= MAX_IMMEDIATE) {
         const remainingMin = Math.ceil((COOLDOWN_MS - timeSince) / 60000);
-        console.log(`[MeshSpider] Cooldown active for ${input}, ${remainingMin}min remaining`);
+        console.log(`[MeshSpider] Cooldown active for ${normalizedInput}, ${remainingMin}min remaining`);
         setSpiderStatus({
           active: false,
           stage: '',
@@ -317,10 +364,10 @@ export function useMeshGraph(initialEntityId?: string) {
         });
         return;
       } else {
-        spiderAttemptsRef.current.set(input, { count: record.count + 1, lastAttempt: now });
+        spiderAttemptsRef.current.set(normalizedInput, { count: record.count + 1, lastAttempt: now });
       }
     } else {
-      spiderAttemptsRef.current.set(input, { count: 1, lastAttempt: now });
+      spiderAttemptsRef.current.set(normalizedInput, { count: 1, lastAttempt: now });
     }
 
     setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
