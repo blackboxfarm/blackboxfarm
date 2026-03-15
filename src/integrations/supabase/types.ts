@@ -13886,6 +13886,15 @@ export type Database = {
           community_admin_handles: string[] | null
           community_mod_handles: string[] | null
           creator_wallet: string | null
+          dev_auto_blacklisted: boolean | null
+          dev_is_legitimate_builder: boolean | null
+          dev_is_serial_spammer: boolean | null
+          dev_pattern: string | null
+          dev_reputation_score: number | null
+          dev_tokens_rugged: number | null
+          dev_tokens_successful: number | null
+          dev_total_launches: number | null
+          dev_trust_level: string | null
           dev_wallets: string[] | null
           dex_id: string | null
           image_url: string | null
@@ -13893,8 +13902,11 @@ export type Database = {
           mesh_x_handles: string[] | null
           name: string | null
           pair_address: string | null
+          primary_dev_wallet: string | null
           symbol: string | null
+          token_health_grade: string | null
           token_mint: string | null
+          was_posted: boolean | null
           websites: string[] | null
           x_community_names: string[] | null
           x_community_urls: string[] | null
