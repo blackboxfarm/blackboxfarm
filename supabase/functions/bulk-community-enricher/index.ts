@@ -36,15 +36,14 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const batchSize = Math.min(body.batchSize || 3, 10); // Small batches to avoid timeout
-    const maxAgeDays = body.maxAgeDays || 7;
 
     console.log(`[bulk-community-enricher] Batch of ${batchSize}`);
 
     // Get communities needing enrichment:
-    // - Missing admin data OR stale
+    // - Missing admin data (never scraped)
     // - Not deleted, not at max failures
     // - Has linked tokens (from HoldersIntel)
-    const staleThreshold = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
+    // NOTE: We NEVER re-scrape. Staff data is a historical snapshot from launch.
 
     // Fetch communities that might need enrichment - broad query, filter in code
     const { data: rawCommunities, error: fetchError } = await supabase
