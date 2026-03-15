@@ -80,10 +80,10 @@ async function checkCommunityViaWeb(communityId: string): Promise<CommunityExist
 }
 
 /**
- * Interpret Apify scrape results
- * Empty members array might indicate deletion or private community
+ * Interpret scrape results (from Firecrawl or other sources)
+ * Empty results might indicate deletion or private community
  */
-export function interpretApifyResult(members: any[]): CommunityExistenceResult {
+export function interpretScrapeResult(members: any[]): CommunityExistenceResult {
   const checkedAt = new Date().toISOString();
   
   if (!members || members.length === 0) {
@@ -91,7 +91,7 @@ export function interpretApifyResult(members: any[]): CommunityExistenceResult {
       exists: false,
       isDeleted: false, // Not confirmed deleted yet
       memberCount: 0,
-      errorMessage: 'No members returned from Apify scrape',
+      errorMessage: 'No staff data returned from scrape',
       checkedAt,
     };
   }
