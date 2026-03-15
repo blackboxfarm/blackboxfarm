@@ -57,7 +57,7 @@ export function XCommunityManager() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [bulkScraping, setBulkScraping] = useState(false);
-  const [singleScraping, setSingleScraping] = useState<string | null>(null);
+  
   const [followDialogCommunity, setFollowDialogCommunity] = useState<XCommunity | null>(null);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -150,28 +150,6 @@ export function XCommunityManager() {
   }, [fetchCommunities]);
 
   const filteredCommunities = communities; // Already filtered server-side
-
-  // Trigger Apify scrape for a single community
-  const scrapeCommunity = async (community: XCommunity) => {
-    setSingleScraping(community.community_id);
-    try {
-      const { data, error } = await supabase.functions.invoke('x-community-enricher', {
-        body: { 
-          communityUrl: community.community_url || `https://x.com/i/communities/${community.community_id}`,
-          triggerTeamDetection: true
-        }
-      });
-
-      if (error) throw error;
-
-      toast.success(`Scraped ${community.name || community.community_id}: ${data.admins?.length || 0} admins, ${data.moderators?.length || 0} mods`);
-      await fetchCommunities();
-    } catch (err: any) {
-      toast.error(`Scrape failed: ${err.message}`);
-    } finally {
-      setSingleScraping(null);
-    }
-  };
 
   // Bulk scrape all communities missing admin/mod data
   const bulkScrapeCommunities = async () => {
@@ -468,12 +446,12 @@ export function XCommunityManager() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">Community</TableHead>
-                  <TableHead>Admins</TableHead>
-                  <TableHead>Moderators</TableHead>
-                  <TableHead className="w-[100px]">Members</TableHead>
-                  <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead className="w-[140px]">Actions</TableHead>
+                  <TableHead className="w-[200px]">Community</TableHead>
+                  <TableHead className="w-[120px]">Token</TableHead>
+                  <TableHead>Staff</TableHead>
+                  <TableHead className="w-[80px]">Members</TableHead>
+                  <TableHead className="w-[100px]">Status</TableHead>
+                  <TableHead className="w-[120px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -490,129 +468,139 @@ export function XCommunityManager() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredCommunities.map((community) => (
-                    <TableRow key={community.id} className={community.is_flagged ? 'bg-red-500/5' : ''}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="font-medium truncate max-w-[200px]">
-                            {community.name || `#${community.community_id}`}
-                          </div>
-                          {/* Linked token tickers */}
-                          {(community.linked_token_mints?.length ?? 0) > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {community.linked_token_mints.slice(0, 2).map(mint => {
-                                const sym = tokenSymbols[mint];
-                                return sym ? (
-                                  <Badge key={mint} variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1">
-                                    <Coins className="h-2.5 w-2.5" />{"$"}{sym}
-                                  </Badge>
-                                ) : null;
-                              })}
-                              {community.linked_token_mints.length > 2 && (
-                                <span className="text-xs text-muted-foreground">+{community.linked_token_mints.length - 2}</span>
+                  filteredCommunities.map((community) => {
+                    const admins = community.admin_usernames || [];
+                    const mods = community.moderator_usernames || [];
+                    const allStaff = [
+                      ...admins.map(h => ({ handle: h, role: 'admin' as const })),
+                      ...mods.map(h => ({ handle: h, role: 'mod' as const })),
+                    ];
+                    const visibleStaff = allStaff.slice(0, 5);
+                    const extraCount = allStaff.length - 5;
+
+                    return (
+                      <TableRow key={community.id} className={community.is_flagged ? 'bg-red-500/5' : ''}>
+                        {/* Community name + ID */}
+                        <TableCell>
+                          <div className="space-y-0.5">
+                            <div className="font-medium text-sm truncate max-w-[200px]">
+                              {community.name || `Community ${community.community_id.slice(0, 10)}...`}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground font-mono">
+                                {community.community_id.slice(0, 8)}...
+                              </span>
+                              {community.community_url && (
+                                <a 
+                                  href={community.community_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-sky-400 hover:text-sky-300"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
                               )}
                             </div>
-                          )}
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {community.community_id.slice(0, 8)}...
-                            </span>
-                            {community.community_url && (
-                              <a 
-                                href={community.community_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-sky-400 hover:text-sky-300"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
+                          </div>
+                        </TableCell>
+
+                        {/* Token ticker column */}
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {(community.linked_token_mints || []).slice(0, 2).map(mint => {
+                              const sym = tokenSymbols[mint];
+                              return sym ? (
+                                <Badge key={mint} variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1">
+                                  <Coins className="h-2.5 w-2.5" />{"$"}{sym}
+                                </Badge>
+                              ) : (
+                                <span key={mint} className="text-xs text-muted-foreground font-mono">{mint.slice(0, 6)}...</span>
+                              );
+                            })}
+                            {(community.linked_token_mints?.length || 0) > 2 && (
+                              <span className="text-xs text-muted-foreground">+{(community.linked_token_mints?.length || 0) - 2}</span>
+                            )}
+                            {!(community.linked_token_mints?.length) && (
+                              <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1 max-w-[180px]">
-                          {community.admin_usernames?.slice(0, 3).map(admin => (
-                            <Badge key={admin} variant="outline" className="text-xs text-yellow-400 border-yellow-500/30">
-                              <Crown className="h-2.5 w-2.5 mr-1" />
-                              @{admin}
-                            </Badge>
-                          ))}
-                          {(community.admin_usernames?.length || 0) > 3 && (
-                            <Badge variant="outline" className="text-xs">+{(community.admin_usernames?.length || 0) - 3}</Badge>
-                          )}
-                          {!community.admin_usernames?.length && (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {community.moderator_usernames?.slice(0, 3).map(mod => (
-                            <Badge key={mod} variant="outline" className="text-xs text-blue-400 border-blue-500/30">
-                              <Shield className="h-2.5 w-2.5 mr-1" />
-                              @{mod}
-                            </Badge>
-                          ))}
-                          {(community.moderator_usernames?.length || 0) > 3 && (
-                            <Badge variant="outline" className="text-xs">+{(community.moderator_usernames?.length || 0) - 3}</Badge>
-                          )}
-                          {!community.moderator_usernames?.length && (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-sm">
-                          {community.member_count?.toLocaleString() || '—'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {getScrapeStatusBadge(community)}
-                        {community.is_flagged && (
-                          <Badge variant="destructive" className="ml-1 text-xs">Flagged</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setFollowDialogCommunity(community)}
+                        </TableCell>
+
+                        {/* Combined Staff column */}
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1 max-w-[280px]">
+                            {visibleStaff.map(({ handle, role }) => (
+                              <Badge
+                                key={handle}
+                                variant="outline"
+                                className={`text-xs ${
+                                  role === 'admin'
+                                    ? 'text-yellow-400 border-yellow-500/30'
+                                    : 'text-cyan-400 border-cyan-500/30'
+                                }`}
                               >
-                                <BadgeCheck className="h-4 w-4 text-sky-400" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[260px]">
-                              <p className="font-medium">Follow Blue Checks</p>
-                              <p className="text-xs text-muted-foreground mt-1">Uses Twitter/X API (free) to send follow + follow-back requests from @HoldersIntel. No Apify credits used.</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditDialog(community)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => scrapeCommunity(community)}
-                            disabled={singleScraping === community.community_id || community.is_deleted}
-                          >
-                            {singleScraping === community.community_id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4" />
+                                {role === 'admin' ? (
+                                  <Crown className="h-2.5 w-2.5 mr-1" />
+                                ) : (
+                                  <Shield className="h-2.5 w-2.5 mr-1" />
+                                )}
+                                @{handle}
+                              </Badge>
+                            ))}
+                            {extraCount > 0 && (
+                              <Badge variant="outline" className="text-xs">+{extraCount}</Badge>
                             )}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            {allStaff.length === 0 && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Members */}
+                        <TableCell>
+                          <span className="font-mono text-sm">
+                            {community.member_count?.toLocaleString() || '—'}
+                          </span>
+                        </TableCell>
+
+                        {/* Status */}
+                        <TableCell>
+                          {getScrapeStatusBadge(community)}
+                          {community.is_flagged && (
+                            <Badge variant="destructive" className="ml-1 text-xs">Flagged</Badge>
+                          )}
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setFollowDialogCommunity(community)}
+                                >
+                                  <BadgeCheck className="h-4 w-4 text-sky-400" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[260px]">
+                                <p className="font-medium">Follow Blue Checks</p>
+                                <p className="text-xs text-muted-foreground mt-1">Uses Twitter/X API (free). No Apify credits.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditDialog(community)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
