@@ -261,8 +261,11 @@ export function XCommunityManager() {
     }
   };
 
+  const [editName, setEditName] = useState("");
+
   const openEditDialog = (community: XCommunity) => {
     setSelectedCommunity(community);
+    setEditName(community.name || '');
     setManualAdmins(community.admin_usernames?.join(', ') || '');
     setManualMods(community.moderator_usernames?.join(', ') || '');
     setEditDialogOpen(true);
