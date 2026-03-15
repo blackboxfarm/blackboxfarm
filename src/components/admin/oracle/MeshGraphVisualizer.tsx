@@ -514,22 +514,31 @@ const MeshGraphVisualizer = () => {
       return;
     }
 
-    // ── Single click: if flagged, show red flag dialog; otherwise expand + center ──
+    // ── Single click: always expand + center. Show red flag as toast hint, not blocking dialog ──
     lastClickNodeRef.current = nodeId;
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null;
       lastClickNodeRef.current = null;
       
-      // Show red flag dialog if node has flags
-      if (meshNode.redFlags && meshNode.redFlags.length > 0) {
-        setRedFlagDialog({ node: meshNode, flags: meshNode.redFlags });
-        return;
-      }
-      
+      // Always expand the node
       expandEntity(nodeId);
       if (graphRef.current) {
         graphRef.current.centerAt(node.x, node.y, 800);
         graphRef.current.zoom(2, 800);
+      }
+      
+      // Show red flag as a non-blocking toast with option to view details
+      if (meshNode.redFlags && meshNode.redFlags.length > 0) {
+        const flagCount = meshNode.redFlags.length;
+        const topFlag = meshNode.redFlags[0];
+        toast.warning(`🚩 ${flagCount} red flag${flagCount > 1 ? 's' : ''}: ${topFlag.shortLabel}`, {
+          description: 'Click to view details',
+          action: {
+            label: 'View',
+            onClick: () => setRedFlagDialog({ node: meshNode, flags: meshNode.redFlags! }),
+          },
+          duration: 5000,
+        });
       }
     }, 300);
   }, [expandEntity, triggerSpider, graphData.nodes, refetch]);
