@@ -578,6 +578,7 @@ export function useMeshGraph(initialEntityId?: string) {
     setFocusedEntity(null);
     setExpandedEntities(new Set());
     setSpiderStatus({ active: false, stage: '' });
+    reverseCommunityLookupDone.current.clear();
     spiderAttemptsRef.current.clear();
   }, []);
 
