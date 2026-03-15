@@ -8,16 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface ApifyCommunityMember {
-  communityRole: "Admin" | "Moderator" | "member";
-  screenName: string;
-  name: string;
-  restId: string;
-  isBlueVerified: boolean;
-  followersCount?: number;
-  followingCount?: number;
-}
-
 interface XCommunityData {
   communityId: string;
   name?: string;
@@ -35,7 +25,6 @@ function detectTwitterType(url: string): 'account' | 'community' | null {
     return 'community';
   }
   if (url.includes('x.com/') || url.includes('twitter.com/')) {
-    // Check if it's not a special path
     const username = url.match(/(?:twitter\.com|x\.com)\/([^/?]+)/i)?.[1];
     if (username && !['i', 'home', 'search', 'explore', 'notifications', 'messages', 'settings'].includes(username.toLowerCase())) {
       return 'account';
@@ -60,75 +49,196 @@ function extractTwitterUsername(url: string): string | null {
 }
 
 interface FetchResult {
-  members: ApifyCommunityMember[];
+  admins: string[];
+  moderators: string[];
+  memberCount?: number;
+  name?: string;
+  description?: string;
   httpStatus: number;
   errorBody?: string;
+  rawData?: any;
 }
 
-async function fetchCommunityMembers(communityId: string, apifyApiKey: string): Promise<FetchResult> {
+/**
+ * Fetch X Community staff via Firecrawl (replaces Apify actor)
+ * Scrapes the community About tab and parses admin/mod handles from markdown
+ */
+async function fetchCommunityViaFirecrawl(communityId: string, firecrawlApiKey: string): Promise<FetchResult> {
   const { createApiLogger } = await import("../_shared/api-logger.ts");
   const logger = createApiLogger({
-    serviceName: 'apify',
-    endpoint: 'danpoletaev~twitter-x-community-member-scraper',
+    serviceName: 'firecrawl',
+    endpoint: 'v1/scrape',
     method: 'POST',
     functionName: 'x-community-enricher',
     metadata: { communityId },
   });
 
   try {
-    console.log(`Fetching X Community members for community ${communityId}...`);
-    
-    const response = await fetch(
-      `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          communityId: communityId,
-          maxItems: 100,
-          proxyConfiguration: {
-            useApifyProxy: true,
-            apifyProxyGroups: ["RESIDENTIAL"]
-          }
-        })
-      }
-    );
+    const communityUrl = `https://x.com/i/communities/${communityId}`;
+    console.log(`[Firecrawl] Scraping X Community About page: ${communityUrl}`);
+
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: communityUrl,
+        formats: ['markdown', 'links'],
+        onlyMainContent: true,
+        waitFor: 3000, // Wait for JS to render community page
+      }),
+    });
 
     await logger.complete(response.status);
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => '');
-      console.error(`Apify API error ${response.status} for community ${communityId}: ${errorBody.slice(0, 200)}`);
-      return { members: [], httpStatus: response.status, errorBody: errorBody.slice(0, 300) };
+      console.error(`[Firecrawl] HTTP ${response.status} for community ${communityId}: ${errorBody.slice(0, 200)}`);
+      return { admins: [], moderators: [], httpStatus: response.status, errorBody: errorBody.slice(0, 300) };
     }
 
     const data = await response.json();
-    return { members: data || [], httpStatus: response.status };
+    const markdown = data?.data?.markdown || data?.markdown || '';
+    const metadata = data?.data?.metadata || data?.metadata || {};
+
+    if (!markdown || markdown.length < 50) {
+      console.warn(`[Firecrawl] Empty or too short markdown for community ${communityId}`);
+      return { admins: [], moderators: [], httpStatus: response.status, errorBody: 'Empty markdown response' };
+    }
+
+    // Parse the markdown for admin/mod handles
+    const parsed = parseXCommunityMarkdown(markdown);
+
+    console.log(`[Firecrawl] Community ${communityId}: ${parsed.admins.length} admins, ${parsed.moderators.length} mods found`);
+
+    return {
+      admins: parsed.admins,
+      moderators: parsed.moderators,
+      memberCount: parsed.memberCount,
+      name: parsed.name || metadata?.title,
+      description: parsed.description,
+      httpStatus: response.status,
+      rawData: { markdown: markdown.slice(0, 2000), parsedAt: new Date().toISOString() },
+    };
   } catch (error) {
     await logger.fail(error instanceof Error ? error.message : String(error));
-    console.error('Failed to fetch community members:', error);
-    return { members: [], httpStatus: 0, errorBody: String(error) };
+    console.error('[Firecrawl] Failed to fetch community:', error);
+    return { admins: [], moderators: [], httpStatus: 0, errorBody: String(error) };
   }
 }
 
-async function processCommunityData(members: ApifyCommunityMember[]): Promise<XCommunityData> {
+/**
+ * Parse X Community page markdown to extract admin/mod handles
+ * 
+ * X Community pages typically show:
+ * - Community name as heading
+ * - Member count
+ * - "Admin" section with @handles or profile links
+ * - "Moderator" or "Moderators" section with @handles or profile links
+ */
+function parseXCommunityMarkdown(markdown: string): {
+  admins: string[];
+  moderators: string[];
+  memberCount?: number;
+  name?: string;
+  description?: string;
+} {
   const admins: string[] = [];
   const moderators: string[] = [];
-  
-  for (const member of members) {
-    if (member.communityRole === 'Admin') {
-      admins.push(member.screenName.toLowerCase());
-    } else if (member.communityRole === 'Moderator') {
-      moderators.push(member.screenName.toLowerCase());
+  let memberCount: number | undefined;
+  let name: string | undefined;
+  let description: string | undefined;
+
+  // Extract community name from first heading
+  const nameMatch = markdown.match(/^#\s+(.+)$/m);
+  if (nameMatch) name = nameMatch[1].trim();
+
+  // Extract member count (various formats)
+  const memberPatterns = [
+    /(\d[\d,.]+)\s*(?:Members?|members?)/i,
+    /Members?\s*[:\-]\s*(\d[\d,.]+)/i,
+  ];
+  for (const pattern of memberPatterns) {
+    const match = markdown.match(pattern);
+    if (match) {
+      memberCount = parseInt(match[1].replace(/[,.]/g, ''), 10);
+      break;
     }
   }
-  
+
+  // Helper: extract @handles from a text section
+  function extractHandles(text: string): string[] {
+    const handles: string[] = [];
+    // Match @username patterns
+    const atMatches = text.matchAll(/@([A-Za-z0-9_]{1,15})/g);
+    for (const m of atMatches) handles.push(m[1].toLowerCase());
+    // Match x.com/username or twitter.com/username links
+    const linkMatches = text.matchAll(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]{1,15})/gi);
+    for (const m of linkMatches) {
+      const u = m[1].toLowerCase();
+      if (!['i', 'home', 'search', 'explore', 'communities'].includes(u) && !handles.includes(u)) {
+        handles.push(u);
+      }
+    }
+    return [...new Set(handles)];
+  }
+
+  // Split markdown into lines for section-based parsing
+  const lines = markdown.split('\n');
+  let currentSection: 'none' | 'admin' | 'moderator' = 'none';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const lower = line.toLowerCase();
+
+    // Detect section headers
+    if (/admin/i.test(lower) && (lower.startsWith('#') || lower.startsWith('**') || lower.endsWith(':'))) {
+      currentSection = 'admin';
+      // Check if handles are on the same line
+      const sameLineHandles = extractHandles(line);
+      admins.push(...sameLineHandles);
+      continue;
+    }
+    if (/moderator/i.test(lower) && (lower.startsWith('#') || lower.startsWith('**') || lower.endsWith(':'))) {
+      currentSection = 'moderator';
+      const sameLineHandles = extractHandles(line);
+      moderators.push(...sameLineHandles);
+      continue;
+    }
+    // A new non-admin/mod section header resets
+    if ((lower.startsWith('#') || lower.startsWith('**')) && !/admin|moderator|mod/i.test(lower)) {
+      if (currentSection !== 'none') currentSection = 'none';
+      continue;
+    }
+
+    // Extract handles from current section
+    if (currentSection === 'admin') {
+      admins.push(...extractHandles(line));
+    } else if (currentSection === 'moderator') {
+      moderators.push(...extractHandles(line));
+    }
+  }
+
+  // Fallback: if section parsing found nothing, try global regex for "Admin: @handle" patterns
+  if (admins.length === 0 && moderators.length === 0) {
+    const adminLineMatch = markdown.match(/Admin[s]?\s*[:\-]\s*(.+)/gi);
+    if (adminLineMatch) {
+      for (const line of adminLineMatch) admins.push(...extractHandles(line));
+    }
+    const modLineMatch = markdown.match(/Moderator[s]?\s*[:\-]\s*(.+)/gi);
+    if (modLineMatch) {
+      for (const line of modLineMatch) moderators.push(...extractHandles(line));
+    }
+  }
+
   return {
-    communityId: '',
-    adminUsernames: [...new Set(admins)],
-    moderatorUsernames: [...new Set(moderators)],
-    memberCount: members.length,
-    rawData: members.slice(0, 20) // Keep first 20 for reference
+    admins: [...new Set(admins)],
+    moderators: [...new Set(moderators)],
+    memberCount,
+    name,
+    description,
   };
 }
 
