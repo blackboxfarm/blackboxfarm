@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
       .eq('is_deleted', false)
       .lt('failed_scrape_count', 3)
       .not('linked_token_mints', 'is', null)
+      .like('community_id', '%[0-9]%') // Only numeric community IDs (not X account URL slugs)
       .or(`admin_usernames.is.null,last_scraped_at.is.null,last_scraped_at.lt.${staleThreshold}`)
       .order('last_scraped_at', { ascending: true, nullsFirst: true })
       .limit(batchSize);
