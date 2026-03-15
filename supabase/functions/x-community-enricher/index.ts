@@ -348,23 +348,21 @@ Deno.serve(async (req) => {
         moderatorUsernames: existingCommunity?.moderator_usernames || []
       };
 
-      if (needsScrape && apifyApiKey) {
-        console.log('Fetching fresh community data from Apify...');
-        const fetchResult = await fetchCommunityMembers(communityId, apifyApiKey);
-        const members = fetchResult.members;
+      if (needsScrape && firecrawlApiKey) {
+        console.log('[Firecrawl] Fetching fresh community data...');
+        const fetchResult = await fetchCommunityViaFirecrawl(communityId, firecrawlApiKey);
         
-        // If Apify returned an error (400/500), track the failure and stop
+        // If Firecrawl returned an error (400/500), track the failure and stop
         if (fetchResult.httpStatus >= 400 || (fetchResult.httpStatus === 0 && fetchResult.errorBody)) {
           const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
-          console.warn(`[x-community-enricher] Apify ${fetchResult.httpStatus} for community ${communityId} (fail #${newFailCount}): ${fetchResult.errorBody?.slice(0, 100)}`);
+          console.warn(`[x-community-enricher] Firecrawl ${fetchResult.httpStatus} for community ${communityId} (fail #${newFailCount}): ${fetchResult.errorBody?.slice(0, 100)}`);
           
-          // Update fail count and set last_scraped_at to prevent immediate retry
           await supabase.from('x_communities').upsert({
             community_id: communityId,
             community_url: urlToProcess,
             failed_scrape_count: newFailCount,
             scrape_status: `error_${fetchResult.httpStatus}`,
-            last_scraped_at: new Date().toISOString(), // Prevents retry for 24h
+            last_scraped_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'community_id' });
           
@@ -372,14 +370,15 @@ Deno.serve(async (req) => {
             success: false,
             type: 'community',
             communityId,
-            error: `Apify returned ${fetchResult.httpStatus}`,
+            error: `Firecrawl returned ${fetchResult.httpStatus}`,
             failCount: newFailCount,
             willRetryAfter: newFailCount >= 3 ? 'never (max failures reached)' : '24h',
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
         
-        // Validate if community still exists
-        const existenceCheck = await validateCommunityExists(communityId, members);
+        // Validate if community still exists (use empty array since Firecrawl doesn't return members list)
+        const hasStaff = fetchResult.admins.length > 0 || fetchResult.moderators.length > 0;
+        const existenceCheck = await validateCommunityExists(communityId, hasStaff ? [{ role: 'staff' }] : []);
         
         if (existenceCheck.isDeleted) {
           console.warn(`[X Community Enricher] Community ${communityId} appears DELETED`);
@@ -424,9 +423,17 @@ Deno.serve(async (req) => {
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
         
-        if (members.length > 0) {
-          communityData = await processCommunityData(members);
-          communityData.communityId = communityId;
+        // If we got admin/mod handles, update community data
+        if (hasStaff) {
+          communityData = {
+            communityId,
+            name: fetchResult.name,
+            description: fetchResult.description,
+            adminUsernames: fetchResult.admins,
+            moderatorUsernames: fetchResult.moderators,
+            memberCount: fetchResult.memberCount,
+            rawData: fetchResult.rawData,
+          };
           
           // Reset fail count on successful scrape
           if (existingCommunity?.failed_scrape_count > 0) {
@@ -435,8 +442,8 @@ Deno.serve(async (req) => {
             }).eq('community_id', communityId);
           }
         }
-      } else if (needsScrape && !apifyApiKey) {
-        console.warn('APIFY_API_KEY not configured, skipping scrape');
+      } else if (needsScrape && !firecrawlApiKey) {
+        console.warn('FIRECRAWL_API_KEY not configured, skipping scrape');
       }
 
       // Build linked arrays
