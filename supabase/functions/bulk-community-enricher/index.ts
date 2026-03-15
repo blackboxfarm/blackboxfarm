@@ -53,13 +53,14 @@ Deno.serve(async (req) => {
       .eq('is_deleted', false)
       .lt('failed_scrape_count', 3)
       .not('linked_token_mints', 'is', null)
-      .or(`admin_usernames.is.null,last_scraped_at.is.null,last_scraped_at.lt.${staleThreshold}`)
+      .or(`admin_usernames.is.null,admin_usernames.eq.{},last_scraped_at.is.null,last_scraped_at.lt.${staleThreshold}`)
       .order('last_scraped_at', { ascending: true, nullsFirst: true })
-      .limit(batchSize * 3); // Over-fetch to account for filtering
+      .limit(batchSize * 5); // Over-fetch to account for filtering
 
     if (fetchError) throw fetchError;
 
     // Filter to only numeric community IDs (real X Communities, not account URL slugs)
+    // Also filter out communities with populated admins unless stale
     const communities = (rawCommunities || [])
       .filter(c => /^\d+$/.test(c.community_id))
       .slice(0, batchSize);
