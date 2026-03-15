@@ -200,6 +200,7 @@ export function XCommunityManager() {
       const { error } = await supabase
         .from('x_communities')
         .update({
+          name: editName.trim() || null,
           admin_usernames: admins,
           moderator_usernames: mods,
           updated_at: new Date().toISOString()
