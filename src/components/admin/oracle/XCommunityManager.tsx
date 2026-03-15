@@ -22,9 +22,11 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  BadgeCheck
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { CommunityFollowDialog } from "./CommunityFollowDialog";
 
 interface XCommunity {
   id: string;
