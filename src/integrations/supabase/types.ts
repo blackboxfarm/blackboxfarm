@@ -13896,15 +13896,15 @@ export type Database = {
           dev_total_launches: number | null
           dev_trust_level: string | null
           dev_wallets: string[] | null
-          dex_id: string | null
+          graduated_at: string | null
           image_url: string | null
+          is_graduated: boolean | null
+          kyc_source: string | null
+          kyc_verified: boolean | null
           launchpad: string | null
           mesh_x_handles: string[] | null
           name: string | null
-          pair_address: string | null
-          primary_dev_wallet: string | null
           symbol: string | null
-          token_health_grade: string | null
           token_mint: string | null
           was_posted: boolean | null
           websites: string[] | null
