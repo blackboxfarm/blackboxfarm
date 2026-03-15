@@ -128,6 +128,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter</TabsTrigger>
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun</TabsTrigger>
+            <TabsTrigger value="master-db" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500/30 data-[state=active]:to-blue-500/20">🗄️ Master DB</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
