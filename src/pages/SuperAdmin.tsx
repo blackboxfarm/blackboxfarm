@@ -203,6 +203,13 @@ export default function SuperAdmin() {
               </Suspense>
             )}
           </TabsContent>
+          <TabsContent value="master-db">
+            {activeTab === "master-db" && (
+              <Suspense fallback={<TabLoader />}>
+                <MasterDBTab />
+              </Suspense>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
