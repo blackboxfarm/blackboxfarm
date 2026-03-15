@@ -537,6 +537,14 @@ export function XCommunityManager() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setFollowDialogCommunity(community)}
+                            title="Follow Blue Checks"
+                          >
+                            <BadgeCheck className="h-4 w-4 text-sky-400" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => openEditDialog(community)}
                           >
                             <Edit className="h-4 w-4" />
