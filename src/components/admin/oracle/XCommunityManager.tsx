@@ -133,40 +133,50 @@ export function XCommunityManager() {
         const mintArray = Array.from(allMints);
         const map: Record<string, string> = {};
 
-        // 1. scraped_tokens (primary)
-        const { data: scraped } = await supabase
-          .from('scraped_tokens')
+        // 1. holders_intel_seen_tokens — THE primary source (all posted tokens live here)
+        const { data: seenTokens } = await supabase
+          .from('holders_intel_seen_tokens')
           .select('token_mint, symbol')
           .in('token_mint', mintArray);
-        scraped?.forEach(t => { if (t.symbol && t.symbol !== 'UNKNOWN') map[t.token_mint] = t.symbol; });
+        seenTokens?.forEach(t => { if (t.symbol && t.symbol !== 'UNKNOWN') map[t.token_mint] = t.symbol; });
 
-        // 2. holders_intel_post_queue (XBot posts — often the original source)
-        const unresolvedAfterScraped = mintArray.filter(m => !map[m]);
-        if (unresolvedAfterScraped.length > 0) {
+        // 2. scraped_tokens
+        const unresolved1 = mintArray.filter(m => !map[m]);
+        if (unresolved1.length > 0) {
+          const { data: scraped } = await supabase
+            .from('scraped_tokens')
+            .select('token_mint, symbol')
+            .in('token_mint', unresolved1);
+          scraped?.forEach(t => { if (t.symbol && t.symbol !== 'UNKNOWN') map[t.token_mint] = t.symbol; });
+        }
+
+        // 3. holders_intel_post_queue (XBot posts)
+        const unresolved2 = mintArray.filter(m => !map[m]);
+        if (unresolved2.length > 0) {
           const { data: postQueue } = await supabase
             .from('holders_intel_post_queue')
             .select('token_mint, symbol')
-            .in('token_mint', unresolvedAfterScraped);
+            .in('token_mint', unresolved2);
           postQueue?.forEach(t => { if (t.symbol && t.symbol !== 'UNKNOWN' && !map[t.token_mint]) map[t.token_mint] = t.symbol; });
         }
 
-        // 3. token_watchlist fallback
-        const unresolvedAfterQueue = mintArray.filter(m => !map[m]);
-        if (unresolvedAfterQueue.length > 0) {
+        // 4. token_watchlist
+        const unresolved3 = mintArray.filter(m => !map[m]);
+        if (unresolved3.length > 0) {
           const { data: watchlist } = await supabase
             .from('token_watchlist')
             .select('token_mint, symbol')
-            .in('token_mint', unresolvedAfterQueue);
+            .in('token_mint', unresolved3);
           watchlist?.forEach(t => { if (t.symbol && !map[t.token_mint]) map[t.token_mint] = t.symbol; });
         }
 
-        // 4. token_metadata last resort
-        const unresolvedFinal = mintArray.filter(m => !map[m]);
-        if (unresolvedFinal.length > 0) {
+        // 5. token_metadata last resort
+        const unresolved4 = mintArray.filter(m => !map[m]);
+        if (unresolved4.length > 0) {
           const { data: metadata } = await supabase
             .from('token_metadata')
             .select('mint_address, symbol')
-            .in('mint_address', unresolvedFinal);
+            .in('mint_address', unresolved4);
           metadata?.forEach((t: any) => { if (t.symbol && !map[t.mint_address]) map[t.mint_address] = t.symbol; });
         }
 
