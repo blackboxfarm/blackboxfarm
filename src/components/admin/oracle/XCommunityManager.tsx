@@ -295,28 +295,17 @@ export function XCommunityManager() {
       return <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" /> Deleted</Badge>;
     }
     if (!community.last_scraped_at) {
-      return <Badge variant="outline" className="gap-1 text-muted-foreground"><Clock className="h-3 w-3" /> Never scraped</Badge>;
+      return <Badge variant="outline" className="gap-1 text-muted-foreground"><Clock className="h-3 w-3" /> Pending</Badge>;
     }
-    const hoursSince = (Date.now() - new Date(community.last_scraped_at).getTime()) / (1000 * 60 * 60);
     const lastScraped = formatDistanceToNow(new Date(community.last_scraped_at), { addSuffix: true });
-    if (hoursSince < 24) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" /> Fresh</Badge>
-          </TooltipTrigger>
-          <TooltipContent>Scraped {lastScraped}</TooltipContent>
-        </Tooltip>
-      );
-    }
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge variant="secondary" className="gap-1 cursor-help"><Clock className="h-3 w-3" /> Stale</Badge>
+          <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" /> Scraped</Badge>
         </TooltipTrigger>
-        <TooltipContent className="max-w-[240px]">
-          <p className="font-medium">Last scraped {lastScraped}</p>
-          <p className="text-xs text-muted-foreground mt-1">Data is older than 24h. The cron job will auto-refresh it, or click the ↻ button to rescrape manually.</p>
+        <TooltipContent>
+          <p>Scraped {lastScraped}</p>
+          <p className="text-xs text-muted-foreground mt-1">Community staff data is a historical snapshot — it does not re-scrape.</p>
         </TooltipContent>
       </Tooltip>
     );
