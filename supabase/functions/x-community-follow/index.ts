@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             communityId,
-            maxItems: 50, // Need more for blue check filtering
+            maxItems: 100, // ~$0.13 per scrape, captures all blue checks
             proxyConfiguration: {
               useApifyProxy: true,
               apifyProxyGroups: ['RESIDENTIAL'],
