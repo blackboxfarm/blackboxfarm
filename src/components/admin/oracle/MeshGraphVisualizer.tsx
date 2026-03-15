@@ -486,6 +486,60 @@ const MeshGraphVisualizer = () => {
         console.log(`[BubbleMap] Double-click spidering: ${rawId}`);
         triggerSpider(rawId, 'quick');
       }
+      if (type === 'x_account') {
+        // ═══ Cross-reference: find all communities this handle is in ═══
+        console.log(`[BubbleMap] Double-click cross-referencing @${rawId} across communities`);
+        setCommunitySearching(true);
+        toast.info(`🔍 Searching all communities for @${rawId}...`);
+        (async () => {
+          try {
+            // Query x_communities where this handle appears as admin or mod
+            const cleanHandle = rawId.replace(/^@/, '').toLowerCase();
+            const { data: communities, error } = await supabase
+              .from('x_communities')
+              .select('community_id, name, community_url, admin_usernames, moderator_usernames')
+              .or(`admin_usernames.cs.{${cleanHandle}},moderator_usernames.cs.{${cleanHandle}}`);
+            
+            if (error) throw error;
+            
+            if (!communities || communities.length === 0) {
+              toast.warning(`@${cleanHandle} not found in any other X Communities`);
+            } else {
+              toast.success(`Found @${cleanHandle} in ${communities.length} communities`);
+              
+              // Upsert mesh links for each discovered community
+              const upserts: any[] = [];
+              for (const comm of communities) {
+                const isAdmin = (comm.admin_usernames || []).map((u: string) => u.toLowerCase()).includes(cleanHandle);
+                upserts.push({
+                  source_type: 'x_community',
+                  source_id: comm.community_id,
+                  linked_type: 'x_account',
+                  linked_id: cleanHandle,
+                  relationship: isAdmin ? 'admin_of' : 'mod_of',
+                  confidence: 100,
+                  discovered_via: 'x_cross_reference',
+                  evidence: { community_name: comm.name },
+                });
+              }
+              
+              if (upserts.length > 0) {
+                await supabase
+                  .from('reputation_mesh')
+                  .upsert(upserts, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+              }
+              
+              // Expand the handle node and refresh to show new links
+              expandEntity(nodeId);
+              setTimeout(() => refetch(), 1000);
+            }
+          } catch (err: any) {
+            toast.error(`Cross-reference failed: ${err.message}`);
+          } finally {
+            setCommunitySearching(false);
+          }
+        })();
+      }
       if (type === 'x_community') {
         console.log(`[BubbleMap] Double-click enriching X Community: ${rawId}`);
         setCommunitySearching(true);
@@ -552,10 +606,16 @@ const MeshGraphVisualizer = () => {
 
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const meshNode = node as MeshNode & { x: number; y: number };
-    const color = ENTITY_COLORS[meshNode.type] || '#888';
+    let color = ENTITY_COLORS[meshNode.type] || '#888';
     const size = Math.max(4, Math.min(meshNode.val * 3 + 3, 20));
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
     const hasRedFlags = meshNode.redFlags && meshNode.redFlags.length > 0;
+
+    // ═══ Admin/Mod role-based coloring for x_account nodes ═══
+    const isAdmin = meshNode.type === 'x_account' && meshNode.role === 'admin';
+    const isMod = meshNode.type === 'x_account' && meshNode.role === 'mod';
+    if (isAdmin) color = '#f59e0b'; // amber/gold for admins
+    if (isMod) color = '#06b6d4';   // cyan for mods
 
     if (isFocused) {
       ctx.shadowColor = color;
@@ -588,6 +648,17 @@ const MeshGraphVisualizer = () => {
       ctx.globalAlpha = 1;
     }
 
+    // Admin/Mod ring indicator
+    if (isAdmin || isMod) {
+      ctx.beginPath();
+      ctx.arc(meshNode.x, meshNode.y, size + 3, 0, 2 * Math.PI);
+      ctx.strokeStyle = isAdmin ? '#f59e0b' : '#06b6d4';
+      ctx.lineWidth = 2;
+      ctx.setLineDash(isMod ? [3, 2] : []);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     ctx.beginPath();
     ctx.arc(meshNode.x, meshNode.y, size, 0, 2 * Math.PI);
     ctx.fillStyle = color;
@@ -609,6 +680,19 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
 
+    // Admin crown / Mod shield emoji on node
+    if (isAdmin) {
+      ctx.font = `${Math.max(7, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👑', meshNode.x, meshNode.y);
+    } else if (isMod) {
+      ctx.font = `${Math.max(7, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🛡️', meshNode.x, meshNode.y);
+    }
+
     // 🚩 Red flag badge on flagged nodes
     if (hasRedFlags) {
       const flagSize = Math.max(7, 10 / globalScale);
@@ -618,14 +702,19 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🚩', meshNode.x + size + 3, meshNode.y - size - 2);
     }
 
-    // Always show friendly label
-    const labelText = meshNode.label;
+    // Always show friendly label with role suffix
+    let labelText = meshNode.label;
+    if (isAdmin) labelText = `${labelText} (Admin)`;
+    else if (isMod) labelText = `${labelText} (Mod)`;
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 
+                      isAdmin ? 'rgba(245,158,11,0.95)' : 
+                      isMod ? 'rgba(6,182,212,0.95)' : 
+                      'rgba(255,255,255,0.9)';
       ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
 

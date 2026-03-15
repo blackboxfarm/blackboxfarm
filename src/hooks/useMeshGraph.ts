@@ -16,6 +16,7 @@ export interface MeshNode {
   fullId: string;      // Raw ID for tooltip (full address)
   val: number;
   redFlags?: RedFlag[];
+  role?: 'admin' | 'mod' | null;  // For x_account nodes: their role in community
 }
 
 export interface MeshLink {
@@ -841,6 +842,25 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
       relationship: link.relationship,
       confidence: link.confidence || 50,
     });
+
+    // Track admin/mod role on x_account nodes
+    if (link.linked_type === 'x_account' && link.relationship === 'admin_of') {
+      const node = nodesMap.get(targetKey);
+      if (node) node.role = 'admin';
+    }
+    if (link.linked_type === 'x_account' && link.relationship === 'mod_of') {
+      const node = nodesMap.get(targetKey);
+      if (node && node.role !== 'admin') node.role = 'mod'; // admin takes precedence
+    }
+    // Also check reverse direction (x_account is source)
+    if (link.source_type === 'x_account' && link.relationship === 'admin_of') {
+      const node = nodesMap.get(sourceKey);
+      if (node) node.role = 'admin';
+    }
+    if (link.source_type === 'x_account' && link.relationship === 'mod_of') {
+      const node = nodesMap.get(sourceKey);
+      if (node && node.role !== 'admin') node.role = 'mod';
+    }
   }
 
   // Prune orphan nodes (no links after filtering)
