@@ -190,12 +190,30 @@ export function CommunityFollowDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Stats bar */}
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-muted-foreground">{targets.length} blue checks indexed</span>
-          <span className="text-green-400">{followedCount} followed</span>
-          <span className="text-muted-foreground">{unfollowedCount} unfollowed</span>
-          <span className="text-primary">{selected.size} selected</span>
+        {/* Top action bar with Follow + Close */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-muted-foreground">{targets.length} blue checks indexed</span>
+            <span className="text-green-400">{followedCount} followed</span>
+            <span className="text-muted-foreground">{unfollowedCount} unfollowed</span>
+            <span className="text-primary">{selected.size} selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Close</Button>
+            <Button
+              size="sm"
+              onClick={followSelected}
+              disabled={following || selected.size === 0}
+              className="gap-2"
+            >
+              {following ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4" />
+              )}
+              Follow {selected.size} Account{selected.size !== 1 ? 's' : ''}
+            </Button>
+          </div>
         </div>
 
         {/* Actions */}
@@ -277,22 +295,6 @@ export function CommunityFollowDialog({
             </div>
           </details>
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button
-            onClick={followSelected}
-            disabled={following || selected.size === 0}
-            className="gap-2"
-          >
-            {following ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <UserPlus className="h-4 w-4" />
-            )}
-            Follow {selected.size} Account{selected.size !== 1 ? 's' : ''}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
