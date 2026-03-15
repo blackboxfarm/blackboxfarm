@@ -136,6 +136,10 @@ export default function MasterDBTab() {
         </div>
       </CardHeader>
       <CardContent className="p-0">
+        {/* Top horizontal scrollbar */}
+        <div id="master-db-scroll-sync" className="overflow-x-auto overflow-y-hidden h-3 border-b">
+          <div style={{ height: '1px' }} />
+        </div>
         <div className="overflow-x-auto" ref={(el) => {
           if (el) {
             // Sync dual scrollbars
