@@ -189,19 +189,20 @@ export default function MasterDBTab() {
                 <TableHead>Mods</TableHead>
                 <TableHead>Mesh X</TableHead>
                 <TableHead>Websites</TableHead>
+                <TableHead>ATH 24h</TableHead>
                 <TableHead>Posted</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={28} className="text-center py-12">
+                  <TableCell colSpan={29} className="text-center py-12">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={28} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={29} className="text-center py-8 text-muted-foreground">
                     No tokens found
                   </TableCell>
                 </TableRow>
@@ -247,6 +248,7 @@ export default function MasterDBTab() {
                     <TableCell><ArrayCell arr={r.community_mod_handles} /></TableCell>
                     <TableCell><ArrayCell arr={r.mesh_x_handles} /></TableCell>
                     <TableCell><ArrayCell arr={r.websites} /></TableCell>
+                    <TableCell className="text-muted-foreground">{r.ath_24h_usd != null ? `$${Number(r.ath_24h_usd).toFixed(6)}` : "—"}</TableCell>
                     <TableCell>{r.was_posted ? "✅" : "—"}</TableCell>
                   </TableRow>
                 ))

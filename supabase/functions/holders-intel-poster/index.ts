@@ -87,6 +87,78 @@ function formatTimestamp(): string {
   return `${formatted} EST`;
 }
 
+/**
+ * Fetch ATH (24h window) from GeckoTerminal OHLCV data.
+ * Uses hourly candles over 24h, takes the max high.
+ * GeckoTerminal free API: 30 req/min, no key needed.
+ */
+async function fetchAth24h(tokenMint: string): Promise<number | null> {
+  try {
+    console.log(`[poster] Fetching ATH 24h for ${tokenMint} from GeckoTerminal`);
+    
+    // Step 1: Find the top pool for this token on Solana
+    const poolsRes = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${tokenMint}/pools?page=1`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!poolsRes.ok) {
+      console.warn(`[poster] GeckoTerminal pools lookup failed: ${poolsRes.status}`);
+      return null;
+    }
+    
+    const poolsData = await poolsRes.json();
+    const pools = poolsData?.data;
+    
+    if (!pools || pools.length === 0) {
+      console.warn('[poster] No pools found on GeckoTerminal for this token');
+      return null;
+    }
+    
+    // Use the first (highest-ranked) pool
+    const poolAddress = pools[0]?.attributes?.address;
+    if (!poolAddress) {
+      console.warn('[poster] No pool address found');
+      return null;
+    }
+    
+    console.log(`[poster] Using pool ${poolAddress} for OHLCV`);
+    
+    // Step 2: Fetch hourly OHLCV candles (24 candles = 24h window)
+    const ohlcvRes = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/hour?aggregate=1&limit=24&currency=usd`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!ohlcvRes.ok) {
+      console.warn(`[poster] GeckoTerminal OHLCV failed: ${ohlcvRes.status}`);
+      return null;
+    }
+    
+    const ohlcvData = await ohlcvRes.json();
+    const candles = ohlcvData?.data?.attributes?.ohlcv_list;
+    
+    if (!candles || candles.length === 0) {
+      console.warn('[poster] No OHLCV candles returned');
+      return null;
+    }
+    
+    // OHLCV format: [timestamp, open, high, low, close, volume]
+    // Take the max "high" (index 2) across all candles
+    let maxHigh = 0;
+    for (const candle of candles) {
+      const high = Number(candle[2]);
+      if (high > maxHigh) maxHigh = high;
+    }
+    
+    console.log(`[poster] ATH 24h: $${maxHigh} from ${candles.length} candles`);
+    return maxHigh > 0 ? maxHigh : null;
+  } catch (err) {
+    console.warn('[poster] ATH 24h fetch failed:', err);
+    return null;
+  }
+}
+
 // Fetch AI interpretation summary for XBot posts (abbreviated version)
 async function fetchAISummary(
   reportData: Record<string, unknown>,
@@ -194,7 +266,9 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{x_community\}/g, xCommunity)
     .replace(/\{X_COMMUNITY\}/g, xCommunity)
     .replace(/\{website\}/g, website)
-    .replace(/\{WEBSITE\}/g, website);
+    .replace(/\{WEBSITE\}/g, website)
+    .replace(/\{ath_24h\}/g, data.ath24h != null ? `$${Number(data.ath24h).toFixed(6)}` : 'N/A')
+    .replace(/\{ATH_24H\}/g, data.ath24h != null ? `$${Number(data.ath24h).toFixed(6)}` : 'N/A');
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
@@ -465,6 +539,28 @@ Deno.serve(async (req) => {
         );
       }
       
+      // ATH 24h: Fetch from GeckoTerminal on FIRST POST only, store in token_lifecycle
+      let ath24h: number | null = null;
+      if (currentTimesPosted === 1) {
+        ath24h = await fetchAth24h(item.token_mint);
+        if (ath24h !== null) {
+          // Store in token_lifecycle (upsert)
+          const { error: athError } = await supabase
+            .from('token_lifecycle')
+            .upsert({
+              token_mint: item.token_mint,
+              ath_24h_usd: ath24h,
+            }, { onConflict: 'token_mint' });
+          
+          if (athError) {
+            console.warn(`[poster] Failed to store ATH 24h: ${athError.message}`);
+          } else {
+            console.log(`[poster] Stored ATH 24h: $${ath24h} for ${item.token_mint}`);
+          }
+        }
+      }
+      (stats as any).ath24h = ath24h;
+
       // Check if AI summary is enabled (via queue item flag or template contains AI vars)
       const templateUsesAI = tweetTemplate.includes('{ai_summary}') || tweetTemplate.includes('{AI_SUMMARY}') ||
                              tweetTemplate.includes('{ai_overview}') || tweetTemplate.includes('{AI_OVERVIEW}') ||
