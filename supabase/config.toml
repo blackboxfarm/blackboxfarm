@@ -477,3 +477,6 @@ verify_jwt = false
 
 [functions.pumpfun-kol-registry]
 verify_jwt = false
+
+[functions.bulk-community-enricher]
+verify_jwt = false
