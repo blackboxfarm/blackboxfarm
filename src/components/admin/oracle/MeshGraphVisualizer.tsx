@@ -543,6 +543,11 @@ const MeshGraphVisualizer = () => {
       if (type === 'x_community') {
         console.log(`[BubbleMap] Double-click enriching X Community: ${rawId}`);
         setCommunitySearching(true);
+        // Ensure Apify tracker is active for this enrichment call
+        if (!apifySnapshot.isTracking) {
+          resetApifyTracking();
+          startApifyTracking();
+        }
         toast.info(`👥 Enriching X Community ${rawId.slice(0, 16)}...`);
         (async () => {
           try {
