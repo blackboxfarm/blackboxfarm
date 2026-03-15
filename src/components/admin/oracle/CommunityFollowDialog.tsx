@@ -16,6 +16,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  RotateCcw,
 } from "lucide-react";
 
 interface FollowTarget {
@@ -47,6 +48,7 @@ export function CommunityFollowDialog({
   const [loading, setLoading] = useState(false);
   const [scraping, setScraping] = useState(false);
   const [following, setFollowing] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Load existing targets when dialog opens
@@ -140,6 +142,22 @@ export function CommunityFollowDialog({
     }
   };
 
+  const resetErrors = async () => {
+    setResetting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('x-community-follow', {
+        body: { action: 'reset_errors', communityId },
+      });
+      if (error) throw error;
+      toast.success(`Reset ${data.reset} errored targets — ready to retry`);
+      await loadTargets();
+    } catch (err: any) {
+      toast.error(`Reset failed: ${err.message}`);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const toggleSelect = (handle: string) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -222,6 +240,12 @@ export function CommunityFollowDialog({
             {scraping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BadgeCheck className="h-4 w-4 mr-2" />}
             {targets.length > 0 ? 'Rescrape' : 'Scan Blue Checks'}
           </Button>
+          {targets.some(t => t.follow_status === 'error') && (
+            <Button variant="outline" size="sm" onClick={resetErrors} disabled={resetting} className="gap-1 text-destructive border-destructive/30">
+              {resetting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              Reset Errors
+            </Button>
+          )}
           {targets.length > 0 && (
             <>
               <Button variant="ghost" size="sm" onClick={selectAll}>Select All</Button>

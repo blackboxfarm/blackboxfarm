@@ -392,7 +392,42 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: 'Invalid action. Use: scrape_blue_checks, follow, get_targets' }), {
+    // ACTION: Reset errored targets back to not_followed so they can be retried
+    if (action === 'reset_errors') {
+      const { data: errorTargets, error: fetchErr } = await supabase
+        .from('community_follow_targets')
+        .select('id, target_handle')
+        .eq('community_id', communityId)
+        .eq('follow_status', 'error');
+
+      if (fetchErr) throw fetchErr;
+
+      if (!errorTargets?.length) {
+        return new Response(JSON.stringify({ success: true, reset: 0, message: 'No errored targets to reset' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { error: updateErr } = await supabase
+        .from('community_follow_targets')
+        .update({
+          follow_status: 'not_followed',
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('community_id', communityId)
+        .eq('follow_status', 'error');
+
+      if (updateErr) throw updateErr;
+
+      console.log(`[follow] Reset ${errorTargets.length} errored targets for community ${communityId}`);
+
+      return new Response(JSON.stringify({ success: true, reset: errorTargets.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: 'Invalid action. Use: scrape_blue_checks, follow, get_targets, reset_errors' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
