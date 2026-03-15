@@ -341,6 +341,51 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ACTION: Backfill from enricher's raw_data (no Apify cost!)
+    if (action === 'backfill_from_enricher') {
+      const { data: community } = await supabase
+        .from('x_communities')
+        .select('raw_data')
+        .eq('community_id', communityId)
+        .single();
+
+      if (!community?.raw_data || !Array.isArray(community.raw_data)) {
+        return new Response(JSON.stringify({ success: true, backfilled: 0, reason: 'No raw_data available' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const blueChecked = community.raw_data.filter((m: any) => m.isBlueVerified);
+      if (blueChecked.length === 0) {
+        return new Response(JSON.stringify({ success: true, backfilled: 0, reason: 'No blue-checked members in raw_data' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const upsertData = blueChecked.map((m: any) => ({
+        community_id: communityId,
+        target_handle: (m.screenName || '').toLowerCase(),
+        target_x_user_id: m.restId || null,
+        is_blue_verified: true,
+        community_role: m.communityRole || 'member',
+        followers_count: m.followersCount || null,
+        follow_status: 'not_followed',
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error: upsertErr } = await supabase
+        .from('community_follow_targets')
+        .upsert(upsertData, { onConflict: 'community_id,target_handle' });
+
+      if (upsertErr) throw upsertErr;
+
+      console.log(`[follow] Backfilled ${upsertData.length} blue checks from enricher raw_data for ${communityId}`);
+
+      return new Response(JSON.stringify({ success: true, backfilled: upsertData.length }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action. Use: scrape_blue_checks, follow, get_targets' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
