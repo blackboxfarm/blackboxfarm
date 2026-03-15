@@ -552,10 +552,16 @@ const MeshGraphVisualizer = () => {
 
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const meshNode = node as MeshNode & { x: number; y: number };
-    const color = ENTITY_COLORS[meshNode.type] || '#888';
+    let color = ENTITY_COLORS[meshNode.type] || '#888';
     const size = Math.max(4, Math.min(meshNode.val * 3 + 3, 20));
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
     const hasRedFlags = meshNode.redFlags && meshNode.redFlags.length > 0;
+
+    // ═══ Admin/Mod role-based coloring for x_account nodes ═══
+    const isAdmin = meshNode.type === 'x_account' && meshNode.role === 'admin';
+    const isMod = meshNode.type === 'x_account' && meshNode.role === 'mod';
+    if (isAdmin) color = '#f59e0b'; // amber/gold for admins
+    if (isMod) color = '#06b6d4';   // cyan for mods
 
     if (isFocused) {
       ctx.shadowColor = color;
@@ -588,6 +594,17 @@ const MeshGraphVisualizer = () => {
       ctx.globalAlpha = 1;
     }
 
+    // Admin/Mod ring indicator
+    if (isAdmin || isMod) {
+      ctx.beginPath();
+      ctx.arc(meshNode.x, meshNode.y, size + 3, 0, 2 * Math.PI);
+      ctx.strokeStyle = isAdmin ? '#f59e0b' : '#06b6d4';
+      ctx.lineWidth = 2;
+      ctx.setLineDash(isMod ? [3, 2] : []);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     ctx.beginPath();
     ctx.arc(meshNode.x, meshNode.y, size, 0, 2 * Math.PI);
     ctx.fillStyle = color;
@@ -609,6 +626,19 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
 
+    // Admin crown / Mod shield emoji on node
+    if (isAdmin) {
+      ctx.font = `${Math.max(7, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👑', meshNode.x, meshNode.y);
+    } else if (isMod) {
+      ctx.font = `${Math.max(7, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🛡️', meshNode.x, meshNode.y);
+    }
+
     // 🚩 Red flag badge on flagged nodes
     if (hasRedFlags) {
       const flagSize = Math.max(7, 10 / globalScale);
@@ -618,14 +648,19 @@ const MeshGraphVisualizer = () => {
       ctx.fillText('🚩', meshNode.x + size + 3, meshNode.y - size - 2);
     }
 
-    // Always show friendly label
-    const labelText = meshNode.label;
+    // Always show friendly label with role suffix
+    let labelText = meshNode.label;
+    if (isAdmin) labelText = `${labelText} (Admin)`;
+    else if (isMod) labelText = `${labelText} (Mod)`;
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = hasRedFlags ? 'rgba(239,68,68,0.95)' : 
+                      isAdmin ? 'rgba(245,158,11,0.95)' : 
+                      isMod ? 'rgba(6,182,212,0.95)' : 
+                      'rgba(255,255,255,0.9)';
       ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
 
