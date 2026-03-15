@@ -635,6 +635,18 @@ export function XCommunityManager() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Community Name
+              </Label>
+              <Input
+                placeholder="e.g. $TOKEN Community"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
                 <Crown className="h-4 w-4 text-yellow-500" />
                 Admins (comma-separated usernames)
               </Label>
@@ -661,7 +673,7 @@ export function XCommunityManager() {
             </div>
             {selectedCommunity?.last_scraped_at && (
               <div className="text-xs text-muted-foreground">
-                Last scraped: {formatDistanceToNow(new Date(selectedCommunity.last_scraped_at), { addSuffix: true })}
+                Scraped: {formatDistanceToNow(new Date(selectedCommunity.last_scraped_at), { addSuffix: true })}
               </div>
             )}
           </div>
