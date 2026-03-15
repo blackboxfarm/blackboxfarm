@@ -63,6 +63,9 @@ export function XCommunityManager() {
   const [totalCount, setTotalCount] = useState(0);
   const PAGE_SIZE = 50;
 
+  // Token mint → symbol map for display
+  const [tokenSymbols, setTokenSymbols] = useState<Record<string, string>>({});
+
   // Form state for manual entry
   const [manualAdmins, setManualAdmins] = useState("");
   const [manualMods, setManualMods] = useState("");
