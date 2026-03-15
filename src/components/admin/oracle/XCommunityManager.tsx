@@ -636,6 +636,13 @@ export function XCommunityManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Follow Blue Checks Dialog */}
+      <CommunityFollowDialog
+        open={!!followDialogCommunity}
+        onOpenChange={(open) => !open && setFollowDialogCommunity(null)}
+        communityId={followDialogCommunity?.community_id || ''}
+        communityName={followDialogCommunity?.name || null}
+      />
     </div>
   );
 }
