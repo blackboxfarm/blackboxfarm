@@ -136,7 +136,29 @@ export default function MasterDBTab() {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        {/* Top horizontal scrollbar */}
+        <div id="master-db-scroll-sync" className="overflow-x-auto overflow-y-hidden h-3 border-b">
+          <div style={{ height: '1px' }} />
+        </div>
+        <div className="overflow-x-auto" ref={(el) => {
+          if (el) {
+            // Sync dual scrollbars
+            const id = 'master-db-scroll-sync';
+            const top = document.getElementById(id);
+            if (top) {
+              top.onscroll = () => { el.scrollLeft = top.scrollLeft; };
+              el.onscroll = () => { top.scrollLeft = el.scrollLeft; };
+              // Match inner width
+              const inner = top.firstElementChild as HTMLElement;
+              if (inner) {
+                const resizeObs = new ResizeObserver(() => {
+                  inner.style.width = el.scrollWidth + 'px';
+                });
+                resizeObs.observe(el);
+              }
+            }
+          }
+        }}>
           <Table className="text-xs">
             <TableHeader>
               <TableRow className="[&>th]:whitespace-nowrap [&>th]:px-2 [&>th]:py-2 [&>th]:text-[11px] [&>th]:font-semibold">
