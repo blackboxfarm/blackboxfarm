@@ -150,6 +150,9 @@ export function useMeshGraph(initialEntityId?: string) {
   if (focusedEntity) entityIds.push(focusedEntity.id);
   const uniqueIds = [...new Set(entityIds)];
 
+  // Reverse community lookup: when searching an X handle, find all communities they admin/mod
+  const reverseCommunityLookupDone = useRef<Set<string>>(new Set());
+
   const { data: graphData, isLoading, refetch } = useQuery({
     queryKey: ['mesh-graph', uniqueIds.sort().join(','), [...typeFilters].sort().join(',')],
     queryFn: async (): Promise<MeshGraphData> => {
@@ -158,6 +161,70 @@ export function useMeshGraph(initialEntityId?: string) {
       }
 
       const allLinks: any[] = [];
+
+      // ═══ REVERSE COMMUNITY LOOKUP for X handles ═══
+      // If focused entity looks like an X handle, check x_communities for admin/mod membership
+      // and auto-upsert mesh links so they show up immediately
+      if (focusedEntity?.type === 'x_account' || focusedEntity?.type === 'x_user') {
+        const handle = focusedEntity.id.replace(/^@/, '').toLowerCase();
+        if (!reverseCommunityLookupDone.current.has(handle)) {
+          reverseCommunityLookupDone.current.add(handle);
+          try {
+            const { data: communities } = await supabase
+              .from('x_communities')
+              .select('community_id, name, admin_usernames, moderator_usernames, linked_token_mints')
+              .or(`admin_usernames.cs.{"${handle}"},moderator_usernames.cs.{"${handle}"}`);
+
+            if (communities && communities.length > 0) {
+              console.log(`[MeshGraph] Reverse community lookup found ${communities.length} communities for @${handle}`);
+              const upserts: any[] = [];
+              const now = new Date().toISOString();
+
+              for (const comm of communities) {
+                const isAdmin = (comm.admin_usernames || []).map((u: string) => u.toLowerCase()).includes(handle);
+                const isMod = (comm.moderator_usernames || []).map((u: string) => u.toLowerCase()).includes(handle);
+                const relationship = isAdmin ? 'community_admin' : isMod ? 'community_mod' : 'community_mod';
+
+                // Link handle → community
+                upserts.push({
+                  source_id: comm.community_id,
+                  source_type: 'x_community',
+                  linked_id: handle,
+                  linked_type: 'x_account',
+                  relationship,
+                  confidence: 95,
+                  evidence: { source: 'reverse_lookup', community_name: comm.name },
+                  discovered_at: now,
+                });
+
+                // Also link community → any linked tokens
+                const tokens = comm.linked_token_mints || [];
+                for (const mint of tokens) {
+                  upserts.push({
+                    source_id: comm.community_id,
+                    source_type: 'x_community',
+                    linked_id: mint,
+                    linked_type: 'token',
+                    relationship: 'community_for',
+                    confidence: 90,
+                    evidence: { source: 'reverse_lookup' },
+                    discovered_at: now,
+                  });
+                }
+              }
+
+              if (upserts.length > 0) {
+                await supabase
+                  .from('reputation_mesh')
+                  .upsert(upserts, { onConflict: 'source_id,linked_id,relationship', ignoreDuplicates: true });
+                console.log(`[MeshGraph] Upserted ${upserts.length} reverse community links`);
+              }
+            }
+          } catch (err) {
+            console.warn('[MeshGraph] Reverse community lookup failed:', err);
+          }
+        }
+      }
       
       // 1-hop: fetch links for all focused/expanded entities
       for (const entityId of uniqueIds) {
