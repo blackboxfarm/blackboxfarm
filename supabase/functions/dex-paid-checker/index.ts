@@ -270,6 +270,14 @@ serve(async (req) => {
         if (error) {
           console.error(`Error updating dex_paid_status for ${status.tokenMint}:`, error);
         }
+        
+        // ── CTO Social-Change Snapshot Subroutine ──
+        // When CTO is flagged OR socials exist on a paid profile,
+        // snapshot into token_socials_history so CTO detection pipeline
+        // can compare snapshots and flag social replacements.
+        if (status.socials && (status.hasCTO || status.hasPaidProfile)) {
+          await snapshotSocialsIfChanged(supabase, status.tokenMint, status.socials, status.hasCTO);
+        }
       }
     }
     
