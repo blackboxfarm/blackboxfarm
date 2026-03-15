@@ -46,20 +46,23 @@ Deno.serve(async (req) => {
     // - Has linked tokens (from HoldersIntel)
     const staleThreshold = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
 
-    const { data: communities, error: fetchError } = await supabase
+    // Fetch more than needed, then filter to numeric IDs in code
+    const { data: rawCommunities, error: fetchError } = await supabase
       .from('x_communities')
       .select('community_id, community_url, name, admin_usernames, linked_token_mints, last_scraped_at, failed_scrape_count')
       .eq('is_deleted', false)
       .lt('failed_scrape_count', 3)
       .not('linked_token_mints', 'is', null)
-      .like('community_id', '%[0-9]%') // Only numeric community IDs (not X account URL slugs)
       .or(`admin_usernames.is.null,last_scraped_at.is.null,last_scraped_at.lt.${staleThreshold}`)
       .order('last_scraped_at', { ascending: true, nullsFirst: true })
-      .limit(batchSize);
+      .limit(batchSize * 3); // Over-fetch to account for filtering
 
     if (fetchError) throw fetchError;
 
-    if (!communities || communities.length === 0) {
+    // Filter to only numeric community IDs (real X Communities, not account URL slugs)
+    const communities = (rawCommunities || [])
+      .filter(c => /^\d+$/.test(c.community_id))
+      .slice(0, batchSize);
       // Get stats
       const { count: total } = await supabase
         .from('x_communities')
