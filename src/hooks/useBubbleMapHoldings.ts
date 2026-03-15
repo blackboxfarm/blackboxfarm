@@ -71,9 +71,8 @@ export function useBubbleMapHoldings() {
               },
             });
 
-            if (response.ok) {
-              const data = await response.json();
-              const assets = data?.result?.items || [];
+            if (!fnError && responseData) {
+              const assets = responseData?.result?.items || [];
               const tokenAsset = assets.find((a: any) => a.id === tokenMint);
               const balance = tokenAsset?.token_info?.balance
                 ? tokenAsset.token_info.balance / Math.pow(10, tokenAsset.token_info.decimals || 6)
