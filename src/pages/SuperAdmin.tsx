@@ -20,6 +20,7 @@ const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramCha
 const TwitterAccountManager = lazy(() => import("@/components/admin/TwitterAccountManager"));
 const PumpfunMonitorTab = lazy(() => import("@/components/admin/tabs/PumpfunMonitorTab"));
 const OracleTab = lazy(() => import("@/components/admin/tabs/OracleTab"));
+const MasterDBTab = lazy(() => import("@/components/admin/tabs/MasterDBTab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
@@ -127,6 +128,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter</TabsTrigger>
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun</TabsTrigger>
+            <TabsTrigger value="master-db" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500/30 data-[state=active]:to-blue-500/20">🗄️ Master DB</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -198,6 +200,13 @@ export default function SuperAdmin() {
             {activeTab === "pumpfun-monitor" && (
               <Suspense fallback={<TabLoader />}>
                 <PumpfunMonitorTab />
+              </Suspense>
+            )}
+          </TabsContent>
+          <TabsContent value="master-db">
+            {activeTab === "master-db" && (
+              <Suspense fallback={<TabLoader />}>
+                <MasterDBTab />
               </Suspense>
             )}
           </TabsContent>
