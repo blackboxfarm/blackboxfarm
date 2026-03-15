@@ -1161,12 +1161,38 @@ const MeshGraphVisualizer = () => {
             </div>
           )}
 
-          {/* Spider Error */}
+          {/* Spider Error - auto-dismiss if graph has populated despite the error */}
           {spiderStatus.error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                <span className="text-xs text-destructive">{spiderStatus.error}</span>
+            <div className={`rounded-lg border p-3 space-y-2 ${
+              graphData.nodes.length > 0 
+                ? 'border-yellow-500/30 bg-yellow-500/5' 
+                : 'border-destructive/30 bg-destructive/5'
+            }`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className={`h-3.5 w-3.5 ${graphData.nodes.length > 0 ? 'text-yellow-500' : 'text-destructive'}`} />
+                  <span className={`text-xs ${graphData.nodes.length > 0 ? 'text-yellow-500' : 'text-destructive'}`}>
+                    {graphData.nodes.length > 0 
+                      ? `⚠️ Spider partial failure (graph loaded ${graphData.nodes.length} entities via other sources)`
+                      : spiderStatus.error
+                    }
+                  </span>
+                </div>
+                {graphData.nodes.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      // Clear the spider error since graph has data
+                      // This is a UI-only dismiss
+                      const el = document.getElementById('spider-error-panel');
+                      if (el) el.style.display = 'none';
+                    }}
+                    className="text-[10px] h-5 px-2 text-muted-foreground"
+                  >
+                    Dismiss
+                  </Button>
+                )}
               </div>
               {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
                 <>
@@ -1186,9 +1212,11 @@ const MeshGraphVisualizer = () => {
                   )}
                 </>
               )}
-              <Button variant="outline" size="sm" onClick={handleSpider} className="text-[10px] h-6">
-                <Radar className="h-3 w-3 mr-1" /> Retry
-              </Button>
+              {graphData.nodes.length === 0 && (
+                <Button variant="outline" size="sm" onClick={handleSpider} className="text-[10px] h-6">
+                  <Radar className="h-3 w-3 mr-1" /> Retry
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
