@@ -355,7 +355,10 @@ Deno.serve(async (req) => {
         });
       }
 
-      const blueChecked = community.raw_data.filter((m: any) => m.isBlueVerified);
+      // Admins & Mods are ALWAYS blue-checked (X requires verification to manage a community)
+      const blueChecked = community.raw_data.filter((m: any) => 
+        m.isBlueVerified || m.communityRole === 'Admin' || m.communityRole === 'Moderator'
+      );
       if (blueChecked.length === 0) {
         return new Response(JSON.stringify({ success: true, backfilled: 0, reason: 'No blue-checked members in raw_data' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
