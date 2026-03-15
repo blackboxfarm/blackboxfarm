@@ -125,6 +125,19 @@ export function XCommunityManager() {
       if (error) throw error;
       setCommunities(data || []);
       setTotalCount(count || 0);
+
+      // Resolve token mints to symbols
+      const allMints = new Set<string>();
+      (data || []).forEach(c => c.linked_token_mints?.forEach((m: string) => allMints.add(m)));
+      if (allMints.size > 0) {
+        const { data: tokens } = await supabase
+          .from('scraped_tokens')
+          .select('token_mint, symbol')
+          .in('token_mint', Array.from(allMints));
+        const map: Record<string, string> = {};
+        tokens?.forEach(t => { if (t.symbol) map[t.token_mint] = t.symbol; });
+        setTokenSymbols(map);
+      }
     } catch (err: any) {
       toast.error(`Failed to fetch communities: ${err.message}`);
     } finally {
