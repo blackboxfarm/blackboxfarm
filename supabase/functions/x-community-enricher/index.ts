@@ -230,9 +230,30 @@ Deno.serve(async (req) => {
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // 5-minute cooldown to prevent duplicate concurrent scrapes + 24h full cache
+      const lastScrapedMs = existingCommunity?.last_scraped_at 
+        ? new Date(existingCommunity.last_scraped_at).getTime() 
+        : 0;
+      const timeSinceLastScrape = Date.now() - lastScrapedMs;
       const needsScrape = !existingCommunity || 
         !existingCommunity.last_scraped_at ||
-        new Date(existingCommunity.last_scraped_at).getTime() < Date.now() - 24 * 60 * 60 * 1000; // 24h cache
+        timeSinceLastScrape > 24 * 60 * 60 * 1000; // 24h cache
+      
+      // Short cooldown: if scraped in last 5 min, skip even if "needs" scrape
+      const recentlySscraped = lastScrapedMs > 0 && timeSinceLastScrape < 5 * 60 * 1000;
+      
+      if (recentlySscraped && existingCommunity) {
+        console.log(`[x-community-enricher] Skipping ${communityId} - scraped ${Math.round(timeSinceLastScrape/1000)}s ago (5min cooldown)`);
+        return new Response(JSON.stringify({
+          success: true,
+          type: 'community',
+          communityId,
+          cached: true,
+          cooldown: true,
+          admins: existingCommunity.admin_usernames || [],
+          moderators: existingCommunity.moderator_usernames || [],
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       let communityData: XCommunityData = {
         communityId,
