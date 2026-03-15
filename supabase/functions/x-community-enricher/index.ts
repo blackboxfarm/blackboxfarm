@@ -333,7 +333,7 @@ Deno.serve(async (req) => {
           type: 'community',
           communityId,
           skipped: true,
-          reason: `Skipped after ${failCount} consecutive Apify failures. Community likely deleted or private.`,
+          reason: `Skipped after ${failCount} consecutive scrape failures. Community likely deleted or private.`,
           failCount,
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
