@@ -440,8 +440,32 @@ export function useMeshGraph(initialEntityId?: string) {
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
     const normalizedInput = input.trim().replace(/^@/, '').toLowerCase();
-    // If it looks like an X handle (short, no base58), normalize
-    const isXHandle = !(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput)) && normalizedInput.length < 30 && !normalizedInput.includes('.');
+    
+    // ═══ INPUT TYPE DETECTION — prevents sending wrong types to wrong APIs ═══
+    const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
+    const isCommunityId = /^\d{10,25}$/.test(normalizedInput);
+    const isCommunityUrl = normalizedInput.includes('/communities/');
+    const isUrl = normalizedInput.includes('://') || normalizedInput.includes('.com') || normalizedInput.includes('.io');
+    const isXHandle = !isBase58 && !isCommunityId && !isCommunityUrl && !isUrl && normalizedInput.length < 30;
+    
+    // Community IDs and URLs should NOT be sent to oracle-unified-lookup (which calls Helius/Pump.fun)
+    // They are handled by the reverse community lookup in the graph query
+    if (isCommunityId || isCommunityUrl) {
+      console.log(`[MeshSpider] Skipping external spider for community input: ${normalizedInput.slice(0, 20)}`);
+      setSpiderStatus({
+        active: false,
+        stage: '',
+        diagnostics: [
+          `Input type: x_community`,
+          '✅ Community data loaded from x_communities table',
+          'No external API calls needed for community lookups',
+        ],
+        recommendation: 'Community data loaded from database.',
+      });
+      refetch();
+      return;
+    }
+    
     const now = Date.now();
 
     // Cache-first: if recent mesh links already exist, skip expensive external spider calls
