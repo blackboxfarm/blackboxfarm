@@ -61,12 +61,12 @@ Deno.serve(async (req) => {
     // Filter to:
     // 1. Numeric community IDs only (real X Communities)
     // 2. Missing admins (null or empty array) OR stale data
+    // Only enrich communities MISSING admin data — never re-scrape existing ones
     const communities = (rawCommunities || [])
       .filter(c => {
         if (!/^\d+$/.test(c.community_id)) return false;
         const hasAdmins = c.admin_usernames && c.admin_usernames.length > 0;
-        const isStale = !c.last_scraped_at || new Date(c.last_scraped_at).getTime() < Date.now() - maxAgeDays * 86400000;
-        return !hasAdmins || isStale;
+        return !hasAdmins;
       })
       .slice(0, batchSize);
 
