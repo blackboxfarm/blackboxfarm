@@ -339,7 +339,7 @@ export function XCommunityManager() {
         <Card className="bg-card/50">
           <CardContent className="p-3 text-center">
             <div className="text-2xl font-bold text-orange-500">{stats.needsScrape}</div>
-            <div className="text-xs text-muted-foreground">Needs Scrape</div>
+            <div className="text-xs text-muted-foreground">Pending</div>
           </CardContent>
         </Card>
         <Card className="bg-card/50">

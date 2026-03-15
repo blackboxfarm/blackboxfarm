@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
       .eq('is_deleted', false)
       .lt('failed_scrape_count', 3)
       .not('linked_token_mints', 'is', null)
-      .or(`admin_usernames.is.null,last_scraped_at.is.null,last_scraped_at.lt.${staleThreshold}`);
+      .is('admin_usernames', null);
 
     console.log(`[bulk-community-enricher] Done: ${enriched} enriched, ${failed} failed. ${remaining} remaining.`);
 
