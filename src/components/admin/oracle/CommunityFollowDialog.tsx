@@ -16,6 +16,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  RotateCcw,
 } from "lucide-react";
 
 interface FollowTarget {
