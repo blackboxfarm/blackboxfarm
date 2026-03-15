@@ -20,6 +20,7 @@ const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramCha
 const TwitterAccountManager = lazy(() => import("@/components/admin/TwitterAccountManager"));
 const PumpfunMonitorTab = lazy(() => import("@/components/admin/tabs/PumpfunMonitorTab"));
 const OracleTab = lazy(() => import("@/components/admin/tabs/OracleTab"));
+const MasterDBTab = lazy(() => import("@/components/admin/tabs/MasterDBTab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
