@@ -447,7 +447,7 @@ export function XCommunityManager() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[200px]">Community</TableHead>
-                  <TableHead className="w-[120px]">Token</TableHead>
+                  <TableHead className="w-[120px]">$TICKER</TableHead>
                   <TableHead>Staff</TableHead>
                   <TableHead className="w-[80px]">Members</TableHead>
                   <TableHead className="w-[100px]">Status</TableHead>
