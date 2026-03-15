@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 /**
  * Resolves a Telegram username (e.g., "guanocoin") to its immutable numeric channel ID
