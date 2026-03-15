@@ -507,20 +507,15 @@ export function XCommunityManager() {
                         {/* Token ticker column */}
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {(community.linked_token_mints || []).slice(0, 2).map(mint => {
+                            {(community.linked_token_mints || []).map(mint => {
                               const sym = tokenSymbols[mint];
                               return sym ? (
                                 <Badge key={mint} variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1">
                                   <Coins className="h-2.5 w-2.5" />{"$"}{sym}
                                 </Badge>
-                              ) : (
-                                <span key={mint} className="text-xs text-muted-foreground font-mono">{mint.slice(0, 6)}...</span>
-                              );
-                            })}
-                            {(community.linked_token_mints?.length || 0) > 2 && (
-                              <span className="text-xs text-muted-foreground">+{(community.linked_token_mints?.length || 0) - 2}</span>
-                            )}
-                            {!(community.linked_token_mints?.length) && (
+                              ) : null;
+                            }).filter(Boolean)}
+                            {!(community.linked_token_mints || []).some(m => tokenSymbols[m]) && (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </div>
