@@ -225,6 +225,83 @@ export function useMeshGraph(initialEntityId?: string) {
           }
         }
       }
+
+      // ═══ COMMUNITY ID LOOKUP ═══
+      // If focused entity is an X Community, look up its data and auto-create mesh links
+      if (focusedEntity?.type === 'x_community') {
+        const commId = focusedEntity.id;
+        if (!reverseCommunityLookupDone.current.has(`comm_${commId}`)) {
+          reverseCommunityLookupDone.current.add(`comm_${commId}`);
+          try {
+            const { data: comm } = await supabase
+              .from('x_communities')
+              .select('community_id, name, admin_usernames, moderator_usernames, linked_token_mints')
+              .eq('community_id', commId)
+              .maybeSingle();
+
+            if (comm) {
+              console.log(`[MeshGraph] Community lookup found: ${comm.name}, admins: ${(comm.admin_usernames || []).length}, mods: ${(comm.moderator_usernames || []).length}`);
+              const upserts: any[] = [];
+              const now = new Date().toISOString();
+
+              // Link community → admins
+              for (const admin of (comm.admin_usernames || [])) {
+                const handle = admin.toLowerCase();
+                upserts.push({
+                  source_id: commId,
+                  source_type: 'x_community',
+                  linked_id: handle,
+                  linked_type: 'x_account',
+                  relationship: 'community_admin',
+                  confidence: 95,
+                  evidence: { source: 'community_lookup', community_name: comm.name },
+                  discovered_at: now,
+                });
+              }
+
+              // Link community → mods
+              for (const mod of (comm.moderator_usernames || [])) {
+                const handle = mod.toLowerCase();
+                upserts.push({
+                  source_id: commId,
+                  source_type: 'x_community',
+                  linked_id: handle,
+                  linked_type: 'x_account',
+                  relationship: 'community_mod',
+                  confidence: 95,
+                  evidence: { source: 'community_lookup', community_name: comm.name },
+                  discovered_at: now,
+                });
+              }
+
+              // Link community → tokens
+              for (const mint of (comm.linked_token_mints || [])) {
+                upserts.push({
+                  source_id: commId,
+                  source_type: 'x_community',
+                  linked_id: mint,
+                  linked_type: 'token',
+                  relationship: 'community_for',
+                  confidence: 90,
+                  evidence: { source: 'community_lookup', community_name: comm.name },
+                  discovered_at: now,
+                });
+              }
+
+              if (upserts.length > 0) {
+                await supabase
+                  .from('reputation_mesh')
+                  .upsert(upserts, { onConflict: 'source_id,linked_id,relationship', ignoreDuplicates: true });
+                console.log(`[MeshGraph] Upserted ${upserts.length} community mesh links`);
+              }
+            } else {
+              console.log(`[MeshGraph] Community ${commId} not in x_communities table — will need scraping`);
+            }
+          } catch (err) {
+            console.warn('[MeshGraph] Community lookup failed:', err);
+          }
+        }
+      }
       
       // 1-hop: fetch links for all focused/expanded entities
       for (const entityId of uniqueIds) {
@@ -486,6 +563,31 @@ export function useMeshGraph(initialEntityId?: string) {
       diagnostics.push(`Mesh links added: ${result.meshLinksAdded || 0}`);
 
       const hasUsefulData = (result.meshLinksAdded || 0) > 0 || result.found;
+
+      // ═══ REGISTER X HANDLE ON EMPTY SEARCH ═══
+      // If searching an X handle and nothing found, register it in x_account_registry
+      // so future community scrapes can cross-link this handle
+      if (isXHandle && !hasUsefulData) {
+        try {
+          const cleanHandle = normalizedInput.replace(/^@/, '').toLowerCase();
+          const now_ts = new Date().toISOString();
+          await supabase.from('x_account_registry').upsert({
+            x_user_id: `pending_${cleanHandle}`, // Placeholder until X API resolves real ID
+            current_handle: cleanHandle,
+            display_name: cleanHandle,
+            is_verified: false,
+            handle_history: [],
+            name_history: [],
+            linked_token_count: 0,
+            first_seen_at: now_ts,
+            last_seen_at: now_ts,
+          }, { onConflict: 'current_handle', ignoreDuplicates: true });
+          diagnostics.push(`📝 Registered @${cleanHandle} in x_account_registry for future cross-linking`);
+          console.log(`[MeshSpider] Registered X handle @${cleanHandle} in registry`);
+        } catch (regErr) {
+          console.warn('[MeshSpider] Handle registration failed:', regErr);
+        }
+      }
 
       if (!hasUsefulData && result.requiresScan) {
         setSpiderStatus({
