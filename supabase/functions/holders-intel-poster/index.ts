@@ -537,6 +537,28 @@ Deno.serve(async (req) => {
         );
       }
       
+      // ATH 24h: Fetch from GeckoTerminal on FIRST POST only, store in token_lifecycle
+      let ath24h: number | null = null;
+      if (currentTimesPosted === 1) {
+        ath24h = await fetchAth24h(item.token_mint);
+        if (ath24h !== null) {
+          // Store in token_lifecycle (upsert)
+          const { error: athError } = await supabase
+            .from('token_lifecycle')
+            .upsert({
+              token_mint: item.token_mint,
+              ath_24h_usd: ath24h,
+            }, { onConflict: 'token_mint' });
+          
+          if (athError) {
+            console.warn(`[poster] Failed to store ATH 24h: ${athError.message}`);
+          } else {
+            console.log(`[poster] Stored ATH 24h: $${ath24h} for ${item.token_mint}`);
+          }
+        }
+      }
+      (stats as any).ath24h = ath24h;
+
       // Check if AI summary is enabled (via queue item flag or template contains AI vars)
       const templateUsesAI = tweetTemplate.includes('{ai_summary}') || tweetTemplate.includes('{AI_SUMMARY}') ||
                              tweetTemplate.includes('{ai_overview}') || tweetTemplate.includes('{AI_OVERVIEW}') ||
