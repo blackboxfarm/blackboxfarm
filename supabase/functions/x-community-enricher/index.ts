@@ -346,6 +346,44 @@ Deno.serve(async (req) => {
               failed_scrape_count: 0,
             }).eq('community_id', communityId);
           }
+
+          // === CROSS-POPULATE: Feed blue-checked members into community_follow_targets ===
+          // This eliminates the need for a separate "Scan Blue Checks" Apify scrape
+          const blueCheckedMembers = members.filter((m: ApifyCommunityMember) => m.isBlueVerified);
+          if (blueCheckedMembers.length > 0) {
+            console.log(`[x-community-enricher] Cross-populating ${blueCheckedMembers.length} blue-checked members into follow targets`);
+            
+            // Check existing follow statuses to preserve them
+            const handles = blueCheckedMembers.map((m: ApifyCommunityMember) => m.screenName.toLowerCase());
+            const { data: existingTargets } = await supabase
+              .from('community_follow_targets')
+              .select('target_handle, follow_status')
+              .eq('community_id', communityId)
+              .in('target_handle', handles);
+            
+            const existingMap = new Map((existingTargets || []).map((e: any) => [e.target_handle, e.follow_status]));
+            
+            const upsertData = blueCheckedMembers.map((m: ApifyCommunityMember) => ({
+              community_id: communityId,
+              target_handle: m.screenName.toLowerCase(),
+              target_x_user_id: m.restId || null,
+              is_blue_verified: true,
+              community_role: m.communityRole === 'Admin' ? 'Admin' : m.communityRole === 'Moderator' ? 'Moderator' : 'member',
+              followers_count: m.followersCount || null,
+              follow_status: existingMap.get(m.screenName.toLowerCase()) || 'not_followed',
+              updated_at: new Date().toISOString(),
+            }));
+            
+            const { error: followUpsertErr } = await supabase
+              .from('community_follow_targets')
+              .upsert(upsertData, { onConflict: 'community_id,target_handle' });
+            
+            if (followUpsertErr) {
+              console.warn('[x-community-enricher] Follow targets upsert error:', followUpsertErr.message);
+            } else {
+              console.log(`[x-community-enricher] ✅ Indexed ${upsertData.length} blue-checked members for community ${communityId}`);
+            }
+          }
         }
       } else if (needsScrape && !apifyApiKey) {
         console.warn('APIFY_API_KEY not configured, skipping scrape');
