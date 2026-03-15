@@ -23,9 +23,11 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  BadgeCheck
+  BadgeCheck,
+  Coins
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CommunityFollowDialog } from "./CommunityFollowDialog";
 
 interface XCommunity {
@@ -60,6 +62,9 @@ export function XCommunityManager() {
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const PAGE_SIZE = 50;
+
+  // Token mint → symbol map for display
+  const [tokenSymbols, setTokenSymbols] = useState<Record<string, string>>({});
 
   // Form state for manual entry
   const [manualAdmins, setManualAdmins] = useState("");
@@ -120,6 +125,19 @@ export function XCommunityManager() {
       if (error) throw error;
       setCommunities(data || []);
       setTotalCount(count || 0);
+
+      // Resolve token mints to symbols
+      const allMints = new Set<string>();
+      (data || []).forEach(c => c.linked_token_mints?.forEach((m: string) => allMints.add(m)));
+      if (allMints.size > 0) {
+        const { data: tokens } = await supabase
+          .from('scraped_tokens')
+          .select('token_mint, symbol')
+          .in('token_mint', Array.from(allMints));
+        const map: Record<string, string> = {};
+        tokens?.forEach(t => { if (t.symbol) map[t.token_mint] = t.symbol; });
+        setTokenSymbols(map);
+      }
     } catch (err: any) {
       toast.error(`Failed to fetch communities: ${err.message}`);
     } finally {
@@ -280,10 +298,29 @@ export function XCommunityManager() {
       return <Badge variant="outline" className="gap-1 text-muted-foreground"><Clock className="h-3 w-3" /> Never scraped</Badge>;
     }
     const hoursSince = (Date.now() - new Date(community.last_scraped_at).getTime()) / (1000 * 60 * 60);
+    const lastScraped = formatDistanceToNow(new Date(community.last_scraped_at), { addSuffix: true });
     if (hoursSince < 24) {
-      return <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" /> Fresh</Badge>;
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" /> Fresh</Badge>
+          </TooltipTrigger>
+          <TooltipContent>Scraped {lastScraped}</TooltipContent>
+        </Tooltip>
+      );
     }
-    return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" /> Stale</Badge>;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="secondary" className="gap-1 cursor-help"><Clock className="h-3 w-3" /> Stale</Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[240px]">
+          <p className="font-medium">Last scraped {lastScraped}</p>
+          <p className="text-xs text-muted-foreground mt-1">Data is older than 24h. The cron job will auto-refresh it, or click the ↻ button to rescrape manually.</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
   };
 
   // Stats are fetched from DB (see fetchTotalStats above)
@@ -469,9 +506,25 @@ export function XCommunityManager() {
                     <TableRow key={community.id} className={community.is_flagged ? 'bg-red-500/5' : ''}>
                       <TableCell>
                         <div className="space-y-1">
-                          <div className="font-medium truncate max-w-[160px]">
+                          <div className="font-medium truncate max-w-[200px]">
                             {community.name || `#${community.community_id}`}
                           </div>
+                          {/* Linked token tickers */}
+                          {(community.linked_token_mints?.length ?? 0) > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {community.linked_token_mints.slice(0, 2).map(mint => {
+                                const sym = tokenSymbols[mint];
+                                return sym ? (
+                                  <Badge key={mint} variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1">
+                                    <Coins className="h-2.5 w-2.5" />${sym}
+                                  </Badge>
+                                ) : null;
+                              })}
+                              {community.linked_token_mints.length > 2 && (
+                                <span className="text-xs text-muted-foreground">+{community.linked_token_mints.length - 2}</span>
+                              )}
+                            </div>
+                          )}
                           <div className="flex items-center gap-1">
                             <span className="text-xs text-muted-foreground font-mono">
                               {community.community_id.slice(0, 8)}...
@@ -534,14 +587,21 @@ export function XCommunityManager() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setFollowDialogCommunity(community)}
-                            title="Follow Blue Checks"
-                          >
-                            <BadgeCheck className="h-4 w-4 text-sky-400" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setFollowDialogCommunity(community)}
+                              >
+                                <BadgeCheck className="h-4 w-4 text-sky-400" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[260px]">
+                              <p className="font-medium">Follow Blue Checks</p>
+                              <p className="text-xs text-muted-foreground mt-1">Uses Twitter/X API (free) to send follow + follow-back requests from @HoldersIntel. No Apify credits used.</p>
+                            </TooltipContent>
+                          </Tooltip>
                           <Button
                             variant="ghost"
                             size="sm"
