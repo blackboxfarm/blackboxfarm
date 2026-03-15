@@ -483,3 +483,6 @@ verify_jwt = false
 
 [functions.x-community-follow]
 verify_jwt = false
+
+[functions.harvest-token-socials]
+verify_jwt = false
