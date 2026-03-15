@@ -474,3 +474,6 @@ verify_jwt = false
 
 [functions.phanes-x-query]
 verify_jwt = false
+
+[functions.pumpfun-kol-registry]
+verify_jwt = false
