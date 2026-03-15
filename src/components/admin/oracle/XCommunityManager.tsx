@@ -587,14 +587,21 @@ export function XCommunityManager() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setFollowDialogCommunity(community)}
-                            title="Follow Blue Checks"
-                          >
-                            <BadgeCheck className="h-4 w-4 text-sky-400" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setFollowDialogCommunity(community)}
+                              >
+                                <BadgeCheck className="h-4 w-4 text-sky-400" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[260px]">
+                              <p className="font-medium">Follow Blue Checks</p>
+                              <p className="text-xs text-muted-foreground mt-1">Uses Twitter/X API (free) to send follow + follow-back requests from @HoldersIntel. No Apify credits used.</p>
+                            </TooltipContent>
+                          </Tooltip>
                           <Button
                             variant="ghost"
                             size="sm"
