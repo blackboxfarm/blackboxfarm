@@ -516,7 +516,7 @@ export function XCommunityManager() {
                                 const sym = tokenSymbols[mint];
                                 return sym ? (
                                   <Badge key={mint} variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1">
-                                    <Coins className="h-2.5 w-2.5" />${sym}
+                                    <Coins className="h-2.5 w-2.5" />{"$"}{sym}
                                   </Badge>
                                 ) : null;
                               })}
