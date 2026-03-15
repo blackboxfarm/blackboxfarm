@@ -429,7 +429,7 @@ export function XCommunityManager() {
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <Users className="h-5 w-5" />
-            X Communities ({filteredCommunities.length})
+            X Communities ({stats.total})
           </CardTitle>
           <CardDescription>
             Manage X Community admin/mod rosters for reputation tracking
