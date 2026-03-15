@@ -84,7 +84,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId: communityId,
-          maxItems: 6, // Only need admins/mods (usually 2-5 staff)
+          maxItems: 25, // Need enough to reliably find admins/mods (not sorted by role)
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ["RESIDENTIAL"]

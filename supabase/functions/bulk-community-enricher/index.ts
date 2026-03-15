@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               communityId,
-              maxItems: 6,
+              maxItems: 25, // Need enough to reliably find admins/mods (not sorted by role)
               proxyConfiguration: {
                 useApifyProxy: true,
                 apifyProxyGroups: ["RESIDENTIAL"],
