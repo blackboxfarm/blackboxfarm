@@ -13893,7 +13893,6 @@ export type Database = {
           health_grade: string | null
           image_url: string | null
           launchpad: string | null
-          lifecycle_dev_wallet: string | null
           lifecycle_status: string | null
           liquidity_usd: number | null
           market_cap: number | null
