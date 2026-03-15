@@ -63,9 +63,34 @@ export function CommunityFollowDialog({
         body: { action: 'get_targets', communityId },
       });
       if (error) throw error;
-      setTargets(data.targets || []);
+      const loadedTargets = data.targets || [];
+      
+      // If no targets exist, try to backfill from existing x_communities raw_data
+      // This avoids a second Apify scrape when the enricher already ran
+      if (loadedTargets.length === 0) {
+        console.log('[FollowDialog] No targets found, attempting backfill from enricher data...');
+        const { data: backfillData, error: backfillErr } = await supabase.functions.invoke('x-community-follow', {
+          body: { action: 'backfill_from_enricher', communityId },
+        });
+        if (!backfillErr && backfillData?.backfilled > 0) {
+          toast.success(`📋 Auto-indexed ${backfillData.backfilled} blue checks from previous enricher scrape`);
+          // Reload targets after backfill
+          const { data: reloadData } = await supabase.functions.invoke('x-community-follow', {
+            body: { action: 'get_targets', communityId },
+          });
+          setTargets(reloadData?.targets || []);
+          const unfollowed = (reloadData?.targets || [])
+            .filter((t: FollowTarget) => t.follow_status === 'not_followed' && t.target_x_user_id)
+            .map((t: FollowTarget) => t.target_handle);
+          setSelected(new Set(unfollowed));
+          setLoading(false);
+          return;
+        }
+      }
+      
+      setTargets(loadedTargets);
       // Pre-select unfollowed targets
-      const unfollowed = (data.targets || [])
+      const unfollowed = loadedTargets
         .filter((t: FollowTarget) => t.follow_status === 'not_followed' && t.target_x_user_id)
         .map((t: FollowTarget) => t.target_handle);
       setSelected(new Set(unfollowed));
