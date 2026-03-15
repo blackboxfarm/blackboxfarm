@@ -487,8 +487,6 @@ export function useMeshGraph(initialEntityId?: string) {
   }, [refetch, autoDiscoverCommunity]);
 
   const focusOnEntity = useCallback((id: string, type: string) => {
-    // Reset spider attempts for new searches
-    spiderAttemptsRef.current.clear();
     setFocusedEntity({ id, type });
     setExpandedEntities(new Set([id]));
     setSpiderStatus({ active: false, stage: '' }); // Clear previous errors
