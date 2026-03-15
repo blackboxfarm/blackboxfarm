@@ -289,34 +289,36 @@ Deno.serve(async (req) => {
               if (website.url?.includes('x.com/i/communities/')) {
                 const communityId = website.url.match(/communities\/(\d+)/)?.[1];
                 if (communityId) {
-                  // Upsert into x_communities if not exists
-                  const { error: xcErr } = await supabase
+                  // Check if community already exists
+                  const { data: existing } = await supabase
                     .from('x_communities')
-                    .upsert({
-                      community_url: website.url,
-                      linked_token_mints: [mint],
-                      scrape_status: 'pending',
-                      is_deleted: false,
-                    }, { onConflict: 'community_url', ignoreDuplicates: false });
+                    .select('id, linked_token_mints')
+                    .eq('community_id', communityId)
+                    .maybeSingle();
 
-                  if (!xcErr) {
-                    results.dexscreener.communitiesAdded++;
-                  } else {
-                    // If exists, add this mint to linked_token_mints
-                    const { data: existing } = await supabase
-                      .from('x_communities')
-                      .select('id, linked_token_mints')
-                      .eq('community_url', website.url)
-                      .maybeSingle();
-                    
-                    if (existing && !existing.linked_token_mints?.includes(mint)) {
+                  if (existing) {
+                    // Add mint if not already linked
+                    if (!existing.linked_token_mints?.includes(mint)) {
                       await supabase
                         .from('x_communities')
                         .update({
                           linked_token_mints: [...(existing.linked_token_mints || []), mint],
                         })
                         .eq('id', existing.id);
+                      results.dexscreener.communitiesAdded++;
                     }
+                  } else {
+                    // Create new community entry
+                    const { error: xcErr } = await supabase
+                      .from('x_communities')
+                      .insert({
+                        community_id: communityId,
+                        community_url: website.url.replace(/\/$/, ''),
+                        linked_token_mints: [mint],
+                        scrape_status: 'pending',
+                        is_deleted: false,
+                      });
+                    if (!xcErr) results.dexscreener.communitiesAdded++;
                   }
                 }
               }
