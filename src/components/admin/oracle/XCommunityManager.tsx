@@ -558,6 +558,22 @@ export function XCommunityManager() {
               </TableBody>
             </Table>
           </ScrollArea>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t">
+              <span className="text-sm text-muted-foreground">
+                Page {page + 1} of {totalPages} ({totalCount} results)
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
