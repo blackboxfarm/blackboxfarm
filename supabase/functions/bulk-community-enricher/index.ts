@@ -63,7 +63,8 @@ Deno.serve(async (req) => {
     const communities = (rawCommunities || [])
       .filter(c => /^\d+$/.test(c.community_id))
       .slice(0, batchSize);
-      // Get stats
+
+    if (communities.length === 0) {
       const { count: total } = await supabase
         .from('x_communities')
         .select('*', { count: 'exact', head: true })
