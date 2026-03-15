@@ -362,7 +362,9 @@ export function useMeshGraph(initialEntityId?: string) {
 
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
-    const normalizedInput = input.trim();
+    const normalizedInput = input.trim().replace(/^@/, '').toLowerCase();
+    // If it looks like an X handle (short, no base58), normalize
+    const isXHandle = !(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput)) && normalizedInput.length < 30 && !normalizedInput.includes('.');
     const now = Date.now();
 
     // Cache-first: if recent mesh links already exist, skip expensive external spider calls
