@@ -13883,31 +13883,18 @@ export type Database = {
       }
       master_token_directory: {
         Row: {
-          bonded_at: string | null
           community_admin_handles: string[] | null
-          community_member_count: number | null
           community_mod_handles: string[] | null
+          creator_wallet: string | null
           dev_wallets: string[] | null
           dex_id: string | null
-          first_seen_at: string | null
-          health_grade: string | null
           image_url: string | null
           launchpad: string | null
-          lifecycle_status: string | null
-          liquidity_usd: number | null
-          market_cap: number | null
           mesh_x_handles: string[] | null
-          minted_at: string | null
           name: string | null
-          oracle_score: number | null
           pair_address: string | null
-          price_usd: number | null
           symbol: string | null
-          times_posted: number | null
-          times_seen: number | null
           token_mint: string | null
-          volume_24h: number | null
-          was_posted: boolean | null
           websites: string[] | null
           x_community_names: string[] | null
           x_community_urls: string[] | null
