@@ -97,12 +97,12 @@ const MeshGraphVisualizer = () => {
             return viewMode === 'tree' ? 100 : 80;
           }
           if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) {
-            return viewMode === 'tree' ? 30 : 20;
+            return viewMode === 'tree' ? 50 : 40;
           }
           if (['community_for', 'social_account'].includes(rel)) {
-            return viewMode === 'tree' ? 55 : 40;
+            return viewMode === 'tree' ? 80 : 65;
           }
-          return viewMode === 'tree' ? 65 : 45;
+          return viewMode === 'tree' ? 90 : 70;
         });
       }
       graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -350 : -280);
