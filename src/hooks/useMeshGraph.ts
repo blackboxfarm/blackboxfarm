@@ -371,13 +371,13 @@ export function useMeshGraph(initialEntityId?: string) {
     }
 
     setSpiderStatus({ active: true, stage: '🕷️ Initializing spider scan...' });
-    console.log('[MeshSpider] Starting spider:', { input: input.slice(0, 16), scanMode });
+    console.log('[MeshSpider] Starting spider:', { input: normalizedInput.slice(0, 16), scanMode });
 
     try {
       setSpiderStatus({ active: true, stage: '🔍 Resolving entity type & wallet...' });
 
       const { data, error } = await supabase.functions.invoke('oracle-unified-lookup', {
-        body: { input, scanMode },
+        body: { input: normalizedInput, scanMode },
       });
 
       if (error) {
