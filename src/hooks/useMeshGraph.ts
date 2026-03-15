@@ -439,12 +439,12 @@ export function useMeshGraph(initialEntityId?: string) {
 
         // ═══ AUTO-DISCOVER X COMMUNITY ═══
         // If input is a token mint, discover its X Community + admins/mods
-        const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input.trim());
+        const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
         if (isBase58) {
           // Input could be token or wallet. Try community discovery for input as token,
           // and also for any tokens discovered in the spider result
           const tokensToCheck = new Set<string>();
-          tokensToCheck.add(input.trim());
+          tokensToCheck.add(normalizedInput);
           
           // Also add tokens from the spider result's token history
           if (result.tokenHistory) {
