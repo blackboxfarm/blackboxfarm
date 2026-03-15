@@ -35,7 +35,6 @@ function detectTwitterType(url: string): 'account' | 'community' | null {
     return 'community';
   }
   if (url.includes('x.com/') || url.includes('twitter.com/')) {
-    // Check if it's not a special path
     const username = url.match(/(?:twitter\.com|x\.com)\/([^/?]+)/i)?.[1];
     if (username && !['i', 'home', 'search', 'explore', 'notifications', 'messages', 'settings'].includes(username.toLowerCase())) {
       return 'account';
@@ -128,9 +127,12 @@ async function processCommunityData(members: ApifyCommunityMember[]): Promise<XC
     adminUsernames: [...new Set(admins)],
     moderatorUsernames: [...new Set(moderators)],
     memberCount: members.length,
-    rawData: members.slice(0, 20) // Keep first 20 for reference
+    rawData: members.slice(0, 20)
   };
 }
+
+
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -223,7 +225,7 @@ Deno.serve(async (req) => {
           type: 'community',
           communityId,
           skipped: true,
-          reason: `Skipped after ${failCount} consecutive Apify failures. Community likely deleted or private.`,
+          reason: `Skipped after ${failCount} consecutive scrape failures. Community likely deleted or private.`,
           failCount,
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -248,13 +250,12 @@ Deno.serve(async (req) => {
           const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
           console.warn(`[x-community-enricher] Apify ${fetchResult.httpStatus} for community ${communityId} (fail #${newFailCount}): ${fetchResult.errorBody?.slice(0, 100)}`);
           
-          // Update fail count and set last_scraped_at to prevent immediate retry
           await supabase.from('x_communities').upsert({
             community_id: communityId,
             community_url: urlToProcess,
             failed_scrape_count: newFailCount,
             scrape_status: `error_${fetchResult.httpStatus}`,
-            last_scraped_at: new Date().toISOString(), // Prevents retry for 24h
+            last_scraped_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'community_id' });
           

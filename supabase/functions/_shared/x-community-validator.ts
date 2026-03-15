@@ -89,7 +89,7 @@ export function interpretApifyResult(members: any[]): CommunityExistenceResult {
   if (!members || members.length === 0) {
     return {
       exists: false,
-      isDeleted: false, // Not confirmed deleted yet
+      isDeleted: false,
       memberCount: 0,
       errorMessage: 'No members returned from Apify scrape',
       checkedAt,
