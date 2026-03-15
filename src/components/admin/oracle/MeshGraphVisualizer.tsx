@@ -600,7 +600,7 @@ const MeshGraphVisualizer = () => {
         });
       }
     }, 300);
-  }, [expandEntity, triggerSpider, graphData.nodes, refetch]);
+  }, [expandEntity, triggerSpider, graphData.nodes, refetch, apifySnapshot.isTracking, resetApifyTracking, startApifyTracking]);
 
   const handleNodeRightClick = useCallback((node: any) => {
     const parts = (node.id as string).split(':');
