@@ -480,3 +480,6 @@ verify_jwt = false
 
 [functions.bulk-community-enricher]
 verify_jwt = false
+
+[functions.x-community-follow]
+verify_jwt = false

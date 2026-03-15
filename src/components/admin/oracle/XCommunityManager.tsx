@@ -22,9 +22,11 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  BadgeCheck
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { CommunityFollowDialog } from "./CommunityFollowDialog";
 
 interface XCommunity {
   id: string;
@@ -54,6 +56,7 @@ export function XCommunityManager() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [bulkScraping, setBulkScraping] = useState(false);
   const [singleScraping, setSingleScraping] = useState<string | null>(null);
+  const [followDialogCommunity, setFollowDialogCommunity] = useState<XCommunity | null>(null);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const PAGE_SIZE = 50;
@@ -534,6 +537,14 @@ export function XCommunityManager() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setFollowDialogCommunity(community)}
+                            title="Follow Blue Checks"
+                          >
+                            <BadgeCheck className="h-4 w-4 text-sky-400" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => openEditDialog(community)}
                           >
                             <Edit className="h-4 w-4" />
@@ -625,6 +636,13 @@ export function XCommunityManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Follow Blue Checks Dialog */}
+      <CommunityFollowDialog
+        open={!!followDialogCommunity}
+        onOpenChange={(open) => !open && setFollowDialogCommunity(null)}
+        communityId={followDialogCommunity?.community_id || ''}
+        communityName={followDialogCommunity?.name || null}
+      />
     </div>
   );
 }

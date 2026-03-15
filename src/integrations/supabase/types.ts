@@ -2356,6 +2356,54 @@ export type Database = {
           },
         ]
       }
+      community_follow_targets: {
+        Row: {
+          community_id: string
+          community_role: string | null
+          created_at: string | null
+          error_message: string | null
+          follow_back_detected_at: string | null
+          follow_status: string | null
+          followed_at: string | null
+          followers_count: number | null
+          id: string
+          is_blue_verified: boolean | null
+          target_handle: string
+          target_x_user_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          community_id: string
+          community_role?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          follow_back_detected_at?: string | null
+          follow_status?: string | null
+          followed_at?: string | null
+          followers_count?: number | null
+          id?: string
+          is_blue_verified?: boolean | null
+          target_handle: string
+          target_x_user_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          community_id?: string
+          community_role?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          follow_back_detected_at?: string | null
+          follow_status?: string | null
+          followed_at?: string | null
+          followers_count?: number | null
+          id?: string
+          is_blue_verified?: boolean | null
+          target_handle?: string
+          target_x_user_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       copy_trades: {
         Row: {
           amount_sol: number | null
