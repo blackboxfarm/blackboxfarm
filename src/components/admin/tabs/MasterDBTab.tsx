@@ -86,7 +86,7 @@ export default function MasterDBTab() {
         .from("master_token_directory" as any)
         .select("*", { count: "exact" })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-        .order("symbol", { ascending: true });
+        .order("created_at", { ascending: false, nullsFirst: false });
 
       if (search) {
         query = query.or(
