@@ -197,15 +197,27 @@ export const useOracleBackfillStatus = () => {
   });
 };
 
-export const useOracleMesh = (entityId?: string, entityType?: string) => {
+export const useOracleMesh = (entityId?: string, entityType?: string, page = 0, pageSize = 100) => {
   return useQuery({
-    queryKey: ['oracle-mesh', entityId, entityType],
+    queryKey: ['oracle-mesh', entityId, entityType, page, pageSize],
     queryFn: async () => {
+      // First get total count
+      let countQuery = supabase
+        .from('reputation_mesh')
+        .select('*', { count: 'exact', head: true });
+
+      if (entityId) {
+        countQuery = countQuery.or(`source_id.eq.${entityId},linked_id.eq.${entityId}`);
+      }
+
+      const { count } = await countQuery;
+
+      // Then get paginated data
       let query = supabase
         .from('reputation_mesh')
         .select('*')
         .order('discovered_at', { ascending: false })
-        .limit(100);
+        .range(page * pageSize, (page + 1) * pageSize - 1);
 
       if (entityId) {
         query = query.or(`source_id.eq.${entityId},linked_id.eq.${entityId}`);
@@ -213,10 +225,10 @@ export const useOracleMesh = (entityId?: string, entityType?: string) => {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data || [];
+      return { links: data || [], totalCount: count || 0 };
     },
     enabled: true,
-    staleTime: 60 * 1000 // 1 minute
+    staleTime: 60 * 1000
   });
 };
 
