@@ -48,11 +48,15 @@ export function XCommunityManager() {
   const [communities, setCommunities] = useState<XCommunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedCommunity, setSelectedCommunity] = useState<XCommunity | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [bulkScraping, setBulkScraping] = useState(false);
   const [singleScraping, setSingleScraping] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
 
   // Form state for manual entry
   const [manualAdmins, setManualAdmins] = useState("");
@@ -60,38 +64,71 @@ export function XCommunityManager() {
   const [newCommunityUrl, setNewCommunityUrl] = useState("");
   const [newCommunityName, setNewCommunityName] = useState("");
 
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(0);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Get true total count (once)
+  const fetchTotalStats = useCallback(async () => {
+    const [totalRes, adminsRes, modsRes, flaggedRes, deletedRes, needsScrapeRes] = await Promise.all([
+      supabase.from('x_communities').select('*', { count: 'exact', head: true }),
+      supabase.from('x_communities').select('*', { count: 'exact', head: true }).not('admin_usernames', 'eq', '{}'),
+      supabase.from('x_communities').select('*', { count: 'exact', head: true }).not('moderator_usernames', 'eq', '{}'),
+      supabase.from('x_communities').select('*', { count: 'exact', head: true }).eq('is_flagged', true),
+      supabase.from('x_communities').select('*', { count: 'exact', head: true }).eq('is_deleted', true),
+      supabase.from('x_communities').select('*', { count: 'exact', head: true }).is('last_scraped_at', null).eq('is_deleted', false),
+    ]);
+    return {
+      total: totalRes.count || 0,
+      withAdmins: adminsRes.count || 0,
+      withMods: modsRes.count || 0,
+      flagged: flaggedRes.count || 0,
+      deleted: deletedRes.count || 0,
+      needsScrape: needsScrapeRes.count || 0,
+    };
+  }, []);
+
+  const [stats, setStats] = useState({ total: 0, withAdmins: 0, withMods: 0, flagged: 0, deleted: 0, needsScrape: 0 });
+
   const fetchCommunities = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('x_communities')
-        .select('*')
-        .order('member_count', { ascending: false, nullsFirst: false })
-        .limit(200);
+      // Fetch stats
+      const newStats = await fetchTotalStats();
+      setStats(newStats);
 
+      // Build query with server-side search
+      let query = supabase
+        .from('x_communities')
+        .select('*', { count: 'exact' })
+        .order('member_count', { ascending: false, nullsFirst: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      if (debouncedSearch) {
+        query = query.or(`community_id.ilike.%${debouncedSearch}%,name.ilike.%${debouncedSearch}%,admin_usernames.cs.{"${debouncedSearch}"},moderator_usernames.cs.{"${debouncedSearch}"}`);
+      }
+
+      const { data, error, count } = await query;
       if (error) throw error;
       setCommunities(data || []);
+      setTotalCount(count || 0);
     } catch (err: any) {
       toast.error(`Failed to fetch communities: ${err.message}`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, debouncedSearch, fetchTotalStats]);
 
   useEffect(() => {
     fetchCommunities();
   }, [fetchCommunities]);
 
-  const filteredCommunities = communities.filter(c => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      c.community_id?.toLowerCase().includes(q) ||
-      c.name?.toLowerCase().includes(q) ||
-      c.admin_usernames?.some(a => a.toLowerCase().includes(q)) ||
-      c.moderator_usernames?.some(m => m.toLowerCase().includes(q))
-    );
-  });
+  const filteredCommunities = communities; // Already filtered server-side
 
   // Trigger Apify scrape for a single community
   const scrapeCommunity = async (community: XCommunity) => {
