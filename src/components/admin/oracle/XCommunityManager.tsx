@@ -126,16 +126,50 @@ export function XCommunityManager() {
       setCommunities(data || []);
       setTotalCount(count || 0);
 
-      // Resolve token mints to symbols
+      // Resolve token mints to symbols — cascade across multiple tables
       const allMints = new Set<string>();
       (data || []).forEach(c => c.linked_token_mints?.forEach((m: string) => allMints.add(m)));
       if (allMints.size > 0) {
-        const { data: tokens } = await supabase
+        const mintArray = Array.from(allMints);
+        const map: Record<string, string> = {};
+
+        // 1. scraped_tokens (primary)
+        const { data: scraped } = await supabase
           .from('scraped_tokens')
           .select('token_mint, symbol')
-          .in('token_mint', Array.from(allMints));
-        const map: Record<string, string> = {};
-        tokens?.forEach(t => { if (t.symbol) map[t.token_mint] = t.symbol; });
+          .in('token_mint', mintArray);
+        scraped?.forEach(t => { if (t.symbol && t.symbol !== 'UNKNOWN') map[t.token_mint] = t.symbol; });
+
+        // 2. holders_intel_post_queue (XBot posts — often the original source)
+        const unresolvedAfterScraped = mintArray.filter(m => !map[m]);
+        if (unresolvedAfterScraped.length > 0) {
+          const { data: postQueue } = await supabase
+            .from('holders_intel_post_queue')
+            .select('token_mint, symbol')
+            .in('token_mint', unresolvedAfterScraped);
+          postQueue?.forEach(t => { if (t.symbol && t.symbol !== 'UNKNOWN' && !map[t.token_mint]) map[t.token_mint] = t.symbol; });
+        }
+
+        // 3. token_watchlist fallback
+        const unresolvedAfterQueue = mintArray.filter(m => !map[m]);
+        if (unresolvedAfterQueue.length > 0) {
+          const { data: watchlist } = await supabase
+            .from('token_watchlist')
+            .select('token_mint, symbol')
+            .in('token_mint', unresolvedAfterQueue);
+          watchlist?.forEach(t => { if (t.symbol && !map[t.token_mint]) map[t.token_mint] = t.symbol; });
+        }
+
+        // 4. token_metadata last resort
+        const unresolvedFinal = mintArray.filter(m => !map[m]);
+        if (unresolvedFinal.length > 0) {
+          const { data: metadata } = await supabase
+            .from('token_metadata')
+            .select('mint_address, symbol')
+            .in('mint_address', unresolvedFinal);
+          metadata?.forEach((t: any) => { if (t.symbol && !map[t.mint_address]) map[t.mint_address] = t.symbol; });
+        }
+
         setTokenSymbols(map);
       }
     } catch (err: any) {
