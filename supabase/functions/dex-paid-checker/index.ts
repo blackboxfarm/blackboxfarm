@@ -188,6 +188,83 @@ async function checkDexPaidStatus(tokenMint: string): Promise<DexPaidStatus> {
   return result;
 }
 
+/**
+ * CTO Social-Change Snapshot Subroutine
+ * 
+ * Compares current DexScreener socials against the last snapshot
+ * in token_socials_history. If ANY social link changed (or no
+ * previous snapshot exists), inserts a new row so the CTO
+ * detection pipeline (useCTODetection) can diff snapshots.
+ * 
+ * This is critical for CTO tokens where the new community
+ * replaces twitter/telegram/website after takeover.
+ */
+async function snapshotSocialsIfChanged(
+  supabase: any,
+  tokenMint: string,
+  socials: { twitter?: string; website?: string; telegram?: string },
+  isCTO: boolean
+): Promise<void> {
+  try {
+    // Fetch the most recent snapshot for this token
+    const { data: lastSnapshot } = await supabase
+      .from('token_socials_history')
+      .select('twitter, telegram, website, captured_at')
+      .eq('token_mint', tokenMint)
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const currentTwitter = socials.twitter || null;
+    const currentTelegram = socials.telegram || null;
+    const currentWebsite = socials.website || null;
+
+    // Skip if nothing to record
+    if (!currentTwitter && !currentTelegram && !currentWebsite) return;
+
+    // Check if socials actually changed from last snapshot
+    if (lastSnapshot) {
+      const unchanged =
+        (lastSnapshot.twitter || null) === currentTwitter &&
+        (lastSnapshot.telegram || null) === currentTelegram &&
+        (lastSnapshot.website || null) === currentWebsite;
+
+      if (unchanged) {
+        return; // No change — skip insert
+      }
+
+      console.log(`[CTO-Snapshot] Social change detected for ${tokenMint}:`, {
+        before: { twitter: lastSnapshot.twitter, telegram: lastSnapshot.telegram, website: lastSnapshot.website },
+        after: { twitter: currentTwitter, telegram: currentTelegram, website: currentWebsite },
+        isCTO,
+      });
+    } else {
+      console.log(`[CTO-Snapshot] First social snapshot for ${tokenMint}`);
+    }
+
+    // Insert new snapshot (unique index on token_mint + social combo prevents true dupes)
+    const { error } = await supabase
+      .from('token_socials_history')
+      .insert({
+        token_mint: tokenMint,
+        twitter: currentTwitter,
+        telegram: currentTelegram,
+        website: currentWebsite,
+        source: isCTO ? 'dexscreener_cto' : 'dexscreener_paid',
+      });
+
+    if (error) {
+      // Unique constraint violation = exact same combo already stored, safe to ignore
+      if (error.code === '23505') return;
+      console.error(`[CTO-Snapshot] Insert error for ${tokenMint}:`, error);
+    } else {
+      console.log(`[CTO-Snapshot] ✅ Saved snapshot for ${tokenMint} (source: ${isCTO ? 'CTO' : 'paid'})`);
+    }
+  } catch (err) {
+    console.error(`[CTO-Snapshot] Unexpected error for ${tokenMint}:`, err);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -269,6 +346,14 @@ serve(async (req) => {
         
         if (error) {
           console.error(`Error updating dex_paid_status for ${status.tokenMint}:`, error);
+        }
+        
+        // ── CTO Social-Change Snapshot Subroutine ──
+        // When CTO is flagged OR socials exist on a paid profile,
+        // snapshot into token_socials_history so CTO detection pipeline
+        // can compare snapshots and flag social replacements.
+        if (status.socials && (status.hasCTO || status.hasPaidProfile)) {
+          await snapshotSocialsIfChanged(supabase, status.tokenMint, status.socials, status.hasCTO);
         }
       }
     }
