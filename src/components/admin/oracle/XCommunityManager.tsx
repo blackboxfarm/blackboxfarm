@@ -510,7 +510,7 @@ export function XCommunityManager() {
                             {community.name || `#${community.community_id}`}
                           </div>
                           {/* Linked token tickers */}
-                          {community.linked_token_mints?.length > 0 && (
+                          {(community.linked_token_mints?.length ?? 0) > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {community.linked_token_mints.slice(0, 2).map(mint => {
                                 const sym = tokenSymbols[mint];
