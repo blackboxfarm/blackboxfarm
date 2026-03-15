@@ -176,7 +176,7 @@ async function checkXCommunityForToken(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId,
-          maxItems: 50,
+          maxItems: 6, // Only need admins/mods (2-5 staff)
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ['RESIDENTIAL'],
