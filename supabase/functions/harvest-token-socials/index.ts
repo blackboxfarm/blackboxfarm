@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
       const { data: tokens, error } = await supabase
         .from('pumpfun_watchlist')
         .select('token_mint, token_symbol, creator_wallet, twitter_url, website_url, telegram_url')
+        .not('status', 'in', '("rejected","dead")')
         .or('twitter_url.neq.,website_url.neq.')
         .range(offset, offset + batchSize - 1);
 
