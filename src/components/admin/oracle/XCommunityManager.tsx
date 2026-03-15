@@ -151,28 +151,6 @@ export function XCommunityManager() {
 
   const filteredCommunities = communities; // Already filtered server-side
 
-  // Trigger Apify scrape for a single community
-  const scrapeCommunity = async (community: XCommunity) => {
-    setSingleScraping(community.community_id);
-    try {
-      const { data, error } = await supabase.functions.invoke('x-community-enricher', {
-        body: { 
-          communityUrl: community.community_url || `https://x.com/i/communities/${community.community_id}`,
-          triggerTeamDetection: true
-        }
-      });
-
-      if (error) throw error;
-
-      toast.success(`Scraped ${community.name || community.community_id}: ${data.admins?.length || 0} admins, ${data.moderators?.length || 0} mods`);
-      await fetchCommunities();
-    } catch (err: any) {
-      toast.error(`Scrape failed: ${err.message}`);
-    } finally {
-      setSingleScraping(null);
-    }
-  };
-
   // Bulk scrape all communities missing admin/mod data
   const bulkScrapeCommunities = async () => {
     const needsScrape = communities.filter(c => 
