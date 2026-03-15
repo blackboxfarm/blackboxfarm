@@ -321,7 +321,6 @@ export function XCommunityManager() {
       </Tooltip>
     );
   };
-  };
 
   // Stats are fetched from DB (see fetchTotalStats above)
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
