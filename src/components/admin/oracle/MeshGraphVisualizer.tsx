@@ -486,6 +486,60 @@ const MeshGraphVisualizer = () => {
         console.log(`[BubbleMap] Double-click spidering: ${rawId}`);
         triggerSpider(rawId, 'quick');
       }
+      if (type === 'x_account') {
+        // ═══ Cross-reference: find all communities this handle is in ═══
+        console.log(`[BubbleMap] Double-click cross-referencing @${rawId} across communities`);
+        setCommunitySearching(true);
+        toast.info(`🔍 Searching all communities for @${rawId}...`);
+        (async () => {
+          try {
+            // Query x_communities where this handle appears as admin or mod
+            const cleanHandle = rawId.replace(/^@/, '').toLowerCase();
+            const { data: communities, error } = await supabase
+              .from('x_communities')
+              .select('community_id, name, community_url, admin_usernames, moderator_usernames')
+              .or(`admin_usernames.cs.{${cleanHandle}},moderator_usernames.cs.{${cleanHandle}}`);
+            
+            if (error) throw error;
+            
+            if (!communities || communities.length === 0) {
+              toast.warning(`@${cleanHandle} not found in any other X Communities`);
+            } else {
+              toast.success(`Found @${cleanHandle} in ${communities.length} communities`);
+              
+              // Upsert mesh links for each discovered community
+              const upserts: any[] = [];
+              for (const comm of communities) {
+                const isAdmin = (comm.admin_usernames || []).map((u: string) => u.toLowerCase()).includes(cleanHandle);
+                upserts.push({
+                  source_type: 'x_community',
+                  source_id: comm.community_id,
+                  linked_type: 'x_account',
+                  linked_id: cleanHandle,
+                  relationship: isAdmin ? 'admin_of' : 'mod_of',
+                  confidence: 100,
+                  discovered_via: 'x_cross_reference',
+                  evidence: { community_name: comm.name },
+                });
+              }
+              
+              if (upserts.length > 0) {
+                await supabase
+                  .from('reputation_mesh')
+                  .upsert(upserts, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+              }
+              
+              // Expand the handle node and refresh to show new links
+              expandEntity(nodeId);
+              setTimeout(() => refetch(), 1000);
+            }
+          } catch (err: any) {
+            toast.error(`Cross-reference failed: ${err.message}`);
+          } finally {
+            setCommunitySearching(false);
+          }
+        })();
+      }
       if (type === 'x_community') {
         console.log(`[BubbleMap] Double-click enriching X Community: ${rawId}`);
         setCommunitySearching(true);
