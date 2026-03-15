@@ -142,7 +142,23 @@ export function CommunityFollowDialog({
     }
   };
 
-  const toggleSelect = (handle: string) => {
+  const resetErrors = async () => {
+    setResetting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('x-community-follow', {
+        body: { action: 'reset_errors', communityId },
+      });
+      if (error) throw error;
+      toast.success(`Reset ${data.reset} errored targets — ready to retry`);
+      await loadTargets();
+    } catch (err: any) {
+      toast.error(`Reset failed: ${err.message}`);
+    } finally {
+      setResetting(false);
+    }
+  };
+
+
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(handle)) next.delete(handle);
