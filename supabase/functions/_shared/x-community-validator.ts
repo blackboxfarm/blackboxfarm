@@ -110,22 +110,22 @@ export function interpretScrapeResult(members: any[]): CommunityExistenceResult 
  */
 export async function validateCommunityExists(
   communityId: string,
-  apifyMembers: any[] = []
+  scrapeResults: any[] = []
 ): Promise<CommunityExistenceResult> {
   const checkedAt = new Date().toISOString();
   
-  // If Apify returned members, community definitely exists
-  if (apifyMembers && apifyMembers.length > 0) {
+  // If scrape returned data, community definitely exists
+  if (scrapeResults && scrapeResults.length > 0) {
     return {
       exists: true,
       isDeleted: false,
-      memberCount: apifyMembers.length,
+      memberCount: scrapeResults.length,
       checkedAt,
     };
   }
   
-  // Apify returned nothing - do secondary web check
-  console.log(`[X Community Validator] Apify empty for ${communityId}, checking web...`);
+  // Scrape returned nothing - do secondary web check
+  console.log(`[X Community Validator] Scrape empty for ${communityId}, checking web...`);
   const webCheck = await checkCommunityViaWeb(communityId);
   
   if (webCheck.httpStatus === 404) {
