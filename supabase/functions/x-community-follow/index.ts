@@ -183,7 +183,36 @@ Deno.serve(async (req) => {
       if (fetchErr) throw fetchErr;
       if (!targets?.length) throw new Error('No matching targets found');
 
-      // First, get our own user ID (HoldersIntel)
+      // DEDUP: Skip accounts already followed, pending, or with follow-back
+      const skipped: any[] = [];
+      const actionableTargets = targets.filter((t: any) => {
+        if (t.follow_status === 'followed' || t.follow_status === 'pending') {
+          skipped.push({ handle: t.target_handle, status: 'skipped', reason: `already_${t.follow_status}` });
+          console.log(`   ⏭️ Skip @${t.target_handle} — already ${t.follow_status}`);
+          return false;
+        }
+        if (t.follow_back_detected_at) {
+          skipped.push({ handle: t.target_handle, status: 'skipped', reason: 'already_following_back' });
+          console.log(`   ⏭️ Skip @${t.target_handle} — already following back`);
+          return false;
+        }
+        return true;
+      });
+
+      if (actionableTargets.length === 0) {
+        return new Response(JSON.stringify({
+          success: true,
+          followed: 0,
+          errors: 0,
+          skipped: skipped.length,
+          message: 'All selected accounts are already followed or following back',
+          results: skipped,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      console.log(`[follow] ${actionableTargets.length} actionable, ${skipped.length} skipped`);
+
+      // Get our own user ID (HoldersIntel)
       const meUrl = 'https://api.x.com/2/users/me';
       const meHeader = generateOAuthHeader('GET', meUrl);
       const meRes = await fetch(meUrl, {
@@ -199,21 +228,25 @@ Deno.serve(async (req) => {
       const sourceUserId = meData.data?.id;
       if (!sourceUserId) throw new Error('Could not resolve HoldersIntel user ID');
 
-      console.log(`[follow] Following ${targets.length} accounts from user ${sourceUserId}`);
+      console.log(`[follow] Following ${actionableTargets.length} accounts from user ${sourceUserId}`);
 
-      const results: any[] = [];
+      const results: any[] = [...skipped];
       let followed = 0;
       let errors = 0;
 
-      for (const target of targets) {
+      for (let i = 0; i < actionableTargets.length; i++) {
+        const target = actionableTargets[i];
         if (!target.target_x_user_id) {
           results.push({ handle: target.target_handle, status: 'error', error: 'No X user ID' });
           errors++;
           continue;
         }
 
-        // Rate limit: 1 second between follows
-        if (followed > 0) await new Promise(r => setTimeout(r, 1500));
+        // Rate limit: 3-5s random delay between follows to avoid spam detection
+        if (i > 0) {
+          const delay = 3000 + Math.floor(Math.random() * 2000);
+          await new Promise(r => setTimeout(r, delay));
+        }
 
         try {
           const followUrl = `https://api.x.com/2/users/${sourceUserId}/following`;
@@ -248,18 +281,35 @@ Deno.serve(async (req) => {
           } else {
             const errMsg = followData.detail || followData.title || JSON.stringify(followData.errors?.[0]) || 'Unknown error';
             
-            await supabase
-              .from('community_follow_targets')
-              .update({
-                follow_status: 'error',
-                error_message: errMsg,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', target.id);
-
-            results.push({ handle: target.target_handle, status: 'error', error: errMsg });
-            errors++;
-            console.warn(`   ❌ Failed @${target.target_handle}: ${errMsg}`);
+            // Detect "already following" responses from X API
+            const isAlready = errMsg.toLowerCase().includes('already') || 
+              followData.errors?.[0]?.message?.toLowerCase().includes('already');
+            
+            if (isAlready) {
+              await supabase
+                .from('community_follow_targets')
+                .update({
+                  follow_status: 'followed',
+                  followed_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', target.id);
+              results.push({ handle: target.target_handle, status: 'already_followed' });
+              followed++;
+              console.log(`   ℹ️ Already following @${target.target_handle}`);
+            } else {
+              await supabase
+                .from('community_follow_targets')
+                .update({
+                  follow_status: 'error',
+                  error_message: errMsg,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', target.id);
+              results.push({ handle: target.target_handle, status: 'error', error: errMsg });
+              errors++;
+              console.warn(`   ❌ Failed @${target.target_handle}: ${errMsg}`);
+            }
           }
         } catch (e) {
           results.push({ handle: target.target_handle, status: 'error', error: String(e) });
@@ -271,6 +321,7 @@ Deno.serve(async (req) => {
         success: true,
         followed,
         errors,
+        skipped: skipped.length,
         results,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
