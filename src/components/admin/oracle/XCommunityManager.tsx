@@ -23,9 +23,11 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  BadgeCheck
+  BadgeCheck,
+  Coins
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CommunityFollowDialog } from "./CommunityFollowDialog";
 
 interface XCommunity {
