@@ -158,7 +158,7 @@ export function CommunityFollowDialog({
     }
   };
 
-
+  const toggleSelect = (handle: string) => {
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(handle)) next.delete(handle);
