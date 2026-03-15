@@ -46,23 +46,28 @@ Deno.serve(async (req) => {
     // - Has linked tokens (from HoldersIntel)
     const staleThreshold = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
 
-    // Fetch more than needed, then filter to numeric IDs in code
+    // Fetch communities that might need enrichment - broad query, filter in code
     const { data: rawCommunities, error: fetchError } = await supabase
       .from('x_communities')
       .select('community_id, community_url, name, admin_usernames, linked_token_mints, last_scraped_at, failed_scrape_count')
       .eq('is_deleted', false)
       .lt('failed_scrape_count', 3)
       .not('linked_token_mints', 'is', null)
-      .or(`admin_usernames.is.null,admin_usernames.eq.{},last_scraped_at.is.null,last_scraped_at.lt.${staleThreshold}`)
       .order('last_scraped_at', { ascending: true, nullsFirst: true })
-      .limit(batchSize * 5); // Over-fetch to account for filtering
+      .limit(200);
 
     if (fetchError) throw fetchError;
 
-    // Filter to only numeric community IDs (real X Communities, not account URL slugs)
-    // Also filter out communities with populated admins unless stale
+    // Filter to:
+    // 1. Numeric community IDs only (real X Communities)
+    // 2. Missing admins (null or empty array) OR stale data
     const communities = (rawCommunities || [])
-      .filter(c => /^\d+$/.test(c.community_id))
+      .filter(c => {
+        if (!/^\d+$/.test(c.community_id)) return false;
+        const hasAdmins = c.admin_usernames && c.admin_usernames.length > 0;
+        const isStale = !c.last_scraped_at || new Date(c.last_scraped_at).getTime() < Date.now() - maxAgeDays * 86400000;
+        return !hasAdmins || isStale;
+      })
       .slice(0, batchSize);
 
     if (communities.length === 0) {
