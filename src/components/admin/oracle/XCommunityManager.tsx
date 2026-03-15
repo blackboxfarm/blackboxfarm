@@ -298,10 +298,29 @@ export function XCommunityManager() {
       return <Badge variant="outline" className="gap-1 text-muted-foreground"><Clock className="h-3 w-3" /> Never scraped</Badge>;
     }
     const hoursSince = (Date.now() - new Date(community.last_scraped_at).getTime()) / (1000 * 60 * 60);
+    const lastScraped = formatDistanceToNow(new Date(community.last_scraped_at), { addSuffix: true });
     if (hoursSince < 24) {
-      return <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" /> Fresh</Badge>;
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" /> Fresh</Badge>
+          </TooltipTrigger>
+          <TooltipContent>Scraped {lastScraped}</TooltipContent>
+        </Tooltip>
+      );
     }
-    return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" /> Stale</Badge>;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="secondary" className="gap-1 cursor-help"><Clock className="h-3 w-3" /> Stale</Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[240px]">
+          <p className="font-medium">Last scraped {lastScraped}</p>
+          <p className="text-xs text-muted-foreground mt-1">Data is older than 24h. The cron job will auto-refresh it, or click the ↻ button to rescrape manually.</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
   };
 
   // Stats are fetched from DB (see fetchTotalStats above)
