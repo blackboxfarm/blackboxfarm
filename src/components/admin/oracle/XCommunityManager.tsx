@@ -487,9 +487,25 @@ export function XCommunityManager() {
                     <TableRow key={community.id} className={community.is_flagged ? 'bg-red-500/5' : ''}>
                       <TableCell>
                         <div className="space-y-1">
-                          <div className="font-medium truncate max-w-[160px]">
+                          <div className="font-medium truncate max-w-[200px]">
                             {community.name || `#${community.community_id}`}
                           </div>
+                          {/* Linked token tickers */}
+                          {community.linked_token_mints?.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {community.linked_token_mints.slice(0, 2).map(mint => {
+                                const sym = tokenSymbols[mint];
+                                return sym ? (
+                                  <Badge key={mint} variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1">
+                                    <Coins className="h-2.5 w-2.5" />${sym}
+                                  </Badge>
+                                ) : null;
+                              })}
+                              {community.linked_token_mints.length > 2 && (
+                                <span className="text-xs text-muted-foreground">+{community.linked_token_mints.length - 2}</span>
+                              )}
+                            </div>
+                          )}
                           <div className="flex items-center gap-1">
                             <span className="text-xs text-muted-foreground font-mono">
                               {community.community_id.slice(0, 8)}...
