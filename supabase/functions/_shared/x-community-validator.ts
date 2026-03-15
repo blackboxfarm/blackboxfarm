@@ -80,18 +80,18 @@ async function checkCommunityViaWeb(communityId: string): Promise<CommunityExist
 }
 
 /**
- * Interpret scrape results (from Firecrawl or other sources)
- * Empty results might indicate deletion or private community
+ * Interpret Apify scrape results
+ * Empty members array might indicate deletion or private community
  */
-export function interpretScrapeResult(members: any[]): CommunityExistenceResult {
+export function interpretApifyResult(members: any[]): CommunityExistenceResult {
   const checkedAt = new Date().toISOString();
   
   if (!members || members.length === 0) {
     return {
       exists: false,
-      isDeleted: false, // Not confirmed deleted yet
+      isDeleted: false,
       memberCount: 0,
-      errorMessage: 'No staff data returned from scrape',
+      errorMessage: 'No members returned from Apify scrape',
       checkedAt,
     };
   }
@@ -110,22 +110,22 @@ export function interpretScrapeResult(members: any[]): CommunityExistenceResult 
  */
 export async function validateCommunityExists(
   communityId: string,
-  scrapeResults: any[] = []
+  apifyMembers: any[] = []
 ): Promise<CommunityExistenceResult> {
   const checkedAt = new Date().toISOString();
   
-  // If scrape returned data, community definitely exists
-  if (scrapeResults && scrapeResults.length > 0) {
+  // If Apify returned members, community definitely exists
+  if (apifyMembers && apifyMembers.length > 0) {
     return {
       exists: true,
       isDeleted: false,
-      memberCount: scrapeResults.length,
+      memberCount: apifyMembers.length,
       checkedAt,
     };
   }
   
-  // Scrape returned nothing - do secondary web check
-  console.log(`[X Community Validator] Scrape empty for ${communityId}, checking web...`);
+  // Apify returned nothing - do secondary web check
+  console.log(`[X Community Validator] Apify empty for ${communityId}, checking web...`);
   const webCheck = await checkCommunityViaWeb(communityId);
   
   if (webCheck.httpStatus === 404) {

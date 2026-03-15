@@ -350,8 +350,8 @@ Deno.serve(async (req) => {
         member_count: communityData.memberCount,
         linked_token_mints: linkedTokenMints,
         linked_wallets: linkedWallets,
-        last_scraped_at: needsScrape && firecrawlApiKey ? new Date().toISOString() : existingCommunity?.last_scraped_at,
-        scrape_status: needsScrape && firecrawlApiKey ? 'complete' : existingCommunity?.scrape_status,
+        last_scraped_at: needsScrape && apifyApiKey ? new Date().toISOString() : existingCommunity?.last_scraped_at,
+        scrape_status: needsScrape && apifyApiKey ? 'complete' : existingCommunity?.scrape_status,
         raw_data: communityData.rawData || existingCommunity?.raw_data
       }, { onConflict: 'community_id' });
 
