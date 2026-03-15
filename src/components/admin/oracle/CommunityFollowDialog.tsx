@@ -240,6 +240,12 @@ export function CommunityFollowDialog({
             {scraping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BadgeCheck className="h-4 w-4 mr-2" />}
             {targets.length > 0 ? 'Rescrape' : 'Scan Blue Checks'}
           </Button>
+          {targets.some(t => t.follow_status === 'error') && (
+            <Button variant="outline" size="sm" onClick={resetErrors} disabled={resetting} className="gap-1 text-destructive border-destructive/30">
+              {resetting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              Reset Errors
+            </Button>
+          )}
           {targets.length > 0 && (
             <>
               <Button variant="ghost" size="sm" onClick={selectAll}>Select All</Button>
