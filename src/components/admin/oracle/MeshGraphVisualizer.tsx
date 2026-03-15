@@ -140,9 +140,15 @@ const MeshGraphVisualizer = () => {
       return;
     }
     let type = 'wallet';
-    if (searchInput.startsWith('@')) type = 'x_account';
-    else if (searchInput.length < 20) type = 'token';
-    focusOnEntity(searchInput.trim(), type);
+    let normalizedInput = searchInput.trim();
+    if (normalizedInput.startsWith('@')) {
+      type = 'x_account';
+      // Normalize: strip @ and lowercase to match DB storage
+      normalizedInput = normalizedInput.replace(/^@/, '').toLowerCase();
+    } else if (normalizedInput.length < 20) {
+      type = 'token';
+    }
+    focusOnEntity(normalizedInput, type);
     // Start credit tracking on new search
     resetTracking();
     startTracking();
