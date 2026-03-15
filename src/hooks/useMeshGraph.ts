@@ -16,6 +16,7 @@ export interface MeshNode {
   fullId: string;      // Raw ID for tooltip (full address)
   val: number;
   redFlags?: RedFlag[];
+  role?: 'admin' | 'mod' | null;  // For x_account nodes: their role in community
 }
 
 export interface MeshLink {
