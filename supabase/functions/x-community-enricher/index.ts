@@ -347,9 +347,11 @@ Deno.serve(async (req) => {
             }).eq('community_id', communityId);
           }
 
-          // === CROSS-POPULATE: Feed blue-checked members into community_follow_targets ===
-          // This eliminates the need for a separate "Scan Blue Checks" Apify scrape
-          const blueCheckedMembers = members.filter((m: ApifyCommunityMember) => m.isBlueVerified);
+          // === CROSS-POPULATE: Feed verified members into community_follow_targets ===
+          // Admins & Mods are ALWAYS blue-checked (X requires verification to create/admin a community)
+          const blueCheckedMembers = members.filter((m: ApifyCommunityMember) => 
+            m.isBlueVerified || m.communityRole === 'Admin' || m.communityRole === 'Moderator'
+          );
           if (blueCheckedMembers.length > 0) {
             console.log(`[x-community-enricher] Cross-populating ${blueCheckedMembers.length} blue-checked members into follow targets`);
             

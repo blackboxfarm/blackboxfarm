@@ -103,7 +103,10 @@ Deno.serve(async (req) => {
       }
 
       const members = await response.json();
-      const blueChecked = (members || []).filter((m: any) => m.isBlueVerified);
+      // Admins & Mods are ALWAYS blue-checked (X requires verification to manage a community)
+      const blueChecked = (members || []).filter((m: any) => 
+        m.isBlueVerified || m.communityRole === 'Admin' || m.communityRole === 'Moderator'
+      );
 
       console.log(`[follow] Found ${blueChecked.length} blue-checked out of ${members?.length || 0} members`);
 
