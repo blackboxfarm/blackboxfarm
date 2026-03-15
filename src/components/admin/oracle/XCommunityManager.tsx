@@ -283,15 +283,8 @@ export function XCommunityManager() {
     return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" /> Stale</Badge>;
   };
 
-  // Stats
-  const stats = {
-    total: communities.length,
-    withAdmins: communities.filter(c => c.admin_usernames?.length).length,
-    withMods: communities.filter(c => c.moderator_usernames?.length).length,
-    flagged: communities.filter(c => c.is_flagged).length,
-    deleted: communities.filter(c => c.is_deleted).length,
-    needsScrape: communities.filter(c => !c.is_deleted && !c.admin_usernames?.length && !c.moderator_usernames?.length).length
-  };
+  // Stats are fetched from DB (see fetchTotalStats above)
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   return (
     <div className="space-y-4">
