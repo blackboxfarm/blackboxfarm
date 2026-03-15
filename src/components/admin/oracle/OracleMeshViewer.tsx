@@ -105,11 +105,7 @@ const OracleMeshViewer = () => {
   const { data: stats } = useQuery({
     queryKey: ['mesh-stats'],
     queryFn: async () => {
-      const [totalRes, typesRes, relsRes] = await Promise.all([
-        supabase.from('reputation_mesh').select('*', { count: 'exact', head: true }),
-        supabase.rpc('get_mesh_type_counts').catch(() => null),
-        supabase.rpc('get_mesh_relationship_counts').catch(() => null),
-      ]);
+      const totalRes = await supabase.from('reputation_mesh').select('*', { count: 'exact', head: true });
       return { total: totalRes.count || 0 };
     },
     staleTime: 5 * 60 * 1000,
