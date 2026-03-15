@@ -173,8 +173,11 @@ export function useMeshGraph(initialEntityId?: string) {
       // 2-hop: for wallet entities, also fetch links for their direct neighbors
       const hop1Ids = new Set<string>();
       for (const link of allLinks) {
-        if (link.source_type === 'wallet' || link.linked_type === 'wallet' ||
-            link.source_type === 'kyc_root' || link.linked_type === 'kyc_root') {
+        if (
+          link.source_type === 'wallet' || link.linked_type === 'wallet' ||
+          link.source_type === 'kyc_root' || link.linked_type === 'kyc_root' ||
+          link.source_type === 'x_community' || link.linked_type === 'x_community'
+        ) {
           hop1Ids.add(link.source_id);
           hop1Ids.add(link.linked_id);
         }
