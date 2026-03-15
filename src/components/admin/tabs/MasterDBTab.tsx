@@ -196,13 +196,13 @@ export default function MasterDBTab() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={28} className="text-center py-12">
+                  <TableCell colSpan={29} className="text-center py-12">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={28} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={29} className="text-center py-8 text-muted-foreground">
                     No tokens found
                   </TableCell>
                 </TableRow>
