@@ -200,6 +200,7 @@ export function XCommunityManager() {
       const { error } = await supabase
         .from('x_communities')
         .update({
+          name: editName.trim() || null,
           admin_usernames: admins,
           moderator_usernames: mods,
           updated_at: new Date().toISOString()
@@ -261,8 +262,11 @@ export function XCommunityManager() {
     }
   };
 
+  const [editName, setEditName] = useState("");
+
   const openEditDialog = (community: XCommunity) => {
     setSelectedCommunity(community);
+    setEditName(community.name || '');
     setManualAdmins(community.admin_usernames?.join(', ') || '');
     setManualMods(community.moderator_usernames?.join(', ') || '');
     setEditDialogOpen(true);
@@ -447,7 +451,7 @@ export function XCommunityManager() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[200px]">Community</TableHead>
-                  <TableHead className="w-[120px]">Token</TableHead>
+                  <TableHead className="w-[120px]">$TICKER</TableHead>
                   <TableHead>Staff</TableHead>
                   <TableHead className="w-[80px]">Members</TableHead>
                   <TableHead className="w-[100px]">Status</TableHead>
@@ -507,20 +511,15 @@ export function XCommunityManager() {
                         {/* Token ticker column */}
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {(community.linked_token_mints || []).slice(0, 2).map(mint => {
+                            {(community.linked_token_mints || []).map(mint => {
                               const sym = tokenSymbols[mint];
                               return sym ? (
                                 <Badge key={mint} variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1">
                                   <Coins className="h-2.5 w-2.5" />{"$"}{sym}
                                 </Badge>
-                              ) : (
-                                <span key={mint} className="text-xs text-muted-foreground font-mono">{mint.slice(0, 6)}...</span>
-                              );
-                            })}
-                            {(community.linked_token_mints?.length || 0) > 2 && (
-                              <span className="text-xs text-muted-foreground">+{(community.linked_token_mints?.length || 0) - 2}</span>
-                            )}
-                            {!(community.linked_token_mints?.length) && (
+                              ) : null;
+                            }).filter(Boolean)}
+                            {!(community.linked_token_mints || []).some(m => tokenSymbols[m]) && (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </div>
@@ -636,6 +635,18 @@ export function XCommunityManager() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Community Name
+              </Label>
+              <Input
+                placeholder="e.g. $TOKEN Community"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
                 <Crown className="h-4 w-4 text-yellow-500" />
                 Admins (comma-separated usernames)
               </Label>
@@ -662,7 +673,7 @@ export function XCommunityManager() {
             </div>
             {selectedCommunity?.last_scraped_at && (
               <div className="text-xs text-muted-foreground">
-                Last scraped: {formatDistanceToNow(new Date(selectedCommunity.last_scraped_at), { addSuffix: true })}
+                Scraped: {formatDistanceToNow(new Date(selectedCommunity.last_scraped_at), { addSuffix: true })}
               </div>
             )}
           </div>
