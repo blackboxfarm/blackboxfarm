@@ -48,6 +48,7 @@ export function CommunityFollowDialog({
   const [loading, setLoading] = useState(false);
   const [scraping, setScraping] = useState(false);
   const [following, setFollowing] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Load existing targets when dialog opens
