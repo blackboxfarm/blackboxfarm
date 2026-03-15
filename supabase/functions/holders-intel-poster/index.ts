@@ -559,11 +559,20 @@ Deno.serve(async (req) => {
       
       console.log(`[poster] Successfully posted tweet: ${tweetResult.tweetId}`);
       
-      // 🕸️ MESH FEEDER: Every posted token feeds the mesh
+      // 🕸️ MESH FEEDER: Every posted token feeds the mesh with ALL available data
+      const creatorWalletForMesh = report?.creatorInfo?.wallet || report?.potentialDevWallet || null;
+      const twitterUrlForMesh = report?.socials?.twitter || null;
+      const telegramUrlForMesh = report?.socials?.telegram || null;
+      const websiteUrlForMesh = report?.socials?.website || null;
+      
       meshFeed.token(supabase, {
         mint: item.token_mint,
         symbol: stats.symbol,
         name: stats.name,
+        creatorWallet: creatorWalletForMesh,
+        twitterUrl: twitterUrlForMesh,
+        telegramUrl: telegramUrlForMesh,
+        websiteUrl: websiteUrlForMesh,
         source: 'holders-intel-poster',
       }).catch(e => console.warn('[mesh-feeder] poster feed failed:', e));
       

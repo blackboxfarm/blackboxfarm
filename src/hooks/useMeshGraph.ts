@@ -487,6 +487,31 @@ export function useMeshGraph(initialEntityId?: string) {
 
       const hasUsefulData = (result.meshLinksAdded || 0) > 0 || result.found;
 
+      // ═══ REGISTER X HANDLE ON EMPTY SEARCH ═══
+      // If searching an X handle and nothing found, register it in x_account_registry
+      // so future community scrapes can cross-link this handle
+      if (isXHandle && !hasUsefulData) {
+        try {
+          const cleanHandle = normalizedInput.replace(/^@/, '').toLowerCase();
+          const now_ts = new Date().toISOString();
+          await supabase.from('x_account_registry').upsert({
+            x_user_id: `pending_${cleanHandle}`, // Placeholder until X API resolves real ID
+            current_handle: cleanHandle,
+            display_name: cleanHandle,
+            is_verified: false,
+            handle_history: [],
+            name_history: [],
+            linked_token_count: 0,
+            first_seen_at: now_ts,
+            last_seen_at: now_ts,
+          }, { onConflict: 'current_handle', ignoreDuplicates: true });
+          diagnostics.push(`📝 Registered @${cleanHandle} in x_account_registry for future cross-linking`);
+          console.log(`[MeshSpider] Registered X handle @${cleanHandle} in registry`);
+        } catch (regErr) {
+          console.warn('[MeshSpider] Handle registration failed:', regErr);
+        }
+      }
+
       if (!hasUsefulData && result.requiresScan) {
         setSpiderStatus({
           active: false,

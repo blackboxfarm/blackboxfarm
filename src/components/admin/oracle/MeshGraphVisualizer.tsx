@@ -141,20 +141,27 @@ const MeshGraphVisualizer = () => {
     }
     let type = 'wallet';
     let normalizedInput = searchInput.trim();
-    if (normalizedInput.startsWith('@')) {
+    
+    // Detect X Community URL/ID: x.com/i/communities/123... or raw numeric ID
+    const communityMatch = normalizedInput.match(/communities\/(\d+)/);
+    if (communityMatch) {
+      type = 'x_community';
+      normalizedInput = communityMatch[1];
+    } else if (normalizedInput.startsWith('@')) {
       type = 'x_account';
-      // Normalize: strip @ and lowercase to match DB storage
       normalizedInput = normalizedInput.replace(/^@/, '').toLowerCase();
-    } else if (normalizedInput.length < 20) {
+    } else if (/^\d{10,25}$/.test(normalizedInput)) {
+      // Pure numeric ID that's too long for a token ticker — could be community ID
+      type = 'x_community';
+    } else if (normalizedInput.length < 20 && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput)) {
       type = 'token';
     }
+    
     focusOnEntity(normalizedInput, type);
-    // Start credit tracking on new search
     resetTracking();
     startTracking();
     resetApifyTracking();
     startApifyTracking();
-    // Reset node cap
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
   }, [searchInput, focusOnEntity, resetView, startTracking, stopTracking, resetTracking, startApifyTracking, resetApifyTracking]);
