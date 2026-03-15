@@ -8,6 +8,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface ApifyCommunityMember {
+  communityRole: "Admin" | "Moderator" | "member";
+  screenName: string;
+  name: string;
+  restId: string;
+  isBlueVerified: boolean;
+  followersCount?: number;
+  followingCount?: number;
+}
+
 interface XCommunityData {
   communityId: string;
   name?: string;
@@ -49,14 +59,76 @@ function extractTwitterUsername(url: string): string | null {
 }
 
 interface FetchResult {
-  admins: string[];
-  moderators: string[];
-  memberCount?: number;
-  name?: string;
-  description?: string;
+  members: ApifyCommunityMember[];
   httpStatus: number;
   errorBody?: string;
-  rawData?: any;
+}
+
+async function fetchCommunityMembers(communityId: string, apifyApiKey: string): Promise<FetchResult> {
+  const { createApiLogger } = await import("../_shared/api-logger.ts");
+  const logger = createApiLogger({
+    serviceName: 'apify',
+    endpoint: 'danpoletaev~twitter-x-community-member-scraper',
+    method: 'POST',
+    functionName: 'x-community-enricher',
+    metadata: { communityId },
+  });
+
+  try {
+    console.log(`Fetching X Community members for community ${communityId}...`);
+    
+    const response = await fetch(
+      `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          communityId: communityId,
+          maxItems: 100,
+          proxyConfiguration: {
+            useApifyProxy: true,
+            apifyProxyGroups: ["RESIDENTIAL"]
+          }
+        })
+      }
+    );
+
+    await logger.complete(response.status);
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      console.error(`Apify API error ${response.status} for community ${communityId}: ${errorBody.slice(0, 200)}`);
+      return { members: [], httpStatus: response.status, errorBody: errorBody.slice(0, 300) };
+    }
+
+    const data = await response.json();
+    return { members: data || [], httpStatus: response.status };
+  } catch (error) {
+    await logger.fail(error instanceof Error ? error.message : String(error));
+    console.error('Failed to fetch community members:', error);
+    return { members: [], httpStatus: 0, errorBody: String(error) };
+  }
+}
+
+async function processCommunityData(members: ApifyCommunityMember[]): Promise<XCommunityData> {
+  const admins: string[] = [];
+  const moderators: string[] = [];
+  
+  for (const member of members) {
+    if (member.communityRole === 'Admin') {
+      admins.push(member.screenName.toLowerCase());
+    } else if (member.communityRole === 'Moderator') {
+      moderators.push(member.screenName.toLowerCase());
+    }
+  }
+  
+  return {
+    communityId: '',
+    adminUsernames: [...new Set(admins)],
+    moderatorUsernames: [...new Set(moderators)],
+    memberCount: members.length,
+    rawData: members.slice(0, 20)
+  };
 }
 
 /**
