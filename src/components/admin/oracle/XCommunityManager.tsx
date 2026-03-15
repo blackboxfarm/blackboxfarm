@@ -57,7 +57,7 @@ export function XCommunityManager() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [bulkScraping, setBulkScraping] = useState(false);
-  const [singleScraping, setSingleScraping] = useState<string | null>(null);
+  
   const [followDialogCommunity, setFollowDialogCommunity] = useState<XCommunity | null>(null);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
