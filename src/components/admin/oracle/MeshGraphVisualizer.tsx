@@ -105,7 +105,7 @@ const MeshGraphVisualizer = () => {
           return viewMode === 'tree' ? 65 : 45;
         });
       }
-      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -120);
+      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -350 : -280);
       
       // Add boundary force to keep nodes on screen (softer in tree mode)
       const padding = viewMode === 'tree' ? 20 : 40;
