@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { MeshNode } from './useMeshGraph';
+import { supabase } from '@/integrations/supabase/client';
 
 interface HoldingInfo {
   walletAddress: string;
