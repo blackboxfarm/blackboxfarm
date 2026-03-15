@@ -176,7 +176,7 @@ async function checkXCommunityForToken(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId,
-          maxItems: 25, // Need enough to reliably find admins/mods (not sorted by role)
+          maxItems: 100, // ~$0.13/scrape — captures admins/mods reliably + blue checks
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ['RESIDENTIAL'],
