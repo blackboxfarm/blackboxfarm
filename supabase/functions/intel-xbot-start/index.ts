@@ -44,6 +44,11 @@ const CRON_JOBS = [
     name: 'holdersintel-surge-scanner-5min',
     schedule: '*/5 * * * *',
     function: 'search-surge-scanner'
+  },
+  {
+    name: 'ath-24h-backfill-30min',
+    schedule: '*/30 * * * *',
+    function: 'ath-24h-backfill'
   }
   // Twitter scanner disabled - X API credits exhausted
 ];
