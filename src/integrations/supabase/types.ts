@@ -6102,6 +6102,87 @@ export type Database = {
         }
         Relationships: []
       }
+      morning_reports_archive: {
+        Row: {
+          alerts: Json | null
+          api_usage_summary: Json | null
+          archived_at: string
+          auth_failure_events: Json | null
+          created_at: string | null
+          error_patterns: Json | null
+          execution_time_ms: number | null
+          external_services_status: Json | null
+          holders_intel_metrics: Json | null
+          id: string
+          new_signups: number | null
+          new_signups_details: Json | null
+          new_subscribers: number | null
+          new_subscribers_details: Json | null
+          overall_status: string | null
+          quota_status: Json | null
+          rate_limit_events: Json | null
+          report_date: string
+          report_period_end: string | null
+          report_period_start: string | null
+          table_health: Json | null
+          telegram_sent: boolean | null
+          telegram_sent_at: string | null
+          unread_notifications: number | null
+        }
+        Insert: {
+          alerts?: Json | null
+          api_usage_summary?: Json | null
+          archived_at?: string
+          auth_failure_events?: Json | null
+          created_at?: string | null
+          error_patterns?: Json | null
+          execution_time_ms?: number | null
+          external_services_status?: Json | null
+          holders_intel_metrics?: Json | null
+          id: string
+          new_signups?: number | null
+          new_signups_details?: Json | null
+          new_subscribers?: number | null
+          new_subscribers_details?: Json | null
+          overall_status?: string | null
+          quota_status?: Json | null
+          rate_limit_events?: Json | null
+          report_date: string
+          report_period_end?: string | null
+          report_period_start?: string | null
+          table_health?: Json | null
+          telegram_sent?: boolean | null
+          telegram_sent_at?: string | null
+          unread_notifications?: number | null
+        }
+        Update: {
+          alerts?: Json | null
+          api_usage_summary?: Json | null
+          archived_at?: string
+          auth_failure_events?: Json | null
+          created_at?: string | null
+          error_patterns?: Json | null
+          execution_time_ms?: number | null
+          external_services_status?: Json | null
+          holders_intel_metrics?: Json | null
+          id?: string
+          new_signups?: number | null
+          new_signups_details?: Json | null
+          new_subscribers?: number | null
+          new_subscribers_details?: Json | null
+          overall_status?: string | null
+          quota_status?: Json | null
+          rate_limit_events?: Json | null
+          report_date?: string
+          report_period_end?: string | null
+          report_period_start?: string | null
+          table_health?: Json | null
+          telegram_sent?: boolean | null
+          telegram_sent_at?: string | null
+          unread_notifications?: number | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -14066,6 +14147,7 @@ export type Database = {
         Args: { user_id_param: string }
         Returns: Json
       }
+      archive_old_morning_reports: { Args: never; Returns: number }
       check_api_service_alerts: {
         Args: never
         Returns: {
