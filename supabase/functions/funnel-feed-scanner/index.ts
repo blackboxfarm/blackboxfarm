@@ -117,10 +117,14 @@ Deno.serve(async (req) => {
 });
 
 async function runScan(supabase: any, specificSourceId?: string) {
-  const botToken = Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
+  // Use TELEGRAM_BOT_TOKEN (general bot) to avoid conflict with holders-intel webhook bot
+  const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
   if (!botToken) {
-    return jsonRes({ error: 'TELEGRAM_HOLDERSINTEL_BOT_TOKEN not configured' }, 500);
+    return jsonRes({ error: 'No Telegram bot token configured' }, 500);
   }
+
+  // Ensure no webhook is set (getUpdates conflicts with webhooks)
+  await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`, { method: 'POST' });
 
   // Step 1: Poll getUpdates to capture new channel_post messages
   const capturedCount = await pollBotUpdates(supabase, botToken);
