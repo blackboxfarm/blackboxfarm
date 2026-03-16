@@ -11593,6 +11593,7 @@ export type Database = {
           insider_cluster_count: number | null
           liquidity_usd: number | null
           lp_pct_of_supply: number | null
+          matched_pattern_rules: Json | null
           mcap_usd: number | null
           name: string | null
           outcome: string | null
@@ -11667,6 +11668,7 @@ export type Database = {
           insider_cluster_count?: number | null
           liquidity_usd?: number | null
           lp_pct_of_supply?: number | null
+          matched_pattern_rules?: Json | null
           mcap_usd?: number | null
           name?: string | null
           outcome?: string | null
@@ -11741,6 +11743,7 @@ export type Database = {
           insider_cluster_count?: number | null
           liquidity_usd?: number | null
           lp_pct_of_supply?: number | null
+          matched_pattern_rules?: Json | null
           mcap_usd?: number | null
           name?: string | null
           outcome?: string | null
@@ -12298,6 +12301,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      token_pattern_rules: {
+        Row: {
+          conditions: Json
+          confidence_pct: number
+          created_at: string
+          description: string
+          example_tokens: Json | null
+          extracted_by: string | null
+          id: string
+          is_active: boolean
+          last_validated_at: string | null
+          outcome_association: string
+          pattern_type: string
+          rule_id: string
+          sample_size: number
+          updated_at: string
+        }
+        Insert: {
+          conditions?: Json
+          confidence_pct?: number
+          created_at?: string
+          description: string
+          example_tokens?: Json | null
+          extracted_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_validated_at?: string | null
+          outcome_association: string
+          pattern_type: string
+          rule_id: string
+          sample_size?: number
+          updated_at?: string
+        }
+        Update: {
+          conditions?: Json
+          confidence_pct?: number
+          created_at?: string
+          description?: string
+          example_tokens?: Json | null
+          extracted_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_validated_at?: string | null
+          outcome_association?: string
+          pattern_type?: string
+          rule_id?: string
+          sample_size?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       token_price_history: {
         Row: {
