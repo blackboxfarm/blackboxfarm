@@ -85,9 +85,9 @@ Deno.serve(async (req) => {
     // Get tokens without ath_24h_usd, newest first
     const { data: tokens, error: fetchError } = await supabase
       .from('token_lifecycle')
-      .select('token_mint, first_seen')
+      .select('token_mint, first_seen_at')
       .is('ath_24h_usd', null)
-      .order('first_seen', { ascending: false })
+      .order('first_seen_at', { ascending: false })
       .limit(batchSize);
 
     if (fetchError) throw fetchError;
