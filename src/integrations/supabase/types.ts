@@ -6024,6 +6024,81 @@ export type Database = {
         }
         Relationships: []
       }
+      morning_reports: {
+        Row: {
+          alerts: Json
+          api_usage_summary: Json
+          auth_failure_events: Json
+          created_at: string
+          error_patterns: Json
+          execution_time_ms: number | null
+          external_services_status: Json
+          id: string
+          new_signups: number
+          new_signups_details: Json
+          new_subscribers: number
+          new_subscribers_details: Json
+          overall_status: string
+          quota_status: Json
+          rate_limit_events: Json
+          report_date: string
+          report_period_end: string
+          report_period_start: string
+          table_health: Json
+          telegram_sent: boolean
+          telegram_sent_at: string | null
+          unread_notifications: number
+        }
+        Insert: {
+          alerts?: Json
+          api_usage_summary?: Json
+          auth_failure_events?: Json
+          created_at?: string
+          error_patterns?: Json
+          execution_time_ms?: number | null
+          external_services_status?: Json
+          id?: string
+          new_signups?: number
+          new_signups_details?: Json
+          new_subscribers?: number
+          new_subscribers_details?: Json
+          overall_status?: string
+          quota_status?: Json
+          rate_limit_events?: Json
+          report_date: string
+          report_period_end: string
+          report_period_start: string
+          table_health?: Json
+          telegram_sent?: boolean
+          telegram_sent_at?: string | null
+          unread_notifications?: number
+        }
+        Update: {
+          alerts?: Json
+          api_usage_summary?: Json
+          auth_failure_events?: Json
+          created_at?: string
+          error_patterns?: Json
+          execution_time_ms?: number | null
+          external_services_status?: Json
+          id?: string
+          new_signups?: number
+          new_signups_details?: Json
+          new_subscribers?: number
+          new_subscribers_details?: Json
+          overall_status?: string
+          quota_status?: Json
+          rate_limit_events?: Json
+          report_date?: string
+          report_period_end?: string
+          report_period_start?: string
+          table_health?: Json
+          telegram_sent?: boolean
+          telegram_sent_at?: string | null
+          unread_notifications?: number
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string

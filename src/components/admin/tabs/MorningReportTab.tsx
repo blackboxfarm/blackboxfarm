@@ -1,0 +1,413 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap } from "lucide-react";
+import { toast } from "sonner";
+import { format } from "date-fns";
+
+interface MorningReport {
+  id: string;
+  report_date: string;
+  report_period_start: string;
+  report_period_end: string;
+  overall_status: string;
+  api_usage_summary: Record<string, {
+    total_calls: number;
+    successful: number;
+    failed: number;
+    fail_rate_pct: number;
+    avg_response_ms: number;
+    credits_used: number;
+    top_errors: { error: string; count: number }[];
+  }>;
+  rate_limit_events: { service: string; endpoint: string; status: number; count: number }[];
+  auth_failure_events: { service: string; endpoint: string; status: number; count: number }[];
+  quota_status: Record<string, { display_name: string; used: number; limit: number | null; pct: number; status: string; tier: string | null; is_paid: boolean }>;
+  error_patterns: { endpoint: string; service: string; count: number; error: string | null }[];
+  new_signups: number;
+  new_signups_details: { email: string; provider: string; display_name: string | null; created_at: string }[];
+  new_subscribers: number;
+  new_subscribers_details: any[];
+  table_health: Record<string, { row_count: number; status: string }>;
+  external_services_status: Record<string, { status: string; calls_overnight: number; failures: number; notes: string }>;
+  unread_notifications: number;
+  alerts: { level: string; category: string; title: string; detail: string }[];
+  execution_time_ms: number;
+  telegram_sent: boolean;
+  telegram_sent_at: string | null;
+  created_at: string;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const config: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
+    healthy: { variant: "default", icon: <CheckCircle className="w-3 h-3" /> },
+    ok: { variant: "default", icon: <CheckCircle className="w-3 h-3" /> },
+    active: { variant: "default", icon: <CheckCircle className="w-3 h-3" /> },
+    warning: { variant: "secondary", icon: <AlertTriangle className="w-3 h-3" /> },
+    critical: { variant: "destructive", icon: <XCircle className="w-3 h-3" /> },
+    degraded: { variant: "secondary", icon: <AlertTriangle className="w-3 h-3" /> },
+    down: { variant: "destructive", icon: <XCircle className="w-3 h-3" /> },
+    idle: { variant: "outline", icon: <Clock className="w-3 h-3" /> },
+    error: { variant: "destructive", icon: <XCircle className="w-3 h-3" /> },
+  };
+  const c = config[status] || config.ok;
+  return (
+    <Badge variant={c.variant} className="gap-1 text-xs">
+      {c.icon} {status}
+    </Badge>
+  );
+}
+
+function Section({ title, icon, children, defaultOpen = true }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+        {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        {icon}
+        <span className="font-semibold text-sm">{title}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pl-9 pr-3 pb-3">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ReportView({ report }: { report: MorningReport }) {
+  const totalCalls = Object.values(report.api_usage_summary).reduce((s, v) => s + v.total_calls, 0);
+  const totalFails = Object.values(report.api_usage_summary).reduce((s, v) => s + v.failed, 0);
+  const totalCredits = Object.values(report.api_usage_summary).reduce((s, v) => s + v.credits_used, 0);
+
+  return (
+    <div className="space-y-1">
+      {/* Alerts Banner */}
+      {report.alerts.filter(a => a.level === 'critical' || a.level === 'warning').length > 0 && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              <span className="font-semibold text-sm text-destructive">Action Required</span>
+            </div>
+            <div className="space-y-1">
+              {report.alerts.filter(a => a.level === 'critical' || a.level === 'warning').map((alert, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs">
+                  <Badge variant={alert.level === 'critical' ? 'destructive' : 'secondary'} className="text-[10px] shrink-0">
+                    {alert.level}
+                  </Badge>
+                  <div>
+                    <span className="font-medium">{alert.title}</span>
+                    <span className="text-muted-foreground ml-1">— {alert.detail}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Summary Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+        <Card className="p-3">
+          <div className="text-xs text-muted-foreground">API Calls</div>
+          <div className="text-lg font-bold">{totalCalls.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">{totalFails} failed</div>
+        </Card>
+        <Card className="p-3">
+          <div className="text-xs text-muted-foreground">Credits Used</div>
+          <div className="text-lg font-bold">{totalCredits.toLocaleString()}</div>
+        </Card>
+        <Card className="p-3">
+          <div className="text-xs text-muted-foreground">New Signups</div>
+          <div className="text-lg font-bold">{report.new_signups}</div>
+        </Card>
+        <Card className="p-3">
+          <div className="text-xs text-muted-foreground">Payments</div>
+          <div className="text-lg font-bold">{report.new_subscribers}</div>
+        </Card>
+        <Card className="p-3">
+          <div className="text-xs text-muted-foreground">Rate Limits</div>
+          <div className="text-lg font-bold">{report.rate_limit_events.length}</div>
+        </Card>
+        <Card className="p-3">
+          <div className="text-xs text-muted-foreground">Unread</div>
+          <div className="text-lg font-bold">{report.unread_notifications}</div>
+        </Card>
+      </div>
+
+      {/* Detailed Sections */}
+      <Card>
+        <CardContent className="p-4 space-y-0">
+          {/* Signups */}
+          <Section title={`Overnight Signups (${report.new_signups})`} icon={<Users className="w-4 h-4 text-blue-400" />}>
+            {report.new_signups_details.length > 0 ? (
+              <div className="space-y-1">
+                {report.new_signups_details.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <Badge variant="outline" className="text-[10px]">{s.provider}</Badge>
+                    <span className="font-mono">{s.email}</span>
+                    {s.display_name && <span className="text-muted-foreground">({s.display_name})</span>}
+                    <span className="text-muted-foreground ml-auto">{s.created_at ? format(new Date(s.created_at), 'h:mm a') : ''}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No new signups overnight</p>
+            )}
+          </Section>
+
+          {/* API Usage Per Service */}
+          <Section title="API Usage by Service" icon={<Activity className="w-4 h-4 text-green-400" />}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-1.5 pr-3 font-medium">Service</th>
+                    <th className="text-right py-1.5 px-2 font-medium">Calls</th>
+                    <th className="text-right py-1.5 px-2 font-medium">Failed</th>
+                    <th className="text-right py-1.5 px-2 font-medium">Fail %</th>
+                    <th className="text-right py-1.5 px-2 font-medium">Avg ms</th>
+                    <th className="text-right py-1.5 px-2 font-medium">Credits</th>
+                    <th className="text-left py-1.5 pl-2 font-medium">Top Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(report.api_usage_summary)
+                    .sort((a, b) => b[1].total_calls - a[1].total_calls)
+                    .map(([svc, stats]) => (
+                      <tr key={svc} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="py-1.5 pr-3 font-medium">{svc}</td>
+                        <td className="text-right py-1.5 px-2">{stats.total_calls}</td>
+                        <td className="text-right py-1.5 px-2">{stats.failed > 0 ? <span className="text-destructive">{stats.failed}</span> : '0'}</td>
+                        <td className="text-right py-1.5 px-2">
+                          <span className={stats.fail_rate_pct >= 50 ? 'text-destructive font-bold' : stats.fail_rate_pct >= 10 ? 'text-yellow-500' : ''}>
+                            {stats.fail_rate_pct}%
+                          </span>
+                        </td>
+                        <td className="text-right py-1.5 px-2">{stats.avg_response_ms}ms</td>
+                        <td className="text-right py-1.5 px-2">{stats.credits_used || '—'}</td>
+                        <td className="py-1.5 pl-2 max-w-[200px] truncate text-muted-foreground">
+                          {stats.top_errors[0]?.error || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+
+          {/* Rate Limits & Auth Failures */}
+          {(report.rate_limit_events.length > 0 || report.auth_failure_events.length > 0) && (
+            <Section title="Rate Limit & Auth Issues" icon={<Zap className="w-4 h-4 text-yellow-400" />}>
+              <div className="space-y-1">
+                {report.rate_limit_events.map((e, i) => (
+                  <div key={`rl-${i}`} className="flex items-center gap-2 text-xs">
+                    <Badge variant="secondary" className="text-[10px]">429</Badge>
+                    <span>{e.service}/{e.endpoint}</span>
+                    <span className="text-muted-foreground">×{e.count}</span>
+                  </div>
+                ))}
+                {report.auth_failure_events.map((e, i) => (
+                  <div key={`af-${i}`} className="flex items-center gap-2 text-xs">
+                    <Badge variant="destructive" className="text-[10px]">{e.status}</Badge>
+                    <span>{e.service}/{e.endpoint}</span>
+                    <span className="text-muted-foreground">×{e.count}</span>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Quota Status */}
+          <Section title="Quota Status" icon={<Activity className="w-4 h-4 text-purple-400" />} defaultOpen={false}>
+            <div className="space-y-2">
+              {Object.entries(report.quota_status).map(([svc, q]) => (
+                <div key={svc} className="flex items-center gap-2 text-xs">
+                  <StatusBadge status={q.status} />
+                  <span className="font-medium w-24">{q.display_name}</span>
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        q.pct >= 90 ? 'bg-destructive' : q.pct >= 75 ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min(q.pct, 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-muted-foreground w-20 text-right">
+                    {q.limit ? `${q.used}/${q.limit}` : `${q.used}`}
+                  </span>
+                  <span className="text-muted-foreground w-12 text-right">{q.pct}%</span>
+                  {q.tier && <Badge variant="outline" className="text-[10px]">{q.tier}</Badge>}
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          {/* Error Patterns */}
+          {report.error_patterns.length > 0 && (
+            <Section title={`Repeated Errors (${report.error_patterns.length})`} icon={<XCircle className="w-4 h-4 text-red-400" />}>
+              <div className="space-y-1">
+                {report.error_patterns.map((ep, i) => (
+                  <div key={i} className="text-xs border-l-2 border-destructive/30 pl-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{ep.endpoint}</span>
+                      <Badge variant="secondary" className="text-[10px]">{ep.count}×</Badge>
+                    </div>
+                    {ep.error && <p className="text-muted-foreground truncate">{ep.error}</p>}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* External Services */}
+          <Section title="External Services" icon={<Globe className="w-4 h-4 text-cyan-400" />}>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {Object.entries(report.external_services_status).map(([svc, info]) => (
+                <div key={svc} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-muted/30">
+                  <StatusBadge status={info.status} />
+                  <div>
+                    <div className="font-medium">{svc}</div>
+                    <div className="text-muted-foreground">{info.notes}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          {/* Table Health */}
+          <Section title="Table Health" icon={<Database className="w-4 h-4 text-indigo-400" />} defaultOpen={false}>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {Object.entries(report.table_health).map(([table, info]) => (
+                <div key={table} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/30">
+                  <span className="font-mono">{table}</span>
+                  <div className="flex items-center gap-1">
+                    <span className={info.status !== 'ok' ? 'text-yellow-500 font-bold' : ''}>
+                      {info.row_count >= 0 ? info.row_count.toLocaleString() : 'err'}
+                    </span>
+                    <StatusBadge status={info.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function MorningReportTab() {
+  const queryClient = useQueryClient();
+  
+  const { data: reports, isLoading } = useQuery({
+    queryKey: ['morning-reports'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('morning_reports')
+        .select('*')
+        .order('report_date', { ascending: false })
+        .limit(14);
+      if (error) throw error;
+      return data as unknown as MorningReport[];
+    },
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('morning-report');
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Morning report generated!');
+      queryClient.invalidateQueries({ queryKey: ['morning-reports'] });
+    },
+    onError: (err) => toast.error(`Failed: ${err.message}`),
+  });
+
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const selectedReport = reports?.[selectedIdx];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            ☀️ Morning Report
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Daily system health digest — auto-generated at 9:00 AM ET
+          </p>
+        </div>
+        <Button
+          onClick={() => generateMutation.mutate()}
+          disabled={generateMutation.isPending}
+          variant="outline"
+          size="sm"
+        >
+          <RefreshCw className={`w-4 h-4 mr-1 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
+          Generate Now
+        </Button>
+      </div>
+
+      {/* Date picker / report selector */}
+      {reports && reports.length > 0 && (
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {reports.map((r, i) => (
+            <Button
+              key={r.id}
+              variant={i === selectedIdx ? "default" : "outline"}
+              size="sm"
+              className="shrink-0 text-xs"
+              onClick={() => setSelectedIdx(i)}
+            >
+              <StatusBadge status={r.overall_status} />
+              <span className="ml-1">{format(new Date(r.report_date + 'T00:00:00'), 'MMM d')}</span>
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      )}
+
+      {!isLoading && !selectedReport && (
+        <Card className="p-8 text-center">
+          <p className="text-muted-foreground mb-4">No morning reports yet. Generate your first one!</p>
+          <Button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
+            <RefreshCw className={`w-4 h-4 mr-1 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
+            Generate Morning Report
+          </Button>
+        </Card>
+      )}
+
+      {selectedReport && (
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            <StatusBadge status={selectedReport.overall_status} />
+            <span className="text-sm text-muted-foreground">
+              {format(new Date(selectedReport.report_period_start), 'MMM d, h:mm a')} → {format(new Date(selectedReport.report_period_end), 'h:mm a')}
+            </span>
+            {selectedReport.telegram_sent && (
+              <Badge variant="outline" className="text-[10px] gap-1">
+                <Bell className="w-3 h-3" /> TG sent {selectedReport.telegram_sent_at ? format(new Date(selectedReport.telegram_sent_at), 'h:mm a') : ''}
+              </Badge>
+            )}
+            <span className="text-xs text-muted-foreground ml-auto">
+              Generated in {selectedReport.execution_time_ms}ms
+            </span>
+          </div>
+          <ReportView report={selectedReport} />
+        </div>
+      )}
+    </div>
+  );
+}
