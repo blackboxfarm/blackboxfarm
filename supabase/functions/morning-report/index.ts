@@ -434,6 +434,7 @@ Deno.serve(async (req) => {
         new_subscribers_details: newSubscribersDetails,
         table_health: tableHealth,
         external_services_status: externalServicesStatus,
+        holders_intel_metrics: holdersIntelMetrics,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
