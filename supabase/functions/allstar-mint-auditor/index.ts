@@ -327,7 +327,7 @@ async function auditAllstarFamily(
 // ─── STEP 3: Create alerts + notifications (multi-channel) ───
 
 const ALERT_EMAIL = 'wilsondavid@live.ca';
-const ALERT_TG_USERNAME = 'DrRick_gem';
+const DRRICKGEM_CHAT_ID = 5549703183;
 
 async function createAllstarAlert(
   supabase: any,
