@@ -364,6 +364,7 @@ function ReportView({ report }: { report: MorningReport }) {
 
 export default function MorningReportTab() {
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<'active' | 'archive'>('active');
   
   const { data: reports, isLoading } = useQuery({
     queryKey: ['morning-reports'],
@@ -371,11 +372,23 @@ export default function MorningReportTab() {
       const { data, error } = await supabase
         .from('morning_reports')
         .select('*')
-        .order('report_date', { ascending: false })
-        .limit(14);
+        .order('report_date', { ascending: false });
       if (error) throw error;
       return data as unknown as MorningReport[];
     },
+  });
+
+  const { data: archivedReports, isLoading: archiveLoading } = useQuery({
+    queryKey: ['morning-reports-archive'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('morning_reports_archive' as any)
+        .select('*')
+        .order('report_date', { ascending: false });
+      if (error) throw error;
+      return data as unknown as (MorningReport & { archived_at: string })[];
+    },
+    enabled: viewMode === 'archive',
   });
 
   const generateMutation = useMutation({
@@ -391,62 +404,151 @@ export default function MorningReportTab() {
     onError: (err) => toast.error(`Failed: ${err.message}`),
   });
 
-  const [selectedIdx, setSelectedIdx] = useState(0);
-  const selectedReport = reports?.[selectedIdx];
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('archive_old_morning_reports' as any);
+      if (error) throw error;
+      return data as number;
+    },
+    onSuccess: (count) => {
+      toast.success(`Archived ${count} old reports`);
+      queryClient.invalidateQueries({ queryKey: ['morning-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['morning-reports-archive'] });
+    },
+    onError: (err) => toast.error(`Archive failed: ${err.message}`),
+  });
+
+  const displayReports = viewMode === 'active' ? reports : archivedReports;
+  const [selectedReportId, setSelectedReportId] = useState<string>('');
+
+  const groupedReports = useMemo(() => {
+    if (!displayReports?.length) return {};
+    const groups: Record<string, typeof displayReports> = {};
+    displayReports.forEach(r => {
+      const month = format(new Date(r.report_date + 'T00:00:00'), 'MMMM yyyy');
+      if (!groups[month]) groups[month] = [];
+      groups[month]!.push(r);
+    });
+    return groups;
+  }, [displayReports]);
+
+  const selectedReport = displayReports?.find(r => r.id === selectedReportId) || displayReports?.[0];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             ☀️ Morning Report
           </h2>
           <p className="text-sm text-muted-foreground">
-            Daily system health digest — auto-generated at 9:00 AM ET
+            Daily system health digest — auto-generated at 9:00 AM ET · 30-day retention, then archived monthly
           </p>
         </div>
-        <Button
-          onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending}
-          variant="outline"
-          size="sm"
-        >
-          <RefreshCw className={`w-4 h-4 mr-1 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
-          Generate Now
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => archiveMutation.mutate()}
+            disabled={archiveMutation.isPending}
+            variant="ghost"
+            size="sm"
+            title="Archive reports older than 30 days"
+          >
+            <Archive className={`w-4 h-4 mr-1 ${archiveMutation.isPending ? 'animate-spin' : ''}`} />
+            Archive Old
+          </Button>
+          <Button
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+            variant="outline"
+            size="sm"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
+            Generate Now
+          </Button>
+        </div>
       </div>
 
-      {/* Date picker / report selector */}
-      {reports && reports.length > 0 && (
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {reports.map((r, i) => (
-            <Button
-              key={r.id}
-              variant={i === selectedIdx ? "default" : "outline"}
-              size="sm"
-              className="shrink-0 text-xs"
-              onClick={() => setSelectedIdx(i)}
-            >
-              <StatusBadge status={r.overall_status} />
-              <span className="ml-1">{format(new Date(r.report_date + 'T00:00:00'), 'MMM d')}</span>
-            </Button>
-          ))}
+      {/* View mode toggle + Calendar select */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          <button
+            onClick={() => setViewMode('active')}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'active' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+          >
+            <CalendarDays className="w-3 h-3 inline mr-1" />
+            Active ({reports?.length || 0})
+          </button>
+          <button
+            onClick={() => setViewMode('archive')}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'archive' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+          >
+            <Archive className="w-3 h-3 inline mr-1" />
+            Archived ({archivedReports?.length || '…'})
+          </button>
         </div>
-      )}
 
-      {isLoading && (
+        {displayReports && displayReports.length > 0 && (
+          <Select
+            value={selectedReport?.id || ''}
+            onValueChange={(val) => setSelectedReportId(val)}
+          >
+            <SelectTrigger className="w-[280px]">
+              <SelectValue placeholder="Select a report date…">
+                {selectedReport && (
+                  <span className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full inline-block ${
+                      selectedReport.overall_status === 'healthy' ? 'bg-green-500' :
+                      selectedReport.overall_status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
+                    }`} />
+                    {format(new Date(selectedReport.report_date + 'T00:00:00'), 'EEEE, MMM d, yyyy')}
+                  </span>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(groupedReports).map(([month, reps]) => (
+                <div key={month}>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{month}</div>
+                  {reps!.map(r => (
+                    <SelectItem key={r.id} value={r.id}>
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full inline-block ${
+                          r.overall_status === 'healthy' ? 'bg-green-500' :
+                          r.overall_status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
+                        }`} />
+                        {format(new Date(r.report_date + 'T00:00:00'), 'EEE, MMM d')}
+                        <span className="text-muted-foreground text-[10px] ml-auto">
+                          {r.new_signups} signups
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </div>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      {(isLoading || (viewMode === 'archive' && archiveLoading)) && (
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
       )}
 
-      {!isLoading && !selectedReport && (
+      {!isLoading && !selectedReport && viewMode === 'active' && (
         <Card className="p-8 text-center">
           <p className="text-muted-foreground mb-4">No morning reports yet. Generate your first one!</p>
           <Button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
             <RefreshCw className={`w-4 h-4 mr-1 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
             Generate Morning Report
           </Button>
+        </Card>
+      )}
+
+      {!archiveLoading && !displayReports?.length && viewMode === 'archive' && (
+        <Card className="p-8 text-center">
+          <p className="text-muted-foreground">No archived reports yet. Reports older than 30 days get archived automatically.</p>
         </Card>
       )}
 
@@ -460,6 +562,11 @@ export default function MorningReportTab() {
             {selectedReport.telegram_sent && (
               <Badge variant="outline" className="text-[10px] gap-1">
                 <Bell className="w-3 h-3" /> TG sent {selectedReport.telegram_sent_at ? format(new Date(selectedReport.telegram_sent_at), 'h:mm a') : ''}
+              </Badge>
+            )}
+            {viewMode === 'archive' && (
+              <Badge variant="secondary" className="text-[10px] gap-1">
+                <Archive className="w-3 h-3" /> Archived
               </Badge>
             )}
             <span className="text-xs text-muted-foreground ml-auto">
