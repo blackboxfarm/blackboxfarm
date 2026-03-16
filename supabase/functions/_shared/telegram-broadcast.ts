@@ -46,14 +46,6 @@ export async function getTelegramTargets(
 }
 
 /**
- * Sanitize ticker symbols in outgoing messages to prevent bot loops.
- * Converts "$TICKER" → "$ TICKER" so other bots (e.g. Phanes) don't trigger on our posts.
- */
-function sanitizeTickers(text: string): string {
-  return text.replace(/\$([A-Za-z]{2,})/g, '$ $1');
-}
-
-/**
  * Sends a message to a single Telegram target via MTProto
  */
 async function sendToTarget(
@@ -61,8 +53,6 @@ async function sendToTarget(
   target: TelegramTarget,
   message: string
 ): Promise<BroadcastResult> {
-  // Sanitize tickers to avoid triggering other bots in a loop
-  message = sanitizeTickers(message);
   const chatId = Number(target.chat_id);
 
   try {

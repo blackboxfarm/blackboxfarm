@@ -575,8 +575,6 @@ function getHelpMessage(tier: UserTier): string {
 }
 
 async function sendTelegramMessage(token: string, chatId: number, text: string) {
-  // Sanitize $TICKER patterns to avoid triggering other bots in a loop
-  text = text.replace(/\$([A-Za-z]{2,})/g, '$ $1');
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
