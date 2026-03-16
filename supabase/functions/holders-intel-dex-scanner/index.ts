@@ -220,7 +220,7 @@ async function broadcastDexAlert(supabase: any, trigger: DetectedTrigger): Promi
     const triggerConfig = TRIGGER_CONFIGS[trigger.triggerType];
     const boostLabel = trigger.boostCount ? ` (${trigger.boostCount}x)` : '';
     const message = `🚀${triggerConfig.comment}${boostLabel}\n` +
-      `$${trigger.symbol} (${trigger.name})\n` +
+      `$ ${trigger.symbol} (${trigger.name})\n` +
       `CA: \`${trigger.tokenMint}\``;
 
     const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
