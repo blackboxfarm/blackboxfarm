@@ -798,7 +798,7 @@ Deno.serve(async (req) => {
         const familySize = (allstar.family_wallets || []).length;
         results.total_family_wallets_scanned += familySize;
 
-        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey, hours_lookback);
+        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey, effectiveHoursLookback);
         results.allstars_audited++;
 
         for (const hit of hits) {
@@ -822,10 +822,10 @@ Deno.serve(async (req) => {
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[allstar] ✅ Complete in ${elapsed}ms:`, results);
+    console.log(`[allstar] ✅ Complete in ${elapsed}ms with ${effectiveHoursLookback}h max mint age:`, results);
 
     return new Response(
-      JSON.stringify({ success: true, elapsed, results }),
+      JSON.stringify({ success: true, elapsed, effective_hours_lookback: effectiveHoursLookback, results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
