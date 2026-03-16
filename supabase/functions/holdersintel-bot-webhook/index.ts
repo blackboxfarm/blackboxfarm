@@ -2060,9 +2060,12 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   // Build early warnings block from cached warnings (fast DB read)
   let warningsBlock = '';
   if (cachedWarnings.length > 0) {
+    // Filter out low/informational — only show actionable alerts
+    const actionable = cachedWarnings.filter(w => w.severity !== 'low');
+    
     // Sort: critical first, then high, etc.
-    const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    const sorted = cachedWarnings.sort((a, b) => 
+    const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2 };
+    const sorted = actionable.sort((a, b) => 
       (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
     );
     
