@@ -380,16 +380,21 @@ export function useMeshGraph(initialEntityId?: string) {
       let communityUrl: string | null = null;
       let discoverySource = 'dexscreener_auto';
 
-      // 1. Try DexScreener first
+      // 1. Try DexScreener v1 API first (supports PumpSwap + graduated tokens)
       try {
-        const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+        const dexRes = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${tokenMint}`);
         if (dexRes.ok) {
           const dexData = await dexRes.json();
-          const pair = dexData?.pairs?.[0];
+          // v1 returns an array of pairs directly
+          const pair = Array.isArray(dexData) ? dexData[0] : dexData?.pairs?.[0];
           const socials = pair?.info?.socials || [];
-          allSocialUrls = socials.map((s: any) => s.url).filter(Boolean);
+          const websites = pair?.info?.websites || [];
+          allSocialUrls = [
+            ...socials.map((s: any) => s.url),
+            ...websites.map((w: any) => w.url),
+          ].filter(Boolean);
           if (allSocialUrls.length > 0) {
-            console.log(`[MeshSpider] DexScreener returned ${allSocialUrls.length} social URLs`);
+            console.log(`[MeshSpider] DexScreener v1 returned ${allSocialUrls.length} social URLs:`, allSocialUrls);
           }
         }
       } catch (e) {

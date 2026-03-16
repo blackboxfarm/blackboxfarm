@@ -22,6 +22,7 @@ const PumpfunMonitorTab = lazy(() => import("@/components/admin/tabs/PumpfunMoni
 const OracleTab = lazy(() => import("@/components/admin/tabs/OracleTab"));
 const MasterDBTab = lazy(() => import("@/components/admin/tabs/MasterDBTab"));
 const MorningReportTab = lazy(() => import("@/components/admin/tabs/MorningReportTab"));
+const AllstarTab = lazy(() => import("@/components/admin/tabs/AllstarTab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
@@ -131,6 +132,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun</TabsTrigger>
             <TabsTrigger value="master-db" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500/30 data-[state=active]:to-blue-500/20">🗄️ Master DB</TabsTrigger>
             <TabsTrigger value="morning-report" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">☀️ Morning Report</TabsTrigger>
+            <TabsTrigger value="allstar" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">⭐ Allstars</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -216,6 +218,13 @@ export default function SuperAdmin() {
             {activeTab === "morning-report" && (
               <Suspense fallback={<TabLoader />}>
                 <MorningReportTab />
+              </Suspense>
+            )}
+          </TabsContent>
+          <TabsContent value="allstar">
+            {activeTab === "allstar" && (
+              <Suspense fallback={<TabLoader />}>
+                <AllstarTab />
               </Suspense>
             )}
           </TabsContent>
