@@ -16,6 +16,7 @@ const INTEL_FUNCTIONS = [
 const SLOW_FUNCTIONS: Record<string, number> = {
   'twitter-token-mention-scanner': 3, // every ~15 min
   'token-vigil': 1, // every tick (~5 min) — death detection + mid-growth snapshots
+  'allstar-mint-auditor': 6, // every ~30 min — audit allstar wallet families for new mints
 };
 
 Deno.serve(async (req) => {
