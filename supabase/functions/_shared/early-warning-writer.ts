@@ -189,13 +189,13 @@ export function generateWarningsFromHoldersData(
 
   // 6. Health score critical
   const healthScoreVal = data?.healthScore?.score ?? data?.stabilityScore ?? null;
-  if (healthScore != null && healthScore < 25) {
+  if (healthScoreVal != null && healthScoreVal < 25) {
     warnings.push({
       token_mint: tokenMint,
       warning_type: 'health_critical',
       severity: 'critical',
-      plain_text: `💔 Health score is ${healthScore}/100. Our analysis suggests this token is in serious trouble.`,
-      metric_value: healthScore,
+      plain_text: `💔 Health score is ${healthScoreVal}/100. Our analysis suggests this token is in serious trouble.`,
+      metric_value: healthScoreVal,
       source_function: sourceFunction,
     });
   }
