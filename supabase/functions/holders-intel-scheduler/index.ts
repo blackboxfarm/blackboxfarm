@@ -220,7 +220,7 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
     const tokens: TrendingToken[] = [];
     
     // Process ALL pairs, not just resolved ones
-    for (let i = 0; i < Math.min(allPairs.length, 50); i++) {
+    for (let i = 0; i < Math.min(allPairs.length, 100); i++) {
       const p = allPairs[i];
       
       if (p.ok && p.tokenMint) {
