@@ -187,7 +187,8 @@ async function pollBotUpdates(supabase: any, botToken: string): Promise<number> 
     });
 
     if (!resp.ok) {
-      console.error(`[funnel-feed-scanner] getUpdates failed: ${resp.status}`);
+      const errBody = await resp.text();
+      console.error(`[funnel-feed-scanner] getUpdates failed: ${resp.status} - ${errBody}`);
       break;
     }
 
