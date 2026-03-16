@@ -233,6 +233,7 @@ export default function MasterDBTab() {
             <TableHeader>
               <TableRow className="[&>th]:whitespace-nowrap [&>th]:px-2 [&>th]:py-2 [&>th]:text-[11px] [&>th]:font-semibold">
                 <TableHead>#</TableHead>
+                <TableHead>Src</TableHead>
                 <TableHead>Img</TableHead>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Name</TableHead>
