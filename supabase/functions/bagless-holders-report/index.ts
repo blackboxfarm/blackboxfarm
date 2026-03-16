@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { meshFeed } from "../_shared/mesh-feeder.ts"
+import { writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts"
 import { detectLP, type LPDetectionResult, type LaunchpadInfo } from "../_shared/lp-detection.ts"
 import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts"
 import { fetchCreatorInfo } from "../_shared/creator-api.ts"
@@ -751,6 +752,22 @@ serve(async (req) => {
         devGenealogy.creatorWallet,
         devGenealogy.parentWallets.map(p => p.wallet),
       ).catch(() => {});
+    }
+
+    // 🚨 EARLY WARNING WRITER: Populate cumulative warning cache (fire and forget)
+    const earlyWarningResult = {
+      symbol: tokenSymbol, tokenSymbol, marketCap: inferredMarketCapUSD,
+      simpleTiers, distributionStats, lpPercentageOfSupply: lpWallets.length > 0 ? (lpBalance / totalBalance * 100) : 0,
+      insidersGraph: insidersResult.hasInsiders ? insidersResult : undefined,
+      insiderClusters: insidersResult.clusters.length > 0 ? insidersResult.clusters : undefined,
+      vitality, freshWallets, healthScore: { score: healthScore },
+      stabilityScore: healthScore,
+    };
+    const holdersWarnings = generateWarningsFromHoldersData(tokenMint, earlyWarningResult, 'bagless-holders-report');
+    if (holdersWarnings.length > 0) {
+      writeEarlyWarnings(holdersWarnings, supabaseForMesh).catch(e =>
+        console.warn('[early-warning-writer] holders report warnings failed:', e)
+      );
     }
 
     const totalTime = Date.now() - requestStartTime;

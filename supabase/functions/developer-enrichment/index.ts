@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { writeEarlyWarnings, generateDevWalletWarning } from '../_shared/early-warning-writer.ts';
 enableHeliusTracking('developer-enrichment');
 
 const corsHeaders = {
@@ -262,6 +263,45 @@ serve(async (req) => {
     };
 
     console.log(`[developer-enrichment] Result: risk=${result.riskLevel}, canTrade=${result.canTrade}, rugcheck=${rugcheckResult.normalised}/100`);
+
+    // Write dev wallet early warning (genealogy-aware: only flag if genealogy also has no history)
+    // A fresh dev wallet alone is NOT a red flag — devs often use new wallets per launch
+    if (tokenMint && creatorWallet) {
+      const { data: devRep } = await supabase
+        .from('dev_wallet_reputation')
+        .select('upstream_wallets, trust_level, total_tokens_launched, reputation_score')
+        .eq('wallet_address', creatorWallet)
+        .maybeSingle();
+
+      const hasGenealogyData = !!(devRep?.upstream_wallets && devRep.upstream_wallets.length > 0);
+      
+      // Check if any upstream wallet has a track record
+      let genealogyHasHistory = false;
+      if (hasGenealogyData && devRep.upstream_wallets.length > 0) {
+        const { data: upstreamReps } = await supabase
+          .from('dev_wallet_reputation')
+          .select('total_tokens_launched, trust_level')
+          .in('wallet_address', devRep.upstream_wallets.slice(0, 10));
+        
+        genealogyHasHistory = (upstreamReps || []).some(
+          (u: any) => (u.total_tokens_launched || 0) > 0 || u.trust_level === 'trusted'
+        );
+      }
+
+      const devWarning = generateDevWalletWarning(tokenMint, {
+        walletAddress: creatorWallet,
+        totalTokensLaunched: devRep?.total_tokens_launched ?? developerProfile?.total_tokens_created ?? 0,
+        trustLevel: devRep?.trust_level ?? 'unknown',
+        reputationScore: devRep?.reputation_score ?? 50,
+        hasGenealogyData,
+        genealogyHasHistory,
+        upstreamWalletCount: devRep?.upstream_wallets?.length ?? 0,
+      }, 'developer-enrichment');
+
+      if (devWarning) {
+        writeEarlyWarnings([devWarning], supabase).catch(() => {});
+      }
+    }
 
     return new Response(
       JSON.stringify(result),

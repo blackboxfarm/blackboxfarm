@@ -11517,6 +11517,48 @@ export type Database = {
         }
         Relationships: []
       }
+      token_early_warnings: {
+        Row: {
+          detected_at: string
+          id: string
+          last_seen_at: string
+          metadata: Json | null
+          metric_value: number | null
+          plain_text: string
+          scan_count: number
+          severity: string
+          source_function: string | null
+          token_mint: string
+          warning_type: string
+        }
+        Insert: {
+          detected_at?: string
+          id?: string
+          last_seen_at?: string
+          metadata?: Json | null
+          metric_value?: number | null
+          plain_text: string
+          scan_count?: number
+          severity?: string
+          source_function?: string | null
+          token_mint: string
+          warning_type: string
+        }
+        Update: {
+          detected_at?: string
+          id?: string
+          last_seen_at?: string
+          metadata?: Json | null
+          metric_value?: number | null
+          plain_text?: string
+          scan_count?: number
+          severity?: string
+          source_function?: string | null
+          token_mint?: string
+          warning_type?: string
+        }
+        Relationships: []
+      }
       token_lifecycle: {
         Row: {
           active_boosts: number | null

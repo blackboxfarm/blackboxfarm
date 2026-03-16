@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveTelegramUsername, incrementChannelTokenCount } from "../_shared/telegram-resolver.ts";
 import { resolveXHandle, incrementXUserTokenCount } from "../_shared/x-handle-resolver.ts";
+import { writeEarlyWarnings, generateXAccountWarning } from "../_shared/early-warning-writer.ts";
 
 /**
  * SOCIAL MESH LINKER — Background cron (every 10min)
@@ -251,6 +252,26 @@ Deno.serve(async (req) => {
           discoveredSocials.push(`x_user:${xResolved.userId}(@${xResolved.handle})`);
           if (xResolved.isRotated) {
             console.log(`   🔄 ROTATED X HANDLE detected: @${xResolved.handle} has ${xResolved.handleCount} known handles`);
+          }
+
+          // Write X credibility early warning if applicable
+          // Note: X Communities are positive (require blue check to create) — only flag regular accounts
+          const { data: twitterAccountData } = await supabase
+            .from('twitter_accounts')
+            .select('follower_count, join_date')
+            .ilike('username', xResolved.handle)
+            .maybeSingle();
+
+          const xWarning = generateXAccountWarning(token_mint, {
+            followerCount: twitterAccountData?.follower_count ?? undefined,
+            accountAge: twitterAccountData?.join_date ?? undefined,
+            isRotated: xResolved.isRotated,
+            handleCount: xResolved.handleCount,
+            handle: xResolved.handle,
+          }, 'social-mesh-linker');
+
+          if (xWarning) {
+            writeEarlyWarnings([xWarning], supabase).catch(() => {});
           }
         } else {
           // Fallback: handle-only (API failed, rate limited, etc.)

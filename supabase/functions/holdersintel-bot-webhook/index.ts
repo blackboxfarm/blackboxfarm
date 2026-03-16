@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { detectTokenPhase, contextualizeDevRep, type TokenPhase } from "../_shared/token-phase.ts";
 import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -2026,7 +2027,12 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   // Fire a minimalist risk snippet (no gate check — this is a passive feature for activated groups)
   await logUsage(telegramUserId, "/autoscan", ca);
 
-  const holdersData = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+  // Parallel: fetch holders data AND cached early warnings
+  const [holdersData, cachedWarnings] = await Promise.all([
+    invokeFunction("bagless-holders-report", { tokenMint: ca }),
+    getTokenWarnings(ca, supabase),
+  ]);
+
   if (!holdersData || holdersData.error) return; // silently fail
 
   const symbol = holdersData?.symbol || holdersData?.tokenSymbol || null;
@@ -2051,15 +2057,41 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
       `\`Dust    ${bar(tiers.dust?.percentage ?? 0)} ${Math.round(tiers.dust?.percentage ?? 0)}%\`  <$1\n`;
   }
 
+  // Build early warnings block from cached warnings (fast DB read)
+  let warningsBlock = '';
+  if (cachedWarnings.length > 0) {
+    // Sort: critical first, then high, etc.
+    const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    const sorted = cachedWarnings.sort((a, b) => 
+      (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
+    );
+    
+    // Show top 3 most severe warnings
+    const topWarnings = sorted.slice(0, 3);
+    const warningLines = topWarnings.map(w => {
+      const seenNote = w.scan_count > 1 ? ` _(seen ${w.scan_count}x)_` : '';
+      return `${w.plain_text}${seenNote}`;
+    });
+    
+    warningsBlock = `\n\n🚨 *Intel Alerts*\n${warningLines.join('\n\n')}`;
+  }
+
   const msg = `⚡ *${tokenLabel} Quick Stats*\n\n` +
     `${holders ? `👥 Holders: *${holders}*\n` : ''}` +
     `${health != null ? `❤️ Health: *${health}/100*\n` : ''}` +
     `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
     distBlock +
+    warningsBlock +
     `\n→ /risk \`${ca}\` for full report` +
     TAGLINE;
 
   await sendMessage(chatId, msg);
+
+  // Fire-and-forget: write new warnings from this scan (cumulative)
+  const newWarnings = generateWarningsFromHoldersData(ca, holdersData, 'autoscan');
+  if (newWarnings.length > 0) {
+    writeEarlyWarnings(newWarnings, supabase).catch(() => {});
+  }
 }
 
 // ─── /add — DM-only: Add bot to a channel/group ───
