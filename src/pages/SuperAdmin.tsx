@@ -22,6 +22,7 @@ const PumpfunMonitorTab = lazy(() => import("@/components/admin/tabs/PumpfunMoni
 const OracleTab = lazy(() => import("@/components/admin/tabs/OracleTab"));
 const MasterDBTab = lazy(() => import("@/components/admin/tabs/MasterDBTab"));
 const MorningReportTab = lazy(() => import("@/components/admin/tabs/MorningReportTab"));
+const AllstarTab = lazy(() => import("@/components/admin/tabs/AllstarTab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
