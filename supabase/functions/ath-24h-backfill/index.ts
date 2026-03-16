@@ -37,7 +37,7 @@ async function fetchAth24h(tokenMint: string): Promise<number | null> {
     if (!poolAddress) return null;
 
     // Rate limit pause between the two API calls (GeckoTerminal free: 30 req/min)
-    await new Promise(r => setTimeout(r, 4000));
+    await new Promise(r => setTimeout(r, 6000));
 
     // Step 2: Fetch hourly OHLCV candles (24h window)
     const ohlcvRes = await fetch(
