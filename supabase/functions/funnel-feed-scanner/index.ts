@@ -212,38 +212,14 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     return { tokens_found: 0, messages_processed: 0, new_tokens: 0, message: 'No new messages since last scan' };
   }
 
-// Process unprocessed raw messages for a given source
-async function processSourceMessages(supabase: any, source: FunnelSource) {
-  // Get unprocessed messages from this source's chat
-  const { data: rawMsgs, error: rawErr } = await supabase
-    .from('funnel_feed_raw_messages')
-    .select('*')
-    .eq('chat_id', source.source_id)
-    .eq('processed', false)
-    .order('message_id', { ascending: true })
-    .limit(200);
-
-  if (rawErr || !rawMsgs?.length) {
-    // Update last_scraped_at even if no messages
-    await supabase
-      .from('funnel_feed_sources')
-      .update({ last_scraped_at: new Date().toISOString() })
-      .eq('id', source.id);
-    return { tokens_found: 0, messages_processed: 0, message: rawMsgs?.length === 0 ? 'No new messages' : rawErr?.message };
-  }
-
-  console.log(`[funnel-feed-scanner] Processing ${rawMsgs.length} messages for ${source.source_name}`);
-
-  // Extract Solana addresses from messages
+  // Extract Solana addresses from new messages
   const discoveredTokens: Map<string, { messageId: number; text: string }> = new Map();
-  let maxMessageId = source.last_message_id || 0;
-  const processedIds: number[] = [];
+  let maxMessageId = lastMsgId;
 
-  for (const msg of rawMsgs) {
-    const text = msg.message_text || '';
-    const msgId = msg.message_id || 0;
+  for (const msg of newMessages) {
+    const text = msg.text || '';
+    const msgId = msg.id || 0;
     maxMessageId = Math.max(maxMessageId, msgId);
-    processedIds.push(msg.id);
 
     const addresses = text.match(SOLANA_ADDRESS_REGEX) || [];
     for (const addr of addresses) {
@@ -255,20 +231,12 @@ async function processSourceMessages(supabase: any, source: FunnelSource) {
     }
   }
 
-  // Mark messages as processed
-  if (processedIds.length > 0) {
-    await supabase
-      .from('funnel_feed_raw_messages')
-      .update({ processed: true })
-      .in('id', processedIds);
-  }
-
   console.log(`[funnel-feed-scanner] Found ${discoveredTokens.size} potential token addresses in ${source.source_name}`);
 
   let newTokens = 0;
 
   for (const [mint, info] of discoveredTokens) {
-    // Upsert into discoveries table
+    // Check if already discovered from this source
     const { data: existing } = await supabase
       .from('funnel_feed_discoveries')
       .select('id')
@@ -276,7 +244,7 @@ async function processSourceMessages(supabase: any, source: FunnelSource) {
       .eq('source_id', source.id)
       .maybeSingle();
 
-    if (existing) continue; // Already discovered from this source
+    if (existing) continue;
 
     // Check if already in pumpfun_watchlist
     const { data: watchlistEntry } = await supabase
@@ -377,7 +345,7 @@ async function processSourceMessages(supabase: any, source: FunnelSource) {
     })
     .eq('id', source.id);
 
-  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, messages_processed: rawMsgs.length, max_message_id: maxMessageId };
+  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, messages_processed: newMessages.length, max_message_id: maxMessageId };
 }
 
 function jsonRes(data: any, status = 200) {
