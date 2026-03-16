@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap, Twitter } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -34,6 +34,22 @@ interface MorningReport {
   new_subscribers_details: any[];
   table_health: Record<string, { row_count: number; status: string }>;
   external_services_status: Record<string, { status: string; calls_overnight: number; failures: number; notes: string }>;
+  holders_intel_metrics: {
+    display_name: string;
+    username: string;
+    is_verified: boolean;
+    professional_type: string | null;
+    followers: { total: number; blue_check_premium: number; normal: number; blue_check_pct: number };
+    following: number;
+    follow_ratio: number;
+    tweets: number;
+    likes: number;
+    avg_likes_per_tweet: number;
+    listed_count: number;
+    media_count: number;
+    join_date: string | null;
+    last_enriched_at: string | null;
+  } | null;
   unread_notifications: number;
   alerts: { level: string; category: string; title: string; detail: string }[];
   execution_time_ms: number;
@@ -261,6 +277,51 @@ function ReportView({ report }: { report: MorningReport }) {
                   </div>
                 ))}
               </div>
+            </Section>
+          )}
+
+          {/* HoldersIntel Twitter Metrics */}
+          {report.holders_intel_metrics && (
+            <Section title="@HoldersIntel Account" icon={<Twitter className="w-4 h-4 text-sky-400" />}>
+              {(() => {
+                const hi = report.holders_intel_metrics!;
+                return (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div className="p-2 rounded-lg bg-muted/30 text-center">
+                        <div className="text-lg font-bold">{hi.followers.total.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">Total Followers</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-sky-500/10 text-center">
+                        <div className="text-lg font-bold text-sky-400">{hi.followers.blue_check_premium.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">🔵 Blue Check / Premium</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-muted/30 text-center">
+                        <div className="text-lg font-bold">{hi.followers.normal.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">👤 Normal Followers</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-muted/30 text-center">
+                        <div className="text-lg font-bold">{hi.followers.blue_check_pct}%</div>
+                        <div className="text-[10px] text-muted-foreground">Blue Check Ratio</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                      <div className="text-xs"><span className="text-muted-foreground">Following:</span> <span className="font-medium">{hi.following}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Ratio:</span> <span className="font-medium">{hi.follow_ratio}:1</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Tweets:</span> <span className="font-medium">{hi.tweets.toLocaleString()}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Likes:</span> <span className="font-medium">{hi.likes.toLocaleString()}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Listed:</span> <span className="font-medium">{hi.listed_count}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Media:</span> <span className="font-medium">{hi.media_count}</span></div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>Avg Likes/Tweet: <span className="font-medium text-foreground">{hi.avg_likes_per_tweet}</span></span>
+                      <span>Verified: {hi.is_verified ? '✅' : '❌'}</span>
+                      <span>Type: {hi.professional_type || 'N/A'}</span>
+                      {hi.last_enriched_at && <span>Enriched: {format(new Date(hi.last_enriched_at), 'MMM d, h:mm a')}</span>}
+                    </div>
+                  </div>
+                );
+              })()}
             </Section>
           )}
 

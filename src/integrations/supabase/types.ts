@@ -6033,6 +6033,7 @@ export type Database = {
           error_patterns: Json
           execution_time_ms: number | null
           external_services_status: Json
+          holders_intel_metrics: Json | null
           id: string
           new_signups: number
           new_signups_details: Json
@@ -6057,6 +6058,7 @@ export type Database = {
           error_patterns?: Json
           execution_time_ms?: number | null
           external_services_status?: Json
+          holders_intel_metrics?: Json | null
           id?: string
           new_signups?: number
           new_signups_details?: Json
@@ -6081,6 +6083,7 @@ export type Database = {
           error_patterns?: Json
           execution_time_ms?: number | null
           external_services_status?: Json
+          holders_intel_metrics?: Json | null
           id?: string
           new_signups?: number
           new_signups_details?: Json
