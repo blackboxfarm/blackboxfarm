@@ -23,6 +23,7 @@ const OracleTab = lazy(() => import("@/components/admin/tabs/OracleTab"));
 const MasterDBTab = lazy(() => import("@/components/admin/tabs/MasterDBTab"));
 const MorningReportTab = lazy(() => import("@/components/admin/tabs/MorningReportTab"));
 const AllstarTab = lazy(() => import("@/components/admin/tabs/AllstarTab"));
+const FunnelFeedsTab = lazy(() => import("@/components/admin/tabs/FunnelFeedsTab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
@@ -133,6 +134,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="master-db" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500/30 data-[state=active]:to-blue-500/20">🗄️ Master DB</TabsTrigger>
             <TabsTrigger value="morning-report" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">☀️ Morning Report</TabsTrigger>
             <TabsTrigger value="allstar" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">⭐ Allstars</TabsTrigger>
+            <TabsTrigger value="funnel-feeds" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-lime-500/30 data-[state=active]:to-green-500/20">🔄 Funnel Feeds</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -225,6 +227,13 @@ export default function SuperAdmin() {
             {activeTab === "allstar" && (
               <Suspense fallback={<TabLoader />}>
                 <AllstarTab />
+              </Suspense>
+            )}
+          </TabsContent>
+          <TabsContent value="funnel-feeds">
+            {activeTab === "funnel-feeds" && (
+              <Suspense fallback={<TabLoader />}>
+                <FunnelFeedsTab />
               </Suspense>
             )}
           </TabsContent>

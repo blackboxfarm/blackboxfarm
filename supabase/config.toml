@@ -1,5 +1,8 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
+[functions.funnel-feed-scanner]
+verify_jwt = false
+
 # Edge Functions configuration
 [functions.generate-share-card-satori]
 verify_jwt = false

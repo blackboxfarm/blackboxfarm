@@ -4356,6 +4356,119 @@ export type Database = {
         }
         Relationships: []
       }
+      funnel_feed_discoveries: {
+        Row: {
+          created_at: string
+          creator_wallet: string | null
+          dex_data: Json | null
+          discovered_at: string
+          id: string
+          mesh_processed_at: string | null
+          mesh_status: string
+          notes: string | null
+          source_id: string | null
+          source_message_id: number | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          watchlist_processed_at: string | null
+          watchlist_status: string
+          xpost_processed_at: string | null
+          xpost_status: string
+        }
+        Insert: {
+          created_at?: string
+          creator_wallet?: string | null
+          dex_data?: Json | null
+          discovered_at?: string
+          id?: string
+          mesh_processed_at?: string | null
+          mesh_status?: string
+          notes?: string | null
+          source_id?: string | null
+          source_message_id?: number | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          watchlist_processed_at?: string | null
+          watchlist_status?: string
+          xpost_processed_at?: string | null
+          xpost_status?: string
+        }
+        Update: {
+          created_at?: string
+          creator_wallet?: string | null
+          dex_data?: Json | null
+          discovered_at?: string
+          id?: string
+          mesh_processed_at?: string | null
+          mesh_status?: string
+          notes?: string | null
+          source_id?: string | null
+          source_message_id?: number | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          watchlist_processed_at?: string | null
+          watchlist_status?: string
+          xpost_processed_at?: string | null
+          xpost_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_feed_discoveries_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "funnel_feed_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funnel_feed_sources: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_message_id: number | null
+          last_scraped_at: string | null
+          notes: string | null
+          scrape_interval_minutes: number
+          source_id: string
+          source_name: string
+          source_type: string
+          tokens_discovered: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_message_id?: number | null
+          last_scraped_at?: string | null
+          notes?: string | null
+          scrape_interval_minutes?: number
+          source_id: string
+          source_name: string
+          source_type?: string
+          tokens_discovered?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_message_id?: number | null
+          last_scraped_at?: string | null
+          notes?: string | null
+          scrape_interval_minutes?: number
+          source_id?: string
+          source_name?: string
+          source_type?: string
+          tokens_discovered?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       helius_api_usage: {
         Row: {
           created_at: string
