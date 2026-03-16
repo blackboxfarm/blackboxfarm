@@ -12,9 +12,10 @@ const INTEL_FUNCTIONS = [
   'search-surge-scanner',
 ];
 
-// Twitter scanner runs less frequently (every ~15 min = every 3rd tick)
+// Slower functions with custom tick intervals
 const SLOW_FUNCTIONS: Record<string, number> = {
-  'twitter-token-mention-scanner': 3,
+  'twitter-token-mention-scanner': 3, // every ~15 min
+  'token-vigil': 1, // every tick (~5 min) — death detection + mid-growth snapshots
 };
 
 Deno.serve(async (req) => {
