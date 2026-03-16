@@ -325,6 +325,78 @@ export function generateDevWalletWarning(
 }
 
 /**
+ * Generate warnings from post-mortem pattern rules.
+ * Checks active rules in token_pattern_rules against current token metrics.
+ */
+export async function generatePatternWarnings(
+  tokenMint: string,
+  metrics: {
+    whale_supply_pct?: number;
+    dust_pct?: number;
+    top10_pct?: number;
+    health_score?: number;
+    dev_sold_all?: boolean;
+    has_twitter?: boolean;
+    bundled_pct?: number;
+    lp_pct?: number;
+    volume_mcap_ratio?: number;
+  },
+  sourceFunction: string,
+  supabase?: ReturnType<typeof createClient>,
+): Promise<EarlyWarning[]> {
+  const warnings: EarlyWarning[] = [];
+
+  try {
+    const client = supabase || createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { data: rules } = await client
+      .from('token_pattern_rules')
+      .select('rule_id, pattern_type, outcome_association, description, conditions, confidence_pct, sample_size')
+      .eq('is_active', true)
+      .eq('pattern_type', 'death_signal')
+      .gte('confidence_pct', 60) // Only high-confidence rules
+      .order('confidence_pct', { ascending: false })
+      .limit(20);
+
+    if (!rules || rules.length === 0) return warnings;
+
+    for (const rule of rules) {
+      if (matchesRuleConditions(rule.conditions, metrics)) {
+        warnings.push({
+          token_mint: tokenMint,
+          warning_type: `pattern_${rule.rule_id}`.slice(0, 100),
+          severity: rule.confidence_pct >= 80 ? 'critical' : 'high',
+          plain_text: `📜 Post-mortem pattern match: ${rule.description} → historically leads to ${rule.outcome_association} (${rule.confidence_pct}% of ${rule.sample_size} similar tokens).`,
+          metric_value: rule.confidence_pct,
+          source_function: sourceFunction,
+          metadata: { rule_id: rule.rule_id, outcome: rule.outcome_association, conditions: rule.conditions },
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`[early-warning-writer] Pattern rule check failed:`, err);
+  }
+
+  return warnings;
+}
+
+function matchesRuleConditions(conditions: Record<string, any>, metrics: Record<string, any>): boolean {
+  for (const [key, threshold] of Object.entries(conditions)) {
+    const val = metrics[key];
+    if (val === undefined || val === null) continue;
+    const str = String(threshold);
+    if (str === 'true' && val !== true) return false;
+    if (str === 'false' && val !== false) return false;
+    if (str.startsWith('>') && typeof val === 'number' && val <= parseFloat(str.slice(1))) return false;
+    if (str.startsWith('<') && typeof val === 'number' && val >= parseFloat(str.slice(1))) return false;
+  }
+  return true;
+}
+
+/**
  * Read cached warnings for a token — designed for fast auto-scan replies (< 50ms).
  */
 export async function getTokenWarnings(
