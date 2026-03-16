@@ -489,3 +489,6 @@ verify_jwt = false
 
 [functions.ath-24h-backfill]
 verify_jwt = false
+
+[functions.morning-report]
+verify_jwt = false
