@@ -379,6 +379,7 @@ Deno.serve(async (req) => {
     } = body;
 
     const results = {
+      creators_backfilled: 0,
       new_allstars_qualified: 0,
       allstars_audited: 0,
       new_mints_detected: 0,
@@ -386,6 +387,11 @@ Deno.serve(async (req) => {
       total_family_wallets_scanned: 0,
       errors: [] as string[],
     };
+
+    // ─── PHASE 0: Backfill missing creator wallets on proven_dev_tokens ───
+    console.log('[allstar] Phase 0: Backfilling creator wallets...');
+    results.creators_backfilled = await backfillCreatorWallets(supabase);
+    console.log(`[allstar] Backfilled ${results.creators_backfilled} creator wallets`);
 
     // ─── PHASE 1: Qualify new allstars ───
     console.log('[allstar] Phase 1: Qualifying allstars from proven_dev_tokens...');
