@@ -10,6 +10,7 @@ const corsHeaders = {
 
 // Minimum tier to qualify as an allstar (tier 2 = 300k+)
 const MIN_ALLSTAR_TIER = 2;
+const MAX_MINT_ALERT_AGE_HOURS = 2;
 
 // ─── STEP 1: Qualify new allstars from proven_dev_tokens ───
 
@@ -584,11 +585,20 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const {
       audit_batch_size = 10,
-      hours_lookback = 2,
+      hours_lookback: requestedHoursLookback = MAX_MINT_ALERT_AGE_HOURS,
       force_requalify = false,
       // Manual add mode: provide a token_mint to add its dev to allstars
       manual_add_token_mint = null,
     } = body;
+
+    const effectiveHoursLookback = Math.min(
+      MAX_MINT_ALERT_AGE_HOURS,
+      Math.max(0.25, Number(requestedHoursLookback) || MAX_MINT_ALERT_AGE_HOURS),
+    );
+
+    if (effectiveHoursLookback !== Number(requestedHoursLookback)) {
+      console.log(`[allstar] Clamped hours_lookback from ${requestedHoursLookback} to ${effectiveHoursLookback}h`);
+    }
 
     // ─── MANUAL ADD MODE ───
     if (manual_add_token_mint) {
@@ -788,7 +798,7 @@ Deno.serve(async (req) => {
         const familySize = (allstar.family_wallets || []).length;
         results.total_family_wallets_scanned += familySize;
 
-        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey, hours_lookback);
+        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey, effectiveHoursLookback);
         results.allstars_audited++;
 
         for (const hit of hits) {
@@ -812,10 +822,10 @@ Deno.serve(async (req) => {
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[allstar] ✅ Complete in ${elapsed}ms:`, results);
+    console.log(`[allstar] ✅ Complete in ${elapsed}ms with ${effectiveHoursLookback}h max mint age:`, results);
 
     return new Response(
-      JSON.stringify({ success: true, elapsed, results }),
+      JSON.stringify({ success: true, elapsed, effective_hours_lookback: effectiveHoursLookback, results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
