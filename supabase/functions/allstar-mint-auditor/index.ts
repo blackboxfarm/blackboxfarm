@@ -13,6 +13,37 @@ const MIN_ALLSTAR_TIER = 2;
 
 // ─── STEP 1: Qualify new allstars from proven_dev_tokens ───
 
+// Resolve creator for a token via pump.fun API
+async function resolveCreator(tokenMint: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data?.creator && typeof data.creator === 'string' && data.creator.length >= 32) ? data.creator : null;
+  } catch { return null; }
+}
+
+// Phase 0: Backfill dev_wallet on proven_dev_tokens that are missing it
+async function backfillCreatorWallets(supabase: any): Promise<number> {
+  const { data: missing } = await supabase
+    .from('proven_dev_tokens')
+    .select('id, token_mint')
+    .is('dev_wallet', null)
+    .limit(10); // 10 per run to avoid rate limits
+
+  let filled = 0;
+  for (const token of missing || []) {
+    const creator = await resolveCreator(token.token_mint);
+    if (creator) {
+      await supabase.from('proven_dev_tokens').update({ dev_wallet: creator, updated_at: new Date().toISOString() }).eq('id', token.id);
+      filled++;
+      console.log(`[allstar] Backfilled creator for ${token.token_mint.slice(0, 12)}... → ${creator.slice(0, 8)}...`);
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return filled;
+}
+
 async function qualifyAllstars(supabase: any): Promise<number> {
   // Get all proven tokens with dev_wallet that meet minimum tier
   const { data: provenTokens } = await supabase
