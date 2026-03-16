@@ -75,6 +75,36 @@ function ArrayCell({ arr }: { arr: string[] | null }) {
   );
 }
 
+// Source icon definitions — inferred from row data
+const SOURCE_ICONS: { key: string; emoji: string; label: string; test: (r: any) => boolean }[] = [
+  { key: 'pump',    emoji: '🎰', label: 'Pump.fun Discovery',         test: r => r.launchpad?.toLowerCase() === 'pump.fun' },
+  { key: 'bonk',    emoji: '🦴', label: 'Bonk.fun Discovery',         test: r => r.launchpad?.toLowerCase() === 'bonk.fun' },
+  { key: 'bags',    emoji: '👜', label: 'Bags.fm Discovery',          test: r => r.launchpad?.toLowerCase() === 'bags.fm' },
+  { key: 'dex',     emoji: '📊', label: 'DexScreener (Graduated/Top 50)', test: r => r.is_graduated === true },
+  { key: 'xpost',   emoji: '📢', label: 'HoldersIntel X Post',       test: r => r.was_posted === true },
+  { key: 'mesh',    emoji: '🕸️', label: 'Mesh / Bubble Map Submit',   test: r => (r.mesh_x_handles?.length > 0 || r.community_admin_handles?.length > 0) && !r.was_posted },
+  { key: 'manual',  emoji: '🔍', label: 'Manual /holders Query',      test: r => !r.launchpad && !r.was_posted && !r.is_graduated },
+];
+
+function SourceIcons({ row }: { row: any }) {
+  const matched = SOURCE_ICONS.filter(s => s.test(row));
+  if (matched.length === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <TooltipProvider delayDuration={200}>
+      <span className="flex items-center gap-0.5">
+        {matched.map(s => (
+          <Tooltip key={s.key}>
+            <TooltipTrigger asChild>
+              <span className="cursor-default text-sm leading-none">{s.emoji}</span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">{s.label}</TooltipContent>
+          </Tooltip>
+        ))}
+      </span>
+    </TooltipProvider>
+  );
+}
+
 export default function MasterDBTab() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
