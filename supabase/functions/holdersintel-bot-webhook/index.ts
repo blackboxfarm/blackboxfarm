@@ -502,7 +502,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${unlocked} /status — View your tier, usage & limits\n` +
     `${unlocked} /help — This command reference\n\n`;
 
-  cmds += `*🔬 Core Analysis — Auth ★*\n` +
+  cmds += `*🔬 Core Analysis — Auth ★ = just signup free online*\n` +
     `_The essentials — know what you're buying before you ape._\n` +
     `${check("auth")} /risk (/r) \`CA\` — 360° risk score: rug probability, liquidity traps & holder red flags\n` +
     `${check("auth")} /holders \`CA\` — Full holder breakdown: whales, retail spread & distribution health\n` +
