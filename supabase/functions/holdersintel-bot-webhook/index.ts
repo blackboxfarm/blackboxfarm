@@ -1178,7 +1178,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
 
   const tiers = data.simpleTiers;
   if (tiers && typeof tiers === 'object') {
-    msg += `*Distribution:*\n`;
+    msg += `*Wallet Distribution:*\n`;
     const tierOrder = ['whales', 'serious', 'retail', 'dust'];
     const tierEmojis: Record<string, string> = { whales: '🐋', serious: '💼', retail: '👤', dust: '🌫' };
     const tierLabels: Record<string, string> = { whales: 'Whales', serious: 'Serious', retail: 'Retail', dust: 'Dust' };
@@ -2050,7 +2050,7 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
       const filled = Math.round(pct / 10);
       return '█'.repeat(filled) + '░'.repeat(10 - filled);
     };
-    distBlock = `\n📈 *Distribution*\n` +
+    distBlock = `\n📈 *Wallet Distribution*\n` +
       `\`Whales  ${bar(tiers.whales?.percentage ?? 0)} ${Math.round(tiers.whales?.percentage ?? 0)}%\`  >$1K\n` +
       `\`Serious ${bar(tiers.serious?.percentage ?? 0)} ${Math.round(tiers.serious?.percentage ?? 0)}%\`  $200‑$1K\n` +
       `\`Retail  ${bar(tiers.retail?.percentage ?? 0)} ${Math.round(tiers.retail?.percentage ?? 0)}%\`  $1‑$199\n` +
