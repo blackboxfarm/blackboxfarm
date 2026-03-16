@@ -6179,6 +6179,7 @@ export type Database = {
       morning_reports: {
         Row: {
           alerts: Json
+          allstar_stats: Json | null
           api_usage_summary: Json
           auth_failure_events: Json
           created_at: string
@@ -6201,9 +6202,11 @@ export type Database = {
           telegram_sent: boolean
           telegram_sent_at: string | null
           unread_notifications: number
+          vigil_stats: Json | null
         }
         Insert: {
           alerts?: Json
+          allstar_stats?: Json | null
           api_usage_summary?: Json
           auth_failure_events?: Json
           created_at?: string
@@ -6226,9 +6229,11 @@ export type Database = {
           telegram_sent?: boolean
           telegram_sent_at?: string | null
           unread_notifications?: number
+          vigil_stats?: Json | null
         }
         Update: {
           alerts?: Json
+          allstar_stats?: Json | null
           api_usage_summary?: Json
           auth_failure_events?: Json
           created_at?: string
@@ -6251,6 +6256,7 @@ export type Database = {
           telegram_sent?: boolean
           telegram_sent_at?: string | null
           unread_notifications?: number
+          vigil_stats?: Json | null
         }
         Relationships: []
       }

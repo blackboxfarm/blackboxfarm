@@ -397,7 +397,142 @@ Deno.serve(async (req) => {
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // 9. UNREAD NOTIFICATIONS
+    // 9. TOKEN VIGIL — Post-Mortem & Death Detection Stats
+    // ═══════════════════════════════════════════════════════════════
+    let vigilStats: any = {};
+    try {
+      // Deaths detected overnight
+      const { data: recentDeaths } = await supabase
+        .from('token_vigil')
+        .select('symbol, name, peak_mcap_usd, current_mcap_usd, death_detected_at')
+        .eq('status', 'dead')
+        .gte('death_detected_at', periodStart.toISOString())
+        .order('death_detected_at', { ascending: false });
+
+      // Post-mortems captured overnight
+      const { data: recentPostMortems } = await supabase
+        .from('token_assessments')
+        .select('symbol, outcome, cause_of_death, assessment_type, created_at')
+        .eq('assessment_type', 'post_mortem')
+        .gte('created_at', periodStart.toISOString());
+
+      // Mid-growth assessments overnight
+      const { data: recentMidGrowth } = await supabase
+        .from('token_assessments')
+        .select('symbol, outcome, mcap_usd, assessment_type, created_at')
+        .eq('assessment_type', 'mid_growth')
+        .gte('created_at', periodStart.toISOString());
+
+      // Totals
+      const { count: totalVigilWatching } = await supabase
+        .from('token_vigil')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['watching', 'declining']);
+
+      const { count: totalDead } = await supabase
+        .from('token_vigil')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'dead');
+
+      const { count: totalAssessments } = await supabase
+        .from('token_assessments')
+        .select('*', { count: 'exact', head: true });
+
+      // Cause of death breakdown (all time)
+      const { data: codBreakdown } = await supabase
+        .from('token_assessments')
+        .select('cause_of_death')
+        .eq('assessment_type', 'post_mortem')
+        .not('cause_of_death', 'is', null);
+
+      const codCounts: Record<string, number> = {};
+      for (const row of codBreakdown || []) {
+        codCounts[row.cause_of_death] = (codCounts[row.cause_of_death] || 0) + 1;
+      }
+
+      vigilStats = {
+        overnight_deaths: recentDeaths?.length || 0,
+        overnight_deaths_list: (recentDeaths || []).map(d => ({
+          symbol: d.symbol,
+          peak_mcap: d.peak_mcap_usd,
+        })),
+        overnight_post_mortems: recentPostMortems?.length || 0,
+        overnight_post_mortem_causes: (recentPostMortems || []).reduce((acc: Record<string, number>, pm) => {
+          acc[pm.cause_of_death || 'unknown'] = (acc[pm.cause_of_death || 'unknown'] || 0) + 1;
+          return acc;
+        }, {}),
+        overnight_mid_growth: recentMidGrowth?.length || 0,
+        overnight_mid_growth_list: (recentMidGrowth || []).map(m => ({
+          symbol: m.symbol,
+          mcap: m.mcap_usd,
+        })),
+        total_watching: totalVigilWatching || 0,
+        total_dead: totalDead || 0,
+        total_assessments: totalAssessments || 0,
+        cause_of_death_all_time: codCounts,
+      };
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch vigil stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 10. ALLSTAR DEV REGISTRY — Monitoring & Alerts
+    // ═══════════════════════════════════════════════════════════════
+    let allstarStats: any = {};
+    try {
+      const { count: totalAllstars } = await supabase
+        .from('allstar_dev_registry')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      const { data: allstarsByTier } = await supabase
+        .from('allstar_dev_registry')
+        .select('best_tier')
+        .eq('status', 'active');
+
+      const tierCounts: Record<string, number> = {};
+      for (const a of allstarsByTier || []) {
+        tierCounts[`T${a.best_tier}`] = (tierCounts[`T${a.best_tier}`] || 0) + 1;
+      }
+
+      // Total family wallets being monitored
+      const { data: familySizes } = await supabase
+        .from('allstar_dev_registry')
+        .select('total_wallet_family_size')
+        .eq('status', 'active');
+      const totalFamilyWallets = (familySizes || []).reduce((s, a) => s + (a.total_wallet_family_size || 0), 0);
+
+      // Overnight mint alerts
+      const { data: overnightAlerts } = await supabase
+        .from('allstar_mint_alerts')
+        .select('token_symbol, allstar_tier, alert_level, creator_wallet, created_at')
+        .gte('created_at', periodStart.toISOString())
+        .order('created_at', { ascending: false });
+
+      // Total audits run overnight
+      const { data: auditedOvernight } = await supabase
+        .from('allstar_dev_registry')
+        .select('master_wallet, best_tier, best_token_symbol')
+        .gte('last_audit_at', periodStart.toISOString());
+
+      allstarStats = {
+        total_allstars: totalAllstars || 0,
+        tier_breakdown: tierCounts,
+        total_family_wallets_monitored: totalFamilyWallets,
+        overnight_audits: auditedOvernight?.length || 0,
+        overnight_mint_alerts: overnightAlerts?.length || 0,
+        overnight_alerts_list: (overnightAlerts || []).map(a => ({
+          symbol: a.token_symbol,
+          tier: a.allstar_tier,
+          level: a.alert_level,
+        })),
+      };
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch allstar stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 11. UNREAD NOTIFICATIONS
     // ═══════════════════════════════════════════════════════════════
     const { count: unreadCount } = await supabase
       .from('admin_notifications')
@@ -435,6 +570,8 @@ Deno.serve(async (req) => {
         table_health: tableHealth,
         external_services_status: externalServicesStatus,
         holders_intel_metrics: holdersIntelMetrics,
+        vigil_stats: vigilStats,
+        allstar_stats: allstarStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -544,7 +681,52 @@ Deno.serve(async (req) => {
     }
     tgMessage += `\n`;
 
-    tgMessage += `📬 Unread Notifications: ${unreadCount || 0}\n`;
+    // Token Vigil section
+    if (vigilStats.overnight_deaths > 0 || vigilStats.overnight_post_mortems > 0 || vigilStats.overnight_mid_growth > 0 || vigilStats.total_watching > 0) {
+      tgMessage += `\n💀 **Token Vigil**\n`;
+      tgMessage += `• Watching: ${vigilStats.total_watching || 0} | Dead: ${vigilStats.total_dead || 0} | Total Assessments: ${vigilStats.total_assessments || 0}\n`;
+      
+      if (vigilStats.overnight_deaths > 0) {
+        tgMessage += `• ☠️ Deaths overnight: ${vigilStats.overnight_deaths}\n`;
+        for (const d of (vigilStats.overnight_deaths_list || []).slice(0, 5)) {
+          tgMessage += `  → $${d.symbol} (peak $${d.peak_mcap >= 1000000 ? (d.peak_mcap/1000000).toFixed(1)+'M' : (d.peak_mcap/1000).toFixed(0)+'K'})\n`;
+        }
+      }
+      if (vigilStats.overnight_post_mortems > 0) {
+        tgMessage += `• 🔬 Post-mortems: ${vigilStats.overnight_post_mortems}`;
+        const causes = vigilStats.overnight_post_mortem_causes || {};
+        const causeStr = Object.entries(causes).map(([k, v]) => `${k}:${v}`).join(', ');
+        if (causeStr) tgMessage += ` (${causeStr})`;
+        tgMessage += `\n`;
+      }
+      if (vigilStats.overnight_mid_growth > 0) {
+        tgMessage += `• 📈 Mid-growth snapshots: ${vigilStats.overnight_mid_growth}\n`;
+        for (const m of (vigilStats.overnight_mid_growth_list || []).slice(0, 5)) {
+          tgMessage += `  → $${m.symbol} ($${m.mcap >= 1000000 ? (m.mcap/1000000).toFixed(1)+'M' : (m.mcap/1000).toFixed(0)+'K'})\n`;
+        }
+      }
+      if (Object.keys(vigilStats.cause_of_death_all_time || {}).length > 0) {
+        tgMessage += `• COD all-time: ${Object.entries(vigilStats.cause_of_death_all_time).map(([k, v]) => `${k}:${v}`).join(', ')}\n`;
+      }
+    }
+
+    // Allstar section
+    if ((allstarStats.total_allstars || 0) > 0) {
+      tgMessage += `\n⭐ **Allstar Dev Registry**\n`;
+      tgMessage += `• Active Allstars: ${allstarStats.total_allstars} | Family Wallets: ${allstarStats.total_family_wallets_monitored}\n`;
+      if (Object.keys(allstarStats.tier_breakdown || {}).length > 0) {
+        tgMessage += `• Tiers: ${Object.entries(allstarStats.tier_breakdown).sort().map(([k, v]) => `${k}:${v}`).join(', ')}\n`;
+      }
+      tgMessage += `• Overnight audits: ${allstarStats.overnight_audits || 0}\n`;
+      if (allstarStats.overnight_mint_alerts > 0) {
+        tgMessage += `• 🚨 NEW MINT ALERTS: ${allstarStats.overnight_mint_alerts}\n`;
+        for (const a of (allstarStats.overnight_alerts_list || []).slice(0, 5)) {
+          tgMessage += `  → $${a.symbol || 'UNKNOWN'} (T${a.tier}, ${a.level})\n`;
+        }
+      }
+    }
+
+    tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
     // Send via admin-notify
