@@ -4,6 +4,9 @@ import { Resend } from "npm:resend@2.0.0";
 
 // Inlined broadcast function to avoid import issues
 async function broadcastToBlackBox(supabase: SupabaseClient, message: string) {
+  // Sanitize tickers to avoid triggering other bots (e.g. Phanes) in a loop
+  message = message.replace(/\$([A-Za-z]{2,})/g, '$ $1');
+
   const { data: targets, error } = await supabase
     .from("telegram_message_targets")
     .select("id, chat_id, label, resolved_name")
