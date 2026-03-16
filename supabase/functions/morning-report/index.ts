@@ -531,6 +531,19 @@ Deno.serve(async (req) => {
       tgMessage += `\n`;
     }
 
+    // HoldersIntel account metrics
+    if (holdersIntelMetrics) {
+      const hi = holdersIntelMetrics;
+      tgMessage += `\n🐦 **@HoldersIntel Account**\n`;
+      tgMessage += `• Followers: ${hi.followers.total.toLocaleString()} (🔵 ${hi.followers.blue_check_premium.toLocaleString()} premium / 👤 ${hi.followers.normal.toLocaleString()} normal — ${hi.followers.blue_check_pct}% blue)\n`;
+      tgMessage += `• Following: ${hi.following} | Ratio: ${hi.follow_ratio}:1\n`;
+      tgMessage += `• Tweets: ${hi.tweets.toLocaleString()} | Likes: ${hi.likes.toLocaleString()}\n`;
+      tgMessage += `• Avg Likes/Tweet: ${hi.avg_likes_per_tweet} | Listed: ${hi.listed_count}\n`;
+      tgMessage += `• Media: ${hi.media_count} | Verified: ${hi.is_verified ? '✅' : '❌'} | Type: ${hi.professional_type || 'N/A'}\n`;
+      tgMessage += `• Last enriched: ${hi.last_enriched_at ? new Date(hi.last_enriched_at).toLocaleString() : 'never'}\n`;
+    }
+    tgMessage += `\n`;
+
     tgMessage += `📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
