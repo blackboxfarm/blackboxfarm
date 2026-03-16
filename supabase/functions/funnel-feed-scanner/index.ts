@@ -117,20 +117,7 @@ Deno.serve(async (req) => {
 });
 
 async function runScan(supabase: any, specificSourceId?: string) {
-  // Use TELEGRAM_BOT_TOKEN (general bot) to avoid conflict with holders-intel webhook bot
-  const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
-  if (!botToken) {
-    return jsonRes({ error: 'No Telegram bot token configured' }, 500);
-  }
-
-  // Ensure no webhook is set (getUpdates conflicts with webhooks)
-  await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`, { method: 'POST' });
-
-  // Step 1: Poll getUpdates to capture new channel_post messages
-  const capturedCount = await pollBotUpdates(supabase, botToken);
-  console.log(`[funnel-feed-scanner] Captured ${capturedCount} new messages from getUpdates`);
-
-  // Step 2: Get active sources
+  // Get active sources
   let query = supabase
     .from('funnel_feed_sources')
     .select('*')
@@ -142,15 +129,18 @@ async function runScan(supabase: any, specificSourceId?: string) {
   
   const { data: sources, error: srcErr } = await query;
   if (srcErr || !sources?.length) {
-    return jsonRes({ message: 'No active sources to scan', captured: capturedCount, error: srcErr?.message });
+    return jsonRes({ message: 'No active sources to scan', error: srcErr?.message });
   }
 
-  // Step 3: Process unprocessed messages for each source
   const results: any[] = [];
 
   for (const source of sources) {
     try {
-      const result = await processSourceMessages(supabase, source);
+      // Step 1: Scrape messages via MTProto (same as telegram-channel-monitor)
+      const messages = await scrapeViaMTProto(supabase, source);
+      
+      // Step 2: Extract tokens from scraped messages
+      const result = await processMessages(supabase, source, messages);
       results.push({ source: source.source_name, ...result });
     } catch (err) {
       console.error(`[funnel-feed-scanner] Error processing ${source.source_name}:`, err);
@@ -158,85 +148,69 @@ async function runScan(supabase: any, specificSourceId?: string) {
     }
   }
 
-  return jsonRes({ captured: capturedCount, scanned: results.length, results });
+  return jsonRes({ scanned: results.length, results });
 }
 
-// Poll Telegram Bot API getUpdates and store raw messages
-async function pollBotUpdates(supabase: any, botToken: string): Promise<number> {
-  // Get current offset
-  const { data: state } = await supabase
-    .from('funnel_feed_bot_state')
-    .select('update_offset')
-    .eq('id', 1)
-    .single();
+// Scrape channel/group messages via MTProto using telegram-mtproto-auth (same pattern as telegram-channel-monitor)
+async function scrapeViaMTProto(supabase: any, source: FunnelSource): Promise<any[]> {
+  // source_id can be a numeric chat ID or a channel username
+  const isNumeric = /^-?\d+$/.test(source.source_id);
+  
+  const invokeBody: any = {
+    action: 'fetch_recent_messages',
+    limit: 50,
+  };
 
-  let offset = state?.update_offset || 0;
-  let totalCaptured = 0;
-
-  // Poll up to 3 times (short timeout each) to drain pending updates
-  for (let i = 0; i < 3; i++) {
-    const resp = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        offset,
-        timeout: 2, // 2-second long poll
-        limit: 100,
-        allowed_updates: ['channel_post', 'message'],
-      }),
-    });
-
-    if (!resp.ok) {
-      const errBody = await resp.text();
-      console.error(`[funnel-feed-scanner] getUpdates failed: ${resp.status} - ${errBody}`);
-      break;
-    }
-
-    const data = await resp.json();
-    const updates = data.result || [];
-    if (updates.length === 0) break;
-
-    // Store raw messages
-    const rows = updates
-      .filter((u: any) => u.channel_post || u.message)
-      .map((u: any) => {
-        const msg = u.channel_post || u.message;
-        return {
-          update_id: u.update_id,
-          chat_id: msg.chat.id.toString(),
-          message_id: msg.message_id,
-          message_text: msg.text || msg.caption || '',
-          message_date: new Date(msg.date * 1000).toISOString(),
-          processed: false,
-        };
-      });
-
-    if (rows.length > 0) {
-      const { error: insertErr } = await supabase
-        .from('funnel_feed_raw_messages')
-        .upsert(rows, { onConflict: 'update_id', ignoreDuplicates: true });
-
-      if (insertErr) {
-        console.error(`[funnel-feed-scanner] Raw message insert error:`, insertErr.message);
-      } else {
-        totalCaptured += rows.length;
-      }
-    }
-
-    // Advance offset
-    const newOffset = Math.max(...updates.map((u: any) => u.update_id)) + 1;
-    await supabase
-      .from('funnel_feed_bot_state')
-      .update({ update_offset: newOffset, updated_at: new Date().toISOString() })
-      .eq('id', 1);
-    offset = newOffset;
-
-    // If we got fewer than 100, we've drained the queue
-    if (updates.length < 100) break;
+  if (isNumeric) {
+    invokeBody.chatId = parseInt(source.source_id, 10);
+  } else {
+    invokeBody.channelUsername = source.source_id;
   }
 
-  return totalCaptured;
+  console.log(`[funnel-feed-scanner] MTProto fetch for ${source.source_name} (${isNumeric ? 'chatId' : 'username'}: ${source.source_id})`);
+
+  const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+    body: invokeBody,
+  });
+
+  if (error) {
+    console.error(`[funnel-feed-scanner] MTProto invoke error for ${source.source_name}:`, error.message);
+    throw new Error(`MTProto error: ${error.message}`);
+  }
+
+  if (!data?.success) {
+    console.error(`[funnel-feed-scanner] MTProto failed for ${source.source_name}:`, data?.error);
+    throw new Error(`MTProto failed: ${data?.error || 'Unknown'}`);
+  }
+
+  const messages = data.messages || [];
+  console.log(`[funnel-feed-scanner] MTProto returned ${messages.length} messages from ${source.source_name}`);
+  return messages;
 }
+
+// Process MTProto messages - extract tokens, dedup, insert discoveries
+async function processMessages(supabase: any, source: FunnelSource, messages: any[]) {
+  if (!messages.length) {
+    await supabase
+      .from('funnel_feed_sources')
+      .update({ last_scraped_at: new Date().toISOString() })
+      .eq('id', source.id);
+    return { tokens_found: 0, messages_processed: 0, message: 'No messages from MTProto' };
+  }
+
+  // Filter to only messages newer than last_message_id to avoid reprocessing
+  const lastMsgId = source.last_message_id || 0;
+  const newMessages = messages.filter((m: any) => (m.id || 0) > lastMsgId);
+  
+  console.log(`[funnel-feed-scanner] ${newMessages.length} new messages (after msg ID ${lastMsgId}) for ${source.source_name}`);
+
+  if (newMessages.length === 0) {
+    await supabase
+      .from('funnel_feed_sources')
+      .update({ last_scraped_at: new Date().toISOString() })
+      .eq('id', source.id);
+    return { tokens_found: 0, messages_processed: 0, new_tokens: 0, message: 'No new messages since last scan' };
+  }
 
 // Process unprocessed raw messages for a given source
 async function processSourceMessages(supabase: any, source: FunnelSource) {
