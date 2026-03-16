@@ -366,6 +366,158 @@ export type Database = {
         }
         Relationships: []
       }
+      allstar_dev_registry: {
+        Row: {
+          audit_count: number | null
+          best_mcap_achieved: number | null
+          best_tier: number
+          best_token_mint: string | null
+          best_token_symbol: string | null
+          created_at: string
+          developer_id: string | null
+          family_wallets: Json | null
+          id: string
+          kyc_root_wallet: string | null
+          last_audit_at: string | null
+          last_mint_detected_at: string | null
+          master_wallet: string
+          new_mints_found: number | null
+          notes: string | null
+          status: string
+          total_proven_tokens: number | null
+          total_wallet_family_size: number | null
+          twitter_handle: string | null
+          updated_at: string
+        }
+        Insert: {
+          audit_count?: number | null
+          best_mcap_achieved?: number | null
+          best_tier?: number
+          best_token_mint?: string | null
+          best_token_symbol?: string | null
+          created_at?: string
+          developer_id?: string | null
+          family_wallets?: Json | null
+          id?: string
+          kyc_root_wallet?: string | null
+          last_audit_at?: string | null
+          last_mint_detected_at?: string | null
+          master_wallet: string
+          new_mints_found?: number | null
+          notes?: string | null
+          status?: string
+          total_proven_tokens?: number | null
+          total_wallet_family_size?: number | null
+          twitter_handle?: string | null
+          updated_at?: string
+        }
+        Update: {
+          audit_count?: number | null
+          best_mcap_achieved?: number | null
+          best_tier?: number
+          best_token_mint?: string | null
+          best_token_symbol?: string | null
+          created_at?: string
+          developer_id?: string | null
+          family_wallets?: Json | null
+          id?: string
+          kyc_root_wallet?: string | null
+          last_audit_at?: string | null
+          last_mint_detected_at?: string | null
+          master_wallet?: string
+          new_mints_found?: number | null
+          notes?: string | null
+          status?: string
+          total_proven_tokens?: number | null
+          total_wallet_family_size?: number | null
+          twitter_handle?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "allstar_dev_registry_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "allstar_dev_registry_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      allstar_mint_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          alert_level: string
+          allstar_best_mcap: number | null
+          allstar_id: string | null
+          allstar_tier: number | null
+          created_at: string
+          creator_wallet: string
+          detecting_wallet: string | null
+          developer_id: string | null
+          id: string
+          is_acknowledged: boolean | null
+          launchpad: string | null
+          metadata: Json | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          wallet_depth: number | null
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          alert_level?: string
+          allstar_best_mcap?: number | null
+          allstar_id?: string | null
+          allstar_tier?: number | null
+          created_at?: string
+          creator_wallet: string
+          detecting_wallet?: string | null
+          developer_id?: string | null
+          id?: string
+          is_acknowledged?: boolean | null
+          launchpad?: string | null
+          metadata?: Json | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          wallet_depth?: number | null
+        }
+        Update: {
+          acknowledged_at?: string | null
+          alert_level?: string
+          allstar_best_mcap?: number | null
+          allstar_id?: string | null
+          allstar_tier?: number | null
+          created_at?: string
+          creator_wallet?: string
+          detecting_wallet?: string | null
+          developer_id?: string | null
+          id?: string
+          is_acknowledged?: boolean | null
+          launchpad?: string | null
+          metadata?: Json | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          wallet_depth?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "allstar_mint_alerts_allstar_id_fkey"
+            columns: ["allstar_id"]
+            isOneToOne: false
+            referencedRelation: "allstar_dev_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_provider_config: {
         Row: {
           created_at: string | null
@@ -6536,7 +6688,9 @@ export type Database = {
           tier: number
           tier_1_at: string | null
           tier_2_at: string | null
+          tier_200k_at: string | null
           tier_3_at: string | null
+          tier_300k_at: string | null
           tier_4_at: string | null
           tier_5_at: string | null
           tier_6_at: string | null
@@ -6560,7 +6714,9 @@ export type Database = {
           tier?: number
           tier_1_at?: string | null
           tier_2_at?: string | null
+          tier_200k_at?: string | null
           tier_3_at?: string | null
+          tier_300k_at?: string | null
           tier_4_at?: string | null
           tier_5_at?: string | null
           tier_6_at?: string | null
@@ -6584,7 +6740,9 @@ export type Database = {
           tier?: number
           tier_1_at?: string | null
           tier_2_at?: string | null
+          tier_200k_at?: string | null
           tier_3_at?: string | null
+          tier_300k_at?: string | null
           tier_4_at?: string | null
           tier_5_at?: string | null
           tier_6_at?: string | null

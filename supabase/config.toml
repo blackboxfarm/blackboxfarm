@@ -498,3 +498,6 @@ verify_jwt = false
 
 [functions.ai-token-pattern-matcher]
 verify_jwt = false
+
+[functions.allstar-mint-auditor]
+verify_jwt = false
