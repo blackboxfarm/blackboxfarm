@@ -1,0 +1,1 @@
+ALTER TABLE public.morning_reports ADD COLUMN IF NOT EXISTS holders_intel_metrics jsonb DEFAULT NULL;
