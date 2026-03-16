@@ -584,7 +584,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const {
       audit_batch_size = 10,
-      hours_lookback = 24,
+      hours_lookback = 2,
       force_requalify = false,
       // Manual add mode: provide a token_mint to add its dev to allstars
       manual_add_token_mint = null,
