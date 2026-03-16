@@ -91,11 +91,13 @@ export function generateWarningsFromHoldersData(
   const retailPct = data?.simpleTiers?.retail?.percentage ?? 0;
   const divergence = Math.abs(whalesPct - retailPct);
   if (divergence > 35) {
+    const mcap = data?.marketCap ?? data?.mcap ?? 0;
+    const holderLabel = mcap > 100_000 ? 'Big money' : 'Larger holders';
     warnings.push({
       token_mint: tokenMint,
       warning_type: 'tier_divergence_high',
       severity: divergence > 50 ? 'critical' : 'high',
-      plain_text: `⚠️ Big money and regular buyers are moving in opposite directions — ${divergence.toFixed(0)}% gap. This could mean insiders are exiting while retail buys in.`,
+      plain_text: `⚠️ ${holderLabel} and regular buyers are moving in opposite directions — ${divergence.toFixed(0)}% gap. This could mean insiders are exiting while retail buys in.`,
       metric_value: divergence,
       source_function: sourceFunction,
       metadata: { whales_pct: whalesPct, retail_pct: retailPct },
