@@ -11391,6 +11391,231 @@ export type Database = {
         }
         Relationships: []
       }
+      token_assessments: {
+        Row: {
+          active_boosts: number | null
+          active_warnings: Json | null
+          ai_confidence: number | null
+          ai_prediction: string | null
+          ai_reasoning: string | null
+          ai_similar_tokens: Json | null
+          assessment_type: string
+          ath_usd: number | null
+          bundled_pct: number | null
+          buy_sell_ratio: number | null
+          buys_1h: number | null
+          buys_5m: number | null
+          cause_of_death: string | null
+          created_at: string
+          dev_holding_pct: number | null
+          dev_is_serial_spammer: boolean | null
+          dev_pattern: string | null
+          dev_reputation_score: number | null
+          dev_sold_all: boolean | null
+          dev_tokens_rugged: number | null
+          dev_total_launches: number | null
+          dev_trust_level: string | null
+          dev_wallet: string | null
+          dex_paid: boolean | null
+          dust_pct: number | null
+          dust_wallets: number | null
+          fresh_wallet_pct: number | null
+          has_telegram: boolean | null
+          has_twitter: boolean | null
+          has_website: boolean | null
+          health_grade: string | null
+          health_score: number | null
+          id: string
+          insider_cluster_count: number | null
+          liquidity_usd: number | null
+          lp_pct_of_supply: number | null
+          mcap_usd: number | null
+          name: string | null
+          outcome: string | null
+          phase: string | null
+          prediction_validated: boolean | null
+          price_drop_from_ath_pct: number | null
+          price_usd: number | null
+          raw_report_data: Json | null
+          real_holders: number | null
+          retail_count: number | null
+          retail_pct: number | null
+          retail_supply_pct: number | null
+          risk_flags: Json | null
+          sells_1h: number | null
+          sells_5m: number | null
+          serious_count: number | null
+          serious_pct: number | null
+          serious_supply_pct: number | null
+          snapshot_at: string
+          stability_score: number | null
+          symbol: string | null
+          tier_divergence: number | null
+          token_age_minutes: number | null
+          token_mint: string
+          top10_pct: number | null
+          top20_pct: number | null
+          top5_pct: number | null
+          total_holders: number | null
+          updated_at: string
+          validated_at: string | null
+          volume_1h: number | null
+          volume_24h: number | null
+          volume_mcap_ratio: number | null
+          whale_count: number | null
+          whale_pct: number | null
+          whale_supply_pct: number | null
+        }
+        Insert: {
+          active_boosts?: number | null
+          active_warnings?: Json | null
+          ai_confidence?: number | null
+          ai_prediction?: string | null
+          ai_reasoning?: string | null
+          ai_similar_tokens?: Json | null
+          assessment_type: string
+          ath_usd?: number | null
+          bundled_pct?: number | null
+          buy_sell_ratio?: number | null
+          buys_1h?: number | null
+          buys_5m?: number | null
+          cause_of_death?: string | null
+          created_at?: string
+          dev_holding_pct?: number | null
+          dev_is_serial_spammer?: boolean | null
+          dev_pattern?: string | null
+          dev_reputation_score?: number | null
+          dev_sold_all?: boolean | null
+          dev_tokens_rugged?: number | null
+          dev_total_launches?: number | null
+          dev_trust_level?: string | null
+          dev_wallet?: string | null
+          dex_paid?: boolean | null
+          dust_pct?: number | null
+          dust_wallets?: number | null
+          fresh_wallet_pct?: number | null
+          has_telegram?: boolean | null
+          has_twitter?: boolean | null
+          has_website?: boolean | null
+          health_grade?: string | null
+          health_score?: number | null
+          id?: string
+          insider_cluster_count?: number | null
+          liquidity_usd?: number | null
+          lp_pct_of_supply?: number | null
+          mcap_usd?: number | null
+          name?: string | null
+          outcome?: string | null
+          phase?: string | null
+          prediction_validated?: boolean | null
+          price_drop_from_ath_pct?: number | null
+          price_usd?: number | null
+          raw_report_data?: Json | null
+          real_holders?: number | null
+          retail_count?: number | null
+          retail_pct?: number | null
+          retail_supply_pct?: number | null
+          risk_flags?: Json | null
+          sells_1h?: number | null
+          sells_5m?: number | null
+          serious_count?: number | null
+          serious_pct?: number | null
+          serious_supply_pct?: number | null
+          snapshot_at?: string
+          stability_score?: number | null
+          symbol?: string | null
+          tier_divergence?: number | null
+          token_age_minutes?: number | null
+          token_mint: string
+          top10_pct?: number | null
+          top20_pct?: number | null
+          top5_pct?: number | null
+          total_holders?: number | null
+          updated_at?: string
+          validated_at?: string | null
+          volume_1h?: number | null
+          volume_24h?: number | null
+          volume_mcap_ratio?: number | null
+          whale_count?: number | null
+          whale_pct?: number | null
+          whale_supply_pct?: number | null
+        }
+        Update: {
+          active_boosts?: number | null
+          active_warnings?: Json | null
+          ai_confidence?: number | null
+          ai_prediction?: string | null
+          ai_reasoning?: string | null
+          ai_similar_tokens?: Json | null
+          assessment_type?: string
+          ath_usd?: number | null
+          bundled_pct?: number | null
+          buy_sell_ratio?: number | null
+          buys_1h?: number | null
+          buys_5m?: number | null
+          cause_of_death?: string | null
+          created_at?: string
+          dev_holding_pct?: number | null
+          dev_is_serial_spammer?: boolean | null
+          dev_pattern?: string | null
+          dev_reputation_score?: number | null
+          dev_sold_all?: boolean | null
+          dev_tokens_rugged?: number | null
+          dev_total_launches?: number | null
+          dev_trust_level?: string | null
+          dev_wallet?: string | null
+          dex_paid?: boolean | null
+          dust_pct?: number | null
+          dust_wallets?: number | null
+          fresh_wallet_pct?: number | null
+          has_telegram?: boolean | null
+          has_twitter?: boolean | null
+          has_website?: boolean | null
+          health_grade?: string | null
+          health_score?: number | null
+          id?: string
+          insider_cluster_count?: number | null
+          liquidity_usd?: number | null
+          lp_pct_of_supply?: number | null
+          mcap_usd?: number | null
+          name?: string | null
+          outcome?: string | null
+          phase?: string | null
+          prediction_validated?: boolean | null
+          price_drop_from_ath_pct?: number | null
+          price_usd?: number | null
+          raw_report_data?: Json | null
+          real_holders?: number | null
+          retail_count?: number | null
+          retail_pct?: number | null
+          retail_supply_pct?: number | null
+          risk_flags?: Json | null
+          sells_1h?: number | null
+          sells_5m?: number | null
+          serious_count?: number | null
+          serious_pct?: number | null
+          serious_supply_pct?: number | null
+          snapshot_at?: string
+          stability_score?: number | null
+          symbol?: string | null
+          tier_divergence?: number | null
+          token_age_minutes?: number | null
+          token_mint?: string
+          top10_pct?: number | null
+          top20_pct?: number | null
+          top5_pct?: number | null
+          total_holders?: number | null
+          updated_at?: string
+          validated_at?: string | null
+          volume_1h?: number | null
+          volume_24h?: number | null
+          volume_mcap_ratio?: number | null
+          whale_count?: number | null
+          whale_pct?: number | null
+          whale_supply_pct?: number | null
+        }
+        Relationships: []
+      }
       token_banners: {
         Row: {
           banner_url: string
@@ -12244,6 +12469,105 @@ export type Database = {
           website?: string | null
         }
         Relationships: []
+      }
+      token_vigil: {
+        Row: {
+          created_at: string
+          current_dust_pct: number | null
+          current_holders: number | null
+          current_mcap_usd: number | null
+          current_price_usd: number | null
+          current_volume_1h: number | null
+          death_detected_at: string | null
+          first_seen_at: string
+          holder_drop_from_peak_pct: number | null
+          id: string
+          last_scanned_at: string | null
+          mid_growth_id: string | null
+          name: string | null
+          peak_holders: number | null
+          peak_mcap_usd: number | null
+          peak_price_usd: number | null
+          peak_volume_1h: number | null
+          post_mortem_id: string | null
+          price_drop_from_peak_pct: number | null
+          scan_count: number | null
+          status: string
+          symbol: string | null
+          token_mint: string
+          updated_at: string
+          volume_drop_from_peak_pct: number | null
+        }
+        Insert: {
+          created_at?: string
+          current_dust_pct?: number | null
+          current_holders?: number | null
+          current_mcap_usd?: number | null
+          current_price_usd?: number | null
+          current_volume_1h?: number | null
+          death_detected_at?: string | null
+          first_seen_at?: string
+          holder_drop_from_peak_pct?: number | null
+          id?: string
+          last_scanned_at?: string | null
+          mid_growth_id?: string | null
+          name?: string | null
+          peak_holders?: number | null
+          peak_mcap_usd?: number | null
+          peak_price_usd?: number | null
+          peak_volume_1h?: number | null
+          post_mortem_id?: string | null
+          price_drop_from_peak_pct?: number | null
+          scan_count?: number | null
+          status?: string
+          symbol?: string | null
+          token_mint: string
+          updated_at?: string
+          volume_drop_from_peak_pct?: number | null
+        }
+        Update: {
+          created_at?: string
+          current_dust_pct?: number | null
+          current_holders?: number | null
+          current_mcap_usd?: number | null
+          current_price_usd?: number | null
+          current_volume_1h?: number | null
+          death_detected_at?: string | null
+          first_seen_at?: string
+          holder_drop_from_peak_pct?: number | null
+          id?: string
+          last_scanned_at?: string | null
+          mid_growth_id?: string | null
+          name?: string | null
+          peak_holders?: number | null
+          peak_mcap_usd?: number | null
+          peak_price_usd?: number | null
+          peak_volume_1h?: number | null
+          post_mortem_id?: string | null
+          price_drop_from_peak_pct?: number | null
+          scan_count?: number | null
+          status?: string
+          symbol?: string | null
+          token_mint?: string
+          updated_at?: string
+          volume_drop_from_peak_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_vigil_mid_growth_id_fkey"
+            columns: ["mid_growth_id"]
+            isOneToOne: false
+            referencedRelation: "token_assessments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "token_vigil_post_mortem_id_fkey"
+            columns: ["post_mortem_id"]
+            isOneToOne: false
+            referencedRelation: "token_assessments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       token_watchlist: {
         Row: {
