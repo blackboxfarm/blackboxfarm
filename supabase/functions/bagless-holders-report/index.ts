@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { meshFeed } from "../_shared/mesh-feeder.ts"
-import { writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts"
+import { writeEarlyWarnings, generateWarningsFromHoldersData, generatePatternWarnings } from "../_shared/early-warning-writer.ts"
 import { detectLP, type LPDetectionResult, type LaunchpadInfo } from "../_shared/lp-detection.ts"
 import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts"
 import { fetchCreatorInfo } from "../_shared/creator-api.ts"
@@ -764,8 +764,24 @@ serve(async (req) => {
       stabilityScore: healthScore,
     };
     const holdersWarnings = generateWarningsFromHoldersData(tokenMint, earlyWarningResult, 'bagless-holders-report');
-    if (holdersWarnings.length > 0) {
-      writeEarlyWarnings(holdersWarnings, supabaseForMesh).catch(e =>
+    
+    // Also check post-mortem pattern rules against current metrics
+    const lpPctVal = lpWallets.length > 0 ? (lpBalance / totalBalance * 100) : 0;
+    const patternWarnings = await generatePatternWarnings(tokenMint, {
+      whale_supply_pct: simpleTiers.whales?.supplyPercentage || 0,
+      dust_pct: simpleTiers.dust?.percentage || 0,
+      top10_pct: distributionStats?.top10Percentage || 0,
+      health_score: healthScore,
+      dev_sold_all: false, // Not available here
+      has_twitter: !!vitality?.info?.socials?.find((s: any) => s.type === 'twitter'),
+      bundled_pct: insidersResult?.bundledPercentage || 0,
+      lp_pct: lpPctVal,
+      volume_mcap_ratio: inferredMarketCapUSD > 0 ? (vitality?.volume?.h24 || 0) / inferredMarketCapUSD : 0,
+    }, 'bagless-holders-report', supabaseForMesh).catch(() => [] as any[]);
+
+    const allWarnings = [...holdersWarnings, ...patternWarnings];
+    if (allWarnings.length > 0) {
+      writeEarlyWarnings(allWarnings, supabaseForMesh).catch(e =>
         console.warn('[early-warning-writer] holders report warnings failed:', e)
       );
     }

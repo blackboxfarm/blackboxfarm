@@ -680,14 +680,33 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
     if (healthPhase) msg += ` (${healthPhase.replace('_', ' ')})`;
     msg += `\n`;
 
-    // AI risk narrative for Pro+
+    // AI risk narrative + post-mortem intelligence for Pro+
     if (hasTier(gate.tier, "pro")) {
       try {
         const useAI = await getHealthMode('telegram_bot');
         if (useAI) {
-          const aiData = await invokeFunction("token-ai-interpreter", { tokenMint: ca, reportData: holdersData });
+          // Parallel: AI interpretation + pattern matcher prediction
+          const [aiData, patternData] = await Promise.all([
+            invokeFunction("token-ai-interpreter", { tokenMint: ca, reportData: holdersData }),
+            invokeFunction("ai-token-pattern-matcher", { tokenMint: ca, reportData: holdersData }).catch(() => null),
+          ]);
           if (aiData?.interpretation?.abbreviated_summary) {
             msg += `\n🧠 *AI Assessment:*\n_${aiData.interpretation.abbreviated_summary.slice(0, 400)}_\n`;
+          }
+          // Inject post-mortem pattern intelligence
+          if (patternData?.prediction) {
+            const predEmoji: Record<string, string> = {
+              likely_rug: '🔴', likely_pump_dump: '🔴', likely_slow_bleed: '🟡',
+              likely_survive: '🟢', likely_thrive: '🟢', uncertain: '⚪',
+            };
+            msg += `\n📜 *Post-Mortem Pattern Match:*\n`;
+            msg += `${predEmoji[patternData.prediction] || '⚪'} _${patternData.prediction.replace('likely_', '').replace('_', ' ')}_ (${patternData.confidence}% conf, ${patternData.training_data_size} historical tokens)\n`;
+            if (patternData.risk_factors?.length > 0) {
+              msg += `⚠️ _${patternData.risk_factors.slice(0, 2).join(' | ')}_\n`;
+            }
+            if (patternData.strength_factors?.length > 0) {
+              msg += `✅ _${patternData.strength_factors.slice(0, 2).join(' | ')}_\n`;
+            }
           }
         }
       } catch (_) {}
