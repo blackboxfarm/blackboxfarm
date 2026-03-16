@@ -357,7 +357,8 @@ async function createAllstarAlert(
   const dexUrl = `https://dexscreener.com/solana/${mintAddr}`;
   const solscanUrl = `https://solscan.io/token/${mintAddr}`;
 
-  // Insert alert record
+  // Insert alert record with verified mint timestamp
+  const mintDate = new Date(hit.mintTimestamp * 1000);
   await supabase.from('allstar_mint_alerts').insert({
     allstar_id: allstar.id,
     developer_id: allstar.developer_id,
@@ -377,6 +378,9 @@ async function createAllstarAlert(
       best_token_symbol: allstar.best_token_symbol,
       signature: hit.signature,
       family_size: allstar.total_wallet_family_size,
+      mint_timestamp: mintDate.toISOString(),
+      mint_age: hit.mintAge,
+      verified_onchain: !!hit.mintTimestamp,
     },
   });
 
