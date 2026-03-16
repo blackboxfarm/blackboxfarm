@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -73,6 +74,29 @@ export default function MasterDBTab() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const { toast } = useToast();
+
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("ath-24h-backfill", {
+        body: { batchSize: 10 },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "ATH 24h Backfill Started",
+        description: `Processed ${data?.processed ?? 0} tokens. ${data?.remaining ?? "?"} remaining.`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Backfill Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const doSearch = useCallback(() => {
     setSearch(searchInput.trim());
@@ -131,6 +155,16 @@ export default function MasterDBTab() {
             />
             <Button type="submit" size="sm" variant="secondary" className="h-8 px-3">
               <Search className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3 gap-1.5"
+              disabled={backfillMutation.isPending}
+              onClick={() => backfillMutation.mutate()}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${backfillMutation.isPending ? "animate-spin" : ""}`} />
+              Backfill ATH
             </Button>
           </form>
         </div>
