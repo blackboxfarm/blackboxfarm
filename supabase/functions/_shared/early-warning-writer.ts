@@ -188,7 +188,7 @@ export function generateWarningsFromHoldersData(
   }
 
   // 6. Health score critical
-  const healthScore = data?.healthScore?.score ?? data?.stabilityScore ?? null;
+  const healthScoreVal = data?.healthScore?.score ?? data?.stabilityScore ?? null;
   if (healthScore != null && healthScore < 25) {
     warnings.push({
       token_mint: tokenMint,
