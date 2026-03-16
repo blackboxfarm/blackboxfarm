@@ -672,6 +672,37 @@ Deno.serve(async (req) => {
         source: 'holders-intel-poster',
       }).catch(e => console.warn('[mesh-feeder] poster feed failed:', e));
       
+      // 🏘️ AUTO-ENRICH X COMMUNITY: If the token's social link is an X Community,
+      // fire off the community enricher to scrape admins/mods into the mesh
+      if (twitterUrlForMesh && (twitterUrlForMesh.includes('/i/communities/') || twitterUrlForMesh.includes('/communities/'))) {
+        const communityIdMatch = twitterUrlForMesh.match(/communities\/(\d+)/);
+        if (communityIdMatch) {
+          const communityId = communityIdMatch[1];
+          console.log(`[poster] 🏘️ Detected X Community ${communityId}, auto-queuing enrichment...`);
+          
+          // Fire-and-forget: call the community enricher
+          fetch(`${supabaseUrl}/functions/v1/x-community-enricher`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              communityId,
+              tokenMint: item.token_mint,
+              source: 'holders-intel-poster-auto',
+            }),
+          }).then(async (res) => {
+            if (res.ok) {
+              const result = await res.json().catch(() => ({}));
+              console.log(`[poster] 🏘️ Community enrichment triggered: ${JSON.stringify(result).substring(0, 200)}`);
+            } else {
+              console.warn(`[poster] 🏘️ Community enrichment failed: ${res.status}`);
+            }
+          }).catch(e => console.warn('[poster] 🏘️ Community enrichment error:', e));
+        }
+      }
+      
       // Also post to BlackBox TG group (fire-and-forget, with retry)
       try {
         // Generate ASCII bar for TG messages
