@@ -281,6 +281,7 @@ export default function MasterDBTab() {
                 rows.map((r: any, i: number) => (
                   <TableRow key={r.token_mint} className="[&>td]:px-2 [&>td]:py-1.5 [&>td]:whitespace-nowrap hover:bg-muted/50">
                     <TableCell className="text-muted-foreground">{page * PAGE_SIZE + i + 1}</TableCell>
+                    <TableCell><SourceIcons row={r} /></TableCell>
                     <TableCell>
                       {r.image_url ? (
                         <img src={r.image_url} alt="" className="h-5 w-5 rounded-full object-cover" loading="lazy" />
