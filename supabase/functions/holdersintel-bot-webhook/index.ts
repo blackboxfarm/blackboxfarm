@@ -1178,7 +1178,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
 
   const tiers = data.simpleTiers;
   if (tiers && typeof tiers === 'object') {
-    msg += `*Distribution:*\n`;
+    msg += `*Wallet Distribution:*\n`;
     const tierOrder = ['whales', 'serious', 'retail', 'dust'];
     const tierEmojis: Record<string, string> = { whales: '🐋', serious: '💼', retail: '👤', dust: '🌫' };
     const tierLabels: Record<string, string> = { whales: 'Whales', serious: 'Serious', retail: 'Retail', dust: 'Dust' };
