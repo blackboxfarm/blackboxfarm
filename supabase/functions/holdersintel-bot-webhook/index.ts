@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { detectTokenPhase, contextualizeDevRep, type TokenPhase } from "../_shared/token-phase.ts";
 import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
