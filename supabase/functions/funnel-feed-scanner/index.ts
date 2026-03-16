@@ -179,6 +179,10 @@ async function scrapeSource(supabase: any, source: FunnelSource) {
   // Use Telegram Bot API to get channel messages via getUpdates won't work for channels
   // Instead, use the MTProto session to read channel history
   
+  // Use 30-min lookback window to catch missed messages, dedup at insert level
+  const lookbackMinutes = 30;
+  const lookbackId = Math.max(0, (source.last_message_id || 0) - 200); // ~200 msgs overlap buffer
+
   try {
     // Call internal edge function to scrape channel messages
     const resp = await fetch(`${supabaseUrl}/functions/v1/telegram-channel-monitor`, {
@@ -190,8 +194,9 @@ async function scrapeSource(supabase: any, source: FunnelSource) {
       body: JSON.stringify({
         action: 'scrape_channel_messages',
         channel_id: source.source_id,
-        min_id: source.last_message_id || 0,
-        limit: 50,
+        min_id: lookbackId,
+        limit: 100,
+        offset_date: Math.floor((Date.now() - lookbackMinutes * 60 * 1000) / 1000),
       }),
     });
 
