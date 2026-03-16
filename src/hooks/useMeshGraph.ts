@@ -375,28 +375,68 @@ export function useMeshGraph(initialEntityId?: string) {
         return;
       }
 
-      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-      if (!dexRes.ok) return;
-      const dexData = await dexRes.json();
-      const pair = dexData?.pairs?.[0];
-      const socials = pair?.info?.socials || [];
+      // Collect all social URLs from available sources
+      let allSocialUrls: string[] = [];
+      let communityUrl: string | null = null;
+      let discoverySource = 'dexscreener_auto';
+
+      // 1. Try DexScreener first
+      try {
+        const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+        if (dexRes.ok) {
+          const dexData = await dexRes.json();
+          const pair = dexData?.pairs?.[0];
+          const socials = pair?.info?.socials || [];
+          allSocialUrls = socials.map((s: any) => s.url).filter(Boolean);
+          if (allSocialUrls.length > 0) {
+            console.log(`[MeshSpider] DexScreener returned ${allSocialUrls.length} social URLs`);
+          }
+        }
+      } catch (e) {
+        console.warn('[MeshSpider] DexScreener fetch failed:', e);
+      }
+
+      // 2. Pump.fun fallback if DexScreener had no data
+      if (allSocialUrls.length === 0 && tokenMint.endsWith('pump')) {
+        try {
+          console.log(`[MeshSpider] DexScreener empty — trying Pump.fun metadata for ${tokenMint.slice(0, 12)}...`);
+          const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
+          if (pumpRes.ok) {
+            const pumpData = await pumpRes.json();
+            discoverySource = 'pumpfun_metadata';
+            // Collect all social fields from pump.fun
+            for (const field of [pumpData?.twitter, pumpData?.telegram, pumpData?.website]) {
+              if (field && typeof field === 'string' && field.trim().length > 0) {
+                allSocialUrls.push(field.trim());
+              }
+            }
+            if (allSocialUrls.length > 0) {
+              console.log(`[MeshSpider] Pump.fun returned ${allSocialUrls.length} social URLs: ${allSocialUrls.join(', ')}`);
+            }
+          }
+        } catch (e) {
+          console.warn('[MeshSpider] Pump.fun metadata fetch failed:', e);
+        }
+      }
+
+      // 3. Extract X Community URL from any source
+      communityUrl = allSocialUrls.find(u => u.includes('/communities/')) || null;
+
+      // 4. Extract X handles — support both profile URLs and status URLs
+      const xUrls = allSocialUrls.filter(u =>
+        (u.includes('x.com/') || u.includes('twitter.com/')) && !u.includes('/communities/')
+      );
       
-      // Look for X Community URL
-      const communityUrl = socials.find((s: any) => s.url?.includes('/communities/'))?.url;
-      
-      // Also extract X handle if present
-      const xHandleUrl = socials.find((s: any) => 
-        (s.url?.includes('x.com/') || s.url?.includes('twitter.com/')) && 
-        !s.url?.includes('/communities/')
-      )?.url;
-      
-      if (xHandleUrl) {
-        // Extract handle and add to mesh
-        const handleMatch = xHandleUrl.match(/(?:x\.com|twitter\.com)\/(@?([a-zA-Z0-9_]+))/i);
+      for (const xUrl of xUrls) {
+        // Match profile URL or extract handle from status URL (x.com/HANDLE/status/...)
+        const handleMatch = xUrl.match(/(?:x\.com|twitter\.com)\/(@?([a-zA-Z0-9_]+))/i);
         if (handleMatch) {
           const handle = (handleMatch[2] || handleMatch[1]).replace(/^@/, '').toLowerCase();
-          if (handle && !['i', 'intent', 'search', 'home', 'explore'].includes(handle)) {
-            console.log(`[MeshSpider] Found X handle: @${handle}`);
+          const reserved = ['i', 'intent', 'search', 'home', 'explore', 'hashtag', 'settings',
+            'notifications', 'messages', 'compose', 'lists', 'bookmarks', 'communities',
+            'spaces', 'tos', 'privacy', 'help', 'about', 'login', 'signup', 'share', 'status'];
+          if (handle && !reserved.includes(handle) && handle.length <= 15) {
+            console.log(`[MeshSpider] Found X handle: @${handle} (from ${discoverySource})`);
             await supabase.from('reputation_mesh').upsert({
               source_type: 'token',
               source_id: tokenMint,
@@ -404,15 +444,15 @@ export function useMeshGraph(initialEntityId?: string) {
               linked_id: handle,
               relationship: 'social_account',
               confidence: 85,
-              discovered_via: 'dexscreener_auto',
+              discovered_via: discoverySource,
             }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
           }
         }
       }
-      
+
+      // 5. Process X Community if found
       if (communityUrl) {
-        console.log(`[MeshSpider] Found X Community: ${communityUrl}`);
-        // Call x-community-enricher to scrape admins/mods
+        console.log(`[MeshSpider] Found X Community: ${communityUrl} (from ${discoverySource})`);
         const { data, error } = await supabase.functions.invoke('x-community-enricher', {
           body: {
             communityUrl,
@@ -422,7 +462,6 @@ export function useMeshGraph(initialEntityId?: string) {
         });
         if (!error && data) {
           console.log(`[MeshSpider] Community enriched: ${data.admins?.length || 0} admins, ${data.moderators?.length || 0} mods`);
-          // Store community_name in evidence for label enrichment
           const communityMatch = communityUrl.match(/communities\/(\d+)/);
           if (communityMatch && data.communityName) {
             await supabase.from('reputation_mesh')
