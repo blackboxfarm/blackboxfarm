@@ -78,7 +78,7 @@ export default function MasterDBTab() {
   const backfillMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("ath-24h-backfill", {
-        body: { batchSize: 10 },
+        body: { batchSize: 5 },
       });
       if (error) throw error;
       return data;
