@@ -86,12 +86,22 @@ export function generateWarningsFromHoldersData(
   const warnings: EarlyWarning[] = [];
   const symbol = data?.symbol || data?.tokenSymbol || tokenMint.slice(0, 8);
 
-  // 1. Tier Divergence — whale vs retail gap
+  // 1. Tier Divergence — whale vs retail gap (context-aware)
   const whalesPct = data?.simpleTiers?.whales?.percentage ?? 0;
+  const seriousPct = data?.simpleTiers?.serious?.percentage ?? 0;
   const retailPct = data?.simpleTiers?.retail?.percentage ?? 0;
   const divergence = Math.abs(whalesPct - retailPct);
-  if (divergence > 35) {
-    const mcap = data?.marketCap ?? data?.mcap ?? 0;
+  const mcap = data?.marketCap ?? data?.mcap ?? 0;
+  const totalHolders = data?.totalHolders ?? 0;
+  const healthScore = data?.healthScore?.score ?? data?.stabilityScore ?? 50;
+
+  // Only flag if divergence is high AND context suggests actual risk:
+  // - High health + growing holder count = organic retail flood, not insider exit
+  // - Whales + Serious combined > 10% means money IS present, just outnumbered by retail
+  const moneyPresent = whalesPct + seriousPct;
+  const isLikelyOrganicGrowth = healthScore >= 60 && totalHolders > 100 && moneyPresent >= 8;
+
+  if (divergence > 35 && !isLikelyOrganicGrowth) {
     const holderLabel = mcap > 100_000 ? 'Big money' : 'Larger holders';
     warnings.push({
       token_mint: tokenMint,
@@ -100,7 +110,18 @@ export function generateWarningsFromHoldersData(
       plain_text: `⚠️ ${holderLabel} and regular buyers are moving in opposite directions — ${divergence.toFixed(0)}% gap. This could mean insiders are exiting while retail buys in.`,
       metric_value: divergence,
       source_function: sourceFunction,
-      metadata: { whales_pct: whalesPct, retail_pct: retailPct },
+      metadata: { whales_pct: whalesPct, retail_pct: retailPct, serious_pct: seriousPct },
+    });
+  } else if (divergence > 35 && isLikelyOrganicGrowth) {
+    // Healthy growth — note it as informational, not a warning
+    warnings.push({
+      token_mint: tokenMint,
+      warning_type: 'tier_divergence_healthy',
+      severity: 'low',
+      plain_text: `📊 Retail dominates the holder base (${retailPct.toFixed(0)}%) but ${moneyPresent.toFixed(0)}% are serious+ holders — appears to be organic adoption, not insider exit.`,
+      metric_value: divergence,
+      source_function: sourceFunction,
+      metadata: { whales_pct: whalesPct, retail_pct: retailPct, serious_pct: seriousPct, health: healthScore },
     });
   }
 
