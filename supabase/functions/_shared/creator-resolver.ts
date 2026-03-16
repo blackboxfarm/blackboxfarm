@@ -50,6 +50,7 @@ export async function resolveTokenCreator(
           errors: [],
         };
       }
+      }
     } else if (pfRes.status !== 404) {
       apiErrors.push(`Pump.fun API ${pfRes.status} for ${tokenMint.slice(0, 8)}`);
     }
