@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json().catch(() => ({}));
-    const batchSize = Math.min(Math.max(body.batchSize || 10, 1), 50);
+    const batchSize = Math.min(Math.max(body.batchSize || 5, 1), 20);
 
     // Get tokens without ath_24h_usd, newest first
     const { data: tokens, error: fetchError } = await supabase
