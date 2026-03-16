@@ -280,6 +280,51 @@ function ReportView({ report }: { report: MorningReport }) {
             </Section>
           )}
 
+          {/* HoldersIntel Twitter Metrics */}
+          {report.holders_intel_metrics && (
+            <Section title="@HoldersIntel Account" icon={<Twitter className="w-4 h-4 text-sky-400" />}>
+              {(() => {
+                const hi = report.holders_intel_metrics!;
+                return (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div className="p-2 rounded-lg bg-muted/30 text-center">
+                        <div className="text-lg font-bold">{hi.followers.total.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">Total Followers</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-sky-500/10 text-center">
+                        <div className="text-lg font-bold text-sky-400">{hi.followers.blue_check_premium.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">🔵 Blue Check / Premium</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-muted/30 text-center">
+                        <div className="text-lg font-bold">{hi.followers.normal.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">👤 Normal Followers</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-muted/30 text-center">
+                        <div className="text-lg font-bold">{hi.followers.blue_check_pct}%</div>
+                        <div className="text-[10px] text-muted-foreground">Blue Check Ratio</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                      <div className="text-xs"><span className="text-muted-foreground">Following:</span> <span className="font-medium">{hi.following}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Ratio:</span> <span className="font-medium">{hi.follow_ratio}:1</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Tweets:</span> <span className="font-medium">{hi.tweets.toLocaleString()}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Likes:</span> <span className="font-medium">{hi.likes.toLocaleString()}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Listed:</span> <span className="font-medium">{hi.listed_count}</span></div>
+                      <div className="text-xs"><span className="text-muted-foreground">Media:</span> <span className="font-medium">{hi.media_count}</span></div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>Avg Likes/Tweet: <span className="font-medium text-foreground">{hi.avg_likes_per_tweet}</span></span>
+                      <span>Verified: {hi.is_verified ? '✅' : '❌'}</span>
+                      <span>Type: {hi.professional_type || 'N/A'}</span>
+                      {hi.last_enriched_at && <span>Enriched: {format(new Date(hi.last_enriched_at), 'MMM d, h:mm a')}</span>}
+                    </div>
+                  </div>
+                );
+              })()}
+            </Section>
+          )}
+
           {/* External Services */}
           <Section title="External Services" icon={<Globe className="w-4 h-4 text-cyan-400" />}>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
