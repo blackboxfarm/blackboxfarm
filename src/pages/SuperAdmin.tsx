@@ -230,6 +230,13 @@ export default function SuperAdmin() {
               </Suspense>
             )}
           </TabsContent>
+          <TabsContent value="funnel-feeds">
+            {activeTab === "funnel-feeds" && (
+              <Suspense fallback={<TabLoader />}>
+                <FunnelFeedsTab />
+              </Suspense>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
