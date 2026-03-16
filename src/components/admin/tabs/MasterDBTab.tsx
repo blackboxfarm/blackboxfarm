@@ -26,6 +26,12 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const PAGE_SIZE = 100;
 
@@ -66,6 +72,36 @@ function ArrayCell({ arr }: { arr: string[] | null }) {
         </Badge>
       )}
     </div>
+  );
+}
+
+// Source icon definitions — inferred from row data
+const SOURCE_ICONS: { key: string; emoji: string; label: string; test: (r: any) => boolean }[] = [
+  { key: 'pump',    emoji: '🎰', label: 'Pump.fun Discovery',         test: r => r.launchpad?.toLowerCase() === 'pump.fun' },
+  { key: 'bonk',    emoji: '🦴', label: 'Bonk.fun Discovery',         test: r => r.launchpad?.toLowerCase() === 'bonk.fun' },
+  { key: 'bags',    emoji: '👜', label: 'Bags.fm Discovery',          test: r => r.launchpad?.toLowerCase() === 'bags.fm' },
+  { key: 'dex',     emoji: '📊', label: 'DexScreener (Graduated/Top 50)', test: r => r.is_graduated === true },
+  { key: 'xpost',   emoji: '📢', label: 'HoldersIntel X Post',       test: r => r.was_posted === true },
+  { key: 'mesh',    emoji: '🕸️', label: 'Mesh / Bubble Map Submit',   test: r => (r.mesh_x_handles?.length > 0 || r.community_admin_handles?.length > 0) && !r.was_posted },
+  { key: 'manual',  emoji: '🔍', label: 'Manual /holders Query',      test: r => !r.launchpad && !r.was_posted && !r.is_graduated },
+];
+
+function SourceIcons({ row }: { row: any }) {
+  const matched = SOURCE_ICONS.filter(s => s.test(row));
+  if (matched.length === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <TooltipProvider delayDuration={200}>
+      <span className="flex items-center gap-0.5">
+        {matched.map(s => (
+          <Tooltip key={s.key}>
+            <TooltipTrigger asChild>
+              <span className="cursor-default text-sm leading-none">{s.emoji}</span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">{s.label}</TooltipContent>
+          </Tooltip>
+        ))}
+      </span>
+    </TooltipProvider>
   );
 }
 
@@ -197,6 +233,7 @@ export default function MasterDBTab() {
             <TableHeader>
               <TableRow className="[&>th]:whitespace-nowrap [&>th]:px-2 [&>th]:py-2 [&>th]:text-[11px] [&>th]:font-semibold">
                 <TableHead>#</TableHead>
+                <TableHead>Src</TableHead>
                 <TableHead>Img</TableHead>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Name</TableHead>
@@ -230,13 +267,13 @@ export default function MasterDBTab() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={29} className="text-center py-12">
+                  <TableCell colSpan={30} className="text-center py-12">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={29} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={30} className="text-center py-8 text-muted-foreground">
                     No tokens found
                   </TableCell>
                 </TableRow>
@@ -244,6 +281,7 @@ export default function MasterDBTab() {
                 rows.map((r: any, i: number) => (
                   <TableRow key={r.token_mint} className="[&>td]:px-2 [&>td]:py-1.5 [&>td]:whitespace-nowrap hover:bg-muted/50">
                     <TableCell className="text-muted-foreground">{page * PAGE_SIZE + i + 1}</TableCell>
+                    <TableCell><SourceIcons row={r} /></TableCell>
                     <TableCell>
                       {r.image_url ? (
                         <img src={r.image_url} alt="" className="h-5 w-5 rounded-full object-cover" loading="lazy" />
