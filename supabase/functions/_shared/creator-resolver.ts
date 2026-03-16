@@ -39,8 +39,10 @@ export async function resolveTokenCreator(
       signal: AbortSignal.timeout(5000),
     });
     if (pfRes.ok) {
-      const data = await pfRes.json();
-      if (data?.creator) {
+      const text = await pfRes.text();
+      if (text && text.trim().length > 0) {
+        const data = JSON.parse(text);
+        if (data?.creator) {
         return {
           creatorWallet: data.creator,
           source: 'pumpfun',
