@@ -160,8 +160,6 @@ function toPlainText(text: string): string {
 }
 
 async function sendMessage(chatId: number, text: string, parseMode = "Markdown", replyToMessageId?: number) {
-  // Sanitize $TICKER patterns to "$ TICKER" to avoid triggering other bots (e.g. Phanes)
-  text = text.replace(/\$([A-Za-z]{2,})/g, '$ $1');
   const chunks = splitMessage(text);
 
   for (let i = 0; i < chunks.length; i++) {
