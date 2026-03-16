@@ -252,6 +252,28 @@ async function auditAllstarFamily(
         const tokenMint = tx.tokenTransfers?.[0]?.mint || tx.events?.token?.mint;
         if (!tokenMint) continue;
 
+        // ── CRITICAL: Verify this wallet is actually the CREATOR, not just a participant ──
+        // Check if this wallet initiated the mint (is the fee payer / signer)
+        const feePayer = tx.feePayer || tx.fee_payer;
+        const isFeePayer = feePayer === wallet;
+        
+        // Also check pump.fun creator field if available
+        const pumpCreator = tx.events?.token?.nativeTransfers?.[0]?.fromUserAccount;
+        const isDirectCreator = isFeePayer || pumpCreator === wallet;
+        
+        // If the wallet is NOT the fee payer, verify via Pump.fun API
+        if (!isDirectCreator) {
+          const verifiedCreator = await resolveCreator(tokenMint);
+          if (verifiedCreator !== wallet) {
+            // Check if verified creator is ANY wallet in the family
+            const isInFamily = familyWallets.includes(verifiedCreator || '');
+            if (!isInFamily) {
+              console.log(`[allstar] ❌ FALSE POSITIVE: ${tokenMint.slice(0, 12)} creator is ${(verifiedCreator || 'unknown').slice(0, 8)}..., NOT family wallet ${wallet.slice(0, 8)}... — skipping`);
+              continue;
+            }
+          }
+        }
+
         // Skip if already known
         const { data: knownToken } = await supabase
           .from('allstar_mint_alerts')
