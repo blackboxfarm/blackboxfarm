@@ -75,6 +75,29 @@ export default function MasterDBTab() {
   const [searchInput, setSearchInput] = useState("");
   const { toast } = useToast();
 
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("ath-24h-backfill", {
+        body: { batchSize: 10 },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "ATH 24h Backfill Started",
+        description: `Processed ${data?.processed ?? 0} tokens. ${data?.remaining ?? "?"} remaining.`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Backfill Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const doSearch = useCallback(() => {
     setSearch(searchInput.trim());
     setPage(0);
