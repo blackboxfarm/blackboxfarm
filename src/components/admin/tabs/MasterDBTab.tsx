@@ -133,6 +133,16 @@ export default function MasterDBTab() {
             <Button type="submit" size="sm" variant="secondary" className="h-8 px-3">
               <Search className="h-3.5 w-3.5" />
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3 gap-1.5"
+              disabled={backfillMutation.isPending}
+              onClick={() => backfillMutation.mutate()}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${backfillMutation.isPending ? "animate-spin" : ""}`} />
+              Backfill ATH
+            </Button>
           </form>
         </div>
       </CardHeader>
