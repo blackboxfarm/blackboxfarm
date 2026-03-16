@@ -36,8 +36,23 @@ export async function writeEarlyWarnings(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // Supersession map: when one warning type is active, delete the conflicting one
+  const supersedes: Record<string, string[]> = {
+    'tier_divergence_healthy': ['tier_divergence_high'],
+    'tier_divergence_high': ['tier_divergence_healthy'],
+  };
+
   for (const w of warnings) {
     try {
+      // Delete any superseded warnings for this token
+      const toDelete = supersedes[w.warning_type];
+      if (toDelete && toDelete.length > 0) {
+        await client.from('token_early_warnings')
+          .delete()
+          .eq('token_mint', w.token_mint)
+          .in('warning_type', toDelete);
+      }
+
       // Check if exists
       const { data: existing } = await client
         .from('token_early_warnings')
