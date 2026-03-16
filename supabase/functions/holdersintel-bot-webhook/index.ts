@@ -495,56 +495,71 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   const locked = "🔒";
   const check = (req: string) => hasTier(tier, req) ? unlocked : locked;
 
-  let cmds = `📖 *HoldersIntel Bot Commands*\n\n` +
-    `*General — All Users*\n` +
-    `${unlocked} /start — Welcome & setup\n` +
-    `${unlocked} /register \`CODE\` — Link account\n` +
-    `${unlocked} /status — Check tier & usage\n` +
-    `${unlocked} /help — This message\n\n`;
+  let cmds = `🔍 *HoldersIntel — Your Edge in Solana Intel*\n\n` +
+    `*🌐 General — Free for Everyone*\n` +
+    `${unlocked} /start — Get started & connect your account\n` +
+    `${unlocked} /register \`CODE\` — Link your BlackBox Farm account\n` +
+    `${unlocked} /status — View your tier, usage & limits\n` +
+    `${unlocked} /help — This command reference\n\n`;
 
-  cmds += `*Analysis — Auth ★*\n` +
-    `${check("auth")} /risk (/r) \`CA\` — Composite risk & stability assessment\n` +
-    `${check("auth")} /holders \`CA\` — Holder distribution analysis\n` +
-    `${check("auth")} /concentration \`CA\` — Detailed holder % breakdown\n` +
-    `${check("auth")} /dev (/d) \`CA\` — Developer intel & social doxxing\n` +
-    `${check("auth")} /ca \`CA\` — Default holder analysis for a token\n` +
-    `${check("auth")} /quick (/q) \`CA\` — Fast holder count & key stats\n` +
-    `${check("auth")} /ai \`CA\` — Descriptive AI analysis snapshot\n\n`;
+  cmds += `*🔬 Core Analysis — Auth ★*\n` +
+    `_The essentials — know what you're buying before you ape._\n` +
+    `${check("auth")} /risk (/r) \`CA\` — 360° risk score: rug probability, liquidity traps & holder red flags\n` +
+    `${check("auth")} /holders \`CA\` — Full holder breakdown: whales, retail spread & distribution health\n` +
+    `${check("auth")} /concentration \`CA\` — Top wallet % tiers: see exactly who controls the supply\n` +
+    `${check("auth")} /dev (/d) \`CA\` — Dev identity mesh: socials, past launches & reputation score\n` +
+    `${check("auth")} /ca \`CA\` — Quick-glance holder profile for any token\n` +
+    `${check("auth")} /quick (/q) \`CA\` — Instant snapshot: holder count, MCap & key metrics in seconds\n` +
+    `${check("auth")} /ai \`CA\` — AI-narrated analysis: plain-English verdict on any token\n`;
+  if (!hasTier(tier, "auth")) {
+    cmds += `  _↑ Free — just create an account at blackbox.farm_\n`;
+  }
+  cmds += `\n`;
 
-  cmds += `*Advanced — X Subscriber ★★*\n` +
-    `${check("x_subscriber")} /momentum (/m) \`CA\` — Volume & price momentum scoring\n` +
-    `${check("x_subscriber")} /insiders (/i) \`CA\` — Insider cluster & bundling pre-check\n` +
-    `${check("x_subscriber")} /compare (/cmp) \`CA CA\` — Side-by-side token comparison\n`;
+  cmds += `*⚡ Advanced Intel — X Subscriber ★★*\n` +
+    `_Deeper signals that separate smart money from exit liquidity._\n` +
+    `${check("x_subscriber")} /momentum (/m) \`CA\` — Volume surge detection, price velocity & trend momentum scoring\n` +
+    `${check("x_subscriber")} /insiders (/i) \`CA\` — Bundled wallet detection: spot coordinated buys before they dump\n` +
+    `${check("x_subscriber")} /compare (/cmp) \`CA CA\` — Head-to-head token showdown: risk, holders & momentum side-by-side\n`;
   if (!hasTier(tier, "x_subscriber")) {
-    cmds += `  _↑ Unlock with X Subscriber ($3.99/mo)_\n`;
+    cmds += `  _↑ Unlock for just $3.99/mo — follow @HoldersIntel on X_\n`;
   }
   cmds += `\n`;
 
-  cmds += `*Pro Intelligence — Pro ★★★*\n` +
-    `${check("pro")} /oracle (/o) \`CA\` — Full developer reputation mesh\n` +
-    `${check("pro")} /wallet (/w) \`ADDR\` — Wallet behavior analysis\n`;
+  cmds += `*🧠 Pro Intelligence — Pro ★★★*\n` +
+    `_Institutional-grade tools. See what nobody else can._\n` +
+    `${check("pro")} /oracle (/o) \`CA\` — Deep dev reputation mesh: funding chains, wallet genealogy & cross-token links\n` +
+    `${check("pro")} /wallet (/w) \`ADDR\` — Full wallet forensics: trading patterns, PnL history & behavioral profiling\n`;
   if (!hasTier(tier, "pro")) {
-    cmds += `  _↑ Unlock with Pro ($9.99/mo)_\n`;
+    cmds += `  _↑ Go Pro at $9.99/mo — the alpha edge that pays for itself_\n`;
   }
   cmds += `\n`;
 
-  cmds += `*Group Admin — Alerts ⚙️*\n` +
-    `${unlocked} /alerts — Manage group alert feeds\n` +
-    `  _Types: dex · mint · rug · whale · news · kol_\n\n`;
+  cmds += `*📢 Group & Channel Features*\n` +
+    `_Supercharge your community with real-time intel feeds._\n\n` +
+    `${unlocked} *Auto-Scan* — Paste any Solana CA in an activated group and get an instant risk snippet automatically\n` +
+    `${unlocked} /alerts — Toggle real-time alert feeds for your group\n` +
+    `  _Available feeds: 🔔 dex · 🪙 mint · 🚨 rug · 🐋 whale · 📰 news · 👑 kol_\n\n` +
 
-  cmds += `*Channel Management (DM only) 📡*\n` +
-    `${check("auth")} /add — Add bot to your channel/group\n` +
-    `${check("auth")} /channels (/ch) — List & manage installations\n` +
-    `${check("auth")} /config — Configure channel settings\n` +
-    `  _Usage: /config delay 3000 · verbose on · admin-only on · dev-alerts on_\n` +
-    `${check("auth")} /payment (/pay) — View/generate payment wallet\n`;
+    `*🛠 Channel Management (DM only) 📡*\n` +
+    `_One-time 0.25 SOL activation — manage everything from DMs._\n` +
+    `${check("auth")} /add — Install the bot in your channel or group\n` +
+    `${check("auth")} /channels (/ch) — View & manage all your installations\n` +
+    `${check("auth")} /config — Fine-tune your setup\n` +
+    `  _• /config delay 3000 — Set response delay (ms) so other bots fire first_\n` +
+    `  _• /config verbose on|off — Toggle detailed vs minimal responses_\n` +
+    `  _• /config admin-only on|off — Restrict commands to admins_\n` +
+    `  _• /config dev-alerts on|off — Get notified when watched devs launch_\n` +
+    `${check("auth")} /payment (/pay) — View or generate your activation payment wallet\n` +
+    `${check("auth")} /dashboard — Full channel management dashboard\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
-    `★ = Tier required | ${unlocked} = Available | ${locked} = Locked\n` +
-    `_Shortforms shown in parentheses_\n\n` +
+    `${unlocked} = Available | ${locked} = Locked to your tier\n` +
+    `_Aliases shown in (parentheses) — e.g. /r instead of /risk_\n\n` +
     `📊 Your tier: *${tier.toUpperCase()}*\n` +
     `📈 Rate limit: *${RATE_LIMITS[tier] ?? 3}* lookups/hr\n\n` +
-    `🚀 Upgrade: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)` +
+    `🔓 Upgrade anytime: [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions)\n` +
+    `💬 Questions? [blackbox.farm/contact](https://blackbox.farm/contact)` +
     TAGLINE;
 
   await sendMessage(chatId, cmds);
