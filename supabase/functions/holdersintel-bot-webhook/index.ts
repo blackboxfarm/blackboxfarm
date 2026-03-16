@@ -2030,28 +2030,33 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   if (!holdersData || holdersData.error) return; // silently fail
 
   const symbol = holdersData?.symbol || holdersData?.tokenSymbol || null;
-  const name = holdersData?.name || holdersData?.tokenName || null;
   const health = holdersData?.healthScore?.score ?? holdersData?.stabilityScore ?? null;
   const top10 = holdersData?.distributionStats?.top10Percentage ?? null;
-  const mcap = holdersData?.marketCap || null;
   const holders = holdersData?.realHolders ?? holdersData?.totalHolders ?? null;
-
-  // Determine quick risk signal
-  let riskEmoji = '🟢';
-  let riskLabel = 'STABLE';
-  if (health != null) {
-    if (health < 30) { riskEmoji = '🔴'; riskLabel = 'HIGH RISK'; }
-    else if (health < 50) { riskEmoji = '🟡'; riskLabel = 'MODERATE'; }
-  }
 
   const tokenLabel = symbol ? `$${symbol}` : ca.slice(0, 8) + '...';
 
-  const msg = `🔍 *${tokenLabel}* ${riskEmoji} ${riskLabel}\n` +
-    `${health != null ? `❤️ ${health}/100` : ''}` +
-    `${holders ? ` · 👥 ${holders}` : ''}` +
-    `${top10 != null ? ` · 🏦 ${top10.toFixed(0)}%` : ''}` +
-    `${mcap ? ` · 💰 ${fmtMcap(mcap)}` : ''}\n` +
-    `→ /risk \`${ca}\` for full report` +
+  // Build distribution bars from simpleTiers
+  const tiers = holdersData?.simpleTiers;
+  let distBlock = '';
+  if (tiers) {
+    const bar = (pct: number) => {
+      const filled = Math.round(pct / 10);
+      return '█'.repeat(filled) + '░'.repeat(10 - filled);
+    };
+    distBlock = `\n📈 *Distribution*\n` +
+      `\`Whales  ${bar(tiers.whales?.percentage ?? 0)} ${Math.round(tiers.whales?.percentage ?? 0)}%\`  >$1K\n` +
+      `\`Serious ${bar(tiers.serious?.percentage ?? 0)} ${Math.round(tiers.serious?.percentage ?? 0)}%\`  $200‑$1K\n` +
+      `\`Retail  ${bar(tiers.retail?.percentage ?? 0)} ${Math.round(tiers.retail?.percentage ?? 0)}%\`  $1‑$199\n` +
+      `\`Dust    ${bar(tiers.dust?.percentage ?? 0)} ${Math.round(tiers.dust?.percentage ?? 0)}%\`  <$1\n`;
+  }
+
+  const msg = `⚡ *${tokenLabel} Quick Stats*\n\n` +
+    `${holders ? `👥 Holders: *${holders}*\n` : ''}` +
+    `${health != null ? `❤️ Health: *${health}/100*\n` : ''}` +
+    `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
+    distBlock +
+    `\n→ /risk \`${ca}\` for full report` +
     TAGLINE;
 
   await sendMessage(chatId, msg);
