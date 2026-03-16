@@ -117,12 +117,11 @@ export function generateWarningsFromHoldersData(
   const isLikelyOrganicGrowth = healthScore >= 60 && totalHolders > 100 && moneyPresent >= 8;
 
   if (divergence > 35 && !isLikelyOrganicGrowth) {
-    const holderLabel = mcap > 100_000 ? 'Big money' : 'Larger holders';
     warnings.push({
       token_mint: tokenMint,
       warning_type: 'tier_divergence_high',
       severity: divergence > 50 ? 'critical' : 'high',
-      plain_text: `⚠️ ${holderLabel} and regular buyers are moving in opposite directions — ${divergence.toFixed(0)}% gap. This could mean insiders are exiting while retail buys in.`,
+      plain_text: `⚠️ Holder distribution divergence detected — ${divergence.toFixed(0)}% gap (${whalesPct.toFixed(0)}% whales vs ${retailPct.toFixed(0)}% retail).`,
       metric_value: divergence,
       source_function: sourceFunction,
       metadata: { whales_pct: whalesPct, retail_pct: retailPct, serious_pct: seriousPct },
