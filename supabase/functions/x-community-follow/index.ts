@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
         community_id: communityId,
         target_handle: m.screenName.toLowerCase(),
         target_x_user_id: m.restId || null,
-        is_blue_verified: true,
+        is_blue_verified: !!(m.isBlueVerified) || m.communityRole === 'Admin' || m.communityRole === 'Moderator',
         community_role: m.communityRole || 'member',
         followers_count: m.followersCount || null,
         // Preserve existing follow_status if already tracked
@@ -372,7 +372,7 @@ Deno.serve(async (req) => {
         community_id: communityId,
         target_handle: (m.screenName || '').toLowerCase(),
         target_x_user_id: m.restId || null,
-        is_blue_verified: true,
+        is_blue_verified: !!(m.isBlueVerified) || m.communityRole === 'Admin' || m.communityRole === 'Moderator',
         community_role: m.communityRole || 'member',
         followers_count: m.followersCount || null,
         follow_status: 'not_followed',
