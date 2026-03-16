@@ -267,7 +267,10 @@ async function auditAllstarFamily(
   return hits;
 }
 
-// ─── STEP 3: Create alerts + notifications ───
+// ─── STEP 3: Create alerts + notifications (multi-channel) ───
+
+const ALERT_EMAIL = 'wilsondavid@live.ca';
+const ALERT_TG_USERNAME = 'DrRick_gem';
 
 async function createAllstarAlert(
   supabase: any,
@@ -279,23 +282,37 @@ async function createAllstarAlert(
                      allstar.best_tier >= 4 ? 'high_priority' : 'opportunity';
 
   const tierLabel = `T${allstar.best_tier}`;
+  const tierStars = '⭐'.repeat(Math.min(allstar.best_tier, 8));
   const mcapLabel = allstar.best_mcap_achieved >= 1_000_000
     ? `$${(allstar.best_mcap_achieved / 1_000_000).toFixed(1)}M`
     : `$${(allstar.best_mcap_achieved / 1_000).toFixed(0)}K`;
 
-  // Insert alert
+  const ticker = hit.symbol || 'UNKNOWN';
+  const tokenName = hit.name || ticker;
+  const mintAddr = hit.tokenMint;
+  const shortMint = mintAddr.slice(0, 8) + '...' + mintAddr.slice(-4);
+  const devHandle = allstar.twitter_handle ? `@${allstar.twitter_handle}` : allstar.master_wallet.slice(0, 12) + '...';
+  const launchpad = hit.launchpad || 'unknown';
+
+  // Links
+  const pumpUrl = `https://pump.fun/${mintAddr}`;
+  const padreUrl = `https://padre.gg/token/${mintAddr}`;
+  const dexUrl = `https://dexscreener.com/solana/${mintAddr}`;
+  const solscanUrl = `https://solscan.io/token/${mintAddr}`;
+
+  // Insert alert record
   await supabase.from('allstar_mint_alerts').insert({
     allstar_id: allstar.id,
     developer_id: allstar.developer_id,
-    token_mint: hit.tokenMint,
-    token_symbol: hit.symbol,
-    token_name: hit.name,
+    token_mint: mintAddr,
+    token_symbol: ticker,
+    token_name: tokenName,
     creator_wallet: hit.creatorWallet,
     detecting_wallet: hit.creatorWallet,
     wallet_depth: hit.walletDepth,
     allstar_tier: allstar.best_tier,
     allstar_best_mcap: allstar.best_mcap_achieved,
-    launchpad: hit.launchpad,
+    launchpad,
     alert_level: alertLevel,
     metadata: {
       twitter_handle: allstar.twitter_handle,
@@ -306,18 +323,15 @@ async function createAllstarAlert(
     },
   });
 
-  // Admin notification
+  // Admin notification (dashboard badge)
   const emoji = alertLevel === 'critical' ? '🌟🚨' : alertLevel === 'high_priority' ? '⭐🔔' : '✨';
   await supabase.from('admin_notifications').insert({
     notification_type: 'allstar_mint',
-    title: `${emoji} ALLSTAR DEV MINTED: $${hit.symbol || 'UNKNOWN'}`,
-    message: `${tierLabel} dev ${allstar.twitter_handle || allstar.master_wallet.slice(0, 8)}... (best: $${allstar.best_token_symbol} → ${mcapLabel}) just launched $${hit.symbol || 'NEW'} on ${hit.launchpad}. Wallet family: ${allstar.total_wallet_family_size} wallets.`,
+    title: `${emoji} ALLSTAR DEV MINTED: $${ticker}`,
+    message: `${tierLabel} dev ${devHandle} (best: $${allstar.best_token_symbol} → ${mcapLabel}) just launched $${ticker} on ${launchpad}`,
     metadata: {
-      token_mint: hit.tokenMint,
-      allstar_id: allstar.id,
-      allstar_tier: allstar.best_tier,
-      creator_wallet: hit.creatorWallet,
-      action_url: `https://pump.fun/${hit.tokenMint}`,
+      token_mint: mintAddr, allstar_id: allstar.id, allstar_tier: allstar.best_tier,
+      creator_wallet: hit.creatorWallet, pump_url: pumpUrl, padre_url: padreUrl,
     },
   });
 
@@ -331,29 +345,162 @@ async function createAllstarAlert(
     })
     .eq('id', allstar.id);
 
-  // Fire Telegram alert for high-tier devs
-  if (allstar.best_tier >= 4) {
+  // ──────────────────────────────────────────────
+  // CHANNEL 1: BlackBox Telegram Group (broadcast)
+  // ──────────────────────────────────────────────
+  try {
+    const tgMessage = [
+      `🚀🌟 **A+ ALLSTAR DEV MINT ALERT** 🌟🚀`,
+      ``,
+      `${tierStars} **Tier ${allstar.best_tier} Developer**`,
+      ``,
+      `**Token:** $${ticker} (${tokenName})`,
+      `**Mint:** \`${shortMint}\``,
+      `**Launchpad:** ${launchpad}`,
+      `**Creator:** \`${hit.creatorWallet.slice(0, 12)}...\``,
+      allstar.twitter_handle ? `**Dev X:** [@${allstar.twitter_handle}](https://x.com/${allstar.twitter_handle})` : '',
+      ``,
+      `📊 **Dev Track Record:**`,
+      `├ Best Token: $${allstar.best_token_symbol} → ${mcapLabel}`,
+      `├ Proven Tokens: ${allstar.total_proven_tokens || '?'}`,
+      `├ Wallet Family: ${allstar.total_wallet_family_size || 1} wallets`,
+      allstar.kyc_root_wallet ? `├ KYC Root: \`${allstar.kyc_root_wallet.slice(0, 8)}...\`` : '',
+      `└ Alert Level: **${alertLevel.toUpperCase()}**`,
+      ``,
+      `🔗 **Quick Links:**`,
+      `├ [Pump.fun](${pumpUrl})`,
+      `├ [Padre.gg](${padreUrl})`,
+      `├ [DexScreener](${dexUrl})`,
+      `└ [Solscan](${solscanUrl})`,
+      ``,
+      `⏰ ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC`,
+      ``,
+      `💡 _This dev previously launched $${allstar.best_token_symbol} to ${mcapLabel}. Move fast._`,
+    ].filter(Boolean).join('\n');
+
+    // Check suspension
+    let suspended = false;
     try {
-      await supabase.functions.invoke('telegram-bot-webhook', {
-        body: {
-          type: 'allstar_mint_alert',
-          data: {
-            token_mint: hit.tokenMint,
-            token_symbol: hit.symbol,
-            allstar_tier: allstar.best_tier,
-            allstar_twitter: allstar.twitter_handle,
-            best_token: allstar.best_token_symbol,
-            best_mcap: allstar.best_mcap_achieved,
-            launchpad: hit.launchpad,
-          },
-        },
-      });
-    } catch (e) {
-      console.warn('[allstar] Telegram alert failed:', e);
+      const { data: s } = await supabase.from('system_settings').select('value').eq('key', 'telegram_broadcast_suspended').maybeSingle();
+      suspended = s?.value === true;
+    } catch {}
+
+    if (!suspended) {
+      const { broadcastToBlackBox } = await import('../_shared/telegram-broadcast.ts');
+      const results = await broadcastToBlackBox(supabase, tgMessage);
+      const ok = results.filter(r => r.success).length;
+      console.log(`[allstar] ✓ BlackBox TG alert sent (${ok} targets)`);
+    } else {
+      console.log('[allstar] TG broadcasts suspended, skipping BlackBox');
     }
+  } catch (e) {
+    console.warn('[allstar] BlackBox TG alert failed:', e);
   }
 
-  console.log(`[allstar] 🚀 ALERT: ${tierLabel} dev ${allstar.master_wallet.slice(0, 8)}... minted $${hit.symbol || hit.tokenMint.slice(0, 8)} (${alertLevel})`);
+  // ──────────────────────────────────────────────
+  // CHANNEL 2: Direct MTProto DM to @DrRick_gem
+  // ──────────────────────────────────────────────
+  try {
+    // Resolve username to chat ID
+    const { data: targetUser } = await supabase
+      .from('telegram_message_targets')
+      .select('chat_id')
+      .eq('resolved_name', ALERT_TG_USERNAME)
+      .maybeSingle();
+
+    let chatId = targetUser?.chat_id;
+
+    if (!chatId) {
+      // Try resolving via MTProto
+      const { data: resolveData } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { action: 'resolve_username', username: ALERT_TG_USERNAME },
+      });
+      chatId = resolveData?.userId || resolveData?.chatId;
+    }
+
+    if (chatId) {
+      const dmMessage = [
+        `🚀 ALLSTAR MINT: $${ticker}`,
+        `T${allstar.best_tier} dev ${devHandle}`,
+        `Best: $${allstar.best_token_symbol} → ${mcapLabel}`,
+        ``,
+        `Pump: ${pumpUrl}`,
+        `Padre: ${padreUrl}`,
+        `DexScreener: ${dexUrl}`,
+      ].join('\n');
+
+      await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { action: 'send_message', chatId: Number(chatId), message: dmMessage },
+      });
+      console.log(`[allstar] ✓ DM sent to @${ALERT_TG_USERNAME}`);
+    } else {
+      console.warn(`[allstar] Could not resolve @${ALERT_TG_USERNAME} for DM`);
+    }
+  } catch (e) {
+    console.warn('[allstar] DM to DrRick_gem failed:', e);
+  }
+
+  // ──────────────────────────────────────────────
+  // CHANNEL 3: Email alert via admin-notify
+  // ──────────────────────────────────────────────
+  try {
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    if (resendApiKey) {
+      const { Resend } = await import('npm:resend@2.0.0');
+      const resend = new Resend(resendApiKey);
+
+      const emailHtml = `
+        <div style="font-family: 'Courier New', monospace; max-width: 640px; margin: 0 auto; background: #0a0a0a; border: 2px solid #00ff88; border-radius: 12px; padding: 0; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%); padding: 16px 24px;">
+            <h1 style="color: #000; margin: 0; font-size: 22px;">🚀 A+ ALLSTAR DEV MINT ALERT</h1>
+            <p style="color: #000; margin: 4px 0 0; font-weight: bold;">${tierStars} Tier ${allstar.best_tier} Developer</p>
+          </div>
+          <div style="padding: 24px;">
+            <table style="width: 100%; border-collapse: collapse; color: #ffffff;">
+              <tr><td style="padding: 6px 0; color: #888;">Token</td><td style="padding: 6px 0; font-weight: bold; color: #00ff88; font-size: 18px;">$${ticker} (${tokenName})</td></tr>
+              <tr><td style="padding: 6px 0; color: #888;">Mint</td><td style="padding: 6px 0;"><code style="background: #1a1a2e; padding: 2px 6px; border-radius: 4px; color: #fff;">${shortMint}</code></td></tr>
+              <tr><td style="padding: 6px 0; color: #888;">Launchpad</td><td style="padding: 6px 0; color: #fff;">${launchpad}</td></tr>
+              <tr><td style="padding: 6px 0; color: #888;">Creator</td><td style="padding: 6px 0;"><code style="background: #1a1a2e; padding: 2px 6px; border-radius: 4px; color: #fff;">${hit.creatorWallet.slice(0, 16)}...</code></td></tr>
+              ${allstar.twitter_handle ? `<tr><td style="padding: 6px 0; color: #888;">Dev X</td><td style="padding: 6px 0;"><a href="https://x.com/${allstar.twitter_handle}" style="color: #1da1f2;">@${allstar.twitter_handle}</a></td></tr>` : ''}
+            </table>
+            <hr style="border: 1px solid #333; margin: 16px 0;" />
+            <h3 style="color: #00ff88; margin: 0 0 8px;">📊 Dev Track Record</h3>
+            <table style="width: 100%; border-collapse: collapse; color: #ccc;">
+              <tr><td style="padding: 4px 0;">Best Token</td><td style="padding: 4px 0;"><strong>$${allstar.best_token_symbol}</strong> → ${mcapLabel}</td></tr>
+              <tr><td style="padding: 4px 0;">Proven Tokens</td><td style="padding: 4px 0;">${allstar.total_proven_tokens || '?'}</td></tr>
+              <tr><td style="padding: 4px 0;">Wallet Family</td><td style="padding: 4px 0;">${allstar.total_wallet_family_size || 1} wallets</td></tr>
+              <tr><td style="padding: 4px 0;">Alert Level</td><td style="padding: 4px 0; font-weight: bold; color: ${alertLevel === 'critical' ? '#ff4444' : alertLevel === 'high_priority' ? '#ffaa00' : '#00ff88'};">${alertLevel.toUpperCase()}</td></tr>
+            </table>
+            <hr style="border: 1px solid #333; margin: 16px 0;" />
+            <h3 style="color: #00ff88; margin: 0 0 12px;">🔗 Quick Links</h3>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <a href="${pumpUrl}" style="display: inline-block; padding: 10px 20px; background: #00ff88; color: #000; text-decoration: none; border-radius: 8px; font-weight: bold;">Pump.fun</a>
+              <a href="${padreUrl}" style="display: inline-block; padding: 10px 20px; background: #7c3aed; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold;">Padre.gg</a>
+              <a href="${dexUrl}" style="display: inline-block; padding: 10px 20px; background: #1a1a2e; color: #fff; text-decoration: none; border-radius: 8px; border: 1px solid #444; font-weight: bold;">DexScreener</a>
+              <a href="${solscanUrl}" style="display: inline-block; padding: 10px 20px; background: #1a1a2e; color: #fff; text-decoration: none; border-radius: 8px; border: 1px solid #444; font-weight: bold;">Solscan</a>
+            </div>
+            <p style="color: #888; font-size: 12px; margin-top: 20px;">
+              ⏰ ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC • BlackBox Farm AllStar System
+            </p>
+          </div>
+        </div>
+      `;
+
+      await resend.emails.send({
+        from: 'BlackBox Alerts <alerts@blackbox.farm>',
+        to: [ALERT_EMAIL],
+        subject: `🚀 ALLSTAR MINT: $${ticker} — T${allstar.best_tier} Dev (${mcapLabel} track record)`,
+        html: emailHtml,
+      });
+      console.log(`[allstar] ✓ Email alert sent to ${ALERT_EMAIL}`);
+    } else {
+      console.warn('[allstar] No RESEND_API_KEY, skipping email');
+    }
+  } catch (e) {
+    console.warn('[allstar] Email alert failed:', e);
+  }
+
+  console.log(`[allstar] 🚀 ALERT COMPLETE: ${tierLabel} dev ${allstar.master_wallet.slice(0, 8)}... minted $${ticker} (${alertLevel}) → TG+DM+Email`);
 }
 
 // ─── MAIN HANDLER ───
