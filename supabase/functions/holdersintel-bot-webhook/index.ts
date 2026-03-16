@@ -2082,7 +2082,7 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
     `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
     distBlock +
     warningsBlock +
-    `\n→ /risk \`${ca}\` for full report` +
+    `` +
     TAGLINE;
 
   await sendMessage(chatId, msg);
