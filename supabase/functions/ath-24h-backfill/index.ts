@@ -37,7 +37,7 @@ async function fetchAth24h(tokenMint: string): Promise<number | null> {
     if (!poolAddress) return null;
 
     // Rate limit pause between the two API calls (GeckoTerminal free: 30 req/min)
-    await new Promise(r => setTimeout(r, 4000));
+    await new Promise(r => setTimeout(r, 6000));
 
     // Step 2: Fetch hourly OHLCV candles (24h window)
     const ohlcvRes = await fetch(
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json().catch(() => ({}));
-    const batchSize = Math.min(Math.max(body.batchSize || 5, 1), 20);
+    const batchSize = Math.min(Math.max(body.batchSize || 50, 1), 50);
 
     // Get tokens without ath_24h_usd, newest first
     const { data: tokens, error: fetchError } = await supabase
@@ -135,9 +135,8 @@ Deno.serve(async (req) => {
 
       results.push({ mint: token.token_mint, ath });
 
-      // GeckoTerminal free tier: 30 req/min → need ~4s between each API call
-      // We have 4s inside fetchAth24h, add 4s between tokens too
-      await new Promise(r => setTimeout(r, 4000));
+      // 15 seconds between each token to safely respect GeckoTerminal rate limits
+      await new Promise(r => setTimeout(r, 15000));
     }
 
     console.log(`[ath-backfill] Batch done: ${enriched} enriched, ${skipped} skipped, ~${(remaining ?? 0) - tokens.length} remaining`);
