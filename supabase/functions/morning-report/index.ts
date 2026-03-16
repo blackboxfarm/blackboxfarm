@@ -681,7 +681,52 @@ Deno.serve(async (req) => {
     }
     tgMessage += `\n`;
 
-    tgMessage += `📬 Unread Notifications: ${unreadCount || 0}\n`;
+    // Token Vigil section
+    if (vigilStats.overnight_deaths > 0 || vigilStats.overnight_post_mortems > 0 || vigilStats.overnight_mid_growth > 0 || vigilStats.total_watching > 0) {
+      tgMessage += `\n💀 **Token Vigil**\n`;
+      tgMessage += `• Watching: ${vigilStats.total_watching || 0} | Dead: ${vigilStats.total_dead || 0} | Total Assessments: ${vigilStats.total_assessments || 0}\n`;
+      
+      if (vigilStats.overnight_deaths > 0) {
+        tgMessage += `• ☠️ Deaths overnight: ${vigilStats.overnight_deaths}\n`;
+        for (const d of (vigilStats.overnight_deaths_list || []).slice(0, 5)) {
+          tgMessage += `  → $${d.symbol} (peak $${d.peak_mcap >= 1000000 ? (d.peak_mcap/1000000).toFixed(1)+'M' : (d.peak_mcap/1000).toFixed(0)+'K'})\n`;
+        }
+      }
+      if (vigilStats.overnight_post_mortems > 0) {
+        tgMessage += `• 🔬 Post-mortems: ${vigilStats.overnight_post_mortems}`;
+        const causes = vigilStats.overnight_post_mortem_causes || {};
+        const causeStr = Object.entries(causes).map(([k, v]) => `${k}:${v}`).join(', ');
+        if (causeStr) tgMessage += ` (${causeStr})`;
+        tgMessage += `\n`;
+      }
+      if (vigilStats.overnight_mid_growth > 0) {
+        tgMessage += `• 📈 Mid-growth snapshots: ${vigilStats.overnight_mid_growth}\n`;
+        for (const m of (vigilStats.overnight_mid_growth_list || []).slice(0, 5)) {
+          tgMessage += `  → $${m.symbol} ($${m.mcap >= 1000000 ? (m.mcap/1000000).toFixed(1)+'M' : (m.mcap/1000).toFixed(0)+'K'})\n`;
+        }
+      }
+      if (Object.keys(vigilStats.cause_of_death_all_time || {}).length > 0) {
+        tgMessage += `• COD all-time: ${Object.entries(vigilStats.cause_of_death_all_time).map(([k, v]) => `${k}:${v}`).join(', ')}\n`;
+      }
+    }
+
+    // Allstar section
+    if ((allstarStats.total_allstars || 0) > 0) {
+      tgMessage += `\n⭐ **Allstar Dev Registry**\n`;
+      tgMessage += `• Active Allstars: ${allstarStats.total_allstars} | Family Wallets: ${allstarStats.total_family_wallets_monitored}\n`;
+      if (Object.keys(allstarStats.tier_breakdown || {}).length > 0) {
+        tgMessage += `• Tiers: ${Object.entries(allstarStats.tier_breakdown).sort().map(([k, v]) => `${k}:${v}`).join(', ')}\n`;
+      }
+      tgMessage += `• Overnight audits: ${allstarStats.overnight_audits || 0}\n`;
+      if (allstarStats.overnight_mint_alerts > 0) {
+        tgMessage += `• 🚨 NEW MINT ALERTS: ${allstarStats.overnight_mint_alerts}\n`;
+        for (const a of (allstarStats.overnight_alerts_list || []).slice(0, 5)) {
+          tgMessage += `  → $${a.symbol || 'UNKNOWN'} (T${a.tier}, ${a.level})\n`;
+        }
+      }
+    }
+
+    tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
     // Send via admin-notify
