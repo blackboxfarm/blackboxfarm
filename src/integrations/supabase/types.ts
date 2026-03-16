@@ -4356,6 +4356,24 @@ export type Database = {
         }
         Relationships: []
       }
+      funnel_feed_bot_state: {
+        Row: {
+          id: number
+          update_offset: number
+          updated_at: string
+        }
+        Insert: {
+          id: number
+          update_offset?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          update_offset?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       funnel_feed_discoveries: {
         Row: {
           created_at: string
@@ -4423,6 +4441,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      funnel_feed_raw_messages: {
+        Row: {
+          captured_at: string
+          chat_id: string
+          id: number
+          message_date: string | null
+          message_id: number
+          message_text: string | null
+          processed: boolean
+          update_id: number
+        }
+        Insert: {
+          captured_at?: string
+          chat_id: string
+          id?: number
+          message_date?: string | null
+          message_id: number
+          message_text?: string | null
+          processed?: boolean
+          update_id: number
+        }
+        Update: {
+          captured_at?: string
+          chat_id?: string
+          id?: number
+          message_date?: string | null
+          message_id?: number
+          message_text?: string | null
+          processed?: boolean
+          update_id?: number
+        }
+        Relationships: []
       }
       funnel_feed_sources: {
         Row: {

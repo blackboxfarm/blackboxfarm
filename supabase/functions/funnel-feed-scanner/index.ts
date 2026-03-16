@@ -117,7 +117,20 @@ Deno.serve(async (req) => {
 });
 
 async function runScan(supabase: any, specificSourceId?: string) {
-  // Get active sources due for scraping
+  // Use TELEGRAM_BOT_TOKEN (general bot) to avoid conflict with holders-intel webhook bot
+  const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
+  if (!botToken) {
+    return jsonRes({ error: 'No Telegram bot token configured' }, 500);
+  }
+
+  // Ensure no webhook is set (getUpdates conflicts with webhooks)
+  await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`, { method: 'POST' });
+
+  // Step 1: Poll getUpdates to capture new channel_post messages
+  const capturedCount = await pollBotUpdates(supabase, botToken);
+  console.log(`[funnel-feed-scanner] Captured ${capturedCount} new messages from getUpdates`);
+
+  // Step 2: Get active sources
   let query = supabase
     .from('funnel_feed_sources')
     .select('*')
@@ -129,120 +142,151 @@ async function runScan(supabase: any, specificSourceId?: string) {
   
   const { data: sources, error: srcErr } = await query;
   if (srcErr || !sources?.length) {
-    return jsonRes({ message: 'No active sources to scan', error: srcErr?.message });
+    return jsonRes({ message: 'No active sources to scan', captured: capturedCount, error: srcErr?.message });
   }
 
-  // Filter to sources that are due for scraping
-  const now = Date.now();
-  const dueSources: FunnelSource[] = sources.filter((s: FunnelSource) => {
-    if (specificSourceId) return true; // Force scan if manually triggered
-    if (!s.last_scraped_at) return true;
-    const elapsed = now - new Date(s.last_scraped_at).getTime();
-    return elapsed >= s.scrape_interval_minutes * 60 * 1000;
-  });
-
-  if (dueSources.length === 0) {
-    return jsonRes({ message: 'No sources due for scraping' });
-  }
-
-  console.log(`[funnel-feed-scanner] Scanning ${dueSources.length} sources...`);
-
+  // Step 3: Process unprocessed messages for each source
   const results: any[] = [];
 
-  for (const source of dueSources) {
+  for (const source of sources) {
     try {
-      const result = await scrapeSource(supabase, source);
+      const result = await processSourceMessages(supabase, source);
       results.push({ source: source.source_name, ...result });
     } catch (err) {
-      console.error(`[funnel-feed-scanner] Error scraping ${source.source_name}:`, err);
+      console.error(`[funnel-feed-scanner] Error processing ${source.source_name}:`, err);
       results.push({ source: source.source_name, error: err instanceof Error ? err.message : 'Unknown' });
     }
   }
 
-  return jsonRes({ scanned: results.length, results });
+  return jsonRes({ captured: capturedCount, scanned: results.length, results });
 }
 
-async function scrapeSource(supabase: any, source: FunnelSource) {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+// Poll Telegram Bot API getUpdates and store raw messages
+async function pollBotUpdates(supabase: any, botToken: string): Promise<number> {
+  // Get current offset
+  const { data: state } = await supabase
+    .from('funnel_feed_bot_state')
+    .select('update_offset')
+    .eq('id', 1)
+    .single();
 
-  // Use telegram-channel-monitor's MTProto infrastructure to read messages
-  // We call the existing scrape endpoint to get recent messages
-  const telegramBotToken = Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
-  
-  let messages: any[] = [];
-  
-  // Try Bot API getUpdates for channels where bot is admin, or use MTProto
-  // For channels, we use the Telegram Bot API's getChat + forwardMessage approach
-  // But simplest: call the telegram-channel-monitor's internal scrape
-  
-  // Use Telegram Bot API to get channel messages via getUpdates won't work for channels
-  // Instead, use the MTProto session to read channel history
-  
-  // Use 30-min lookback window to catch missed messages, dedup at insert level
-  const lookbackMinutes = 30;
-  const lookbackId = Math.max(0, (source.last_message_id || 0) - 200); // ~200 msgs overlap buffer
+  let offset = state?.update_offset || 0;
+  let totalCaptured = 0;
 
-  try {
-    // Call internal edge function to scrape channel messages
-    const resp = await fetch(`${supabaseUrl}/functions/v1/telegram-channel-monitor`, {
+  // Poll up to 3 times (short timeout each) to drain pending updates
+  for (let i = 0; i < 3; i++) {
+    const resp = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'scrape_channel_messages',
-        channel_id: source.source_id,
-        min_id: lookbackId,
+        offset,
+        timeout: 2, // 2-second long poll
         limit: 100,
-        offset_date: Math.floor((Date.now() - lookbackMinutes * 60 * 1000) / 1000),
+        allowed_updates: ['channel_post', 'message'],
       }),
     });
 
-    if (resp.ok) {
-      const data = await resp.json();
-      messages = data.messages || [];
-    } else {
-      // Fallback: try Bot API for groups where bot is a member
-      console.log(`[funnel-feed-scanner] MTProto scrape failed for ${source.source_name}, trying Bot API...`);
-      messages = await fetchViaBotApi(telegramBotToken, source.source_id, source.last_message_id);
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      console.error(`[funnel-feed-scanner] getUpdates failed: ${resp.status} - ${errBody}`);
+      break;
     }
-  } catch (err) {
-    console.warn(`[funnel-feed-scanner] Scrape error for ${source.source_name}:`, err);
-    // Try Bot API fallback
-    if (telegramBotToken) {
-      messages = await fetchViaBotApi(telegramBotToken, source.source_id, source.last_message_id);
+
+    const data = await resp.json();
+    const updates = data.result || [];
+    if (updates.length === 0) break;
+
+    // Store raw messages
+    const rows = updates
+      .filter((u: any) => u.channel_post || u.message)
+      .map((u: any) => {
+        const msg = u.channel_post || u.message;
+        return {
+          update_id: u.update_id,
+          chat_id: msg.chat.id.toString(),
+          message_id: msg.message_id,
+          message_text: msg.text || msg.caption || '',
+          message_date: new Date(msg.date * 1000).toISOString(),
+          processed: false,
+        };
+      });
+
+    if (rows.length > 0) {
+      const { error: insertErr } = await supabase
+        .from('funnel_feed_raw_messages')
+        .upsert(rows, { onConflict: 'update_id', ignoreDuplicates: true });
+
+      if (insertErr) {
+        console.error(`[funnel-feed-scanner] Raw message insert error:`, insertErr.message);
+      } else {
+        totalCaptured += rows.length;
+      }
     }
+
+    // Advance offset
+    const newOffset = Math.max(...updates.map((u: any) => u.update_id)) + 1;
+    await supabase
+      .from('funnel_feed_bot_state')
+      .update({ update_offset: newOffset, updated_at: new Date().toISOString() })
+      .eq('id', 1);
+    offset = newOffset;
+
+    // If we got fewer than 100, we've drained the queue
+    if (updates.length < 100) break;
   }
 
-  if (!messages.length) {
+  return totalCaptured;
+}
+
+// Process unprocessed raw messages for a given source
+async function processSourceMessages(supabase: any, source: FunnelSource) {
+  // Get unprocessed messages from this source's chat
+  const { data: rawMsgs, error: rawErr } = await supabase
+    .from('funnel_feed_raw_messages')
+    .select('*')
+    .eq('chat_id', source.source_id)
+    .eq('processed', false)
+    .order('message_id', { ascending: true })
+    .limit(200);
+
+  if (rawErr || !rawMsgs?.length) {
     // Update last_scraped_at even if no messages
     await supabase
       .from('funnel_feed_sources')
       .update({ last_scraped_at: new Date().toISOString() })
       .eq('id', source.id);
-    return { tokens_found: 0, message: 'No new messages' };
+    return { tokens_found: 0, messages_processed: 0, message: rawMsgs?.length === 0 ? 'No new messages' : rawErr?.message };
   }
+
+  console.log(`[funnel-feed-scanner] Processing ${rawMsgs.length} messages for ${source.source_name}`);
 
   // Extract Solana addresses from messages
   const discoveredTokens: Map<string, { messageId: number; text: string }> = new Map();
   let maxMessageId = source.last_message_id || 0;
+  const processedIds: number[] = [];
 
-  for (const msg of messages) {
-    const text = msg.text || msg.message || '';
-    const msgId = msg.message_id || msg.id || 0;
+  for (const msg of rawMsgs) {
+    const text = msg.message_text || '';
+    const msgId = msg.message_id || 0;
     maxMessageId = Math.max(maxMessageId, msgId);
+    processedIds.push(msg.id);
 
     const addresses = text.match(SOLANA_ADDRESS_REGEX) || [];
     for (const addr of addresses) {
       if (SKIP_ADDRESSES.has(addr)) continue;
       if (addr.length < 32 || addr.length > 44) continue;
-      // Basic heuristic: token mints often end in 'pump' or are exactly 44 chars
       if (!discoveredTokens.has(addr)) {
         discoveredTokens.set(addr, { messageId: msgId, text: text.slice(0, 200) });
       }
     }
+  }
+
+  // Mark messages as processed
+  if (processedIds.length > 0) {
+    await supabase
+      .from('funnel_feed_raw_messages')
+      .update({ processed: true })
+      .in('id', processedIds);
   }
 
   console.log(`[funnel-feed-scanner] Found ${discoveredTokens.size} potential token addresses in ${source.source_name}`);
@@ -294,7 +338,7 @@ async function scrapeSource(supabase: any, source: FunnelSource) {
     if (!insertErr) {
       newTokens++;
 
-      // Feed into mesh pipeline (fire-and-forget)
+      // Feed into mesh pipeline
       try {
         await meshFeed(supabase, {
           entity_type: 'token',
@@ -305,7 +349,7 @@ async function scrapeSource(supabase: any, source: FunnelSource) {
         console.warn(`[funnel-feed-scanner] Mesh feed error for ${mint}:`, meshErr);
       }
 
-      // If not in watchlist, insert as pending_triage for pipeline processing
+      // Insert into watchlist if not already there
       if (watchlistStatus === 'pending') {
         const { error: wlErr } = await supabase
           .from('pumpfun_watchlist')
@@ -323,7 +367,6 @@ async function scrapeSource(supabase: any, source: FunnelSource) {
         if (wlErr && !wlErr.message.includes('duplicate')) {
           console.warn(`[funnel-feed-scanner] Watchlist insert error for ${mint}:`, wlErr.message);
         } else {
-          // Update discovery status
           await supabase
             .from('funnel_feed_discoveries')
             .update({ watchlist_status: 'inserted', watchlist_processed_at: new Date().toISOString() })
@@ -332,10 +375,8 @@ async function scrapeSource(supabase: any, source: FunnelSource) {
         }
       }
 
-      // If not yet posted to X, queue for holders-intel-poster
+      // Queue for X posting
       if (xpostStatus === 'pending') {
-        // The holders-intel-scheduler will pick it up from the watchlist
-        // We just mark it as queued
         await supabase
           .from('funnel_feed_discoveries')
           .update({ xpost_status: 'queued', xpost_processed_at: new Date().toISOString() })
@@ -358,41 +399,11 @@ async function scrapeSource(supabase: any, source: FunnelSource) {
     .update({
       last_scraped_at: new Date().toISOString(),
       last_message_id: maxMessageId,
-      tokens_discovered: source.tokens_discovered + newTokens,
+      tokens_discovered: (source.tokens_discovered || 0) + newTokens,
     })
     .eq('id', source.id);
 
-  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, max_message_id: maxMessageId };
-}
-
-async function fetchViaBotApi(botToken: string | undefined, chatId: string, _afterId: number): Promise<any[]> {
-  if (!botToken) return [];
-  
-  try {
-    // Bot API doesn't support getHistory, but for groups where bot is admin we can try
-    // This is limited - mainly works for supergroups
-    const resp = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        allowed_updates: ['channel_post', 'message'],
-        limit: 100,
-      }),
-    });
-    
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    
-    // Filter to messages from the target chat
-    return (data.result || [])
-      .filter((u: any) => {
-        const msg = u.message || u.channel_post;
-        return msg && msg.chat.id.toString() === chatId.toString();
-      })
-      .map((u: any) => u.message || u.channel_post);
-  } catch {
-    return [];
-  }
+  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, messages_processed: rawMsgs.length, max_message_id: maxMessageId };
 }
 
 function jsonRes(data: any, status = 200) {
