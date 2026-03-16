@@ -570,6 +570,8 @@ Deno.serve(async (req) => {
         table_health: tableHealth,
         external_services_status: externalServicesStatus,
         holders_intel_metrics: holdersIntelMetrics,
+        vigil_stats: vigilStats,
+        allstar_stats: allstarStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
