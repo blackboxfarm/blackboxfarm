@@ -590,11 +590,35 @@ serve(async (req) => {
       },
     };
 
+    // Fetch post-mortem pattern intelligence
+    let patternBlock = '';
+    try {
+      const patternCtx = await getPatternContext(supabase, {
+        mcap_usd: reportData.marketCap || 0,
+        real_holders: totalHolders,
+        whale_supply_pct: reportData.simpleTiers?.whales?.supplyPercentage || 0,
+        dust_pct: dustPercent,
+        top10_pct: top10Pct,
+        health_score: healthScore,
+        dev_sold_all: !!reportData.potentialDevWallet?.detectionMethod?.includes('sold'),
+        has_twitter: !!reportData.socials?.twitter,
+        has_telegram: !!reportData.socials?.telegram,
+        bundled_pct: bundledPct,
+        lp_pct: lpPercentage,
+      });
+      patternBlock = patternCtx.prompt_block;
+      console.log(`[token-ai-interpreter] Pattern context: ${patternCtx.matched_rules.length} rules matched, ${patternCtx.death_probability}% death prob`);
+    } catch (e) {
+      console.warn('[token-ai-interpreter] Pattern context fetch failed:', e);
+    }
+
     // Call Lovable AI
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
+
+    const userPrompt = `Analyze this token's holder structure and generate an interpretation:\n\n${JSON.stringify(metricsContext, null, 2)}${patternBlock ? '\n\n' + patternBlock : ''}`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -606,10 +630,7 @@ serve(async (req) => {
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: buildSystemPrompt(mode, tone as ToneType) },
-          { 
-            role: "user", 
-            content: `Analyze this token's holder structure and generate an interpretation:\n\n${JSON.stringify(metricsContext, null, 2)}`
-          }
+          { role: "user", content: userPrompt }
         ],
         tools: [interpretationTool],
         tool_choice: { type: "function", function: { name: "token_interpretation" } }
