@@ -459,54 +459,24 @@ async function createAllstarAlert(
   }
 
   // ──────────────────────────────────────────────
-  // CHANNEL 2: Direct MTProto DM to @DrRick_gem
+  // CHANNEL 2: Direct MTProto DM to @DrRick_gem (hardcoded ID: 5549703183)
   // ──────────────────────────────────────────────
   try {
-    // Resolve username to chat ID - check DB first, then MTProto resolve_chat
-    const { data: targetUser } = await supabase
-      .from('telegram_message_targets')
-      .select('chat_id')
-      .eq('resolved_name', ALERT_TG_USERNAME)
-      .maybeSingle();
+    const dmMessage = [
+      `🚀 ALLSTAR MINT: $${ticker}`,
+      `T${allstar.best_tier} dev ${devHandle}`,
+      `Best: $${allstar.best_token_symbol} → ${mcapLabel}`,
+      `⏰ Minted: ${hit.mintAge}`,
+      ``,
+      `Pump: ${pumpUrl}`,
+      `Padre: ${padreUrl}`,
+      `DexScreener: ${dexUrl}`,
+    ].join('\n');
 
-    let chatId = targetUser?.chat_id;
-
-    if (!chatId) {
-      // Try resolving via MTProto resolve_chat action
-      const { data: resolveData } = await supabase.functions.invoke('telegram-mtproto-auth', {
-        body: { action: 'resolve_chat', chatUsername: ALERT_TG_USERNAME },
-      });
-      chatId = resolveData?.chatInfo?.id;
-      
-      // Cache for future lookups
-      if (chatId) {
-        await supabase.from('telegram_message_targets').upsert({
-          chat_id: String(chatId),
-          label: `DM_${ALERT_TG_USERNAME}`,
-          resolved_name: ALERT_TG_USERNAME,
-          target_type: 'user',
-        }, { onConflict: 'label' });
-      }
-    }
-
-    if (chatId) {
-      const dmMessage = [
-        `🚀 ALLSTAR MINT: $${ticker}`,
-        `T${allstar.best_tier} dev ${devHandle}`,
-        `Best: $${allstar.best_token_symbol} → ${mcapLabel}`,
-        ``,
-        `Pump: ${pumpUrl}`,
-        `Padre: ${padreUrl}`,
-        `DexScreener: ${dexUrl}`,
-      ].join('\n');
-
-      await supabase.functions.invoke('telegram-mtproto-auth', {
-        body: { action: 'send_message', chatId: Number(chatId), message: dmMessage },
-      });
-      console.log(`[allstar] ✓ DM sent to @${ALERT_TG_USERNAME}`);
-    } else {
-      console.warn(`[allstar] Could not resolve @${ALERT_TG_USERNAME} for DM`);
-    }
+    await supabase.functions.invoke('telegram-mtproto-auth', {
+      body: { action: 'send_message', chatId: DRRICKGEM_CHAT_ID, message: dmMessage },
+    });
+    console.log(`[allstar] ✓ DM sent to DrRick_gem (${DRRICKGEM_CHAT_ID})`);
   } catch (e) {
     console.warn('[allstar] DM to DrRick_gem failed:', e);
   }
