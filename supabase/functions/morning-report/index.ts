@@ -287,6 +287,57 @@ Deno.serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // 7.5. HOLDERSINTEL TWITTER ACCOUNT METRICS
+    // ═══════════════════════════════════════════════════════════════
+    let holdersIntelMetrics: Record<string, any> | null = null;
+
+    try {
+      const { data: hiAccount } = await supabase
+        .from('twitter_accounts')
+        .select('follower_count, following_count, tweet_count, likes_count, listed_count, media_count, is_verified, fast_followers_count, professional_type, professional_category, bio, display_name, username, profile_image_url, last_enriched_at, join_date')
+        .ilike('username', 'holdersintel')
+        .maybeSingle();
+
+      if (hiAccount) {
+        // Calculate follower quality heuristics
+        const followerCount = hiAccount.follower_count || 0;
+        const fastFollowers = hiAccount.fast_followers_count || 0; // "fast followers" = blue-check / premium subscribers
+        const normalFollowers = followerCount - fastFollowers;
+        const blueCheckPct = followerCount > 0 ? Math.round((fastFollowers / followerCount) * 1000) / 10 : 0;
+        const followRatio = hiAccount.following_count && hiAccount.following_count > 0
+          ? Math.round((followerCount / hiAccount.following_count) * 100) / 100
+          : followerCount;
+        const engagementProxy = followerCount > 0
+          ? Math.round(((hiAccount.likes_count || 0) / (hiAccount.tweet_count || 1)) * 100) / 100
+          : 0;
+
+        holdersIntelMetrics = {
+          display_name: hiAccount.display_name,
+          username: hiAccount.username,
+          is_verified: hiAccount.is_verified,
+          professional_type: hiAccount.professional_type,
+          followers: {
+            total: followerCount,
+            blue_check_premium: fastFollowers,
+            normal: normalFollowers,
+            blue_check_pct: blueCheckPct,
+          },
+          following: hiAccount.following_count || 0,
+          follow_ratio: followRatio,
+          tweets: hiAccount.tweet_count || 0,
+          likes: hiAccount.likes_count || 0,
+          avg_likes_per_tweet: engagementProxy,
+          listed_count: hiAccount.listed_count || 0,
+          media_count: hiAccount.media_count || 0,
+          join_date: hiAccount.join_date,
+          last_enriched_at: hiAccount.last_enriched_at,
+        };
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch HoldersIntel metrics:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // 8. EXTERNAL SERVICES STATUS (Solscan, Cloudflare, etc.)
     // ═══════════════════════════════════════════════════════════════
     const externalServicesStatus: Record<string, { status: string; calls_overnight: number; failures: number; notes: string }> = {};
