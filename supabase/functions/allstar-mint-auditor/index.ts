@@ -192,6 +192,38 @@ interface MintHit {
   launchpad?: string;
   signature: string;
   timestamp: number;
+  mintTimestamp: number; // actual on-chain mint time (verified)
+  mintAge: string; // human-readable age
+}
+
+/**
+ * Verify actual on-chain mint timestamp via Helius getTransaction.
+ * Returns epoch seconds or null if unverifiable.
+ */
+async function verifyMintTimestamp(tokenMint: string, heliusApiKey: string): Promise<number | null> {
+  try {
+    // Use Helius parsed transaction history for this specific token mint
+    const url = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'TOKEN_MINT', limit: '1' });
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const txs = await res.json();
+    if (Array.isArray(txs) && txs.length > 0 && txs[0].timestamp) {
+      return txs[0].timestamp;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function formatMintAge(mintTimestamp: number): string {
+  const ageMs = Date.now() - (mintTimestamp * 1000);
+  const mins = Math.floor(ageMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ${hrs % 24}h ago`;
 }
 
 async function auditAllstarFamily(
@@ -204,7 +236,7 @@ async function auditAllstarFamily(
   const familyWallets: string[] = allstar.family_wallets || [allstar.master_wallet];
   const hits: MintHit[] = [];
 
-  for (const wallet of familyWallets.slice(0, 30)) { // Cap at 30 wallets per family
+  for (const wallet of familyWallets.slice(0, 30)) {
     try {
       const url = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { type: 'TOKEN_MINT', limit: '50' });
       const response = await fetch(url, { method: 'GET' });
@@ -236,10 +268,33 @@ async function auditAllstarFamily(
           .eq('token_mint', tokenMint)
           .maybeSingle();
 
+        // ── VERIFY ACTUAL ON-CHAIN MINT TIMESTAMP ──
+        const verifiedMintTime = await verifyMintTimestamp(tokenMint, heliusApiKey);
+        const actualMintTimestamp = verifiedMintTime || tx.timestamp;
+        const mintDate = new Date(actualMintTimestamp * 1000);
+        const mintAgeMs = Date.now() - mintDate.getTime();
+        const mintAgeHours = mintAgeMs / (1000 * 60 * 60);
+        const mintAge = formatMintAge(actualMintTimestamp);
+
+        // Log the verification result
+        if (verifiedMintTime) {
+          console.log(`[allstar] ✓ Verified mint time for ${tokenMint.slice(0, 12)}: ${mintDate.toISOString()} (${mintAge})`);
+        } else {
+          console.log(`[allstar] ⚠ Could not verify mint time for ${tokenMint.slice(0, 12)}, using TX time: ${mintDate.toISOString()}`);
+        }
+
+        // Skip tokens that are actually OLD (minted more than sinceHours ago)
+        if (mintAgeHours > sinceHours) {
+          console.log(`[allstar] ⏭ Skipping ${tokenMint.slice(0, 12)}: minted ${mintAge} (older than ${sinceHours}h lookback)`);
+          continue;
+        }
+
         // Detect launchpad
         const programIds = tx.accountData?.map((a: any) => a.account) || [];
         let launchpad = 'unknown';
         if (programIds.includes('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') || tx.source === 'PUMP_FUN') launchpad = 'pump.fun';
+        if (tokenMint.endsWith('pump')) launchpad = 'pump.fun';
+        if (tokenMint.endsWith('jupx')) launchpad = 'jupiter';
 
         // Determine wallet depth in family
         const depth = wallet === allstar.master_wallet ? 0 :
@@ -254,6 +309,8 @@ async function auditAllstarFamily(
           launchpad,
           signature: tx.signature,
           timestamp: tx.timestamp,
+          mintTimestamp: actualMintTimestamp,
+          mintAge,
         });
       }
 
