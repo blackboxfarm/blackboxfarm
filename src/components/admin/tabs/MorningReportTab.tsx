@@ -34,6 +34,22 @@ interface MorningReport {
   new_subscribers_details: any[];
   table_health: Record<string, { row_count: number; status: string }>;
   external_services_status: Record<string, { status: string; calls_overnight: number; failures: number; notes: string }>;
+  holders_intel_metrics: {
+    display_name: string;
+    username: string;
+    is_verified: boolean;
+    professional_type: string | null;
+    followers: { total: number; blue_check_premium: number; normal: number; blue_check_pct: number };
+    following: number;
+    follow_ratio: number;
+    tweets: number;
+    likes: number;
+    avg_likes_per_tweet: number;
+    listed_count: number;
+    media_count: number;
+    join_date: string | null;
+    last_enriched_at: string | null;
+  } | null;
   unread_notifications: number;
   alerts: { level: string; category: string; title: string; detail: string }[];
   execution_time_ms: number;
