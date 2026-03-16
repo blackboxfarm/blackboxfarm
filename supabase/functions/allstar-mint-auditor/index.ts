@@ -376,7 +376,172 @@ Deno.serve(async (req) => {
       audit_batch_size = 10,
       hours_lookback = 24,
       force_requalify = false,
+      // Manual add mode: provide a token_mint to add its dev to allstars
+      manual_add_token_mint = null,
     } = body;
+
+    // ─── MANUAL ADD MODE ───
+    if (manual_add_token_mint) {
+      console.log(`[allstar] Manual add requested for ${manual_add_token_mint}`);
+      
+      // Step 1: Resolve creator wallet
+      let creatorWallet = await resolveCreator(manual_add_token_mint);
+      
+      // Fallback: check proven_dev_tokens or developer_tokens
+      if (!creatorWallet) {
+        const { data: proven } = await supabase
+          .from('proven_dev_tokens')
+          .select('dev_wallet')
+          .eq('token_mint', manual_add_token_mint)
+          .maybeSingle();
+        creatorWallet = proven?.dev_wallet || null;
+      }
+      if (!creatorWallet) {
+        const { data: devToken } = await supabase
+          .from('developer_tokens')
+          .select('developer_id')
+          .eq('token_mint', manual_add_token_mint)
+          .maybeSingle();
+        if (devToken?.developer_id) {
+          const { data: profile } = await supabase
+            .from('developer_profiles')
+            .select('master_wallet_address')
+            .eq('id', devToken.developer_id)
+            .maybeSingle();
+          creatorWallet = profile?.master_wallet_address || null;
+        }
+      }
+
+      if (!creatorWallet) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Could not resolve creator wallet for this token. Try adding the dev wallet directly.' 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 });
+      }
+
+      // Step 2: Check if already in allstar registry
+      const { data: existingAllstar } = await supabase
+        .from('allstar_dev_registry')
+        .select('id, master_wallet, best_tier, status')
+        .eq('master_wallet', creatorWallet)
+        .maybeSingle();
+
+      if (existingAllstar) {
+        return new Response(JSON.stringify({
+          success: true,
+          action: 'already_exists',
+          message: `Dev ${creatorWallet.slice(0, 8)}... already in allstar registry (T${existingAllstar.best_tier}, ${existingAllstar.status})`,
+          allstar_id: existingAllstar.id,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Step 3: Get token info from DexScreener
+      let tokenSymbol = 'UNKNOWN';
+      let tokenName = 'Unknown Token';
+      let marketCap = 0;
+      try {
+        const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${manual_add_token_mint}`);
+        if (dexRes.ok) {
+          const dexData = await dexRes.json();
+          const pair = dexData.pairs?.[0];
+          if (pair) {
+            tokenSymbol = pair.baseToken?.symbol || 'UNKNOWN';
+            tokenName = pair.baseToken?.name || 'Unknown Token';
+            marketCap = pair.marketCap || pair.fdv || 0;
+          }
+        }
+      } catch {}
+
+      // Step 4: Find developer profile + build wallet family
+      const { data: devProfile } = await supabase
+        .from('developer_profiles')
+        .select('id, twitter_handle, master_wallet_address')
+        .eq('master_wallet_address', creatorWallet)
+        .maybeSingle();
+
+      let kycRoot: string | null = null;
+      const familyWallets: string[] = [creatorWallet];
+
+      if (devProfile) {
+        const { data: kycWallet } = await supabase
+          .from('developer_wallets')
+          .select('wallet_address')
+          .eq('developer_id', devProfile.id)
+          .eq('wallet_type', 'kyc_root')
+          .limit(1)
+          .maybeSingle();
+        kycRoot = kycWallet?.wallet_address || null;
+
+        const { data: relatedWallets } = await supabase
+          .from('developer_wallets')
+          .select('wallet_address')
+          .eq('developer_id', devProfile.id);
+        for (const w of relatedWallets || []) {
+          if (!familyWallets.includes(w.wallet_address)) familyWallets.push(w.wallet_address);
+        }
+      }
+
+      // Also pull from reputation_mesh
+      const { data: meshWallets } = await supabase
+        .from('reputation_mesh')
+        .select('target_id')
+        .eq('source_id', creatorWallet)
+        .in('relationship_type', ['funded_by', 'funds', 'same_entity', 'parent_wallet', 'child_wallet'])
+        .limit(50);
+      for (const mw of meshWallets || []) {
+        if (mw.target_id && !familyWallets.includes(mw.target_id)) familyWallets.push(mw.target_id);
+      }
+
+      // Step 5: Determine tier from proven_dev_tokens or default to manual T1
+      const { data: provenTokens } = await supabase
+        .from('proven_dev_tokens')
+        .select('tier, market_cap_ath')
+        .eq('dev_wallet', creatorWallet)
+        .order('tier', { ascending: false })
+        .limit(1);
+
+      const bestTier = provenTokens?.[0]?.tier || 1;
+      const bestMcap = provenTokens?.[0]?.market_cap_ath || marketCap;
+
+      // Step 6: Insert into allstar registry
+      const { data: newAllstar, error: insertErr } = await supabase
+        .from('allstar_dev_registry')
+        .insert({
+          developer_id: devProfile?.id || null,
+          master_wallet: creatorWallet,
+          twitter_handle: devProfile?.twitter_handle || null,
+          kyc_root_wallet: kycRoot,
+          best_tier: bestTier,
+          best_token_mint: manual_add_token_mint,
+          best_token_symbol: tokenSymbol,
+          best_mcap_achieved: bestMcap,
+          total_proven_tokens: provenTokens?.length || 1,
+          total_wallet_family_size: familyWallets.length,
+          family_wallets: familyWallets,
+          status: 'active',
+          notes: `Manually added via token ${tokenSymbol} (${manual_add_token_mint.slice(0, 12)}...)`,
+        })
+        .select('id')
+        .single();
+
+      if (insertErr) {
+        return new Response(JSON.stringify({ success: false, error: insertErr.message }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500,
+        });
+      }
+
+      console.log(`[allstar] ⭐ Manually added allstar: ${creatorWallet.slice(0, 8)}... via $${tokenSymbol} (${familyWallets.length} family wallets)`);
+
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'added',
+        message: `Added dev ${creatorWallet.slice(0, 8)}... to allstar registry via $${tokenSymbol}`,
+        allstar_id: newAllstar.id,
+        creator_wallet: creatorWallet,
+        family_wallets_count: familyWallets.length,
+        tier: bestTier,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     const results = {
       creators_backfilled: 0,
