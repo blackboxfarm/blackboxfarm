@@ -2671,7 +2671,7 @@ serve(async (req) => {
     }));
 
     // Commands that are allowed to reply publicly in groups
-    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/risk', '/r', '/quick', '/q', '/alerts'];
+    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts'];
 
     // If in a group chat and command is NOT in the public list, redirect to DM
     if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
