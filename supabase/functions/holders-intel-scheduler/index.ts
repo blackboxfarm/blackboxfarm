@@ -101,14 +101,16 @@ async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null;
   }
 }
 
-// Tier thresholds for proven dev tracking
+// Tier thresholds for proven dev tracking (expanded to 200k+)
 const TIER_THRESHOLDS = [
-  { tier: 6, minMcap: 3_000_000 },
-  { tier: 5, minMcap: 2_000_000 },
-  { tier: 4, minMcap: 1_000_000 },
-  { tier: 3, minMcap: 800_000 },
-  { tier: 2, minMcap: 600_000 },
-  { tier: 1, minMcap: 400_000 },
+  { tier: 8, minMcap: 3_000_000 },
+  { tier: 7, minMcap: 2_000_000 },
+  { tier: 6, minMcap: 1_000_000 },
+  { tier: 5, minMcap: 800_000 },
+  { tier: 4, minMcap: 600_000 },
+  { tier: 3, minMcap: 400_000 },
+  { tier: 2, minMcap: 300_000 },
+  { tier: 1, minMcap: 200_000 },
 ];
 
 function calculateTier(marketCap: number): number {
@@ -119,15 +121,15 @@ function calculateTier(marketCap: number): number {
 }
 
 const TIER_COLUMN_MAP: Record<number, string> = {
-  1: 'tier_1_at', 2: 'tier_2_at', 3: 'tier_3_at',
-  4: 'tier_4_at', 5: 'tier_5_at', 6: 'tier_6_at',
+  1: 'tier_200k_at', 2: 'tier_300k_at', 3: 'tier_1_at', 4: 'tier_2_at',
+  5: 'tier_3_at', 6: 'tier_4_at', 7: 'tier_5_at', 8: 'tier_6_at',
 };
 
 async function upsertProvenDevTokens(supabase: any, tokens: TrendingToken[], currentSlot: string) {
-  const qualifying = tokens.filter(t => t.marketCap >= 400_000);
+  const qualifying = tokens.filter(t => t.marketCap >= 200_000);
   if (qualifying.length === 0) return;
 
-  console.log(`[scheduler] ${qualifying.length} tokens qualify for proven dev tracking (≥400k mcap)`);
+  console.log(`[scheduler] ${qualifying.length} tokens qualify for proven dev tracking (≥200k mcap)`);
 
   for (const token of qualifying) {
     const tier = calculateTier(token.marketCap);
