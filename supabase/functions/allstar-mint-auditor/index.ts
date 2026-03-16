@@ -401,7 +401,7 @@ async function createAllstarAlert(
   // CHANNEL 2: Direct MTProto DM to @DrRick_gem
   // ──────────────────────────────────────────────
   try {
-    // Resolve username to chat ID
+    // Resolve username to chat ID - check DB first, then MTProto resolve_chat
     const { data: targetUser } = await supabase
       .from('telegram_message_targets')
       .select('chat_id')
@@ -411,11 +411,21 @@ async function createAllstarAlert(
     let chatId = targetUser?.chat_id;
 
     if (!chatId) {
-      // Try resolving via MTProto
+      // Try resolving via MTProto resolve_chat action
       const { data: resolveData } = await supabase.functions.invoke('telegram-mtproto-auth', {
-        body: { action: 'resolve_username', username: ALERT_TG_USERNAME },
+        body: { action: 'resolve_chat', chatUsername: ALERT_TG_USERNAME },
       });
-      chatId = resolveData?.userId || resolveData?.chatId;
+      chatId = resolveData?.chatInfo?.id;
+      
+      // Cache for future lookups
+      if (chatId) {
+        await supabase.from('telegram_message_targets').upsert({
+          chat_id: String(chatId),
+          label: `DM_${ALERT_TG_USERNAME}`,
+          resolved_name: ALERT_TG_USERNAME,
+          target_type: 'user',
+        }, { onConflict: 'label' });
+      }
     }
 
     if (chatId) {
