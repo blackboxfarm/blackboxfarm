@@ -397,7 +397,142 @@ Deno.serve(async (req) => {
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // 9. UNREAD NOTIFICATIONS
+    // 9. TOKEN VIGIL — Post-Mortem & Death Detection Stats
+    // ═══════════════════════════════════════════════════════════════
+    let vigilStats: any = {};
+    try {
+      // Deaths detected overnight
+      const { data: recentDeaths } = await supabase
+        .from('token_vigil')
+        .select('symbol, name, peak_mcap_usd, current_mcap_usd, death_detected_at')
+        .eq('status', 'dead')
+        .gte('death_detected_at', periodStart.toISOString())
+        .order('death_detected_at', { ascending: false });
+
+      // Post-mortems captured overnight
+      const { data: recentPostMortems } = await supabase
+        .from('token_assessments')
+        .select('symbol, outcome, cause_of_death, assessment_type, created_at')
+        .eq('assessment_type', 'post_mortem')
+        .gte('created_at', periodStart.toISOString());
+
+      // Mid-growth assessments overnight
+      const { data: recentMidGrowth } = await supabase
+        .from('token_assessments')
+        .select('symbol, outcome, mcap_usd, assessment_type, created_at')
+        .eq('assessment_type', 'mid_growth')
+        .gte('created_at', periodStart.toISOString());
+
+      // Totals
+      const { count: totalVigilWatching } = await supabase
+        .from('token_vigil')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['watching', 'declining']);
+
+      const { count: totalDead } = await supabase
+        .from('token_vigil')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'dead');
+
+      const { count: totalAssessments } = await supabase
+        .from('token_assessments')
+        .select('*', { count: 'exact', head: true });
+
+      // Cause of death breakdown (all time)
+      const { data: codBreakdown } = await supabase
+        .from('token_assessments')
+        .select('cause_of_death')
+        .eq('assessment_type', 'post_mortem')
+        .not('cause_of_death', 'is', null);
+
+      const codCounts: Record<string, number> = {};
+      for (const row of codBreakdown || []) {
+        codCounts[row.cause_of_death] = (codCounts[row.cause_of_death] || 0) + 1;
+      }
+
+      vigilStats = {
+        overnight_deaths: recentDeaths?.length || 0,
+        overnight_deaths_list: (recentDeaths || []).map(d => ({
+          symbol: d.symbol,
+          peak_mcap: d.peak_mcap_usd,
+        })),
+        overnight_post_mortems: recentPostMortems?.length || 0,
+        overnight_post_mortem_causes: (recentPostMortems || []).reduce((acc: Record<string, number>, pm) => {
+          acc[pm.cause_of_death || 'unknown'] = (acc[pm.cause_of_death || 'unknown'] || 0) + 1;
+          return acc;
+        }, {}),
+        overnight_mid_growth: recentMidGrowth?.length || 0,
+        overnight_mid_growth_list: (recentMidGrowth || []).map(m => ({
+          symbol: m.symbol,
+          mcap: m.mcap_usd,
+        })),
+        total_watching: totalVigilWatching || 0,
+        total_dead: totalDead || 0,
+        total_assessments: totalAssessments || 0,
+        cause_of_death_all_time: codCounts,
+      };
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch vigil stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 10. ALLSTAR DEV REGISTRY — Monitoring & Alerts
+    // ═══════════════════════════════════════════════════════════════
+    let allstarStats: any = {};
+    try {
+      const { count: totalAllstars } = await supabase
+        .from('allstar_dev_registry')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      const { data: allstarsByTier } = await supabase
+        .from('allstar_dev_registry')
+        .select('best_tier')
+        .eq('status', 'active');
+
+      const tierCounts: Record<string, number> = {};
+      for (const a of allstarsByTier || []) {
+        tierCounts[`T${a.best_tier}`] = (tierCounts[`T${a.best_tier}`] || 0) + 1;
+      }
+
+      // Total family wallets being monitored
+      const { data: familySizes } = await supabase
+        .from('allstar_dev_registry')
+        .select('total_wallet_family_size')
+        .eq('status', 'active');
+      const totalFamilyWallets = (familySizes || []).reduce((s, a) => s + (a.total_wallet_family_size || 0), 0);
+
+      // Overnight mint alerts
+      const { data: overnightAlerts } = await supabase
+        .from('allstar_mint_alerts')
+        .select('token_symbol, allstar_tier, alert_level, creator_wallet, created_at')
+        .gte('created_at', periodStart.toISOString())
+        .order('created_at', { ascending: false });
+
+      // Total audits run overnight
+      const { data: auditedOvernight } = await supabase
+        .from('allstar_dev_registry')
+        .select('master_wallet, best_tier, best_token_symbol')
+        .gte('last_audit_at', periodStart.toISOString());
+
+      allstarStats = {
+        total_allstars: totalAllstars || 0,
+        tier_breakdown: tierCounts,
+        total_family_wallets_monitored: totalFamilyWallets,
+        overnight_audits: auditedOvernight?.length || 0,
+        overnight_mint_alerts: overnightAlerts?.length || 0,
+        overnight_alerts_list: (overnightAlerts || []).map(a => ({
+          symbol: a.token_symbol,
+          tier: a.allstar_tier,
+          level: a.alert_level,
+        })),
+      };
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch allstar stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 11. UNREAD NOTIFICATIONS
     // ═══════════════════════════════════════════════════════════════
     const { count: unreadCount } = await supabase
       .from('admin_notifications')
