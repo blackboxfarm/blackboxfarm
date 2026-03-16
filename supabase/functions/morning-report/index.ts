@@ -595,6 +595,7 @@ Deno.serve(async (req) => {
         auth_failure_events: authFailureEvents,
         error_patterns: errorPatterns,
         external_services_status: externalServicesStatus,
+        holders_intel_metrics: holdersIntelMetrics,
         table_health: tableHealth,
         new_signups_details: newSignupsDetails,
         alerts,
