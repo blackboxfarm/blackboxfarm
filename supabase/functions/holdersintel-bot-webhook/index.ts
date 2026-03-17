@@ -1888,7 +1888,7 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
       }
     } catch (_) {}
   }
-  const thdr = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const thdr = symbol && name ? `$ ${symbol} (${name})` : symbol ? `$ ${symbol}` : "Unknown Token";
 
   let msg = `\`${ca}\`\n🪙 *${thdr}*\n\n🤖 *AI Analysis*\n\n`;
 
