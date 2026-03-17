@@ -381,9 +381,10 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
 
       // Feed into mesh pipeline
       try {
-        await meshFeed(supabase, {
-          entity_type: 'token',
-          entity_id: mint,
+        await meshFeed.token(supabase, {
+          mint,
+          symbol: tokenSymbol || undefined,
+          name: tokenName || undefined,
           source: `funnel_feed:${source.source_name}`,
         });
       } catch (meshErr) {
