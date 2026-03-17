@@ -218,7 +218,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
         const url = `${baseUrl}?limit=${limit}&offset=${offset}&includeNsfw=true`;
         console.log(`[Oracle] Fetching created tokens offset=${offset}...`);
         
-        const response = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+        const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
         
         if (response.ok) {
           const data = await response.json();
