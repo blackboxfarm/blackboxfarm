@@ -314,7 +314,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     let tokenSymbol = watchlistEntry?.token_symbol || null;
     let tokenName = watchlistEntry?.token_name || null;
     if (!tokenSymbol) {
-      const meta = await fetchPumpMeta(mint);
+      const meta = await fetchTokenMeta(mint);
       tokenSymbol = meta.symbol || null;
       tokenName = meta.name || null;
     }
