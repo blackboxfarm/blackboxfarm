@@ -290,7 +290,7 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
 
 async function getTableStats(supabase: any) {
   const tables = [

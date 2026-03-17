@@ -48,7 +48,7 @@ async function callTelegram(botToken: string, method: string, body?: Record<stri
   return payload;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('telegram-bot-health', async (req) => {
   const t0 = Date.now();
   console.log("[telegram-bot-health] ▶ incoming request", req.method);
 

@@ -98,7 +98,7 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('oracle-master-spider', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

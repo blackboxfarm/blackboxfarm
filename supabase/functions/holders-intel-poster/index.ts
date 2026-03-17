@@ -345,7 +345,7 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
   return result;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('holders-intel-poster', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

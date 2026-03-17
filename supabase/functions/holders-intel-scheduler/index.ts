@@ -267,7 +267,7 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

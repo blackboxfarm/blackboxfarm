@@ -670,7 +670,7 @@ async function createAllstarAlert(
 
 // ─── MAIN HANDLER ───
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

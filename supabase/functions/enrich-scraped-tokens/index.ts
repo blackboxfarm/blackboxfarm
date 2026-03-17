@@ -34,7 +34,7 @@ const detectLaunchpad = (tokenMint: string, pairData: any): string | null => {
   return null;
 };
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

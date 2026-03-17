@@ -87,7 +87,7 @@ function parseLeaderboardData(html: string): ParsedKOL[] {
   return kols;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('kol-registry-sync', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
