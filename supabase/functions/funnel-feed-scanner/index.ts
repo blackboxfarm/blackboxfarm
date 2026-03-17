@@ -508,7 +508,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     })
     .eq('id', source.id);
 
-  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, messages_processed: newMessages.length, max_message_id: maxMessageId };
+  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, skipped_non_tokens: skippedNonTokens, messages_processed: newMessages.length, max_message_id: maxMessageId };
 }
 
 function jsonRes(data: any, status = 200) {
