@@ -9,6 +9,44 @@ const corsHeaders = {
 // Solana address regex - base58, 32-44 chars
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
+// Known launchpad suffixes that guarantee it's a token mint
+const KNOWN_TOKEN_SUFFIXES = ['pump', 'moon'];
+
+function hasKnownTokenSuffix(mint: string): boolean {
+  return KNOWN_TOKEN_SUFFIXES.some(s => mint.endsWith(s));
+}
+
+// Validate if a Solana address is actually a token mint (not a wallet/pool/program)
+// Uses DexScreener as a lightweight check — if it has pairs, it's a real token
+async function validateTokenMint(mint: string): Promise<{ valid: boolean; symbol?: string; name?: string }> {
+  // Known launchpad suffixes are always valid
+  if (hasKnownTokenSuffix(mint)) {
+    return { valid: true };
+  }
+
+  // For unknown-suffix addresses, check DexScreener for pairs
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.pairs && d.pairs.length > 0) {
+        const pair = d.pairs[0];
+        return {
+          valid: true,
+          symbol: pair.baseToken?.symbol || undefined,
+          name: pair.baseToken?.name || undefined,
+        };
+      }
+    }
+  } catch { /* ignore */ }
+
+  // No pairs found — very likely not a token mint
+  console.log(`[funnel-feed-scanner] Skipping ${mint}: no DexScreener pairs, likely not a token mint`);
+  return { valid: false };
+}
+
 // Quick metadata fetch: pump.fun first, then DexScreener fallback
 async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
   // Try pump.fun first
