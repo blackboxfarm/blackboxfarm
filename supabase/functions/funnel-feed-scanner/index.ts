@@ -9,6 +9,21 @@ const corsHeaders = {
 // Solana address regex - base58, 32-44 chars
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
+// Quick pump.fun metadata fetch
+async function fetchPumpMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
+  try {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return {};
+    const d = await res.json();
+    return { symbol: d.symbol || undefined, name: d.name || undefined };
+  } catch {
+    return {};
+  }
+}
+
 // Known non-token addresses to skip (system programs, common wallets)
 const SKIP_ADDRESSES = new Set([
   '11111111111111111111111111111111',
@@ -101,6 +116,32 @@ Deno.serve(async (req) => {
         .limit(limit);
       if (error) return jsonRes({ error: error.message }, 500);
       return jsonRes({ discoveries: data });
+    }
+
+    // ── Backfill: fetch metadata for discoveries with null symbols ──
+    if (action === 'backfill_metadata') {
+      const { data: nullRows } = await supabase
+        .from('funnel_feed_discoveries')
+        .select('id, token_mint')
+        .is('token_symbol', null)
+        .limit(50);
+      if (!nullRows?.length) return jsonRes({ message: 'Nothing to backfill', updated: 0 });
+      let updated = 0;
+      for (const row of nullRows) {
+        const meta = await fetchPumpMeta(row.token_mint);
+        if (meta.symbol) {
+          await supabase.from('funnel_feed_discoveries')
+            .update({ token_symbol: meta.symbol, token_name: meta.name || null })
+            .eq('id', row.id);
+          // Also update watchlist
+          await supabase.from('pumpfun_watchlist')
+            .update({ token_symbol: meta.symbol, token_name: meta.name || null })
+            .eq('token_mint', row.token_mint)
+            .is('token_symbol', null);
+          updated++;
+        }
+      }
+      return jsonRes({ message: `Backfilled ${updated}/${nullRows.length}`, updated });
     }
 
     // ── SCAN: Scrape active sources via MTProto ──
@@ -253,6 +294,15 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
       .eq('token_mint', mint)
       .maybeSingle();
 
+    // Resolve symbol/name: watchlist first, then pump.fun API
+    let tokenSymbol = watchlistEntry?.token_symbol || null;
+    let tokenName = watchlistEntry?.token_name || null;
+    if (!tokenSymbol) {
+      const meta = await fetchPumpMeta(mint);
+      tokenSymbol = meta.symbol || null;
+      tokenName = meta.name || null;
+    }
+
     const watchlistStatus = watchlistEntry ? 'already_exists' : 'pending';
 
     // Check if already posted to X
@@ -268,8 +318,8 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
       .from('funnel_feed_discoveries')
       .insert({
         token_mint: mint,
-        token_symbol: watchlistEntry?.token_symbol || null,
-        token_name: watchlistEntry?.token_name || null,
+        token_symbol: tokenSymbol,
+        token_name: tokenName,
         source_id: source.id,
         source_message_id: info.messageId,
         watchlist_status: watchlistStatus,
@@ -297,8 +347,8 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
           .from('pumpfun_watchlist')
           .insert({
             token_mint: mint,
-            token_symbol: watchlistEntry?.token_symbol || null,
-            token_name: watchlistEntry?.token_name || null,
+            token_symbol: tokenSymbol,
+            token_name: tokenName,
             status: 'pending_triage',
             source: `funnel_feed:${source.source_name}`,
             created_at: new Date().toISOString(),
