@@ -787,19 +787,8 @@ Deno.serve(async (req) => {
         console.warn('[poster] TG notification failed:', tgErr);
       }
       
-      const elapsed = Date.now() - startTime;
-      
-      return new Response(
-        JSON.stringify({
-          success: true,
-          posted: true,
-          symbol: stats.symbol,
-          tweetId: tweetResult.tweetId,
-          tweetUrl: tweetResult.tweetUrl,
-          executionTimeMs: elapsed,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      postsThisTick++;
+      results.push({ symbol: stats.symbol, action: 'posted', tweetId: tweetResult.tweetId });
       
     } catch (postError: any) {
       console.error(`[poster] Error processing ${item.symbol}:`, postError);
