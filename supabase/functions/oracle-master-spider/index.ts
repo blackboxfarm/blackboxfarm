@@ -549,7 +549,7 @@ Deno.serve(async (req) => {
 
     // ── STEP 3: Genealogy trace ──
     addStep('Genealogy Trace', 'running', 'Tracing funding chain...');
-    const genealogy = { kycRoot: null as string | null, parents: [] as string[], satellites: [] as string[], depth: 0 };
+    const genealogy = { kycRoot: null as string | null, parents: [] as string[], satellites: [] as string[], depth: 0, circularFunding: false, circularWallets: [] as string[] };
 
     if (heliusKey) {
       try {
