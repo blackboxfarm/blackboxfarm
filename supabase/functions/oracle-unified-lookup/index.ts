@@ -281,7 +281,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
   // Step 2a: TOKEN_MINT tx history (separate try/catch so timeout doesn't kill Steps 3+4)
   if (heliusKey) {
     try {
-      const txHistoryUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100' });
+      const txHistoryUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '120' });
       
       let allMints: string[] = [];
       let currentUrl = txHistoryUrl;
