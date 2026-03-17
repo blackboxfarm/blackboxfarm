@@ -1,50 +1,66 @@
 
 
-## Root Cause: `verifyMintTimestamp` Returns Wrong Date
+# HoldersIntel Bot — Full Command Suite with Tier Gating
 
-The bug is in `verifyMintTimestamp()` (line 204-218). It queries:
+## Command List (Updated)
+
+```text
+/start           — Welcome & setup
+/register        — Link BlackBox Farm account
+/status          — Check subscription tier
+/help            — Show commands
+/risk (/r) CA    — Composite risk & stability assessment
+/holders CA      — Holder distribution analysis
+/concentration CA — Detailed holder % breakdown
+/dev (/d) CA     — Developer intel & social doxxing
+/ca CA           — Default holder analysis
+/quick (/q) CA   — Fast holder count & key stats
+/ai CA           — Descriptive AI analysis snapshot
+/momentum (/m) CA — Volume & price momentum scoring
+/insiders (/i) CA — Insider cluster & bundling pre-check
+/compare (/cmp) CA CA — Side-by-side token comparison
+/alerts          — Manage alert preferences
+/oracle (/o) CA  — Full developer reputation mesh (Pro)
+/wallet (/w) ADDR — Wallet behavior analysis (Pro)
 ```
-/v0/addresses/${tokenMint}/transactions?type=TOKEN_MINT&limit=1
+
+**Removed from UI:** `/verdict` — functions retained internally but not exposed in help or command routing.
+
+## Tier Gating Matrix
+
+```text
+Command         │ Free │ Auth │ X Sub │ Pro  │ Dev
+────────────────┼──────┼──────┼───────┼──────┼─────
+/start          │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/register       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/status         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/help           │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/risk CA        │  —   │ lite │ full  │ full+│ full+
+/holders CA     │  —   │ lite │ full  │ full+│ full+
+/concentration  │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/dev CA         │  —   │ base │ full  │ full │ full
+/ca CA          │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/quick CA       │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/ai CA          │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/momentum CA    │  —   │  —   │  ✓    │  ✓   │  ✓
+/insiders CA    │  —   │  —   │  ✓    │ full │ full
+/compare CA CA  │  —   │  —   │  ✓    │  ✓   │  ✓
+/alerts         │  —   │  —   │  ✓    │  ✓   │  ✓
+/oracle CA      │  —   │  —   │  —    │  ✓   │  ✓
+/wallet ADDR    │  —   │  —   │  —    │  ✓   │  ✓
 ```
 
-This returns the **most recent** TOKEN_MINT transaction involving that token address — not the **original creation**. For ADX (a 1.5yr old token), a recent mint/transfer event returned a timestamp of "3 minutes ago," which passed the 2-hour freshness check.
+## Group Chat Features
 
-The `sinceHours` filter on line 310 (`if (mintAgeHours > sinceHours)`) relied on this broken timestamp, so the old token sailed through as "fresh."
+- **Auto-Scan**: When someone pastes a Solana CA (no command prefix) in an activated group, the bot waits 3 seconds (lets other bots like Phanes fire first), then replies with a minimalist risk snippet.
+- Requires paid channel installation (`channel_installations.is_paid = true`).
+- Snippet includes: health score, holder count, top 10% concentration, MCap, and a link to `/risk` for full report.
 
-## The Fix (Two Parts)
+## /insiders Maturity Skip Logic
 
-### Part 1: Fix `verifyMintTimestamp` — Use DAS `getAsset` for True Creation Date
+If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a notification that early-stage bundling data is no longer actionable, and suggests using `/holders` or `/risk` instead.
 
-Replace the current approach with a Helius DAS `getAsset` RPC call (already used elsewhere in the codebase via `creator-resolver.ts`). The DAS response includes `content.metadata` and `created_at` / the token's actual creation signature timestamp. This is authoritative for SPL token creation dates.
+## /dev vs /oracle
 
-Fallback: if DAS doesn't return a creation date, fetch `/v0/addresses/${tokenMint}/transactions?type=TOKEN_MINT&limit=50` and take the **oldest** transaction (last item) instead of the newest.
-
-### Part 2: Add Hard Absolute Age Cap
-
-Add a `MAX_ABSOLUTE_MINT_AGE_HOURS = 168` (7 days) constant that acts as an absolute ceiling regardless of any other config. Even if `verifyMintTimestamp` somehow returns a wrong value, no token older than 7 days can trigger an alert.
-
-### Part 3: Index Old Tokens Without Alerting
-
-When a legitimately old token is discovered through a wallet family scan, it should still be:
-- Registered in `developer_tokens` / mesh for genealogy tracking
-- Logged as `mint_discovered_old` in the decision log
-
-But it must **not**:
-- Create an `allstar_mint_alerts` record
-- Send Telegram/email notifications
-- Trigger admin notifications
-
-This means splitting the current `auditAllstarFamily` flow: discovered tokens that fail the age check get indexed silently into the mesh, while only truly fresh tokens proceed to `createAllstarAlert`.
-
-### Files Changed
-
-1. **`supabase/functions/allstar-mint-auditor/index.ts`**
-   - Replace `verifyMintTimestamp` with DAS-based approach + oldest-tx fallback
-   - Add `MAX_ABSOLUTE_MINT_AGE_HOURS = 168` hard cap at line 310
-   - After the age skip on line 311, add silent mesh indexing (insert into `developer_tokens` if not exists, log decision as `mint_discovered_old`)
-   - Update the skip log to clearly indicate "old token indexed to mesh, no alert"
-
-### Summary
-
-The system will still discover and catalog old tokens from wallet families (valuable for the mesh), but will never fire alerts for anything older than 7 days. The true creation date will be verified via DAS rather than the broken "most recent TOKEN_MINT tx" approach.
-
+- `/dev` (Auth tier) — Developer-focused: social doxxing, launch history, performance stats, social links, identity mesh. Designed to showcase the "who is this dev" angle.
+- `/oracle` (Pro tier) — Full reputation mesh: deeper mesh connections, funding chains, comprehensive relationship mapping. Token-focused intelligence.
