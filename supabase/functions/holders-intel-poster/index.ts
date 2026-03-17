@@ -738,7 +738,7 @@ Deno.serve(async (req) => {
         // Process template with variables
         const tgMessage = tgTemplate
           .replace(/\{ticker\}/g, stats.symbol.toUpperCase())
-          .replace(/\$\{ticker\}/g, `$${stats.symbol.toUpperCase()}`)
+          .replace(/\$\{ticker\}/g, `$ ${stats.symbol.toUpperCase()}`)
           .replace(/\{TICKER\}/g, stats.symbol.toUpperCase())
           .replace(/\{totalWallets\}/g, stats.totalHolders.toLocaleString())
           .replace(/\{realHolders\}/g, stats.realHolders.toLocaleString())
