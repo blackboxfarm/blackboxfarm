@@ -9,6 +9,44 @@ const corsHeaders = {
 // Solana address regex - base58, 32-44 chars
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
+// Known launchpad suffixes that guarantee it's a token mint
+const KNOWN_TOKEN_SUFFIXES = ['pump', 'moon'];
+
+function hasKnownTokenSuffix(mint: string): boolean {
+  return KNOWN_TOKEN_SUFFIXES.some(s => mint.endsWith(s));
+}
+
+// Validate if a Solana address is actually a token mint (not a wallet/pool/program)
+// Uses DexScreener as a lightweight check — if it has pairs, it's a real token
+async function validateTokenMint(mint: string): Promise<{ valid: boolean; symbol?: string; name?: string }> {
+  // Known launchpad suffixes are always valid
+  if (hasKnownTokenSuffix(mint)) {
+    return { valid: true };
+  }
+
+  // For unknown-suffix addresses, check DexScreener for pairs
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.pairs && d.pairs.length > 0) {
+        const pair = d.pairs[0];
+        return {
+          valid: true,
+          symbol: pair.baseToken?.symbol || undefined,
+          name: pair.baseToken?.name || undefined,
+        };
+      }
+    }
+  } catch { /* ignore */ }
+
+  // No pairs found — very likely not a token mint
+  console.log(`[funnel-feed-scanner] Skipping ${mint}: no DexScreener pairs, likely not a token mint`);
+  return { valid: false };
+}
+
 // Quick metadata fetch: pump.fun first, then DexScreener fallback
 async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
   // Try pump.fun first
@@ -324,8 +362,15 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
   console.log(`[funnel-feed-scanner] Found ${discoveredTokens.size} potential token addresses in ${source.source_name}`);
 
   let newTokens = 0;
+  let skippedNonTokens = 0;
 
   for (const [mint, info] of discoveredTokens) {
+    // ── Validate this is actually a token mint, not a wallet/pool/program ──
+    const validation = await validateTokenMint(mint);
+    if (!validation.valid) {
+      skippedNonTokens++;
+      continue;
+    }
     // Check if already discovered from this source
     const { data: existing } = await supabase
       .from('funnel_feed_discoveries')
@@ -343,9 +388,9 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
       .eq('token_mint', mint)
       .maybeSingle();
 
-    // Resolve symbol/name: watchlist first, then pump.fun API
-    let tokenSymbol = watchlistEntry?.token_symbol || null;
-    let tokenName = watchlistEntry?.token_name || null;
+    // Resolve symbol/name: validation result first, then watchlist, then pump.fun API
+    let tokenSymbol = validation.symbol || watchlistEntry?.token_symbol || null;
+    let tokenName = validation.name || watchlistEntry?.token_name || null;
     if (!tokenSymbol) {
       const meta = await fetchTokenMeta(mint);
       tokenSymbol = meta.symbol || null;
@@ -463,7 +508,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     })
     .eq('id', source.id);
 
-  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, messages_processed: newMessages.length, max_message_id: maxMessageId };
+  return { tokens_found: discoveredTokens.size, new_tokens: newTokens, skipped_non_tokens: skippedNonTokens, messages_processed: newMessages.length, max_message_id: maxMessageId };
 }
 
 function jsonRes(data: any, status = 200) {
