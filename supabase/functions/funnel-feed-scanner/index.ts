@@ -362,8 +362,15 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
   console.log(`[funnel-feed-scanner] Found ${discoveredTokens.size} potential token addresses in ${source.source_name}`);
 
   let newTokens = 0;
+  let skippedNonTokens = 0;
 
   for (const [mint, info] of discoveredTokens) {
+    // ── Validate this is actually a token mint, not a wallet/pool/program ──
+    const validation = await validateTokenMint(mint);
+    if (!validation.valid) {
+      skippedNonTokens++;
+      continue;
+    }
     // Check if already discovered from this source
     const { data: existing } = await supabase
       .from('funnel_feed_discoveries')
