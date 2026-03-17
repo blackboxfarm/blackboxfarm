@@ -541,10 +541,8 @@ Deno.serve(async (req) => {
           })
           .eq('id', item.id);
         
-        return new Response(
-          JSON.stringify({ success: true, skipped: true, reason: 'Low health grade' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        results.push({ symbol: item.symbol, action: 'skipped', reason: 'Low health grade' });
+        continue;
       }
       
       // ATH 24h: Fetch from GeckoTerminal on FIRST POST only, store in token_lifecycle
