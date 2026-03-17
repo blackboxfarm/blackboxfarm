@@ -527,10 +527,8 @@ Deno.serve(async (req) => {
           })
           .eq('id', item.id);
         
-        return new Response(
-          JSON.stringify({ success: true, skipped: true, reason: 'Too few holders' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        results.push({ symbol: item.symbol, action: 'skipped', reason: 'Too few holders' });
+        continue;
       }
       
       if (SKIP_GRADES.includes(stats.healthGrade)) {
