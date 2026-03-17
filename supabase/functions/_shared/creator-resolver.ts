@@ -130,7 +130,7 @@ export async function resolveTokenCreator(
           method: 'getSignaturesForAddress',
           params: [tokenMint, { limit: 20 }],
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(12000),
       });
 
       if (sigRes.ok) {
