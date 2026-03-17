@@ -321,8 +321,8 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
           .from('pumpfun_watchlist')
           .insert({
             token_mint: mint,
-            token_symbol: watchlistEntry?.token_symbol || null,
-            token_name: watchlistEntry?.token_name || null,
+            token_symbol: tokenSymbol,
+            token_name: tokenName,
             status: 'pending_triage',
             source: `funnel_feed:${source.source_name}`,
             created_at: new Date().toISOString(),
