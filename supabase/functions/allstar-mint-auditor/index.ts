@@ -512,8 +512,8 @@ async function createAllstarAlert(
   const emoji = alertLevel === 'critical' ? '🌟🚨' : alertLevel === 'high_priority' ? '⭐🔔' : '✨';
   await supabase.from('admin_notifications').insert({
     notification_type: 'allstar_mint',
-    title: `${emoji} ALLSTAR DEV MINTED: $${ticker}`,
-    message: `${tierLabel} dev ${devHandle} (best: $${allstar.best_token_symbol} → ${mcapLabel}) just launched $${ticker} on ${launchpad}`,
+    title: `${emoji} ALLSTAR DEV MINTED: $ ${ticker}`,
+    message: `${tierLabel} dev ${devHandle} (best: $ ${allstar.best_token_symbol} → ${mcapLabel}) just launched $ ${ticker} on ${launchpad}`,
     metadata: {
       token_mint: mintAddr, allstar_id: allstar.id, allstar_tier: allstar.best_tier,
       creator_wallet: hit.creatorWallet, pump_url: pumpUrl, padre_url: padreUrl,
