@@ -658,6 +658,19 @@ export function useMeshGraph(initialEntityId?: string) {
       }
 
       if (!hasUsefulData && result.requiresScan) {
+        // Even on failure, try X Community discovery for token mints
+        const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
+        if (isBase58) {
+          try {
+            console.log('[MeshSpider] Running X Community discovery despite empty spider results...');
+            await autoDiscoverCommunity(normalizedInput, result.resolvedWallet);
+            diagnostics.push('🏠 X Community auto-discovery ran (fallback on empty results)');
+            // Refresh to show any community nodes that were discovered
+            setTimeout(() => refetch(), 1500);
+          } catch (e) {
+            console.warn('[MeshSpider] Fallback community discovery failed:', e);
+          }
+        }
         setSpiderStatus({
           active: false,
           stage: '',

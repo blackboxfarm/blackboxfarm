@@ -533,27 +533,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      // If creator cannot be resolved from any provider, return explicit failure
+      // If creator cannot be resolved, fall back to treating input as a wallet address
+      // This handles cases like bags.fn / non-pump launchpads where the input IS the wallet
       if (!resolvedWallet) {
-        console.log('[Oracle] Creator resolution failed across all providers');
-        return new Response(
-          JSON.stringify({
-            found: false,
-            requiresScan: true,
-            inputType,
-            resolvedWallet: null,
-            score: 50,
-            trafficLight: 'UNKNOWN' as const,
-            stats: { totalTokens: 0, successfulTokens: 0, failedTokens: 0, rugPulls: 0, slowDrains: 0, avgLifespanHours: 0 },
-            network: { linkedWallets: [], linkedXAccounts: [], sharedMods: [], relatedTokens: [] },
-            blacklistStatus: { isBlacklisted: false, linkedEntities: [] },
-            whitelistStatus: { isWhitelisted: false },
-            recommendation: '⚠️ CREATOR NOT RESOLVED - Pump.fun + Helius + DB cache all returned no creator for this mint.',
-            meshLinksAdded: 0,
-            apiErrors
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
+        console.log('[Oracle] Creator resolution failed — falling back to wallet mode for base58 input');
+        resolvedWallet = cleanedInput;
+        inputType = 'wallet' as any; // Override: treat as wallet going forward
+        apiErrors.push('Creator resolution failed for mint — treating as wallet address instead');
       }
     } else {
       // Assume it's a wallet address
