@@ -64,3 +64,74 @@ If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a n
 
 - `/dev` (Auth tier) — Developer-focused: social doxxing, launch history, performance stats, social links, identity mesh. Designed to showcase the "who is this dev" angle.
 - `/oracle` (Pro tier) — Full reputation mesh: deeper mesh connections, funding chains, comprehensive relationship mapping. Token-focused intelligence.
+
+---
+
+# Backend Gap Analysis — Implementation Status
+
+## ✅ Phase 1: Foundation (COMPLETED)
+
+### A. Error Logs and Reports
+- [x] **edge_function_runs** table — tracks every function invocation with duration, status, errors
+- [x] **dead_letter_queue** table — retryable failed operations with exponential backoff
+- [x] **error_trend_snapshot** table — daily error aggregation per service/endpoint
+- [x] **run-logger.ts** shared helper — `withRunLog()` wrapper and `createRunLogger()` 
+- [x] **dead-letter.ts** shared helper — `enqueueDeadLetter()` for failed operations
+- [x] **retry-dead-letters** edge function — processes DLQ items every 10 min
+- [x] **cleanup functions** — `cleanup_edge_function_runs()` and `cleanup_dead_letter_queue()`
+
+### B. Communication and Alerts
+- [x] **notification_delivery_log** table — tracks TG/email delivery status
+- [x] **service_status** table — real-time service health (public read policy)
+
+### C. API Usage, Sources, Rotation, Costs
+- [x] **monthly_usage_archive** table — historical monthly usage snapshots
+- [x] **cost_per_credit_usd** column added to api_service_config
+
+### D. Spidering and Scaling Metrics
+- [x] **spider_run_metrics** table — per-run aggregation of spider outcomes
+- [x] **token_funnel_daily** table — token pipeline stage tracking
+- [x] **mesh_growth_daily** table — daily mesh size snapshots
+
+### Instrumented Functions (14 total)
+- [x] pumpfun-orchestrator
+- [x] trading-orchestrator
+- [x] intel-xbot-start
+- [x] morning-report
+- [x] system-health-audit
+- [x] database-housekeeping
+- [x] allstar-mint-auditor
+- [x] oracle-master-spider
+- [x] holders-intel-poster
+- [x] holders-intel-scheduler
+- [x] holdersintel-bot-webhook
+- [x] kol-registry-sync
+- [x] enrich-scraped-tokens
+- [x] telegram-bot-health
+- [x] retry-dead-letters
+
+## 🔲 Phase 2: Integration (TODO — next sessions)
+
+### A. Error Logs
+- [ ] Add "Function Health" section to morning report querying edge_function_runs
+- [ ] Wire `enqueueDeadLetter()` into telegram-broadcast.ts for failed sends
+- [ ] Populate error_trend_snapshot from database-housekeeping daily
+- [ ] Roll out `withRunLog` to remaining ~85 edge functions
+
+### B. Communication
+- [ ] Wire notification_delivery_log into telegram-broadcast.ts send results
+- [ ] Add escalation chain (Tier 1→2→3) for persistent outages
+- [ ] Create /service-status endpoint from service_status table
+- [ ] Update system-health-audit to write to service_status
+
+### C. API Costs
+- [ ] Add monthly quota auto-reset cron (1st of month)
+- [ ] Populate monthly_usage_archive from reset cron
+- [ ] Add cost_per_credit_usd values for paid services
+- [ ] Audit + wrap top unlogged API calls with createApiLogger
+
+### D. Metrics
+- [ ] Instrument oracle-master-spider to write spider_run_metrics
+- [ ] Add funnel stage counters across pipeline functions
+- [ ] Populate mesh_growth_daily from database-housekeeping
+- [ ] Add spider/funnel/mesh sections to morning report
