@@ -587,9 +587,9 @@ async function createAllstarAlert(
   // ──────────────────────────────────────────────
   try {
     const dmMessage = [
-      `🚀 ALLSTAR MINT: $${ticker}`,
+      `🚀 ALLSTAR MINT: $ ${ticker}`,
       `T${allstar.best_tier} dev ${devHandle}`,
-      `Best: $${allstar.best_token_symbol} → ${mcapLabel}`,
+      `Best: $ ${allstar.best_token_symbol} → ${mcapLabel}`,
       `⏰ Minted: ${hit.mintAge}`,
       ``,
       `Pump: ${pumpUrl}`,
