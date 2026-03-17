@@ -84,7 +84,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId: communityId,
-          maxItems: 100, // ~$0.13/scrape — captures admins/mods reliably + blue checks
+          maxItems: 4, // Hard cap: 4 members max — first is usually Admin, rest are top members
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ["RESIDENTIAL"]

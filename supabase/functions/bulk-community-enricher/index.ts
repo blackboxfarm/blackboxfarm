@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               communityId,
-              maxItems: 100, // ~$0.13/scrape — captures admins/mods reliably + blue checks
+              maxItems: 4, // Hard cap: 4 members max — first is usually Admin
               proxyConfiguration: {
                 useApifyProxy: true,
                 apifyProxyGroups: ["RESIDENTIAL"],
