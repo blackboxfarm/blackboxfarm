@@ -218,7 +218,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
 
   for (const msg of newMessages) {
     const text = msg.text || '';
-    const msgId = msg.id || 0;
+    const msgId = parseInt(msg.messageId || msg.id || '0', 10);
     maxMessageId = Math.max(maxMessageId, msgId);
 
     const addresses = text.match(SOLANA_ADDRESS_REGEX) || [];
