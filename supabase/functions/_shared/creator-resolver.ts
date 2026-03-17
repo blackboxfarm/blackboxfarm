@@ -37,7 +37,7 @@ export async function resolveTokenCreator(
   try {
     const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10000),
     });
     if (pfRes.ok) {
       const text = await pfRes.text();
