@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { withRunLog } from "../_shared/run-logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
