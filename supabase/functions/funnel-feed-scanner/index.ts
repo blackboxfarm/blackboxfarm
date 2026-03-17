@@ -118,6 +118,32 @@ Deno.serve(async (req) => {
       return jsonRes({ discoveries: data });
     }
 
+    // ── Backfill: fetch metadata for discoveries with null symbols ──
+    if (action === 'backfill_metadata') {
+      const { data: nullRows } = await supabase
+        .from('funnel_feed_discoveries')
+        .select('id, token_mint')
+        .is('token_symbol', null)
+        .limit(50);
+      if (!nullRows?.length) return jsonRes({ message: 'Nothing to backfill', updated: 0 });
+      let updated = 0;
+      for (const row of nullRows) {
+        const meta = await fetchPumpMeta(row.token_mint);
+        if (meta.symbol) {
+          await supabase.from('funnel_feed_discoveries')
+            .update({ token_symbol: meta.symbol, token_name: meta.name || null })
+            .eq('id', row.id);
+          // Also update watchlist
+          await supabase.from('pumpfun_watchlist')
+            .update({ token_symbol: meta.symbol, token_name: meta.name || null })
+            .eq('token_mint', row.token_mint)
+            .is('token_symbol', null);
+          updated++;
+        }
+      }
+      return jsonRes({ message: `Backfilled ${updated}/${nullRows.length}`, updated });
+    }
+
     // ── SCAN: Scrape active sources via MTProto ──
     if (action === 'scan') {
       return await runScan(supabase, body.source_id);
