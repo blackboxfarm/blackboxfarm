@@ -83,7 +83,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { action, code, channelUsername, limit } = body;
+    const { action, code, channelUsername, chatId, limit } = body;
 
     const apiIdRaw = Deno.env.get('TELEGRAM_API_ID');
     const apiHash = Deno.env.get('TELEGRAM_API_HASH');
