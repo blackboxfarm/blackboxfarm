@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
       if (!nullRows?.length) return jsonRes({ message: 'Nothing to backfill', updated: 0 });
       let updated = 0;
       for (const row of nullRows) {
-        const meta = await fetchPumpMeta(row.token_mint);
+        const meta = await fetchTokenMeta(row.token_mint);
         if (meta.symbol) {
           await supabase.from('funnel_feed_discoveries')
             .update({ token_symbol: meta.symbol, token_name: meta.name || null })
