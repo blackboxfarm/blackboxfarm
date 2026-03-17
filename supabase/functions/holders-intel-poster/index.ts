@@ -362,7 +362,9 @@ Deno.serve(async (req) => {
     // Fetch the active template from database
     const tweetTemplate = await fetchActiveTemplate(supabase);
     
-    // Check for any pending items that are due
+    // BATCH MODE: fetch up to 5 candidates, post up to 3 per tick
+    const MAX_POSTS_PER_TICK = 3;
+    const BATCH_SIZE = 5; // fetch extra in case some skip/fail
     const now = new Date().toISOString();
     
     const { data: pendingItems, error: fetchError } = await supabase
@@ -371,14 +373,13 @@ Deno.serve(async (req) => {
       .eq('status', 'pending')
       .lte('scheduled_at', now)
       .order('scheduled_at', { ascending: true })
-      .limit(1);
+      .limit(BATCH_SIZE);
     
     if (fetchError) {
       throw fetchError;
     }
     
     if (!pendingItems || pendingItems.length === 0) {
-      // Check if there are future pending items
       const { count } = await supabase
         .from('holders_intel_post_queue')
         .select('*', { count: 'exact', head: true })
@@ -394,7 +395,16 @@ Deno.serve(async (req) => {
       );
     }
     
-    const item = pendingItems[0];
+    console.log(`[poster] Batch: ${pendingItems.length} candidates, max ${MAX_POSTS_PER_TICK} posts`);
+    
+    const results: any[] = [];
+    let postsThisTick = 0;
+    
+    for (const item of pendingItems) {
+      if (postsThisTick >= MAX_POSTS_PER_TICK) {
+        console.log(`[poster] Hit ${MAX_POSTS_PER_TICK} posts this tick, stopping`);
+        break;
+      }
     console.log(`[poster] Processing: ${item.symbol} (${item.token_mint})`);
     
     // Mark as processing
