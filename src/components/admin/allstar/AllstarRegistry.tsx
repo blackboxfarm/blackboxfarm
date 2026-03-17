@@ -115,7 +115,7 @@ export function AllstarRegistry() {
                 </TableRow>
               ) : (
                 filtered.map((dev) => {
-                  const tier = TIER_LABELS[dev.best_tier] || TIER_LABELS[5];
+                  const tier = TIER_LABELS[dev.best_tier] || { label: `T${dev.best_tier}`, color: 'text-muted-foreground' };
                   return (
                     <TableRow key={dev.id} className="text-xs">
                       <TableCell>
