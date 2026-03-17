@@ -625,15 +625,8 @@ Deno.serve(async (req) => {
       } else if (!latestItem || latestItem.status !== 'processing') {
         console.log(`[poster] Aborting post: queue item status is '${latestItem?.status ?? 'missing'}'`);
 
-        return new Response(
-          JSON.stringify({
-            success: true,
-            aborted: true,
-            reason: 'Queue item was stopped before posting',
-            symbol: item.symbol,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        results.push({ symbol: item.symbol, action: 'aborted', reason: 'Stopped before posting' });
+        continue;
       }
       
       // Post tweet
