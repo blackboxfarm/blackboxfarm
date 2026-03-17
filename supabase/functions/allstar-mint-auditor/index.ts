@@ -384,9 +384,31 @@ async function auditAllstarFamily(
           console.log(`[allstar] ⚠ Could not verify mint time for ${tokenMint.slice(0, 12)}, using TX time: ${mintDate.toISOString()}`);
         }
 
-        // Skip tokens that are actually OLD (minted more than sinceHours ago)
+        // ── HARD ABSOLUTE AGE CAP: No token older than 7 days can trigger an alert ──
+        if (mintAgeHours > MAX_ABSOLUTE_MINT_AGE_HOURS) {
+          console.log(`[allstar] 🏛 OLD TOKEN DISCOVERED: ${tokenMint.slice(0, 12)} minted ${mintAge} (>${MAX_ABSOLUTE_MINT_AGE_HOURS}h) — indexing to mesh silently, NO alert`);
+          
+          // Silent mesh indexing: register in developer_tokens if not already there
+          if (!devToken) {
+            try {
+              await supabase.from('developer_tokens').upsert({
+                token_mint: tokenMint,
+                creator_wallet: wallet,
+                developer_id: allstar.developer_id || null,
+                discovered_via: 'allstar_family_scan',
+                discovery_note: `Old token (${mintAge}) discovered via allstar family scan — silent index, no alert`,
+              }, { onConflict: 'token_mint', ignoreDuplicates: true });
+              console.log(`[allstar] 📝 Silently indexed old token ${tokenMint.slice(0, 12)} to developer_tokens mesh`);
+            } catch (meshErr) {
+              console.warn(`[allstar] Failed to index old token to mesh:`, meshErr);
+            }
+          }
+          continue;
+        }
+
+        // Skip tokens that are outside the lookback window but within absolute cap
         if (mintAgeHours > sinceHours) {
-          console.log(`[allstar] ⏭ Skipping ${tokenMint.slice(0, 12)}: minted ${mintAge} (older than ${sinceHours}h lookback)`);
+          console.log(`[allstar] ⏭ Skipping ${tokenMint.slice(0, 12)}: minted ${mintAge} (older than ${sinceHours}h lookback but <${MAX_ABSOLUTE_MINT_AGE_HOURS}h cap)`);
           continue;
         }
 
