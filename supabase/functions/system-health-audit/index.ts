@@ -13,7 +13,7 @@ interface HealthCheck {
   metadata?: Record<string, unknown>;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('system-health-audit', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
