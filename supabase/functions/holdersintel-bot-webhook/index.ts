@@ -2656,7 +2656,7 @@ async function handleMyChatMember(update: any) {
 // MAIN SERVER
 // ════════════════════════════════════════
 
-serve(async (req) => {
+serve(withRunLog('holdersintel-bot-webhook', async (req) => {
   // Webhook setup
   if (req.method === "GET") {
     const url = new URL(req.url);
