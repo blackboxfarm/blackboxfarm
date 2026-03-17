@@ -1228,6 +1228,47 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
     }
   }
 
+  // ── Circular Funding Detection ──
+  // Detect wallet pairs that fund each other (A→B and B→A)
+  const fundingRelTypes = new Set(['directly_funded', 'funded_by', 'indirectly_funded']);
+  const fundingEdges = new Map<string, Set<string>>(); // source → Set<target>
+  
+  for (const link of links) {
+    if (fundingRelTypes.has(link.relationship || '')) {
+      const src = typeof link.source === 'string' ? link.source : (link.source as any)?.id;
+      const tgt = typeof link.target === 'string' ? link.target : (link.target as any)?.id;
+      if (src && tgt) {
+        if (!fundingEdges.has(src)) fundingEdges.set(src, new Set());
+        fundingEdges.get(src)!.add(tgt);
+      }
+    }
+  }
+
+  // Find bidirectional funding (A funds B AND B funds A)
+  const circularPairs = new Set<string>();
+  for (const [src, targets] of fundingEdges) {
+    for (const tgt of targets) {
+      if (fundingEdges.get(tgt)?.has(src) && !circularPairs.has(`${tgt}-${src}`)) {
+        circularPairs.add(`${src}-${tgt}`);
+        // Flag both wallets
+        for (const node of connectedNodes) {
+          if (node.id === src || node.id === tgt) {
+            if (!node.redFlags) node.redFlags = [];
+            if (!node.redFlags.some(f => f.type === 'circular_funding')) {
+              const otherWallet = node.id === src ? tgt : src;
+              node.redFlags.push({
+                type: 'circular_funding',
+                severity: 'critical',
+                shortLabel: '🔄 Circular Funding Loop',
+                explanation: `This wallet is part of a circular funding loop — it both sends to AND receives funds from ${otherWallet.slice(0, 8)}…${otherWallet.slice(-4)}. This is a CRITICAL red flag:\n\n• Wash Infrastructure — Two wallets repeatedly funding each other to obscure the true origin of funds and create the illusion of independent activity.\n• Sybil Network — Fake identities recycling SOL between each other to simulate organic wallet creation.\n• Long-Running Operator — Circular funding loops are often maintained for months or years, used as launchpad infrastructure for serial token deployments.\n\nThis pattern is almost never legitimate. The operator behind these wallets is deliberately hiding their funding trail.`,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
   return {
     nodes: connectedNodes,
     links,
