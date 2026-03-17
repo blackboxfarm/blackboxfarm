@@ -160,6 +160,39 @@ Deno.serve(async (req) => {
       return jsonRes({ message: `Backfilled ${updated}/${nullRows.length}`, updated });
     }
 
+    // ── Backfill: push queued discoveries into the actual post queue ──
+    if (action === 'backfill_xpost_queue') {
+      const { data: queued } = await supabase
+        .from('funnel_feed_discoveries')
+        .select('token_mint, token_symbol, token_name, source_id, funnel_feed_sources(source_name)')
+        .eq('xpost_status', 'queued');
+
+      if (!queued?.length) return jsonRes({ message: 'No queued discoveries', inserted: 0 });
+
+      const { data: existing } = await supabase
+        .from('holders_intel_post_queue')
+        .select('token_mint')
+        .in('token_mint', queued.map(q => q.token_mint));
+      const existingSet = new Set((existing || []).map(e => e.token_mint));
+
+      let inserted = 0;
+      for (const q of queued) {
+        if (existingSet.has(q.token_mint)) continue;
+        const scheduledAt = new Date(Date.now() + Math.floor(Math.random() * 1_800_000)).toISOString();
+        const { error } = await supabase.from('holders_intel_post_queue').insert({
+          token_mint: q.token_mint,
+          symbol: q.token_symbol || null,
+          name: q.token_name || null,
+          scheduled_at: scheduledAt,
+          status: 'pending',
+          trigger_source: 'funnel_feed',
+          trigger_comment: `Backfill from funnel feed: ${(q as any).funnel_feed_sources?.source_name || 'unknown'}`,
+        });
+        if (!error) inserted++;
+      }
+      return jsonRes({ message: `Inserted ${inserted}/${queued.length} into post queue`, inserted });
+    }
+
     // ── SCAN: Scrape active sources via MTProto ──
     if (action === 'scan') {
       return await runScan(supabase, body.source_id);
