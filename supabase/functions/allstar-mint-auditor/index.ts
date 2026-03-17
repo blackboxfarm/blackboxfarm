@@ -358,8 +358,9 @@ async function createAllstarAlert(
   hit: MintHit
 ): Promise<void> {
   // Determine alert level based on allstar tier
+  // Higher tier = better dev, so higher = more critical alert
   const alertLevel = allstar.best_tier >= 6 ? 'critical' :
-                     allstar.best_tier >= 4 ? 'high_priority' : 'opportunity';
+                     allstar.best_tier >= 4 ? 'high' : 'medium';
 
   const tierLabel = `T${allstar.best_tier}`;
   const tierStars = '⭐'.repeat(Math.min(allstar.best_tier, 8));

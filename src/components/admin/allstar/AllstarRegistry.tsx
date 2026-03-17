@@ -31,7 +31,7 @@ export function AllstarRegistry() {
       const { data, error } = await supabase
         .from('allstar_dev_registry')
         .select('*')
-        .order('best_tier', { ascending: true })
+        .order('best_tier', { ascending: false })
         .order('best_mcap_achieved', { ascending: false })
         .limit(100);
       if (error) throw error;
