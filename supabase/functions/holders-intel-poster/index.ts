@@ -761,7 +761,7 @@ Deno.serve(async (req) => {
             const { error } = await supabase.functions.invoke('admin-notify', {
               body: {
                 type: 'intel_xbot_post',
-                title: `XBot: $${stats.symbol.toUpperCase()}`,
+                title: `XBot: $ ${stats.symbol.toUpperCase()}`,
                 message: tgMessage,
                 metadata: { tokenMint: item.token_mint, tweetId: tweetResult.tweetId },
                 channels: ['telegram'],
