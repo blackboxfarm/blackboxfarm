@@ -14,7 +14,7 @@ export function AllstarAddForm() {
   const [tokenMint, setTokenMint] = useState('');
   const [masterWallet, setMasterWallet] = useState('');
   const [twitterHandle, setTwitterHandle] = useState('');
-  const [tier, setTier] = useState('3');
+  const [tier, setTier] = useState('4');
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState<'token' | 'wallet'>('token');
 
