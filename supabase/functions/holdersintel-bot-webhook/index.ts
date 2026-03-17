@@ -65,7 +65,7 @@ function buildVerdictPrompt(data: {
   holdersData: { totalHolders: number | null; top10Pct: number | null; baglessCount: number | null };
 }): string {
   const lines: string[] = [
-    `TOKEN: $${data.tokenSymbol} (${data.tokenName})`,
+    `TOKEN: $ ${data.tokenSymbol} (${data.tokenName})`,
     `PHASE: ${data.phase || 'unknown'}`,
     `MOMENTUM SCORE: ${data.momentumScore}/100`,
     `HEALTH SCORE: ${data.healthScore}/100`,
