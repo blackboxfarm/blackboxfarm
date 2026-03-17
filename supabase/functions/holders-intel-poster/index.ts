@@ -738,7 +738,7 @@ Deno.serve(async (req) => {
         // Process template with variables
         const tgMessage = tgTemplate
           .replace(/\{ticker\}/g, stats.symbol.toUpperCase())
-          .replace(/\$\{ticker\}/g, `$${stats.symbol.toUpperCase()}`)
+          .replace(/\$\{ticker\}/g, `$ ${stats.symbol.toUpperCase()}`)
           .replace(/\{TICKER\}/g, stats.symbol.toUpperCase())
           .replace(/\{totalWallets\}/g, stats.totalHolders.toLocaleString())
           .replace(/\{realHolders\}/g, stats.realHolders.toLocaleString())
@@ -761,7 +761,7 @@ Deno.serve(async (req) => {
             const { error } = await supabase.functions.invoke('admin-notify', {
               body: {
                 type: 'intel_xbot_post',
-                title: `XBot: $${stats.symbol.toUpperCase()}`,
+                title: `XBot: $ ${stats.symbol.toUpperCase()}`,
                 message: tgMessage,
                 metadata: { tokenMint: item.token_mint, tweetId: tweetResult.tweetId },
                 channels: ['telegram'],
