@@ -218,9 +218,25 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
         const url = `${baseUrl}?limit=${limit}&offset=${offset}&includeNsfw=true`;
         console.log(`[Oracle] Fetching created tokens offset=${offset}...`);
         
-        const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+        let response: Response | null = null;
+        // Retry up to 2 times on failure/timeout
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+            if (response.ok || (response.status >= 400 && response.status < 500)) break; // Don't retry 4xx
+            console.log(`[Oracle] Pump.fun attempt ${attempt + 1} failed with ${response.status}, retrying...`);
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          } catch (retryErr) {
+            if (attempt === 0) {
+              console.log(`[Oracle] Pump.fun attempt 1 timed out, retrying with longer timeout...`);
+              await new Promise(r => setTimeout(r, 500));
+              continue;
+            }
+            throw retryErr;
+          }
+        }
         
-        if (response.ok) {
+        if (response?.ok) {
           const data = await response.json();
           if (Array.isArray(data) && data.length > 0) {
             allTokens = allTokens.concat(data);
@@ -230,13 +246,13 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
               keepFetching = false;
             } else {
               offset += limit;
-              if (offset >= 1000) keepFetching = false;
+              if (offset >= 1200) keepFetching = false; // Raised cap
             }
           } else {
             keepFetching = false;
           }
         } else {
-          const errMsg = `Pump.fun API ${response.status} on ${baseUrl.includes('frontend') ? 'frontend-api' : 'client-api'}`;
+          const errMsg = `Pump.fun API ${response?.status || 'timeout'} on ${baseUrl.includes('frontend') ? 'frontend-api' : 'client-api'}`;
           console.log(`[Oracle] ${errMsg}`);
           apiErrors.push(errMsg);
           keepFetching = false;
