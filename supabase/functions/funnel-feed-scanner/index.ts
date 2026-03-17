@@ -388,9 +388,9 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
       .eq('token_mint', mint)
       .maybeSingle();
 
-    // Resolve symbol/name: watchlist first, then pump.fun API
-    let tokenSymbol = watchlistEntry?.token_symbol || null;
-    let tokenName = watchlistEntry?.token_name || null;
+    // Resolve symbol/name: validation result first, then watchlist, then pump.fun API
+    let tokenSymbol = validation.symbol || watchlistEntry?.token_symbol || null;
+    let tokenName = validation.name || watchlistEntry?.token_name || null;
     if (!tokenSymbol) {
       const meta = await fetchTokenMeta(mint);
       tokenSymbol = meta.symbol || null;
