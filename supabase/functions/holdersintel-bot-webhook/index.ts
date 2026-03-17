@@ -1130,9 +1130,9 @@ async function handleCompare(chatId: number, telegramUserId: string, args: strin
   const score1 = (typeof health1 === 'number' ? health1 : 0) + (typeof mom1 === 'number' ? mom1 : 0);
   const score2 = (typeof health2 === 'number' ? health2 : 0) + (typeof mom2 === 'number' ? mom2 : 0);
   if (score1 > score2 + 10) {
-    msg += `\n📍 *$${sym1}* has stronger combined signals.`;
+    msg += `\n📍 *$ ${sym1}* has stronger combined signals.`;
   } else if (score2 > score1 + 10) {
-    msg += `\n📍 *$${sym2}* has stronger combined signals.`;
+    msg += `\n📍 *$ ${sym2}* has stronger combined signals.`;
   } else {
     msg += `\n📍 Both tokens show *similar strength*.`;
   }
