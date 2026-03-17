@@ -2929,4 +2929,4 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
   }
 
   return new Response("OK");
-});
+}));
