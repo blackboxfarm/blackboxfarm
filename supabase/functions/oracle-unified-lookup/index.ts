@@ -718,7 +718,13 @@ Deno.serve(async (req) => {
       heliusKycRootLabel = kycRootLabel;
       
       if (heliusFundingChain.length > 0) {
-        console.log(`[Oracle] Helius funding chain: ${heliusFundingChain.length} hops, KYC root: ${heliusKycRoot?.slice(0, 8) || 'none'} (${heliusKycRootLabel || 'N/A'})`);
+        console.log(`[Oracle] Helius funding chain: ${heliusFundingChain.length} hops, KYC root: ${heliusKycRoot?.slice(0, 8) || 'none'} (${heliusKycRootLabel || 'N/A'})${circularFunding ? ' ⚠️ CIRCULAR FUNDING DETECTED' : ''}`);
+      }
+      
+      // If circular funding detected, add as red flag to mesh
+      if (circularFunding && circularWallets.length > 0) {
+        console.log(`[Oracle] 🔄 Circular funding wallets: ${circularWallets.map(w => w.slice(0,8)).join(' ↔ ')}`);
+        apiErrors.push(`🔄 CIRCULAR FUNDING: ${circularWallets.length} wallets in funding loop`);
       }
     }
     
