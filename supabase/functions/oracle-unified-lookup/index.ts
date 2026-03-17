@@ -210,8 +210,8 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
   
   for (const baseUrl of baseEndpoints) {
     let offset = 0;
-    const limit = 100;
-    let keepFetching = true;
+        const limit = 120;
+        let keepFetching = true;
     
     try {
       while (keepFetching) {
