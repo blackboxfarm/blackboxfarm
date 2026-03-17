@@ -557,7 +557,7 @@ Deno.serve(async (req) => {
         const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
         let currentWallet = creatorWallet;
 
-        for (let depth = 0; depth < 3; depth++) {
+        for (let depth = 0; depth < 6; depth++) {
           await delay(200); // Rate limit between RPC calls
           const sigRes = await fetch(rpcUrl, {
             method: 'POST',

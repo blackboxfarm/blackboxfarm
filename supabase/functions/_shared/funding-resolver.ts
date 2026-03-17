@@ -97,7 +97,7 @@ export async function discoverFunding(
  */
 export async function discoverFundingChain(
   walletAddress: string,
-  maxDepth: number = 3,
+  maxDepth: number = 6,
   apiErrors: string[] = []
 ): Promise<{
   chain: FundingResult[];
