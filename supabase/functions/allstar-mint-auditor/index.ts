@@ -560,7 +560,7 @@ async function createAllstarAlert(
       ``,
       `⏰ Minted: **${hit.mintAge}** (${mintDate.toISOString().slice(0, 19).replace('T', ' ')} UTC)`,
       ``,
-      `💡 _This dev previously launched $${allstar.best_token_symbol} to ${mcapLabel}. Move fast._`,
+      `💡 _This dev previously launched $ ${allstar.best_token_symbol} to ${mcapLabel}. Move fast._`,
     ].filter(Boolean).join('\n');
 
     // Check suspension
