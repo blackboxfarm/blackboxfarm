@@ -691,7 +691,7 @@ Deno.serve(async (req) => {
     if (resolvedWallet) {
       console.log('[Oracle] Running Helius funding chain discovery...');
       
-      const { chain, kycRoot, kycRootLabel } = await discoverFundingChain(resolvedWallet, 3, apiErrors);
+      const { chain, kycRoot, kycRootLabel, circularFunding, circularWallets } = await discoverFundingChain(resolvedWallet, 6, apiErrors);
       heliusFundingChain = chain.map(f => ({
         funder: f.funder,
         funderName: f.funderName,
