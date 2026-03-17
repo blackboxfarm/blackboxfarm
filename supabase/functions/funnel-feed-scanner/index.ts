@@ -423,8 +423,8 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
           .from('holders_intel_post_queue')
           .insert({
             token_mint: mint,
-            symbol: tokenMeta?.symbol || null,
-            name: tokenMeta?.name || null,
+            symbol: tokenSymbol || null,
+            name: tokenName || null,
             scheduled_at: scheduledAt,
             status: 'pending',
             trigger_source: 'funnel_feed',
