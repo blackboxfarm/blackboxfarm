@@ -353,7 +353,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
             limit: 1000
           }
         }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(12000)
       });
       
       if (dasResponse.ok) {
