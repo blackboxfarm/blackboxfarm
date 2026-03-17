@@ -58,4 +58,4 @@ Deno.serve(withRunLog('trading-orchestrator', async (req) => {
     JSON.stringify({ orchestrator: 'trading', tick: tickNumber, elapsed, results }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
-});
+}));
