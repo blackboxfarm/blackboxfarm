@@ -314,7 +314,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
               }
             }
             
-            if (transactions.length < 100) break;
+            if (transactions.length < 120) break;
             
             const lastTx = transactions[transactions.length - 1];
             if (lastTx?.signature) {
