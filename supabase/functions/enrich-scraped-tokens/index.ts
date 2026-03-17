@@ -1,5 +1,6 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
+import { withRunLog } from '../_shared/run-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,7 +34,7 @@ const detectLaunchpad = (tokenMint: string, pairData: any): string | null => {
   return null;
 };
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -238,4 +239,4 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));

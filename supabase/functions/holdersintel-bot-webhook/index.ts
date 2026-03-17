@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { withRunLog } from "../_shared/run-logger.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { detectTokenPhase, contextualizeDevRep, type TokenPhase } from "../_shared/token-phase.ts";
 import { getHealthMode } from "../_shared/health-mode.ts";
@@ -2655,7 +2656,7 @@ async function handleMyChatMember(update: any) {
 // MAIN SERVER
 // ════════════════════════════════════════
 
-serve(async (req) => {
+serve(withRunLog('holdersintel-bot-webhook', async (req) => {
   // Webhook setup
   if (req.method === "GET") {
     const url = new URL(req.url);
@@ -2928,4 +2929,4 @@ serve(async (req) => {
   }
 
   return new Response("OK");
-});
+}));

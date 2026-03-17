@@ -563,6 +563,7 @@ export type Database = {
           api_key_rotation_date: string | null
           api_key_rotation_reminder_days: number | null
           billing_cycle_start: string | null
+          cost_per_credit_usd: number | null
           cost_per_unit: number | null
           created_at: string | null
           currency: string | null
@@ -597,6 +598,7 @@ export type Database = {
           api_key_rotation_date?: string | null
           api_key_rotation_reminder_days?: number | null
           billing_cycle_start?: string | null
+          cost_per_credit_usd?: number | null
           cost_per_unit?: number | null
           created_at?: string | null
           currency?: string | null
@@ -631,6 +633,7 @@ export type Database = {
           api_key_rotation_date?: string | null
           api_key_rotation_reminder_days?: number | null
           billing_cycle_start?: string | null
+          cost_per_credit_usd?: number | null
           cost_per_unit?: number | null
           created_at?: string | null
           currency?: string | null
@@ -2721,6 +2724,51 @@ export type Database = {
         }
         Relationships: []
       }
+      dead_letter_queue: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          id: string
+          max_retries: number | null
+          next_retry_at: string | null
+          operation: string
+          payload: Json
+          resolved_at: string | null
+          retry_count: number | null
+          source_function: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          max_retries?: number | null
+          next_retry_at?: string | null
+          operation: string
+          payload?: Json
+          resolved_at?: string | null
+          retry_count?: number | null
+          source_function: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          max_retries?: number | null
+          next_retry_at?: string | null
+          operation?: string
+          payload?: Json
+          resolved_at?: string | null
+          retry_count?: number | null
+          source_function?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       dev_teams: {
         Row: {
           admin_usernames: string[] | null
@@ -3474,6 +3522,45 @@ export type Database = {
         }
         Relationships: []
       }
+      edge_function_runs: {
+        Row: {
+          created_at: string | null
+          duration_ms: number | null
+          error_message: string | null
+          finished_at: string | null
+          function_name: string
+          id: string
+          invocation_source: string | null
+          metadata: Json | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          duration_ms?: number | null
+          error_message?: string | null
+          finished_at?: string | null
+          function_name: string
+          id?: string
+          invocation_source?: string | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          created_at?: string | null
+          duration_ms?: number | null
+          error_message?: string | null
+          finished_at?: string | null
+          function_name?: string
+          id?: string
+          invocation_source?: string | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       emergency_sells: {
         Row: {
           created_at: string | null
@@ -3505,6 +3592,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      error_trend_snapshot: {
+        Row: {
+          avg_7d_error_count: number | null
+          created_at: string | null
+          endpoint: string | null
+          error_count: number | null
+          id: string
+          is_anomaly: boolean | null
+          service_name: string
+          snapshot_date: string
+          status_401_count: number | null
+          status_403_count: number | null
+          status_429_count: number | null
+          status_500_count: number | null
+        }
+        Insert: {
+          avg_7d_error_count?: number | null
+          created_at?: string | null
+          endpoint?: string | null
+          error_count?: number | null
+          id?: string
+          is_anomaly?: boolean | null
+          service_name: string
+          snapshot_date?: string
+          status_401_count?: number | null
+          status_403_count?: number | null
+          status_429_count?: number | null
+          status_500_count?: number | null
+        }
+        Update: {
+          avg_7d_error_count?: number | null
+          created_at?: string | null
+          endpoint?: string | null
+          error_count?: number | null
+          id?: string
+          is_anomaly?: boolean | null
+          service_name?: string
+          snapshot_date?: string
+          status_401_count?: number | null
+          status_403_count?: number | null
+          status_429_count?: number | null
+          status_500_count?: number | null
+        }
+        Relationships: []
       }
       fantasy_positions: {
         Row: {
@@ -6135,6 +6267,48 @@ export type Database = {
         }
         Relationships: []
       }
+      mesh_growth_daily: {
+        Row: {
+          coverage_pct: number | null
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          new_identities_24h: number | null
+          new_links_24h: number | null
+          new_profiles_24h: number | null
+          snapshot_date: string
+          total_developer_profiles: number | null
+          total_social_identities: number | null
+          total_wallet_links: number | null
+        }
+        Insert: {
+          coverage_pct?: number | null
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          new_identities_24h?: number | null
+          new_links_24h?: number | null
+          new_profiles_24h?: number | null
+          snapshot_date?: string
+          total_developer_profiles?: number | null
+          total_social_identities?: number | null
+          total_wallet_links?: number | null
+        }
+        Update: {
+          coverage_pct?: number | null
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          new_identities_24h?: number | null
+          new_links_24h?: number | null
+          new_profiles_24h?: number | null
+          snapshot_date?: string
+          total_developer_profiles?: number | null
+          total_social_identities?: number | null
+          total_wallet_links?: number | null
+        }
+        Relationships: []
+      }
       mesh_spider_queue: {
         Row: {
           completed_at: string | null
@@ -6340,6 +6514,45 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_usage_archive: {
+        Row: {
+          archived_at: string | null
+          estimated_cost_usd: number | null
+          id: string
+          month_year: string
+          quota_limit: number | null
+          service_name: string
+          total_calls: number | null
+          total_credits_used: number | null
+          total_errors: number | null
+          usage_percentage: number | null
+        }
+        Insert: {
+          archived_at?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          month_year: string
+          quota_limit?: number | null
+          service_name: string
+          total_calls?: number | null
+          total_credits_used?: number | null
+          total_errors?: number | null
+          usage_percentage?: number | null
+        }
+        Update: {
+          archived_at?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          month_year?: string
+          quota_limit?: number | null
+          service_name?: string
+          total_calls?: number | null
+          total_credits_used?: number | null
+          total_errors?: number | null
+          usage_percentage?: number | null
+        }
+        Relationships: []
+      }
       morning_reports: {
         Row: {
           alerts: Json
@@ -6502,6 +6715,45 @@ export type Database = {
           telegram_sent?: boolean | null
           telegram_sent_at?: string | null
           unread_notifications?: number | null
+        }
+        Relationships: []
+      }
+      notification_delivery_log: {
+        Row: {
+          channel: string
+          created_at: string | null
+          delivered_at: string | null
+          error_message: string | null
+          id: string
+          notification_id: string | null
+          recipient: string | null
+          response_body: string | null
+          response_code: number | null
+          status: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          notification_id?: string | null
+          recipient?: string | null
+          response_body?: string | null
+          response_code?: number | null
+          status?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          notification_id?: string | null
+          recipient?: string | null
+          response_body?: string | null
+          response_code?: number | null
+          status?: string
         }
         Relationships: []
       }
@@ -9993,6 +10245,42 @@ export type Database = {
         }
         Relationships: []
       }
+      service_status: {
+        Row: {
+          id: string
+          last_checked_at: string | null
+          last_failure_at: string | null
+          last_success_at: string | null
+          message: string | null
+          metadata: Json | null
+          service_name: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          last_checked_at?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          message?: string | null
+          metadata?: Json | null
+          service_name: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          last_checked_at?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          message?: string | null
+          metadata?: Json | null
+          service_name?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sol_price_fetch_logs: {
         Row: {
           created_at: string
@@ -10026,6 +10314,54 @@ export type Database = {
           response_time_ms?: number | null
           source_name?: string
           success?: boolean
+        }
+        Relationships: []
+      }
+      spider_run_metrics: {
+        Row: {
+          avg_genealogy_depth: number | null
+          avg_run_time_ms: number | null
+          blacklist_hits: number | null
+          created_at: string | null
+          errors: number | null
+          id: string
+          mesh_links_added: number | null
+          metadata: Json | null
+          run_date: string
+          social_identities_found: number | null
+          tokens_spidered: number | null
+          wallets_discovered: number | null
+          whitelist_hits: number | null
+        }
+        Insert: {
+          avg_genealogy_depth?: number | null
+          avg_run_time_ms?: number | null
+          blacklist_hits?: number | null
+          created_at?: string | null
+          errors?: number | null
+          id?: string
+          mesh_links_added?: number | null
+          metadata?: Json | null
+          run_date?: string
+          social_identities_found?: number | null
+          tokens_spidered?: number | null
+          wallets_discovered?: number | null
+          whitelist_hits?: number | null
+        }
+        Update: {
+          avg_genealogy_depth?: number | null
+          avg_run_time_ms?: number | null
+          blacklist_hits?: number | null
+          created_at?: string | null
+          errors?: number | null
+          id?: string
+          mesh_links_added?: number | null
+          metadata?: Json | null
+          run_date?: string
+          social_identities_found?: number | null
+          tokens_spidered?: number | null
+          wallets_discovered?: number | null
+          whitelist_hits?: number | null
         }
         Relationships: []
       }
@@ -12112,6 +12448,33 @@ export type Database = {
           source_function?: string | null
           token_mint?: string
           warning_type?: string
+        }
+        Relationships: []
+      }
+      token_funnel_daily: {
+        Row: {
+          created_at: string | null
+          funnel_date: string
+          id: string
+          metadata: Json | null
+          stage: string
+          token_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          funnel_date?: string
+          id?: string
+          metadata?: Json | null
+          stage: string
+          token_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          funnel_date?: string
+          id?: string
+          metadata?: Json | null
+          stage?: string
+          token_count?: number | null
         }
         Relationships: []
       }
@@ -14932,6 +15295,14 @@ export type Database = {
       check_user_access_with_security: {
         Args: { target_user_id: string }
         Returns: boolean
+      }
+      cleanup_dead_letter_queue: {
+        Args: { retention_days?: number }
+        Returns: number
+      }
+      cleanup_edge_function_runs: {
+        Args: { retention_days?: number }
+        Returns: number
       }
       create_wallet_backup: {
         Args: {

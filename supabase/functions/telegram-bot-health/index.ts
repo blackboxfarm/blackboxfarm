@@ -1,4 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { withRunLog } from "../_shared/run-logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,7 +48,7 @@ async function callTelegram(botToken: string, method: string, body?: Record<stri
   return payload;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('telegram-bot-health', async (req) => {
   const t0 = Date.now();
   console.log("[telegram-bot-health] ▶ incoming request", req.method);
 
@@ -216,4 +217,4 @@ Deno.serve(async (req) => {
     console.error("[telegram-bot-health] ✗ unhandled error:", error?.message, error?.stack);
     return json({ success: false, error: error?.message || "Unexpected error" }, 500);
   }
-});
+}));

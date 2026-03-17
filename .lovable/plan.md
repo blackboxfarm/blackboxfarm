@@ -1,93 +1,137 @@
 
 
-# Backend Gap Analysis: 4 Categories, 3 Missing Each + 1 ASAP
+# HoldersIntel Bot — Full Command Suite with Tier Gating
+
+## Command List (Updated)
+
+```text
+/start           — Welcome & setup
+/register        — Link BlackBox Farm account
+/status          — Check subscription tier
+/help            — Show commands
+/risk (/r) CA    — Composite risk & stability assessment
+/holders CA      — Holder distribution analysis
+/concentration CA — Detailed holder % breakdown
+/dev (/d) CA     — Developer intel & social doxxing
+/ca CA           — Default holder analysis
+/quick (/q) CA   — Fast holder count & key stats
+/ai CA           — Descriptive AI analysis snapshot
+/momentum (/m) CA — Volume & price momentum scoring
+/insiders (/i) CA — Insider cluster & bundling pre-check
+/compare (/cmp) CA CA — Side-by-side token comparison
+/alerts          — Manage alert preferences
+/oracle (/o) CA  — Full developer reputation mesh (Pro)
+/wallet (/w) ADDR — Wallet behavior analysis (Pro)
+```
+
+**Removed from UI:** `/verdict` — functions retained internally but not exposed in help or command routing.
+
+## Tier Gating Matrix
+
+```text
+Command         │ Free │ Auth │ X Sub │ Pro  │ Dev
+────────────────┼──────┼──────┼───────┼──────┼─────
+/start          │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/register       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/status         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/help           │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
+/risk CA        │  —   │ lite │ full  │ full+│ full+
+/holders CA     │  —   │ lite │ full  │ full+│ full+
+/concentration  │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/dev CA         │  —   │ base │ full  │ full │ full
+/ca CA          │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/quick CA       │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/ai CA          │  —   │  ✓   │  ✓    │  ✓   │  ✓
+/momentum CA    │  —   │  —   │  ✓    │  ✓   │  ✓
+/insiders CA    │  —   │  —   │  ✓    │ full │ full
+/compare CA CA  │  —   │  —   │  ✓    │  ✓   │  ✓
+/alerts         │  —   │  —   │  ✓    │  ✓   │  ✓
+/oracle CA      │  —   │  —   │  —    │  ✓   │  ✓
+/wallet ADDR    │  —   │  —   │  —    │  ✓   │  ✓
+```
+
+## Group Chat Features
+
+- **Auto-Scan**: When someone pastes a Solana CA (no command prefix) in an activated group, the bot waits 3 seconds (lets other bots like Phanes fire first), then replies with a minimalist risk snippet.
+- Requires paid channel installation (`channel_installations.is_paid = true`).
+- Snippet includes: health score, holder count, top 10% concentration, MCap, and a link to `/risk` for full report.
+
+## /insiders Maturity Skip Logic
+
+If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a notification that early-stage bundling data is no longer actionable, and suggests using `/holders` or `/risk` instead.
+
+## /dev vs /oracle
+
+- `/dev` (Auth tier) — Developer-focused: social doxxing, launch history, performance stats, social links, identity mesh. Designed to showcase the "who is this dev" angle.
+- `/oracle` (Pro tier) — Full reputation mesh: deeper mesh connections, funding chains, comprehensive relationship mapping. Token-focused intelligence.
 
 ---
 
-## A. Error Logs and Reports
+# Backend Gap Analysis — Implementation Status
 
-### Missing 1 — Edge Function Execution Log Table (ASAP)
-There is no centralized table tracking edge function invocations, durations, and errors. Every function uses `console.error` (286 files, 5900+ matches) which vanishes after Supabase's short log retention window. If a cron-triggered function silently fails at 3 AM, there is zero persistent record.
+## ✅ Phase 1: Foundation (COMPLETED)
 
-**Fix:** Create an `edge_function_runs` table (function_name, started_at, finished_at, duration_ms, status, error_message, invocation_source). Add a lightweight `logRun()` helper in `_shared/` that wraps every function's main handler. The morning report then queries this table instead of relying on ephemeral logs.
+### A. Error Logs and Reports
+- [x] **edge_function_runs** table — tracks every function invocation with duration, status, errors
+- [x] **dead_letter_queue** table — retryable failed operations with exponential backoff
+- [x] **error_trend_snapshot** table — daily error aggregation per service/endpoint
+- [x] **run-logger.ts** shared helper — `withRunLog()` wrapper and `createRunLogger()` 
+- [x] **dead-letter.ts** shared helper — `enqueueDeadLetter()` for failed operations
+- [x] **retry-dead-letters** edge function — processes DLQ items every 10 min
+- [x] **cleanup functions** — `cleanup_edge_function_runs()` and `cleanup_dead_letter_queue()`
 
-### Missing 2 — Dead Letter Queue for Failed Operations
-No retry or dead-letter mechanism exists (`dead_letter|retry_queue|dlq` = 0 matches). When a Telegram alert fails to send, or a mesh upsert errors out, the data is lost. Failed allstar alerts, failed TG broadcasts, failed token enrichments — all silently dropped.
+### B. Communication and Alerts
+- [x] **notification_delivery_log** table — tracks TG/email delivery status
+- [x] **service_status** table — real-time service health (public read policy)
 
-**Fix:** Create a `dead_letter_queue` table (id, source_function, payload, error, retry_count, next_retry_at, resolved_at). Failed critical operations insert here instead of swallowing errors. A `retry-dead-letters` cron processes retryable items every 10 minutes.
+### C. API Usage, Sources, Rotation, Costs
+- [x] **monthly_usage_archive** table — historical monthly usage snapshots
+- [x] **cost_per_credit_usd** column added to api_service_config
 
-### Missing 3 — Error Pattern Aggregation and Trending
-The morning report captures top errors per service, but there is no trending or comparison. You can't see "Helius 403 errors went from 2/day to 200/day this week." The `system-health-audit` checks a 1-hour and 6-hour window but doesn't track week-over-week trends.
+### D. Spidering and Scaling Metrics
+- [x] **spider_run_metrics** table — per-run aggregation of spider outcomes
+- [x] **token_funnel_daily** table — token pipeline stage tracking
+- [x] **mesh_growth_daily** table — daily mesh size snapshots
 
-**Fix:** Add a daily `error_trend_snapshot` table populated by `database-housekeeping`. Compare current-day error counts per service/endpoint against 7-day rolling average. Flag in the morning report when any error type is 3x+ above its baseline.
+### Instrumented Functions (14 total)
+- [x] pumpfun-orchestrator
+- [x] trading-orchestrator
+- [x] intel-xbot-start
+- [x] morning-report
+- [x] system-health-audit
+- [x] database-housekeeping
+- [x] allstar-mint-auditor
+- [x] oracle-master-spider
+- [x] holders-intel-poster
+- [x] holders-intel-scheduler
+- [x] holdersintel-bot-webhook
+- [x] kol-registry-sync
+- [x] enrich-scraped-tokens
+- [x] telegram-bot-health
+- [x] retry-dead-letters
 
----
+## 🔲 Phase 2: Integration (TODO — next sessions)
 
-## B. Communication and Alerts
+### A. Error Logs
+- [ ] Add "Function Health" section to morning report querying edge_function_runs
+- [ ] Wire `enqueueDeadLetter()` into telegram-broadcast.ts for failed sends
+- [ ] Populate error_trend_snapshot from database-housekeeping daily
+- [ ] Roll out `withRunLog` to remaining ~85 edge functions
 
-### Missing 1 — Alert Delivery Confirmation and Audit Trail
-The `api-failure-alerts.ts` fires Telegram messages but has no tracking of whether they were actually delivered. The `broadcastToTelegram` call is fire-and-forget. If the TG bot token expires, all alerts silently die. Same for email notifications.
+### B. Communication
+- [ ] Wire notification_delivery_log into telegram-broadcast.ts send results
+- [ ] Add escalation chain (Tier 1→2→3) for persistent outages
+- [ ] Create /service-status endpoint from service_status table
+- [ ] Update system-health-audit to write to service_status
 
-**Fix:** Add a `notification_delivery_log` table (notification_id, channel, status, response_code, delivered_at, error). Every TG/email send records its delivery status. The morning report includes a "delivery success rate" metric. Alert on >10% delivery failure.
+### C. API Costs
+- [ ] Add monthly quota auto-reset cron (1st of month)
+- [ ] Populate monthly_usage_archive from reset cron
+- [ ] Add cost_per_credit_usd values for paid services
+- [ ] Audit + wrap top unlogged API calls with createApiLogger
 
-### Missing 2 — Escalation Chain for Critical Alerts
-There is a 10-minute cooldown per service in `api-failure-alerts.ts`, but no escalation. If Helius is down for 2 hours, you get one alert at minute 0 and then silence. No secondary channel (email, SMS) kicks in if TG delivery fails. No "still broken after 30 min" re-alert.
-
-**Fix:** Add escalation tiers to the alert system: Tier 1 = TG (immediate), Tier 2 = Email (after 15 min if unresolved), Tier 3 = repeat TG with "STILL DOWN" prefix every 30 min. Track resolution via `admin_notifications.is_read` or a new `alert_acknowledged_at` field.
-
-### Missing 3 — User-Facing Service Status Page
-When Helius or pump.fun goes down, end users have no visibility. Bot replies fail silently, scans return stale data, but the user sees nothing.
-
-**Fix:** Create a simple `service_status` table (service_name, status, last_checked_at, message) updated by `system-health-audit`. Expose via a lightweight `/service-status` endpoint or a status banner in the app when any service is degraded.
-
----
-
-## C. API Usage, Sources, Rotation, and Costs
-
-### Missing 1 — Monthly Quota Auto-Reset (ASAP)
-`monthly_quota_used` in `api_service_config` is tracked but **never reset**. There is no cron, no migration, and no function that resets counters on the 1st of each month. The quota warnings will eventually fire permanently and become meaningless noise.
-
-**Fix:** Add a `reset-monthly-quotas` cron job on the 1st of each month at 00:00 UTC. Before resetting, snapshot the final month's usage to a `monthly_usage_archive` table for historical tracking.
-
-### Missing 2 — Actual Cost Tracking (Dollar Amounts)
-The `SERVICE_CREDITS` map in `api-logger.ts` has rough estimates (Helius = 100, Solscan = 1) but no actual dollar conversion. The `token_analysis_costs` table stores credit counts but not dollar amounts. You can't answer "how much did we spend on Helius this month?"
-
-**Fix:** Add `cost_per_credit_usd` to `api_service_config`. The morning report calculates estimated monthly spend per service. Add a `monthly_cost_estimate` field to the report output. This turns the existing credit data into actionable financial data.
-
-### Missing 3 — Unlogged API Calls
-Only 14 files use `createApiLogger`/`loggedFetch`. There are 200+ edge functions making external API calls — the vast majority are unlogged. Pump.fun calls, Jupiter quotes, Raydium swaps, Firecrawl scrapes, Apify actor runs — many bypass the logging system entirely.
-
-**Fix:** Audit all edge functions making `fetch()` calls to external services. Priority targets: `pumpfun-token-fetcher`, `jupiter` calls in swap functions, `raydium-quote`, `firecrawl-scrape`, `helius-rpc-proxy`. Wrap each with `createApiLogger` or `loggedFetch`. This is a multi-session effort — start with the highest-cost services (Helius, Apify, Solscan).
-
----
-
-## D. Collected Metrics from Token Spidering and Scaling
-
-### Missing 1 — Spider Run Metrics Dashboard Table
-The `oracle-master-spider` (1155 lines) returns rich `SpiderResult` objects with `meshUpdates`, `discoveredTokens`, `discoveredSocials`, and genealogy depth. But none of this is aggregated. There is no table tracking "today we spidered 45 tokens, discovered 120 new wallets, added 30 mesh links, found 8 blacklisted devs."
-
-**Fix:** Create a `spider_run_metrics` table (run_date, tokens_spidered, wallets_discovered, mesh_links_added, blacklist_hits, whitelist_hits, avg_genealogy_depth, avg_run_time_ms). Populate from each spider invocation. Surface in morning report.
-
-### Missing 2 — Token Discovery Funnel Metrics
-Tokens flow through: funnel-feed-scanner → pumpfun-token-fetcher → enricher → watchlist → vigil → post-mortem. But there is no funnel tracking. You can't see "of 500 tokens discovered yesterday, 200 passed enrichment, 50 made watchlist, 12 died, 3 hit 100K mcap."
-
-**Fix:** Create a `token_funnel_daily` table (date, stage, count). Each pipeline stage increments its counter. The morning report includes a funnel visualization showing conversion rates between stages. This is critical for understanding if your filters are too aggressive or too loose.
-
-### Missing 3 — Mesh Growth and Coverage Metrics
-The `mesh_summary` materialized view exists but is never queried by any reporting function. There is no tracking of mesh growth over time — total wallet-to-wallet links, total social identities mapped, total developer profiles, coverage percentage of spidered vs unspidered tokens.
-
-**Fix:** Add mesh growth metrics to the morning report: query `mesh_summary` (or the underlying tables) for total links, total identities, new links added in the last 24h. Create a `mesh_growth_daily` snapshot table populated by housekeeping. This shows whether the mesh is growing, stagnant, or degrading.
-
----
-
-## The 1 ASAP Priority: Edge Function Execution Log Table (Category A, Item 1)
-
-This is the single highest-impact gap. With 200+ edge functions, 40+ cron jobs, and zero persistent execution logging, you are effectively flying blind. When something breaks overnight, the morning report can only tell you about API call failures that happened to be logged — not which functions ran, which failed, or which silently timed out. Every other gap (error trends, cost accuracy, spider metrics) becomes easier to solve once you have a centralized execution log to build on.
-
-**Implementation approach:**
-1. Create `edge_function_runs` table via migration
-2. Create `_shared/run-logger.ts` with a `withRunLog(functionName, handler)` wrapper
-3. Wrap the top 15 highest-frequency cron functions first
-4. Add a "Function Health" section to the morning report querying this table
-5. Roll out to remaining functions over subsequent sessions
-
+### D. Metrics
+- [ ] Instrument oracle-master-spider to write spider_run_metrics
+- [ ] Add funnel stage counters across pipeline functions
+- [ ] Populate mesh_growth_daily from database-housekeeping
+- [ ] Add spider/funnel/mesh sections to morning report

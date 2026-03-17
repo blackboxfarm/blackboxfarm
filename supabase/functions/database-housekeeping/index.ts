@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { withRunLog } from "../_shared/run-logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -92,7 +93,7 @@ async function snapshotHeliusUsage(supabase: any, retentionDays: number) {
   return data?.length || 0;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('database-housekeeping', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -289,7 +290,7 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
 
 async function getTableStats(supabase: any) {
   const tables = [

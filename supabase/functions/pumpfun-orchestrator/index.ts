@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { withRunLog } from "../_shared/run-logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,7 +28,7 @@ const SLOW_FUNCTIONS: Record<string, number> = {
   'social-mesh-linker': 2,           // every 2nd tick (10 min) — auto-links socials to mesh
 };
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('pumpfun-orchestrator', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -92,4 +93,4 @@ Deno.serve(async (req) => {
     JSON.stringify({ orchestrator: 'pumpfun', tick: tickNumber, elapsed, results }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
-});
+}));

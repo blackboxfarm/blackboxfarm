@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { withRunLog } from "../_shared/run-logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,7 +18,7 @@ const TRADING_FUNCTIONS = [
   'telegram-fantasy-price-monitor',
 ];
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('trading-orchestrator', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -57,4 +58,4 @@ Deno.serve(async (req) => {
     JSON.stringify({ orchestrator: 'trading', tick: tickNumber, elapsed, results }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
-});
+}));

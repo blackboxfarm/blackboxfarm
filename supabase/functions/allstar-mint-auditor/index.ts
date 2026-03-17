@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { withRunLog } from '../_shared/run-logger.ts';
 enableHeliusTracking('allstar-mint-auditor');
 
 const corsHeaders = {
@@ -670,7 +671,7 @@ async function createAllstarAlert(
 
 // ─── MAIN HANDLER ───
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -936,4 +937,4 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));

@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
+import { withRunLog } from "../_shared/run-logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -344,7 +345,7 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
   return result;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('holders-intel-poster', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -871,4 +872,4 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
