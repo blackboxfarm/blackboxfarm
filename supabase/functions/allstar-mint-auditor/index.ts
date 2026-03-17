@@ -539,7 +539,7 @@ async function createAllstarAlert(
       ``,
       `${tierStars} **Tier ${allstar.best_tier} Developer**`,
       ``,
-      `**Token:** $${ticker} (${tokenName})`,
+      `**Token:** $ ${ticker} (${tokenName})`,
       `**Mint:** \`${shortMint}\``,
       `**Launchpad:** ${launchpad}`,
       `**Creator:** \`${hit.creatorWallet.slice(0, 12)}...\``,
