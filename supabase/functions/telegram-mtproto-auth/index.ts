@@ -136,8 +136,10 @@ serve(async (req) => {
     }
 
     if (action === 'fetch_recent_messages') {
-      if (!channelUsername) {
-        throw new Error('Channel username required');
+      // Accept either channelUsername or chatId (numeric ID for private groups)
+      const resolvedPeer = channelUsername || (chatId ? String(chatId) : null);
+      if (!resolvedPeer) {
+        throw new Error('channelUsername or chatId required');
       }
       if (!existingSession?.session_string) {
         return new Response(JSON.stringify({
@@ -149,16 +151,18 @@ serve(async (req) => {
         });
       }
 
-      const username = normalizeUsername(channelUsername);
+      // For numeric chat IDs, pass as-is; for usernames, normalize
+      const isNumeric = /^-?\d+$/.test(resolvedPeer);
+      const peerValue = isNumeric ? resolvedPeer : normalizeUsername(resolvedPeer);
       const msgLimit = Math.max(1, Math.min(200, Number(limit) || 50));
 
-      console.log(`[telegram-mtproto-auth] fetch_recent_messages @${username} limit=${msgLimit}`);
+      console.log(`[telegram-mtproto-auth] fetch_recent_messages ${isNumeric ? 'chatId' : '@'}${peerValue} limit=${msgLimit}`);
 
       const res = await fetchRecentMessagesViaMTProto({
         sessionString: existingSession.session_string,
         apiId,
         apiHash,
-        channelUsername: username,
+        channelUsername: peerValue,
         limit: msgLimit,
       });
 
