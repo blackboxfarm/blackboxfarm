@@ -273,7 +273,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
       
       while (currentUrl && pageCount < 10) {
         console.log(`[Oracle] Fetching Helius TOKEN_MINT page ${pageCount + 1}...`);
-        const response = await fetch(currentUrl, { signal: AbortSignal.timeout(6000) });
+        const response = await fetch(currentUrl, { signal: AbortSignal.timeout(12000) });
         
         if (response.ok) {
           const transactions = await response.json();
