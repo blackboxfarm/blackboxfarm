@@ -342,7 +342,7 @@ function fmtMcap(mcap: number | null): string | null {
 }
 
 function tokenHeaderLine(symbol: string | null, name: string | null, mcap: number | null): string {
-  const label = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const label = symbol && name ? `$ ${symbol} (${name})` : symbol ? `$ ${symbol}` : "Unknown Token";
   const mcapStr = fmtMcap(mcap);
   return `🪙 *${label}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}`;
 }
