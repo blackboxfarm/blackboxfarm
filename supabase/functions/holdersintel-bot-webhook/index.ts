@@ -2059,7 +2059,7 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   const top10 = holdersData?.distributionStats?.top10Percentage ?? null;
   const holders = holdersData?.realHolders ?? holdersData?.totalHolders ?? null;
 
-  const tokenLabel = symbol ? `$${symbol}` : ca.slice(0, 8) + '...';
+  const tokenLabel = symbol ? `$ ${symbol}` : ca.slice(0, 8) + '...';
 
   // Build distribution bars from simpleTiers
   const tiers = holdersData?.simpleTiers;
