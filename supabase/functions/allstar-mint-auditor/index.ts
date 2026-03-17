@@ -512,8 +512,8 @@ async function createAllstarAlert(
   const emoji = alertLevel === 'critical' ? '🌟🚨' : alertLevel === 'high_priority' ? '⭐🔔' : '✨';
   await supabase.from('admin_notifications').insert({
     notification_type: 'allstar_mint',
-    title: `${emoji} ALLSTAR DEV MINTED: $${ticker}`,
-    message: `${tierLabel} dev ${devHandle} (best: $${allstar.best_token_symbol} → ${mcapLabel}) just launched $${ticker} on ${launchpad}`,
+    title: `${emoji} ALLSTAR DEV MINTED: $ ${ticker}`,
+    message: `${tierLabel} dev ${devHandle} (best: $ ${allstar.best_token_symbol} → ${mcapLabel}) just launched $ ${ticker} on ${launchpad}`,
     metadata: {
       token_mint: mintAddr, allstar_id: allstar.id, allstar_tier: allstar.best_tier,
       creator_wallet: hit.creatorWallet, pump_url: pumpUrl, padre_url: padreUrl,
@@ -539,14 +539,14 @@ async function createAllstarAlert(
       ``,
       `${tierStars} **Tier ${allstar.best_tier} Developer**`,
       ``,
-      `**Token:** $${ticker} (${tokenName})`,
+      `**Token:** $ ${ticker} (${tokenName})`,
       `**Mint:** \`${shortMint}\``,
       `**Launchpad:** ${launchpad}`,
       `**Creator:** \`${hit.creatorWallet.slice(0, 12)}...\``,
       allstar.twitter_handle ? `**Dev X:** [@${allstar.twitter_handle}](https://x.com/${allstar.twitter_handle})` : '',
       ``,
       `📊 **Dev Track Record:**`,
-      `├ Best Token: $${allstar.best_token_symbol} → ${mcapLabel}`,
+      `├ Best Token: $ ${allstar.best_token_symbol} → ${mcapLabel}`,
       `├ Proven Tokens: ${allstar.total_proven_tokens || '?'}`,
       `├ Wallet Family: ${allstar.total_wallet_family_size || 1} wallets`,
       allstar.kyc_root_wallet ? `├ KYC Root: \`${allstar.kyc_root_wallet.slice(0, 8)}...\`` : '',
@@ -560,7 +560,7 @@ async function createAllstarAlert(
       ``,
       `⏰ Minted: **${hit.mintAge}** (${mintDate.toISOString().slice(0, 19).replace('T', ' ')} UTC)`,
       ``,
-      `💡 _This dev previously launched $${allstar.best_token_symbol} to ${mcapLabel}. Move fast._`,
+      `💡 _This dev previously launched $ ${allstar.best_token_symbol} to ${mcapLabel}. Move fast._`,
     ].filter(Boolean).join('\n');
 
     // Check suspension
@@ -587,9 +587,9 @@ async function createAllstarAlert(
   // ──────────────────────────────────────────────
   try {
     const dmMessage = [
-      `🚀 ALLSTAR MINT: $${ticker}`,
+      `🚀 ALLSTAR MINT: $ ${ticker}`,
       `T${allstar.best_tier} dev ${devHandle}`,
-      `Best: $${allstar.best_token_symbol} → ${mcapLabel}`,
+      `Best: $ ${allstar.best_token_symbol} → ${mcapLabel}`,
       `⏰ Minted: ${hit.mintAge}`,
       ``,
       `Pump: ${pumpUrl}`,

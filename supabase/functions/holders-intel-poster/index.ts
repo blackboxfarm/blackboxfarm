@@ -223,7 +223,7 @@ function processTemplate(template: string, data: any): string {
   const website = data.website || 'N/A';
   
   return template
-    .replace(/\{TICKER\}/g, `$${tickerUpper}`)
+    .replace(/\{TICKER\}/g, `$ ${tickerUpper}`)
     .replace(/\{ticker\}/g, tickerUpper)
     .replace(/\{NAME\}/g, tokenName)
     .replace(/\{name\}/g, tokenName)

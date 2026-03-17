@@ -65,7 +65,7 @@ function buildVerdictPrompt(data: {
   holdersData: { totalHolders: number | null; top10Pct: number | null; baglessCount: number | null };
 }): string {
   const lines: string[] = [
-    `TOKEN: $${data.tokenSymbol} (${data.tokenName})`,
+    `TOKEN: $ ${data.tokenSymbol} (${data.tokenName})`,
     `PHASE: ${data.phase || 'unknown'}`,
     `MOMENTUM SCORE: ${data.momentumScore}/100`,
     `HEALTH SCORE: ${data.healthScore}/100`,
@@ -342,7 +342,7 @@ function fmtMcap(mcap: number | null): string | null {
 }
 
 function tokenHeaderLine(symbol: string | null, name: string | null, mcap: number | null): string {
-  const label = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const label = symbol && name ? `$ ${symbol} (${name})` : symbol ? `$ ${symbol}` : "Unknown Token";
   const mcapStr = fmtMcap(mcap);
   return `🪙 *${label}*${mcapStr ? ` — MCap: *${mcapStr}*` : ''}`;
 }
@@ -1130,9 +1130,9 @@ async function handleCompare(chatId: number, telegramUserId: string, args: strin
   const score1 = (typeof health1 === 'number' ? health1 : 0) + (typeof mom1 === 'number' ? mom1 : 0);
   const score2 = (typeof health2 === 'number' ? health2 : 0) + (typeof mom2 === 'number' ? mom2 : 0);
   if (score1 > score2 + 10) {
-    msg += `\n📍 *$${sym1}* has stronger combined signals.`;
+    msg += `\n📍 *$ ${sym1}* has stronger combined signals.`;
   } else if (score2 > score1 + 10) {
-    msg += `\n📍 *$${sym2}* has stronger combined signals.`;
+    msg += `\n📍 *$ ${sym2}* has stronger combined signals.`;
   } else {
     msg += `\n📍 Both tokens show *similar strength*.`;
   }
@@ -1325,9 +1325,9 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
 
   let tokenHeader: string;
   if (tokenSymbol && tokenName) {
-    tokenHeader = `$${tokenSymbol} (${tokenName})`;
+    tokenHeader = `$ ${tokenSymbol} (${tokenName})`;
   } else if (tokenSymbol) {
-    tokenHeader = `$${tokenSymbol}`;
+    tokenHeader = `$ ${tokenSymbol}`;
   } else if (tokenName) {
     tokenHeader = tokenName;
   } else {
@@ -1618,7 +1618,7 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
     msg += `\n🪙 *Recent Tokens:*\n`;
     for (const t of data.tokenHistory.slice(0, 5)) {
       const outcomeEmoji = t.outcome === 'success' ? '✅' : t.outcome === 'rug_pull' ? '🚩' : t.outcome === 'slow_drain' ? '🐌' : '❓';
-      msg += `• ${outcomeEmoji} $${t.symbol || '???'} — ${t.outcome}${t.isActive ? ' (active)' : ''}\n`;
+      msg += `• ${outcomeEmoji} $ ${t.symbol || '???'} — ${t.outcome}${t.isActive ? ' (active)' : ''}\n`;
     }
   }
 
@@ -1888,7 +1888,7 @@ async function handleAI(chatId: number, telegramUserId: string, args: string) {
       }
     } catch (_) {}
   }
-  const thdr = symbol && name ? `$${symbol} (${name})` : symbol ? `$${symbol}` : "Unknown Token";
+  const thdr = symbol && name ? `$ ${symbol} (${name})` : symbol ? `$ ${symbol}` : "Unknown Token";
 
   let msg = `\`${ca}\`\n🪙 *${thdr}*\n\n🤖 *AI Analysis*\n\n`;
 
@@ -2059,7 +2059,7 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   const top10 = holdersData?.distributionStats?.top10Percentage ?? null;
   const holders = holdersData?.realHolders ?? holdersData?.totalHolders ?? null;
 
-  const tokenLabel = symbol ? `$${symbol}` : ca.slice(0, 8) + '...';
+  const tokenLabel = symbol ? `$ ${symbol}` : ca.slice(0, 8) + '...';
 
   // Build distribution bars from simpleTiers
   const tiers = holdersData?.simpleTiers;
