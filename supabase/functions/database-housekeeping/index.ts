@@ -93,7 +93,7 @@ async function snapshotHeliusUsage(supabase: any, retentionDays: number) {
   return data?.length || 0;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('database-housekeeping', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
