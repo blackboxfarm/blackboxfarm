@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Star, Bell, Plus } from 'lucide-react';
+import { Star, Bell, Plus, Activity, UserPlus } from 'lucide-react';
 import { AllstarRegistry } from '../allstar/AllstarRegistry';
 import { AllstarMintAlerts } from '../allstar/AllstarMintAlerts';
 import { AllstarAddForm } from '../allstar/AllstarAddForm';
+import { AllstarAuditFeed } from '../allstar/AllstarAuditFeed';
+import { MissingAdminPanel } from '../allstar/MissingAdminPanel';
 
 export default function AllstarTab() {
   return (
@@ -28,6 +30,14 @@ export default function AllstarTab() {
             <Bell className="h-4 w-4" />
             Mint Alerts
           </TabsTrigger>
+          <TabsTrigger value="audit-feed" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Audit Feed
+          </TabsTrigger>
+          <TabsTrigger value="missing-admins" className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4" />
+            Missing Admins
+          </TabsTrigger>
           <TabsTrigger value="add" className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             Add Dev
@@ -39,6 +49,12 @@ export default function AllstarTab() {
         </TabsContent>
         <TabsContent value="alerts">
           <AllstarMintAlerts />
+        </TabsContent>
+        <TabsContent value="audit-feed">
+          <AllstarAuditFeed />
+        </TabsContent>
+        <TabsContent value="missing-admins">
+          <MissingAdminPanel />
         </TabsContent>
         <TabsContent value="add">
           <AllstarAddForm />
