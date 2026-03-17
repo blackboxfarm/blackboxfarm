@@ -268,6 +268,15 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
       .eq('token_mint', mint)
       .maybeSingle();
 
+    // Resolve symbol/name: watchlist first, then pump.fun API
+    let tokenSymbol = watchlistEntry?.token_symbol || null;
+    let tokenName = watchlistEntry?.token_name || null;
+    if (!tokenSymbol) {
+      const meta = await fetchPumpMeta(mint);
+      tokenSymbol = meta.symbol || null;
+      tokenName = meta.name || null;
+    }
+
     const watchlistStatus = watchlistEntry ? 'already_exists' : 'pending';
 
     // Check if already posted to X
@@ -283,8 +292,8 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
       .from('funnel_feed_discoveries')
       .insert({
         token_mint: mint,
-        token_symbol: watchlistEntry?.token_symbol || null,
-        token_name: watchlistEntry?.token_name || null,
+        token_symbol: tokenSymbol,
+        token_name: tokenName,
         source_id: source.id,
         source_message_id: info.messageId,
         watchlist_status: watchlistStatus,
