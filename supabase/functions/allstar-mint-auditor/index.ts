@@ -11,6 +11,9 @@ const corsHeaders = {
 // Minimum tier to qualify as an allstar (tier 2 = 300k+)
 const MIN_ALLSTAR_TIER = 2;
 const MAX_MINT_ALERT_AGE_HOURS = 2;
+// Hard absolute ceiling: no token older than 7 days can EVER trigger an alert,
+// regardless of any other config. Tokens older than this are silently indexed to the mesh.
+const MAX_ABSOLUTE_MINT_AGE_HOURS = 168;
 
 // ─── STEP 1: Qualify new allstars from proven_dev_tokens ───
 
