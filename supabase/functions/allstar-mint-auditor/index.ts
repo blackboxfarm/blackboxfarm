@@ -205,19 +205,94 @@ interface MintHit {
  * Returns epoch seconds or null if unverifiable.
  */
 async function verifyMintTimestamp(tokenMint: string, heliusApiKey: string): Promise<number | null> {
+  // Strategy 1: Helius DAS getAsset — returns authoritative token creation date
   try {
-    // Use Helius parsed transaction history for this specific token mint
-    const url = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'TOKEN_MINT', limit: '1' });
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const txs = await res.json();
-    if (Array.isArray(txs) && txs.length > 0 && txs[0].timestamp) {
-      return txs[0].timestamp;
+    const rpcUrl = getHeliusRpcUrl(heliusApiKey);
+    const dasRes = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'mint-ts-das',
+        method: 'getAsset',
+        params: { id: tokenMint },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (dasRes.ok) {
+      const dasData = await dasRes.json();
+      const asset = dasData?.result;
+      // DAS returns created_at as ISO string on the token_info or content level
+      const createdAt = asset?.token_info?.mint_authority
+        ? null // mint_authority alone doesn't give us a date
+        : null;
+      // Check slot-based creation: the asset's "slot" field from the earliest tx
+      // More reliably, check content.metadata or compression.created_at
+      const compressionCreatedAt = asset?.compression?.created_at;
+      const contentCreatedAt = asset?.created_at;
+      const isoDate = compressionCreatedAt || contentCreatedAt;
+      if (isoDate) {
+        const epoch = Math.floor(new Date(isoDate).getTime() / 1000);
+        if (epoch > 0) {
+          console.log(`[allstar] ✓ DAS getAsset creation date for ${tokenMint.slice(0, 12)}: ${isoDate}`);
+          return epoch;
+        }
+      }
     }
-    return null;
-  } catch {
-    return null;
+  } catch (e) {
+    console.warn(`[allstar] DAS getAsset failed for ${tokenMint.slice(0, 12)}:`, e);
   }
+
+  // Strategy 2: Helius TOKEN_MINT transactions — take the OLDEST (last item), not newest
+  try {
+    const url = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'TOKEN_MINT', limit: '50' });
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (res.ok) {
+      const txs = await res.json();
+      if (Array.isArray(txs) && txs.length > 0) {
+        // Take the OLDEST transaction (last in the array) — that's the true mint
+        const oldestTx = txs[txs.length - 1];
+        if (oldestTx?.timestamp) {
+          console.log(`[allstar] ✓ Oldest TOKEN_MINT tx for ${tokenMint.slice(0, 12)}: ${new Date(oldestTx.timestamp * 1000).toISOString()} (${txs.length} txs found)`);
+          return oldestTx.timestamp;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[allstar] TOKEN_MINT fallback failed for ${tokenMint.slice(0, 12)}:`, e);
+  }
+
+  // Strategy 3: getSignaturesForAddress — get the earliest signature for the mint address
+  try {
+    const rpcUrl = getHeliusRpcUrl(heliusApiKey);
+    const sigRes = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'mint-ts-sigs',
+        method: 'getSignaturesForAddress',
+        params: [tokenMint, { limit: 1000 }],
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+    if (sigRes.ok) {
+      const sigData = await sigRes.json();
+      const sigs = sigData?.result || [];
+      if (sigs.length > 0) {
+        // Last element = oldest signature = creation tx
+        const oldest = sigs[sigs.length - 1];
+        if (oldest?.blockTime) {
+          console.log(`[allstar] ✓ Oldest signature blockTime for ${tokenMint.slice(0, 12)}: ${new Date(oldest.blockTime * 1000).toISOString()} (${sigs.length} sigs)`);
+          return oldest.blockTime;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[allstar] getSignaturesForAddress failed for ${tokenMint.slice(0, 12)}:`, e);
+  }
+
+  return null;
 }
 
 function formatMintAge(mintTimestamp: number): string {
