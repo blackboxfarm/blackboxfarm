@@ -1618,7 +1618,7 @@ async function handleOracle(chatId: number, telegramUserId: string, args: string
     msg += `\n🪙 *Recent Tokens:*\n`;
     for (const t of data.tokenHistory.slice(0, 5)) {
       const outcomeEmoji = t.outcome === 'success' ? '✅' : t.outcome === 'rug_pull' ? '🚩' : t.outcome === 'slow_drain' ? '🐌' : '❓';
-      msg += `• ${outcomeEmoji} $${t.symbol || '???'} — ${t.outcome}${t.isActive ? ' (active)' : ''}\n`;
+      msg += `• ${outcomeEmoji} $ ${t.symbol || '???'} — ${t.outcome}${t.isActive ? ' (active)' : ''}\n`;
     }
   }
 
