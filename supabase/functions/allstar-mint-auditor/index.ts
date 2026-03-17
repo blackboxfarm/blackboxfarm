@@ -546,7 +546,7 @@ async function createAllstarAlert(
       allstar.twitter_handle ? `**Dev X:** [@${allstar.twitter_handle}](https://x.com/${allstar.twitter_handle})` : '',
       ``,
       `📊 **Dev Track Record:**`,
-      `├ Best Token: $${allstar.best_token_symbol} → ${mcapLabel}`,
+      `├ Best Token: $ ${allstar.best_token_symbol} → ${mcapLabel}`,
       `├ Proven Tokens: ${allstar.total_proven_tokens || '?'}`,
       `├ Wallet Family: ${allstar.total_wallet_family_size || 1} wallets`,
       allstar.kyc_root_wallet ? `├ KYC Root: \`${allstar.kyc_root_wallet.slice(0, 8)}...\`` : '',
