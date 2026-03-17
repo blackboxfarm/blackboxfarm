@@ -9,6 +9,21 @@ const corsHeaders = {
 // Solana address regex - base58, 32-44 chars
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
+// Quick pump.fun metadata fetch
+async function fetchPumpMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
+  try {
+    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return {};
+    const d = await res.json();
+    return { symbol: d.symbol || undefined, name: d.name || undefined };
+  } catch {
+    return {};
+  }
+}
+
 // Known non-token addresses to skip (system programs, common wallets)
 const SKIP_ADDRESSES = new Set([
   '11111111111111111111111111111111',
