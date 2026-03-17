@@ -10,12 +10,16 @@ import { Star, ExternalLink, RefreshCw, Search, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
+// Higher tier number = better developer (matches proven_dev_tokens scale)
 const TIER_LABELS: Record<number, { label: string; color: string }> = {
-  1: { label: '🥇 Tier 1', color: 'text-yellow-400' },
-  2: { label: '🥈 Tier 2', color: 'text-gray-300' },
-  3: { label: '🥉 Tier 3', color: 'text-amber-600' },
-  4: { label: 'Tier 4', color: 'text-muted-foreground' },
-  5: { label: 'Tier 5', color: 'text-muted-foreground' },
+  8: { label: '🥇 T8 Legend', color: 'text-yellow-400' },
+  7: { label: '🥇 T7 Elite', color: 'text-yellow-400' },
+  6: { label: '🥈 T6 $1M+', color: 'text-gray-300' },
+  5: { label: '🥈 T5 $500K+', color: 'text-gray-300' },
+  4: { label: '🥉 T4 $300K+', color: 'text-amber-600' },
+  3: { label: 'T3 $100K+', color: 'text-muted-foreground' },
+  2: { label: 'T2 Promising', color: 'text-muted-foreground' },
+  1: { label: 'T1 Watch', color: 'text-muted-foreground' },
 };
 
 export function AllstarRegistry() {
@@ -27,7 +31,7 @@ export function AllstarRegistry() {
       const { data, error } = await supabase
         .from('allstar_dev_registry')
         .select('*')
-        .order('best_tier', { ascending: true })
+        .order('best_tier', { ascending: false })
         .order('best_mcap_achieved', { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -111,7 +115,7 @@ export function AllstarRegistry() {
                 </TableRow>
               ) : (
                 filtered.map((dev) => {
-                  const tier = TIER_LABELS[dev.best_tier] || TIER_LABELS[5];
+                  const tier = TIER_LABELS[dev.best_tier] || { label: `T${dev.best_tier}`, color: 'text-muted-foreground' };
                   return (
                     <TableRow key={dev.id} className="text-xs">
                       <TableCell>

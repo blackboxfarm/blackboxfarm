@@ -14,7 +14,7 @@ export function AllstarAddForm() {
   const [tokenMint, setTokenMint] = useState('');
   const [masterWallet, setMasterWallet] = useState('');
   const [twitterHandle, setTwitterHandle] = useState('');
-  const [tier, setTier] = useState('3');
+  const [tier, setTier] = useState('4');
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState<'token' | 'wallet'>('token');
 
@@ -160,11 +160,14 @@ export function AllstarAddForm() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">🥇 Tier 1 ($1M+ mcap)</SelectItem>
-              <SelectItem value="2">🥈 Tier 2 ($500K+ mcap)</SelectItem>
-              <SelectItem value="3">🥉 Tier 3 ($300K+ mcap)</SelectItem>
-              <SelectItem value="4">Tier 4 (promising)</SelectItem>
-              <SelectItem value="5">Tier 5 (watch)</SelectItem>
+              <SelectItem value="8">🥇 T8 Legend ($10M+)</SelectItem>
+              <SelectItem value="7">🥇 T7 Elite ($5M+)</SelectItem>
+              <SelectItem value="6">🥈 T6 ($1M+ mcap)</SelectItem>
+              <SelectItem value="5">🥈 T5 ($500K+ mcap)</SelectItem>
+              <SelectItem value="4">🥉 T4 ($300K+ mcap)</SelectItem>
+              <SelectItem value="3">T3 ($100K+ mcap)</SelectItem>
+              <SelectItem value="2">T2 (promising)</SelectItem>
+              <SelectItem value="1">T1 (watch)</SelectItem>
             </SelectContent>
           </Select>
         </div>
