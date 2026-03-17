@@ -64,7 +64,7 @@ export async function resolveTokenCreator(
   if (heliusKey) {
     try {
       const txUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'TOKEN_MINT', limit: '5' });
-      const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(8000) });
+      const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(12000) });
       if (txRes.ok) {
         const transactions = await txRes.json();
         if (Array.isArray(transactions) && transactions.length > 0) {
