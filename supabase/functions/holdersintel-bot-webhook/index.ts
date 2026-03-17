@@ -1325,9 +1325,9 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
 
   let tokenHeader: string;
   if (tokenSymbol && tokenName) {
-    tokenHeader = `$${tokenSymbol} (${tokenName})`;
+    tokenHeader = `$ ${tokenSymbol} (${tokenName})`;
   } else if (tokenSymbol) {
-    tokenHeader = `$${tokenSymbol}`;
+    tokenHeader = `$ ${tokenSymbol}`;
   } else if (tokenName) {
     tokenHeader = tokenName;
   } else {
