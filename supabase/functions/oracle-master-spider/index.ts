@@ -549,15 +549,24 @@ Deno.serve(async (req) => {
 
     // ── STEP 3: Genealogy trace ──
     addStep('Genealogy Trace', 'running', 'Tracing funding chain...');
-    const genealogy = { kycRoot: null as string | null, parents: [] as string[], satellites: [] as string[], depth: 0 };
+    const genealogy = { kycRoot: null as string | null, parents: [] as string[], satellites: [] as string[], depth: 0, circularFunding: false, circularWallets: [] as string[] };
 
     if (heliusKey) {
       try {
         // Trace parent wallets (who funded this creator)
         const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
         let currentWallet = creatorWallet;
+        const visitedWallets = new Set<string>();
 
-        for (let depth = 0; depth < 3; depth++) {
+        for (let depth = 0; depth < 6; depth++) {
+          // Circular funding detection
+          if (visitedWallets.has(currentWallet)) {
+            genealogy.circularFunding = true;
+            genealogy.circularWallets = [...visitedWallets];
+            console.log(`[spider] 🔄 CIRCULAR FUNDING DETECTED at depth ${depth}: ${currentWallet.slice(0, 8)}...`);
+            break;
+          }
+          visitedWallets.add(currentWallet);
           await delay(200); // Rate limit between RPC calls
           const sigRes = await fetch(rpcUrl, {
             method: 'POST',

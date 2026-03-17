@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface RedFlag {
-  type: 'unlinked_cluster' | 'recycled_identity' | 'rotated_handle';
+  type: 'unlinked_cluster' | 'recycled_identity' | 'rotated_handle' | 'circular_funding';
   severity: 'high' | 'critical';
   shortLabel: string;
   explanation: string;
@@ -1224,6 +1224,47 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
           shortLabel: dist === undefined ? '🚩 No KYC Link' : `🚩 ${dist} Hops from KYC`,
           explanation: `This wallet is ${dist === undefined ? 'completely disconnected from' : `${dist} steps away from`} the developer's KYC root wallet. What this likely means:\n\n• Sybil/Sockpuppet Wallets — Controlled by the same person but deliberately isolated from the KYC chain to hide supply concentration.\n• Bundled Insider Wallets — Pre-funded wallets used to fake early trading volume, create artificial price action, or accumulate supply before a coordinated dump.\n• Exit Liquidity Network — A hidden whale setup where the dev controls far more supply than appears on-chain, staged for extraction.\n\nThese wallets share funding paths or timing patterns but have been deliberately distanced from the dev's identity chain. This is a common pattern in rug pull and slow drain operations.`,
         });
+      }
+    }
+  }
+
+  // ── Circular Funding Detection ──
+  // Detect wallet pairs that fund each other (A→B and B→A)
+  const fundingRelTypes = new Set(['directly_funded', 'funded_by', 'indirectly_funded']);
+  const fundingEdges = new Map<string, Set<string>>(); // source → Set<target>
+  
+  for (const link of links) {
+    if (fundingRelTypes.has(link.relationship || '')) {
+      const src = typeof link.source === 'string' ? link.source : (link.source as any)?.id;
+      const tgt = typeof link.target === 'string' ? link.target : (link.target as any)?.id;
+      if (src && tgt) {
+        if (!fundingEdges.has(src)) fundingEdges.set(src, new Set());
+        fundingEdges.get(src)!.add(tgt);
+      }
+    }
+  }
+
+  // Find bidirectional funding (A funds B AND B funds A)
+  const circularPairs = new Set<string>();
+  for (const [src, targets] of fundingEdges) {
+    for (const tgt of targets) {
+      if (fundingEdges.get(tgt)?.has(src) && !circularPairs.has(`${tgt}-${src}`)) {
+        circularPairs.add(`${src}-${tgt}`);
+        // Flag both wallets
+        for (const node of connectedNodes) {
+          if (node.id === src || node.id === tgt) {
+            if (!node.redFlags) node.redFlags = [];
+            if (!node.redFlags.some(f => f.type === 'circular_funding')) {
+              const otherWallet = node.id === src ? tgt : src;
+              node.redFlags.push({
+                type: 'circular_funding',
+                severity: 'critical',
+                shortLabel: '🔄 Circular Funding Loop',
+                explanation: `This wallet is part of a circular funding loop — it both sends to AND receives funds from ${otherWallet.slice(0, 8)}…${otherWallet.slice(-4)}. This is a CRITICAL red flag:\n\n• Wash Infrastructure — Two wallets repeatedly funding each other to obscure the true origin of funds and create the illusion of independent activity.\n• Sybil Network — Fake identities recycling SOL between each other to simulate organic wallet creation.\n• Long-Running Operator — Circular funding loops are often maintained for months or years, used as launchpad infrastructure for serial token deployments.\n\nThis pattern is almost never legitimate. The operator behind these wallets is deliberately hiding their funding trail.`,
+              });
+            }
+          }
+        }
       }
     }
   }

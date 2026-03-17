@@ -97,22 +97,35 @@ export async function discoverFunding(
  */
 export async function discoverFundingChain(
   walletAddress: string,
-  maxDepth: number = 3,
+  maxDepth: number = 6,
   apiErrors: string[] = []
 ): Promise<{
   chain: FundingResult[];
   kycRoot: string | null;
   kycRootLabel: string | null;
+  circularFunding: boolean;
+  circularWallets: string[];
 }> {
   const chain: FundingResult[] = [];
   const visited = new Set<string>();
+  const visitOrder: string[] = [];
   let current = walletAddress;
   let kycRoot: string | null = null;
   let kycRootLabel: string | null = null;
+  let circularFunding = false;
+  let circularWallets: string[] = [];
 
   for (let depth = 0; depth < maxDepth; depth++) {
-    if (visited.has(current)) break;
+    if (visited.has(current)) {
+      // Circular loop detected!
+      circularFunding = true;
+      const loopStart = visitOrder.indexOf(current);
+      circularWallets = visitOrder.slice(loopStart);
+      console.log(`[FundingResolver] 🔄 CIRCULAR FUNDING DETECTED: ${circularWallets.map(w => w.slice(0, 8)).join(' ↔ ')} (loop at depth ${depth})`);
+      break;
+    }
     visited.add(current);
+    visitOrder.push(current);
 
     const funding = await discoverFunding(current, apiErrors);
     if (!funding) break;
@@ -136,5 +149,5 @@ export async function discoverFundingChain(
     kycRoot = chain[chain.length - 1].funder;
   }
 
-  return { chain, kycRoot, kycRootLabel };
+  return { chain, kycRoot, kycRootLabel, circularFunding, circularWallets };
 }
