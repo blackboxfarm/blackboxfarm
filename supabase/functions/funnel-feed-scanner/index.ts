@@ -9,19 +9,35 @@ const corsHeaders = {
 // Solana address regex - base58, 32-44 chars
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
-// Quick pump.fun metadata fetch
-async function fetchPumpMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
+// Quick metadata fetch: pump.fun first, then DexScreener fallback
+async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
+  // Try pump.fun first
   try {
     const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return {};
-    const d = await res.json();
-    return { symbol: d.symbol || undefined, name: d.name || undefined };
-  } catch {
-    return {};
-  }
+    if (res.ok) {
+      const d = await res.json();
+      if (d.symbol) return { symbol: d.symbol, name: d.name || undefined };
+    }
+  } catch { /* fall through */ }
+
+  // Fallback: DexScreener
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      const pair = d.pairs?.[0];
+      if (pair?.baseToken?.symbol) {
+        return { symbol: pair.baseToken.symbol, name: pair.baseToken.name || undefined };
+      }
+    }
+  } catch { /* ignore */ }
+
+  return {};
 }
 
 // Known non-token addresses to skip (system programs, common wallets)
