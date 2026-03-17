@@ -937,4 +937,4 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));

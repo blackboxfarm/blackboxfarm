@@ -1153,4 +1153,4 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));

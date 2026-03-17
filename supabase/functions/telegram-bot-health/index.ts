@@ -217,4 +217,4 @@ Deno.serve(withRunLog('telegram-bot-health', async (req) => {
     console.error("[telegram-bot-health] ✗ unhandled error:", error?.message, error?.stack);
     return json({ success: false, error: error?.message || "Unexpected error" }, 500);
   }
-});
+}));

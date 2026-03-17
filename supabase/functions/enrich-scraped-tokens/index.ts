@@ -239,4 +239,4 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));

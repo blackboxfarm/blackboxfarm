@@ -216,4 +216,4 @@ Deno.serve(withRunLog('kol-registry-sync', async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
