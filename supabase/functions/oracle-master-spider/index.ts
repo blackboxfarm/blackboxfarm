@@ -1,4 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { withRunLog } from '../_shared/run-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
