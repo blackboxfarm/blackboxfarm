@@ -362,7 +362,9 @@ Deno.serve(async (req) => {
     // Fetch the active template from database
     const tweetTemplate = await fetchActiveTemplate(supabase);
     
-    // Check for any pending items that are due
+    // BATCH MODE: fetch up to 5 candidates, post up to 3 per tick
+    const MAX_POSTS_PER_TICK = 3;
+    const BATCH_SIZE = 5; // fetch extra in case some skip/fail
     const now = new Date().toISOString();
     
     const { data: pendingItems, error: fetchError } = await supabase
@@ -371,14 +373,13 @@ Deno.serve(async (req) => {
       .eq('status', 'pending')
       .lte('scheduled_at', now)
       .order('scheduled_at', { ascending: true })
-      .limit(1);
+      .limit(BATCH_SIZE);
     
     if (fetchError) {
       throw fetchError;
     }
     
     if (!pendingItems || pendingItems.length === 0) {
-      // Check if there are future pending items
       const { count } = await supabase
         .from('holders_intel_post_queue')
         .select('*', { count: 'exact', head: true })
@@ -394,7 +395,16 @@ Deno.serve(async (req) => {
       );
     }
     
-    const item = pendingItems[0];
+    console.log(`[poster] Batch: ${pendingItems.length} candidates, max ${MAX_POSTS_PER_TICK} posts`);
+    
+    const results: any[] = [];
+    let postsThisTick = 0;
+    
+    for (const item of pendingItems) {
+      if (postsThisTick >= MAX_POSTS_PER_TICK) {
+        console.log(`[poster] Hit ${MAX_POSTS_PER_TICK} posts this tick, stopping`);
+        break;
+      }
     console.log(`[poster] Processing: ${item.symbol} (${item.token_mint})`);
     
     // Mark as processing
@@ -517,10 +527,8 @@ Deno.serve(async (req) => {
           })
           .eq('id', item.id);
         
-        return new Response(
-          JSON.stringify({ success: true, skipped: true, reason: 'Too few holders' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        results.push({ symbol: item.symbol, action: 'skipped', reason: 'Too few holders' });
+        continue;
       }
       
       if (SKIP_GRADES.includes(stats.healthGrade)) {
@@ -533,10 +541,8 @@ Deno.serve(async (req) => {
           })
           .eq('id', item.id);
         
-        return new Response(
-          JSON.stringify({ success: true, skipped: true, reason: 'Low health grade' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        results.push({ symbol: item.symbol, action: 'skipped', reason: 'Low health grade' });
+        continue;
       }
       
       // ATH 24h: Fetch from GeckoTerminal on FIRST POST only, store in token_lifecycle
@@ -619,15 +625,8 @@ Deno.serve(async (req) => {
       } else if (!latestItem || latestItem.status !== 'processing') {
         console.log(`[poster] Aborting post: queue item status is '${latestItem?.status ?? 'missing'}'`);
 
-        return new Response(
-          JSON.stringify({
-            success: true,
-            aborted: true,
-            reason: 'Queue item was stopped before posting',
-            symbol: item.symbol,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        results.push({ symbol: item.symbol, action: 'aborted', reason: 'Stopped before posting' });
+        continue;
       }
       
       // Post tweet
@@ -788,27 +787,14 @@ Deno.serve(async (req) => {
         console.warn('[poster] TG notification failed:', tgErr);
       }
       
-      const elapsed = Date.now() - startTime;
-      
-      return new Response(
-        JSON.stringify({
-          success: true,
-          posted: true,
-          symbol: stats.symbol,
-          tweetId: tweetResult.tweetId,
-          tweetUrl: tweetResult.tweetUrl,
-          executionTimeMs: elapsed,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      postsThisTick++;
+      results.push({ symbol: stats.symbol, action: 'posted', tweetId: tweetResult.tweetId });
       
     } catch (postError: any) {
       console.error(`[poster] Error processing ${item.symbol}:`, postError);
       
       const errorMsg = postError.message || '';
       
-      // ANY Twitter API rejection = skip immediately, never retry
-      // We do NOT want to repeatedly hit their API and risk a ban
       const isTwitterRejection = errorMsg.includes('Twitter API error') ||
                                   errorMsg.includes('duplicate') ||
                                   errorMsg.includes('already posted') ||
@@ -817,12 +803,11 @@ Deno.serve(async (req) => {
                                   errorMsg.includes('You are not allowed') ||
                                   errorMsg.includes('403') ||
                                   errorMsg.includes('401') ||
-                                  errorMsg.includes('429') || // rate limit
+                                  errorMsg.includes('429') ||
                                   errorMsg.includes('Too Many Requests');
       
       if (isTwitterRejection) {
         console.log(`[poster] Twitter rejected, skipping (no retry): ${item.symbol} - ${errorMsg.substring(0, 100)}`);
-        
         await supabase
           .from('holders_intel_post_queue')
           .update({
@@ -831,23 +816,15 @@ Deno.serve(async (req) => {
           })
           .eq('id', item.id);
         
-        return new Response(
-          JSON.stringify({
-            success: true,
-            skipped: true,
-            reason: 'Twitter rejected',
-            symbol: item.symbol,
-            error: errorMsg.substring(0, 200),
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        results.push({ symbol: item.symbol, action: 'skipped', reason: 'Twitter rejected' });
+        // Twitter rejection = stop posting this tick to avoid rate limit cascade
+        break;
       }
       
-      // Non-Twitter errors (e.g., our holder report failed) - can retry once
+      // Non-Twitter errors (RPC fail etc.) - retry once, but CONTINUE to next item
       const newRetryCount = (item.retry_count || 0) + 1;
-      const finalStatus = newRetryCount >= 2 ? 'failed' : 'pending'; // Max 1 retry for internal errors
-      
-      const retryAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min delay
+      const finalStatus = newRetryCount >= 2 ? 'failed' : 'pending';
+      const retryAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       
       await supabase
         .from('holders_intel_post_queue')
@@ -859,16 +836,23 @@ Deno.serve(async (req) => {
         })
         .eq('id', item.id);
       
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: postError.message,
-          retryCount: newRetryCount,
-          willRetry: finalStatus === 'pending',
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      results.push({ symbol: item.symbol, action: finalStatus, error: errorMsg.substring(0, 100) });
+      continue; // Move to next item instead of returning!
     }
+    } // end for-loop
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`[poster] Batch complete: ${postsThisTick} posted, ${results.length} processed in ${elapsed}ms`);
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        postsThisTick,
+        results,
+        executionTimeMs: elapsed,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
     
   } catch (error: any) {
     console.error('[poster] Error:', error);
