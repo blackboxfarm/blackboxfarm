@@ -139,4 +139,4 @@ Deno.serve(withRunLog('intel-xbot-start', async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
