@@ -383,11 +383,29 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
         }
       }
 
-      // Queue for X posting
+      // Queue for X posting — insert into the actual post queue the poster reads from
       if (xpostStatus === 'pending') {
+        const scheduledAt = new Date(Date.now() + Math.floor(Math.random() * 300_000)).toISOString(); // random 0-5min delay
+        const { error: queueErr } = await supabase
+          .from('holders_intel_post_queue')
+          .insert({
+            token_mint: mint,
+            symbol: tokenMeta?.symbol || null,
+            name: tokenMeta?.name || null,
+            scheduled_at: scheduledAt,
+            status: 'pending',
+            trigger_source: 'funnel_feed',
+            trigger_comment: `Discovered via funnel feed: ${source.source_name}`,
+          });
+
+        const newXpostStatus = queueErr ? 'failed' : 'queued';
+        if (queueErr) {
+          console.warn(`[funnel-feed-scanner] Post queue insert error for ${mint}:`, queueErr.message);
+        }
+
         await supabase
           .from('funnel_feed_discoveries')
-          .update({ xpost_status: 'queued', xpost_processed_at: new Date().toISOString() })
+          .update({ xpost_status: newXpostStatus, xpost_processed_at: new Date().toISOString() })
           .eq('token_mint', mint)
           .eq('source_id', source.id);
       }
