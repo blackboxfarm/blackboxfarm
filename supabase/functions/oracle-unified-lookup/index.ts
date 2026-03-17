@@ -318,7 +318,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
             
             const lastTx = transactions[transactions.length - 1];
             if (lastTx?.signature) {
-              currentUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100', before: lastTx.signature });
+              currentUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '120', before: lastTx.signature });
               pageCount++;
             } else {
               break;
