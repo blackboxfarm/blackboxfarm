@@ -96,7 +96,7 @@ export async function resolveTokenCreator(
           method: 'getAsset',
           params: { id: tokenMint },
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(12000),
       });
       if (dasRes.ok) {
         const result = await dasRes.json();
