@@ -54,7 +54,7 @@ const CRON_JOBS = [
   // Twitter scanner disabled - X API credits exhausted
 ];
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('intel-xbot-start', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
