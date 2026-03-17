@@ -83,7 +83,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { action, code, channelUsername, limit } = body;
+    const { action, code, channelUsername, chatId, limit } = body;
 
     const apiIdRaw = Deno.env.get('TELEGRAM_API_ID');
     const apiHash = Deno.env.get('TELEGRAM_API_HASH');
@@ -136,8 +136,10 @@ serve(async (req) => {
     }
 
     if (action === 'fetch_recent_messages') {
-      if (!channelUsername) {
-        throw new Error('Channel username required');
+      // Accept either channelUsername or chatId (numeric ID for private groups)
+      const resolvedPeer = channelUsername || (chatId ? String(chatId) : null);
+      if (!resolvedPeer) {
+        throw new Error('channelUsername or chatId required');
       }
       if (!existingSession?.session_string) {
         return new Response(JSON.stringify({
@@ -149,16 +151,18 @@ serve(async (req) => {
         });
       }
 
-      const username = normalizeUsername(channelUsername);
+      // For numeric chat IDs, pass as-is; for usernames, normalize
+      const isNumeric = /^-?\d+$/.test(resolvedPeer);
+      const peerValue = isNumeric ? resolvedPeer : normalizeUsername(resolvedPeer);
       const msgLimit = Math.max(1, Math.min(200, Number(limit) || 50));
 
-      console.log(`[telegram-mtproto-auth] fetch_recent_messages @${username} limit=${msgLimit}`);
+      console.log(`[telegram-mtproto-auth] fetch_recent_messages ${isNumeric ? 'chatId' : '@'}${peerValue} limit=${msgLimit}`);
 
       const res = await fetchRecentMessagesViaMTProto({
         sessionString: existingSession.session_string,
         apiId,
         apiHash,
-        channelUsername: username,
+        channelUsername: peerValue,
         limit: msgLimit,
       });
 
@@ -169,7 +173,7 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({
         success: true,
-        channelUsername: username,
+        channelUsername: peerValue,
         messageCount: res.messages.length,
         messages: res.messages,
       }), {

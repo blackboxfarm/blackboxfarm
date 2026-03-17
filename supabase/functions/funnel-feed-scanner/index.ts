@@ -200,7 +200,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
 
   // Filter to only messages newer than last_message_id to avoid reprocessing
   const lastMsgId = source.last_message_id || 0;
-  const newMessages = messages.filter((m: any) => (m.id || 0) > lastMsgId);
+  const newMessages = messages.filter((m: any) => (parseInt(m.messageId || m.id || '0', 10)) > lastMsgId);
   
   console.log(`[funnel-feed-scanner] ${newMessages.length} new messages (after msg ID ${lastMsgId}) for ${source.source_name}`);
 
@@ -218,7 +218,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
 
   for (const msg of newMessages) {
     const text = msg.text || '';
-    const msgId = msg.id || 0;
+    const msgId = parseInt(msg.messageId || msg.id || '0', 10);
     maxMessageId = Math.max(maxMessageId, msgId);
 
     const addresses = text.match(SOLANA_ADDRESS_REGEX) || [];
