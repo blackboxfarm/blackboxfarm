@@ -652,6 +652,15 @@ Deno.serve(async (req) => {
         })
         .eq('token_mint', item.token_mint);
       
+      // Update funnel_feed_discoveries if this came from funnel feed
+      if (item.trigger_source === 'funnel_feed') {
+        await supabase
+          .from('funnel_feed_discoveries')
+          .update({ xpost_status: 'posted', xpost_processed_at: new Date().toISOString() })
+          .eq('token_mint', item.token_mint);
+        console.log(`[poster] Updated funnel_feed_discoveries xpost_status → posted for ${item.token_mint.slice(0, 8)}`);
+      }
+      
       console.log(`[poster] Successfully posted tweet: ${tweetResult.tweetId}`);
       
       // 🕸️ MESH FEEDER: Every posted token feeds the mesh with ALL available data
