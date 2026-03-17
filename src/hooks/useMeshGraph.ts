@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface RedFlag {
-  type: 'unlinked_cluster' | 'recycled_identity' | 'rotated_handle';
+  type: 'unlinked_cluster' | 'recycled_identity' | 'rotated_handle' | 'circular_funding';
   severity: 'high' | 'critical';
   shortLabel: string;
   explanation: string;
