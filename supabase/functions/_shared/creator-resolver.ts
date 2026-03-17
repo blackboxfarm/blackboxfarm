@@ -37,7 +37,7 @@ export async function resolveTokenCreator(
   try {
     const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10000),
     });
     if (pfRes.ok) {
       const text = await pfRes.text();
@@ -64,7 +64,7 @@ export async function resolveTokenCreator(
   if (heliusKey) {
     try {
       const txUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'TOKEN_MINT', limit: '5' });
-      const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(8000) });
+      const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(12000) });
       if (txRes.ok) {
         const transactions = await txRes.json();
         if (Array.isArray(transactions) && transactions.length > 0) {
@@ -96,7 +96,7 @@ export async function resolveTokenCreator(
           method: 'getAsset',
           params: { id: tokenMint },
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(12000),
       });
       if (dasRes.ok) {
         const result = await dasRes.json();
@@ -130,7 +130,7 @@ export async function resolveTokenCreator(
           method: 'getSignaturesForAddress',
           params: [tokenMint, { limit: 20 }],
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(12000),
       });
 
       if (sigRes.ok) {
@@ -153,7 +153,7 @@ export async function resolveTokenCreator(
                 method: 'getTransaction',
                 params: [oldestSig, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }],
               }),
-              signal: AbortSignal.timeout(8000),
+              signal: AbortSignal.timeout(12000),
             });
 
             if (txRes.ok) {

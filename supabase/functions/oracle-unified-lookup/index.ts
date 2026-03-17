@@ -210,17 +210,33 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
   
   for (const baseUrl of baseEndpoints) {
     let offset = 0;
-    const limit = 100;
-    let keepFetching = true;
+        const limit = 120;
+        let keepFetching = true;
     
     try {
       while (keepFetching) {
         const url = `${baseUrl}?limit=${limit}&offset=${offset}&includeNsfw=true`;
         console.log(`[Oracle] Fetching created tokens offset=${offset}...`);
         
-        const response = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+        let response: Response | null = null;
+        // Retry up to 2 times on failure/timeout
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+            if (response.ok || (response.status >= 400 && response.status < 500)) break; // Don't retry 4xx
+            console.log(`[Oracle] Pump.fun attempt ${attempt + 1} failed with ${response.status}, retrying...`);
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          } catch (retryErr) {
+            if (attempt === 0) {
+              console.log(`[Oracle] Pump.fun attempt 1 timed out, retrying with longer timeout...`);
+              await new Promise(r => setTimeout(r, 500));
+              continue;
+            }
+            throw retryErr;
+          }
+        }
         
-        if (response.ok) {
+        if (response?.ok) {
           const data = await response.json();
           if (Array.isArray(data) && data.length > 0) {
             allTokens = allTokens.concat(data);
@@ -230,13 +246,13 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
               keepFetching = false;
             } else {
               offset += limit;
-              if (offset >= 1000) keepFetching = false;
+              if (offset >= 1200) keepFetching = false; // Raised cap
             }
           } else {
             keepFetching = false;
           }
         } else {
-          const errMsg = `Pump.fun API ${response.status} on ${baseUrl.includes('frontend') ? 'frontend-api' : 'client-api'}`;
+          const errMsg = `Pump.fun API ${response?.status || 'timeout'} on ${baseUrl.includes('frontend') ? 'frontend-api' : 'client-api'}`;
           console.log(`[Oracle] ${errMsg}`);
           apiErrors.push(errMsg);
           keepFetching = false;
@@ -265,7 +281,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
   // Step 2a: TOKEN_MINT tx history (separate try/catch so timeout doesn't kill Steps 3+4)
   if (heliusKey) {
     try {
-      const txHistoryUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100' });
+      const txHistoryUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '120' });
       
       let allMints: string[] = [];
       let currentUrl = txHistoryUrl;
@@ -273,7 +289,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
       
       while (currentUrl && pageCount < 10) {
         console.log(`[Oracle] Fetching Helius TOKEN_MINT page ${pageCount + 1}...`);
-        const response = await fetch(currentUrl, { signal: AbortSignal.timeout(6000) });
+        const response = await fetch(currentUrl, { signal: AbortSignal.timeout(12000) });
         
         if (response.ok) {
           const transactions = await response.json();
@@ -298,11 +314,11 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
               }
             }
             
-            if (transactions.length < 100) break;
+            if (transactions.length < 120) break;
             
             const lastTx = transactions[transactions.length - 1];
             if (lastTx?.signature) {
-              currentUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '100', before: lastTx.signature });
+              currentUrl = getHeliusRestUrl(`/v0/addresses/${walletAddress}/transactions`, { type: 'TOKEN_MINT', limit: '120', before: lastTx.signature });
               pageCount++;
             } else {
               break;
@@ -353,7 +369,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
             limit: 1000
           }
         }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(12000)
       });
       
       if (dasResponse.ok) {
@@ -691,7 +707,7 @@ Deno.serve(async (req) => {
     if (resolvedWallet) {
       console.log('[Oracle] Running Helius funding chain discovery...');
       
-      const { chain, kycRoot, kycRootLabel } = await discoverFundingChain(resolvedWallet, 3, apiErrors);
+      const { chain, kycRoot, kycRootLabel, circularFunding, circularWallets } = await discoverFundingChain(resolvedWallet, 6, apiErrors);
       heliusFundingChain = chain.map(f => ({
         funder: f.funder,
         funderName: f.funderName,
@@ -702,7 +718,13 @@ Deno.serve(async (req) => {
       heliusKycRootLabel = kycRootLabel;
       
       if (heliusFundingChain.length > 0) {
-        console.log(`[Oracle] Helius funding chain: ${heliusFundingChain.length} hops, KYC root: ${heliusKycRoot?.slice(0, 8) || 'none'} (${heliusKycRootLabel || 'N/A'})`);
+        console.log(`[Oracle] Helius funding chain: ${heliusFundingChain.length} hops, KYC root: ${heliusKycRoot?.slice(0, 8) || 'none'} (${heliusKycRootLabel || 'N/A'})${circularFunding ? ' ⚠️ CIRCULAR FUNDING DETECTED' : ''}`);
+      }
+      
+      // If circular funding detected, add as red flag to mesh
+      if (circularFunding && circularWallets.length > 0) {
+        console.log(`[Oracle] 🔄 Circular funding wallets: ${circularWallets.map(w => w.slice(0,8)).join(' ↔ ')}`);
+        apiErrors.push(`🔄 CIRCULAR FUNDING: ${circularWallets.length} wallets in funding loop`);
       }
     }
     
