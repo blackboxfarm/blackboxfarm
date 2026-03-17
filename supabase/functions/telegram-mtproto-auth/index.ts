@@ -173,7 +173,7 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({
         success: true,
-        channelUsername: username,
+        channelUsername: peerValue,
         messageCount: res.messages.length,
         messages: res.messages,
       }), {
