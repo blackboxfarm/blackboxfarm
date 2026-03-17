@@ -121,7 +121,7 @@ export function generateWarningsFromHoldersData(
       token_mint: tokenMint,
       warning_type: 'tier_divergence_high',
       severity: divergence > 50 ? 'critical' : 'high',
-      plain_text: `⚠️ Holder distribution divergence detected — ${divergence.toFixed(0)}% gap (${whalesPct.toFixed(0)}% whales vs ${retailPct.toFixed(0)}% retail).`,
+      plain_text: `⚠️ ${retailPct.toFixed(0)}% of holders are small retail wallets but only ${whalesPct.toFixed(0)}% are whales — top-heavy sell pressure could crash price fast.`,
       metric_value: divergence,
       source_function: sourceFunction,
       metadata: { whales_pct: whalesPct, retail_pct: retailPct, serious_pct: seriousPct },
