@@ -93,4 +93,4 @@ Deno.serve(withRunLog('pumpfun-orchestrator', async (req) => {
     JSON.stringify({ orchestrator: 'pumpfun', tick: tickNumber, elapsed, results }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
-});
+}));

@@ -18,7 +18,7 @@ const TRADING_FUNCTIONS = [
   'telegram-fantasy-price-monitor',
 ];
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('trading-orchestrator', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
