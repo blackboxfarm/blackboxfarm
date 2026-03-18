@@ -4,6 +4,7 @@ const ABOUT_PAGE_MAX_POLLS = 20;
 
 export interface XCommunityAboutAdminResult {
   adminUsername: string | null;
+  moderatorUsernames: string[];
   memberCount: number | null;
   httpStatus: number;
   error?: string;
@@ -14,6 +15,7 @@ export interface XCommunityAboutAdminResult {
     pageTitle?: string;
     textSnippet: string;
     adminUsername: string | null;
+    moderatorUsernames: string[];
     memberCount: number | null;
   };
 }
@@ -53,14 +55,35 @@ export async function fetchXCommunityAboutAdmin(
       title = await page.title();
       text = await page.evaluate(() => document.body.innerText || '');
 
-      const adminMatch = text.match(/Created[\\s\\S]{0,160}?by\\s+@?([A-Za-z0-9_]{1,15})/i);
+      // Extract all handles from the Moderators section
+      // The about page lists moderators — first one is the Admin (creator)
+      const allHandles = [];
+      const moderatorSection = text.match(/Moderators[\\s\\S]{0,2000}/i);
+      if (moderatorSection) {
+        const handleMatches = moderatorSection[0].matchAll(/@([A-Za-z0-9_]{1,15})/g);
+        for (const m of handleMatches) {
+          allHandles.push(m[1].toLowerCase());
+        }
+      }
+
+      // Fallback: try "Created by @handle" pattern
+      if (allHandles.length === 0) {
+        const createdMatch = text.match(/Created[\\s\\S]{0,160}?by\\s+@?([A-Za-z0-9_]{1,15})/i);
+        if (createdMatch) allHandles.push(createdMatch[1].toLowerCase());
+      }
+
       const memberMatch = text.match(/([\\d,]+)\\s+Members?\\b/i);
+
+      // First handle = admin, rest = moderators
+      const adminUsername = allHandles.length > 0 ? allHandles[0] : null;
+      const moderatorUsernames = allHandles.slice(1);
 
       return {
         pageTitle: title,
         finalUrl: page.url(),
         textSnippet: text.slice(0, 3000),
-        adminUsername: adminMatch ? adminMatch[1].toLowerCase() : null,
+        adminUsername,
+        moderatorUsernames,
         memberCount: memberMatch ? Number(memberMatch[1].replace(/,/g, '')) : null,
       };
     };
@@ -80,6 +103,7 @@ export async function fetchXCommunityAboutAdmin(
       const errorBody = await response.text().catch(() => '');
       return {
         adminUsername: null,
+        moderatorUsernames: [],
         memberCount: null,
         httpStatus: response.status,
         error: errorBody.slice(0, 300),
@@ -88,6 +112,7 @@ export async function fetchXCommunityAboutAdmin(
           aboutPageUrl,
           textSnippet: '',
           adminUsername: null,
+          moderatorUsernames: [],
           memberCount: null,
         },
       };
@@ -95,11 +120,15 @@ export async function fetchXCommunityAboutAdmin(
 
     const payload = await response.json();
     const adminUsername = normalizeHandle(payload?.adminUsername);
+    const moderatorUsernames: string[] = (Array.isArray(payload?.moderatorUsernames) ? payload.moderatorUsernames : [])
+      .map((h: string) => normalizeHandle(h))
+      .filter(Boolean) as string[];
     const memberCount = typeof payload?.memberCount === 'number' ? payload.memberCount : null;
     const textSnippet = typeof payload?.textSnippet === 'string' ? payload.textSnippet.slice(0, 3000) : '';
 
     return {
       adminUsername,
+      moderatorUsernames,
       memberCount,
       httpStatus: response.status,
       rawData: {
@@ -109,12 +138,14 @@ export async function fetchXCommunityAboutAdmin(
         pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
         textSnippet,
         adminUsername,
+        moderatorUsernames,
         memberCount,
       },
     };
   } catch (error) {
     return {
       adminUsername: null,
+      moderatorUsernames: [],
       memberCount: null,
       httpStatus: 0,
       error: error instanceof Error ? error.message : String(error),
@@ -123,6 +154,7 @@ export async function fetchXCommunityAboutAdmin(
         aboutPageUrl,
         textSnippet: '',
         adminUsername: null,
+        moderatorUsernames: [],
         memberCount: null,
       },
     };
