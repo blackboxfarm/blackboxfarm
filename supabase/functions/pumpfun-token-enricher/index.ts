@@ -1295,7 +1295,7 @@ async function enrichTokenBatch(
   return { enriched, promoted, rejected, softRejected };
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-token-enricher', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
