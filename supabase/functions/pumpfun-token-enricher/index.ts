@@ -5,6 +5,7 @@ import { heliusFetch, canMakeHeliusCall } from "../_shared/helius-rate-limiter.t
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
+import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
