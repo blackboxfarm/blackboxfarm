@@ -413,13 +413,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     if (!src.x || !tgt.x) return;
     const rel = link.relationship || '';
     let strokeColor = 'rgba(255,255,255,0.2)';
-    let lineWidth = 1.2;
-    // Strong thick lines for critical relationships
-    if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.7)'; lineWidth = 3; }
-    else if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.6)'; lineWidth = 2.5; }
-    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.5)'; lineWidth = 2.5; }
-    else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.5)'; lineWidth = 1.5; }
-    else if (rel.includes('community_for') || rel.includes('social_account')) { strokeColor = 'rgba(99,102,241,0.4)'; lineWidth = 1.5; }
+    let lineWidth = 1;
+    // Created links (token↔dev wallet) — visible but not overwhelming
+    if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.5)'; lineWidth = 1.5; }
+    else if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.45)'; lineWidth = 1.5; }
+    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.4)'; lineWidth = 1.5; }
+    else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.4)'; lineWidth = 1; }
+    else if (rel.includes('community_for') || rel.includes('social_account')) { strokeColor = 'rgba(99,102,241,0.35)'; lineWidth = 1; }
     ctx.beginPath(); ctx.moveTo(src.x, src.y); ctx.lineTo(tgt.x, tgt.y);
     ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth; ctx.stroke();
     if (globalScale > 2) {
