@@ -293,6 +293,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     return acc;
   }, {} as Record<string, number>);
 
+  // Derive focused entity display info
+  const focusedDisplayInfo = (() => {
+    if (!focusedEntity) return null;
+    const matchingNode = graphData.nodes.find(n => n.id.includes(focusedEntity.id));
+    const type = focusedEntity.type || matchingNode?.type || 'wallet';
+    const emoji = type === 'token' ? '🪙' : type === 'wallet' ? '💰' : type === 'x_account' ? '🐦' : type === 'kyc_root' ? '🏦' : type === 'telegram' ? '📡' : '🔍';
+    const label = matchingNode?.label || focusedEntity.id.slice(0, 16) + '...';
+    return { emoji, label, type };
+  })();
+
   const trafficLightColor = (tl?: string) => {
     switch (tl) {
       case 'RED': return 'text-red-400';
