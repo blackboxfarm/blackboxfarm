@@ -19,6 +19,12 @@ export interface FundingResult {
 
 const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin', 'huobi', 'gate.io', 'ftx', 'gemini', 'bitfinex', 'crypto.com', 'mexc'];
 
+const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function isValidSolanaAddress(address: string): boolean {
+  return typeof address === 'string' && BASE58_REGEX.test(address);
+}
+
 function isKnownCex(name: string | null, type: string | null): boolean {
   if (type === 'exchange' || type === 'cex') return true;
   const n = (name || '').toLowerCase();
@@ -33,6 +39,12 @@ export async function discoverFunding(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<FundingResult | null> {
+  if (!isValidSolanaAddress(walletAddress)) {
+    console.warn(`[FundingResolver] Skipping invalid address: ${walletAddress}`);
+    apiErrors.push(`Invalid Solana address for funding lookup: ${walletAddress.slice(0, 20)}`);
+    return null;
+  }
+
   const heliusKey = getHeliusApiKey();
   if (!heliusKey) {
     apiErrors.push('HELIUS_API_KEY not configured for funding discovery');
