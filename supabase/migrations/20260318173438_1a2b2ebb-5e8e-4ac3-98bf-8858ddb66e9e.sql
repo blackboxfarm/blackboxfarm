@@ -1,0 +1,1 @@
+ALTER TABLE public.morning_reports ADD COLUMN IF NOT EXISTS funnel_feed_throughput jsonb DEFAULT '{}'::jsonb;

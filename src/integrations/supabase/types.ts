@@ -6565,6 +6565,7 @@ export type Database = {
           execution_time_ms: number | null
           external_services_status: Json
           function_health: Json | null
+          funnel_feed_throughput: Json | null
           funnel_metrics: Json | null
           holders_intel_metrics: Json | null
           id: string
@@ -6597,6 +6598,7 @@ export type Database = {
           execution_time_ms?: number | null
           external_services_status?: Json
           function_health?: Json | null
+          funnel_feed_throughput?: Json | null
           funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
@@ -6629,6 +6631,7 @@ export type Database = {
           execution_time_ms?: number | null
           external_services_status?: Json
           function_health?: Json | null
+          funnel_feed_throughput?: Json | null
           funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
