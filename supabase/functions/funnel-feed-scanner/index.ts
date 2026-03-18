@@ -510,6 +510,11 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     })
     .eq('id', source.id);
 
+  // Track funnel stage
+  if (newTokens > 0) {
+    await trackFunnelStage(supabase, 'discovered', newTokens);
+  }
+
   return { tokens_found: discoveredTokens.size, new_tokens: newTokens, skipped_non_tokens: skippedNonTokens, messages_processed: newMessages.length, max_message_id: maxMessageId };
 }
 
