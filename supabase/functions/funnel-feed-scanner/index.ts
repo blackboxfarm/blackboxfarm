@@ -98,7 +98,7 @@ interface FunnelSource {
   last_scraped_at: string | null;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
