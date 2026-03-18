@@ -210,6 +210,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       const parts = nodeId.split(':');
       const type = parts[0];
       const rawId = parts.slice(1).join(':');
+      // Update search input + focus to reflect the hop
+      setSearchInput(rawId);
+      focusOnEntity(rawId, type);
       if (type === 'wallet' || type === 'token') triggerSpider(rawId, 'quick');
       return;
     }
@@ -223,7 +226,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         graphRef.current.zoom(2, 800);
       }
     }, 300);
-  }, [expandEntity, triggerSpider]);
+  }, [expandEntity, triggerSpider, focusOnEntity]);
 
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const meshNode = node as MeshNode & { x: number; y: number };
