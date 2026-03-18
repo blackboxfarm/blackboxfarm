@@ -550,13 +550,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 className={`text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
                   hasSpideredOnce && !communitySearching && !xAccountsRevealed ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
                 }`}>
-                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <span className="mr-1">🐦</span>}
-                Map X Community @Handles to Token and Dev Wallet
-                {hiddenXAccountCount > 0 && !revealingXAccounts && (
-                  <Badge className="ml-1.5 bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[9px] px-1 py-0">
-                    {hiddenXAccountCount} hidden
-                  </Badge>
+                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : (
+                  <img src={xIcon} alt="X" className="h-3 w-3 mr-1 rounded-sm" />
                 )}
+                Map X Community
               </Button>
             </div>
           )}
