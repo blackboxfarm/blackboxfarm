@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState, useEffect } from "react";
+import React, { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,14 +10,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useBubbleMapRateLimit } from "@/hooks/useBubbleMapRateLimit";
 import { useNavigate } from "react-router-dom";
+import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 
 type ViewMode = 'bubble' | 'tree';
 const NODE_CAP_DEFAULT = 80;
 
 interface PublicBubbleMapProps {
-  /** If true, show subscriber upgrade messaging */
   showUpgradePrompt?: boolean;
-  /** Mode label */
   mode: 'promo' | 'authenticated';
 }
 
@@ -37,6 +36,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [communitySearching, setCommunitySearching] = useState(false);
   const [hasSpideredOnce, setHasSpideredOnce] = useState(false);
 
+  // Showmanship state
+  const [xAccountsRevealed, setXAccountsRevealed] = useState(false);
+  const [revealingXAccounts, setRevealingXAccounts] = useState(false);
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const [terminalVisible, setTerminalVisible] = useState(false);
+  const [terminalTitle, setTerminalTitle] = useState('ORACLE TRACE');
+
   const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated } = useBubbleMapRateLimit();
 
   const {
@@ -44,6 +50,15 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     expandEntity, resetView, typeFilters, toggleTypeFilter,
     spiderStatus, triggerSpider, refetch, autoDiscoverCommunity,
   } = useMeshGraph();
+
+  // --- Terminal helpers ---
+  const addTerminalLine = useCallback((text: string, type: TerminalLine['type'] = 'info') => {
+    setTerminalLines(prev => [...prev, { text, type, timestamp: Date.now() }]);
+  }, []);
+
+  const clearTerminal = useCallback(() => {
+    setTerminalLines([]);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -95,22 +110,22 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
   }, [graphData, viewMode, dimensions.width]);
 
+  // Reset reveal state on new search
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
-      console.log('[BubbleMap] Reset — empty search');
       resetView();
+      setXAccountsRevealed(false);
       return;
     }
     if (!canSearch) {
-      console.warn('[BubbleMap] Search blocked — daily limit reached', { remaining, limit, isSubscriber });
       toast.error("Daily limit reached! Sign up or subscribe for unlimited access.");
       return;
     }
     recordSearch();
+    setXAccountsRevealed(false);
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
-    console.log('[BubbleMap] Search started:', { input: searchInput.trim().slice(0, 16), type, mode, remaining });
     focusOnEntity(searchInput.trim(), type);
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
@@ -131,14 +146,54 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     setHasSpideredOnce(true);
   }, [searchInput, triggerSpider]);
 
+  // --- X Community discovery with showmanship ---
   const handleDiscoverCommunity = useCallback(async () => {
-    // Find a token mint to use for community discovery
     const tokenNode = graphData.nodes.find(n => n.type === 'token');
     const tokenMint = tokenNode?.fullId || tokenNode?.id.replace(/^token:/, '') || searchInput.trim();
     if (!tokenMint || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenMint)) {
       toast.info('Enter a token mint address to discover its X Community');
       return;
     }
+
+    // If we already have x_account nodes hidden — do the dramatic reveal instead
+    const hiddenXAccounts = graphData.nodes.filter(n => n.type === 'x_account');
+    if (hiddenXAccounts.length > 0 && !xAccountsRevealed) {
+      setRevealingXAccounts(true);
+      setTerminalTitle('X COMMUNITY SCANNER');
+      setTerminalVisible(true);
+      clearTerminal();
+
+      // Dramatic terminal sequence
+      const lines: Array<[string, TerminalLine['type'], number]> = [
+        ['INITIATING X COMMUNITY SCAN...', 'info', 0],
+        [`TARGET: ${tokenMint.slice(0, 16)}...`, 'info', 400],
+        ['SCANNING SOCIAL GRAPH DATABASE...', 'info', 800],
+        ['CROSS-REFERENCING COMMUNITY ROSTERS...', 'info', 1200],
+        [`MATCH FOUND — ${hiddenXAccounts.length} HANDLES IDENTIFIED`, 'success', 1800],
+      ];
+
+      // Add each handle discovery line
+      hiddenXAccounts.forEach((node, i) => {
+        const handle = (node.label || node.fullId || node.id).replace(/^x_account:/, '').replace(/^@/, '');
+        lines.push([`  └─ @${handle} ... MAPPED ✓`, 'highlight', 2000 + i * 300]);
+      });
+      lines.push(['COMMUNITY MAPPING COMPLETE', 'success', 2000 + hiddenXAccounts.length * 300 + 400]);
+
+      for (const [text, type, delay] of lines) {
+        setTimeout(() => addTerminalLine(text, type), delay);
+      }
+
+      const totalDelay = 2000 + hiddenXAccounts.length * 300 + 800;
+      setTimeout(() => {
+        setXAccountsRevealed(true);
+        setRevealingXAccounts(false);
+        setTimeout(() => setTerminalVisible(false), 2000);
+        toast.success(`🐦 ${hiddenXAccounts.length} X Community handles mapped!`);
+      }, totalDelay);
+      return;
+    }
+
+    // Otherwise do the real API call
     setCommunitySearching(true);
     toast.info('🐦 Searching for X Community...');
     try {
@@ -152,47 +207,101 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     } finally {
       setCommunitySearching(false);
     }
-  }, [graphData.nodes, searchInput, autoDiscoverCommunity, refetch]);
+  }, [graphData.nodes, searchInput, autoDiscoverCommunity, refetch, xAccountsRevealed, addTerminalLine, clearTerminal]);
 
+  // --- KYC search with hacker terminal showmanship ---
   const handleFindKYC = useCallback(async () => {
     const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
     const targetWallet = focusedEntity?.type === 'wallet' 
       ? focusedEntity.id.replace(/^wallet:/, '') 
       : walletNodes[0]?.id.split(':').slice(1).join(':');
     if (!targetWallet) { toast.error('No wallet found to trace KYC root'); return; }
+    
     setKycSearching(true);
-    console.log('[BubbleMap] KYC search started:', targetWallet.slice(0, 16));
-    toast.info(`🔍 Deep KYC search for ${targetWallet.slice(0, 12)}...`);
+    setTerminalTitle('KYC GENEALOGY TRACER');
+    setTerminalVisible(true);
+    clearTerminal();
+
+    // Start terminal output
+    addTerminalLine('INITIALIZING WALLET GENEALOGY TRACER v2.1', 'info');
+    setTimeout(() => addTerminalLine(`TARGET WALLET: ${targetWallet.slice(0, 20)}...`, 'info'), 300);
+    setTimeout(() => addTerminalLine('QUERYING FUNDING CHAIN...', 'info'), 700);
+    setTimeout(() => addTerminalLine('DEPTH 0 ── SCANNING INCOMING SOL TRANSFERS', 'info'), 1100);
+
     try {
       const { data, error } = await supabase.functions.invoke('mesh-kyc-deep-search', {
         body: { walletAddress: targetWallet, maxDepth: 5 },
       });
-      if (error) {
-        console.error('[BubbleMap] KYC search edge function error:', error);
-        throw error;
+      if (error) throw error;
+
+      // Animate the chain discovery
+      if (data?.chain && data.chain.length > 0) {
+        data.chain.forEach((link: any, i: number) => {
+          setTimeout(() => {
+            const wallet = link.wallet?.slice(0, 16) || '???';
+            const funder = link.funder?.slice(0, 16) || '???';
+            addTerminalLine(`DEPTH ${i + 1} ── ${wallet}... ← funded by ${funder}...`, 'info');
+          }, 1500 + i * 600);
+        });
       }
-      console.log('[BubbleMap] KYC search result:', { kycRoot: data?.kycRoot?.slice(0, 12), walletsTraced: data?.walletsTraced, chain: data?.chain?.length });
+
+      const chainDelay = 1500 + (data?.chain?.length || 0) * 600;
+
       if (data?.kycRoot) {
-        toast.success(`🏦 KYC Root found: ${data.kycRoot.slice(0, 12)}...`);
-        if (data.kycRoot) expandEntity(`kyc_root:${data.kycRoot}`);
-        expandEntity(`wallet:${targetWallet}`);
-        if (data.chain) {
-          for (const link of data.chain) {
-            if (link.wallet) expandEntity(`wallet:${link.wallet}`);
-            if (link.funder) expandEntity(`wallet:${link.funder}`);
+        setTimeout(() => {
+          addTerminalLine('', 'info');
+          addTerminalLine('█████████████████████████████████████████', 'highlight');
+          addTerminalLine(`  KYC ROOT IDENTIFIED: ${data.kycRoot.slice(0, 24)}...`, 'highlight');
+          addTerminalLine(`  WALLETS TRACED: ${data.walletsTraced || 0}`, 'success');
+          addTerminalLine('█████████████████████████████████████████', 'highlight');
+        }, chainDelay + 400);
+
+        setTimeout(() => {
+          // Auto-focus on KYC bubble
+          expandEntity(`kyc_root:${data.kycRoot}`);
+          expandEntity(`wallet:${targetWallet}`);
+          if (data.chain) {
+            for (const link of data.chain) {
+              if (link.wallet) expandEntity(`wallet:${link.wallet}`);
+              if (link.funder) expandEntity(`wallet:${link.funder}`);
+            }
           }
-        }
+          setTimeout(() => {
+            refetch();
+            // Center on KYC root node after graph updates
+            setTimeout(() => {
+              if (graphRef.current) {
+                const kycNode = graphRef.current.graphData().nodes.find(
+                  (n: any) => n.id === `kyc_root:${data.kycRoot}` || n.id.includes(data.kycRoot)
+                );
+                if (kycNode) {
+                  graphRef.current.centerAt(kycNode.x, kycNode.y, 1200);
+                  graphRef.current.zoom(2.5, 1200);
+                }
+              }
+            }, 800);
+          }, 500);
+
+          toast.success(`🏦 KYC Root found: ${data.kycRoot.slice(0, 12)}...`);
+          setTimeout(() => setTerminalVisible(false), 3000);
+        }, chainDelay + 1200);
       } else {
-        toast.warning(`No KYC root found after tracing ${data?.walletsTraced || 0} wallets`);
+        setTimeout(() => {
+          addTerminalLine(`NO KYC ROOT FOUND — ${data?.walletsTraced || 0} WALLETS TRACED`, 'warning');
+          addTerminalLine('CHAIN EXHAUSTED. RETRY WITH DEEPER SCAN.', 'warning');
+          toast.warning(`No KYC root found after tracing ${data?.walletsTraced || 0} wallets`);
+          setTimeout(() => setTerminalVisible(false), 2500);
+        }, chainDelay + 400);
       }
-      setTimeout(() => refetch(), 500);
     } catch (err: any) {
-      console.error('[BubbleMap] KYC search failed:', err);
+      addTerminalLine(`ERROR: ${err.message}`, 'error');
+      addTerminalLine('TRACE ABORTED', 'error');
       toast.error(`KYC search failed: ${err.message}`);
+      setTimeout(() => setTerminalVisible(false), 2000);
     } finally {
       setKycSearching(false);
     }
-  }, [graphData.nodes, focusedEntity, refetch]);
+  }, [graphData.nodes, focusedEntity, refetch, expandEntity, addTerminalLine, clearTerminal]);
 
   const handleFindTokens = useCallback(async () => {
     const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
@@ -201,21 +310,15 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const walletsToScan = focusedEntity?.type === 'wallet'
       ? [focusedEntity.id.replace(/^wallet:/, '')]
       : walletNodes.slice(0, 5).map(n => n.id.split(':').slice(1).join(':'));
-    console.log('[BubbleMap] Token discovery started:', { walletCount: walletsToScan.length });
     let totalTokens = 0;
     for (const wallet of walletsToScan) {
       try {
         const { data, error } = await supabase.functions.invoke('mesh-wallet-token-discovery', {
           body: { walletAddress: wallet },
         });
-        if (error) {
-          console.error('[BubbleMap] Token discovery edge function error:', { wallet: wallet.slice(0, 12), error });
-          throw error;
-        }
-        console.log('[BubbleMap] Token discovery result:', { wallet: wallet.slice(0, 12), tokensFound: data?.tokensFound });
+        if (error) throw error;
         totalTokens += data?.tokensFound || 0;
       } catch (err: any) {
-        console.error('[BubbleMap] Token scan failed for wallet:', wallet.slice(0, 12), err);
         toast.error(`Token scan failed: ${err.message}`);
       }
     }
@@ -237,7 +340,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       const parts = nodeId.split(':');
       const type = parts[0];
       const rawId = parts.slice(1).join(':');
-      // Update search input + focus to reflect the hop
       setSearchInput(rawId);
       focusOnEntity(rawId, type);
       if (type === 'wallet' || type === 'token') triggerSpider(rawId, 'quick');
@@ -300,27 +402,39 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
   }, []);
 
+  // --- SHOWMANSHIP: Filter x_account nodes until revealed ---
+  const filteredDisplayData = useMemo(() => {
+    const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
+    let baseNodes = isOverCap ? graphData.nodes.slice(0, nodeCap) : graphData.nodes;
+    
+    // Hide x_account nodes until user clicks Map X Community
+    if (!xAccountsRevealed) {
+      baseNodes = baseNodes.filter(n => n.type !== 'x_account');
+    }
+
+    const nodeIds = new Set(baseNodes.map(n => n.id));
+    const baseLinks = graphData.links.filter(l =>
+      nodeIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
+      nodeIds.has(typeof l.target === 'string' ? l.target : (l.target as any).id)
+    );
+
+    return { nodes: baseNodes, links: baseLinks };
+  }, [graphData, nodeCap, capBroken, xAccountsRevealed]);
+
+  const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
-  const displayData = isOverCap
-    ? (() => {
-        const cappedNodes = graphData.nodes.slice(0, nodeCap);
-        const cappedIds = new Set(cappedNodes.map(n => n.id));
-        return {
-          nodes: cappedNodes,
-          links: graphData.links.filter(l =>
-            cappedIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
-            cappedIds.has(typeof l.target === 'string' ? l.target : (l.target as any).id)
-          ),
-        };
-      })()
-    : graphData;
+
+  // Count hidden x_account nodes for the button
+  const hiddenXAccountCount = useMemo(() => {
+    if (xAccountsRevealed) return 0;
+    return graphData.nodes.filter(n => n.type === 'x_account').length;
+  }, [graphData.nodes, xAccountsRevealed]);
 
   const typeCounts = displayData.nodes.reduce((acc, n) => {
     acc[n.type] = (acc[n.type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  // Derive focused entity display info
   const focusedDisplayInfo = (() => {
     if (!focusedEntity) return null;
     const matchingNode = graphData.nodes.find(n => n.id.includes(focusedEntity.id));
@@ -432,12 +546,17 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               <Button variant="outline" size="sm" onClick={handleSpider} disabled={spiderStatus.active} className="text-xs h-7">
                 <Radar className="h-3 w-3 mr-1" /> Deep Spider
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching}
+              <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching || revealingXAccounts}
                 className={`text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
-                  hasSpideredOnce && !communitySearching ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
+                  hasSpideredOnce && !communitySearching && !xAccountsRevealed ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
                 }`}>
-                {communitySearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <span className="mr-1">🐦</span>}
+                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <span className="mr-1">🐦</span>}
                 Map X Community @Handles to Token and Dev Wallet
+                {hiddenXAccountCount > 0 && !revealingXAccounts && (
+                  <Badge className="ml-1.5 bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[9px] px-1 py-0">
+                    {hiddenXAccountCount} hidden
+                  </Badge>
+                )}
               </Button>
             </div>
           )}
@@ -526,14 +645,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                   ✅ First-level sweep complete — {displayData.nodes.length} entities mapped. Some external sources were unavailable but we found what we needed.
                 </span>
               </div>
-              {/* X Community details if discovered */}
-              {(() => {
+              {/* X Community triumphant reveal after discovery */}
+              {xAccountsRevealed && (() => {
                 const communityNodes = displayData.nodes.filter(n => n.type === 'x_community');
                 const xAccountNodes = displayData.nodes.filter(n => n.type === 'x_account');
                 const adminLinks = displayData.links.filter((l: any) => l.relationship === 'admin_of' || l.relationship === 'mod_of');
-                if (communityNodes.length > 0) {
+                if (communityNodes.length > 0 || xAccountNodes.length > 0) {
                   return (
-                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1">
+                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1 animate-fade-in">
                       <div className="flex items-center gap-2">
                         <span className="text-cyan-400 text-xs font-semibold">🐦 X Community Mapped!</span>
                       </div>
@@ -562,7 +681,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
       {/* Graph Canvas */}
       <Card className="overflow-hidden">
-        <div ref={containerRef} className="w-full" style={{ height: '600px', background: 'hsl(var(--background))' }}>
+        <div ref={containerRef} className="w-full relative" style={{ height: '600px', background: 'hsl(var(--background))' }}>
+          {/* Hacker Terminal Overlay */}
+          <HackerTerminal lines={terminalLines} visible={terminalVisible} title={terminalTitle} />
+
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-3">
