@@ -81,12 +81,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 20;
-          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 55 : 40;
-          return viewMode === 'tree' ? 65 : 45;
+          if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
+          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 55 : 35;
+          return viewMode === 'tree' ? 65 : 40;
         });
       }
-      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -120);
+      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -80);
       
       const padding = viewMode === 'tree' ? 20 : 40;
       const pushStrength = viewMode === 'tree' ? 1 : 2;
