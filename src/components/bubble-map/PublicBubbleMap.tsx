@@ -127,6 +127,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
     triggerSpider(searchInput.trim(), 'deep');
+    setHasSpideredOnce(true);
   }, [searchInput, triggerSpider]);
 
   const handleDiscoverCommunity = useCallback(async () => {
