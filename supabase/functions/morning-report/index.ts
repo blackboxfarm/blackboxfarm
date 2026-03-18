@@ -692,7 +692,83 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 14. UNREAD NOTIFICATIONS
+    // 14. FUNNEL FEED THROUGHPUT (per-source token ingestion overnight)
+    // ═══════════════════════════════════════════════════════════════
+    let funnelFeedThroughput: any = {};
+    try {
+      // All tokens that entered the post queue overnight, grouped by trigger_source
+      const { data: queueEntries } = await supabase
+        .from('holders_intel_post_queue')
+        .select('token_mint, symbol, trigger_source, status, scheduled_at')
+        .gte('scheduled_at', periodStart.toISOString())
+        .lte('scheduled_at', periodEnd.toISOString())
+        .order('scheduled_at', { ascending: false })
+        .limit(500);
+
+      if (queueEntries && queueEntries.length > 0) {
+        // Categorize by funnel source
+        const sourceMap: Record<string, { count: number; posted: number; pending: number; failed: number; tokens: { symbol: string | null; mint: string }[] }> = {};
+
+        const categorize = (src: string | null): string => {
+          if (!src) return 'unknown';
+          const s = src.toLowerCase();
+          if (s.includes('telegram') || s.includes('mtproto') || s.includes('tg_')) return 'telegram';
+          if (s.includes('dex') || s.includes('cloudflare') || s.includes('trending')) return 'dex_cloudflare';
+          if (s.includes('holders') || s.includes('/holders')) return 'holders_input';
+          if (s.includes('bubble') || s.includes('bubblemap')) return 'bubbles';
+          if (s.includes('bot') || s.includes('dm') || s.includes('subscriber')) return 'bot_dm';
+          if (s.includes('allstar') || s.includes('mint_alert')) return 'allstar_alert';
+          return src;
+        };
+
+        for (const entry of queueEntries) {
+          const cat = categorize(entry.trigger_source);
+          if (!sourceMap[cat]) sourceMap[cat] = { count: 0, posted: 0, pending: 0, failed: 0, tokens: [] };
+          const bucket = sourceMap[cat];
+          bucket.count++;
+          if (entry.status === 'posted') bucket.posted++;
+          else if (entry.status === 'pending') bucket.pending++;
+          else if (entry.status === 'failed' || entry.status === 'skipped') bucket.failed++;
+          if (bucket.tokens.length < 10) {
+            bucket.tokens.push({ symbol: entry.symbol, mint: entry.token_mint });
+          }
+        }
+
+        funnelFeedThroughput = {
+          total_overnight: queueEntries.length,
+          by_source: sourceMap,
+        };
+      }
+
+      // Also pull funnel_feed_discoveries if that table exists
+      const { data: ffdEntries } = await supabase
+        .from('funnel_feed_discoveries')
+        .select('token_symbol, token_mint, mesh_status, watchlist_status, xpost_status, source_id, discovered_at, funnel_feed_sources!inner(source_name)')
+        .gte('discovered_at', periodStart.toISOString())
+        .lte('discovered_at', periodEnd.toISOString())
+        .order('discovered_at', { ascending: false })
+        .limit(200);
+
+      if (ffdEntries && ffdEntries.length > 0) {
+        const ffdBySource: Record<string, { count: number; watchlisted: number; posted: number; tokens: { symbol: string | null; mint: string }[] }> = {};
+        for (const d of ffdEntries) {
+          const srcName = (d as any).funnel_feed_sources?.source_name || 'unknown';
+          if (!ffdBySource[srcName]) ffdBySource[srcName] = { count: 0, watchlisted: 0, posted: 0, tokens: [] };
+          const b = ffdBySource[srcName];
+          b.count++;
+          if (d.watchlist_status === 'inserted') b.watchlisted++;
+          if (d.xpost_status === 'posted') b.posted++;
+          if (b.tokens.length < 5) b.tokens.push({ symbol: d.token_symbol, mint: d.token_mint });
+        }
+        funnelFeedThroughput.discovery_sources = ffdBySource;
+        funnelFeedThroughput.total_discoveries_overnight = ffdEntries.length;
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch funnel feed throughput:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 15. UNREAD NOTIFICATIONS
     // ═══════════════════════════════════════════════════════════════
     const { count: unreadCount } = await supabase
       .from('admin_notifications')
@@ -737,6 +813,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         spider_metrics: spiderMetrics,
         mesh_growth: meshGrowth,
         funnel_metrics: funnelMetrics,
+        funnel_feed_throughput: funnelFeedThroughput,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -925,6 +1002,35 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
+    // Funnel Feed Throughput
+    if (funnelFeedThroughput.total_overnight > 0 || funnelFeedThroughput.total_discoveries_overnight > 0) {
+      tgMessage += `\n📡 **Funnel Feed Throughput** (overnight)\n`;
+      if (funnelFeedThroughput.total_overnight > 0) {
+        tgMessage += `• Post Queue: ${funnelFeedThroughput.total_overnight} tokens ingested\n`;
+        const bySource = funnelFeedThroughput.by_source || {};
+        for (const [src, info] of Object.entries(bySource) as [string, any][]) {
+          const srcLabel = src === 'dex_cloudflare' ? '☁️ Dex/CF' 
+            : src === 'telegram' ? '📡 Telegram'
+            : src === 'holders_input' ? '🔎 /holders'
+            : src === 'bot_dm' ? '🤖 Bot DM'
+            : src === 'bubbles' ? '🫧 Bubbles'
+            : src === 'allstar_alert' ? '⭐ Allstar'
+            : src;
+          tgMessage += `  ${srcLabel}: ${info.count} (✅${info.posted} posted, ⏳${info.pending} pending)\n`;
+          // Show top tokens per source
+          const topTokens = (info.tokens || []).slice(0, 3).map((t: any) => t.symbol ? `$${t.symbol}` : t.mint.slice(0, 8)).join(', ');
+          if (topTokens) tgMessage += `    → ${topTokens}\n`;
+        }
+      }
+      if (funnelFeedThroughput.total_discoveries_overnight > 0) {
+        tgMessage += `• Discovery Pipeline: ${funnelFeedThroughput.total_discoveries_overnight} tokens\n`;
+        const dSources = funnelFeedThroughput.discovery_sources || {};
+        for (const [src, info] of Object.entries(dSources) as [string, any][]) {
+          tgMessage += `  ${src}: ${info.count} discovered (${info.watchlisted} watchlisted, ${info.posted} posted)\n`;
+        }
+      }
+    }
+
     tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
@@ -983,6 +1089,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         spider_metrics: spiderMetrics,
         mesh_growth: meshGrowth,
         funnel_metrics: funnelMetrics,
+        funnel_feed_throughput: funnelFeedThroughput,
         new_signups_details: newSignupsDetails,
         alerts,
         telegram_sent: telegramSent,
