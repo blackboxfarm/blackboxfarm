@@ -776,6 +776,14 @@ export function useMeshGraph(initialEntityId?: string) {
     spiderAttemptsRef.current.clear();
   }, []);
 
+  const clearCooldown = useCallback((input?: string) => {
+    if (input) {
+      spiderAttemptsRef.current.delete(input.trim().toLowerCase());
+    } else {
+      spiderAttemptsRef.current.clear();
+    }
+  }, []);
+
   // ═══ ENRICH TOKEN TICKERS + COMMUNITY NAMES + TELEGRAM CHANNELS + X USERS ═══
   const [enrichedGraphData, setEnrichedGraphData] = useState<MeshGraphData>({ nodes: [], links: [] });
   const tickerCacheRef = useRef<Map<string, string>>(new Map());
