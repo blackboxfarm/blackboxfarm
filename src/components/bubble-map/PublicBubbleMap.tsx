@@ -454,14 +454,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 <Radar className="h-3.5 w-3.5 text-primary animate-spin" />
                 <span className="text-xs font-medium text-primary">{spiderStatus.stage}</span>
               </div>
-              {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+              {mode !== 'promo' && spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
                 <button onClick={() => setShowDiagnostics(!showDiagnostics)}
                   className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
                   {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   Diagnostics ({spiderStatus.diagnostics.length})
                 </button>
               )}
-              {showDiagnostics && spiderStatus.diagnostics && (
+              {mode !== 'promo' && showDiagnostics && spiderStatus.diagnostics && (
                 <div className="rounded bg-background/50 p-2 space-y-0.5 text-[10px] font-mono text-muted-foreground">
                   {spiderStatus.diagnostics.map((d, i) => <div key={i}>{d}</div>)}
                 </div>
@@ -470,10 +470,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           )}
 
           {spiderStatus.error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+            <div className="rounded-lg border border-muted/30 bg-muted/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                <span className="text-xs text-destructive">{spiderStatus.error}</span>
+                <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  {mode === 'promo'
+                    ? "This entity hasn't been fully indexed yet. Try a different wallet or token, or click Retry to scan again."
+                    : spiderStatus.error}
+                </span>
               </div>
               <Button variant="outline" size="sm" onClick={handleSpider} className="text-[10px] h-6">
                 <Radar className="h-3 w-3 mr-1" /> Retry
