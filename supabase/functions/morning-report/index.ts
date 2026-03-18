@@ -302,9 +302,22 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       if (hiAccount) {
         // Calculate follower quality heuristics
         const followerCount = hiAccount.follower_count || 0;
-        const fastFollowers = hiAccount.fast_followers_count || 0; // "fast followers" = blue-check / premium subscribers
-        const normalFollowers = followerCount - fastFollowers;
-        const blueCheckPct = followerCount > 0 ? Math.round((fastFollowers / followerCount) * 1000) / 10 : 0;
+        
+        // fast_followers_count from Apify is unreliable (always 0 — it's a Twitter internal metric).
+        // Instead, count verified accounts we've indexed that follow HoldersIntel from community_follow_targets
+        let blueCheckEstimate = hiAccount.fast_followers_count || 0;
+        
+        // If fast_followers_count is 0, estimate from our indexed verified accounts
+        if (blueCheckEstimate === 0) {
+          const { count: verifiedFollowerCount } = await supabase
+            .from('twitter_accounts')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_verified', true);
+          blueCheckEstimate = verifiedFollowerCount || 0;
+        }
+        
+        const normalFollowers = Math.max(0, followerCount - blueCheckEstimate);
+        const blueCheckPct = followerCount > 0 ? Math.round((blueCheckEstimate / followerCount) * 1000) / 10 : 0;
         const followRatio = hiAccount.following_count && hiAccount.following_count > 0
           ? Math.round((followerCount / hiAccount.following_count) * 100) / 100
           : followerCount;
@@ -319,7 +332,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
           professional_type: hiAccount.professional_type,
           followers: {
             total: followerCount,
-            blue_check_premium: fastFollowers,
+            blue_check_premium: blueCheckEstimate,
             normal: normalFollowers,
             blue_check_pct: blueCheckPct,
           },
@@ -370,30 +383,26 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
-    // Cloudflare Workers - check via Holders Intel scheduler activity
-    const { data: cfLogs } = await supabase
-      .from('api_usage_log')
-      .select('endpoint, success, error_message')
-      .eq('service_name', 'dexscreener')
-      .ilike('endpoint', '%cloudflare%')
-      .gte('timestamp', periodStart.toISOString())
-      .limit(100);
+    // Cloudflare Workers - check via edge_function_runs for scheduler + dex-scraper
+    const { data: cfSchedulerRuns } = await supabase
+      .from('edge_function_runs')
+      .select('function_name, status, started_at, duration_ms')
+      .in('function_name', ['holders-intel-scheduler', 'dexscreener-top-200-scraper'])
+      .gte('started_at', periodStart.toISOString())
+      .order('started_at', { ascending: false })
+      .limit(50);
 
-    // Also check holders-intel-scheduler which uses Cloudflare worker
-    const { data: schedulerLogs } = await supabase
-      .from('activity_logs')
-      .select('message, metadata, timestamp')
-      .ilike('message', '%holders%intel%')
-      .gte('timestamp', periodStart.toISOString())
-      .order('timestamp', { ascending: false })
-      .limit(20);
+    const cfSuccessRuns = (cfSchedulerRuns || []).filter((r: any) => r.status === 'success');
+    const cfFailRuns = (cfSchedulerRuns || []).filter((r: any) => r.status === 'error');
 
     externalServicesStatus['cloudflare_workers'] = {
-      status: schedulerLogs && schedulerLogs.length > 0 ? 'active' : 'idle',
-      calls_overnight: schedulerLogs?.length || 0,
-      failures: 0,
-      notes: schedulerLogs && schedulerLogs.length > 0 
-        ? `${schedulerLogs.length} scheduler runs detected`
+      status: cfSchedulerRuns && cfSchedulerRuns.length > 0 
+        ? (cfFailRuns.length > cfSuccessRuns.length ? 'degraded' : 'active') 
+        : 'idle',
+      calls_overnight: cfSchedulerRuns?.length || 0,
+      failures: cfFailRuns.length,
+      notes: cfSchedulerRuns && cfSchedulerRuns.length > 0 
+        ? `${cfSuccessRuns.length} successful / ${cfFailRuns.length} failed scheduler+dex runs`
         : 'No Cloudflare worker activity detected',
     };
 
@@ -828,7 +837,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     if (holdersIntelMetrics) {
       const hi = holdersIntelMetrics;
       tgMessage += `\n🐦 **@HoldersIntel Account**\n`;
-      tgMessage += `• Followers: ${hi.followers.total.toLocaleString()} (🔵 ${hi.followers.blue_check_premium.toLocaleString()} premium / 👤 ${hi.followers.normal.toLocaleString()} normal — ${hi.followers.blue_check_pct}% blue)\n`;
+      tgMessage += `• Followers: ${hi.followers.total.toLocaleString()} (🔵 ~${hi.followers.blue_check_premium.toLocaleString()} verified indexed / 👤 ${hi.followers.normal.toLocaleString()} normal — ~${hi.followers.blue_check_pct}% blue est.)\n`;
       tgMessage += `• Following: ${hi.following} | Ratio: ${hi.follow_ratio}:1\n`;
       tgMessage += `• Tweets: ${hi.tweets.toLocaleString()} | Likes: ${hi.likes.toLocaleString()}\n`;
       tgMessage += `• Avg Likes/Tweet: ${hi.avg_likes_per_tweet} | Listed: ${hi.listed_count}\n`;

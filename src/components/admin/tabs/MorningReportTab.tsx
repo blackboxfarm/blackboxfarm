@@ -293,16 +293,16 @@ function ReportView({ report }: { report: MorningReport }) {
                         <div className="text-[10px] text-muted-foreground">Total Followers</div>
                       </div>
                       <div className="p-2 rounded-lg bg-sky-500/10 text-center">
-                        <div className="text-lg font-bold text-sky-400">{hi.followers.blue_check_premium.toLocaleString()}</div>
-                        <div className="text-[10px] text-muted-foreground">🔵 Blue Check / Premium</div>
+                        <div className="text-lg font-bold text-sky-400">~{hi.followers.blue_check_premium.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">🔵 Verified (indexed)</div>
                       </div>
                       <div className="p-2 rounded-lg bg-muted/30 text-center">
                         <div className="text-lg font-bold">{hi.followers.normal.toLocaleString()}</div>
                         <div className="text-[10px] text-muted-foreground">👤 Normal Followers</div>
                       </div>
                       <div className="p-2 rounded-lg bg-muted/30 text-center">
-                        <div className="text-lg font-bold">{hi.followers.blue_check_pct}%</div>
-                        <div className="text-[10px] text-muted-foreground">Blue Check Ratio</div>
+                        <div className="text-lg font-bold">~{hi.followers.blue_check_pct}%</div>
+                        <div className="text-[10px] text-muted-foreground">Blue Check Ratio (est.)</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
