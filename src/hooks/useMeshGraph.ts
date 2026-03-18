@@ -17,6 +17,8 @@ export interface MeshNode {
   val: number;
   redFlags?: RedFlag[];
   role?: 'admin' | 'mod' | null;  // For x_account nodes: their role in community
+  isDev?: boolean;     // True if this wallet created a token
+  displayName?: string; // For x_account: the account's display name from evidence
 }
 
 export interface MeshLink {
@@ -1164,23 +1166,41 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
       confidence: link.confidence || 50,
     });
 
-    // Track admin/mod role on x_account nodes
-    if (link.linked_type === 'x_account' && link.relationship === 'admin_of') {
+    // Track admin/mod role and display name on x_account nodes
+    if (link.linked_type === 'x_account') {
       const node = nodesMap.get(targetKey);
-      if (node) node.role = 'admin';
+      if (node) {
+        if (link.relationship === 'admin_of') node.role = 'admin';
+        if (link.relationship === 'mod_of' && node.role !== 'admin') node.role = 'mod';
+        if (link.relationship === 'community_admin') node.role = 'admin';
+        if (link.relationship === 'community_mod' && node.role !== 'admin') node.role = 'mod';
+        // Capture display name from evidence
+        const dn = evidence?.display_name || evidence?.name;
+        if (dn && !node.displayName) node.displayName = dn;
+      }
     }
-    if (link.linked_type === 'x_account' && link.relationship === 'mod_of') {
-      const node = nodesMap.get(targetKey);
-      if (node && node.role !== 'admin') node.role = 'mod'; // admin takes precedence
-    }
-    // Also check reverse direction (x_account is source)
-    if (link.source_type === 'x_account' && link.relationship === 'admin_of') {
+    if (link.source_type === 'x_account') {
       const node = nodesMap.get(sourceKey);
-      if (node) node.role = 'admin';
+      if (node) {
+        if (link.relationship === 'admin_of') node.role = 'admin';
+        if (link.relationship === 'mod_of' && node.role !== 'admin') node.role = 'mod';
+        if (link.relationship === 'community_admin') node.role = 'admin';
+        if (link.relationship === 'community_mod' && node.role !== 'admin') node.role = 'mod';
+        const dn = evidence?.display_name || evidence?.name;
+        if (dn && !node.displayName) node.displayName = dn;
+      }
     }
-    if (link.source_type === 'x_account' && link.relationship === 'mod_of') {
-      const node = nodesMap.get(sourceKey);
-      if (node && node.role !== 'admin') node.role = 'mod';
+
+    // Mark dev wallets (wallets that created a token)
+    if (['created', 'created_by'].includes(link.relationship)) {
+      if (link.source_type === 'wallet') {
+        const node = nodesMap.get(sourceKey);
+        if (node) node.isDev = true;
+      }
+      if (link.linked_type === 'wallet') {
+        const node = nodesMap.get(targetKey);
+        if (node) node.isDev = true;
+      }
     }
   }
 

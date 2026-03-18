@@ -81,8 +81,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
+          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
+          if (['created', 'created_by'].includes(rel)) return viewMode === 'tree' ? 25 : 15;
           if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 55 : 35;
+          if (rel.includes('funded') || rel.includes('kyc')) return viewMode === 'tree' ? 40 : 25;
           return viewMode === 'tree' ? 65 : 40;
         });
       }
@@ -391,7 +393,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
       ctx.fillText('🛡️', meshNode.x, meshNode.y - size - 1);
     }
-    const labelText = meshNode.label;
+    // Determine label text - use "Dev Wallet" for dev wallets
+    let labelText = meshNode.label;
+    if (meshNode.isDev && meshNode.type === 'wallet') {
+      labelText = '📡 Dev Wallet';
+    }
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -408,10 +414,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const rel = link.relationship || '';
     let strokeColor = 'rgba(255,255,255,0.2)';
     let lineWidth = 1.2;
-    if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.5)'; lineWidth = 2; }
-    else if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.5)'; lineWidth = 2; }
-    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.4)'; lineWidth = 1.5; }
+    // Strong thick lines for critical relationships
+    if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.7)'; lineWidth = 3; }
+    else if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.6)'; lineWidth = 2.5; }
+    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.5)'; lineWidth = 2.5; }
     else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.5)'; lineWidth = 1.5; }
+    else if (rel.includes('community_for') || rel.includes('social_account')) { strokeColor = 'rgba(99,102,241,0.4)'; lineWidth = 1.5; }
     ctx.beginPath(); ctx.moveTo(src.x, src.y); ctx.lineTo(tgt.x, tgt.y);
     ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth; ctx.stroke();
     if (globalScale > 2) {
@@ -674,7 +682,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                         </div>
                       ))}
                       {xAccountNodes.length > 0 && (
-                        <div className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
                           {xAccountNodes.map(a => {
                             const handle = (a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '');
                             const isAdmin = a.role === 'admin';
@@ -682,19 +690,28 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                             const hasRotatedHandle = a.redFlags?.some(f => f.type === 'rotated_handle');
                             const rotatedFlag = a.redFlags?.find(f => f.type === 'rotated_handle');
                             return (
-                              <div key={a.id} className="flex items-center gap-1.5 text-[11px]">
+                              <span key={a.id} className="inline-flex items-center gap-0.5">
                                 {isAdmin && <span title="Admin">👑</span>}
                                 {isMod && <span title="Moderator">🛡️</span>}
-                                <a
-                                  href={`https://x.com/${handle}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`font-medium hover:underline ${isAdmin || isMod ? 'text-blue-400' : 'text-cyan-300'}`}
-                                >
-                                  @{handle}
-                                  {(isAdmin || isMod) && <span className="ml-0.5 text-blue-400">✓</span>}
-                                </a>
-                                <ExternalLink className="h-2.5 w-2.5 text-muted-foreground opacity-50" />
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <a
+                                      href={`https://x.com/${handle}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`font-medium hover:underline ${isAdmin || isMod ? 'text-blue-400' : 'text-cyan-300'}`}
+                                    >
+                                      @{handle}{(isAdmin || isMod) && <span className="ml-0.5 text-blue-400">✓</span>}
+                                    </a>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="text-xs">
+                                    {a.displayName ? (
+                                      <div><span className="font-semibold">{a.displayName}</span> · @{handle} · {isAdmin ? 'ADMIN' : isMod ? 'MOD' : 'Member'}</div>
+                                    ) : (
+                                      <div>@{handle} · {isAdmin ? 'ADMIN' : isMod ? 'MOD' : 'Member'}</div>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
                                 {hasRotatedHandle && rotatedFlag && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -713,10 +730,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
-                                <span className="text-muted-foreground/50 text-[9px] ml-auto">
-                                  {isAdmin ? 'ADMIN' : isMod ? 'MOD' : ''}
-                                </span>
-                              </div>
+                              </span>
                             );
                           })}
                         </div>
@@ -806,7 +820,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               nodeLabel={(node: any) => {
                 const n = node as MeshNode;
                 const rawId = n.fullId || n.id.split(':').slice(1).join(':');
-                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
+                const devLabel = n.isDev ? '📡 Dev Wallet\n' : '';
+                const nameLabel = n.displayName ? `${n.displayName}\n` : '';
+                return `${devLabel}${nameLabel}${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
               cooldownTicks={80}
               d3AlphaDecay={0.03}
@@ -843,8 +859,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           <CardContent className="py-2 space-y-1">
             <div className="flex items-center gap-2 text-xs">
               <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: ENTITY_COLORS[hoveredNode.type] }} />
-              <span className="font-medium">{ENTITY_LABELS[hoveredNode.type] || hoveredNode.type}</span>
-              <span className="font-semibold">{hoveredNode.label}</span>
+              <span className="font-medium">
+                {hoveredNode.isDev ? '📡 Dev Wallet' : (ENTITY_LABELS[hoveredNode.type] || hoveredNode.type)}
+              </span>
+              <span className="font-semibold">{hoveredNode.displayName || hoveredNode.label}</span>
               <Badge variant="secondary" className="text-[10px] ml-auto">{Math.round(hoveredNode.val)} conn</Badge>
             </div>
             <div className="font-mono text-[10px] text-muted-foreground select-all break-all pl-5">
