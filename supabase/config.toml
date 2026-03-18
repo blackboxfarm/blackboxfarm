@@ -510,3 +510,6 @@ verify_jwt = false
 
 [functions.reset-monthly-quotas]
 verify_jwt = false
+
+[functions.service-status]
+verify_jwt = false
