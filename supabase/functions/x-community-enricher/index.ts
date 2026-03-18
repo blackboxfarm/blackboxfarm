@@ -16,6 +16,8 @@ interface ApifyCommunityMember {
   isBlueVerified: boolean;
   followersCount?: number;
   followingCount?: number;
+  description?: string;
+  bio?: string;
 }
 
 interface XCommunityData {
@@ -26,6 +28,12 @@ interface XCommunityData {
   adminUsernames: string[];
   moderatorUsernames: string[];
   rawData?: any;
+}
+
+interface PrimaryCommunityStaffSelection {
+  prioritizedMembers: ApifyCommunityMember[];
+  adminUsernames: string[];
+  moderatorUsernames: string[];
 }
 
 // Detect if a Twitter URL is an X Community
@@ -58,6 +66,40 @@ function extractTwitterUsername(url: string): string | null {
   return null;
 }
 
+function normalizeScreenName(screenName?: string): string | null {
+  const normalized = screenName?.trim().replace(/^@/, '').toLowerCase();
+  return normalized || null;
+}
+
+function selectPrimaryCommunityStaff(members: ApifyCommunityMember[]): PrimaryCommunityStaffSelection {
+  const admin = members.find((member) => member.communityRole === 'Admin' && normalizeScreenName(member.screenName));
+  if (admin) {
+    const handle = normalizeScreenName(admin.screenName)!;
+    return {
+      prioritizedMembers: [admin],
+      adminUsernames: [handle],
+      moderatorUsernames: [],
+    };
+  }
+
+  const moderator = members.find((member) => member.communityRole === 'Moderator' && normalizeScreenName(member.screenName));
+  if (moderator) {
+    const handle = normalizeScreenName(moderator.screenName)!;
+    return {
+      prioritizedMembers: [moderator],
+      adminUsernames: [],
+      moderatorUsernames: [handle],
+    };
+  }
+
+  const fallbackMember = members.find((member) => normalizeScreenName(member.screenName));
+  return {
+    prioritizedMembers: fallbackMember ? [fallbackMember] : [],
+    adminUsernames: [],
+    moderatorUsernames: [],
+  };
+}
+
 interface FetchResult {
   members: ApifyCommunityMember[];
   httpStatus: number;
@@ -84,7 +126,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId: communityId,
-          maxItems: 4, // Hard cap: 4 members max — first is usually Admin, rest are top members
+          maxItems: 1, // Hard stop: only fetch the first result for primary staff detection
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ["RESIDENTIAL"]
@@ -111,23 +153,14 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
 }
 
 async function processCommunityData(members: ApifyCommunityMember[]): Promise<XCommunityData> {
-  const admins: string[] = [];
-  const moderators: string[] = [];
-  
-  for (const member of members) {
-    if (member.communityRole === 'Admin') {
-      admins.push(member.screenName.toLowerCase());
-    } else if (member.communityRole === 'Moderator') {
-      moderators.push(member.screenName.toLowerCase());
-    }
-  }
-  
+  const primaryStaff = selectPrimaryCommunityStaff(members);
+
   return {
     communityId: '',
-    adminUsernames: [...new Set(admins)],
-    moderatorUsernames: [...new Set(moderators)],
-    memberCount: members.length,
-    rawData: members.slice(0, 20)
+    adminUsernames: primaryStaff.adminUsernames,
+    moderatorUsernames: primaryStaff.moderatorUsernames,
+    memberCount: primaryStaff.prioritizedMembers.length,
+    rawData: primaryStaff.prioritizedMembers.slice(0, 1)
   };
 }
 
@@ -235,14 +268,19 @@ Deno.serve(async (req) => {
         ? new Date(existingCommunity.last_scraped_at).getTime() 
         : 0;
       const timeSinceLastScrape = Date.now() - lastScrapedMs;
+      const currentScrapeAt = new Date().toISOString();
       
-      // CRITICAL: Never re-scrape communities that already have admin data.
-      // Staff data is a historical snapshot — once we have it, we're done.
-      const hasAdminData = existingCommunity?.admin_usernames && existingCommunity.admin_usernames.length > 0;
-      const needsScrape = !hasAdminData && (
+      // Never re-scrape communities where we've already captured staff,
+      // or where the primary one-result probe already came back with no staff.
+      const hasStaffData = Boolean(
+        (existingCommunity?.admin_usernames && existingCommunity.admin_usernames.length > 0) ||
+        (existingCommunity?.moderator_usernames && existingCommunity.moderator_usernames.length > 0)
+      );
+      const exhaustedPrimaryProbe = existingCommunity?.scrape_status === 'no_staff_in_first_result';
+      const needsScrape = !hasStaffData && !exhaustedPrimaryProbe && (
         !existingCommunity || 
         !existingCommunity.last_scraped_at ||
-        timeSinceLastScrape > 24 * 60 * 60 * 1000 // 24h cache only for communities MISSING admins
+        timeSinceLastScrape > 24 * 60 * 60 * 1000
       );
       
       // Short cooldown: if scraped in last 5 min, skip even if "needs" scrape
@@ -261,6 +299,7 @@ Deno.serve(async (req) => {
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      let scrapeStatus = existingCommunity?.scrape_status;
       let communityData: XCommunityData = {
         communityId,
         adminUsernames: existingCommunity?.admin_usernames || [],
@@ -282,8 +321,8 @@ Deno.serve(async (req) => {
             community_url: urlToProcess,
             failed_scrape_count: newFailCount,
             scrape_status: `error_${fetchResult.httpStatus}`,
-            last_scraped_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            last_scraped_at: currentScrapeAt,
+            updated_at: currentScrapeAt,
           }, { onConflict: 'community_id' });
           
           return new Response(JSON.stringify({
@@ -305,11 +344,11 @@ Deno.serve(async (req) => {
           const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
           await supabase.from('x_communities').update({
             is_deleted: true,
-            deleted_detected_at: new Date().toISOString(),
+            deleted_detected_at: currentScrapeAt,
             scrape_status: 'deleted',
             failed_scrape_count: newFailCount,
-            last_existence_check_at: new Date().toISOString(),
-            last_scraped_at: new Date().toISOString(),
+            last_existence_check_at: currentScrapeAt,
+            last_scraped_at: currentScrapeAt,
           }).eq('community_id', communityId);
           
           if (!existingCommunity?.deletion_alert_sent) {
@@ -321,10 +360,10 @@ Deno.serve(async (req) => {
               adminUsernames: existingCommunity?.admin_usernames || [],
               moderatorUsernames: existingCommunity?.moderator_usernames || [],
               memberCount: existingCommunity?.member_count,
-              detectedAt: new Date().toISOString(),
+              detectedAt: currentScrapeAt,
             };
             
-            const { alerted } = await alertAndLogCommunityDeletion(supabase, alertInfo);
+            const { alerted } = await alertAndLogCommunityDeletion(supabase as any, alertInfo);
             
             if (alerted) {
               await supabase.from('x_communities').update({
@@ -343,8 +382,12 @@ Deno.serve(async (req) => {
         }
         
         if (members.length > 0) {
+          const primaryStaff = selectPrimaryCommunityStaff(members);
           communityData = await processCommunityData(members);
           communityData.communityId = communityId;
+          scrapeStatus = (communityData.adminUsernames.length > 0 || communityData.moderatorUsernames.length > 0)
+            ? 'complete'
+            : 'no_staff_in_first_result';
           
           // Reset fail count on successful scrape
           if (existingCommunity?.failed_scrape_count > 0) {
@@ -353,16 +396,16 @@ Deno.serve(async (req) => {
             }).eq('community_id', communityId);
           }
 
-          // === CROSS-POPULATE: Feed verified members into community_follow_targets ===
-          // Admins & Mods are ALWAYS blue-checked (X requires verification to create/admin a community)
-          const blueCheckedMembers = members.filter((m: ApifyCommunityMember) => 
+          // Feed only the primary staff candidate into community_follow_targets
+          const blueCheckedMembers = primaryStaff.prioritizedMembers.filter((m: ApifyCommunityMember) => 
             m.isBlueVerified || m.communityRole === 'Admin' || m.communityRole === 'Moderator'
           );
           if (blueCheckedMembers.length > 0) {
-            console.log(`[x-community-enricher] Cross-populating ${blueCheckedMembers.length} blue-checked members into follow targets`);
+            console.log(`[x-community-enricher] Cross-populating ${blueCheckedMembers.length} primary staff member into follow targets`);
             
-            // Check existing follow statuses to preserve them
-            const handles = blueCheckedMembers.map((m: ApifyCommunityMember) => m.screenName.toLowerCase());
+            const handles = blueCheckedMembers
+              .map((m: ApifyCommunityMember) => normalizeScreenName(m.screenName))
+              .filter((handle): handle is string => Boolean(handle));
             const { data: existingTargets } = await supabase
               .from('community_follow_targets')
               .select('target_handle, follow_status')
@@ -371,25 +414,34 @@ Deno.serve(async (req) => {
             
             const existingMap = new Map((existingTargets || []).map((e: any) => [e.target_handle, e.follow_status]));
             
-            const upsertData = blueCheckedMembers.map((m: ApifyCommunityMember) => ({
-              community_id: communityId,
-              target_handle: m.screenName.toLowerCase(),
-              target_x_user_id: m.restId || null,
-              is_blue_verified: !!(m.isBlueVerified) || m.communityRole === 'Admin' || m.communityRole === 'Moderator',
-              community_role: m.communityRole === 'Admin' ? 'Admin' : m.communityRole === 'Moderator' ? 'Moderator' : 'member',
-              followers_count: m.followersCount || null,
-              follow_status: existingMap.get(m.screenName.toLowerCase()) || 'not_followed',
-              updated_at: new Date().toISOString(),
-            }));
+            const upsertData = blueCheckedMembers
+              .map((m: ApifyCommunityMember) => {
+                const normalizedHandle = normalizeScreenName(m.screenName);
+                if (!normalizedHandle) return null;
+
+                return {
+                  community_id: communityId,
+                  target_handle: normalizedHandle,
+                  target_x_user_id: m.restId || null,
+                  is_blue_verified: !!(m.isBlueVerified) || m.communityRole === 'Admin' || m.communityRole === 'Moderator',
+                  community_role: m.communityRole === 'Admin' ? 'Admin' : m.communityRole === 'Moderator' ? 'Moderator' : 'member',
+                  followers_count: m.followersCount || null,
+                  follow_status: existingMap.get(normalizedHandle) || 'not_followed',
+                  updated_at: currentScrapeAt,
+                };
+              })
+              .filter((item): item is NonNullable<typeof item> => Boolean(item));
             
-            const { error: followUpsertErr } = await supabase
-              .from('community_follow_targets')
-              .upsert(upsertData, { onConflict: 'community_id,target_handle' });
-            
-            if (followUpsertErr) {
-              console.warn('[x-community-enricher] Follow targets upsert error:', followUpsertErr.message);
-            } else {
-              console.log(`[x-community-enricher] ✅ Indexed ${upsertData.length} blue-checked members for community ${communityId}`);
+            if (upsertData.length > 0) {
+              const { error: followUpsertErr } = await supabase
+                .from('community_follow_targets')
+                .upsert(upsertData, { onConflict: 'community_id,target_handle' });
+              
+              if (followUpsertErr) {
+                console.warn('[x-community-enricher] Follow targets upsert error:', followUpsertErr.message);
+              } else {
+                console.log(`[x-community-enricher] ✅ Indexed ${upsertData.length} primary staff member for community ${communityId}`);
+              }
             }
           }
         }
@@ -417,8 +469,8 @@ Deno.serve(async (req) => {
         member_count: communityData.memberCount,
         linked_token_mints: linkedTokenMints,
         linked_wallets: linkedWallets,
-        last_scraped_at: needsScrape && apifyApiKey ? new Date().toISOString() : existingCommunity?.last_scraped_at,
-        scrape_status: needsScrape && apifyApiKey ? 'complete' : existingCommunity?.scrape_status,
+        last_scraped_at: needsScrape && apifyApiKey ? currentScrapeAt : existingCommunity?.last_scraped_at,
+        scrape_status: needsScrape && apifyApiKey ? scrapeStatus : existingCommunity?.scrape_status,
         raw_data: communityData.rawData || existingCommunity?.raw_data
       }, { onConflict: 'community_id' });
 
@@ -606,7 +658,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("X Community enricher error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
