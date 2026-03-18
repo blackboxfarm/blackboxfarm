@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
-const commands: never[] = []; // Commands now rendered via TelegramCommandList component
+
 
 const riskSignals = [
   { emoji: '🟢', label: 'STRONG NETWORK', desc: 'Healthy holder distribution, stable wallet behavior, and positive developer history. Signals indicate a strong and stable token structure.', color: 'text-green-400' },
