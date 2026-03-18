@@ -511,6 +511,11 @@ export async function solscanDiscoverCreatedTokens(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<SolscanTokenCreation[]> {
+  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
+  console.log('[Solscan Intel] DISABLED — Pro API not available. Skipping created tokens discovery.');
+  apiErrors.push('Solscan Pro disabled (free tier key)');
+  return [];
+
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
