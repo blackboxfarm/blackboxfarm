@@ -469,7 +469,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
             </div>
           )}
 
-          {spiderStatus.error && (
+          {spiderStatus.error && displayData.nodes.length === 0 && (
             <div className="rounded-lg border border-muted/30 bg-muted/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
                 <Search className="h-3.5 w-3.5 text-muted-foreground" />
@@ -482,6 +482,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               <Button variant="outline" size="sm" onClick={handleSpider} className="text-[10px] h-6">
                 <Radar className="h-3 w-3 mr-1" /> Retry
               </Button>
+            </div>
+          )}
+          {spiderStatus.error && displayData.nodes.length > 0 && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <div className="flex items-center gap-2">
+                <Network className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs text-primary">
+                  ✅ First-level sweep complete — {displayData.nodes.length} entities mapped. Some external sources were unavailable but we found what we needed.
+                </span>
+              </div>
             </div>
           )}
         </CardContent>
