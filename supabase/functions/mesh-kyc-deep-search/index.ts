@@ -170,6 +170,22 @@ Deno.serve(async (req) => {
 
     // If we found a KYC root, mark it in the mesh
     if (kycRoot && kycRoot !== walletAddress) {
+      // Bridge link: wallet:kycRoot → kyc_root:kycRoot (so the chain visually connects)
+      await supabase
+        .from('reputation_mesh')
+        .upsert({
+          source_type: 'wallet',
+          source_id: kycRoot,
+          linked_type: 'kyc_root',
+          linked_id: kycRoot,
+          relationship: 'is_kyc_root',
+          confidence: 95,
+          discovered_via: 'mesh-kyc-deep-search',
+          discovered_at: new Date().toISOString(),
+        }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+      meshLinksAdded++;
+
+      // Also add the same_kyc_root shortcut link
       await supabase
         .from('reputation_mesh')
         .upsert({
