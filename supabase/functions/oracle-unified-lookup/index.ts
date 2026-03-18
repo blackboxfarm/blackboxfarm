@@ -552,11 +552,15 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
 
       // If creator cannot be resolved, fall back to treating input as a wallet address
       // This handles cases like bags.fn / non-pump launchpads where the input IS the wallet
-      if (!resolvedWallet) {
+      // BUT don't fallback for obvious token mints (ending in "pump") — they're not wallets
+      if (!resolvedWallet && !cleanedInput.endsWith('pump')) {
         console.log('[Oracle] Creator resolution failed — falling back to wallet mode for base58 input');
         resolvedWallet = cleanedInput;
         inputType = 'wallet' as any; // Override: treat as wallet going forward
         apiErrors.push('Creator resolution failed for mint — treating as wallet address instead');
+      } else if (!resolvedWallet) {
+        console.log('[Oracle] Creator resolution failed for pump token — NOT falling back to wallet mode');
+        apiErrors.push('Creator resolution failed for pump token mint — skipping wallet fallback');
       }
     } else {
       // Assume it's a wallet address

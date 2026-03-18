@@ -22,7 +22,10 @@ const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin',
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function isValidSolanaAddress(address: string): boolean {
-  return typeof address === 'string' && BASE58_REGEX.test(address);
+  if (typeof address !== 'string' || !BASE58_REGEX.test(address)) return false;
+  // Reject all-lowercase addresses — likely lowercased token mints, not valid wallets
+  if (address === address.toLowerCase() && address.length > 40) return false;
+  return true;
 }
 
 function isKnownCex(name: string | null, type: string | null): boolean {
