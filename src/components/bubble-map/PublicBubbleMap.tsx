@@ -34,13 +34,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [tokenSearching, setTokenSearching] = useState(false);
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
+  const [communitySearching, setCommunitySearching] = useState(false);
 
   const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated } = useBubbleMapRateLimit();
 
   const {
     graphData, isLoading, focusedEntity, focusOnEntity,
     expandEntity, resetView, typeFilters, toggleTypeFilter,
-    spiderStatus, triggerSpider, refetch,
+    spiderStatus, triggerSpider, refetch, autoDiscoverCommunity,
   } = useMeshGraph();
 
   useEffect(() => {
@@ -126,6 +127,29 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     if (!searchInput.trim()) return;
     triggerSpider(searchInput.trim(), 'deep');
   }, [searchInput, triggerSpider]);
+
+  const handleDiscoverCommunity = useCallback(async () => {
+    // Find a token mint to use for community discovery
+    const tokenNode = graphData.nodes.find(n => n.type === 'token');
+    const tokenMint = tokenNode?.fullId || tokenNode?.id.replace(/^token:/, '') || searchInput.trim();
+    if (!tokenMint || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenMint)) {
+      toast.info('Enter a token mint address to discover its X Community');
+      return;
+    }
+    setCommunitySearching(true);
+    toast.info('🐦 Searching for X Community...');
+    try {
+      const walletNode = graphData.nodes.find(n => n.type === 'wallet');
+      const wallet = walletNode?.fullId || walletNode?.id.replace(/^wallet:/, '');
+      await autoDiscoverCommunity(tokenMint, wallet);
+      setTimeout(() => refetch(), 1500);
+      toast.success('🐦 X Community discovery complete — refreshing graph');
+    } catch (err) {
+      toast.error('X Community discovery failed');
+    } finally {
+      setCommunitySearching(false);
+    }
+  }, [graphData.nodes, searchInput, autoDiscoverCommunity, refetch]);
 
   const handleFindKYC = useCallback(async () => {
     const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
@@ -404,6 +428,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               </Button>
               <Button variant="outline" size="sm" onClick={handleSpider} disabled={spiderStatus.active} className="text-xs h-7">
                 <Radar className="h-3 w-3 mr-1" /> Deep Spider
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching}
+                className="text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400">
+                {communitySearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <span className="mr-1">🐦</span>}
+                Discover X Community
               </Button>
             </div>
           )}

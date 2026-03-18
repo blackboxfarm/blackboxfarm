@@ -401,8 +401,8 @@ export function useMeshGraph(initialEntityId?: string) {
         console.warn('[MeshSpider] DexScreener fetch failed:', e);
       }
 
-      // 2. Pump.fun fallback if DexScreener had no data
-      if (allSocialUrls.length === 0 && tokenMint.endsWith('pump')) {
+      // 2. Pump.fun fallback if DexScreener had no data (try for ALL mints, not just .pump)
+      if (allSocialUrls.length === 0) {
         try {
           console.log(`[MeshSpider] DexScreener empty — trying Pump.fun metadata for ${tokenMint.slice(0, 12)}...`);
           const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
@@ -1020,6 +1020,7 @@ export function useMeshGraph(initialEntityId?: string) {
     setTypeFilters,
     spiderStatus,
     triggerSpider,
+    autoDiscoverCommunity,
   };
 }
 
