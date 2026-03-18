@@ -1433,7 +1433,7 @@ async function scrapePublicChannel(username: string): Promise<Array<{
 // MAIN SERVER
 // ============================================================================
 
-serve(async (req) => {
+serve(withRunLog('telegram-channel-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
