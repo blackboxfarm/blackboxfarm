@@ -289,7 +289,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
             }, 800);
           }, 500);
 
-          toast.success(`🏦 KYC Root found: ${data.kycRoot.slice(0, 12)}...`);
+          setKycFound(true);
+          toast.success(`🏦 KYC Root found in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`);
           setTimeout(() => setTerminalVisible(false), 3000);
         }, chainDelay + 1200);
       } else {
