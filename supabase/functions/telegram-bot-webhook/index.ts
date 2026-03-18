@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withRunLog } from '../_shared/run-logger.ts';
 import { Keypair } from 'npm:@solana/web3.js@1.95.3';
 import * as bs58 from 'https://esm.sh/bs58@5.0.0';
 

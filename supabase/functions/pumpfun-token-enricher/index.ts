@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { withRunLog } from '../_shared/run-logger.ts';
 import { heliusFetch, canMakeHeliusCall } from "../_shared/helius-rate-limiter.ts";
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';

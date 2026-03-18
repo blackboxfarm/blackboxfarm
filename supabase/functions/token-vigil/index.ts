@@ -1,3 +1,5 @@
+import { withRunLog } from '../_shared/run-logger.ts';
+
 /**
  * Token Vigil — Death detector + Post-mortem / Mid-growth assessor
  * 

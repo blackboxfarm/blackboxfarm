@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { withRunLog } from '../_shared/run-logger.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('wallet-genealogy-scanner');
