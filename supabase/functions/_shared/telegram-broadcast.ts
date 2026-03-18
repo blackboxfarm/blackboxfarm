@@ -1,6 +1,7 @@
 /**
  * Shared Telegram broadcast utility
  * Fetches targets from database and broadcasts to all matching groups
+ * Logs delivery to notification_delivery_log and enqueues DLQ on failure
  */
 
 import { SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -20,8 +21,6 @@ export interface BroadcastResult {
 
 /**
  * Fetches Telegram targets from the database
- * @param supabase - Supabase client with service role
- * @param labels - Optional array of labels to filter (e.g., ["BLACKBOX"]). If empty, fetches all.
  */
 export async function getTelegramTargets(
   supabase: SupabaseClient,
@@ -85,12 +84,30 @@ async function sendToTarget(
 }
 
 /**
- * Broadcasts a message to multiple Telegram targets
- * @param supabase - Supabase client with service role
- * @param message - The message to send (supports Markdown)
- * @param labels - Optional array of labels to filter targets. If empty, sends to all targets.
- * @returns Array of results for each target
+ * Log delivery result to notification_delivery_log
  */
+async function logDelivery(
+  supabase: SupabaseClient,
+  target: TelegramTarget,
+  result: BroadcastResult,
+  messagePreview: string,
+  sourceFunction?: string
+): Promise<void> {
+  try {
+    await supabase.from('notification_delivery_log').insert({
+      channel: 'telegram',
+      target_id: target.id,
+      target_label: target.label,
+      status: result.success ? 'delivered' : 'failed',
+      error_message: result.error?.slice(0, 500) || null,
+      message_preview: messagePreview.slice(0, 200),
+      source_function: sourceFunction || null,
+    });
+  } catch (e) {
+    console.warn('[telegram-broadcast] Failed to log delivery:', e);
+  }
+}
+
 // Default delay between messages to avoid rate limiting (in milliseconds)
 const DEFAULT_MESSAGE_DELAY_MS = 5000;
 
@@ -103,17 +120,15 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Broadcasts a message to multiple Telegram targets with rate limiting
- * @param supabase - Supabase client with service role
- * @param message - The message to send (supports Markdown)
- * @param labels - Optional array of labels to filter targets. If empty, sends to all targets.
- * @param delayMs - Delay between messages in milliseconds (default: 2000ms)
- * @returns Array of results for each target
+ * Logs each delivery to notification_delivery_log
+ * Enqueues failed sends to the dead letter queue for retry
  */
 export async function broadcastToTelegram(
   supabase: SupabaseClient,
   message: string,
   labels?: string[],
-  delayMs: number = DEFAULT_MESSAGE_DELAY_MS
+  delayMs: number = DEFAULT_MESSAGE_DELAY_MS,
+  sourceFunction?: string
 ): Promise<BroadcastResult[]> {
   // Initial delay to prevent rapid-fire spam when called in loops
   console.log(`[telegram-broadcast] Initial 2s cooldown before sending...`);
@@ -144,10 +159,34 @@ export async function broadcastToTelegram(
     const result = await sendToTarget(supabase, target, message);
     results.push(result);
 
+    // Log delivery result
+    await logDelivery(supabase, target, result, message, sourceFunction);
+
     if (result.success) {
       console.log(`[telegram-broadcast] ✓ Sent to ${target.label}`);
     } else {
       console.error(`[telegram-broadcast] ✗ Failed ${target.label}: ${result.error}`);
+      
+      // Enqueue to DLQ for retry
+      try {
+        const { enqueueDeadLetter } = await import("./dead-letter.ts");
+        await enqueueDeadLetter({
+          sourceFunction: sourceFunction || 'telegram-broadcast',
+          operation: 'tg_send',
+          payload: {
+            target_id: target.id,
+            target_label: target.label,
+            chat_id: target.chat_id,
+            message: message.slice(0, 2000),
+            labels: labels || [],
+          },
+          errorMessage: result.error || 'Unknown send failure',
+          maxRetries: 3,
+          retryDelayMinutes: 5,
+        });
+      } catch (dlqErr) {
+        console.warn('[telegram-broadcast] Failed to enqueue DLQ:', dlqErr);
+      }
     }
   }
 
