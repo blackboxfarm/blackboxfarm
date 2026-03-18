@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { TelegramCommandList } from '@/components/telegram/TelegramCommandList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,46 +27,7 @@ import {
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
-const commands = [
-  {
-    cmd: '/holders',
-    desc: 'Holder distribution analysis with tier breakdowns & ASCII charts',
-    tier: 'Auth ★',
-    tierColor: 'text-green-400',
-    detail: 'Lite for free accounts • Full for X Subscribers+',
-  },
-  {
-    cmd: '/risk',
-    desc: 'AI risk & stability assessment with network behavior analysis',
-    tier: 'Auth ★',
-    tierColor: 'text-green-400',
-    detail: '🟢/🔴 for free • Full analysis for X Subscribers+',
-  },
-  {
-    cmd: '/momentum',
-    desc: 'Live volume, price action & momentum scoring from DexScreener',
-    tier: 'X Sub ★★',
-    tierColor: 'text-blue-400',
-  },
-  {
-    cmd: '/oracle',
-    desc: 'Developer reputation lookup — wallet history, rug risk, trust score',
-    tier: 'Pro ★★★',
-    tierColor: 'text-yellow-400',
-  },
-  {
-    cmd: '/wallet',
-    desc: 'Deep wallet behavior analysis — trading patterns, PnL, clustering',
-    tier: 'Pro ★★★',
-    tierColor: 'text-yellow-400',
-  },
-  {
-    cmd: '/alerts',
-    desc: 'Configure whale movement & price alerts delivered to your DMs',
-    tier: 'X Sub ★★',
-    tierColor: 'text-blue-400',
-  },
-];
+
 
 const riskSignals = [
   { emoji: '🟢', label: 'STRONG NETWORK', desc: 'Healthy holder distribution, stable wallet behavior, and positive developer history. Signals indicate a strong and stable token structure.', color: 'text-green-400' },
@@ -142,29 +104,13 @@ export default function TelegramBot() {
         </div>
       </section>
 
-      {/* Commands Grid */}
       <section className="mx-auto max-w-5xl px-4 py-16">
         <h2 className="text-2xl font-bold text-center mb-2">Bot Commands</h2>
-        <p className="text-sm text-muted-foreground text-center mb-10">
-          Access is gated by your subscription tier. Higher tiers unlock more commands & higher rate limits.
+        <p className="text-sm text-muted-foreground text-center mb-8">
+          Full command suite from <code className="text-primary">/help</code>. Access is gated by your subscription tier.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {commands.map((c) => (
-            <Card key={c.cmd} className="bg-card/50 border-border/50 hover:border-primary/30 transition-colors">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-2">
-                  <code className="text-lg font-bold text-primary">{c.cmd}</code>
-                  <Badge variant="outline" className={`text-xs ${c.tierColor} border-current`}>
-                    {c.tier}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">{c.desc}</p>
-                {c.detail && (
-                  <p className="text-xs text-muted-foreground/70 mt-1 italic">{c.detail}</p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+        <div className="max-w-2xl mx-auto">
+          <TelegramCommandList />
         </div>
       </section>
 
