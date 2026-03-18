@@ -29,6 +29,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { format, differenceInDays, parseISO } from 'date-fns';
+import { HeliusKeyRotationAlert } from './HeliusKeyRotationAlert';
 
 interface ApiServiceConfig {
   id: string;
