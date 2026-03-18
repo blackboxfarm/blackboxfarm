@@ -151,6 +151,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
   }, [graphData.nodes, searchInput, autoDiscoverCommunity, refetch]);
 
+  const handleFindKYC = useCallback(async () => {
     const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
     const targetWallet = focusedEntity?.type === 'wallet' 
       ? focusedEntity.id.replace(/^wallet:/, '') 
