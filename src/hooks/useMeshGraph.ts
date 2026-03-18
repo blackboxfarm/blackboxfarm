@@ -1034,6 +1034,7 @@ export function useMeshGraph(initialEntityId?: string) {
     focusOnEntity,
     expandEntity,
     resetView,
+    clearCooldown,
     typeFilters,
     toggleTypeFilter,
     setTypeFilters,
