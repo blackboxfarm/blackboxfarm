@@ -306,7 +306,7 @@ async function trackRejection(
   return { success: true, tracked: data };
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-lifecycle-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
