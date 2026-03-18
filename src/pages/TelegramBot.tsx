@@ -104,29 +104,13 @@ export default function TelegramBot() {
         </div>
       </section>
 
-      {/* Commands Grid */}
       <section className="mx-auto max-w-5xl px-4 py-16">
         <h2 className="text-2xl font-bold text-center mb-2">Bot Commands</h2>
-        <p className="text-sm text-muted-foreground text-center mb-10">
-          Access is gated by your subscription tier. Higher tiers unlock more commands & higher rate limits.
+        <p className="text-sm text-muted-foreground text-center mb-8">
+          Full command suite from <code className="text-primary">/help</code>. Access is gated by your subscription tier.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {commands.map((c) => (
-            <Card key={c.cmd} className="bg-card/50 border-border/50 hover:border-primary/30 transition-colors">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-2">
-                  <code className="text-lg font-bold text-primary">{c.cmd}</code>
-                  <Badge variant="outline" className={`text-xs ${c.tierColor} border-current`}>
-                    {c.tier}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">{c.desc}</p>
-                {c.detail && (
-                  <p className="text-xs text-muted-foreground/70 mt-1 italic">{c.detail}</p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+        <div className="max-w-2xl mx-auto">
+          <TelegramCommandList />
         </div>
       </section>
 
