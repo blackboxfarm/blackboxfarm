@@ -55,14 +55,35 @@ export async function fetchXCommunityAboutAdmin(
       title = await page.title();
       text = await page.evaluate(() => document.body.innerText || '');
 
-      const adminMatch = text.match(/Created[\\s\\S]{0,160}?by\\s+@?([A-Za-z0-9_]{1,15})/i);
+      // Extract all handles from the Moderators section
+      // The about page lists moderators — first one is the Admin (creator)
+      const allHandles = [];
+      const moderatorSection = text.match(/Moderators[\\s\\S]{0,2000}/i);
+      if (moderatorSection) {
+        const handleMatches = moderatorSection[0].matchAll(/@([A-Za-z0-9_]{1,15})/g);
+        for (const m of handleMatches) {
+          allHandles.push(m[1].toLowerCase());
+        }
+      }
+
+      // Fallback: try "Created by @handle" pattern
+      if (allHandles.length === 0) {
+        const createdMatch = text.match(/Created[\\s\\S]{0,160}?by\\s+@?([A-Za-z0-9_]{1,15})/i);
+        if (createdMatch) allHandles.push(createdMatch[1].toLowerCase());
+      }
+
       const memberMatch = text.match(/([\\d,]+)\\s+Members?\\b/i);
+
+      // First handle = admin, rest = moderators
+      const adminUsername = allHandles.length > 0 ? allHandles[0] : null;
+      const moderatorUsernames = allHandles.slice(1);
 
       return {
         pageTitle: title,
         finalUrl: page.url(),
         textSnippet: text.slice(0, 3000),
-        adminUsername: adminMatch ? adminMatch[1].toLowerCase() : null,
+        adminUsername,
+        moderatorUsernames,
         memberCount: memberMatch ? Number(memberMatch[1].replace(/,/g, '')) : null,
       };
     };
