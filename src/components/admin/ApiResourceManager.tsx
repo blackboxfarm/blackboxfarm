@@ -307,6 +307,20 @@ export function ApiResourceManager() {
         </Card>
       </div>
 
+      {/* Helius Key Rotation Alert */}
+      {(() => {
+        const helius = services.find(s => s.service_name === 'helius');
+        if (!helius) return null;
+        const rotation = getRotationStatus(helius);
+        return (
+          <HeliusKeyRotationAlert
+            rotationStatus={rotation as any}
+            lastRotated={helius.api_key_last_rotated}
+            onRotationComplete={fetchData}
+          />
+        );
+      })()}
+
       {/* Alerts Section */}
       {alerts.length > 0 && (
         <Card className="border-destructive/50 bg-destructive/5">
