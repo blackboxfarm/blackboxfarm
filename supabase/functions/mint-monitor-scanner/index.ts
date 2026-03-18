@@ -456,7 +456,7 @@ async function fetchTokenMetadata(
   }
 }
 
-serve(async (req) => {
+serve(withRunLog('mint-monitor-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
