@@ -7,6 +7,7 @@ const FunnelFeedDiscoveries = lazy(() => import("../funnel-feeds/FunnelFeedDisco
 const DexCloudFlareFeed = lazy(() => import("../funnel-feeds/DexCloudFlareFeed").then(m => ({ default: m.DexCloudFlareFeed })));
 const BubblesFeed = lazy(() => import("../funnel-feeds/BubblesFeed").then(m => ({ default: m.BubblesFeed })));
 const BotDmFeed = lazy(() => import("../funnel-feeds/BotDmFeed").then(m => ({ default: m.BotDmFeed })));
+const HoldersInputFeed = lazy(() => import("../funnel-feeds/HoldersInputFeed").then(m => ({ default: m.HoldersInputFeed })));
 const FunnelOverview = lazy(() => import("../funnel-feeds/FunnelOverview").then(m => ({ default: m.FunnelOverview })));
 
 export default function FunnelFeedsTab() {
@@ -26,6 +27,7 @@ export default function FunnelFeedsTab() {
           <TabsTrigger value="telegram">📡 Telegram</TabsTrigger>
           <TabsTrigger value="dex">☁️ Dex/CloudFlare</TabsTrigger>
           <TabsTrigger value="bubbles">🫧 Bubbles</TabsTrigger>
+          <TabsTrigger value="holders">🔎 /holders</TabsTrigger>
           <TabsTrigger value="bot-dm">🤖 Bot DM</TabsTrigger>
           <TabsTrigger value="overview">📊 Overview</TabsTrigger>
         </TabsList>
@@ -53,6 +55,14 @@ export default function FunnelFeedsTab() {
           {subTab === "bubbles" && (
             <Suspense fallback={<LazyLoader />}>
               <BubblesFeed />
+            </Suspense>
+          )}
+        </TabsContent>
+
+        <TabsContent value="holders">
+          {subTab === "holders" && (
+            <Suspense fallback={<LazyLoader />}>
+              <HoldersInputFeed />
             </Suspense>
           )}
         </TabsContent>
