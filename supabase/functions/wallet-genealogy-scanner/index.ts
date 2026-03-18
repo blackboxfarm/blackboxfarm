@@ -296,7 +296,7 @@ function getMaxDepth(node: WalletNode): number {
   return Math.max(...node.children.map(getMaxDepth));
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
