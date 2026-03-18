@@ -18,7 +18,7 @@ interface TelegramUpdate {
 
 type UserTier = 'free' | 'auth' | 'x_subscriber' | 'pro' | 'dev' | 'enterprise' | 'unlinked';
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('telegram-bot-webhook', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
