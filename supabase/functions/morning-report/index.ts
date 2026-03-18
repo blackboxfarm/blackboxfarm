@@ -1002,6 +1002,35 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
+    // Funnel Feed Throughput
+    if (funnelFeedThroughput.total_overnight > 0 || funnelFeedThroughput.total_discoveries_overnight > 0) {
+      tgMessage += `\n📡 **Funnel Feed Throughput** (overnight)\n`;
+      if (funnelFeedThroughput.total_overnight > 0) {
+        tgMessage += `• Post Queue: ${funnelFeedThroughput.total_overnight} tokens ingested\n`;
+        const bySource = funnelFeedThroughput.by_source || {};
+        for (const [src, info] of Object.entries(bySource) as [string, any][]) {
+          const srcLabel = src === 'dex_cloudflare' ? '☁️ Dex/CF' 
+            : src === 'telegram' ? '📡 Telegram'
+            : src === 'holders_input' ? '🔎 /holders'
+            : src === 'bot_dm' ? '🤖 Bot DM'
+            : src === 'bubbles' ? '🫧 Bubbles'
+            : src === 'allstar_alert' ? '⭐ Allstar'
+            : src;
+          tgMessage += `  ${srcLabel}: ${info.count} (✅${info.posted} posted, ⏳${info.pending} pending)\n`;
+          // Show top tokens per source
+          const topTokens = (info.tokens || []).slice(0, 3).map((t: any) => t.symbol ? `$${t.symbol}` : t.mint.slice(0, 8)).join(', ');
+          if (topTokens) tgMessage += `    → ${topTokens}\n`;
+        }
+      }
+      if (funnelFeedThroughput.total_discoveries_overnight > 0) {
+        tgMessage += `• Discovery Pipeline: ${funnelFeedThroughput.total_discoveries_overnight} tokens\n`;
+        const dSources = funnelFeedThroughput.discovery_sources || {};
+        for (const [src, info] of Object.entries(dSources) as [string, any][]) {
+          tgMessage += `  ${src}: ${info.count} discovered (${info.watchlisted} watchlisted, ${info.posted} posted)\n`;
+        }
+      }
+    }
+
     tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
