@@ -138,8 +138,25 @@ If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a n
 - [x] Add DLQ stats section to morning report
 - [x] Add function health + DLQ sections to TG report message
 
+## ✅ Phase 3: Hardening (COMPLETED)
+
+### A. Service Status Endpoint
+- [x] Created `/service-status` edge function — public endpoint returning overall + per-service health
+- [x] Added to config.toml with verify_jwt = false
+
+### B. Escalation Chain
+- [x] Upgraded `api-failure-alerts.ts` with 3-tier escalation: Tier 1 (immediate, 10 min cooldown), Tier 2 (30 min "STILL DOWN"), Tier 3 (hourly re-alerts with escalation count)
+- [x] Added `clearEscalation()` export for service recovery
+
+### C. Function Instrumentation (61 total)
+- [x] Batch-instrumented 30 additional functions with `withRunLog` (61 total)
+- [x] Key additions: helius-rpc-proxy, firecrawl-scrape, raydium-quote, oracle-unified-lookup, wallet-behavior-analysis, all pumpfun-* analyzers, social-mesh-linker, whale-frenzy-detector
+
+### D. API Call Logging
+- [x] Added `createApiLogger` to helius-rpc-proxy (Helius RPC calls)
+- [x] Added `createApiLogger` to firecrawl-scrape (paid Firecrawl calls)
+- [x] Prior coverage: dexscreener, solscan, rugcheck, apify, helius funding
+
 ## Remaining (Future Sessions)
-- [ ] Roll out withRunLog to remaining ~200 edge functions
-- [ ] Add escalation chain for persistent outages
-- [ ] Create /service-status API endpoint
-- [ ] Audit + wrap top unlogged API calls with createApiLogger
+- [ ] Roll out withRunLog to remaining ~170 edge functions
+- [ ] Add `clearEscalation()` calls on successful API responses in api-logger.ts
