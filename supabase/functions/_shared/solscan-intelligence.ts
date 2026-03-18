@@ -309,6 +309,9 @@ export async function solscanCheckAccountLabel(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<{ label: string | null; isCex: boolean; tags: string[] }> {
+  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
+  console.log('[Solscan Intel] DISABLED — Pro API not available. Falling back to scrape.');
+  
   const scrapeFallback = async () => {
     const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
     const label = scraped.fundedByLabel || null;
@@ -320,6 +323,8 @@ export async function solscanCheckAccountLabel(
 
     return { label, isCex, tags: [] };
   };
+
+  return await scrapeFallback();
 
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
