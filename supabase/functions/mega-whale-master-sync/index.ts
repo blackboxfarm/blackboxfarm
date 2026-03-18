@@ -33,7 +33,7 @@ interface SyncResult {
 // Helper: sleep for rate limiting
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-serve(async (req) => {
+serve(withRunLog('mega-whale-master-sync', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
