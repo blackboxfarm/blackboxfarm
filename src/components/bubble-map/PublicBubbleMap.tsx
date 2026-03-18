@@ -428,7 +428,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>{displayData.nodes.length} entities</span>
             <span>{displayData.links.length} connections</span>
-            {focusedEntity && <span className="text-primary font-mono">{focusedEntity.id.slice(0, 16)}...</span>}
+            {focusedDisplayInfo && (
+              <span className="font-medium" style={{ color: ENTITY_COLORS[focusedDisplayInfo.type] || 'hsl(var(--primary))' }}>
+                {focusedDisplayInfo.emoji} {focusedDisplayInfo.label}
+              </span>
+            )}
             {isOverCap && (
               <div className="flex items-center gap-1">
                 <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">
