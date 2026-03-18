@@ -669,25 +669,105 @@ export function useMeshGraph(initialEntityId?: string) {
       }
 
       if (!hasUsefulData && result.requiresScan) {
-        // Even on failure, try X Community discovery for token mints
+        // ═══ FOLLOW THE MONEY FALLBACK ═══
+        // Oracle didn't find pre-indexed data. Instead of dead-ending,
+        // try direct funding chain trace + community discovery.
         const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
-        if (isBase58) {
+        const walletToTrace = result.resolvedWallet || (isBase58 ? normalizedInput : null);
+        
+        if (walletToTrace) {
+          diagnostics.push('💰 Oracle empty — activating Follow-the-Money fallback...');
+          setSpiderStatus({
+            active: true,
+            stage: '💰 Following the money — tracing funding chain...',
+            diagnostics,
+          });
+
           try {
-            console.log('[MeshSpider] Running X Community discovery despite empty spider results...');
-            await autoDiscoverCommunity(normalizedInput, result.resolvedWallet);
-            diagnostics.push('🏠 X Community auto-discovery ran (fallback on empty results)');
-            // Refresh to show any community nodes that were discovered
-            setTimeout(() => refetch(), 1500);
+            // 1. Trace funding chain (follow the money)
+            const { data: kycData, error: kycErr } = await supabase.functions.invoke('mesh-kyc-deep-search', {
+              body: { walletAddress: walletToTrace, maxDepth: 5 },
+            });
+            
+            if (!kycErr && kycData) {
+              const chainLen = kycData.chain?.length || 0;
+              const walletsTraced = kycData.walletsTraced || 0;
+              diagnostics.push(`✅ Funding chain: ${chainLen} hops, ${walletsTraced} wallets traced`);
+              if (kycData.kycRoot) {
+                diagnostics.push(`🏦 KYC Root identified: ${kycData.kycRoot.slice(0, 16)}...`);
+              }
+            } else {
+              diagnostics.push(`⚠️ Funding trace: ${kycErr?.message || 'no chain found'}`);
+            }
+          } catch (e) {
+            diagnostics.push(`⚠️ Funding trace failed: ${e}`);
+          }
+
+          try {
+            // 2. Community discovery
+            if (isBase58) {
+              await autoDiscoverCommunity(normalizedInput, walletToTrace);
+              diagnostics.push('🏠 X Community auto-discovery ran');
+            }
           } catch (e) {
             console.warn('[MeshSpider] Fallback community discovery failed:', e);
           }
+
+          // 3. Refetch — the funding trace should have added mesh links
+          await new Promise(r => setTimeout(r, 1000));
+          refetch();
+
+          // Check if we now have data
+          const { data: checkLinks } = await supabase
+            .from('reputation_mesh')
+            .select('id')
+            .or(`source_id.eq.${normalizedInput},linked_id.eq.${normalizedInput}`)
+            .limit(5);
+
+          if (checkLinks && checkLinks.length > 0) {
+            diagnostics.push(`✅ Follow-the-money found ${checkLinks.length} mesh links!`);
+            setSpiderStatus({
+              active: false,
+              stage: '',
+              meshLinksAdded: checkLinks.length,
+              diagnostics,
+              recommendation: 'Data discovered via funding chain trace.',
+            });
+          } else {
+            // Also check by resolved wallet
+            const { data: walletLinks } = await supabase
+              .from('reputation_mesh')
+              .select('id')
+              .or(`source_id.eq.${walletToTrace},linked_id.eq.${walletToTrace}`)
+              .limit(5);
+
+            if (walletLinks && walletLinks.length > 0) {
+              // Data exists under the resolved wallet — focus on that instead
+              diagnostics.push(`✅ Found ${walletLinks.length} links via resolved wallet ${walletToTrace.slice(0, 12)}...`);
+              setSpiderStatus({
+                active: false,
+                stage: '',
+                meshLinksAdded: walletLinks.length,
+                diagnostics,
+                recommendation: 'Data discovered via resolved wallet.',
+              });
+            } else {
+              setSpiderStatus({
+                active: false,
+                stage: '',
+                error: 'No funding chain or mesh data found after full trace.',
+                diagnostics,
+              });
+            }
+          }
+        } else {
+          setSpiderStatus({
+            active: false,
+            stage: '',
+            error: `No data found. External APIs returned errors. ${result.recommendation || ''}`,
+            diagnostics,
+          });
         }
-        setSpiderStatus({
-          active: false,
-          stage: '',
-          error: `No data found. External APIs returned errors. ${result.recommendation || ''}`,
-          diagnostics,
-        });
       } else {
         setSpiderStatus({
           active: true,
@@ -701,15 +781,11 @@ export function useMeshGraph(initialEntityId?: string) {
         });
 
         // ═══ AUTO-DISCOVER X COMMUNITY ═══
-        // If input is a token mint, discover its X Community + admins/mods
-        const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
-        if (isBase58) {
-          // Input could be token or wallet. Try community discovery for input as token,
-          // and also for any tokens discovered in the spider result
+        const isBase58Check = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
+        if (isBase58Check) {
           const tokensToCheck = new Set<string>();
           tokensToCheck.add(normalizedInput);
           
-          // Also add tokens from the spider result's token history
           if (result.tokenHistory) {
             for (const t of result.tokenHistory.slice(0, 5)) {
               if (t.mint) tokensToCheck.add(t.mint);
@@ -721,7 +797,6 @@ export function useMeshGraph(initialEntityId?: string) {
             }
           }
 
-          // Run community discovery for all tokens (parallel, max 5)
           const communityPromises = [...tokensToCheck].slice(0, 5).map(mint => 
             autoDiscoverCommunity(mint, result.resolvedWallet)
           );
@@ -729,17 +804,63 @@ export function useMeshGraph(initialEntityId?: string) {
           diagnostics.push(`🏠 X Community auto-discovery ran for ${tokensToCheck.size} tokens`);
         }
 
-        // Refresh mesh graph after spider + community discovery
+        // ═══ FOLLOW THE MONEY (even on success) ═══
+        // If we got the token but no funding chain yet, trace it
+        const walletForChain = result.resolvedWallet;
+        if (walletForChain && isBase58Check) {
+          try {
+            diagnostics.push('💰 Tracing funding chain...');
+            setSpiderStatus(prev => ({ ...prev, stage: '💰 Following the money...' }));
+            const { data: kycData } = await supabase.functions.invoke('mesh-kyc-deep-search', {
+              body: { walletAddress: walletForChain, maxDepth: 5 },
+            });
+            if (kycData?.kycRoot) {
+              diagnostics.push(`🏦 KYC Root: ${kycData.kycRoot.slice(0, 16)}...`);
+            }
+            if (kycData?.chain?.length) {
+              diagnostics.push(`✅ ${kycData.chain.length} funding hops traced`);
+            }
+          } catch (e) {
+            console.warn('[MeshSpider] Follow-the-money trace failed:', e);
+          }
+        }
+
+        // Refresh mesh graph after all discovery
         setTimeout(() => {
           refetch();
           setTimeout(() => {
             setSpiderStatus(prev => ({ ...prev, active: false }));
-          }, 5000);
-        }, 1000);
+          }, 3000);
+        }, 500);
       }
 
     } catch (err: any) {
       console.error('[MeshSpider] Error:', err);
+      
+      // ═══ LAST RESORT: even on total failure, try funding trace ═══
+      const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input.trim());
+      if (isBase58) {
+        try {
+          setSpiderStatus({ active: true, stage: '💰 Oracle failed — following the money directly...' });
+          const { data: kycData } = await supabase.functions.invoke('mesh-kyc-deep-search', {
+            body: { walletAddress: input.trim(), maxDepth: 4 },
+          });
+          if (kycData?.walletsTraced > 0) {
+            setTimeout(() => refetch(), 1000);
+            setSpiderStatus({
+              active: false,
+              stage: '',
+              meshLinksAdded: kycData.walletsTraced,
+              diagnostics: [`💰 Fallback trace: ${kycData.walletsTraced} wallets mapped`],
+              recommendation: 'Data recovered via direct funding trace.',
+            });
+            return;
+          }
+        } catch (fallbackErr) {
+          console.error('[MeshSpider] Fallback trace also failed:', fallbackErr);
+        }
+      }
+      
       setSpiderStatus({
         active: false,
         stage: '',
