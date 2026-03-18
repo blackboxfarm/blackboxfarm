@@ -16,6 +16,8 @@ interface ApifyCommunityMember {
   isBlueVerified: boolean;
   followersCount?: number;
   followingCount?: number;
+  description?: string;
+  bio?: string;
 }
 
 interface XCommunityData {
@@ -26,6 +28,12 @@ interface XCommunityData {
   adminUsernames: string[];
   moderatorUsernames: string[];
   rawData?: any;
+}
+
+interface PrimaryCommunityStaffSelection {
+  prioritizedMembers: ApifyCommunityMember[];
+  adminUsernames: string[];
+  moderatorUsernames: string[];
 }
 
 // Detect if a Twitter URL is an X Community
@@ -58,6 +66,40 @@ function extractTwitterUsername(url: string): string | null {
   return null;
 }
 
+function normalizeScreenName(screenName?: string): string | null {
+  const normalized = screenName?.trim().replace(/^@/, '').toLowerCase();
+  return normalized || null;
+}
+
+function selectPrimaryCommunityStaff(members: ApifyCommunityMember[]): PrimaryCommunityStaffSelection {
+  const admin = members.find((member) => member.communityRole === 'Admin' && normalizeScreenName(member.screenName));
+  if (admin) {
+    const handle = normalizeScreenName(admin.screenName)!;
+    return {
+      prioritizedMembers: [admin],
+      adminUsernames: [handle],
+      moderatorUsernames: [],
+    };
+  }
+
+  const moderator = members.find((member) => member.communityRole === 'Moderator' && normalizeScreenName(member.screenName));
+  if (moderator) {
+    const handle = normalizeScreenName(moderator.screenName)!;
+    return {
+      prioritizedMembers: [moderator],
+      adminUsernames: [],
+      moderatorUsernames: [handle],
+    };
+  }
+
+  const fallbackMember = members.find((member) => normalizeScreenName(member.screenName));
+  return {
+    prioritizedMembers: fallbackMember ? [fallbackMember] : [],
+    adminUsernames: [],
+    moderatorUsernames: [],
+  };
+}
+
 interface FetchResult {
   members: ApifyCommunityMember[];
   httpStatus: number;
@@ -84,7 +126,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId: communityId,
-          maxItems: 4, // Hard cap: 4 members max — first is usually Admin, rest are top members
+          maxItems: 1, // Hard stop: only fetch the first result for primary staff detection
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ["RESIDENTIAL"]
@@ -111,23 +153,14 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
 }
 
 async function processCommunityData(members: ApifyCommunityMember[]): Promise<XCommunityData> {
-  const admins: string[] = [];
-  const moderators: string[] = [];
-  
-  for (const member of members) {
-    if (member.communityRole === 'Admin') {
-      admins.push(member.screenName.toLowerCase());
-    } else if (member.communityRole === 'Moderator') {
-      moderators.push(member.screenName.toLowerCase());
-    }
-  }
-  
+  const primaryStaff = selectPrimaryCommunityStaff(members);
+
   return {
     communityId: '',
-    adminUsernames: [...new Set(admins)],
-    moderatorUsernames: [...new Set(moderators)],
-    memberCount: members.length,
-    rawData: members.slice(0, 20)
+    adminUsernames: primaryStaff.adminUsernames,
+    moderatorUsernames: primaryStaff.moderatorUsernames,
+    memberCount: primaryStaff.prioritizedMembers.length,
+    rawData: primaryStaff.prioritizedMembers.slice(0, 1)
   };
 }
 
