@@ -110,19 +110,19 @@ If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a n
 - [x] telegram-bot-health
 - [x] retry-dead-letters
 
-## 🔲 Phase 2: Integration (TODO — next sessions)
+## ✅ Phase 2: Integration (COMPLETED)
 
 ### A. Error Logs
-- [ ] Add "Function Health" section to morning report querying edge_function_runs
-- [ ] Wire `enqueueDeadLetter()` into telegram-broadcast.ts for failed sends
-- [ ] Populate error_trend_snapshot from database-housekeeping daily
+- [x] Add "Function Health" section to morning report querying edge_function_runs
+- [x] Wire `enqueueDeadLetter()` into telegram-broadcast.ts for failed sends
+- [x] Populate error_trend_snapshot from database-housekeeping daily
 - [ ] Roll out `withRunLog` to remaining ~85 edge functions
 
 ### B. Communication
-- [ ] Wire notification_delivery_log into telegram-broadcast.ts send results
+- [x] Wire notification_delivery_log into telegram-broadcast.ts send results
 - [ ] Add escalation chain (Tier 1→2→3) for persistent outages
 - [ ] Create /service-status endpoint from service_status table
-- [ ] Update system-health-audit to write to service_status
+- [x] Update system-health-audit to write to service_status
 
 ### C. API Costs
 - [ ] Add monthly quota auto-reset cron (1st of month)
@@ -133,5 +133,7 @@ If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a n
 ### D. Metrics
 - [ ] Instrument oracle-master-spider to write spider_run_metrics
 - [ ] Add funnel stage counters across pipeline functions
-- [ ] Populate mesh_growth_daily from database-housekeeping
-- [ ] Add spider/funnel/mesh sections to morning report
+- [x] Populate mesh_growth_daily from database-housekeeping
+- [x] Add spider/funnel/mesh sections to morning report
+- [x] Add DLQ stats section to morning report
+- [x] Add function health + DLQ sections to TG report message
