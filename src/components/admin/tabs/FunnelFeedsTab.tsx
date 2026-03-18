@@ -59,6 +59,14 @@ export default function FunnelFeedsTab() {
           )}
         </TabsContent>
 
+        <TabsContent value="holders">
+          {subTab === "holders" && (
+            <Suspense fallback={<LazyLoader />}>
+              <HoldersInputFeed />
+            </Suspense>
+          )}
+        </TabsContent>
+
         <TabsContent value="bot-dm">
           {subTab === "bot-dm" && (
             <Suspense fallback={<LazyLoader />}>
