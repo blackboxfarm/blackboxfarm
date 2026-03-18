@@ -137,6 +137,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
     recordSearch();
     setXAccountsRevealed(false);
+    setHasSpideredOnce(false); // Reset so auto-spider can fire for new entity
+    clearCooldown(searchInput.trim()); // Clear any stale cooldown for this entity
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
