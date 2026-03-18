@@ -325,6 +325,15 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
         console.warn('[housekeeping] Mesh growth snapshot failed:', e.message);
       }
 
+      // ── Aggregate + purge old holder data ──
+      try {
+        const { data: holderAgg, error: holderAggErr } = await supabase.rpc('aggregate_holder_data', { p_older_than_days: 14 });
+        if (holderAggErr) throw holderAggErr;
+        console.log(`[housekeeping] Holder aggregation:`, JSON.stringify(holderAgg));
+      } catch (e: any) {
+        console.warn('[housekeeping] Holder aggregation failed:', e.message);
+      }
+
       // ── Cleanup edge_function_runs and dead_letter_queue ──
       try {
         const { data: efClean } = await supabase.rpc('cleanup_edge_function_runs', { retention_days: 14 });

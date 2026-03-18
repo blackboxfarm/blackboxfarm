@@ -4766,6 +4766,81 @@ export type Database = {
         }
         Relationships: []
       }
+      holder_daily_summary: {
+        Row: {
+          accumulations: number | null
+          avg_balance: number | null
+          buys: number | null
+          created_at: string | null
+          distributions: number | null
+          dolphin_count: number | null
+          fish_count: number | null
+          id: string
+          median_balance: number | null
+          net_flow_usd: number | null
+          price_at_snapshot: number | null
+          sells: number | null
+          shark_count: number | null
+          shrimp_count: number | null
+          summary_date: string
+          token_mint: string
+          top10_holder_pct: number | null
+          top25_holder_pct: number | null
+          total_holders: number
+          total_usd_value: number | null
+          whale_count: number | null
+          whale_movements: number | null
+        }
+        Insert: {
+          accumulations?: number | null
+          avg_balance?: number | null
+          buys?: number | null
+          created_at?: string | null
+          distributions?: number | null
+          dolphin_count?: number | null
+          fish_count?: number | null
+          id?: string
+          median_balance?: number | null
+          net_flow_usd?: number | null
+          price_at_snapshot?: number | null
+          sells?: number | null
+          shark_count?: number | null
+          shrimp_count?: number | null
+          summary_date: string
+          token_mint: string
+          top10_holder_pct?: number | null
+          top25_holder_pct?: number | null
+          total_holders?: number
+          total_usd_value?: number | null
+          whale_count?: number | null
+          whale_movements?: number | null
+        }
+        Update: {
+          accumulations?: number | null
+          avg_balance?: number | null
+          buys?: number | null
+          created_at?: string | null
+          distributions?: number | null
+          dolphin_count?: number | null
+          fish_count?: number | null
+          id?: string
+          median_balance?: number | null
+          net_flow_usd?: number | null
+          price_at_snapshot?: number | null
+          sells?: number | null
+          shark_count?: number | null
+          shrimp_count?: number | null
+          summary_date?: string
+          token_mint?: string
+          top10_holder_pct?: number | null
+          top25_holder_pct?: number | null
+          total_holders?: number
+          total_usd_value?: number | null
+          whale_count?: number | null
+          whale_movements?: number | null
+        }
+        Relationships: []
+      }
       holder_movements: {
         Row: {
           action: string
@@ -15287,6 +15362,10 @@ export type Database = {
       }
     }
     Functions: {
+      aggregate_holder_data: {
+        Args: { p_older_than_days?: number }
+        Returns: Json
+      }
       apply_referral_discount: {
         Args: { user_id_param: string }
         Returns: Json
