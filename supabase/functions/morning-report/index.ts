@@ -882,6 +882,40 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
+    // Function Health section
+    if (functionHealth.total_runs > 0) {
+      tgMessage += `\n⚙️ **Function Health** (${functionHealth.total_runs} runs, ${functionHealth.total_errors} errors)\n`;
+      const failedFuncs = Object.entries(functionHealth.by_function || {})
+        .filter(([, s]: [string, any]) => s.errors > 0)
+        .sort((a: any, b: any) => b[1].errors - a[1].errors)
+        .slice(0, 5);
+      for (const [fname, stats] of failedFuncs as [string, any][]) {
+        tgMessage += `• 🔴 ${fname}: ${stats.errors}/${stats.runs} failed (${stats.fail_pct}%) avg ${stats.avg_ms}ms\n`;
+      }
+    }
+
+    // DLQ section
+    if (dlqStats.pending > 0 || dlqStats.exhausted > 0) {
+      tgMessage += `\n📥 **Dead Letter Queue**\n`;
+      tgMessage += `• Pending: ${dlqStats.pending} | Exhausted: ${dlqStats.exhausted} | New overnight: ${dlqStats.new_overnight}\n`;
+    }
+
+    // Mesh/Spider section
+    if (meshGrowth.total_developers) {
+      tgMessage += `\n🕸️ **Mesh Growth**\n`;
+      tgMessage += `• Devs: ${meshGrowth.total_developers} | Wallets: ${meshGrowth.total_wallets} | Socials: ${meshGrowth.total_social_links}\n`;
+      if (meshGrowth.new_wallets_today > 0 || meshGrowth.new_social_links_today > 0) {
+        tgMessage += `• New today: +${meshGrowth.new_wallets_today} wallets, +${meshGrowth.new_social_links_today} social links\n`;
+      }
+    }
+
+    if (Object.keys(funnelMetrics).length > 0) {
+      tgMessage += `\n🔬 **Token Funnel** (today)\n`;
+      for (const [stage, count] of Object.entries(funnelMetrics)) {
+        tgMessage += `• ${stage}: ${count}\n`;
+      }
+    }
+
     tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
