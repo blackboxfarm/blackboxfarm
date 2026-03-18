@@ -533,7 +533,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               disabled={!canSearch}
             />
             <Button variant="outline" size="sm" onClick={handleSearch} disabled={isLoading || !canSearch}>
-              <Search className="h-3.5 w-3.5 mr-1" /> Focus
+              <Search className="h-3.5 w-3.5 mr-1" /> Trace
             </Button>
             <Button variant="ghost" size="sm" onClick={resetView}>
               <RotateCcw className="h-3.5 w-3.5" />
