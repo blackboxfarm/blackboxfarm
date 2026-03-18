@@ -15635,6 +15635,10 @@ export type Database = {
         Args: { p_count?: number; p_date: string; p_stage: string }
         Returns: undefined
       }
+      increment_monthly_quota_used: {
+        Args: { p_credits: number; p_service_name: string }
+        Returns: undefined
+      }
       increment_offspring_count: {
         Args: { amount?: number; whale_id: string }
         Returns: undefined

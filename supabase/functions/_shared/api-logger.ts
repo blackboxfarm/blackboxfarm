@@ -99,6 +99,18 @@ export function createApiLogger(params: ApiLogParams): ApiLogger {
       
       console.log(`[ApiLogger] ${params.serviceName}:${params.endpoint} → ${status} (${responseTimeMs}ms, ${credits} credits)`);
 
+      // Increment monthly quota used for paid services
+      if (credits > 0) {
+        try {
+          await supabase.rpc('increment_monthly_quota_used', {
+            p_service_name: params.serviceName,
+            p_credits: credits,
+          });
+        } catch (quotaErr) {
+          console.warn('[ApiLogger] Failed to increment monthly quota:', quotaErr);
+        }
+      }
+
       // Fire TG alert for auth failures (401, 403, 429)
       if ([401, 403, 429].includes(status)) {
         try {
@@ -106,6 +118,16 @@ export function createApiLogger(params: ApiLogParams): ApiLogger {
           await alertOnApiAuthFailure(supabase, params.serviceName, params.endpoint, status, errorMessage, params.functionName);
         } catch (alertErr) {
           console.warn('[ApiLogger] Failed to send auth failure alert:', alertErr);
+        }
+      }
+
+      // Clear escalation state on successful responses
+      if (success) {
+        try {
+          const { clearEscalation } = await import("./api-failure-alerts.ts");
+          clearEscalation(params.serviceName);
+        } catch {
+          // ignore
         }
       }
     } catch (e) {
