@@ -406,12 +406,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const src = link.source; const tgt = link.target;
     if (!src.x || !tgt.x) return;
     const rel = link.relationship || '';
-    let strokeColor = 'rgba(255,255,255,0.15)';
-    let lineWidth = 1;
-    if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.45)'; lineWidth = 1.5; }
-    else if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.4)'; lineWidth = 1.5; }
-    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.35)'; lineWidth = 1.2; }
-    else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.4)'; lineWidth = 1.2; }
+    let strokeColor = 'rgba(255,255,255,0.2)';
+    let lineWidth = 1.2;
+    if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.5)'; lineWidth = 2; }
+    else if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.5)'; lineWidth = 2; }
+    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.4)'; lineWidth = 1.5; }
+    else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.5)'; lineWidth = 1.5; }
     ctx.beginPath(); ctx.moveTo(src.x, src.y); ctx.lineTo(tgt.x, tgt.y);
     ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth; ctx.stroke();
     if (globalScale > 2) {
