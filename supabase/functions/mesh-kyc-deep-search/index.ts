@@ -46,7 +46,6 @@ async function heliusFundedBy(
     );
 
     if (resp.status === 404) {
-      const body = await resp.text();
       await logger.complete(404, 'No funding transaction found');
       return null;
     }
@@ -60,9 +59,7 @@ async function heliusFundedBy(
 
     await logger.complete(resp.status);
     const data: HeliusFundedByResult = await resp.json();
-
     console.log(`[KYCDeep] Helius funded-by: ${walletAddress.slice(0, 8)}... → funder=${data.funder?.slice(0, 8)} name="${data.funderName || 'unknown'}" type="${data.funderType || 'unknown'}" amount=${data.amount} SOL`);
-
     return data;
   } catch (e) {
     const msg = `Helius funded-by error: ${e instanceof Error ? e.message : 'timeout'}`;
@@ -72,8 +69,63 @@ async function heliusFundedBy(
   }
 }
 
-// Deep KYC root search: traces funding chain upward (depth 5) to find CEX/KYC roots
-// Now powered by Helius /v1/wallet/{address}/funded-by (free, no paid plan needed)
+/**
+ * Discover sibling wallets: "Who else did this funder send SOL to?"
+ * This exposes bundle/coordinated wallet networks.
+ */
+async function discoverSiblings(
+  funderWallet: string,
+  apiKey: string,
+  knownWallets: Set<string>,
+  maxSiblings: number = 30
+): Promise<Array<{ wallet: string; amountSol: number }>> {
+  const siblings: Array<{ wallet: string; amountSol: number }> = [];
+  
+  try {
+    // Use Helius enhanced transactions to find outgoing SOL transfers
+    const resp = await fetch(`https://api.helius.xyz/v0/addresses/${funderWallet}/transactions?api-key=${apiKey}&type=TRANSFER&limit=100`, {
+      signal: AbortSignal.timeout(12000),
+    });
+
+    if (!resp.ok) return siblings;
+
+    const txs: any[] = await resp.json();
+    const recipientMap = new Map<string, number>();
+
+    for (const tx of txs) {
+      // Check native transfers (SOL movements)
+      const nativeTransfers = tx.nativeTransfers || [];
+      for (const nt of nativeTransfers) {
+        if (nt.fromUserAccount === funderWallet && nt.toUserAccount !== funderWallet) {
+          const recipient = nt.toUserAccount;
+          const amountSol = (nt.amount || 0) / 1e9;
+          if (amountSol >= 0.01) { // Min 0.01 SOL to be meaningful
+            recipientMap.set(recipient, (recipientMap.get(recipient) || 0) + amountSol);
+          }
+        }
+      }
+    }
+
+    // Sort by amount and take top siblings
+    const sorted = [...recipientMap.entries()]
+      .filter(([wallet]) => !knownWallets.has(wallet))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, maxSiblings);
+
+    for (const [wallet, amountSol] of sorted) {
+      siblings.push({ wallet, amountSol });
+    }
+
+    console.log(`[KYCDeep] Siblings of ${funderWallet.slice(0, 8)}: ${siblings.length} recipients found (${txs.length} txs scanned)`);
+  } catch (e) {
+    console.warn(`[KYCDeep] Sibling discovery failed for ${funderWallet.slice(0, 8)}: ${e}`);
+  }
+
+  return siblings;
+}
+
+// Deep KYC root search: traces funding chain upward (depth 5+) AND discovers sibling wallets
+// Now powered by Helius /v1/wallet/{address}/funded-by + enhanced transactions
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -87,11 +139,12 @@ Deno.serve(async (req) => {
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
     if (!heliusApiKey) throw new Error('HELIUS_API_KEY not configured');
 
-    const { walletAddress, maxDepth } = await req.json();
+    const { walletAddress, maxDepth, discoverBundle } = await req.json();
     if (!walletAddress) throw new Error('walletAddress required');
 
     const depth = Math.min(maxDepth || 5, 8);
-    console.log(`[KYCDeep] Starting depth-${depth} Helius trace for ${walletAddress}`);
+    const shouldDiscoverBundle = discoverBundle !== false; // Default: true
+    console.log(`[KYCDeep] Starting depth-${depth} Helius trace for ${walletAddress} (bundle discovery: ${shouldDiscoverBundle})`);
 
     const visited = new Set<string>();
     const chain: Array<{ wallet: string; funder: string; funderName: string | null; funderType: string | null; amountSol: number; depth: number }> = [];
@@ -99,6 +152,7 @@ Deno.serve(async (req) => {
     let kycRoot: string | null = null;
     let kycRootLabel: string | null = null;
     let meshLinksAdded = 0;
+    const siblingWallets: Array<{ wallet: string; amountSol: number; fundedBy: string }> = [];
 
     const knownCexWallets = new Set<string>();
 
@@ -112,11 +166,9 @@ Deno.serve(async (req) => {
 
       console.log(`[KYCDeep] Tracing depth ${current.depth}: ${current.wallet.slice(0, 12)}...`);
 
-      // Use Helius funded-by to find the original funder of this wallet
       const funding = await heliusFundedBy(current.wallet, heliusApiKey, errors);
 
       if (!funding) {
-        // No funder found — if we're past depth 0, this is a potential KYC root (dead end)
         if (current.depth > 0 && !kycRoot) {
           kycRoot = current.wallet;
           console.log(`[KYCDeep] Potential KYC root at depth ${current.depth}: ${current.wallet.slice(0, 12)} (no further funders)`);
@@ -133,13 +185,11 @@ Deno.serve(async (req) => {
         depth: current.depth + 1,
       });
 
-      // Check if funder is a CEX
       if (isKnownCex(funding.funderName, funding.funderType)) {
         knownCexWallets.add(funding.funder);
-        kycRoot = current.wallet; // The wallet funded by CEX is the KYC root
+        kycRoot = current.wallet;
         kycRootLabel = funding.funderName || funding.funderType || 'exchange';
         console.log(`[KYCDeep] 🏦 CEX-funded KYC root: ${current.wallet.slice(0, 12)} (funded by "${kycRootLabel}" ${funding.funder.slice(0, 8)})`);
-        // Don't trace into CEX wallets
         continue;
       }
 
@@ -159,18 +209,45 @@ Deno.serve(async (req) => {
 
       if (!error) meshLinksAdded++;
 
-      // Continue tracing upward
+      // ═══ SIBLING DISCOVERY: Find other wallets funded by this same funder ═══
+      if (shouldDiscoverBundle && !knownCexWallets.has(funding.funder) && current.depth <= 2) {
+        const siblings = await discoverSiblings(funding.funder, heliusApiKey, visited, 50);
+        
+        for (const sib of siblings) {
+          siblingWallets.push({ ...sib, fundedBy: funding.funder });
+          
+          // Write sibling mesh links
+          const { error: sibErr } = await supabase
+            .from('reputation_mesh')
+            .upsert({
+              source_type: 'wallet',
+              source_id: funding.funder,
+              linked_type: 'wallet',
+              linked_id: sib.wallet,
+              relationship: 'funded_by',
+              confidence: Math.min(90, 50 + sib.amountSol * 3),
+              discovered_via: 'mesh-kyc-deep-search:sibling',
+              discovered_at: new Date().toISOString(),
+              evidence: { amountSol: sib.amountSol, siblingOf: current.wallet },
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+
+          if (!sibErr) meshLinksAdded++;
+        }
+
+        if (siblings.length > 0) {
+          console.log(`[KYCDeep] 🕸️ Found ${siblings.length} sibling wallets funded by ${funding.funder.slice(0, 8)}`);
+        }
+      }
+
       if (!visited.has(funding.funder) && !knownCexWallets.has(funding.funder)) {
         queue.push({ wallet: funding.funder, depth: current.depth + 1 });
       }
 
-      // Rate limit between Helius calls
       await new Promise(r => setTimeout(r, 200));
     }
 
     // If we found a KYC root, mark it in the mesh
     if (kycRoot && kycRoot !== walletAddress) {
-      // Bridge link: wallet:kycRoot → kyc_root:kycRoot (so the chain visually connects)
       await supabase
         .from('reputation_mesh')
         .upsert({
@@ -185,7 +262,6 @@ Deno.serve(async (req) => {
         }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
       meshLinksAdded++;
 
-      // Also add the same_kyc_root shortcut link
       await supabase
         .from('reputation_mesh')
         .upsert({
@@ -198,19 +274,23 @@ Deno.serve(async (req) => {
           discovered_via: 'mesh-kyc-deep-search',
           discovered_at: new Date().toISOString(),
         }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
-
       meshLinksAdded++;
 
-      // Also mark intermediate wallets
-      for (const link of chain) {
-        if (link.funder === kycRoot || link.wallet === kycRoot) continue;
+      // Mark intermediate wallets AND sibling wallets under same KYC root
+      const allWalletsUnderKyc = [
+        ...chain.map(c => c.wallet),
+        ...siblingWallets.map(s => s.wallet),
+      ];
+      
+      for (const wallet of allWalletsUnderKyc) {
+        if (wallet === kycRoot) continue;
         await supabase
           .from('reputation_mesh')
           .upsert({
             source_type: 'kyc_root',
             source_id: kycRoot,
             linked_type: 'wallet',
-            linked_id: link.wallet,
+            linked_id: wallet,
             relationship: 'same_kyc_root',
             confidence: 70,
             discovered_via: 'mesh-kyc-deep-search',
@@ -220,7 +300,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[KYCDeep] Done: ${chain.length} links, KYC root: ${kycRoot?.slice(0, 12) || 'not found'} (${kycRootLabel || 'N/A'})`);
+    console.log(`[KYCDeep] Done: ${chain.length} chain links, ${siblingWallets.length} siblings, KYC root: ${kycRoot?.slice(0, 12) || 'not found'} (${kycRootLabel || 'N/A'}), ${meshLinksAdded} mesh links added`);
 
     return new Response(
       JSON.stringify({
@@ -230,6 +310,7 @@ Deno.serve(async (req) => {
         chainDepth: chain.length,
         walletsTraced: visited.size,
         meshLinksAdded,
+        siblingCount: siblingWallets.length,
         chain: chain.map(c => ({
           wallet: c.wallet,
           funder: c.funder,
@@ -237,6 +318,11 @@ Deno.serve(async (req) => {
           funderType: c.funderType,
           amountSol: c.amountSol,
           depth: c.depth,
+        })),
+        siblings: siblingWallets.slice(0, 20).map(s => ({
+          wallet: s.wallet,
+          amountSol: s.amountSol,
+          fundedBy: s.fundedBy,
         })),
         errors,
       }),
