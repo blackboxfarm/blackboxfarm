@@ -403,27 +403,34 @@ export function useMeshGraph(initialEntityId?: string) {
         console.warn('[MeshSpider] DexScreener fetch failed:', e);
       }
 
-      // 2. Pump.fun fallback if DexScreener had no data (try for ALL mints, not just .pump)
-      if (allSocialUrls.length === 0) {
-        try {
-          console.log(`[MeshSpider] DexScreener empty — trying Pump.fun metadata for ${tokenMint.slice(0, 12)}...`);
-          const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
-          if (pumpRes.ok) {
-            const pumpData = await pumpRes.json();
-            discoverySource = 'pumpfun_metadata';
-            // Collect all social fields from pump.fun
-            for (const field of [pumpData?.twitter, pumpData?.telegram, pumpData?.website]) {
-              if (field && typeof field === 'string' && field.trim().length > 0) {
-                allSocialUrls.push(field.trim());
-              }
-            }
-            if (allSocialUrls.length > 0) {
-              console.log(`[MeshSpider] Pump.fun returned ${allSocialUrls.length} social URLs: ${allSocialUrls.join(', ')}`);
+      // 2. ALWAYS check Pump.fun metadata — DexScreener may have socials but miss the community URL
+      try {
+        console.log(`[MeshSpider] Checking Pump.fun metadata for ${tokenMint.slice(0, 12)}...`);
+        const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
+        if (pumpRes.ok) {
+          const pumpData = await pumpRes.json();
+          const pumpSocials: string[] = [];
+          // Collect all social fields from pump.fun
+          for (const field of [pumpData?.twitter, pumpData?.telegram, pumpData?.website]) {
+            if (field && typeof field === 'string' && field.trim().length > 0) {
+              pumpSocials.push(field.trim());
             }
           }
-        } catch (e) {
-          console.warn('[MeshSpider] Pump.fun metadata fetch failed:', e);
+          if (pumpSocials.length > 0) {
+            console.log(`[MeshSpider] Pump.fun returned ${pumpSocials.length} social URLs: ${pumpSocials.join(', ')}`);
+            // Merge pump.fun URLs with DexScreener URLs (avoid duplicates)
+            for (const url of pumpSocials) {
+              if (!allSocialUrls.includes(url)) {
+                allSocialUrls.push(url);
+              }
+            }
+            if (allSocialUrls.length > 0 && discoverySource === 'dexscreener_auto' && pumpSocials.some(u => u.includes('/communities/'))) {
+              discoverySource = 'pumpfun_metadata';
+            }
+          }
         }
+      } catch (e) {
+        console.warn('[MeshSpider] Pump.fun metadata fetch failed:', e);
       }
 
       // 3. Extract X Community URL from any source
