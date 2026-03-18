@@ -82,14 +82,22 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 20;
-          if (['created', 'created_by'].includes(rel)) return viewMode === 'tree' ? 35 : 25;
-          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 55 : 35;
-          if (rel.includes('funded') || rel.includes('kyc')) return viewMode === 'tree' ? 45 : 30;
-          return viewMode === 'tree' ? 65 : 45;
+          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) return viewMode === 'tree' ? 25 : 15;
+          if (['created', 'created_by'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
+          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 45 : 28;
+          if (rel.includes('funded') || rel.includes('kyc') || rel.includes('is_kyc_root')) return viewMode === 'tree' ? 35 : 22;
+          return viewMode === 'tree' ? 50 : 35;
+        }).strength((link: any) => {
+          // Stronger pull for funding/KYC chain links to keep them visually connected
+          const rel = link.relationship || '';
+          if (rel.includes('funded') || rel.includes('kyc') || rel.includes('created')) return 1.5;
+          return 0.7;
         });
       }
-      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -80);
+      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -150 : -50);
+      
+      // Add center gravity to keep the graph cohesive instead of flying apart
+      graphRef.current.d3Force('center')?.strength(0.05);
       
       const padding = viewMode === 'tree' ? 20 : 40;
       const pushStrength = viewMode === 'tree' ? 1 : 2;
