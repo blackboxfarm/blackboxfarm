@@ -426,4 +426,4 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

@@ -3245,4 +3245,4 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
       await releaseMtprotoLock(supabase, lockerId);
     }
   }
-});
+}));

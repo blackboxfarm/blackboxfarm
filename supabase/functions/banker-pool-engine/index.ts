@@ -72,7 +72,7 @@ serve(withRunLog('banker-pool-engine', async (req) => {
     console.error('Banker Pool error:', e)
     return jsonResponse({ error: String(e) }, 500)
   }
-})
+}))
 
 // ═══════════════════════════════════════════════════════════════
 // INIT

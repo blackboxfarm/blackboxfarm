@@ -391,7 +391,7 @@ Deno.serve(withRunLog('telegram-bot-webhook', async (req) => {
       headers: corsHeaders 
     });
   }
-});
+}));
 
 // ========== HELPER FUNCTIONS ==========
 

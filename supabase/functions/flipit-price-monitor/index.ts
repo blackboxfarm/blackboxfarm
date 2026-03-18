@@ -815,4 +815,4 @@ serve(withRunLog('flipit-price-monitor', async (req) => {
     console.error("FlipIt monitor error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
