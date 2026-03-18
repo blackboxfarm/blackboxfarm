@@ -370,7 +370,7 @@ async function fetchAndTriageNewTokens(supabase: any): Promise<FetcherStats> {
   return stats;
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-token-fetcher', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
