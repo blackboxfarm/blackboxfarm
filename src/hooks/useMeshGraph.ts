@@ -17,6 +17,8 @@ export interface MeshNode {
   val: number;
   redFlags?: RedFlag[];
   role?: 'admin' | 'mod' | null;  // For x_account nodes: their role in community
+  isDev?: boolean;     // True if this wallet created a token
+  displayName?: string; // For x_account: the account's display name from evidence
 }
 
 export interface MeshLink {
