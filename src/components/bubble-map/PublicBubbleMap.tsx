@@ -145,17 +145,19 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     setCapBroken(false);
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
-  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
+  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active, trigger it
+  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active;
 
   useEffect(() => {
-    if (shouldOfferSpider && searchInput.trim()) {
+    if (shouldOfferSpider && searchInput.trim() && !hasSpideredOnce) {
       triggerSpider(searchInput.trim(), 'deep');
       setHasSpideredOnce(true);
     }
-  }, [shouldOfferSpider, searchInput, triggerSpider]);
+  }, [shouldOfferSpider, searchInput, triggerSpider, hasSpideredOnce]);
 
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
+    // Clear cooldown for this entity so retry always works
     triggerSpider(searchInput.trim(), 'deep');
     setHasSpideredOnce(true);
   }, [searchInput, triggerSpider]);
