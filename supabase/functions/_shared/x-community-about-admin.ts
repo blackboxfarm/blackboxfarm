@@ -103,6 +103,7 @@ export async function fetchXCommunityAboutAdmin(
       const errorBody = await response.text().catch(() => '');
       return {
         adminUsername: null,
+        moderatorUsernames: [],
         memberCount: null,
         httpStatus: response.status,
         error: errorBody.slice(0, 300),
@@ -111,6 +112,7 @@ export async function fetchXCommunityAboutAdmin(
           aboutPageUrl,
           textSnippet: '',
           adminUsername: null,
+          moderatorUsernames: [],
           memberCount: null,
         },
       };
@@ -118,11 +120,15 @@ export async function fetchXCommunityAboutAdmin(
 
     const payload = await response.json();
     const adminUsername = normalizeHandle(payload?.adminUsername);
+    const moderatorUsernames: string[] = (Array.isArray(payload?.moderatorUsernames) ? payload.moderatorUsernames : [])
+      .map((h: string) => normalizeHandle(h))
+      .filter(Boolean) as string[];
     const memberCount = typeof payload?.memberCount === 'number' ? payload.memberCount : null;
     const textSnippet = typeof payload?.textSnippet === 'string' ? payload.textSnippet.slice(0, 3000) : '';
 
     return {
       adminUsername,
+      moderatorUsernames,
       memberCount,
       httpStatus: response.status,
       rawData: {
@@ -132,12 +138,14 @@ export async function fetchXCommunityAboutAdmin(
         pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
         textSnippet,
         adminUsername,
+        moderatorUsernames,
         memberCount,
       },
     };
   } catch (error) {
     return {
       adminUsername: null,
+      moderatorUsernames: [],
       memberCount: null,
       httpStatus: 0,
       error: error instanceof Error ? error.message : String(error),
@@ -146,6 +154,7 @@ export async function fetchXCommunityAboutAdmin(
         aboutPageUrl,
         textSnippet: '',
         adminUsername: null,
+        moderatorUsernames: [],
         memberCount: null,
       },
     };
