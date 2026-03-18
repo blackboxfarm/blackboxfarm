@@ -444,7 +444,10 @@ export function ApiResourceManager() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Dialog>
+                      <Dialog 
+                        open={editingService?.id === service.id} 
+                        onOpenChange={(open) => { if (!open) setEditingService(null); }}
+                      >
                         <DialogTrigger asChild>
                           <Button 
                             variant="ghost" 
@@ -463,7 +466,7 @@ export function ApiResourceManager() {
                           </DialogHeader>
                           <ServiceEditForm 
                             service={service} 
-                            onSave={updateService}
+                            onSave={(updates) => { updateService(updates); setEditingService(null); }}
                             onCancel={() => setEditingService(null)}
                           />
                         </DialogContent>
