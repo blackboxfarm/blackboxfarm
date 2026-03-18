@@ -35,6 +35,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
+  const [hasSpideredOnce, setHasSpideredOnce] = useState(false);
 
   const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated } = useBubbleMapRateLimit();
 
@@ -120,12 +121,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   useEffect(() => {
     if (shouldOfferSpider && searchInput.trim()) {
       triggerSpider(searchInput.trim(), 'deep');
+      setHasSpideredOnce(true);
     }
   }, [shouldOfferSpider, searchInput, triggerSpider]);
 
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
     triggerSpider(searchInput.trim(), 'deep');
+    setHasSpideredOnce(true);
   }, [searchInput, triggerSpider]);
 
   const handleDiscoverCommunity = useCallback(async () => {
@@ -430,7 +433,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 <Radar className="h-3 w-3 mr-1" /> Deep Spider
               </Button>
               <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching}
-                className="text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400">
+                className={`text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
+                  hasSpideredOnce && !communitySearching ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
+                }`}>
                 {communitySearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <span className="mr-1">🐦</span>}
                 Map X Community @Handles to Token and Dev Wallet
               </Button>
@@ -514,13 +519,42 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
             </div>
           )}
           {spiderStatus.error && displayData.nodes.length > 0 && (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
                 <Network className="h-3.5 w-3.5 text-primary" />
                 <span className="text-xs text-primary">
                   ✅ First-level sweep complete — {displayData.nodes.length} entities mapped. Some external sources were unavailable but we found what we needed.
                 </span>
               </div>
+              {/* X Community details if discovered */}
+              {(() => {
+                const communityNodes = displayData.nodes.filter(n => n.type === 'x_community');
+                const xAccountNodes = displayData.nodes.filter(n => n.type === 'x_account');
+                const adminLinks = displayData.links.filter((l: any) => l.relationship === 'admin_of' || l.relationship === 'mod_of');
+                if (communityNodes.length > 0) {
+                  return (
+                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-cyan-400 text-xs font-semibold">🐦 X Community Mapped!</span>
+                      </div>
+                      {communityNodes.map(c => (
+                        <div key={c.id} className="text-[11px] text-cyan-300">
+                          📡 {c.label || c.fullId || c.id}
+                        </div>
+                      ))}
+                      {xAccountNodes.length > 0 && (
+                        <div className="text-[11px] text-muted-foreground">
+                          👥 Handles: {xAccountNodes.map(a => `@${(a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '')}`).join(', ')}
+                          {adminLinks.length > 0 && (
+                            <span className="text-amber-400 ml-1">({adminLinks.length} admin/mod links)</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
         </CardContent>
