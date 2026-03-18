@@ -60,8 +60,9 @@ serve(async (req) => {
     const allPoolAddresses: Set<string> = new Set();
     const dexScreenerPairAddresses: Set<string> = new Set();
 
-    // Method 0: Solscan-first LP detection (primary source)
-    const SOLSCAN_API_KEY = Deno.env.get('SOLSCAN_API_KEY');
+    // Method 0: Solscan-first LP detection (DISABLED — Pro API requires $199/mo subscription)
+    // Re-enable when upgraded to Solscan Pro Level 2
+    const SOLSCAN_API_KEY = null; // Deno.env.get('SOLSCAN_API_KEY'); — disabled for Pro
     if (SOLSCAN_API_KEY) {
       try {
         console.log('🔍 [Solscan Primary] Fetching LP from Solscan markets...');
