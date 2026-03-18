@@ -4,6 +4,7 @@ const ABOUT_PAGE_MAX_POLLS = 20;
 
 export interface XCommunityAboutAdminResult {
   adminUsername: string | null;
+  moderatorUsernames: string[];
   memberCount: number | null;
   httpStatus: number;
   error?: string;
@@ -14,6 +15,7 @@ export interface XCommunityAboutAdminResult {
     pageTitle?: string;
     textSnippet: string;
     adminUsername: string | null;
+    moderatorUsernames: string[];
     memberCount: number | null;
   };
 }
