@@ -831,7 +831,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               linkDirectionalArrowRelPos={0.7}
               enableZoomInteraction={true}
               enablePanInteraction={true}
-              linkDistance={60}
+              d3Force={(forceName: string, force: any) => {
+                if (forceName === 'link' && force) force.distance(() => 60);
+                if (forceName === 'charge' && force) force.strength(-120);
+              }}
               nodeRelSize={5}
             />
           )}
