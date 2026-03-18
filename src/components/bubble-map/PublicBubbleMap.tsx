@@ -120,6 +120,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     if (!searchInput.trim()) {
       resetView();
       setXAccountsRevealed(false);
+      setKycFound(false);
       return;
     }
     if (!canSearch) {
