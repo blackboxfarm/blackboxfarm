@@ -235,9 +235,15 @@ Deno.serve(async (req) => {
         ? new Date(existingCommunity.last_scraped_at).getTime() 
         : 0;
       const timeSinceLastScrape = Date.now() - lastScrapedMs;
-      const needsScrape = !existingCommunity || 
+      
+      // CRITICAL: Never re-scrape communities that already have admin data.
+      // Staff data is a historical snapshot — once we have it, we're done.
+      const hasAdminData = existingCommunity?.admin_usernames && existingCommunity.admin_usernames.length > 0;
+      const needsScrape = !hasAdminData && (
+        !existingCommunity || 
         !existingCommunity.last_scraped_at ||
-        timeSinceLastScrape > 24 * 60 * 60 * 1000; // 24h cache
+        timeSinceLastScrape > 24 * 60 * 60 * 1000 // 24h cache only for communities MISSING admins
+      );
       
       // Short cooldown: if scraped in last 5 min, skip even if "needs" scrape
       const recentlySscraped = lastScrapedMs > 0 && timeSinceLastScrape < 5 * 60 * 1000;
