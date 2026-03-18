@@ -239,6 +239,13 @@ export default function SuperAdmin() {
               </Suspense>
             )}
           </TabsContent>
+          <TabsContent value="monitoring">
+            {activeTab === "monitoring" && (
+              <Suspense fallback={<TabLoader />}>
+                <MonitoringTab />
+              </Suspense>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
