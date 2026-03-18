@@ -379,11 +379,24 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       ctx.fillStyle = '#fff'; ctx.font = `${Math.max(8, 12 / globalScale)}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
+    // Admin crown or mod shield on x_account nodes
+    if (meshNode.type === 'x_account' && meshNode.role === 'admin') {
+      ctx.font = `${Math.max(6, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText('👑', meshNode.x, meshNode.y - size - 1);
+    } else if (meshNode.type === 'x_account' && meshNode.role === 'mod') {
+      ctx.font = `${Math.max(6, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText('🛡️', meshNode.x, meshNode.y - size - 1);
+    }
     const labelText = meshNode.label;
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
+      // Blue label for admin/mod x_account nodes
+      const labelColor = (meshNode.type === 'x_account' && (meshNode.role === 'admin' || meshNode.role === 'mod'))
+        ? '#60a5fa' : 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = labelColor; ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
   }, [focusedEntity]);
 
