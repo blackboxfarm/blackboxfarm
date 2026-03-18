@@ -120,18 +120,18 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
     console.log(`Fetching X Community members for community ${communityId}...`);
     
     const response = await fetch(
-      `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`,
+      `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}&maxItems=1&limit=1&clean=1`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          communityId: communityId,
-          maxItems: 1, // Hard stop: only fetch the first result for primary staff detection
+          communityId,
+          maxMembers: 1,
           proxyConfiguration: {
             useApifyProxy: true,
-            apifyProxyGroups: ["RESIDENTIAL"]
-          }
-        })
+            apifyProxyGroups: ["RESIDENTIAL"],
+          },
+        }),
       }
     );
 
@@ -144,7 +144,7 @@ async function fetchCommunityMembers(communityId: string, apifyApiKey: string): 
     }
 
     const data = await response.json();
-    return { members: data || [], httpStatus: response.status };
+    return { members: Array.isArray(data) ? data.slice(0, 1) : [], httpStatus: response.status };
   } catch (error) {
     await logger.fail(error instanceof Error ? error.message : String(error));
     console.error('Failed to fetch community members:', error);
