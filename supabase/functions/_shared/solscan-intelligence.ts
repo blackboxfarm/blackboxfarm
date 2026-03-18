@@ -405,6 +405,10 @@ export async function solscanDiscoverFunders(
     return [];
   };
 
+  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
+  console.log('[Solscan Intel] DISABLED — Pro API not available. Falling back to scrape for funders.');
+  return await fallbackFromScrape();
+
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
