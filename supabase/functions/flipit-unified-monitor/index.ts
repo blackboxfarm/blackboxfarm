@@ -144,7 +144,7 @@ async function fetchSolPrice(): Promise<number> {
   throw new Error('CRITICAL: All SOL price sources failed - cannot proceed with stale price');
 }
 
-serve(async (req) => {
+serve(withRunLog('flipit-unified-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
