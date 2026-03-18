@@ -38,7 +38,8 @@ export const SERVICE_CREDITS: Record<ServiceName, number> = {
   coingecko: 0,     // Free tier
   bonkfun: 0,       // Free
   bagsfm: 0,        // Free
-  apify: 1,         // Paid — compute units per actor run
+  apify: 1,         // Paid — 1 actor run credit (~$0.50/run avg)
+  firecrawl: 1,     // Paid — 1 scrape credit
 };
 
 // Rate limits per service (requests per minute)
