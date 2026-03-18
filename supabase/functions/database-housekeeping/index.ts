@@ -131,6 +131,19 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
       );
     }
 
+    // ── Action: Aggregate holders (standalone, 1 day at a time) ──
+    if (action === 'aggregate_holders') {
+      const batchDays = (body as any).batchDays ?? 1;
+      const { data, error } = await supabase.rpc('aggregate_holder_data_batch', { 
+        p_older_than_days: 14, p_batch_days: batchDays 
+      });
+      if (error) throw error;
+      return new Response(
+        JSON.stringify({ action: 'aggregate_holders', result: data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // ── Action: Bulk dismiss old read notifications ──
     if (action === 'prune_notifications') {
       const cutoff = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
@@ -327,7 +340,8 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
 
       // ── Aggregate + purge old holder data ──
       try {
-        const { data: holderAgg, error: holderAggErr } = await supabase.rpc('aggregate_holder_data', { p_older_than_days: 14 });
+        // Use batch version - process 1 day at a time to avoid timeouts
+        const { data: holderAgg, error: holderAggErr } = await supabase.rpc('aggregate_holder_data_batch', { p_older_than_days: 14, p_batch_days: 1 });
         if (holderAggErr) throw holderAggErr;
         console.log(`[housekeeping] Holder aggregation:`, JSON.stringify(holderAgg));
       } catch (e: any) {
