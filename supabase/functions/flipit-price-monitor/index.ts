@@ -65,7 +65,7 @@ async function fetchTokenPricesWithMetadata(
   return result;
 }
 
-serve(async (req) => {
+serve(withRunLog('flipit-price-monitor', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
