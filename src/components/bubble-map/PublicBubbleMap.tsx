@@ -391,7 +391,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
       ctx.fillText('🛡️', meshNode.x, meshNode.y - size - 1);
     }
-    const labelText = meshNode.label;
+    // Determine label text - use "Dev Wallet" for dev wallets
+    let labelText = meshNode.label;
+    if (meshNode.isDev && meshNode.type === 'wallet') {
+      labelText = '📡 Dev Wallet';
+    }
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
