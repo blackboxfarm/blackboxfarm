@@ -566,9 +566,9 @@ export function useMeshGraph(initialEntityId?: string) {
       console.warn('[MeshSpider] Cache pre-check failed, continuing with spider:', cacheErr);
     }
 
-    // Cooldown-based retry: 2 immediate attempts, then reset after 5 minutes
-    const COOLDOWN_MS = 5 * 60 * 1000;
-    const MAX_IMMEDIATE = 2;
+    // Cooldown-based retry: 3 immediate attempts, then reset after 3 minutes
+    const COOLDOWN_MS = 3 * 60 * 1000;
+    const MAX_IMMEDIATE = 3;
     const record = spiderAttemptsRef.current.get(normalizedInput);
 
     if (record) {
@@ -579,11 +579,13 @@ export function useMeshGraph(initialEntityId?: string) {
       } else if (record.count >= MAX_IMMEDIATE) {
         const remainingMin = Math.ceil((COOLDOWN_MS - timeSince) / 60000);
         console.log(`[MeshSpider] Cooldown active for ${normalizedInput}, ${remainingMin}min remaining`);
+        // Even during cooldown, always try to refetch — data may exist from a manual spider
+        refetch();
         setSpiderStatus({
           active: false,
           stage: '',
-          error: `Spider cooling down (${record.count} attempts). Retry in ~${remainingMin} min.`,
-          diagnostics: ['Cooldown-based retry active', `${record.count} attempts made`, `Resets in ~${remainingMin} minutes`],
+          error: `Spider cooling down (${record.count} attempts). Retry in ~${remainingMin} min. Showing any cached data.`,
+          diagnostics: ['Cooldown-based retry active', `${record.count} attempts made`, `Resets in ~${remainingMin} minutes`, '🔄 Refetching cached mesh data...'],
         });
         return;
       } else {
