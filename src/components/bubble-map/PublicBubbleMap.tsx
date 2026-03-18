@@ -51,7 +51,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const {
     graphData, isLoading, focusedEntity, focusOnEntity,
     expandEntity, resetView, typeFilters, toggleTypeFilter,
-    spiderStatus, triggerSpider, refetch, autoDiscoverCommunity,
+    spiderStatus, triggerSpider, refetch, autoDiscoverCommunity, clearCooldown,
   } = useMeshGraph();
 
   // --- Terminal helpers ---
