@@ -7,6 +7,7 @@ const FunnelFeedDiscoveries = lazy(() => import("../funnel-feeds/FunnelFeedDisco
 const DexCloudFlareFeed = lazy(() => import("../funnel-feeds/DexCloudFlareFeed").then(m => ({ default: m.DexCloudFlareFeed })));
 const BubblesFeed = lazy(() => import("../funnel-feeds/BubblesFeed").then(m => ({ default: m.BubblesFeed })));
 const BotDmFeed = lazy(() => import("../funnel-feeds/BotDmFeed").then(m => ({ default: m.BotDmFeed })));
+const HoldersInputFeed = lazy(() => import("../funnel-feeds/HoldersInputFeed").then(m => ({ default: m.HoldersInputFeed })));
 const FunnelOverview = lazy(() => import("../funnel-feeds/FunnelOverview").then(m => ({ default: m.FunnelOverview })));
 
 export default function FunnelFeedsTab() {
