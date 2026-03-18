@@ -3,8 +3,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 
 const STORAGE_KEY = 'bubble_map_usage';
-const DAILY_LIMIT_ANON = 2;
-const DAILY_LIMIT_FREE_AUTH = 2;
+const DAILY_LIMIT_ANON = 20;  // TODO: revert to 2 after testing
+const DAILY_LIMIT_FREE_AUTH = 20;  // TODO: revert to 2 after testing
 
 interface UsageRecord {
   date: string;
