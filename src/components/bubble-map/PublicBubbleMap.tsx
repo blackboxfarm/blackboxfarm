@@ -432,7 +432,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 <Radar className="h-3 w-3 mr-1" /> Deep Spider
               </Button>
               <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching}
-                className="text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400">
+                className={`text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
+                  hasSpideredOnce && !communitySearching ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
+                }`}>
                 {communitySearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <span className="mr-1">🐦</span>}
                 Map X Community @Handles to Token and Dev Wallet
               </Button>
