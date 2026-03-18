@@ -340,8 +340,8 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
 
       // ── Aggregate + purge old holder data ──
       try {
-        // Use batch version to avoid timeouts on large datasets
-        const { data: holderAgg, error: holderAggErr } = await supabase.rpc('aggregate_holder_data_batch', { p_older_than_days: 14, p_batch_days: 5 });
+        // Use batch version - process 1 day at a time to avoid timeouts
+        const { data: holderAgg, error: holderAggErr } = await supabase.rpc('aggregate_holder_data_batch', { p_older_than_days: 14, p_batch_days: 1 });
         if (holderAggErr) throw holderAggErr;
         console.log(`[housekeeping] Holder aggregation:`, JSON.stringify(holderAgg));
       } catch (e: any) {
