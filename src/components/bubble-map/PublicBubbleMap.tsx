@@ -809,8 +809,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
               cooldownTicks={60}
-              d3AlphaDecay={0.05}
-              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
+              d3AlphaDecay={0.04}
+              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.35}
+              d3AlphaMin={0.01}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
               linkDirectionalParticles={1}
