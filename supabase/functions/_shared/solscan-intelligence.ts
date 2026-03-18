@@ -250,6 +250,11 @@ export async function solscanResolveTokenCreator(
   tokenMint: string,
   apiErrors: string[] = []
 ): Promise<{ creator: string | null; mintAuthority: string | null; meta: any }> {
+  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
+  console.log('[Solscan Intel] DISABLED — Pro API not available (free tier key). Skipping token/meta.');
+  apiErrors.push('Solscan Pro disabled (free tier key)');
+  return { creator: null, mintAuthority: null, meta: null };
+
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
