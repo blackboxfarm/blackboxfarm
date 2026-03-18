@@ -176,6 +176,7 @@ Deno.serve(withRunLog('token-vigil', async (req) => {
               post_mortem_id: postMortemId,
             }).eq('id', vigil.id);
             stats.deaths++;
+            await trackFunnelStage(supabase, 'dead', 1);
           }
         }
         // Mid-growth assessment: > 100K mcap, still watching, not yet assessed
