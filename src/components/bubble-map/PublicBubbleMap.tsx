@@ -857,8 +857,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           <CardContent className="py-2 space-y-1">
             <div className="flex items-center gap-2 text-xs">
               <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: ENTITY_COLORS[hoveredNode.type] }} />
-              <span className="font-medium">{ENTITY_LABELS[hoveredNode.type] || hoveredNode.type}</span>
-              <span className="font-semibold">{hoveredNode.label}</span>
+              <span className="font-medium">
+                {hoveredNode.isDev ? '📡 Dev Wallet' : (ENTITY_LABELS[hoveredNode.type] || hoveredNode.type)}
+              </span>
+              <span className="font-semibold">{hoveredNode.displayName || hoveredNode.label}</span>
               <Badge variant="secondary" className="text-[10px] ml-auto">{Math.round(hoveredNode.val)} conn</Badge>
             </div>
             <div className="font-mono text-[10px] text-muted-foreground select-all break-all pl-5">
