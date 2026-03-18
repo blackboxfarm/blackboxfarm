@@ -1293,6 +1293,11 @@ async function enrichTokenBatch(
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
+  // Track funnel stages
+  if (enriched > 0) await trackFunnelStage(supabase, 'enriched', enriched);
+  if (promoted > 0) await trackFunnelStage(supabase, 'watchlisted', promoted);
+  if (rejected + softRejected > 0) await trackFunnelStage(supabase, 'rejected', rejected + softRejected);
+
   return { enriched, promoted, rejected, softRejected };
 }
 
