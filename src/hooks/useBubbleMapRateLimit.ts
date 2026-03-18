@@ -5,6 +5,7 @@ import { useUserTier } from '@/hooks/useUserTier';
 const STORAGE_KEY = 'bubble_map_usage';
 const DAILY_LIMIT_ANON = 20;  // TODO: revert to 2 after testing
 const DAILY_LIMIT_FREE_AUTH = 20;  // TODO: revert to 2 after testing
+const DISPLAY_LIMIT = 2; // What users see in the UI
 
 interface UsageRecord {
   date: string;
