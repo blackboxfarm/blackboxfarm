@@ -81,8 +81,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
+          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
+          if (['created', 'created_by'].includes(rel)) return viewMode === 'tree' ? 25 : 15;
           if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 55 : 35;
+          if (rel.includes('funded') || rel.includes('kyc')) return viewMode === 'tree' ? 40 : 25;
           return viewMode === 'tree' ? 65 : 40;
         });
       }
