@@ -439,11 +439,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
 
-  // Count hidden x_account nodes for the button
-  const hiddenXAccountCount = useMemo(() => {
-    if (xAccountsRevealed) return 0;
-    return graphData.nodes.filter(n => n.type === 'x_account').length;
-  }, [graphData.nodes, xAccountsRevealed]);
 
   const typeCounts = displayData.nodes.reduce((acc, n) => {
     acc[n.type] = (acc[n.type] || 0) + 1;
