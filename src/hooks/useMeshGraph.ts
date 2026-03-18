@@ -1020,6 +1020,7 @@ export function useMeshGraph(initialEntityId?: string) {
     setTypeFilters,
     spiderStatus,
     triggerSpider,
+    autoDiscoverCommunity,
   };
 }
 
