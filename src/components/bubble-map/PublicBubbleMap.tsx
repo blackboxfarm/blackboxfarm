@@ -34,6 +34,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [tokenSearching, setTokenSearching] = useState(false);
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
+  const [communitySearching, setCommunitySearching] = useState(false);
 
   const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated } = useBubbleMapRateLimit();
 
