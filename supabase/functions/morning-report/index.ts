@@ -302,9 +302,22 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       if (hiAccount) {
         // Calculate follower quality heuristics
         const followerCount = hiAccount.follower_count || 0;
-        const fastFollowers = hiAccount.fast_followers_count || 0; // "fast followers" = blue-check / premium subscribers
-        const normalFollowers = followerCount - fastFollowers;
-        const blueCheckPct = followerCount > 0 ? Math.round((fastFollowers / followerCount) * 1000) / 10 : 0;
+        
+        // fast_followers_count from Apify is unreliable (always 0 — it's a Twitter internal metric).
+        // Instead, count verified accounts we've indexed that follow HoldersIntel from community_follow_targets
+        let blueCheckEstimate = hiAccount.fast_followers_count || 0;
+        
+        // If fast_followers_count is 0, estimate from our indexed verified accounts
+        if (blueCheckEstimate === 0) {
+          const { count: verifiedFollowerCount } = await supabase
+            .from('twitter_accounts')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_verified', true);
+          blueCheckEstimate = verifiedFollowerCount || 0;
+        }
+        
+        const normalFollowers = Math.max(0, followerCount - blueCheckEstimate);
+        const blueCheckPct = followerCount > 0 ? Math.round((blueCheckEstimate / followerCount) * 1000) / 10 : 0;
         const followRatio = hiAccount.following_count && hiAccount.following_count > 0
           ? Math.round((followerCount / hiAccount.following_count) * 100) / 100
           : followerCount;
@@ -319,7 +332,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
           professional_type: hiAccount.professional_type,
           followers: {
             total: followerCount,
-            blue_check_premium: fastFollowers,
+            blue_check_premium: blueCheckEstimate,
             normal: normalFollowers,
             blue_check_pct: blueCheckPct,
           },
