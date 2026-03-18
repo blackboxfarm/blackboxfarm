@@ -15631,8 +15631,24 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_funnel_stage: {
+        Args: { p_count?: number; p_date: string; p_stage: string }
+        Returns: undefined
+      }
       increment_offspring_count: {
         Args: { amount?: number; whale_id: string }
+        Returns: undefined
+      }
+      increment_spider_metrics: {
+        Args: {
+          p_blacklist_hits?: number
+          p_date: string
+          p_genealogy_depth?: number
+          p_mesh_links?: number
+          p_tokens?: number
+          p_wallets?: number
+          p_whitelist_hits?: number
+        }
         Returns: undefined
       }
       initialize_arb_balances_for_user: {
