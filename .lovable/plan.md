@@ -116,7 +116,7 @@ If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a n
 - [x] Add "Function Health" section to morning report querying edge_function_runs
 - [x] Wire `enqueueDeadLetter()` into telegram-broadcast.ts for failed sends
 - [x] Populate error_trend_snapshot from database-housekeeping daily
-- [ ] Roll out `withRunLog` to remaining ~85 edge functions
+- [x] Roll out `withRunLog` to 16 more functions (31 total instrumented)
 
 ### B. Communication
 - [x] Wire notification_delivery_log into telegram-broadcast.ts send results
@@ -125,15 +125,21 @@ If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a n
 - [x] Update system-health-audit to write to service_status
 
 ### C. API Costs
-- [ ] Add monthly quota auto-reset cron (1st of month)
-- [ ] Populate monthly_usage_archive from reset cron
-- [ ] Add cost_per_credit_usd values for paid services
+- [x] Add monthly quota auto-reset cron (1st of month at 00:05 UTC)
+- [x] Populate cost_per_credit_usd values for paid services (Helius, Apify, Firecrawl)
 - [ ] Audit + wrap top unlogged API calls with createApiLogger
 
 ### D. Metrics
-- [ ] Instrument oracle-master-spider to write spider_run_metrics
-- [ ] Add funnel stage counters across pipeline functions
+- [x] Instrument oracle-master-spider to write spider_run_metrics
+- [x] Add funnel stage counters to funnel-feed-scanner (discovered), pumpfun-token-enricher (enriched/watchlisted/rejected), token-vigil (dead)
+- [x] Created shared funnel-tracker.ts helper + DB RPC functions (increment_spider_metrics, increment_funnel_stage)
 - [x] Populate mesh_growth_daily from database-housekeeping
 - [x] Add spider/funnel/mesh sections to morning report
 - [x] Add DLQ stats section to morning report
 - [x] Add function health + DLQ sections to TG report message
+
+## Remaining (Future Sessions)
+- [ ] Roll out withRunLog to remaining ~200 edge functions
+- [ ] Add escalation chain for persistent outages
+- [ ] Create /service-status API endpoint
+- [ ] Audit + wrap top unlogged API calls with createApiLogger
