@@ -39,6 +39,12 @@ export async function discoverFunding(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<FundingResult | null> {
+  if (!isValidSolanaAddress(walletAddress)) {
+    console.warn(`[FundingResolver] Skipping invalid address: ${walletAddress}`);
+    apiErrors.push(`Invalid Solana address for funding lookup: ${walletAddress.slice(0, 20)}`);
+    return null;
+  }
+
   const heliusKey = getHeliusApiKey();
   if (!heliusKey) {
     apiErrors.push('HELIUS_API_KEY not configured for funding discovery');
