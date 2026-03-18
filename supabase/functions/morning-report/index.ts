@@ -837,7 +837,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     if (holdersIntelMetrics) {
       const hi = holdersIntelMetrics;
       tgMessage += `\n🐦 **@HoldersIntel Account**\n`;
-      tgMessage += `• Followers: ${hi.followers.total.toLocaleString()} (🔵 ${hi.followers.blue_check_premium.toLocaleString()} premium / 👤 ${hi.followers.normal.toLocaleString()} normal — ${hi.followers.blue_check_pct}% blue)\n`;
+      tgMessage += `• Followers: ${hi.followers.total.toLocaleString()} (🔵 ~${hi.followers.blue_check_premium.toLocaleString()} verified indexed / 👤 ${hi.followers.normal.toLocaleString()} normal — ~${hi.followers.blue_check_pct}% blue est.)\n`;
       tgMessage += `• Following: ${hi.following} | Ratio: ${hi.follow_ratio}:1\n`;
       tgMessage += `• Tweets: ${hi.tweets.toLocaleString()} | Likes: ${hi.likes.toLocaleString()}\n`;
       tgMessage += `• Avg Likes/Tweet: ${hi.avg_likes_per_tweet} | Listed: ${hi.listed_count}\n`;
