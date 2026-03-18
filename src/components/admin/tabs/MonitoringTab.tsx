@@ -158,9 +158,9 @@ function DeliveryLogPanel() {
                   <div className="flex items-center gap-2">
                     {d.status === 'success' ? <CheckCircle className="h-3 w-3 text-green-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
                     <span className="font-mono">{d.channel}</span>
-                    <span className="text-muted-foreground truncate max-w-[200px]">{d.message_type || 'message'}</span>
+                    <span className="text-muted-foreground truncate max-w-[200px]">{d.notification_id || 'message'}</span>
                   </div>
-                  <span className="text-muted-foreground">{d.sent_at ? format(new Date(d.sent_at), 'MMM d HH:mm') : '—'}</span>
+                  <span className="text-muted-foreground">{d.created_at ? format(new Date(d.created_at), 'MMM d HH:mm') : '—'}</span>
                 </div>
               ))}
             </div>
