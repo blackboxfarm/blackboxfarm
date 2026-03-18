@@ -258,6 +258,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           addTerminalLine('', 'info');
           addTerminalLine('█████████████████████████████████████████', 'highlight');
           addTerminalLine(`  KYC ROOT IDENTIFIED: ${data.kycRoot.slice(0, 24)}...`, 'highlight');
+          addTerminalLine(`  CHAIN DEPTH: ${data.chainDepth || data.chain?.length || 0} HOPS`, 'success');
           addTerminalLine(`  WALLETS TRACED: ${data.walletsTraced || 0}`, 'success');
           addTerminalLine('█████████████████████████████████████████', 'highlight');
         }, chainDelay + 400);
