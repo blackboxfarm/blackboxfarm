@@ -349,7 +349,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">🫧 Mesh Bubble Map</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                🫧 Mesh Bubble Map
+                {focusedDisplayInfo && (
+                  <span className="text-base font-semibold" style={{ color: ENTITY_COLORS[focusedDisplayInfo.type] || 'hsl(var(--primary))' }}>
+                    — {focusedDisplayInfo.emoji} {focusedDisplayInfo.label}
+                  </span>
+                )}
+              </CardTitle>
               <CardDescription>
                 Interactive visualization of the reputation mesh. Enter any entity to explore.
               </CardDescription>
