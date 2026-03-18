@@ -128,7 +128,29 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     triggerSpider(searchInput.trim(), 'deep');
   }, [searchInput, triggerSpider]);
 
-  const handleFindKYC = useCallback(async () => {
+  const handleDiscoverCommunity = useCallback(async () => {
+    // Find a token mint to use for community discovery
+    const tokenNode = graphData.nodes.find(n => n.type === 'token');
+    const tokenMint = tokenNode?.fullId || tokenNode?.id.replace(/^token:/, '') || searchInput.trim();
+    if (!tokenMint || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenMint)) {
+      toast.info('Enter a token mint address to discover its X Community');
+      return;
+    }
+    setCommunitySearching(true);
+    toast.info('🐦 Searching for X Community...');
+    try {
+      const walletNode = graphData.nodes.find(n => n.type === 'wallet');
+      const wallet = walletNode?.fullId || walletNode?.id.replace(/^wallet:/, '');
+      await autoDiscoverCommunity(tokenMint, wallet);
+      setTimeout(() => refetch(), 1500);
+      toast.success('🐦 X Community discovery complete — refreshing graph');
+    } catch (err) {
+      toast.error('X Community discovery failed');
+    } finally {
+      setCommunitySearching(false);
+    }
+  }, [graphData.nodes, searchInput, autoDiscoverCommunity, refetch]);
+
     const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
     const targetWallet = focusedEntity?.type === 'wallet' 
       ? focusedEntity.id.replace(/^wallet:/, '') 
