@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
@@ -834,7 +835,7 @@ async function promoteFromTriage(supabase: any): Promise<{ promoted: number; err
   return { promoted, errors };
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-new-token-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -966,4 +967,4 @@ serve(async (req) => {
     console.error('Error in pumpfun-new-token-monitor:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));

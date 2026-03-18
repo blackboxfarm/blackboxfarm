@@ -1,9 +1,11 @@
+import { withRunLog } from '../_shared/run-logger.ts';
+import { createApiLogger } from '../_shared/api-logger.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('firecrawl-scrape', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -35,6 +37,13 @@ Deno.serve(async (req) => {
 
     console.log('Scraping URL:', formattedUrl);
 
+    const apiLogger = createApiLogger({
+      serviceName: 'apify' as any, // Firecrawl — reuses 'apify' slot for paid services
+      endpoint: '/v1/scrape',
+      method: 'POST',
+      functionName: 'firecrawl-scrape',
+    });
+
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -49,6 +58,8 @@ Deno.serve(async (req) => {
         location: options?.location,
       }),
     });
+
+    await apiLogger.complete(response.status);
 
     const data = await response.json();
 
@@ -73,4 +84,4 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));

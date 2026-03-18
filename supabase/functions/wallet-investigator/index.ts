@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { fetchTransactionHistory, fetchTokenBalance } from '../_shared/rpc-provider.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
@@ -32,7 +33,7 @@ interface InvestigationResult {
   provider: string;
 }
 
-serve(async (req) => {
+serve(withRunLog('wallet-investigator', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -175,4 +176,4 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));

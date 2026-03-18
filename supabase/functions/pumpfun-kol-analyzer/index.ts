@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -14,7 +15,7 @@ interface CabalDetection {
   is_predatory: boolean;
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-kol-analyzer', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -186,7 +187,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));
 
 function calculateTrustScore(kol: any): number {
   let score = 50; // Base score

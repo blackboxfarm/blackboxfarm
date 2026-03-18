@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 // Pump.fun Curve Health Analyzer
 // Analyzes emerging bonding curve patterns to identify ideal buy-in opportunities
 
@@ -468,7 +469,7 @@ async function analyzeWatchlistTokens(supabase: any): Promise<CurveHealthResult[
   return results;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('pumpfun-curve-analyzer', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -550,4 +551,4 @@ Deno.serve(async (req) => {
     console.error("Curve analyzer error:", error);
     return bad(`Analyzer error: ${error.message}`, 500);
   }
-});
+}));

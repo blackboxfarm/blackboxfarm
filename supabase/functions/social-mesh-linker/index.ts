@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveTelegramUsername, incrementChannelTokenCount } from "../_shared/telegram-resolver.ts";
 import { resolveXHandle, incrementXUserTokenCount } from "../_shared/x-handle-resolver.ts";
@@ -148,7 +149,7 @@ async function discoverSocialsFromWebsite(websiteUrl: string): Promise<{ type: s
   });
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('social-mesh-linker', async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -536,4 +537,4 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}));

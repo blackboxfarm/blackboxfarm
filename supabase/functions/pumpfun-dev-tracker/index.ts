@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
@@ -332,7 +333,7 @@ async function getDevReputation(supabase: any, devWallet: string): Promise<any> 
   return data;
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-dev-tracker', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -382,4 +383,4 @@ serve(async (req) => {
     console.error('[Dev Tracker] Error:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));
