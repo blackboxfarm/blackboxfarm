@@ -107,13 +107,13 @@ Deno.serve(async (req) => {
 
         // Direct Apify call (same as x-community-enricher but inline)
         const apifyResponse = await fetch(
-          `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}`,
+          `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}&maxItems=4&limit=4&clean=1`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               communityId,
-              maxItems: 4, // Hard cap: 4 members max — first is usually Admin
+              maxMembers: 4,
               proxyConfiguration: {
                 useApifyProxy: true,
                 apifyProxyGroups: ["RESIDENTIAL"],

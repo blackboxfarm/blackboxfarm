@@ -170,13 +170,13 @@ async function checkXCommunityForToken(
     
     // Use Apify X Community Member Scraper to get community data
     const response = await fetch(
-      `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${APIFY_API_KEY}`,
+      `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${APIFY_API_KEY}&maxItems=4&limit=4&clean=1`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId,
-          maxItems: 4, // Hard cap: 4 members max — first is usually Admin
+          maxMembers: 4,
           proxyConfiguration: {
             useApifyProxy: true,
             apifyProxyGroups: ['RESIDENTIAL'],
