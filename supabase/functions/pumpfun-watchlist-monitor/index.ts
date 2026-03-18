@@ -1410,4 +1410,4 @@ serve(withRunLog('pumpfun-watchlist-monitor', async (req) => {
     console.error('Error in pumpfun-watchlist-monitor:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));

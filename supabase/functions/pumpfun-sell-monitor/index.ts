@@ -521,4 +521,4 @@ serve(withRunLog('pumpfun-sell-monitor', async (req) => {
     console.error('Error in pumpfun-sell-monitor:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));

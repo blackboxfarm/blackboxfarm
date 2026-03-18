@@ -1415,4 +1415,4 @@ serve(withRunLog('pumpfun-token-enricher', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));

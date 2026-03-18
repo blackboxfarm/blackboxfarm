@@ -413,4 +413,4 @@ serve(withRunLog('pumpfun-token-fetcher', async (req) => {
     console.error('Error in pumpfun-token-fetcher:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));

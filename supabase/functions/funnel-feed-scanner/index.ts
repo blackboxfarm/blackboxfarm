@@ -243,7 +243,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
     console.error('[funnel-feed-scanner] Error:', err);
     return jsonRes({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
   }
-});
+}));
 
 async function runScan(supabase: any, specificSourceId?: string) {
   // Get active sources

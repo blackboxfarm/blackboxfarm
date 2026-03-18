@@ -222,7 +222,7 @@ Deno.serve(withRunLog('token-vigil', async (req) => {
     JSON.stringify({ ...stats, elapsed }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
-});
+}));
 
 async function updateVigilMetrics(
   supabase: any, vigil: VigilToken,

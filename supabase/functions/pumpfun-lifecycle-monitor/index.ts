@@ -365,4 +365,4 @@ serve(withRunLog('pumpfun-lifecycle-monitor', async (req) => {
     console.error('[Lifecycle Monitor] Error:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));
