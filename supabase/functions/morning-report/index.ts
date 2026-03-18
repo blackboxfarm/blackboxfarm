@@ -370,30 +370,26 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
-    // Cloudflare Workers - check via Holders Intel scheduler activity
-    const { data: cfLogs } = await supabase
-      .from('api_usage_log')
-      .select('endpoint, success, error_message')
-      .eq('service_name', 'dexscreener')
-      .ilike('endpoint', '%cloudflare%')
-      .gte('timestamp', periodStart.toISOString())
-      .limit(100);
+    // Cloudflare Workers - check via edge_function_runs for scheduler + dex-scraper
+    const { data: cfSchedulerRuns } = await supabase
+      .from('edge_function_runs')
+      .select('function_name, status, started_at, duration_ms')
+      .in('function_name', ['holders-intel-scheduler', 'dexscreener-top-200-scraper'])
+      .gte('started_at', periodStart.toISOString())
+      .order('started_at', { ascending: false })
+      .limit(50);
 
-    // Also check holders-intel-scheduler which uses Cloudflare worker
-    const { data: schedulerLogs } = await supabase
-      .from('activity_logs')
-      .select('message, metadata, timestamp')
-      .ilike('message', '%holders%intel%')
-      .gte('timestamp', periodStart.toISOString())
-      .order('timestamp', { ascending: false })
-      .limit(20);
+    const cfSuccessRuns = (cfSchedulerRuns || []).filter((r: any) => r.status === 'success');
+    const cfFailRuns = (cfSchedulerRuns || []).filter((r: any) => r.status === 'error');
 
     externalServicesStatus['cloudflare_workers'] = {
-      status: schedulerLogs && schedulerLogs.length > 0 ? 'active' : 'idle',
-      calls_overnight: schedulerLogs?.length || 0,
-      failures: 0,
-      notes: schedulerLogs && schedulerLogs.length > 0 
-        ? `${schedulerLogs.length} scheduler runs detected`
+      status: cfSchedulerRuns && cfSchedulerRuns.length > 0 
+        ? (cfFailRuns.length > cfSuccessRuns.length ? 'degraded' : 'active') 
+        : 'idle',
+      calls_overnight: cfSchedulerRuns?.length || 0,
+      failures: cfFailRuns.length,
+      notes: cfSchedulerRuns && cfSchedulerRuns.length > 0 
+        ? `${cfSuccessRuns.length} successful / ${cfFailRuns.length} failed scheduler+dex runs`
         : 'No Cloudflare worker activity detected',
     };
 
