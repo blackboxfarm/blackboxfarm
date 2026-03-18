@@ -51,7 +51,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const {
     graphData, isLoading, focusedEntity, focusOnEntity,
     expandEntity, resetView, typeFilters, toggleTypeFilter,
-    spiderStatus, triggerSpider, refetch, autoDiscoverCommunity,
+    spiderStatus, triggerSpider, refetch, autoDiscoverCommunity, clearCooldown,
   } = useMeshGraph();
 
   // --- Terminal helpers ---
@@ -137,6 +137,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
     recordSearch();
     setXAccountsRevealed(false);
+    setHasSpideredOnce(false); // Reset so auto-spider can fire for new entity
+    clearCooldown(searchInput.trim()); // Clear any stale cooldown for this entity
     let type = 'wallet';
     if (searchInput.startsWith('@')) type = 'x_account';
     else if (searchInput.length < 20) type = 'token';
@@ -145,20 +147,23 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     setCapBroken(false);
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
-  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !spiderStatus.error;
+  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active, trigger it
+  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active;
 
   useEffect(() => {
-    if (shouldOfferSpider && searchInput.trim()) {
+    if (shouldOfferSpider && searchInput.trim() && !hasSpideredOnce) {
       triggerSpider(searchInput.trim(), 'deep');
       setHasSpideredOnce(true);
     }
-  }, [shouldOfferSpider, searchInput, triggerSpider]);
+  }, [shouldOfferSpider, searchInput, triggerSpider, hasSpideredOnce]);
 
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
+    // Clear cooldown so retry always works immediately
+    clearCooldown(searchInput.trim());
     triggerSpider(searchInput.trim(), 'deep');
     setHasSpideredOnce(true);
-  }, [searchInput, triggerSpider]);
+  }, [searchInput, triggerSpider, clearCooldown]);
 
   // --- X Community discovery with showmanship ---
   const handleDiscoverCommunity = useCallback(async () => {
