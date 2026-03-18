@@ -454,14 +454,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 <Radar className="h-3.5 w-3.5 text-primary animate-spin" />
                 <span className="text-xs font-medium text-primary">{spiderStatus.stage}</span>
               </div>
-              {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+              {mode !== 'promo' && spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
                 <button onClick={() => setShowDiagnostics(!showDiagnostics)}
                   className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
                   {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   Diagnostics ({spiderStatus.diagnostics.length})
                 </button>
               )}
-              {showDiagnostics && spiderStatus.diagnostics && (
+              {mode !== 'promo' && showDiagnostics && spiderStatus.diagnostics && (
                 <div className="rounded bg-background/50 p-2 space-y-0.5 text-[10px] font-mono text-muted-foreground">
                   {spiderStatus.diagnostics.map((d, i) => <div key={i}>{d}</div>)}
                 </div>
