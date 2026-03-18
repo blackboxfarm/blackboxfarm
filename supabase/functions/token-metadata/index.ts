@@ -5,6 +5,7 @@ import { PublicKey } from 'npm:@solana/web3.js@1.95.3';
 import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { fetchSolscanFreeTokenMeta } from '../_shared/solscan-free.ts';
 enableHeliusTracking('token-metadata');
 
 const METAPLEX_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
@@ -780,6 +781,31 @@ serve(withRunLog('token-metadata', async (req) => {
     // Step 3: Resolve Raydium pools
     pools = resolveRaydiumPools(dexData);
     console.log('Raydium pools found:', pools.length);
+
+    // Step 3.5: Try FREE Solscan public API for metadata gaps (saves Helius credits)
+    // Only call if we're still missing image or description after DexScreener + launchpad
+    if (!metadata.image || !metadata.description) {
+      console.log('Trying FREE Solscan public API for metadata gaps (Helius credit saver)...');
+      const solscanMeta = await fetchSolscanFreeTokenMeta(tokenMint);
+      
+      if (solscanMeta) {
+        // Fill in missing fields only
+        if (!metadata.image && solscanMeta.icon) {
+          metadata.image = solscanMeta.icon;
+          metadata.logoURI = metadata.logoURI || solscanMeta.icon;
+          console.log('[Solscan Free] Filled image gap — Helius credit saved!');
+        }
+        if (metadata.name === 'Unknown Token' && solscanMeta.name) {
+          metadata.name = solscanMeta.name;
+        }
+        if (metadata.symbol === 'UNK' && solscanMeta.symbol) {
+          metadata.symbol = solscanMeta.symbol;
+        }
+        // Solscan free also returns website/twitter — fill if missing
+        if (!metadata.twitter && solscanMeta.twitter) metadata.twitter = solscanMeta.twitter;
+        if (!metadata.website && solscanMeta.website) metadata.website = solscanMeta.website;
+      }
+    }
 
     // Step 4: Try to get off-chain metadata (image, description) if still missing
     let offChainMetadata = null;

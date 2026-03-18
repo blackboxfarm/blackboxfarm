@@ -158,6 +158,7 @@ async function fetchHeliusTransactions(wallet: string, limit: number): Promise<R
 }
 
 async function fetchSolscanTransactions(wallet: string, limit: number): Promise<RpcResult<any[]>> {
+  // Pro API disabled — go straight to public API
   const solscanKey = Deno.env.get('SOLSCAN_API_KEY');
   
   const headers: Record<string, string> = {
@@ -168,27 +169,18 @@ async function fetchSolscanTransactions(wallet: string, limit: number): Promise<
     headers['token'] = solscanKey;
   }
 
+  // Use public API directly (free tier key doesn't work with pro-api.solscan.io)
   const response = await fetch(
-    `https://pro-api.solscan.io/v1.0/account/transactions?account=${wallet}&limit=${limit}`,
+    `https://public-api.solscan.io/account/transactions?account=${wallet}&limit=${limit}`,
     { headers }
   );
 
   if (!response.ok) {
-    // Try public Solscan API
-    const publicResponse = await fetch(
-      `https://public-api.solscan.io/account/transactions?account=${wallet}&limit=${limit}`
-    );
-    
-    if (!publicResponse.ok) {
-      throw new Error(`Solscan API error: ${publicResponse.status}`);
-    }
-    
-    const data = await publicResponse.json();
-    return { data, error: null, provider: 'solscan_public' };
+    throw new Error(`Solscan public API error: ${response.status}`);
   }
 
   const data = await response.json();
-  return { data, error: null, provider: 'solscan' };
+  return { data, error: null, provider: 'solscan_public' };
 }
 
 async function fetchRpcTransactions(wallet: string, limit: number): Promise<RpcResult<any[]>> {
