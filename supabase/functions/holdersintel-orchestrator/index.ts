@@ -21,7 +21,7 @@ const SLOW_FUNCTIONS: Record<string, number> = {
   'ai-pattern-extractor': 2016, // weekly (~every 7 days) — extract recurring patterns from post-mortems
 };
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('holdersintel-orchestrator', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
