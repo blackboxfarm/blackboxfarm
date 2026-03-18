@@ -812,7 +812,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               nodeLabel={(node: any) => {
                 const n = node as MeshNode;
                 const rawId = n.fullId || n.id.split(':').slice(1).join(':');
-                return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
+                const devLabel = n.isDev ? '📡 Dev Wallet\n' : '';
+                const nameLabel = n.displayName ? `${n.displayName}\n` : '';
+                return `${devLabel}${nameLabel}${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
               cooldownTicks={80}
               d3AlphaDecay={0.03}
