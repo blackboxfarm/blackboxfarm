@@ -521,8 +521,8 @@ export function useMeshGraph(initialEntityId?: string) {
     
     const now = Date.now();
 
-    // Cache-first: if recent mesh links already exist, skip expensive external spider calls
-    const FRESH_CACHE_MS = 10 * 60 * 1000; // 10 min
+    // Cache-first: if mesh links already exist in DB, show them immediately and skip expensive spider
+    const FRESH_CACHE_MS = 60 * 60 * 1000; // 1 hour — generous window, data rarely changes
     try {
       const [sourceLinksRes, linkedLinksRes] = await Promise.all([
         supabase
