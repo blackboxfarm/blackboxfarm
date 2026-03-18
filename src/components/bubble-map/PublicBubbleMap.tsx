@@ -470,10 +470,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           )}
 
           {spiderStatus.error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+            <div className="rounded-lg border border-muted/30 bg-muted/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                <span className="text-xs text-destructive">{spiderStatus.error}</span>
+                <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  {mode === 'promo'
+                    ? "This entity hasn't been fully indexed yet. Try a different wallet or token, or click Retry to scan again."
+                    : spiderStatus.error}
+                </span>
               </div>
               <Button variant="outline" size="sm" onClick={handleSpider} className="text-[10px] h-6">
                 <Radar className="h-3 w-3 mr-1" /> Retry
