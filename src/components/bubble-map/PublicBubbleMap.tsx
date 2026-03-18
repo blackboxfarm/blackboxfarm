@@ -32,6 +32,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('bubble');
   const [kycSearching, setKycSearching] = useState(false);
+  const [kycFound, setKycFound] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
