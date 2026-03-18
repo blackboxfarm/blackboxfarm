@@ -373,8 +373,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     ctx.beginPath();
     ctx.arc(meshNode.x, meshNode.y, size, 0, 2 * Math.PI);
     ctx.fillStyle = color; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.strokeStyle = isFocused ? '#fff' : 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = isFocused ? 2 : 0.5; ctx.stroke(); ctx.shadowBlur = 0;
+    // Connected nodes get a visible white ring; focused nodes get thick bright ring
+    const isConnected = meshNode.val >= 2;
+    ctx.strokeStyle = isFocused ? '#fff' : isConnected ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = isFocused ? 2.5 : isConnected ? 1.5 : 0.5; ctx.stroke(); ctx.shadowBlur = 0;
     if (meshNode.type === 'kyc_root') {
       ctx.fillStyle = '#fff'; ctx.font = `${Math.max(8, 12 / globalScale)}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🏦', meshNode.x, meshNode.y);
