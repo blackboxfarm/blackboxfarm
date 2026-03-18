@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { withRunLog } from '../_shared/run-logger.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
 enableHeliusTracking('wallet-genealogy-scanner');
@@ -295,7 +296,7 @@ function getMaxDepth(node: WalletNode): number {
   return Math.max(...node.children.map(getMaxDepth));
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -425,4 +426,4 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

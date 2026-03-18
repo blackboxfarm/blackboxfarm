@@ -1,5 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { withRunLog } from '../_shared/run-logger.ts';
 import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -97,7 +99,7 @@ interface FunnelSource {
   last_scraped_at: string | null;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -242,7 +244,7 @@ Deno.serve(async (req) => {
     console.error('[funnel-feed-scanner] Error:', err);
     return jsonRes({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
   }
-});
+}));
 
 async function runScan(supabase: any, specificSourceId?: string) {
   // Get active sources
@@ -507,6 +509,11 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
       tokens_discovered: (source.tokens_discovered || 0) + newTokens,
     })
     .eq('id', source.id);
+
+  // Track funnel stage
+  if (newTokens > 0) {
+    await trackFunnelStage(supabase, 'discovered', newTokens);
+  }
 
   return { tokens_found: discoveredTokens.size, new_tokens: newTokens, skipped_non_tokens: skippedNonTokens, messages_processed: newMessages.length, max_message_id: maxMessageId };
 }

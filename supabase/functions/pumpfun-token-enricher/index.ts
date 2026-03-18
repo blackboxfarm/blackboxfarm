@@ -1,9 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { withRunLog } from '../_shared/run-logger.ts';
 import { heliusFetch, canMakeHeliusCall } from "../_shared/helius-rate-limiter.ts";
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
+import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1291,10 +1293,15 @@ async function enrichTokenBatch(
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
+  // Track funnel stages
+  if (enriched > 0) await trackFunnelStage(supabase, 'enriched', enriched);
+  if (promoted > 0) await trackFunnelStage(supabase, 'watchlisted', promoted);
+  if (rejected + softRejected > 0) await trackFunnelStage(supabase, 'rejected', rejected + softRejected);
+
   return { enriched, promoted, rejected, softRejected };
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-token-enricher', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -1414,4 +1421,4 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));

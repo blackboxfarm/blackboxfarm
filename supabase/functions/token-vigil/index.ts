@@ -1,3 +1,5 @@
+import { withRunLog } from '../_shared/run-logger.ts';
+
 /**
  * Token Vigil — Death detector + Post-mortem / Mid-growth assessor
  * 
@@ -14,6 +16,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,7 +48,7 @@ interface VigilToken {
   scan_count: number;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('token-vigil', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -173,6 +176,7 @@ Deno.serve(async (req) => {
               post_mortem_id: postMortemId,
             }).eq('id', vigil.id);
             stats.deaths++;
+            await trackFunnelStage(supabase, 'dead', 1);
           }
         }
         // Mid-growth assessment: > 100K mcap, still watching, not yet assessed
@@ -220,7 +224,7 @@ Deno.serve(async (req) => {
     JSON.stringify({ ...stats, elapsed }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
-});
+}));
 
 async function updateVigilMetrics(
   supabase: any, vigil: VigilToken,

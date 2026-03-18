@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withRunLog } from '../_shared/run-logger.ts';
 import { Keypair } from 'npm:@solana/web3.js@1.95.3';
 import * as bs58 from 'https://esm.sh/bs58@5.0.0';
 
@@ -17,7 +18,7 @@ interface TelegramUpdate {
 
 type UserTier = 'free' | 'auth' | 'x_subscriber' | 'pro' | 'dev' | 'enterprise' | 'unlinked';
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('telegram-bot-webhook', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -390,7 +391,7 @@ Deno.serve(async (req) => {
       headers: corsHeaders 
     });
   }
-});
+}));
 
 // ========== HELPER FUNCTIONS ==========
 

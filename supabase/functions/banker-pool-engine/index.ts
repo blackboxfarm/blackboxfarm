@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { withRunLog } from '../_shared/run-logger.ts'
 
 /**
  * BANKER POOL ENGINE v3 — AUTONOMOUS $250 Bankroll Manager
@@ -38,7 +39,7 @@ const jsonResponse = (data: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 
-serve(async (req) => {
+serve(withRunLog('banker-pool-engine', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -71,7 +72,7 @@ serve(async (req) => {
     console.error('Banker Pool error:', e)
     return jsonResponse({ error: String(e) }, 500)
   }
-})
+}))
 
 // ═══════════════════════════════════════════════════════════════
 // INIT

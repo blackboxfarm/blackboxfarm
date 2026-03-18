@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 enableHeliusTracking('flipit-unified-monitor');
@@ -143,7 +144,7 @@ async function fetchSolPrice(): Promise<number> {
   throw new Error('CRITICAL: All SOL price sources failed - cannot proceed with stale price');
 }
 
-serve(async (req) => {
+serve(withRunLog('flipit-unified-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -405,4 +406,4 @@ serve(async (req) => {
     console.error('Unified monitor error:', error);
     return bad(error.message || 'Internal error', 500);
   }
-});
+}));

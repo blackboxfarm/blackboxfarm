@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { withRunLog } from '../_shared/run-logger.ts';
 
 /**
  * PUMPFUN TOKEN FETCHER
@@ -369,7 +370,7 @@ async function fetchAndTriageNewTokens(supabase: any): Promise<FetcherStats> {
   return stats;
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-token-fetcher', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -412,4 +413,4 @@ serve(async (req) => {
     console.error('Error in pumpfun-token-fetcher:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));
