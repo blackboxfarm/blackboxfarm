@@ -105,7 +105,7 @@ serve(async (req) => {
 
     // Step 3: Update the secret via Supabase Management API
     const projectRef = supabaseUrl.match(/https:\/\/([^.]+)/)?.[1];
-    const managementToken = Deno.env.get('SUPABASE_ACCESS_TOKEN');
+    const managementToken = Deno.env.get('SB_ACCESS_TOKEN');
 
     if (managementToken && projectRef) {
       // Use Management API to update the secret
