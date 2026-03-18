@@ -38,6 +38,13 @@ serve(withRunLog('helius-rpc-proxy', async (req) => {
 
     const rpcUrl = getHeliusRpcUrl();
 
+    const apiLogger = createApiLogger({
+      serviceName: 'helius',
+      endpoint: `/rpc/${method}`,
+      method: 'POST',
+      functionName: 'helius-rpc-proxy',
+    });
+
     const response = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,6 +55,8 @@ serve(withRunLog('helius-rpc-proxy', async (req) => {
         params,
       }),
     });
+
+    await apiLogger.complete(response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
