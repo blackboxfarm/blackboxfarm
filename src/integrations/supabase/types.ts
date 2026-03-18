@@ -15366,6 +15366,10 @@ export type Database = {
         Args: { p_older_than_days?: number }
         Returns: Json
       }
+      aggregate_holder_data_batch: {
+        Args: { p_batch_days?: number; p_older_than_days?: number }
+        Returns: Json
+      }
       apply_referral_discount: {
         Args: { user_id_param: string }
         Returns: Json
