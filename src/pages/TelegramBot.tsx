@@ -27,46 +27,7 @@ import {
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
-const commands = [
-  {
-    cmd: '/holders',
-    desc: 'Holder distribution analysis with tier breakdowns & ASCII charts',
-    tier: 'Auth ★',
-    tierColor: 'text-green-400',
-    detail: 'Lite for free accounts • Full for X Subscribers+',
-  },
-  {
-    cmd: '/risk',
-    desc: 'AI risk & stability assessment with network behavior analysis',
-    tier: 'Auth ★',
-    tierColor: 'text-green-400',
-    detail: '🟢/🔴 for free • Full analysis for X Subscribers+',
-  },
-  {
-    cmd: '/momentum',
-    desc: 'Live volume, price action & momentum scoring from DexScreener',
-    tier: 'X Sub ★★',
-    tierColor: 'text-blue-400',
-  },
-  {
-    cmd: '/oracle',
-    desc: 'Developer reputation lookup — wallet history, rug risk, trust score',
-    tier: 'Pro ★★★',
-    tierColor: 'text-yellow-400',
-  },
-  {
-    cmd: '/wallet',
-    desc: 'Deep wallet behavior analysis — trading patterns, PnL, clustering',
-    tier: 'Pro ★★★',
-    tierColor: 'text-yellow-400',
-  },
-  {
-    cmd: '/alerts',
-    desc: 'Configure whale movement & price alerts delivered to your DMs',
-    tier: 'X Sub ★★',
-    tierColor: 'text-blue-400',
-  },
-];
+const commands: never[] = []; // Commands now rendered via TelegramCommandList component
 
 const riskSignals = [
   { emoji: '🟢', label: 'STRONG NETWORK', desc: 'Healthy holder distribution, stable wallet behavior, and positive developer history. Signals indicate a strong and stable token structure.', color: 'text-green-400' },
