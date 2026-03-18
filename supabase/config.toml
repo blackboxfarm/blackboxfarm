@@ -1,5 +1,8 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
+[functions.rotate-helius-key]
+verify_jwt = false
+
 [functions.funnel-feed-scanner]
 verify_jwt = false
 
