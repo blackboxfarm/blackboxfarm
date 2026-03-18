@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { meshFeed } from "../_shared/mesh-feeder.ts"
 import { writeEarlyWarnings, generateWarningsFromHoldersData, generatePatternWarnings } from "../_shared/early-warning-writer.ts"
@@ -28,7 +29,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(withRunLog('bagless-holders-report', async (req) => {
   const requestStartTime = Date.now();
   console.log('🚀 [PERF] Edge function started');
   
@@ -894,4 +895,4 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));

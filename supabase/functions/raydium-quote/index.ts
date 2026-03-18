@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -161,7 +162,7 @@ async function getPriceUSD(mint: string): Promise<{ price: number; source: strin
   return null;
 }
 
-serve(async (req) => {
+serve(withRunLog('raydium-quote', async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -217,4 +218,4 @@ serve(async (req) => {
     console.error("raydium-quote error", e);
     return bad(`Unexpected error: ${(e as Error).message}`, 500);
   }
-});
+}));

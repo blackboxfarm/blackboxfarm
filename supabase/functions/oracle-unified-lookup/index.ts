@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
@@ -477,7 +478,7 @@ function quickAnalyzeTokens(tokens: any[]): {
   return { totalTokens, graduated, successful, failed, rugged, pattern, successRate, avgMcap };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -1334,4 +1335,4 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));
