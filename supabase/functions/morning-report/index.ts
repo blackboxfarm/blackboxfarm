@@ -813,6 +813,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         spider_metrics: spiderMetrics,
         mesh_growth: meshGrowth,
         funnel_metrics: funnelMetrics,
+        funnel_feed_throughput: funnelFeedThroughput,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
