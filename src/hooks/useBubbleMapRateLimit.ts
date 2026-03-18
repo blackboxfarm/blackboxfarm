@@ -62,10 +62,13 @@ export function useBubbleMapRateLimit() {
     console.log('[BubbleMapRateLimit] Search recorded:', { count: updated.count, limit, remaining: Math.max(0, limit - updated.count) });
   }, [isSubscriber, limit]);
 
+  const displayLimit = isSubscriber ? Infinity : DISPLAY_LIMIT;
+  const displayRemaining = Math.max(0, displayLimit - usage.count);
+
   return {
     canSearch,
-    remaining,
-    limit,
+    remaining: displayRemaining,
+    limit: displayLimit,
     used: usage.count,
     isSubscriber,
     isLimited,
