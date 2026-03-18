@@ -121,6 +121,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   useEffect(() => {
     if (shouldOfferSpider && searchInput.trim()) {
       triggerSpider(searchInput.trim(), 'deep');
+      setHasSpideredOnce(true);
     }
   }, [shouldOfferSpider, searchInput, triggerSpider]);
 
