@@ -37,6 +37,13 @@ Deno.serve(withRunLog('firecrawl-scrape', async (req) => {
 
     console.log('Scraping URL:', formattedUrl);
 
+    const apiLogger = createApiLogger({
+      serviceName: 'apify' as any, // Firecrawl — reuses 'apify' slot for paid services
+      endpoint: '/v1/scrape',
+      method: 'POST',
+      functionName: 'firecrawl-scrape',
+    });
+
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -51,6 +58,8 @@ Deno.serve(withRunLog('firecrawl-scrape', async (req) => {
         location: options?.location,
       }),
     });
+
+    await apiLogger.complete(response.status);
 
     const data = await response.json();
 
