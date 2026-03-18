@@ -210,6 +210,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       const parts = nodeId.split(':');
       const type = parts[0];
       const rawId = parts.slice(1).join(':');
+      // Update search input + focus to reflect the hop
+      setSearchInput(rawId);
+      focusOnEntity(rawId, type);
       if (type === 'wallet' || type === 'token') triggerSpider(rawId, 'quick');
       return;
     }
@@ -223,7 +226,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         graphRef.current.zoom(2, 800);
       }
     }, 300);
-  }, [expandEntity, triggerSpider]);
+  }, [expandEntity, triggerSpider, focusOnEntity]);
 
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const meshNode = node as MeshNode & { x: number; y: number };
@@ -290,6 +293,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     return acc;
   }, {} as Record<string, number>);
 
+  // Derive focused entity display info
+  const focusedDisplayInfo = (() => {
+    if (!focusedEntity) return null;
+    const matchingNode = graphData.nodes.find(n => n.id.includes(focusedEntity.id));
+    const type = focusedEntity.type || matchingNode?.type || 'wallet';
+    const emoji = type === 'token' ? '🪙' : type === 'wallet' ? '💰' : type === 'x_account' ? '🐦' : type === 'kyc_root' ? '🏦' : type === 'telegram' ? '📡' : '🔍';
+    const label = matchingNode?.label || focusedEntity.id.slice(0, 16) + '...';
+    return { emoji, label, type };
+  })();
+
   const trafficLightColor = (tl?: string) => {
     switch (tl) {
       case 'RED': return 'text-red-400';
@@ -336,7 +349,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">🫧 Mesh Bubble Map</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                🫧 Mesh Bubble Map
+                {focusedDisplayInfo && (
+                  <span className="text-base font-semibold" style={{ color: ENTITY_COLORS[focusedDisplayInfo.type] || 'hsl(var(--primary))' }}>
+                    — {focusedDisplayInfo.emoji} {focusedDisplayInfo.label}
+                  </span>
+                )}
+              </CardTitle>
               <CardDescription>
                 Interactive visualization of the reputation mesh. Enter any entity to explore.
               </CardDescription>
@@ -408,7 +428,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>{displayData.nodes.length} entities</span>
             <span>{displayData.links.length} connections</span>
-            {focusedEntity && <span className="text-primary font-mono">{focusedEntity.id.slice(0, 16)}...</span>}
+            {focusedDisplayInfo && (
+              <span className="font-medium" style={{ color: ENTITY_COLORS[focusedDisplayInfo.type] || 'hsl(var(--primary))' }}>
+                {focusedDisplayInfo.emoji} {focusedDisplayInfo.label}
+              </span>
+            )}
             {isOverCap && (
               <div className="flex items-center gap-1">
                 <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">
