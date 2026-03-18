@@ -363,7 +363,7 @@ Deno.serve(async (req) => {
               detectedAt: currentScrapeAt,
             };
             
-            const { alerted } = await alertAndLogCommunityDeletion(supabase, alertInfo);
+            const { alerted } = await alertAndLogCommunityDeletion(supabase as any, alertInfo);
             
             if (alerted) {
               await supabase.from('x_communities').update({
