@@ -81,12 +81,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 20;
-          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 55 : 40;
-          return viewMode === 'tree' ? 65 : 45;
+          if (['admin_of', 'mod_of', 'co_mod'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
+          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 55 : 35;
+          return viewMode === 'tree' ? 65 : 40;
         });
       }
-      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -120);
+      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -200 : -80);
       
       const padding = viewMode === 'tree' ? 20 : 40;
       const pushStrength = viewMode === 'tree' ? 1 : 2;
@@ -406,12 +406,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const src = link.source; const tgt = link.target;
     if (!src.x || !tgt.x) return;
     const rel = link.relationship || '';
-    let strokeColor = 'rgba(255,255,255,0.15)';
-    let lineWidth = 1;
-    if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.45)'; lineWidth = 1.5; }
-    else if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.4)'; lineWidth = 1.5; }
-    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.35)'; lineWidth = 1.2; }
-    else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.4)'; lineWidth = 1.2; }
+    let strokeColor = 'rgba(255,255,255,0.2)';
+    let lineWidth = 1.2;
+    if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.5)'; lineWidth = 2; }
+    else if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.5)'; lineWidth = 2; }
+    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.4)'; lineWidth = 1.5; }
+    else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.5)'; lineWidth = 1.5; }
     ctx.beginPath(); ctx.moveTo(src.x, src.y); ctx.lineTo(tgt.x, tgt.y);
     ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth; ctx.stroke();
     if (globalScale > 2) {
@@ -808,20 +808,20 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 const rawId = n.fullId || n.id.split(':').slice(1).join(':');
                 return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
-              cooldownTicks={60}
-              d3AlphaDecay={0.04}
-              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.35}
-              d3AlphaMin={0.01}
+              cooldownTicks={80}
+              d3AlphaDecay={0.03}
+              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
+              d3AlphaMin={0.005}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
               linkDirectionalParticles={1}
-              linkDirectionalParticleWidth={1.5}
-              linkDirectionalParticleSpeed={0.004}
+              linkDirectionalParticleWidth={2}
+              linkDirectionalParticleSpeed={0.005}
               linkDirectionalParticleColor={(link: any) => {
                 const rel = link.relationship || '';
-                if (rel.includes('funded')) return 'rgba(34,197,94,0.6)';
-                if (rel.includes('created')) return 'rgba(234,179,8,0.6)';
-                return 'rgba(255,255,255,0.3)';
+                if (rel.includes('funded')) return 'rgba(34,197,94,0.7)';
+                if (rel.includes('created')) return 'rgba(234,179,8,0.7)';
+                return 'rgba(255,255,255,0.4)';
               }}
               linkDirectionalArrowLength={(link: any) => {
                 const rel = link.relationship || '';
@@ -831,6 +831,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               linkDirectionalArrowRelPos={0.7}
               enableZoomInteraction={true}
               enablePanInteraction={true}
+              nodeRelSize={5}
             />
           )}
         </div>
