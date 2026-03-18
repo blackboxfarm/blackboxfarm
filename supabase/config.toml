@@ -507,3 +507,6 @@ verify_jwt = false
 
 [functions.ai-pattern-extractor]
 verify_jwt = false
+
+[functions.reset-monthly-quotas]
+verify_jwt = false
