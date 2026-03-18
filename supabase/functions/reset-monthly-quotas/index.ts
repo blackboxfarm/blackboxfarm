@@ -54,12 +54,13 @@ Deno.serve(withRunLog('reset-monthly-quotas', async (req) => {
         .from('monthly_usage_archive')
         .upsert({
           service_name: svc.service_name,
-          month: monthStr,
-          credits_used: svc.monthly_quota_used,
+          month_year: monthStr,
+          total_credits_used: svc.monthly_quota_used,
+          total_calls: svc.monthly_quota_used,
           quota_limit: svc.monthly_quota,
           estimated_cost_usd: estimatedCostUsd,
-          tier: svc.tier,
-        }, { onConflict: 'service_name,month' });
+          usage_percentage: svc.monthly_quota ? (svc.monthly_quota_used / svc.monthly_quota) * 100 : null,
+        }, { onConflict: 'service_name,month_year' });
 
       if (archiveErr) {
         console.error(`[reset-monthly-quotas] Archive error for ${svc.service_name}:`, archiveErr.message);
