@@ -189,7 +189,7 @@ serve(withRunLog('pumpfun-kol-tracker', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));
 
 async function detectKOLsInTrade(supabase: any, trade: TradeDetection): Promise<KOLAnalysis> {
   // Check buyer wallets against KOL registry

@@ -187,7 +187,7 @@ serve(withRunLog('pumpfun-kol-analyzer', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));
 
 function calculateTrustScore(kol: any): number {
   let score = 50; // Base score
