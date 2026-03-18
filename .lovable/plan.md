@@ -157,6 +157,23 @@ If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a n
 - [x] Added `createApiLogger` to firecrawl-scrape (paid Firecrawl calls)
 - [x] Prior coverage: dexscreener, solscan, rugcheck, apify, helius funding
 
+## ✅ Phase 4: Wiring & Visibility (COMPLETED)
+
+### A. Backend Wiring
+- [x] Wired `clearEscalation()` into `api-logger.ts` — clears escalation state on successful API responses
+- [x] Added `increment_monthly_quota_used` RPC — atomically increments `monthly_quota_used` + `success_count_today` per API call
+- [x] Wired quota increment into `api-logger.ts` for all paid services (helius, solscan, apify)
+
+### B. Super Admin Monitoring Dashboard
+- [x] Created `MonitoringTab` with 4 sub-tabs: Overview, Errors & DLQ, Costs, Pipeline
+- [x] **Service Status Panel** — live view of all service health from `service_status` table (30s auto-refresh)
+- [x] **Function Health Panel** — 24h aggregation of `edge_function_runs` by function with error counts and avg duration
+- [x] **Error Trends Panel** — 7-day error aggregation from `error_trend_snapshot` with anomaly highlighting
+- [x] **Dead Letter Queue Panel** — pending/resolved/failed DLQ items from `dead_letter_queue`
+- [x] **Notification Delivery Panel** — recent 50 deliveries from `notification_delivery_log` with success rate
+- [x] **Monthly Costs Panel** — historical cost data from `monthly_usage_archive` grouped by month
+- [x] **Token Funnel Panel** — 7-day pipeline conversion visualization from `token_funnel_daily`
+- [x] **Spider & Mesh Panel** — spider run metrics + mesh growth trends from `spider_run_metrics` and `mesh_growth_daily`
+
 ## Remaining (Future Sessions)
 - [ ] Roll out withRunLog to remaining ~170 edge functions
-- [ ] Add `clearEscalation()` calls on successful API responses in api-logger.ts
