@@ -648,12 +648,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               {xAccountsRevealed && (() => {
                 const communityNodes = displayData.nodes.filter(n => n.type === 'x_community');
                 const xAccountNodes = displayData.nodes.filter(n => n.type === 'x_account');
-                const adminLinks = displayData.links.filter((l: any) => l.relationship === 'admin_of' || l.relationship === 'mod_of');
                 if (communityNodes.length > 0 || xAccountNodes.length > 0) {
                   return (
-                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1 animate-fade-in">
+                    <TooltipProvider>
+                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1.5 animate-fade-in">
                       <div className="flex items-center gap-2">
-                        <span className="text-cyan-400 text-xs font-semibold">🐦 X Community Mapped!</span>
+                        <img src={xIcon} alt="X" className="h-4 w-4 rounded-sm" />
+                        <span className="text-cyan-400 text-xs font-semibold">X Community Mapped!</span>
                       </div>
                       {communityNodes.map(c => (
                         <div key={c.id} className="text-[11px] text-cyan-300">
@@ -661,14 +662,55 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                         </div>
                       ))}
                       {xAccountNodes.length > 0 && (
-                        <div className="text-[11px] text-muted-foreground">
-                          👥 Handles: {xAccountNodes.map(a => `@${(a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '')}`).join(', ')}
-                          {adminLinks.length > 0 && (
-                            <span className="text-amber-400 ml-1">({adminLinks.length} admin/mod links)</span>
-                          )}
+                        <div className="space-y-0.5">
+                          {xAccountNodes.map(a => {
+                            const handle = (a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '');
+                            const isAdmin = a.role === 'admin';
+                            const isMod = a.role === 'mod';
+                            const hasRotatedHandle = a.redFlags?.some(f => f.type === 'rotated_handle');
+                            const rotatedFlag = a.redFlags?.find(f => f.type === 'rotated_handle');
+                            return (
+                              <div key={a.id} className="flex items-center gap-1.5 text-[11px]">
+                                {isAdmin && <span title="Admin">👑</span>}
+                                {isMod && <span title="Moderator">🛡️</span>}
+                                <a
+                                  href={`https://x.com/${handle}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`font-medium hover:underline ${isAdmin || isMod ? 'text-blue-400' : 'text-cyan-300'}`}
+                                >
+                                  @{handle}
+                                  {(isAdmin || isMod) && <span className="ml-0.5 text-blue-400">✓</span>}
+                                </a>
+                                <ExternalLink className="h-2.5 w-2.5 text-muted-foreground opacity-50" />
+                                {hasRotatedHandle && rotatedFlag && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help text-amber-400 flex items-center gap-0.5">
+                                        <SearchCheck className="h-3 w-3" />
+                                        <span className="text-[9px]">⚠</span>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-xs text-xs bg-background border border-red-500/30">
+                                      <div className="space-y-1">
+                                        <div className="font-semibold text-red-400 flex items-center gap-1">
+                                          🚩 Handle Recycling Detected
+                                        </div>
+                                        <div className="text-muted-foreground">{rotatedFlag.explanation}</div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                <span className="text-muted-foreground/50 text-[9px] ml-auto">
+                                  {isAdmin ? 'ADMIN' : isMod ? 'MOD' : ''}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
+                    </TooltipProvider>
                   );
                 }
                 return null;
