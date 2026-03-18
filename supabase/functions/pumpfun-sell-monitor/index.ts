@@ -487,7 +487,7 @@ async function getLiveStats(supabase: any) {
   };
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-sell-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
