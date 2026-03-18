@@ -373,8 +373,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     ctx.beginPath();
     ctx.arc(meshNode.x, meshNode.y, size, 0, 2 * Math.PI);
     ctx.fillStyle = color; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.strokeStyle = isFocused ? '#fff' : 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = isFocused ? 2 : 0.5; ctx.stroke(); ctx.shadowBlur = 0;
+    // Connected nodes get a visible white ring; focused nodes get thick bright ring
+    const isConnected = meshNode.val >= 2;
+    ctx.strokeStyle = isFocused ? '#fff' : isConnected ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = isFocused ? 2.5 : isConnected ? 1.5 : 0.5; ctx.stroke(); ctx.shadowBlur = 0;
     if (meshNode.type === 'kyc_root') {
       ctx.fillStyle = '#fff'; ctx.font = `${Math.max(8, 12 / globalScale)}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🏦', meshNode.x, meshNode.y);
@@ -404,12 +406,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const src = link.source; const tgt = link.target;
     if (!src.x || !tgt.x) return;
     const rel = link.relationship || '';
-    let strokeColor = 'rgba(255,255,255,0.1)';
-    if (rel.includes('funded')) strokeColor = 'rgba(34,197,94,0.25)';
-    else if (rel.includes('created')) strokeColor = 'rgba(234,179,8,0.2)';
-    else if (rel.includes('kyc')) strokeColor = 'rgba(255,255,255,0.2)';
+    let strokeColor = 'rgba(255,255,255,0.15)';
+    let lineWidth = 1;
+    if (rel.includes('funded')) { strokeColor = 'rgba(34,197,94,0.45)'; lineWidth = 1.5; }
+    else if (rel.includes('created')) { strokeColor = 'rgba(234,179,8,0.4)'; lineWidth = 1.5; }
+    else if (rel.includes('kyc')) { strokeColor = 'rgba(255,255,255,0.35)'; lineWidth = 1.2; }
+    else if (rel.includes('operates') || rel.includes('admin') || rel.includes('mod')) { strokeColor = 'rgba(96,165,250,0.4)'; lineWidth = 1.2; }
     ctx.beginPath(); ctx.moveTo(src.x, src.y); ctx.lineTo(tgt.x, tgt.y);
-    ctx.strokeStyle = strokeColor; ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth; ctx.stroke();
     if (globalScale > 2) {
       const midX = (src.x + tgt.x) / 2; const midY = (src.y + tgt.y) / 2;
       ctx.font = `${Math.max(5, 7 / globalScale)}px sans-serif`; ctx.textAlign = 'center';
@@ -533,7 +537,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               disabled={!canSearch}
             />
             <Button variant="outline" size="sm" onClick={handleSearch} disabled={isLoading || !canSearch}>
-              <Search className="h-3.5 w-3.5 mr-1" /> Focus
+              <Search className="h-3.5 w-3.5 mr-1" /> Trace
             </Button>
             <Button variant="ghost" size="sm" onClick={resetView}>
               <RotateCcw className="h-3.5 w-3.5" />
@@ -805,8 +809,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
               cooldownTicks={60}
-              d3AlphaDecay={0.05}
-              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
+              d3AlphaDecay={0.04}
+              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.35}
+              d3AlphaMin={0.01}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
               linkDirectionalParticles={1}
