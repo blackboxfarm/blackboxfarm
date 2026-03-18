@@ -462,7 +462,7 @@ function DLQPanel() {
                 {(data || []).filter(d => d.status === 'pending').map(d => (
                   <div key={d.id} className="text-xs p-2 rounded border border-yellow-500/20 bg-yellow-500/5">
                     <div className="flex justify-between">
-                      <span className="font-mono">{d.operation_type}</span>
+                      <span className="font-mono">{d.operation}</span>
                       <span className="text-muted-foreground">retry #{d.retry_count}</span>
                     </div>
                     {d.error_message && <p className="text-red-400 mt-1 truncate">{d.error_message}</p>}
