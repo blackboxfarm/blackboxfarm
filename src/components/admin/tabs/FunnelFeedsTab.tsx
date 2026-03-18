@@ -27,6 +27,7 @@ export default function FunnelFeedsTab() {
           <TabsTrigger value="telegram">📡 Telegram</TabsTrigger>
           <TabsTrigger value="dex">☁️ Dex/CloudFlare</TabsTrigger>
           <TabsTrigger value="bubbles">🫧 Bubbles</TabsTrigger>
+          <TabsTrigger value="holders">🔎 /holders</TabsTrigger>
           <TabsTrigger value="bot-dm">🤖 Bot DM</TabsTrigger>
           <TabsTrigger value="overview">📊 Overview</TabsTrigger>
         </TabsList>
