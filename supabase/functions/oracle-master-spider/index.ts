@@ -1143,6 +1143,40 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
       steps,
     };
 
+    // ── Record spider run metrics ──
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      await supabase.from('spider_run_metrics').upsert({
+        run_date: today,
+        tokens_spidered: (await supabase.from('spider_run_metrics').select('tokens_spidered').eq('run_date', today).maybeSingle()).data?.tokens_spidered
+          ? undefined : 0,
+      }, { onConflict: 'run_date' });
+
+      // Increment counters
+      await supabase.rpc('increment_spider_metrics', {
+        p_date: today,
+        p_tokens: resolvedTokenMint ? 1 : 0,
+        p_wallets: genealogy.parents.length + genealogy.satellites.length,
+        p_mesh_links: meshUpdates.meshLinksAdded,
+        p_blacklist_hits: meshUpdates.blacklistAdded,
+        p_whitelist_hits: meshUpdates.whitelistAdded,
+        p_genealogy_depth: genealogy.depth,
+      }).catch(() => {
+        // Fallback: direct upsert if RPC doesn't exist
+        supabase.from('spider_run_metrics').upsert({
+          run_date: today,
+          tokens_spidered: resolvedTokenMint ? 1 : 0,
+          wallets_discovered: genealogy.parents.length + genealogy.satellites.length,
+          mesh_links_added: meshUpdates.meshLinksAdded,
+          blacklist_hits: meshUpdates.blacklistAdded,
+          whitelist_hits: meshUpdates.whitelistAdded,
+          avg_genealogy_depth: genealogy.depth,
+        }, { onConflict: 'run_date' }).catch(() => {});
+      });
+    } catch (metricsErr) {
+      console.warn('[spider] Metrics recording failed:', metricsErr);
+    }
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
