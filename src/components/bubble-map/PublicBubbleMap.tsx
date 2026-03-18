@@ -559,10 +559,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           {/* Action Buttons */}
           {graphData.nodes.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching}
-                className="text-xs h-7 border-amber-500/30 hover:bg-amber-500/10 text-amber-400">
+              <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching || kycFound}
+                className={`text-xs h-7 ${kycFound 
+                  ? 'border-muted/30 text-muted-foreground opacity-50 cursor-not-allowed' 
+                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'}`}>
                 {kycSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Key className="h-3 w-3 mr-1" />}
-                Find KYC Root
+                {kycFound ? 'KYC Root Found ✓' : 'Find KYC Root'}
               </Button>
               <Button variant="outline" size="sm" onClick={handleFindTokens} disabled={tokenSearching}
                 className="text-xs h-7 border-yellow-500/30 hover:bg-yellow-500/10 text-yellow-400">
