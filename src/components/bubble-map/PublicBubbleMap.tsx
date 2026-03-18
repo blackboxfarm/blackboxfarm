@@ -518,13 +518,42 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
             </div>
           )}
           {spiderStatus.error && displayData.nodes.length > 0 && (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
                 <Network className="h-3.5 w-3.5 text-primary" />
                 <span className="text-xs text-primary">
                   ✅ First-level sweep complete — {displayData.nodes.length} entities mapped. Some external sources were unavailable but we found what we needed.
                 </span>
               </div>
+              {/* X Community details if discovered */}
+              {(() => {
+                const communityNodes = displayData.nodes.filter(n => n.type === 'x_community');
+                const xAccountNodes = displayData.nodes.filter(n => n.type === 'x_account');
+                const adminLinks = displayData.links.filter((l: any) => l.relationship === 'admin_of' || l.relationship === 'mod_of');
+                if (communityNodes.length > 0) {
+                  return (
+                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-cyan-400 text-xs font-semibold">🐦 X Community Mapped!</span>
+                      </div>
+                      {communityNodes.map(c => (
+                        <div key={c.id} className="text-[11px] text-cyan-300">
+                          📡 {c.label || c.fullId || c.id}
+                        </div>
+                      ))}
+                      {xAccountNodes.length > 0 && (
+                        <div className="text-[11px] text-muted-foreground">
+                          👥 Handles: {xAccountNodes.map(a => `@${(a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '')}`).join(', ')}
+                          {adminLinks.length > 0 && (
+                            <span className="text-amber-400 ml-1">({adminLinks.length} admin/mod links)</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
         </CardContent>
