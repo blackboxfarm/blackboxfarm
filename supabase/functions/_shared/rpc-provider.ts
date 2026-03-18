@@ -176,21 +176,11 @@ async function fetchSolscanTransactions(wallet: string, limit: number): Promise<
   );
 
   if (!response.ok) {
-    // Try public Solscan API
-    const publicResponse = await fetch(
-      `https://public-api.solscan.io/account/transactions?account=${wallet}&limit=${limit}`
-    );
-    
-    if (!publicResponse.ok) {
-      throw new Error(`Solscan API error: ${publicResponse.status}`);
-    }
-    
-    const data = await publicResponse.json();
-    return { data, error: null, provider: 'solscan_public' };
+    throw new Error(`Solscan public API error: ${response.status}`);
   }
 
   const data = await response.json();
-  return { data, error: null, provider: 'solscan' };
+  return { data, error: null, provider: 'solscan_public' };
 }
 
 async function fetchRpcTransactions(wallet: string, limit: number): Promise<RpcResult<any[]>> {
