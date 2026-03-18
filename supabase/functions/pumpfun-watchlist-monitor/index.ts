@@ -1361,7 +1361,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   return stats;
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-watchlist-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
