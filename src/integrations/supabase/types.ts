@@ -6560,11 +6560,15 @@ export type Database = {
           api_usage_summary: Json
           auth_failure_events: Json
           created_at: string
+          dlq_stats: Json | null
           error_patterns: Json
           execution_time_ms: number | null
           external_services_status: Json
+          function_health: Json | null
+          funnel_metrics: Json | null
           holders_intel_metrics: Json | null
           id: string
+          mesh_growth: Json | null
           new_signups: number
           new_signups_details: Json
           new_subscribers: number
@@ -6575,6 +6579,7 @@ export type Database = {
           report_date: string
           report_period_end: string
           report_period_start: string
+          spider_metrics: Json | null
           table_health: Json
           telegram_sent: boolean
           telegram_sent_at: string | null
@@ -6587,11 +6592,15 @@ export type Database = {
           api_usage_summary?: Json
           auth_failure_events?: Json
           created_at?: string
+          dlq_stats?: Json | null
           error_patterns?: Json
           execution_time_ms?: number | null
           external_services_status?: Json
+          function_health?: Json | null
+          funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
+          mesh_growth?: Json | null
           new_signups?: number
           new_signups_details?: Json
           new_subscribers?: number
@@ -6602,6 +6611,7 @@ export type Database = {
           report_date: string
           report_period_end: string
           report_period_start: string
+          spider_metrics?: Json | null
           table_health?: Json
           telegram_sent?: boolean
           telegram_sent_at?: string | null
@@ -6614,11 +6624,15 @@ export type Database = {
           api_usage_summary?: Json
           auth_failure_events?: Json
           created_at?: string
+          dlq_stats?: Json | null
           error_patterns?: Json
           execution_time_ms?: number | null
           external_services_status?: Json
+          function_health?: Json | null
+          funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
+          mesh_growth?: Json | null
           new_signups?: number
           new_signups_details?: Json
           new_subscribers?: number
@@ -6629,6 +6643,7 @@ export type Database = {
           report_date?: string
           report_period_end?: string
           report_period_start?: string
+          spider_metrics?: Json | null
           table_health?: Json
           telegram_sent?: boolean
           telegram_sent_at?: string | null
@@ -6644,11 +6659,15 @@ export type Database = {
           archived_at: string
           auth_failure_events: Json | null
           created_at: string | null
+          dlq_stats: Json | null
           error_patterns: Json | null
           execution_time_ms: number | null
           external_services_status: Json | null
+          function_health: Json | null
+          funnel_metrics: Json | null
           holders_intel_metrics: Json | null
           id: string
+          mesh_growth: Json | null
           new_signups: number | null
           new_signups_details: Json | null
           new_subscribers: number | null
@@ -6659,6 +6678,7 @@ export type Database = {
           report_date: string
           report_period_end: string | null
           report_period_start: string | null
+          spider_metrics: Json | null
           table_health: Json | null
           telegram_sent: boolean | null
           telegram_sent_at: string | null
@@ -6670,11 +6690,15 @@ export type Database = {
           archived_at?: string
           auth_failure_events?: Json | null
           created_at?: string | null
+          dlq_stats?: Json | null
           error_patterns?: Json | null
           execution_time_ms?: number | null
           external_services_status?: Json | null
+          function_health?: Json | null
+          funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id: string
+          mesh_growth?: Json | null
           new_signups?: number | null
           new_signups_details?: Json | null
           new_subscribers?: number | null
@@ -6685,6 +6709,7 @@ export type Database = {
           report_date: string
           report_period_end?: string | null
           report_period_start?: string | null
+          spider_metrics?: Json | null
           table_health?: Json | null
           telegram_sent?: boolean | null
           telegram_sent_at?: string | null
@@ -6696,11 +6721,15 @@ export type Database = {
           archived_at?: string
           auth_failure_events?: Json | null
           created_at?: string | null
+          dlq_stats?: Json | null
           error_patterns?: Json | null
           execution_time_ms?: number | null
           external_services_status?: Json | null
+          function_health?: Json | null
+          funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
+          mesh_growth?: Json | null
           new_signups?: number | null
           new_signups_details?: Json | null
           new_subscribers?: number | null
@@ -6711,6 +6740,7 @@ export type Database = {
           report_date?: string
           report_period_end?: string | null
           report_period_start?: string | null
+          spider_metrics?: Json | null
           table_health?: Json | null
           telegram_sent?: boolean | null
           telegram_sent_at?: string | null

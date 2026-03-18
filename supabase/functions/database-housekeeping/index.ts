@@ -258,6 +258,88 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
     const totalDeleted = results.reduce((sum, r) => sum + r.rowsDeleted, 0);
     const elapsed = Date.now() - startTime;
 
+    // ── Populate error_trend_snapshot (daily error aggregation) ──
+    if (!dryRun) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data: errorLogs } = await supabase
+          .from('api_usage_log')
+          .select('service_name, endpoint, error_message')
+          .eq('success', false)
+          .gte('timestamp', today + 'T00:00:00Z');
+
+        if (errorLogs && errorLogs.length > 0) {
+          const grouped: Record<string, { service: string; endpoint: string; error: string | null; count: number }> = {};
+          for (const log of errorLogs) {
+            const key = `${log.service_name}:${log.endpoint}`;
+            if (!grouped[key]) grouped[key] = { service: log.service_name, endpoint: log.endpoint, error: log.error_message, count: 0 };
+            grouped[key].count++;
+          }
+
+          const snapshots = Object.values(grouped).map(g => ({
+            snapshot_date: today,
+            service_name: g.service,
+            endpoint: g.endpoint,
+            error_count: g.count,
+            sample_error: g.error?.slice(0, 500) || null,
+          }));
+
+          if (snapshots.length > 0) {
+            await supabase.from('error_trend_snapshot').upsert(snapshots, {
+              onConflict: 'snapshot_date,service_name,endpoint',
+            });
+            console.log(`[housekeeping] Wrote ${snapshots.length} error_trend_snapshot rows`);
+          }
+        }
+      } catch (e: any) {
+        console.warn('[housekeeping] Error trend snapshot failed:', e.message);
+      }
+
+      // ── Populate mesh_growth_daily ──
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { count: totalDevs } = await supabase.from('developer_profiles').select('*', { count: 'exact', head: true });
+        const { count: totalWallets } = await supabase.from('developer_wallets').select('*', { count: 'exact', head: true });
+        const { count: totalSocials } = await supabase.from('developer_social_links').select('*', { count: 'exact', head: true });
+        const { count: totalTokens } = await supabase.from('developer_tokens').select('*', { count: 'exact', head: true });
+
+        // New links added today
+        const { count: newWalletsToday } = await supabase.from('developer_wallets')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', today + 'T00:00:00Z');
+        const { count: newSocialsToday } = await supabase.from('developer_social_links')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', today + 'T00:00:00Z');
+
+        await supabase.from('mesh_growth_daily').upsert({
+          snapshot_date: today,
+          total_developers: totalDevs || 0,
+          total_wallets: totalWallets || 0,
+          total_social_links: totalSocials || 0,
+          total_tokens: totalTokens || 0,
+          new_wallets_today: newWalletsToday || 0,
+          new_social_links_today: newSocialsToday || 0,
+        }, { onConflict: 'snapshot_date' });
+        console.log(`[housekeeping] Wrote mesh_growth_daily: ${totalDevs} devs, ${totalWallets} wallets, ${totalSocials} socials`);
+      } catch (e: any) {
+        console.warn('[housekeeping] Mesh growth snapshot failed:', e.message);
+      }
+
+      // ── Cleanup edge_function_runs and dead_letter_queue ──
+      try {
+        const { data: efClean } = await supabase.rpc('cleanup_edge_function_runs', { retention_days: 14 });
+        console.log(`[housekeeping] Cleaned edge_function_runs: ${efClean} rows`);
+      } catch (e: any) {
+        console.warn('[housekeeping] edge_function_runs cleanup failed:', e.message);
+      }
+      try {
+        const { data: dlqClean } = await supabase.rpc('cleanup_dead_letter_queue', { retention_days: 7 });
+        console.log(`[housekeeping] Cleaned dead_letter_queue: ${dlqClean} rows`);
+      } catch (e: any) {
+        console.warn('[housekeeping] dead_letter_queue cleanup failed:', e.message);
+      }
+    }
+
     await supabase.from('activity_logs').insert({
       message: `[housekeeping] ${dryRun ? 'DRY RUN' : 'PRUNED'}: ${totalDeleted} rows deleted across ${results.length} tables (${elapsed}ms)`,
       log_level: 'info',

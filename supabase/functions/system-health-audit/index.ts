@@ -194,6 +194,25 @@ Deno.serve(withRunLog('system-health-audit', async (req) => {
     const warningCount = checks.filter(c => c.status === 'warning').length;
     const overallStatus = criticalCount > 0 ? 'critical' : warningCount > 0 ? 'warning' : 'healthy';
 
+    // ── Write to service_status table for each tracked service ──
+    const trackedServices = ['helius', 'solscan', 'dexscreener', 'rugcheck', 'pumpfun', 'jupiter', 'coingecko', 'apify', 'bonkfun', 'bagsfm'];
+    for (const svc of trackedServices) {
+      const check = checks.find(c => c.check === `api_${svc}`);
+      const svcStatus = check ? check.status : 'ok';
+      const statusLabel = svcStatus === 'critical' ? 'down' : svcStatus === 'warning' ? 'degraded' : 'operational';
+      try {
+        await supabase.from('service_status').upsert({
+          service_name: svc,
+          status: statusLabel,
+          last_checked_at: new Date().toISOString(),
+          message: check?.details || 'No recent activity',
+          metadata: check?.metadata || {},
+        }, { onConflict: 'service_name' });
+      } catch (e) {
+        console.warn(`[health-audit] Failed to update service_status for ${svc}:`, e);
+      }
+    }
+
     console.log(`[health-audit] ${overallStatus.toUpperCase()}: ${checks.length} checks, ${criticalCount} critical, ${warningCount} warnings, ${alertsWritten} new alerts (${elapsed}ms)`);
 
     return new Response(

@@ -533,7 +533,157 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 11. UNREAD NOTIFICATIONS
+    // 11. EDGE FUNCTION HEALTH (from edge_function_runs)
+    // ═══════════════════════════════════════════════════════════════
+    let functionHealth: any = {};
+    try {
+      const { data: funcRuns } = await supabase
+        .from('edge_function_runs')
+        .select('function_name, status, duration_ms, error_message')
+        .gte('started_at', periodStart.toISOString())
+        .lte('started_at', periodEnd.toISOString())
+        .limit(5000);
+
+      if (funcRuns && funcRuns.length > 0) {
+        const byFunc: Record<string, { total: number; ok: number; error: number; totalMs: number; errors: string[] }> = {};
+        for (const run of funcRuns) {
+          if (!byFunc[run.function_name]) byFunc[run.function_name] = { total: 0, ok: 0, error: 0, totalMs: 0, errors: [] };
+          const f = byFunc[run.function_name];
+          f.total++;
+          if (run.status === 'success') f.ok++;
+          else { f.error++; if (run.error_message && f.errors.length < 3) f.errors.push(run.error_message.slice(0, 100)); }
+          f.totalMs += run.duration_ms || 0;
+        }
+
+        functionHealth = {
+          total_runs: funcRuns.length,
+          total_errors: funcRuns.filter(r => r.status === 'error').length,
+          by_function: Object.fromEntries(
+            Object.entries(byFunc)
+              .sort((a, b) => b[1].total - a[1].total)
+              .map(([name, stats]) => [name, {
+                runs: stats.total,
+                errors: stats.error,
+                fail_pct: stats.total > 0 ? Math.round((stats.error / stats.total) * 1000) / 10 : 0,
+                avg_ms: stats.total > 0 ? Math.round(stats.totalMs / stats.total) : 0,
+                top_errors: stats.errors,
+              }])
+          ),
+        };
+
+        // Alert on functions with >50% failure rate
+        for (const [fname, stats] of Object.entries(byFunc)) {
+          if (stats.error > 0 && stats.total >= 3 && (stats.error / stats.total) >= 0.5) {
+            alerts.push({
+              level: (stats.error / stats.total) >= 0.9 ? 'critical' : 'warning',
+              category: 'function_health',
+              title: `${fname}: ${Math.round((stats.error / stats.total) * 100)}% failure rate`,
+              detail: `${stats.error}/${stats.total} runs failed. Error: ${stats.errors[0] || 'unknown'}`,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch function health:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 12. DEAD LETTER QUEUE STATUS
+    // ═══════════════════════════════════════════════════════════════
+    let dlqStats: any = {};
+    try {
+      const { count: pendingDlq } = await supabase.from('dead_letter_queue')
+        .select('*', { count: 'exact', head: true }).eq('status', 'pending');
+      const { count: exhaustedDlq } = await supabase.from('dead_letter_queue')
+        .select('*', { count: 'exact', head: true }).eq('status', 'exhausted');
+      const { data: recentDlq } = await supabase.from('dead_letter_queue')
+        .select('source_function, operation, error_message, created_at')
+        .gte('created_at', periodStart.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      dlqStats = {
+        pending: pendingDlq || 0,
+        exhausted: exhaustedDlq || 0,
+        new_overnight: recentDlq?.length || 0,
+        recent_items: (recentDlq || []).map(d => ({
+          source: d.source_function,
+          op: d.operation,
+          error: d.error_message?.slice(0, 80),
+        })),
+      };
+
+      if ((exhaustedDlq || 0) > 0) {
+        alerts.push({
+          level: 'warning',
+          category: 'dlq',
+          title: `${exhaustedDlq} exhausted items in dead letter queue`,
+          detail: 'Items that failed all retries — manual intervention needed',
+        });
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch DLQ stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 13. SPIDER & MESH METRICS
+    // ═══════════════════════════════════════════════════════════════
+    let spiderMetrics: any = {};
+    let meshGrowth: any = {};
+    let funnelMetrics: any = {};
+    try {
+      // Spider run metrics from overnight
+      const { data: spiderRuns } = await supabase.from('spider_run_metrics')
+        .select('*')
+        .gte('run_date', periodStart.toISOString().split('T')[0])
+        .order('run_date', { ascending: false })
+        .limit(5);
+
+      if (spiderRuns && spiderRuns.length > 0) {
+        const latest = spiderRuns[0];
+        spiderMetrics = {
+          latest_run_date: latest.run_date,
+          tokens_spidered: latest.tokens_spidered,
+          wallets_discovered: latest.wallets_discovered,
+          mesh_links_added: latest.mesh_links_added,
+          avg_run_time_ms: latest.avg_run_time_ms,
+          runs_count: spiderRuns.length,
+        };
+      }
+
+      // Mesh growth (today vs yesterday)
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400_000).toISOString().split('T')[0];
+      const { data: meshToday } = await supabase.from('mesh_growth_daily')
+        .select('*').eq('snapshot_date', today).maybeSingle();
+      const { data: meshYesterday } = await supabase.from('mesh_growth_daily')
+        .select('*').eq('snapshot_date', yesterday).maybeSingle();
+
+      if (meshToday) {
+        meshGrowth = {
+          total_developers: meshToday.total_developers,
+          total_wallets: meshToday.total_wallets,
+          total_social_links: meshToday.total_social_links,
+          total_tokens: meshToday.total_tokens,
+          new_wallets_today: meshToday.new_wallets_today,
+          new_social_links_today: meshToday.new_social_links_today,
+          delta_developers: meshYesterday ? meshToday.total_developers - meshYesterday.total_developers : null,
+          delta_wallets: meshYesterday ? meshToday.total_wallets - meshYesterday.total_wallets : null,
+        };
+      }
+
+      // Token funnel (today)
+      const { data: funnelToday } = await supabase.from('token_funnel_daily')
+        .select('stage, count').eq('funnel_date', today);
+      if (funnelToday && funnelToday.length > 0) {
+        funnelMetrics = Object.fromEntries(funnelToday.map(f => [f.stage, f.count]));
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch spider/mesh metrics:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 14. UNREAD NOTIFICATIONS
     // ═══════════════════════════════════════════════════════════════
     const { count: unreadCount } = await supabase
       .from('admin_notifications')
@@ -573,6 +723,11 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         holders_intel_metrics: holdersIntelMetrics,
         vigil_stats: vigilStats,
         allstar_stats: allstarStats,
+        function_health: functionHealth,
+        dlq_stats: dlqStats,
+        spider_metrics: spiderMetrics,
+        mesh_growth: meshGrowth,
+        funnel_metrics: funnelMetrics,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -727,6 +882,40 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
+    // Function Health section
+    if (functionHealth.total_runs > 0) {
+      tgMessage += `\n⚙️ **Function Health** (${functionHealth.total_runs} runs, ${functionHealth.total_errors} errors)\n`;
+      const failedFuncs = Object.entries(functionHealth.by_function || {})
+        .filter(([, s]: [string, any]) => s.errors > 0)
+        .sort((a: any, b: any) => b[1].errors - a[1].errors)
+        .slice(0, 5);
+      for (const [fname, stats] of failedFuncs as [string, any][]) {
+        tgMessage += `• 🔴 ${fname}: ${stats.errors}/${stats.runs} failed (${stats.fail_pct}%) avg ${stats.avg_ms}ms\n`;
+      }
+    }
+
+    // DLQ section
+    if (dlqStats.pending > 0 || dlqStats.exhausted > 0) {
+      tgMessage += `\n📥 **Dead Letter Queue**\n`;
+      tgMessage += `• Pending: ${dlqStats.pending} | Exhausted: ${dlqStats.exhausted} | New overnight: ${dlqStats.new_overnight}\n`;
+    }
+
+    // Mesh/Spider section
+    if (meshGrowth.total_developers) {
+      tgMessage += `\n🕸️ **Mesh Growth**\n`;
+      tgMessage += `• Devs: ${meshGrowth.total_developers} | Wallets: ${meshGrowth.total_wallets} | Socials: ${meshGrowth.total_social_links}\n`;
+      if (meshGrowth.new_wallets_today > 0 || meshGrowth.new_social_links_today > 0) {
+        tgMessage += `• New today: +${meshGrowth.new_wallets_today} wallets, +${meshGrowth.new_social_links_today} social links\n`;
+      }
+    }
+
+    if (Object.keys(funnelMetrics).length > 0) {
+      tgMessage += `\n🔬 **Token Funnel** (today)\n`;
+      for (const [stage, count] of Object.entries(funnelMetrics)) {
+        tgMessage += `• ${stage}: ${count}\n`;
+      }
+    }
+
     tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
@@ -780,6 +969,11 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         external_services_status: externalServicesStatus,
         holders_intel_metrics: holdersIntelMetrics,
         table_health: tableHealth,
+        function_health: functionHealth,
+        dlq_stats: dlqStats,
+        spider_metrics: spiderMetrics,
+        mesh_growth: meshGrowth,
+        funnel_metrics: funnelMetrics,
         new_signups_details: newSignupsDetails,
         alerts,
         telegram_sent: telegramSent,
