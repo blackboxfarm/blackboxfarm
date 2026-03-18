@@ -16,6 +16,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
