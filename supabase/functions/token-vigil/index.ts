@@ -47,7 +47,7 @@ interface VigilToken {
   scan_count: number;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('token-vigil', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
