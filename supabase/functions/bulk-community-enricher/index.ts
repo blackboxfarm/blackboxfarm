@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { fetchXCommunityAboutAdmin } from "../_shared/x-community-about-admin.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,12 +11,8 @@ const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 /**
  * Bulk X Community Enricher
  * 
- * Processes X communities missing admin/mod handles by calling
- * x-community-enricher for each. Runs in small batches (3-5) to 
- * stay within edge function timeout (~60s).
- * 
- * Designed to be called repeatedly (via cron or manual) until all
- * communities are enriched.
+ * Uses Browserless to scrape the /about page for each community
+ * and extract the admin handle. No Apify. No member scraping.
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -24,31 +21,25 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const apifyApiKey = Deno.env.get('APIFY_API_KEY');
+  const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  if (!apifyApiKey) {
-    return new Response(JSON.stringify({ error: 'APIFY_API_KEY not configured' }), {
+  if (!browserlessApiKey) {
+    return new Response(JSON.stringify({ error: 'BROWSERLESS_API_KEY not configured' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
   try {
     const body = await req.json().catch(() => ({}));
-    const batchSize = Math.min(body.batchSize || 3, 10); // Small batches to avoid timeout
+    const batchSize = Math.min(body.batchSize || 3, 10);
 
-    console.log(`[bulk-community-enricher] Batch of ${batchSize}`);
+    console.log(`[bulk-community-enricher] Batch of ${batchSize} using Browserless about-page`);
 
-    // Get communities needing enrichment:
-    // - Missing admin data (never scraped)
-    // - Not deleted, not at max failures
-    // - Has linked tokens (from HoldersIntel)
-    // NOTE: We NEVER re-scrape. Staff data is a historical snapshot from launch.
-
-    // Fetch communities that might need enrichment - broad query, filter in code
+    // Get communities missing admin data
     const { data: rawCommunities, error: fetchError } = await supabase
       .from('x_communities')
-      .select('community_id, community_url, name, admin_usernames, linked_token_mints, last_scraped_at, failed_scrape_count')
+      .select('community_id, community_url, name, admin_usernames, linked_token_mints, last_scraped_at, failed_scrape_count, scrape_status')
       .eq('is_deleted', false)
       .lt('failed_scrape_count', 3)
       .not('linked_token_mints', 'is', null)
@@ -57,15 +48,15 @@ Deno.serve(async (req) => {
 
     if (fetchError) throw fetchError;
 
-    // Filter to:
-    // 1. Numeric community IDs only (real X Communities)
-    // 2. Missing admins (null or empty array) OR stale data
-    // Only enrich communities MISSING admin data — never re-scrape existing ones
+    // Only communities with numeric IDs, missing admins, not already exhausted
     const communities = (rawCommunities || [])
       .filter(c => {
         if (!/^\d+$/.test(c.community_id)) return false;
         const hasAdmins = c.admin_usernames && c.admin_usernames.length > 0;
-        return !hasAdmins;
+        if (hasAdmins) return false;
+        // Skip if about page already checked and found nothing
+        if (c.scrape_status === 'no_admin_on_about_page') return false;
+        return true;
       })
       .slice(0, batchSize);
 
@@ -94,106 +85,80 @@ Deno.serve(async (req) => {
     let failed = 0;
     const results: any[] = [];
 
-    // Process DIRECTLY with Apify (skip the enricher invocation to avoid double timeout)
     for (let i = 0; i < communities.length; i++) {
       const community = communities[i];
       const communityId = community.community_id;
       const communityUrl = community.community_url || `https://x.com/i/communities/${communityId}`;
 
-      if (i > 0) await delay(1500);
+      if (i > 0) await delay(2000); // Be nice to Browserless
 
       try {
-        console.log(`[${i + 1}/${communities.length}] Scraping ${communityId}`);
+        console.log(`[${i + 1}/${communities.length}] About-page lookup for ${communityId}`);
 
-        // Direct Apify call (same as x-community-enricher but inline)
-        const apifyResponse = await fetch(
-          `https://api.apify.com/v2/acts/danpoletaev~twitter-x-community-member-scraper/run-sync-get-dataset-items?token=${apifyApiKey}&maxItems=4&limit=4&clean=1`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              communityId,
-              maxMembers: 4,
-              proxyConfiguration: {
-                useApifyProxy: true,
-                apifyProxyGroups: ["RESIDENTIAL"],
-              },
-            }),
-          }
-        );
+        const aboutResult = await fetchXCommunityAboutAdmin(communityId, browserlessApiKey);
 
-        if (!apifyResponse.ok) {
-          const errText = await apifyResponse.text().catch(() => '');
-          console.warn(`[bulk] Apify ${apifyResponse.status} for ${communityId}`);
+        if (aboutResult.httpStatus >= 400 || (aboutResult.httpStatus === 0 && aboutResult.error)) {
+          console.warn(`[bulk] About-page failed for ${communityId}: ${aboutResult.error || aboutResult.httpStatus}`);
           
-          // Increment fail count
           await supabase.from('x_communities').upsert({
             community_id: communityId,
             failed_scrape_count: (community.failed_scrape_count || 0) + 1,
-            scrape_status: `error_${apifyResponse.status}`,
+            scrape_status: `error_${aboutResult.httpStatus || 'browserless'}`,
             last_scraped_at: new Date().toISOString(),
+            raw_data: aboutResult.rawData,
           }, { onConflict: 'community_id' });
           
           failed++;
-          results.push({ communityId, status: 'failed', error: `Apify ${apifyResponse.status}` });
+          results.push({ communityId, status: 'failed', error: aboutResult.error || `HTTP ${aboutResult.httpStatus}` });
           continue;
         }
 
-        const members = await apifyResponse.json();
-
-        // Extract admins and mods
-        const admins: string[] = [];
-        const mods: string[] = [];
-        for (const member of (members || [])) {
-          if (member.communityRole === 'Admin') admins.push(member.screenName.toLowerCase());
-          if (member.communityRole === 'Moderator') mods.push(member.screenName.toLowerCase());
-        }
-
-        const uniqueAdmins = [...new Set(admins)];
-        const uniqueMods = [...new Set(mods)];
+        const adminUsername = aboutResult.adminUsername;
+        const memberCount = aboutResult.memberCount;
+        const now = new Date().toISOString();
 
         // Update community record
+        const scrapeStatus = adminUsername ? 'complete' : 'no_admin_on_about_page';
         await supabase.from('x_communities').upsert({
           community_id: communityId,
           community_url: communityUrl,
-          admin_usernames: uniqueAdmins,
-          moderator_usernames: uniqueMods,
-          member_count: members?.length,
-          last_scraped_at: new Date().toISOString(),
-          scrape_status: 'complete',
+          admin_usernames: adminUsername ? [adminUsername] : [],
+          member_count: memberCount ?? community.member_count,
+          last_scraped_at: now,
+          scrape_status: scrapeStatus,
           failed_scrape_count: 0,
-          raw_data: (members || []).slice(0, 10),
+          raw_data: aboutResult.rawData,
         }, { onConflict: 'community_id' });
 
-        // Create mesh links for admins/mods → community → tokens
+        // Create mesh links
         const meshLinks: any[] = [];
-        const now = new Date().toISOString();
         const linkedTokens = community.linked_token_mints || [];
 
-        for (const admin of uniqueAdmins) {
+        if (adminUsername) {
           meshLinks.push({
             source_type: 'x_account',
-            source_id: admin,
+            source_id: adminUsername,
             linked_type: 'x_community',
             linked_id: communityId,
             relationship: 'admin_of',
             confidence: 100,
             discovered_via: 'bulk_community_enricher',
-            evidence: { scraped_at: now },
+            evidence: { scraped_at: now, source: 'about_page' },
           });
-        }
 
-        for (const mod of uniqueMods) {
-          meshLinks.push({
-            source_type: 'x_account',
-            source_id: mod,
-            linked_type: 'x_community',
-            linked_id: communityId,
-            relationship: 'mod_of',
-            confidence: 100,
-            discovered_via: 'bulk_community_enricher',
-            evidence: { scraped_at: now },
-          });
+          // Admin → token links
+          for (const tokenMint of linkedTokens) {
+            meshLinks.push({
+              source_type: 'x_account',
+              source_id: adminUsername,
+              linked_type: 'token',
+              linked_id: tokenMint,
+              relationship: 'admin_of_community_for',
+              confidence: 90,
+              discovered_via: 'bulk_community_enricher',
+              evidence: { community_id: communityId, scraped_at: now },
+            });
+          }
         }
 
         // Community → token links
@@ -210,23 +175,6 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Co-mod links (capped at first 6 staff)
-        const allStaff = [...uniqueAdmins, ...uniqueMods].slice(0, 6);
-        for (let s = 0; s < allStaff.length; s++) {
-          for (let t = s + 1; t < allStaff.length; t++) {
-            meshLinks.push({
-              source_type: 'x_account',
-              source_id: allStaff[s],
-              linked_type: 'x_account',
-              linked_id: allStaff[t],
-              relationship: 'co_mod',
-              confidence: 90,
-              discovered_via: 'bulk_community_enricher',
-              evidence: { community_id: communityId, scraped_at: now },
-            });
-          }
-        }
-
         if (meshLinks.length > 0) {
           const { error: meshError } = await supabase
             .from('reputation_mesh')
@@ -237,29 +185,28 @@ Deno.serve(async (req) => {
           if (meshError) console.warn(`[bulk] Mesh upsert error for ${communityId}:`, meshError.message);
         }
 
-        // Log API usage
+        // Log API usage (Browserless, not Apify)
         await supabase.from('api_usage_log').insert({
-          service_name: 'apify',
-          endpoint: 'danpoletaev~twitter-x-community-member-scraper',
+          service_name: 'browserless',
+          endpoint: 'function_about_page',
           method: 'POST',
           function_name: 'bulk-community-enricher',
           credits_used: 1,
           success: true,
-          response_status: 200,
-          metadata: { communityId, admins: uniqueAdmins.length, mods: uniqueMods.length },
+          response_status: aboutResult.httpStatus,
+          metadata: { communityId, admin: adminUsername, memberCount },
         });
 
         enriched++;
         results.push({
           communityId,
-          status: 'enriched',
-          admins: uniqueAdmins,
-          mods: uniqueMods,
+          status: adminUsername ? 'enriched' : 'no_admin_found',
+          admin: adminUsername,
+          memberCount,
           meshLinks: meshLinks.length,
-          linkedTokens: linkedTokens.length,
         });
 
-        console.log(`[bulk] ✅ ${communityId}: ${uniqueAdmins.length} admins, ${uniqueMods.length} mods, ${meshLinks.length} mesh links`);
+        console.log(`[bulk] ✅ ${communityId}: admin=${adminUsername || 'none'}, members=${memberCount || '?'}`);
       } catch (e) {
         console.error(`[bulk] Exception for ${communityId}:`, e);
         failed++;
@@ -274,7 +221,8 @@ Deno.serve(async (req) => {
       .eq('is_deleted', false)
       .lt('failed_scrape_count', 3)
       .not('linked_token_mints', 'is', null)
-      .is('admin_usernames', null);
+      .is('admin_usernames', null)
+      .neq('scrape_status', 'no_admin_on_about_page');
 
     console.log(`[bulk-community-enricher] Done: ${enriched} enriched, ${failed} failed. ${remaining} remaining.`);
 
