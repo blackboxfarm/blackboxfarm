@@ -808,20 +808,20 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 const rawId = n.fullId || n.id.split(':').slice(1).join(':');
                 return `${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
-              cooldownTicks={60}
-              d3AlphaDecay={0.04}
-              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.35}
-              d3AlphaMin={0.01}
+              cooldownTicks={80}
+              d3AlphaDecay={0.03}
+              d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
+              d3AlphaMin={0.005}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
               linkDirectionalParticles={1}
-              linkDirectionalParticleWidth={1.5}
-              linkDirectionalParticleSpeed={0.004}
+              linkDirectionalParticleWidth={2}
+              linkDirectionalParticleSpeed={0.005}
               linkDirectionalParticleColor={(link: any) => {
                 const rel = link.relationship || '';
-                if (rel.includes('funded')) return 'rgba(34,197,94,0.6)';
-                if (rel.includes('created')) return 'rgba(234,179,8,0.6)';
-                return 'rgba(255,255,255,0.3)';
+                if (rel.includes('funded')) return 'rgba(34,197,94,0.7)';
+                if (rel.includes('created')) return 'rgba(234,179,8,0.7)';
+                return 'rgba(255,255,255,0.4)';
               }}
               linkDirectionalArrowLength={(link: any) => {
                 const rel = link.relationship || '';
@@ -831,6 +831,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               linkDirectionalArrowRelPos={0.7}
               enableZoomInteraction={true}
               enablePanInteraction={true}
+              linkDistance={60}
+              nodeRelSize={5}
             />
           )}
         </div>
