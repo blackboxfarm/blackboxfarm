@@ -157,10 +157,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
-    // Clear cooldown for this entity so retry always works
+    // Clear cooldown so retry always works immediately
+    clearCooldown(searchInput.trim());
     triggerSpider(searchInput.trim(), 'deep');
     setHasSpideredOnce(true);
-  }, [searchInput, triggerSpider]);
+  }, [searchInput, triggerSpider, clearCooldown]);
 
   // --- X Community discovery with showmanship ---
   const handleDiscoverCommunity = useCallback(async () => {
