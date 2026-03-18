@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck } from "lucide-react";
+import { xIcon } from "@/components/token/SocialIcon";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useBubbleMapRateLimit } from "@/hooks/useBubbleMapRateLimit";
@@ -377,11 +379,24 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       ctx.fillStyle = '#fff'; ctx.font = `${Math.max(8, 12 / globalScale)}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🏦', meshNode.x, meshNode.y);
     }
+    // Admin crown or mod shield on x_account nodes
+    if (meshNode.type === 'x_account' && meshNode.role === 'admin') {
+      ctx.font = `${Math.max(6, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText('👑', meshNode.x, meshNode.y - size - 1);
+    } else if (meshNode.type === 'x_account' && meshNode.role === 'mod') {
+      ctx.font = `${Math.max(6, 10 / globalScale)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText('🛡️', meshNode.x, meshNode.y - size - 1);
+    }
     const labelText = meshNode.label;
     if (labelText) {
       const labelFontSize = Math.max(6, 9 / globalScale);
       ctx.font = `bold ${labelFontSize}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
+      // Blue label for admin/mod x_account nodes
+      const labelColor = (meshNode.type === 'x_account' && (meshNode.role === 'admin' || meshNode.role === 'mod'))
+        ? '#60a5fa' : 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = labelColor; ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
   }, [focusedEntity]);
 
@@ -424,11 +439,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
 
-  // Count hidden x_account nodes for the button
-  const hiddenXAccountCount = useMemo(() => {
-    if (xAccountsRevealed) return 0;
-    return graphData.nodes.filter(n => n.type === 'x_account').length;
-  }, [graphData.nodes, xAccountsRevealed]);
 
   const typeCounts = displayData.nodes.reduce((acc, n) => {
     acc[n.type] = (acc[n.type] || 0) + 1;
@@ -550,13 +560,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 className={`text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
                   hasSpideredOnce && !communitySearching && !xAccountsRevealed ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
                 }`}>
-                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <span className="mr-1">🐦</span>}
-                Map X Community @Handles to Token and Dev Wallet
-                {hiddenXAccountCount > 0 && !revealingXAccounts && (
-                  <Badge className="ml-1.5 bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[9px] px-1 py-0">
-                    {hiddenXAccountCount} hidden
-                  </Badge>
+                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : (
+                  <img src={xIcon} alt="X" className="h-3 w-3 mr-1 rounded-sm" />
                 )}
+                Map X Community
               </Button>
             </div>
           )}
@@ -649,12 +656,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               {xAccountsRevealed && (() => {
                 const communityNodes = displayData.nodes.filter(n => n.type === 'x_community');
                 const xAccountNodes = displayData.nodes.filter(n => n.type === 'x_account');
-                const adminLinks = displayData.links.filter((l: any) => l.relationship === 'admin_of' || l.relationship === 'mod_of');
                 if (communityNodes.length > 0 || xAccountNodes.length > 0) {
                   return (
-                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1 animate-fade-in">
+                    <TooltipProvider>
+                    <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1.5 animate-fade-in">
                       <div className="flex items-center gap-2">
-                        <span className="text-cyan-400 text-xs font-semibold">🐦 X Community Mapped!</span>
+                        <img src={xIcon} alt="X" className="h-4 w-4 rounded-sm" />
+                        <span className="text-cyan-400 text-xs font-semibold">X Community Mapped!</span>
                       </div>
                       {communityNodes.map(c => (
                         <div key={c.id} className="text-[11px] text-cyan-300">
@@ -662,14 +670,55 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                         </div>
                       ))}
                       {xAccountNodes.length > 0 && (
-                        <div className="text-[11px] text-muted-foreground">
-                          👥 Handles: {xAccountNodes.map(a => `@${(a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '')}`).join(', ')}
-                          {adminLinks.length > 0 && (
-                            <span className="text-amber-400 ml-1">({adminLinks.length} admin/mod links)</span>
-                          )}
+                        <div className="space-y-0.5">
+                          {xAccountNodes.map(a => {
+                            const handle = (a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '');
+                            const isAdmin = a.role === 'admin';
+                            const isMod = a.role === 'mod';
+                            const hasRotatedHandle = a.redFlags?.some(f => f.type === 'rotated_handle');
+                            const rotatedFlag = a.redFlags?.find(f => f.type === 'rotated_handle');
+                            return (
+                              <div key={a.id} className="flex items-center gap-1.5 text-[11px]">
+                                {isAdmin && <span title="Admin">👑</span>}
+                                {isMod && <span title="Moderator">🛡️</span>}
+                                <a
+                                  href={`https://x.com/${handle}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`font-medium hover:underline ${isAdmin || isMod ? 'text-blue-400' : 'text-cyan-300'}`}
+                                >
+                                  @{handle}
+                                  {(isAdmin || isMod) && <span className="ml-0.5 text-blue-400">✓</span>}
+                                </a>
+                                <ExternalLink className="h-2.5 w-2.5 text-muted-foreground opacity-50" />
+                                {hasRotatedHandle && rotatedFlag && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help text-amber-400 flex items-center gap-0.5">
+                                        <SearchCheck className="h-3 w-3" />
+                                        <span className="text-[9px]">⚠</span>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-xs text-xs bg-background border border-red-500/30">
+                                      <div className="space-y-1">
+                                        <div className="font-semibold text-red-400 flex items-center gap-1">
+                                          🚩 Handle Recycling Detected
+                                        </div>
+                                        <div className="text-muted-foreground">{rotatedFlag.explanation}</div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                <span className="text-muted-foreground/50 text-[9px] ml-auto">
+                                  {isAdmin ? 'ADMIN' : isMod ? 'MOD' : ''}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
+                    </TooltipProvider>
                   );
                 }
                 return null;
