@@ -680,7 +680,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                         </div>
                       ))}
                       {xAccountNodes.length > 0 && (
-                        <div className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
                           {xAccountNodes.map(a => {
                             const handle = (a.label || a.fullId || a.id).replace(/^@/, '').replace(/^x_account:/, '');
                             const isAdmin = a.role === 'admin';
@@ -688,19 +688,28 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                             const hasRotatedHandle = a.redFlags?.some(f => f.type === 'rotated_handle');
                             const rotatedFlag = a.redFlags?.find(f => f.type === 'rotated_handle');
                             return (
-                              <div key={a.id} className="flex items-center gap-1.5 text-[11px]">
+                              <span key={a.id} className="inline-flex items-center gap-0.5">
                                 {isAdmin && <span title="Admin">👑</span>}
                                 {isMod && <span title="Moderator">🛡️</span>}
-                                <a
-                                  href={`https://x.com/${handle}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`font-medium hover:underline ${isAdmin || isMod ? 'text-blue-400' : 'text-cyan-300'}`}
-                                >
-                                  @{handle}
-                                  {(isAdmin || isMod) && <span className="ml-0.5 text-blue-400">✓</span>}
-                                </a>
-                                <ExternalLink className="h-2.5 w-2.5 text-muted-foreground opacity-50" />
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <a
+                                      href={`https://x.com/${handle}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`font-medium hover:underline ${isAdmin || isMod ? 'text-blue-400' : 'text-cyan-300'}`}
+                                    >
+                                      @{handle}{(isAdmin || isMod) && <span className="ml-0.5 text-blue-400">✓</span>}
+                                    </a>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="text-xs">
+                                    {a.displayName ? (
+                                      <div><span className="font-semibold">{a.displayName}</span> · @{handle} · {isAdmin ? 'ADMIN' : isMod ? 'MOD' : 'Member'}</div>
+                                    ) : (
+                                      <div>@{handle} · {isAdmin ? 'ADMIN' : isMod ? 'MOD' : 'Member'}</div>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
                                 {hasRotatedHandle && rotatedFlag && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -719,10 +728,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
-                                <span className="text-muted-foreground/50 text-[9px] ml-auto">
-                                  {isAdmin ? 'ADMIN' : isMod ? 'MOD' : ''}
-                                </span>
-                              </div>
+                              </span>
                             );
                           })}
                         </div>
