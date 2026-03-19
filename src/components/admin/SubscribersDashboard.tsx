@@ -87,6 +87,10 @@ export function SubscribersDashboard() {
   const [overrideUserId, setOverrideUserId] = useState('');
   const [overrideTier, setOverrideTier] = useState('pro');
   
+  // Stripe customers
+  const [stripeCustomers, setStripeCustomers] = useState<StripeCustomer[]>([]);
+  const [stripeSearchQuery, setStripeSearchQuery] = useState('');
+
   // New code dialog
   const [newCodeDialogOpen, setNewCodeDialogOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
