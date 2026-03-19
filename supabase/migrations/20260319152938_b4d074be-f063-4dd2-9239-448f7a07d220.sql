@@ -1,0 +1,1 @@
+UPDATE api_service_config SET monthly_quota = 2500 WHERE service_name = 'apify';
