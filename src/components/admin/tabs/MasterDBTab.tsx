@@ -335,10 +335,13 @@ export default function MasterDBTab() {
                 <TableHead>Name</TableHead>
                 <TableHead>Mint</TableHead>
                 <TableHead>Launchpad</TableHead>
+                <TableHead>Websites</TableHead>
+                <TableHead>X Communities</TableHead>
+                <TableHead>X Handles</TableHead>
+                <TableHead>ATH 24h</TableHead>
                 <TableHead>Grad</TableHead>
                 <TableHead>Graduated At</TableHead>
-                <TableHead>Creator</TableHead>
-                <TableHead>Dev Wallets</TableHead>
+                <TableHead>Dev Wallet</TableHead>
                 <TableHead>KYC</TableHead>
                 <TableHead>KYC Src</TableHead>
                 <TableHead>Rep Score</TableHead>
@@ -350,11 +353,7 @@ export default function MasterDBTab() {
                 <TableHead>Blacklisted</TableHead>
                 <TableHead>Spammer</TableHead>
                 <TableHead>Legit</TableHead>
-                    <TableHead>Websites</TableHead>
-                    <TableHead>X Communities</TableHead>
-                    <TableHead>X Handles</TableHead>
-                    <TableHead>ATH 24h</TableHead>
-                    <TableHead>Posted</TableHead>
+                <TableHead>Posted</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
