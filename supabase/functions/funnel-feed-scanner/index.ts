@@ -476,7 +476,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
             scheduled_at: scheduledAt,
             status: 'pending',
             trigger_source: 'funnel_feed',
-            trigger_comment: `Discovered via funnel feed: ${source.source_name}`,
+            trigger_comment: null,
           });
 
         const newXpostStatus = queueErr ? 'failed' : 'queued';
