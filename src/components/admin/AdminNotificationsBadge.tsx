@@ -23,15 +23,17 @@ interface AdminNotification {
   created_at: string;
 }
 
-type TabCategory = 'signups' | 'transactions' | 'audit';
+type TabCategory = 'signups' | 'transactions' | 'audit' | 'tickets';
 
 const SIGNUP_TYPES = ['new_signup', 'user_registered', 'account_created'];
 const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap'];
+const TICKET_TYPES = ['support_ticket', 'ticket_reply'];
 const AUDIT_TYPES = ['api_failure_critical', 'api_failure_warning', 'quota_critical', 'quota_warning', 'repeated_failure', 'table_bloat', 'security', 'error', 'rug_pull_detected'];
 
 function categorize(type: string): TabCategory {
   if (SIGNUP_TYPES.includes(type)) return 'signups';
   if (TRANSACTION_TYPES.includes(type)) return 'transactions';
+  if (TICKET_TYPES.includes(type)) return 'tickets';
   return 'audit';
 }
 
