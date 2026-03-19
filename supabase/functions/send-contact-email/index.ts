@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 interface ContactFormRequest {
@@ -17,8 +17,17 @@ interface ContactFormRequest {
   message: string;
 }
 
+const CATEGORY_PRIORITY: Record<string, string> = {
+  "Technical Support": "high",
+  "Bug Report": "high",
+  "Security Issue": "critical",
+  "Feature Request/Feedback": "low",
+  "Partnership Inquiries": "medium",
+  "General Inquiry": "medium",
+  "Billing/Subscription": "high",
+};
+
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -26,13 +35,75 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { name, email, subject, category, message }: ContactFormRequest = await req.json();
 
+    // Initialize Supabase admin client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+
+    // Determine auto-priority from category
+    const priority = CATEGORY_PRIORITY[category] || "medium";
+
+    // Check if submitter has an account (by email)
+    let userId: string | null = null;
+    const { data: users } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1 });
+    // More targeted lookup
+    const { data: matchedUsers } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id")
+      .eq("email", email)
+      .limit(1);
+    if (matchedUsers && matchedUsers.length > 0) {
+      userId = matchedUsers[0].user_id;
+    }
+
+    // Save to support_tickets table
+    const { data: ticket, error: ticketError } = await supabaseAdmin
+      .from("support_tickets")
+      .insert({
+        name,
+        email,
+        category,
+        subject,
+        message,
+        priority,
+        user_id: userId,
+        metadata: { source: "contact_form" },
+      })
+      .select("id, ticket_number")
+      .single();
+
+    if (ticketError) {
+      console.error("Failed to create ticket:", ticketError);
+    }
+
+    const ticketNum = ticket?.ticket_number || "N/A";
+
+    // Create admin notification with ticket details
+    if (ticket) {
+      const priorityEmoji = priority === "critical" ? "🔴" : priority === "high" ? "🟠" : priority === "medium" ? "🟡" : "🟢";
+      await supabaseAdmin.from("admin_notifications").insert({
+        notification_type: "support_ticket",
+        title: `🎫 New Ticket #${ticketNum}: ${subject}`,
+        message: `${priorityEmoji} ${priority.toUpperCase()} | ${category}\nFrom: ${name} (${email})\n\n${message.slice(0, 300)}${message.length > 300 ? "…" : ""}`,
+        metadata: {
+          ticket_id: ticket.id,
+          ticket_number: ticketNum,
+          category,
+          priority,
+          email,
+          name,
+        },
+      });
+    }
+
     // Send notification to support team
     const supportEmail = await resend.emails.send({
       from: "BlackBox Farm <noreply@blackbox.farm>",
       to: ["support@blackbox.farm"],
-      subject: `New Contact Form: ${category} - ${subject}`,
+      subject: `[Ticket #${ticketNum}] ${category} - ${subject}`,
       html: `
-        <h2>New Contact Form Submission</h2>
+        <h2>New Support Ticket #${ticketNum}</h2>
+        <p><strong>Priority:</strong> ${priority.toUpperCase()}</p>
         <p><strong>Name:</strong> ${name}</p>
         <p><strong>Email:</strong> ${email}</p>
         <p><strong>Category:</strong> ${category}</p>
@@ -40,7 +111,7 @@ const handler = async (req: Request): Promise<Response> => {
         <h3>Message:</h3>
         <p>${message.replace(/\n/g, '<br>')}</p>
         <hr>
-        <p><small>Submitted from BlackBox Farm contact form</small></p>
+        <p><small>Ticket created from BlackBox Farm contact form</small></p>
       `,
     });
 
@@ -48,56 +119,53 @@ const handler = async (req: Request): Promise<Response> => {
     const userEmail = await resend.emails.send({
       from: "BlackBox Farm <support@blackbox.farm>",
       to: [email],
-      subject: "We received your message - BlackBox Farm",
+      subject: `[Ticket #${ticketNum}] We received your message - BlackBox Farm`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-            Thank you for contacting BlackBox Farm!
-          </h1>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a14; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+          <div style="border-bottom: 2px solid #00e5ff30; padding-bottom: 16px; margin-bottom: 20px;">
+            <h1 style="color: #00e5ff; font-size: 20px; margin: 0;">Thank you for contacting BlackBox Farm!</h1>
+            <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">Ticket #${ticketNum}</p>
+          </div>
           
           <p>Hi ${name},</p>
+          <p>We've received your message and assigned it ticket number <strong>#${ticketNum}</strong>. Our team will get back to you based on the priority of your inquiry.</p>
           
-          <p>We've received your message and will get back to you within 24 hours. Here's a summary of your inquiry:</p>
-          
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+          <div style="background: #111827; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; margin: 16px 0;">
             <p><strong>Category:</strong> ${category}</p>
             <p><strong>Subject:</strong> ${subject}</p>
             <p><strong>Your message:</strong></p>
-            <p style="font-style: italic;">"${message}"</p>
+            <p style="font-style: italic; color: #94a3b8;">"${message}"</p>
           </div>
           
-          <p>In the meantime, you might find these resources helpful:</p>
-          <ul>
-            <li><a href="https://blackbox.farm/whitepaper">White Paper</a> - Learn about our technology and vision</li>
-            <li><a href="https://blackbox.farm/">Fee Calculator</a> - Estimate your trading costs</li>
-            <li><a href="https://discord.gg/blackboxfarm">Discord Community</a> - Join our community for real-time discussions</li>
+          <p style="color: #94a3b8; font-size: 13px;">Expected response times:</p>
+          <ul style="color: #94a3b8; font-size: 13px;">
+            <li>Critical/Security: 2 hours</li>
+            <li>Technical Support: 12 hours</li>
+            <li>General Inquiries: 24 hours</li>
+            <li>Partnerships: 48 hours</li>
           </ul>
           
-          <p>Best regards,<br>
-          The BlackBox Farm Team</p>
+          <p>Best regards,<br>The BlackBox Farm Team</p>
           
-          <hr style="margin: 30px 0;">
-          <p style="font-size: 12px; color: #666;">
-            BlackBox Farm - Democratizing DeFi Trading<br>
-            This email was sent in response to your contact form submission.
+          <hr style="border: none; border-top: 1px solid #1e293b; margin: 24px 0;">
+          <p style="color: #475569; font-size: 11px; text-align: center;">
+            BlackBox Farm · <a href="https://blackbox.farm" style="color: #00e5ff60;">blackbox.farm</a>
           </p>
         </div>
       `,
     });
 
-    console.log("Contact emails sent successfully:", { supportEmail, userEmail });
+    console.log("Contact emails sent, ticket created:", { ticketNum, supportEmail, userEmail });
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "Email sent successfully" 
+        message: "Email sent successfully",
+        ticket_number: ticketNum,
       }), 
       {
         status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
       }
     );
   } catch (error: any) {
