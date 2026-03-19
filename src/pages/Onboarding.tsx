@@ -1,20 +1,33 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { PricingTable } from "@/components/premium/PricingTable";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserTier } from "@/hooks/useUserTier";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const { checkSubscription } = useUserTier();
 
-  // If not logged in, send to auth
-  if (!user) {
-    navigate('/auth?tab=signup', { replace: true });
-    return null;
-  }
+  // Handle Stripe return
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Subscription activated! Welcome aboard 🎉');
+      checkSubscription();
+      localStorage.setItem('bbx_onboarding_done', '1');
+      setSearchParams({}, { replace: true });
+      // Give webhook a moment to process, then redirect
+      setTimeout(() => navigate('/dashboard', { replace: true }), 2000);
+    } else if (searchParams.get('canceled') === 'true') {
+      toast.info('Checkout canceled. No charges were made.');
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]);
 
   const handleSkipFree = () => {
     localStorage.setItem('bbx_onboarding_done', '1');
@@ -28,32 +41,40 @@ export default function Onboarding() {
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium">
             <Sparkles className="w-4 h-4" />
-            Welcome to BlackBox Farm
+            {user ? 'Welcome to BlackBox Farm' : 'Join BlackBox Farm'}
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-foreground">
             Choose Your Plan
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Pick the tier that fits your trading style. You can always upgrade later from your dashboard.
+            {user 
+              ? 'Pick the tier that fits your trading style. You can always upgrade later from your dashboard.'
+              : 'Create a free account and pick a plan — or just sign up and upgrade later. No email confirmation required.'}
           </p>
         </div>
 
-        {/* Pricing Table (reused) */}
+        {/* Pricing Table — handles auth modal for anon users automatically */}
         <PricingTable />
 
         {/* Skip / Continue Free */}
         <div className="text-center space-y-3 pb-8">
-          <Button 
-            variant="ghost" 
-            size="lg"
-            onClick={handleSkipFree}
-            className="text-muted-foreground hover:text-foreground gap-2"
-          >
-            Continue with Free plan
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          {user ? (
+            <Button 
+              variant="ghost" 
+              size="lg"
+              onClick={handleSkipFree}
+              className="text-muted-foreground hover:text-foreground gap-2"
+            >
+              Continue with Free plan
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Click any plan above to create your account and get started.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
-            No credit card required. Upgrade anytime.
+            No email confirmation required. Upgrade anytime.
           </p>
         </div>
       </div>
