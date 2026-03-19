@@ -286,7 +286,7 @@ export default function MasterDBTab() {
               onClick={() => { setFilterPump(f => !f); setPage(0); }}
             >
               <Pill className="h-3.5 w-3.5" />
-              {filterPump ? "Showing Non-Pump" : "Hide Pump.fun"}
+              {filterPump ? "Pump Monitor Hidden" : "Hide Pump Monitor"}
             </Button>
             <Button
               size="sm"
