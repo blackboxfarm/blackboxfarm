@@ -307,6 +307,18 @@ export function AdminNotificationsBadge() {
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger
+              value="tickets"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-500 data-[state=active]:bg-transparent py-2.5 gap-1.5"
+            >
+              <Ticket className="h-4 w-4 text-teal-500" />
+              <span className="text-xs">Tickets</span>
+              {ticketUnread > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-teal-500/20 text-teal-500 border-0">
+                  {ticketUnread}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="signups" className="mt-0">
@@ -314,6 +326,9 @@ export function AdminNotificationsBadge() {
           </TabsContent>
           <TabsContent value="transactions" className="mt-0">
             {renderNotificationList(transactionNotifs, 'transactions')}
+          </TabsContent>
+          <TabsContent value="tickets" className="mt-0">
+            {renderNotificationList(ticketNotifs, 'tickets')}
           </TabsContent>
           <TabsContent value="audit" className="mt-0">
             {renderNotificationList(auditNotifs, 'audit')}
