@@ -226,7 +226,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
           scheduled_at: scheduledAt,
           status: 'pending',
           trigger_source: 'funnel_feed',
-          trigger_comment: `Backfill from funnel feed: ${(q as any).funnel_feed_sources?.source_name || 'unknown'}`,
+          trigger_comment: null,
         });
         if (!error) inserted++;
       }
