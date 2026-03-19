@@ -366,6 +366,149 @@ export function SubscribersDashboard() {
           <TabsTrigger value="redemptions">✅ Redemptions</TabsTrigger>
         </TabsList>
 
+        {/* Stripe Customers Tab */}
+        <TabsContent value="stripe-customers" className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by email or name..."
+                value={stripeSearchQuery}
+                onChange={e => setStripeSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button size="sm" variant="ghost" onClick={fetchStripeCustomers}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <a href="https://dashboard.stripe.com/customers" target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4 mr-1" /> Stripe Dashboard
+              </a>
+            </Button>
+          </div>
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card>
+              <CardContent className="p-4 text-center">
+                <DollarSign className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                <div className="text-2xl font-bold text-emerald-400">{stripeCustomers.filter(c => c.is_active).length}</div>
+                <div className="text-xs text-muted-foreground">Active Paying</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <Users className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                <div className="text-2xl font-bold">{stripeCustomers.length}</div>
+                <div className="text-xs text-muted-foreground">Total Stripe</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <Check className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                <div className="text-2xl font-bold text-emerald-400">{stripeCustomers.filter(c => c.matched_user_id).length}</div>
+                <div className="text-xs text-muted-foreground">Has Site Account</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <X className="h-5 w-5 mx-auto mb-1 text-amber-400" />
+                <div className="text-2xl font-bold text-amber-400">{stripeCustomers.filter(c => !c.matched_user_id).length}</div>
+                <div className="text-xs text-muted-foreground">No Site Account</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="rounded-md border overflow-auto max-h-[500px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Interval</TableHead>
+                  <TableHead>Period End</TableHead>
+                  <TableHead>Site Account</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Stripe</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stripeCustomers
+                  .filter(c => {
+                    if (!stripeSearchQuery) return true;
+                    const q = stripeSearchQuery.toLowerCase();
+                    return c.email.toLowerCase().includes(q) || c.name?.toLowerCase().includes(q);
+                  })
+                  .map(c => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-medium">
+                      {c.name || '—'}
+                    </TableCell>
+                    <TableCell className="text-sm">{c.email}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={TIER_COLORS[c.tier_key] || ''}>
+                        {c.tier_key}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm font-mono">
+                      {c.amount_cents ? `$${(c.amount_cents / 100).toFixed(2)}` : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {c.interval || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {c.current_period_end ? format(new Date(c.current_period_end), 'MMM d, yyyy') : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {c.matched_user_id ? (
+                        <Badge variant="outline" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                          ✅ Linked
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                          ⚠️ No Account
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={c.is_active ? 'default' : 'secondary'}>
+                        {c.is_active ? 'Active' : 'Cancelled'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        asChild
+                      >
+                        <a
+                          href={`https://dashboard.stripe.com/customers/${c.stripe_customer_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View in Stripe"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {stripeCustomers.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      No Stripe customers recorded yet. They'll appear after webhook events fire.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
         {/* Subscribers Tab */}
         <TabsContent value="subscribers" className="space-y-4">
           <div className="flex flex-wrap gap-3 items-center">
