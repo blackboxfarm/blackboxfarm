@@ -147,6 +147,9 @@ interface HealthScore {
   breakdown?: Record<string, { score: number; weight: number; contribution: number }>;
   vitalityPenalties?: string[];
   pairAgeHours?: number | null;
+  structuralScore?: number;
+  activityScore?: number;
+  momentumGrade?: string;
 }
 
 interface HoldersReport {
