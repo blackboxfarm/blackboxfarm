@@ -140,9 +140,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     setHasSpideredOnce(false); // Reset so auto-spider can fire for new entity
     clearCooldown(searchInput.trim()); // Clear any stale cooldown for this entity
     let type = 'wallet';
-    if (searchInput.startsWith('@')) type = 'x_account';
-    else if (searchInput.length < 20) type = 'token';
-    focusOnEntity(searchInput.trim(), type);
+    const rawInput = searchInput.trim();
+    // Normalize X handles: strip @ and lowercase to match DB storage
+    let normalizedId = rawInput;
+    if (rawInput.startsWith('@')) {
+      type = 'x_account';
+      normalizedId = rawInput.replace(/^@/, '').toLowerCase();
+    } else if (rawInput.length < 20) {
+      type = 'token';
+    }
+    focusOnEntity(normalizedId, type);
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
