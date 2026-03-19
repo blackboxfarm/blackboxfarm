@@ -637,6 +637,29 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       vitalityPenalties.push(`WARNING: Only ${realHolderCount} real holders (non-dust) — capped at D`);
     }
     
+    // === MARKET MATURITY FLOOR ===
+    // Tokens with proven market validation (high mcap + high holder count) cannot score below certain floors.
+    // A token at $10M+ with 5K+ real holders has been validated by the market — it's not an F.
+    if (inferredMarketCapUSD >= 10_000_000 && realHolderCount >= 5000) {
+      const floor = 75; // Minimum B grade
+      if (healthScore < floor) {
+        vitalityPenalties.push(`Market maturity floor: $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
+        healthScore = floor;
+      }
+    } else if (inferredMarketCapUSD >= 5_000_000 && realHolderCount >= 2000) {
+      const floor = 65; // Minimum C grade
+      if (healthScore < floor) {
+        vitalityPenalties.push(`Market maturity floor: $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
+        healthScore = floor;
+      }
+    } else if (inferredMarketCapUSD >= 1_000_000 && realHolderCount >= 500) {
+      const floor = 50; // Minimum D grade (not F)
+      if (healthScore < floor) {
+        vitalityPenalties.push(`Market maturity floor: $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
+        healthScore = floor;
+      }
+    }
+    
     healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
     
     let healthGrade = 'A';
