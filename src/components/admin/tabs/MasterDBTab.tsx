@@ -385,10 +385,25 @@ export default function MasterDBTab() {
                     <TableCell>{truncate(r.name, 20)}</TableCell>
                     <TableCell><MintCell mint={r.token_mint} /></TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{r.launchpad ?? "—"}</Badge></TableCell>
+                    <TableCell><WebsitesCell urls={r.websites} /></TableCell>
+                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} admins={r.community_admin_handles} mods={r.community_mod_handles} /></TableCell>
+                    <TableCell><XHandlesCell handles={r.mesh_x_handles} /></TableCell>
+                    <TableCell className="text-muted-foreground">{r.ath_24h_usd != null ? `$${Number(r.ath_24h_usd).toFixed(6)}` : "—"}</TableCell>
                     <TableCell>{r.is_graduated ? "✅" : "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{r.graduated_at ? new Date(r.graduated_at).toLocaleDateString() : "—"}</TableCell>
-                    <TableCell><MintCell mint={r.creator_wallet ?? ""} /></TableCell>
-                    <TableCell><ArrayCell arr={r.dev_wallets} /></TableCell>
+                    <TableCell>
+                      {(() => {
+                        const wallet = r.creator_wallet || (r.dev_wallets && r.dev_wallets[0]);
+                        if (!wallet) return <span className="text-muted-foreground text-xs">—</span>;
+                        return (
+                          <a href={`https://solscan.io/account/${wallet}`} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300">
+                            {wallet.slice(0, 6)}…{wallet.slice(-4)}
+                            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                          </a>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>{r.kyc_verified ? "✅" : "—"}</TableCell>
                     <TableCell>{r.kyc_source ?? "—"}</TableCell>
                     <TableCell>
@@ -406,10 +421,6 @@ export default function MasterDBTab() {
                     <TableCell>{r.dev_auto_blacklisted ? "🚫" : "—"}</TableCell>
                     <TableCell>{r.dev_is_serial_spammer ? "🚫" : "—"}</TableCell>
                     <TableCell>{r.dev_is_legitimate_builder ? "✅" : "—"}</TableCell>
-                    <TableCell><WebsitesCell urls={r.websites} /></TableCell>
-                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} admins={r.community_admin_handles} mods={r.community_mod_handles} /></TableCell>
-                    <TableCell><XHandlesCell handles={r.mesh_x_handles} /></TableCell>
-                    <TableCell className="text-muted-foreground">{r.ath_24h_usd != null ? `$${Number(r.ath_24h_usd).toFixed(6)}` : "—"}</TableCell>
                     <TableCell>{r.was_posted ? "✅" : "—"}</TableCell>
                   </TableRow>
                 ))
