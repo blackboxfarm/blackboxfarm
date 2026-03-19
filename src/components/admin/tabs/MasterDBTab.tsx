@@ -75,6 +75,87 @@ function ArrayCell({ arr }: { arr: string[] | null }) {
   );
 }
 
+function WebsitesCell({ urls }: { urls: string[] | null }) {
+  if (!urls || urls.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  return (
+    <div className="flex flex-col gap-0.5 max-w-[220px]">
+      {urls.slice(0, 3).map((url, i) => {
+        let display = url;
+        try { display = new URL(url).hostname.replace('www.', ''); } catch {}
+        return (
+          <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+            className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate max-w-[220px]">
+            🌐 {display}
+            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+          </a>
+        );
+      })}
+      {urls.length > 3 && <span className="text-[10px] text-muted-foreground">+{urls.length - 3} more</span>}
+    </div>
+  );
+}
+
+function XCommunityCell({ urls, names, admins, mods }: { urls: string[] | null; names: string[] | null; admins: string[] | null; mods: string[] | null }) {
+  if (!urls || urls.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  return (
+    <div className="flex flex-col gap-1 max-w-[280px]">
+      {urls.map((url, i) => {
+        const name = names?.[i] || url.split('/').pop() || 'Community';
+        return (
+          <div key={i} className="border border-border/50 rounded px-1.5 py-1 bg-muted/30">
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate font-medium">
+              🏛️ {truncate(name, 28)}
+              <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+            </a>
+            {(admins && admins.length > 0) && (
+              <div className="flex flex-wrap gap-0.5 mt-0.5">
+                {admins.map((h, j) => (
+                  <a key={`a-${j}`} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5">
+                    <Badge variant="default" className="text-[9px] px-1 py-0 bg-amber-600/80 hover:bg-amber-500">
+                      👑 @{h}
+                    </Badge>
+                  </a>
+                ))}
+              </div>
+            )}
+            {(mods && mods.length > 0) && (
+              <div className="flex flex-wrap gap-0.5 mt-0.5">
+                {mods.slice(0, 4).map((h, j) => (
+                  <a key={`m-${j}`} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5">
+                    <Badge variant="secondary" className="text-[9px] px-1 py-0">
+                      🛡️ @{h}
+                    </Badge>
+                  </a>
+                ))}
+                {mods.length > 4 && <Badge variant="outline" className="text-[9px] px-1 py-0">+{mods.length - 4}</Badge>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function XHandlesCell({ handles }: { handles: string[] | null }) {
+  if (!handles || handles.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  return (
+    <div className="flex flex-wrap gap-0.5 max-w-[200px]">
+      {handles.slice(0, 3).map((h, i) => (
+        <a key={i} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer">
+          <Badge variant="outline" className="text-[10px] px-1 py-0 text-blue-400 hover:text-blue-300">
+            @{h}
+          </Badge>
+        </a>
+      ))}
+      {handles.length > 3 && <Badge variant="secondary" className="text-[10px] px-1 py-0">+{handles.length - 3}</Badge>}
+    </div>
+  );
+}
+
 // Source icon definitions — inferred from row data
 const SOURCE_ICONS: { key: string; emoji: string; label: string; test: (r: any) => boolean }[] = [
   { key: 'pump',    emoji: '🎰', label: 'Pump.fun Discovery',         test: r => r.launchpad?.toLowerCase() === 'pump.fun' },
@@ -254,14 +335,11 @@ export default function MasterDBTab() {
                 <TableHead>Blacklisted</TableHead>
                 <TableHead>Spammer</TableHead>
                 <TableHead>Legit</TableHead>
-                <TableHead>X Communities</TableHead>
-                <TableHead>Community Names</TableHead>
-                <TableHead>Admins</TableHead>
-                <TableHead>Mods</TableHead>
-                <TableHead>Mesh X</TableHead>
-                <TableHead>Websites</TableHead>
-                <TableHead>ATH 24h</TableHead>
-                <TableHead>Posted</TableHead>
+                    <TableHead>Websites</TableHead>
+                    <TableHead>X Communities</TableHead>
+                    <TableHead>X Handles</TableHead>
+                    <TableHead>ATH 24h</TableHead>
+                    <TableHead>Posted</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -314,12 +392,9 @@ export default function MasterDBTab() {
                     <TableCell>{r.dev_auto_blacklisted ? "🚫" : "—"}</TableCell>
                     <TableCell>{r.dev_is_serial_spammer ? "🚫" : "—"}</TableCell>
                     <TableCell>{r.dev_is_legitimate_builder ? "✅" : "—"}</TableCell>
-                    <TableCell><ArrayCell arr={r.x_community_urls} /></TableCell>
-                    <TableCell><ArrayCell arr={r.x_community_names} /></TableCell>
-                    <TableCell><ArrayCell arr={r.community_admin_handles} /></TableCell>
-                    <TableCell><ArrayCell arr={r.community_mod_handles} /></TableCell>
-                    <TableCell><ArrayCell arr={r.mesh_x_handles} /></TableCell>
-                    <TableCell><ArrayCell arr={r.websites} /></TableCell>
+                    <TableCell><WebsitesCell urls={r.websites} /></TableCell>
+                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} admins={r.community_admin_handles} mods={r.community_mod_handles} /></TableCell>
+                    <TableCell><XHandlesCell handles={r.mesh_x_handles} /></TableCell>
                     <TableCell className="text-muted-foreground">{r.ath_24h_usd != null ? `$${Number(r.ath_24h_usd).toFixed(6)}` : "—"}</TableCell>
                     <TableCell>{r.was_posted ? "✅" : "—"}</TableCell>
                   </TableRow>
