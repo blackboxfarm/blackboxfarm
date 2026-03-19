@@ -456,6 +456,9 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{dust\}/g, data.dustCount.toLocaleString())
     .replace(/\{healthGrade\}/g, data.healthGrade)
     .replace(/\{healthScore\}/g, data.healthScore.toString())
+    .replace(/\{structuralScore\}/g, (data.structuralScore ?? '').toString())
+    .replace(/\{activityScore\}/g, (data.activityScore ?? '').toString())
+    .replace(/\{momentumGrade\}/g, data.momentumGrade ?? '')
     .replace(/\{timestamp\}/g, utcTimestamp)
     // Intel/AI variables
     .replace(/\{comment1\}/g, comment1)
