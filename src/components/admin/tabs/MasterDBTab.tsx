@@ -223,13 +223,17 @@ export default function MasterDBTab() {
   }, [searchInput]);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["master-db", page, search],
+    queryKey: ["master-db", page, search, filterPump],
     queryFn: async () => {
       let query = supabase
         .from("master_token_directory" as any)
         .select("*", { count: "exact" })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
         .order("created_at", { ascending: false, nullsFirst: false });
+
+      if (filterPump) {
+        query = query.neq("launchpad", "pump.fun");
+      }
 
       if (search) {
         query = query.or(
