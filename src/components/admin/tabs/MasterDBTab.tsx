@@ -24,6 +24,7 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Pill,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
