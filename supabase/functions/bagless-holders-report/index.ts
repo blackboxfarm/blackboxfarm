@@ -962,6 +962,9 @@ serve(withRunLog('bagless-holders-report', async (req) => {
         breakdown: healthBreakdown,
         vitalityPenalties,
         pairAgeHours: pairAgeHours ? Math.round(pairAgeHours) : null,
+        structuralScore,
+        activityScore,
+        momentumGrade,
       },
       // Intelligence data
       flaggedHolders: flaggedHolders.length > 0 ? flaggedHolders : undefined,
