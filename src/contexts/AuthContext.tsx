@@ -29,10 +29,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
 
-        // Avoid briefly reporting "not authenticated" during the initial session bootstrap.
-        // We'll flip loading=false after getSession() resolves below.
         if (event !== 'INITIAL_SESSION') {
           setLoading(false);
+        }
+
+        // Track login activity
+        if (event === 'SIGNED_IN' && session?.user?.id) {
+          supabase.rpc('track_user_login', { p_user_id: session.user.id }).then();
         }
       }
     );
