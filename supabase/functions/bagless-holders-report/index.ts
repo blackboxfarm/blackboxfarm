@@ -443,16 +443,15 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       riskFlags.push(`Bundled wallets: ${insidersResult.bundledPercentage.toFixed(1)}% supply`);
     }
     
-    // === LIFECYCLE-AWARE HEALTH SCORE ===
+    // === LIFECYCLE-AWARE HEALTH SCORE (Structural/Activity Split v2) ===
     const vitality = dexResult.vitality;
     const pairAgeMs = vitality.pairCreatedAt ? (Date.now() - vitality.pairCreatedAt) : null;
     const pairAgeHours = pairAgeMs ? pairAgeMs / 3600000 : null;
     
-    // 8-phase detection (inline to avoid import issues with shared module in edge fn)
+    // 8-phase detection
     type HealthPhase = 'on_curve' | 'newborn' | 'early' | 'adolescent' | 'established' | 'growth' | 'mature' | 'blue_chip';
     let healthPhase: HealthPhase = 'on_curve';
     
-    // Graduated DEX venues — PumpSwap, Raydium, Orca, Meteora all mean token left bonding curve
     const dexId = vitality.dexId || (dexResult.pairs?.[0]?.dexId) || null;
     const graduatedDex = dexId?.toLowerCase();
     const isGraduatedVenue = graduatedDex === 'pumpswap' || graduatedDex === 'raydium' || graduatedDex === 'orca' || graduatedDex === 'meteora';
@@ -461,9 +460,9 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       if (pairAgeHours! < 2) healthPhase = 'newborn';
       else if (pairAgeHours! < 12) healthPhase = 'early';
       else if (pairAgeHours! < 48) healthPhase = 'adolescent';
-      else if (pairAgeHours! < 168) healthPhase = 'established'; // 7 days
-      else if (pairAgeHours! < 720) healthPhase = 'growth'; // 30 days
-      else if (pairAgeHours! < 2160) healthPhase = 'mature'; // 90 days
+      else if (pairAgeHours! < 168) healthPhase = 'established';
+      else if (pairAgeHours! < 720) healthPhase = 'growth';
+      else if (pairAgeHours! < 2160) healthPhase = 'mature';
       else {
         healthPhase = vitality.volume.h24 > 1_000_000 ? 'blue_chip' : 'mature';
       }
@@ -476,63 +475,118 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       return Math.max(0, Math.min(100, raw));
     };
     
-    // Compute individual metric scores
+    // ── STRUCTURAL METRICS (long-term health) ──
     const holderCountScore = scoreMetric(nonLpHolders.length, 500, 20);
     const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50); // lower is better
     const lpScore = scoreMetric(lpPercentage, 30, 5);
     const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25); // lower is better
     const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60); // lower is better
-    
-    // Buy/sell ratio
+    const devPct = potentialDevWallet?.percentageOfSupply ?? 0;
     const isEarlyPhase = healthPhase === 'on_curve' || healthPhase === 'newborn' || healthPhase === 'early';
+    const devThresholdGood = isEarlyPhase ? 15 : healthPhase === 'adolescent' ? 10 : 5;
+    const devScore = scoreMetric(devPct, devThresholdGood, 40);
+    
+    // Longevity score: how long the token has survived
+    let longevityScore = 0;
+    if (pairAgeHours !== null) {
+      if (pairAgeHours >= 2160) longevityScore = 100; // 90d+
+      else if (pairAgeHours >= 720) longevityScore = 85;  // 30d+
+      else if (pairAgeHours >= 168) longevityScore = 70;  // 7d+
+      else if (pairAgeHours >= 48) longevityScore = 55;   // 2d+
+      else if (pairAgeHours >= 12) longevityScore = 40;
+      else if (pairAgeHours >= 2) longevityScore = 25;
+      else longevityScore = 10;
+    }
+    
+    // Holder retention score (based on dust ratio — high dust = poor retention)
+    const retentionScore = scoreMetric(simpleTiers.dust.percentage, 5, 70); // lower dust = better retention
+    
+    // Structural score: weighted blend
+    const structuralScore = Math.round(
+      holderCountScore * 0.15 +
+      whaleScore * 0.18 +
+      lpScore * 0.15 +
+      bundledScore * 0.15 +
+      dustScore * 0.08 +
+      devScore * 0.08 +
+      longevityScore * 0.12 +
+      retentionScore * 0.09
+    );
+    
+    // ── ACTIVITY METRICS (short-term momentum) ──
     const txWindow = isEarlyPhase ? vitality.txns.h1 : vitality.txns.h24;
     const totalTxns = txWindow.buys + txWindow.sells;
+    
+    // Transaction activity score
+    const txActivityScore = isEarlyPhase
+      ? scoreMetric(vitality.txns.h1.buys + vitality.txns.h1.sells, 50, 0)
+      : scoreMetric(vitality.txns.h24.buys + vitality.txns.h24.sells, 500, 5);
+    
+    // Buy/sell ratio
     const buySellRatio = totalTxns > 0 ? txWindow.buys / totalTxns : 0.5;
     const buySellScore = scoreMetric(buySellRatio, 0.7, 0.2);
     
-    // Volume trend score
+    // Volume/MCap ratio
     const vol24 = vitality.volume.h24;
     const volToMcap = inferredMarketCapUSD > 0 ? (vol24 / inferredMarketCapUSD) : 0;
     const volumeScore = scoreMetric(volToMcap, 0.5, 0.01);
     
-    // Price trend score
+    // Price trend 24h
     const priceH24 = vitality.priceChange.h24;
     const priceTrendScore = scoreMetric(priceH24, 20, -50);
     
-    // Dev holding score
-    const devPct = potentialDevWallet?.percentageOfSupply ?? 0;
-    const devThresholdGood = isEarlyPhase ? 15 : healthPhase === 'adolescent' ? 10 : 5;
-    const devScore = scoreMetric(devPct, devThresholdGood, 40);
+    // 6h/1h stability
+    const priceH1 = vitality.priceChange.h1 ?? 0;
+    const priceH6 = vitality.priceChange.h6 ?? 0;
+    const stabilityScore6h1h = scoreMetric(
+      Math.min(Math.abs(priceH1), Math.abs(priceH6)),
+      0, 50 // 0% change is best, 50%+ is worst
+    );
+    // Invert: low abs change = high score
+    const stabilityFinal = 100 - scoreMetric(Math.max(Math.abs(priceH1), Math.abs(priceH6)), 50, 0);
     
-    // 8-phase weighted scoring matrix (dust is now weighted in ALL phases)
-    const weights: Record<HealthPhase, Record<string, number>> = {
-      on_curve:    { holders: 0.25, whales: 0.10, dev: 0.20, buySell: 0.15, bundled: 0.05, lp: 0,    volume: 0,    price: 0.05, dust: 0.20 },
-      newborn:     { holders: 0.15, whales: 0.15, dev: 0.15, buySell: 0.15, bundled: 0.10, lp: 0.05, volume: 0.05, price: 0.05, dust: 0.10 },
-      early:       { holders: 0.12, whales: 0.20, dev: 0.12, buySell: 0.15, bundled: 0.10, lp: 0.10, volume: 0.06, price: 0.05, dust: 0.10 },
-      adolescent:  { holders: 0.12, whales: 0.20, dev: 0.12, buySell: 0.12, bundled: 0.10, lp: 0.13, volume: 0.06, price: 0.05, dust: 0.10 },
-      established: { holders: 0.08, whales: 0.20, dev: 0.10, buySell: 0.10, bundled: 0.12, lp: 0.12, volume: 0.10, price: 0.08, dust: 0.10 },
-      growth:      { holders: 0.08, whales: 0.18, dev: 0.08, buySell: 0.10, bundled: 0.12, lp: 0.12, volume: 0.12, price: 0.10, dust: 0.10 },
-      mature:      { holders: 0.08, whales: 0.18, dev: 0.05, buySell: 0.10, bundled: 0.12, lp: 0.12, volume: 0.10, price: 0.15, dust: 0.10 },
-      blue_chip:   { holders: 0.05, whales: 0.15, dev: 0.05, buySell: 0.10, bundled: 0.10, lp: 0.10, volume: 0.15, price: 0.15, dust: 0.15 },
+    // Activity score: weighted blend
+    const activityScore = Math.round(
+      txActivityScore * 0.20 +
+      buySellScore * 0.20 +
+      volumeScore * 0.20 +
+      priceTrendScore * 0.20 +
+      stabilityFinal * 0.20
+    );
+    
+    // ── PHASE-BASED BLENDING ──
+    const blendWeights: Record<HealthPhase, { structural: number; activity: number }> = {
+      on_curve:    { structural: 0.40, activity: 0.60 },
+      newborn:     { structural: 0.45, activity: 0.55 },
+      early:       { structural: 0.50, activity: 0.50 },
+      adolescent:  { structural: 0.55, activity: 0.45 },
+      established: { structural: 0.60, activity: 0.40 },
+      growth:      { structural: 0.65, activity: 0.35 },
+      mature:      { structural: 0.75, activity: 0.25 },
+      blue_chip:   { structural: 0.80, activity: 0.20 },
     };
     
-    const w = weights[healthPhase];
-    const healthBreakdown: Record<string, { score: number; weight: number; contribution: number }> = {};
-    const metrics: Record<string, number> = {
-      holders: holderCountScore, whales: whaleScore, dev: devScore, buySell: buySellScore,
-      bundled: bundledScore, lp: lpScore, volume: volumeScore, price: priceTrendScore, dust: dustScore,
+    const blend = blendWeights[healthPhase];
+    let healthScore = Math.round(structuralScore * blend.structural + activityScore * blend.activity);
+    
+    // ── HEALTH BREAKDOWN for UI ──
+    const healthBreakdown: Record<string, { score: number; weight: number; contribution: number }> = {
+      holders: { score: Math.round(holderCountScore), weight: 0.15, contribution: Math.round(holderCountScore * 0.15) },
+      whales: { score: Math.round(whaleScore), weight: 0.18, contribution: Math.round(whaleScore * 0.18) },
+      lp: { score: Math.round(lpScore), weight: 0.15, contribution: Math.round(lpScore * 0.15) },
+      bundled: { score: Math.round(bundledScore), weight: 0.15, contribution: Math.round(bundledScore * 0.15) },
+      dust: { score: Math.round(dustScore), weight: 0.08, contribution: Math.round(dustScore * 0.08) },
+      dev: { score: Math.round(devScore), weight: 0.08, contribution: Math.round(devScore * 0.08) },
+      volume: { score: Math.round(volumeScore), weight: 0.20, contribution: Math.round(volumeScore * 0.20) },
+      buySell: { score: Math.round(buySellScore), weight: 0.20, contribution: Math.round(buySellScore * 0.20) },
+      price: { score: Math.round(priceTrendScore), weight: 0.20, contribution: Math.round(priceTrendScore * 0.20) },
     };
     
-    let healthScore = 0;
-    for (const [key, weight] of Object.entries(w)) {
-      const s = metrics[key] ?? 50;
-      const contribution = s * weight;
-      healthScore += contribution;
-      if (weight > 0) healthBreakdown[key] = { score: Math.round(s), weight, contribution: Math.round(contribution) };
-    }
-    
-    // === VITALITY PENALTIES ===
+    // ── CAPPED MODIFIER BUCKETS ──
     const vitalityPenalties: string[] = [];
+    let activityPenalty = 0;   // cap: -12
+    let structuralPenalty = 0; // cap: -15
+    let catastrophicPenalty = 0; // cap: -35
     
     // === BONDING CURVE PROGRESS ADJUSTMENT (on_curve only) ===
     if (healthPhase === 'on_curve' && creatorInfo.bondingCurveProgress !== undefined) {
@@ -541,92 +595,105 @@ serve(withRunLog('bagless-holders-report', async (req) => {
         healthScore += 10;
         vitalityPenalties.push(`Graduation imminent: ${bcp.toFixed(0)}% bonding curve`);
       } else if (bcp < 20) {
-        healthScore -= 10;
+        activityPenalty += 10;
         vitalityPenalties.push(`Low bonding curve progress: ${bcp.toFixed(0)}%`);
       }
     }
     
-    // Post-bond vitality penalties
+    // ── ACTIVITY WEAKNESS BUCKET (cap -12) ──
     if (healthPhase !== 'on_curve') {
-      if (vol24 < 500 && nonLpHolders.length > 100) { healthScore -= 15; vitalityPenalties.push('Volume collapse (<$500/24h)'); }
-      if (vitality.txns.h1.buys + vitality.txns.h1.sells === 0) { healthScore -= 10; vitalityPenalties.push('Zero transactions in last hour'); }
+      if (vol24 < 500 && nonLpHolders.length > 100) {
+        activityPenalty += 8;
+        vitalityPenalties.push('Volume collapse (<$500/24h)');
+      }
+      if (vitality.txns.h1.buys + vitality.txns.h1.sells === 0) {
+        activityPenalty += 6;
+        vitalityPenalties.push('Zero transactions in last hour');
+      }
     }
     
     // Dead/sleeper on curve
     if (healthPhase === 'on_curve' && pairAgeHours === null) {
       const totalTxns1h = vitality.txns.h1.buys + vitality.txns.h1.sells;
       if (vol24 < 100 && totalTxns1h === 0) {
-        healthScore -= 25;
+        activityPenalty += 12;
         vitalityPenalties.push('Dead on curve: zero activity, never bonded');
       } else if (vol24 < 1000 && totalTxns1h < 5) {
-        healthScore -= 10;
+        activityPenalty += 8;
         vitalityPenalties.push('Sleeper on curve: minimal activity, not bonded');
       }
     } else if (healthPhase === 'on_curve' && pairAgeHours !== null && pairAgeHours >= 24) {
       const totalTxns1h = vitality.txns.h1.buys + vitality.txns.h1.sells;
       if (vol24 < 100 && totalTxns1h === 0) {
-        healthScore -= 30;
+        activityPenalty += 12;
         vitalityPenalties.push(`Dead on curve: ${Math.floor(pairAgeHours)}h old, zero activity`);
       } else if (vol24 < 1000 && totalTxns1h < 5) {
-        healthScore -= 15;
+        activityPenalty += 10;
         vitalityPenalties.push(`Sleeper on curve: ${Math.floor(pairAgeHours)}h old, tiny activity`);
       }
     }
     
-    // === CRASH-TRAJECTORY DETECTION ===
-    const priceH1 = vitality.priceChange.m5 !== undefined ? vitality.priceChange.h1 : 0;
-    const priceH6 = vitality.priceChange.h6 || 0;
+    // ── STRUCTURAL WEAKNESS BUCKET (cap -15) ──
+    if (simpleTiers.dust.percentage > 75) {
+      structuralPenalty += 8;
+      vitalityPenalties.push(`Extreme dust: ${simpleTiers.dust.percentage.toFixed(0)}% of wallets under $1`);
+    }
+    if (distributionStats.top5Percentage > 60) {
+      structuralPenalty += 10;
+      vitalityPenalties.push(`Top 5 wallets hold ${distributionStats.top5Percentage.toFixed(0)}% of supply`);
+    }
+    
+    // ── CATASTROPHIC BUCKET (cap -35) ── 
+    // These represent true failures: rugs, collapses, exit scams
     
     // Bleed arc: sustained downtrend across timeframes
     if (priceH1 < -30 && priceH6 < -60) {
-      healthScore -= 20;
+      catastrophicPenalty += 15;
       vitalityPenalties.push(`Bleed arc: -${Math.abs(Math.round(priceH1))}% 1h, -${Math.abs(Math.round(priceH6))}% 6h`);
     }
     
     // Dump in progress: massive crash + sell-heavy order flow
     if (priceH24 < -80 && vitality.txns.h1.sells > vitality.txns.h1.buys * 3) {
-      healthScore -= 25;
+      catastrophicPenalty += 20;
       vitalityPenalties.push(`Dump in progress: -${Math.abs(Math.round(priceH24))}% 24h, ${vitality.txns.h1.sells}:${vitality.txns.h1.buys} sell:buy ratio`);
     }
     
     // Exit scam pattern: paid DEX + crash
     if (dexStatus.hasDexPaid && priceH24 < -70) {
-      healthScore -= 20;
+      catastrophicPenalty += 15;
       vitalityPenalties.push(`Paid DEX + ${Math.abs(Math.round(priceH24))}% crash — possible exit scam`);
     }
     
-    // === CATASTROPHIC PRICE PENALTIES (replaces old single -10 for >60%) ===
+    // Catastrophic price crashes
     if (priceH24 < -90) {
-      healthScore -= 35;
+      catastrophicPenalty += 25;
       vitalityPenalties.push(`Catastrophic crash: -${Math.abs(Math.round(priceH24))}% in 24h`);
     } else if (priceH24 < -80) {
-      healthScore -= 25;
+      catastrophicPenalty += 15;
       vitalityPenalties.push(`Severe crash: -${Math.abs(Math.round(priceH24))}% in 24h`);
-    } else if (priceH24 < -60) {
-      healthScore -= 10;
-      vitalityPenalties.push(`Price crash: -${Math.abs(Math.round(priceH24))}% in 24h`);
     }
     
     // Dead token: no volume + aged past initial period
     if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6) {
-      healthScore -= 20;
+      catastrophicPenalty += 15;
       vitalityPenalties.push(`Dead token: <$100 vol/24h after ${Math.floor(pairAgeHours)}h`);
     }
     
-    // High dust penalty
-    if (simpleTiers.dust.percentage > 75) {
-      healthScore -= 15;
-      vitalityPenalties.push(`Extreme dust: ${simpleTiers.dust.percentage.toFixed(0)}% of wallets under $1`);
+    // Apply capped penalties
+    const cappedActivity = Math.min(activityPenalty, 12);
+    const cappedStructural = Math.min(structuralPenalty, 15);
+    const cappedCatastrophic = Math.min(catastrophicPenalty, 35);
+    healthScore -= (cappedActivity + cappedStructural + cappedCatastrophic);
+    
+    if (cappedActivity > 0 || cappedStructural > 0 || cappedCatastrophic > 0) {
+      const parts: string[] = [];
+      if (cappedActivity > 0) parts.push(`activity: -${cappedActivity}${activityPenalty > 12 ? ' (capped from -' + activityPenalty + ')' : ''}`);
+      if (cappedStructural > 0) parts.push(`structural: -${cappedStructural}${structuralPenalty > 15 ? ' (capped from -' + structuralPenalty + ')' : ''}`);
+      if (cappedCatastrophic > 0) parts.push(`catastrophic: -${cappedCatastrophic}${catastrophicPenalty > 35 ? ' (capped from -' + catastrophicPenalty + ')' : ''}`);
+      console.log(`[health] Capped penalties: ${parts.join(', ')}`);
     }
     
-    // Top 5 concentration penalty
-    if (distributionStats.top5Percentage > 60) {
-      healthScore -= 15;
-      vitalityPenalties.push(`Top 5 wallets hold ${distributionStats.top5Percentage.toFixed(0)}% of supply`);
-    }
-    
-    // === ABSOLUTE FAILURE FLOORS (hard gates) ===
-    // Real holders = total non-LP holders minus dust wallets
+    // ── ABSOLUTE FAILURE FLOORS (hard gates) ──
     const realHolderCount = nonLpHolders.length - simpleTiers.dust.count;
     
     if (realHolderCount < 15) {
@@ -637,98 +704,58 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       vitalityPenalties.push(`WARNING: Only ${realHolderCount} real holders (non-dust) — capped at D`);
     }
     
-    // === MARKET MATURITY FLOOR ===
-    // Tokens with proven market validation cannot score below certain floors.
-    // If a token has survived at high mcap with thousands of holders, it IS healthy.
-    if (inferredMarketCapUSD >= 25_000_000 && realHolderCount >= 10000) {
-      const floor = 95; // A+ tier — massive market validation
-      if (healthScore < floor) {
-        vitalityPenalties.push(`Market maturity floor (A+): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
-        healthScore = floor;
-      }
-    } else if (inferredMarketCapUSD >= 10_000_000 && realHolderCount >= 5000) {
-      const floor = 90; // A tier
-      if (healthScore < floor) {
-        vitalityPenalties.push(`Market maturity floor (A): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
-        healthScore = floor;
-      }
-    } else if (inferredMarketCapUSD >= 5_000_000 && realHolderCount >= 2000) {
-      const floor = 80; // B tier
-      if (healthScore < floor) {
-        vitalityPenalties.push(`Market maturity floor (B): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
-        healthScore = floor;
-      }
-    } else if (inferredMarketCapUSD >= 1_000_000 && realHolderCount >= 500) {
-      const floor = 65; // C tier
-      if (healthScore < floor) {
-        vitalityPenalties.push(`Market maturity floor (C): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
-        healthScore = floor;
+    // ── MARKET MATURITY FLOORS ──
+    // Only broken by catastrophic flags. Uses TOTAL holder count (including dust).
+    const totalHolderCount = rankedHolders.length;
+    const totalTxns24h = vitality.txns.h24.buys + vitality.txns.h24.sells;
+    const hasCatastrophic = cappedCatastrophic > 0;
+    
+    if (!hasCatastrophic) {
+      if (inferredMarketCapUSD >= 25_000_000 && totalHolderCount >= 10000 && vitality.liquidityUsd >= 250_000 && totalTxns24h >= 100) {
+        const floor = 82; // B+
+        if (healthScore < floor) {
+          vitalityPenalties.push(`Blue chip floor (B+): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${totalHolderCount.toLocaleString()} holders → raised from ${Math.round(healthScore)} to ${floor}`);
+          healthScore = floor;
+        }
+      } else if (inferredMarketCapUSD >= 10_000_000 && totalHolderCount >= 5000 && vitality.liquidityUsd >= 100_000 && totalTxns24h >= 50) {
+        const floor = 76; // B
+        if (healthScore < floor) {
+          vitalityPenalties.push(`Mature floor (B): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${totalHolderCount.toLocaleString()} holders → raised from ${Math.round(healthScore)} to ${floor}`);
+          healthScore = floor;
+        }
+      } else if (inferredMarketCapUSD >= 1_000_000 && totalHolderCount >= 500 && vitality.liquidityUsd >= 50_000) {
+        const floor = 65; // C+
+        if (healthScore < floor) {
+          vitalityPenalties.push(`Growth floor (C+): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${totalHolderCount.toLocaleString()} holders → raised from ${Math.round(healthScore)} to ${floor}`);
+          healthScore = floor;
+        }
       }
     }
     
     healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
     
-    let healthGrade = 'A';
-    if (healthScore >= 90) healthGrade = 'A';
-    else if (healthScore >= 80) healthGrade = 'B';
-    else if (healthScore >= 65) healthGrade = 'C';
-    else if (healthScore >= 50) healthGrade = 'D';
-    else healthGrade = 'F';
-
-    // === HOLDER INTELLIGENCE (parallel, non-blocking) ===
-    const top20Addresses = nonLpHolders.slice(0, 20).map(h => h.owner);
-    const allHolderAddresses = nonLpHolders.slice(0, 50).map(h => h.owner);
+    // ── 14-TIER GRADING ──
+    const scoreToGrade = (s: number): string => {
+      if (s >= 97) return 'A++';
+      if (s >= 93) return 'A+';
+      if (s >= 89) return 'A';
+      if (s >= 85) return 'A-';
+      if (s >= 80) return 'B+';
+      if (s >= 75) return 'B';
+      if (s >= 70) return 'B-';
+      if (s >= 65) return 'C+';
+      if (s >= 60) return 'C';
+      if (s >= 55) return 'C-';
+      if (s >= 50) return 'D+';
+      if (s >= 45) return 'D';
+      if (s >= 40) return 'D-';
+      return 'F';
+    };
     
-    // Determine token creation time for fresh wallet detection
-    const tokenCreatedAt = creatorInfo.createdTimestamp 
-      ? new Date(creatorInfo.createdTimestamp * 1000).toISOString() 
-      : vitality?.pairCreatedAt || null;
+    let healthGrade = scoreToGrade(healthScore);
     
-    const [flaggedHolders, historicalDelta, socialWarnings, kolMatches, devGenealogy, freshWallets] = await Promise.all([
-      crossLinkHolderReputation(top20Addresses),
-      fetchHistoricalDelta(tokenMint),
-      detectSocialChanges(tokenMint, socials),
-      matchKOLWallets(allHolderAddresses),
-      traceDevGenealogy(creatorInfo.wallet),
-      detectFreshWallets(top20Addresses, tokenCreatedAt),
-    ]);
-    
-    // Add social removal warnings to risk flags
-    for (const warning of socialWarnings) {
-      riskFlags.push(warning);
-    }
-    
-    // Add flagged holder warnings to risk flags
-    if (flaggedHolders.length > 0) {
-      const flagSummary = flaggedHolders.map(f => {
-        const parts: string[] = [];
-        if (f.is_blacklisted) parts.push('BLACKLISTED');
-        if (f.trust_level) parts.push(f.trust_level);
-        if (f.tokens_rugged && f.tokens_rugged > 0) parts.push(`${f.tokens_rugged} rugs`);
-        return `${f.wallet_address.slice(0, 6)}...${f.wallet_address.slice(-4)}: ${parts.join(', ')}`;
-      });
-      riskFlags.push(`⚠️ ${flaggedHolders.length} flagged wallet(s) in top 20: ${flagSummary.join(' | ')}`);
-    }
-    
-    // Add fresh wallet warnings to risk flags
-    if (freshWallets) {
-      if (freshWallets.clusterDetected) {
-        riskFlags.push(`🤖 SYBIL ALERT: ${freshWallets.freshWalletCount}/${freshWallets.totalChecked} top holders have fresh wallets created within ${freshWallets.clusterWindowHours}h window`);
-        healthScore = Math.max(0, healthScore - 15);
-        vitalityPenalties.push(`Fresh wallet cluster: ${freshWallets.freshPercentage}% of top 20 holders created around same time`);
-      } else if (freshWallets.freshPercentage >= 40) {
-        riskFlags.push(`⚠️ ${freshWallets.freshPercentage}% of top 20 holders have recently-created wallets`);
-        healthScore = Math.max(0, healthScore - 8);
-        vitalityPenalties.push(`High fresh wallet ratio: ${freshWallets.freshPercentage}%`);
-      }
-    }
-    
-    // Recompute grade after fresh wallet penalties
-    if (healthScore >= 90) healthGrade = 'A';
-    else if (healthScore >= 80) healthGrade = 'B';
-    else if (healthScore >= 65) healthGrade = 'C';
-    else if (healthScore >= 50) healthGrade = 'D';
-    else healthGrade = 'F';
+    // Activity momentum grade (separate dimension)
+    const momentumGrade = scoreToGrade(activityScore);
     
     // Compute historical deltas if we have prior data
     let hasHistoricalData = false;
