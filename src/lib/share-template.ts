@@ -120,7 +120,8 @@ Free report 👉 blackbox.farm/holders?token={ca}`,
   bot_holders: `📊 *Holders Report*
 
 👥 Total: *{totalWallets}*
-❤️ Health: *{healthScore}*/100
+❤️ Health: *{healthGrade}* ({healthScore}/100)
+📈 Momentum: *{momentumGrade}*
 
 *Distribution:*
 \`Whales  {whaleBar} {whalePct}%\`
