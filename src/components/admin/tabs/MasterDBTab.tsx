@@ -392,12 +392,9 @@ export default function MasterDBTab() {
                     <TableCell>{r.dev_auto_blacklisted ? "🚫" : "—"}</TableCell>
                     <TableCell>{r.dev_is_serial_spammer ? "🚫" : "—"}</TableCell>
                     <TableCell>{r.dev_is_legitimate_builder ? "✅" : "—"}</TableCell>
-                    <TableCell><ArrayCell arr={r.x_community_urls} /></TableCell>
-                    <TableCell><ArrayCell arr={r.x_community_names} /></TableCell>
-                    <TableCell><ArrayCell arr={r.community_admin_handles} /></TableCell>
-                    <TableCell><ArrayCell arr={r.community_mod_handles} /></TableCell>
-                    <TableCell><ArrayCell arr={r.mesh_x_handles} /></TableCell>
-                    <TableCell><ArrayCell arr={r.websites} /></TableCell>
+                    <TableCell><WebsitesCell urls={r.websites} /></TableCell>
+                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} admins={r.community_admin_handles} mods={r.community_mod_handles} /></TableCell>
+                    <TableCell><XHandlesCell handles={r.mesh_x_handles} /></TableCell>
                     <TableCell className="text-muted-foreground">{r.ath_24h_usd != null ? `$${Number(r.ath_24h_usd).toFixed(6)}` : "—"}</TableCell>
                     <TableCell>{r.was_posted ? "✅" : "—"}</TableCell>
                   </TableRow>
