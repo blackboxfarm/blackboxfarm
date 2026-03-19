@@ -237,22 +237,82 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 6. NEW SUBSCRIBERS (Stripe - check subscription events)
+    // 6. NEW SUBSCRIBERS (Stripe - from stripe_customers + web_user_subscriptions)
     // ═══════════════════════════════════════════════════════════════
+    // Primary source: stripe_customers table (tracks all payers)
+    const { data: overnightStripeCustomers } = await supabase
+      .from('stripe_customers')
+      .select('email, name, tier_key, amount_cents, currency, interval, is_active, stripe_subscription_id, matched_user_id, created_at')
+      .gte('created_at', periodStart.toISOString())
+      .lte('created_at', periodEnd.toISOString())
+      .order('created_at', { ascending: false });
+
+    // Also check admin_notifications for payment events (fallback / banner purchases)
     const { data: subNotifs } = await supabase
       .from('admin_notifications')
-      .select('title, message, metadata, created_at')
+      .select('notification_type, title, message, metadata, created_at')
       .in('notification_type', ['payment_confirmed', 'subscription_created', 'banner_purchase'])
       .gte('created_at', periodStart.toISOString())
       .lte('created_at', periodEnd.toISOString());
 
-    const newSubscribers = subNotifs?.length || 0;
-    const newSubscribersDetails = (subNotifs || []).map(n => ({
-      type: n.notification_type || 'unknown',
-      title: n.title,
-      created_at: n.created_at,
-      metadata: n.metadata,
+    // Aggregate totals from stripe_customers
+    const stripeSubCount = overnightStripeCustomers?.length || 0;
+    const bannerPurchaseCount = (subNotifs || []).filter(n => n.notification_type === 'banner_purchase').length;
+    const newSubscribers = stripeSubCount + bannerPurchaseCount;
+
+    // Compute revenue summary
+    const totalRevenueCents = (overnightStripeCustomers || []).reduce((sum, c) => sum + (c.amount_cents || 0), 0);
+    const tierBreakdown: Record<string, number> = {};
+    for (const c of overnightStripeCustomers || []) {
+      const tier = c.tier_key || 'unknown';
+      tierBreakdown[tier] = (tierBreakdown[tier] || 0) + 1;
+    }
+
+    // Active subscriber totals (all time)
+    const { count: totalActiveSubscribers } = await supabase
+      .from('stripe_customers')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    const { count: totalLinkedAccounts } = await supabase
+      .from('stripe_customers')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .not('matched_user_id', 'is', null);
+
+    const newSubscribersDetails = (overnightStripeCustomers || []).map(c => ({
+      email: c.email,
+      name: c.name,
+      tier_key: c.tier_key || 'unknown',
+      amount: c.amount_cents ? `$${(c.amount_cents / 100).toFixed(2)}` : 'N/A',
+      interval: c.interval || 'one-time',
+      is_active: c.is_active,
+      linked: !!c.matched_user_id,
+      created_at: c.created_at,
     }));
+
+    // Add banner purchases as separate entries
+    for (const n of (subNotifs || []).filter(n => n.notification_type === 'banner_purchase')) {
+      newSubscribersDetails.push({
+        email: (n.metadata as any)?.email || 'N/A',
+        name: n.title,
+        tier_key: 'banner',
+        amount: (n.metadata as any)?.amount || 'N/A',
+        interval: 'one-time',
+        is_active: true,
+        linked: false,
+        created_at: n.created_at,
+      });
+    }
+
+    const subscriptionSummary = {
+      overnight_new: stripeSubCount,
+      overnight_revenue_usd: totalRevenueCents / 100,
+      tier_breakdown: tierBreakdown,
+      total_active_subscribers: totalActiveSubscribers || 0,
+      total_linked_accounts: totalLinkedAccounts || 0,
+      banner_purchases: bannerPurchaseCount,
+    };
 
     // ═══════════════════════════════════════════════════════════════
     // 7. TABLE HEALTH (row counts for key tables)
@@ -802,7 +862,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         new_signups: newSignups,
         new_signups_details: newSignupsDetails,
         new_subscribers: newSubscribers,
-        new_subscribers_details: newSubscribersDetails,
+        new_subscribers_details: { entries: newSubscribersDetails, summary: subscriptionSummary },
         table_health: tableHealth,
         external_services_status: externalServicesStatus,
         holders_intel_metrics: holdersIntelMetrics,
@@ -845,7 +905,19 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         tgMessage += `  → ${s.email} (${s.provider})\n`;
       }
     }
-    tgMessage += `• New Subscribers/Payments: ${newSubscribers}\n\n`;
+    tgMessage += `• New Subscribers: ${stripeSubCount}`;
+    if (stripeSubCount > 0) {
+      tgMessage += ` ($${(totalRevenueCents / 100).toFixed(2)} revenue)\n`;
+      for (const s of newSubscribersDetails.slice(0, 5)) {
+        tgMessage += `  → ${s.email} — ${s.tier_key} ${s.amount}/${s.interval}${s.linked ? ' ✅ linked' : ' ⏳ unlinked'}\n`;
+      }
+    } else {
+      tgMessage += `\n`;
+    }
+    if (bannerPurchaseCount > 0) {
+      tgMessage += `• Banner Purchases: ${bannerPurchaseCount}\n`;
+    }
+    tgMessage += `• Total Active Subs: ${totalActiveSubscribers || 0} (${totalLinkedAccounts || 0} linked)\n\n`;
 
     // API Overview
     tgMessage += `📊 **API Overview** (${totalApiCalls} total calls)\n`;
