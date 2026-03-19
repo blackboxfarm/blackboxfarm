@@ -756,8 +756,8 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     
     // Activity momentum grade (separate dimension)
     const momentumGrade = scoreToGrade(activityScore);
-    
-    // Compute historical deltas if we have prior data
+
+    // === HOLDER INTELLIGENCE (parallel, non-blocking) ===
     let hasHistoricalData = false;
     if (historicalDelta) {
       historicalDelta.holderCountChange = rankedHolders.length - historicalDelta.previousHolderCount;
