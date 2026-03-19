@@ -862,7 +862,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         new_signups: newSignups,
         new_signups_details: newSignupsDetails,
         new_subscribers: newSubscribers,
-        new_subscribers_details: newSubscribersDetails,
+        new_subscribers_details: { entries: newSubscribersDetails, summary: subscriptionSummary },
         table_health: tableHealth,
         external_services_status: externalServicesStatus,
         holders_intel_metrics: holdersIntelMetrics,
