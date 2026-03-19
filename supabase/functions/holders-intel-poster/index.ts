@@ -41,10 +41,10 @@ function getPostComment(timesPosted: number, triggerComment?: string | null): st
   // If a trigger comment is provided (from DEX scanner), use it
   if (triggerComment) return triggerComment;
   
-  // Default milestone-based comments
-  if (timesPosted <= 1) return ' : First call out!';
-  if (timesPosted === 2) return ' : Still on the Chart!';
-  return ' : Steady & Strong!';
+  // Milestone-based comments — no colon prefix to avoid looking like a health description
+  if (timesPosted <= 1) return ' 🆕 First call out';
+  if (timesPosted === 2) return ' 📡 Still on the Chart';
+  return ' 💪 Steady & Strong';
 }
 
 /**
