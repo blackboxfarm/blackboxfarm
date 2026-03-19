@@ -1,179 +1,62 @@
 
 
-# HoldersIntel Bot — Full Command Suite with Tier Gating
+# Health Scoring Overhaul — Structural vs Activity Split (IMPLEMENTED)
 
-## Command List (Updated)
+## What Changed
 
-```text
-/start           — Welcome & setup
-/register        — Link BlackBox Farm account
-/status          — Check subscription tier
-/help            — Show commands
-/risk (/r) CA    — Composite risk & stability assessment
-/holders CA      — Holder distribution analysis
-/concentration CA — Detailed holder % breakdown
-/dev (/d) CA     — Developer intel & social doxxing
-/ca CA           — Default holder analysis
-/quick (/q) CA   — Fast holder count & key stats
-/ai CA           — Descriptive AI analysis snapshot
-/momentum (/m) CA — Volume & price momentum scoring
-/insiders (/i) CA — Insider cluster & bundling pre-check
-/compare (/cmp) CA CA — Side-by-side token comparison
-/alerts          — Manage alert preferences
-/oracle (/o) CA  — Full developer reputation mesh (Pro)
-/wallet (/w) ADDR — Wallet behavior analysis (Pro)
-```
+### 1. Split metrics into Structural and Activity scores (0-100 each)
 
-**Removed from UI:** `/verdict` — functions retained internally but not exposed in help or command routing.
+**Structural Score** (long-term health) — weighted blend of:
+- Holder Count (15%), Whale Distribution (18%), LP Quality (15%), Insider/Bundled (15%), Dust Quality (8%), Dev Allocation (8%), Longevity/Survival (12%), Holder Retention (9%)
 
-## Tier Gating Matrix
+**Activity Score** (short-term momentum) — weighted blend of:
+- Transaction Activity (20%), Buy/Sell Ratio (20%), Volume/MCap (20%), 24h Price (20%), 6h/1h Stability (20%)
 
-```text
-Command         │ Free │ Auth │ X Sub │ Pro  │ Dev
-────────────────┼──────┼──────┼───────┼──────┼─────
-/start          │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/register       │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/status         │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/help           │  ✓   │  ✓   │   ✓   │  ✓   │  ✓
-/risk CA        │  —   │ lite │ full  │ full+│ full+
-/holders CA     │  —   │ lite │ full  │ full+│ full+
-/concentration  │  —   │  ✓   │  ✓    │  ✓   │  ✓
-/dev CA         │  —   │ base │ full  │ full │ full
-/ca CA          │  —   │  ✓   │  ✓    │  ✓   │  ✓
-/quick CA       │  —   │  ✓   │  ✓    │  ✓   │  ✓
-/ai CA          │  —   │  ✓   │  ✓    │  ✓   │  ✓
-/momentum CA    │  —   │  —   │  ✓    │  ✓   │  ✓
-/insiders CA    │  —   │  —   │  ✓    │ full │ full
-/compare CA CA  │  —   │  —   │  ✓    │  ✓   │  ✓
-/alerts         │  —   │  —   │  ✓    │  ✓   │  ✓
-/oracle CA      │  —   │  —   │  —    │  ✓   │  ✓
-/wallet ADDR    │  —   │  —   │  —    │  ✓   │  ✓
-```
+### 2. Phase-based blending — mature tokens weight structural heavily
 
-## Group Chat Features
+| Phase | Structural | Activity |
+|-------|-----------|----------|
+| on_curve | 40% | 60% |
+| newborn | 45% | 55% |
+| early | 50% | 50% |
+| adolescent | 55% | 45% |
+| established | 60% | 40% |
+| growth | 65% | 35% |
+| mature | 75% | 25% |
+| blue_chip | 80% | 20% |
 
-- **Auto-Scan**: When someone pastes a Solana CA (no command prefix) in an activated group, the bot waits 3 seconds (lets other bots like Phanes fire first), then replies with a minimalist risk snippet.
-- Requires paid channel installation (`channel_installations.is_paid = true`).
-- Snippet includes: health score, holder count, top 10% concentration, MCap, and a link to `/risk` for full report.
+### 3. Capped modifier buckets (no more death by a thousand cuts)
 
-## /insiders Maturity Skip Logic
+- **Activity weakness bucket**: cap at **-12**
+- **Structural weakness bucket**: cap at **-15**  
+- **Catastrophic bucket** (rug, liquidity removed, -90% collapse): cap at **-35**
 
-If a token is >72 hours old AND >$500k MCap, the `/insiders` command returns a notification that early-stage bundling data is no longer actionable, and suggests using `/holders` or `/risk` instead.
+### 4. Mature token floors (broken only by catastrophic flags)
 
-## /dev vs /oracle
+- **Blue chip** (90d+, $25M+, 10K+ holders, $250K+ liq, 100+ txns/24h): floor = 82 (B+)
+- **Mature** (30d+, $10M+, 5K+ holders, $100K+ liq, 50+ txns/24h): floor = 76 (B)
+- **Growth** (7d+, $1M+, 500+ holders, $50K+ liq): floor = 65 (C+)
 
-- `/dev` (Auth tier) — Developer-focused: social doxxing, launch history, performance stats, social links, identity mesh. Designed to showcase the "who is this dev" angle.
-- `/oracle` (Pro tier) — Full reputation mesh: deeper mesh connections, funding chains, comprehensive relationship mapping. Token-focused intelligence.
+Uses **total holder count** (including dust).
 
----
+### 5. 14-tier grading: A++ to F
 
-# Backend Gap Analysis — Implementation Status
+### 6. Three-dimension display in UI
 
-## ✅ Phase 1: Foundation (COMPLETED)
+- **Health Grade**: Blended letter grade
+- **Momentum**:,(Activity score as separate badge  
+- **Structural/Activity/Blended**: Numeric scores shown in dashboard
 
-### A. Error Logs and Reports
-- [x] **edge_function_runs** table — tracks every function invocation with duration, status, errors
-- [x] **dead_letter_queue** table — retryable failed operations with exponential backoff
-- [x] **error_trend_snapshot** table — daily error aggregation per service/endpoint
-- [x] **run-logger.ts** shared helper — `withRunLog()` wrapper and `createRunLogger()` 
-- [x] **dead-letter.ts** shared helper — `enqueueDeadLetter()` for failed operations
-- [x] **retry-dead-letters** edge function — processes DLQ items every 10 min
-- [x] **cleanup functions** — `cleanup_edge_function_runs()` and `cleanup_dead_letter_queue()`
+## Files Modified
 
-### B. Communication and Alerts
-- [x] **notification_delivery_log** table — tracks TG/email delivery status
-- [x] **service_status** table — real-time service health (public read policy)
+1. `supabase/functions/bagless-holders-report/index.ts` — Complete health scoring rewrite (deployed)
+2. `src/components/premium/TokenHealthDashboard.tsx` — Three-dimension display with momentum badge
+3. `src/components/BaglessHoldersReport.tsx` — Pass new props + updated HealthScore interface
 
-### C. API Usage, Sources, Rotation, Costs
-- [x] **monthly_usage_archive** table — historical monthly usage snapshots
-- [x] **cost_per_credit_usd** column added to api_service_config
+## Backward Compatibility
 
-### D. Spidering and Scaling Metrics
-- [x] **spider_run_metrics** table — per-run aggregation of spider outcomes
-- [x] **token_funnel_daily** table — token pipeline stage tracking
-- [x] **mesh_growth_daily** table — daily mesh size snapshots
-
-### Instrumented Functions (14 total)
-- [x] pumpfun-orchestrator
-- [x] trading-orchestrator
-- [x] intel-xbot-start
-- [x] morning-report
-- [x] system-health-audit
-- [x] database-housekeeping
-- [x] allstar-mint-auditor
-- [x] oracle-master-spider
-- [x] holders-intel-poster
-- [x] holders-intel-scheduler
-- [x] holdersintel-bot-webhook
-- [x] kol-registry-sync
-- [x] enrich-scraped-tokens
-- [x] telegram-bot-health
-- [x] retry-dead-letters
-
-## ✅ Phase 2: Integration (COMPLETED)
-
-### A. Error Logs
-- [x] Add "Function Health" section to morning report querying edge_function_runs
-- [x] Wire `enqueueDeadLetter()` into telegram-broadcast.ts for failed sends
-- [x] Populate error_trend_snapshot from database-housekeeping daily
-- [x] Roll out `withRunLog` to 16 more functions (31 total instrumented)
-
-### B. Communication
-- [x] Wire notification_delivery_log into telegram-broadcast.ts send results
-- [ ] Add escalation chain (Tier 1→2→3) for persistent outages
-- [ ] Create /service-status endpoint from service_status table
-- [x] Update system-health-audit to write to service_status
-
-### C. API Costs
-- [x] Add monthly quota auto-reset cron (1st of month at 00:05 UTC)
-- [x] Populate cost_per_credit_usd values for paid services (Helius, Apify, Firecrawl)
-- [ ] Audit + wrap top unlogged API calls with createApiLogger
-
-### D. Metrics
-- [x] Instrument oracle-master-spider to write spider_run_metrics
-- [x] Add funnel stage counters to funnel-feed-scanner (discovered), pumpfun-token-enricher (enriched/watchlisted/rejected), token-vigil (dead)
-- [x] Created shared funnel-tracker.ts helper + DB RPC functions (increment_spider_metrics, increment_funnel_stage)
-- [x] Populate mesh_growth_daily from database-housekeeping
-- [x] Add spider/funnel/mesh sections to morning report
-- [x] Add DLQ stats section to morning report
-- [x] Add function health + DLQ sections to TG report message
-
-## ✅ Phase 3: Hardening (COMPLETED)
-
-### A. Service Status Endpoint
-- [x] Created `/service-status` edge function — public endpoint returning overall + per-service health
-- [x] Added to config.toml with verify_jwt = false
-
-### B. Escalation Chain
-- [x] Upgraded `api-failure-alerts.ts` with 3-tier escalation: Tier 1 (immediate, 10 min cooldown), Tier 2 (30 min "STILL DOWN"), Tier 3 (hourly re-alerts with escalation count)
-- [x] Added `clearEscalation()` export for service recovery
-
-### C. Function Instrumentation (61 total)
-- [x] Batch-instrumented 30 additional functions with `withRunLog` (61 total)
-- [x] Key additions: helius-rpc-proxy, firecrawl-scrape, raydium-quote, oracle-unified-lookup, wallet-behavior-analysis, all pumpfun-* analyzers, social-mesh-linker, whale-frenzy-detector
-
-### D. API Call Logging
-- [x] Added `createApiLogger` to helius-rpc-proxy (Helius RPC calls)
-- [x] Added `createApiLogger` to firecrawl-scrape (paid Firecrawl calls)
-- [x] Prior coverage: dexscreener, solscan, rugcheck, apify, helius funding
-
-## ✅ Phase 4: Wiring & Visibility (COMPLETED)
-
-### A. Backend Wiring
-- [x] Wired `clearEscalation()` into `api-logger.ts` — clears escalation state on successful API responses
-- [x] Added `increment_monthly_quota_used` RPC — atomically increments `monthly_quota_used` + `success_count_today` per API call
-- [x] Wired quota increment into `api-logger.ts` for all paid services (helius, solscan, apify)
-
-### B. Super Admin Monitoring Dashboard
-- [x] Created `MonitoringTab` with 4 sub-tabs: Overview, Errors & DLQ, Costs, Pipeline
-- [x] **Service Status Panel** — live view of all service health from `service_status` table (30s auto-refresh)
-- [x] **Function Health Panel** — 24h aggregation of `edge_function_runs` by function with error counts and avg duration
-- [x] **Error Trends Panel** — 7-day error aggregation from `error_trend_snapshot` with anomaly highlighting
-- [x] **Dead Letter Queue Panel** — pending/resolved/failed DLQ items from `dead_letter_queue`
-- [x] **Notification Delivery Panel** — recent 50 deliveries from `notification_delivery_log` with success rate
-- [x] **Monthly Costs Panel** — historical cost data from `monthly_usage_archive` grouped by month
-- [x] **Token Funnel Panel** — 7-day pipeline conversion visualization from `token_funnel_daily`
-- [x] **Spider & Mesh Panel** — spider run metrics + mesh growth trends from `spider_run_metrics` and `mesh_growth_daily`
-
-## Remaining (Future Sessions)
-- [ ] Roll out withRunLog to remaining ~170 edge functions
+- Grade is still a string field — consumers using `startsWith('A')` etc. work fine
+- `stabilityScore` and `stabilityGrade` still populated for legacy consumers
+- Share card Satori `getGradeColor` already uses `startsWith` — handles A+/B-/etc.
+- X-post templates use `{healthGrade}` string replacement — works with any grade string
+- `holders-intel-poster` SKIP_GRADES is empty array — no filtering impact
