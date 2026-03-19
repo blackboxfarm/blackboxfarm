@@ -638,24 +638,30 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     // === MARKET MATURITY FLOOR ===
-    // Tokens with proven market validation (high mcap + high holder count) cannot score below certain floors.
-    // A token at $10M+ with 5K+ real holders has been validated by the market — it's not an F.
-    if (inferredMarketCapUSD >= 10_000_000 && realHolderCount >= 5000) {
-      const floor = 75; // Minimum B grade
+    // Tokens with proven market validation cannot score below certain floors.
+    // If a token has survived at high mcap with thousands of holders, it IS healthy.
+    if (inferredMarketCapUSD >= 25_000_000 && realHolderCount >= 10000) {
+      const floor = 95; // A+ tier — massive market validation
       if (healthScore < floor) {
-        vitalityPenalties.push(`Market maturity floor: $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
+        vitalityPenalties.push(`Market maturity floor (A+): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
+        healthScore = floor;
+      }
+    } else if (inferredMarketCapUSD >= 10_000_000 && realHolderCount >= 5000) {
+      const floor = 90; // A tier
+      if (healthScore < floor) {
+        vitalityPenalties.push(`Market maturity floor (A): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
         healthScore = floor;
       }
     } else if (inferredMarketCapUSD >= 5_000_000 && realHolderCount >= 2000) {
-      const floor = 65; // Minimum C grade
+      const floor = 80; // B tier
       if (healthScore < floor) {
-        vitalityPenalties.push(`Market maturity floor: $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
+        vitalityPenalties.push(`Market maturity floor (B): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
         healthScore = floor;
       }
     } else if (inferredMarketCapUSD >= 1_000_000 && realHolderCount >= 500) {
-      const floor = 50; // Minimum D grade (not F)
+      const floor = 65; // C tier
       if (healthScore < floor) {
-        vitalityPenalties.push(`Market maturity floor: $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
+        vitalityPenalties.push(`Market maturity floor (C): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${realHolderCount.toLocaleString()} real holders → score raised from ${Math.round(healthScore)} to ${floor}`);
         healthScore = floor;
       }
     }
