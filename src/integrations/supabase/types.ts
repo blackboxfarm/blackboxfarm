@@ -10473,6 +10473,63 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_customers: {
+        Row: {
+          amount_cents: number | null
+          created_at: string | null
+          currency: string | null
+          current_period_end: string | null
+          email: string
+          id: string
+          interval: string | null
+          is_active: boolean | null
+          matched_user_id: string | null
+          metadata: Json | null
+          name: string | null
+          stripe_customer_id: string
+          stripe_product_id: string | null
+          stripe_subscription_id: string | null
+          tier_key: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount_cents?: number | null
+          created_at?: string | null
+          currency?: string | null
+          current_period_end?: string | null
+          email: string
+          id?: string
+          interval?: string | null
+          is_active?: boolean | null
+          matched_user_id?: string | null
+          metadata?: Json | null
+          name?: string | null
+          stripe_customer_id: string
+          stripe_product_id?: string | null
+          stripe_subscription_id?: string | null
+          tier_key?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount_cents?: number | null
+          created_at?: string | null
+          currency?: string | null
+          current_period_end?: string | null
+          email?: string
+          id?: string
+          interval?: string | null
+          is_active?: boolean | null
+          matched_user_id?: string | null
+          metadata?: Json | null
+          name?: string | null
+          stripe_customer_id?: string
+          stripe_product_id?: string | null
+          stripe_subscription_id?: string | null
+          tier_key?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       super_admin_wallets: {
         Row: {
           created_at: string

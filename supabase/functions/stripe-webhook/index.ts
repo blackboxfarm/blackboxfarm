@@ -15,13 +15,13 @@ const logStep = (step: string, details?: any) => {
 // Map Stripe product IDs to tier keys
 const PRODUCT_TO_TIER: Record<string, string> = {
   "prod_U5rCqUTB2ivf09": "pro",
-  "prod_U5rC0vzkGA6sfq": "pro",        // x_sub monthly (legacy)
-  "prod_U8qZhEROQW6Iiu": "pro",        // x_sub monthly ($4/mo)
-  "prod_U8qZ9TNN4LLryZ": "pro",        // x_sub yearly ($38.99/yr)
+  "prod_U5rC0vzkGA6sfq": "pro",
+  "prod_U8qZhEROQW6Iiu": "pro",
+  "prod_U8qZ9TNN4LLryZ": "pro",
   "prod_U5rCvewEcZZetf": "dev",
-  "prod_U5rCsGpO4RKofP": "dev",        // x_sub variant
+  "prod_U5rCsGpO4RKofP": "dev",
   "prod_U5rCyXbfyw6nd6": "enterprise",
-  "prod_U5rC0NjxwWKDTV": "enterprise",  // x_sub variant
+  "prod_U5rC0NjxwWKDTV": "enterprise",
 };
 
 serve(async (req) => {
@@ -71,78 +71,114 @@ serve(async (req) => {
         return new Response("OK", { status: 200 });
       }
 
-      // Find Supabase user by email
-      const { data: users } = await supabase.auth.admin.listUsers();
-      const matchedUser = users?.users?.find(u => u.email === email);
-      if (!matchedUser) {
-        logStep("No Supabase user found for email", { email });
-        return new Response("OK", { status: 200 });
-      }
-
-      const userId = matchedUser.id;
       const isActive = subscription.status === "active" || subscription.status === "trialing";
       const productId = subscription.items.data[0]?.price?.product as string;
       const tierKey = PRODUCT_TO_TIER[productId] || "pro";
       const expiresAt = new Date(subscription.current_period_end * 1000).toISOString();
+      const priceAmount = subscription.items.data[0]?.price?.unit_amount || null;
+      const currency = subscription.items.data[0]?.price?.currency || 'usd';
+      const interval = subscription.items.data[0]?.price?.recurring?.interval || null;
 
-      logStep("Syncing subscription", { userId, email, tierKey, isActive, expiresAt });
+      // ──────────────────────────────────────────────
+      // 1) Always upsert into stripe_customers (tracks ALL paying customers)
+      // ──────────────────────────────────────────────
+      const { error: scError } = await supabase
+        .from("stripe_customers")
+        .upsert({
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscription.id,
+          email,
+          name: customer.name || null,
+          tier_key: tierKey,
+          is_active: isActive,
+          amount_cents: priceAmount,
+          currency,
+          interval,
+          current_period_end: expiresAt,
+          stripe_product_id: productId,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "stripe_customer_id" });
 
-      if (isActive) {
-        // Upsert active subscription
-        const { error } = await supabase
-          .from("web_user_subscriptions")
-          .upsert({
-            user_id: userId,
-            tier_key: tierKey,
-            is_active: true,
-            expires_at: expiresAt,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "user_id,tier_key" });
+      if (scError) logStep("stripe_customers upsert error", { error: scError.message });
+      else logStep("stripe_customers synced", { email, tierKey, isActive });
 
-        if (error) logStep("Upsert error", { error: error.message });
-        else logStep("Subscription synced to DB");
+      // ──────────────────────────────────────────────
+      // 2) Try to match to a Supabase user for web_user_subscriptions
+      // ──────────────────────────────────────────────
+      const { data: users } = await supabase.auth.admin.listUsers();
+      const matchedUser = users?.users?.find(u => u.email === email);
 
-        // Send admin notification for new/renewed subscription
-        if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
-          const priceAmount = subscription.items.data[0]?.price?.unit_amount;
-          const currency = subscription.items.data[0]?.price?.currency?.toUpperCase() || 'USD';
-          const formattedAmount = priceAmount ? `$${(priceAmount / 100).toFixed(2)} ${currency}` : 'N/A';
-          const eventLabel = event.type === "customer.subscription.created" ? "New Subscription" : "Subscription Renewed";
+      if (matchedUser) {
+        const userId = matchedUser.id;
 
-          await supabase.from("admin_notifications").insert({
-            notification_type: "payment_confirmed",
-            title: `💳 ${eventLabel}`,
-            message: `${email} subscribed to ${tierKey.toUpperCase()} tier\n\n💰 Amount: ${formattedAmount}\n📅 Expires: ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}`,
-            metadata: {
-              email,
+        // Update stripe_customers with matched user_id
+        await supabase
+          .from("stripe_customers")
+          .update({ matched_user_id: userId })
+          .eq("stripe_customer_id", customerId);
+
+        logStep("Matched Supabase user", { userId, email });
+
+        if (isActive) {
+          const { error } = await supabase
+            .from("web_user_subscriptions")
+            .upsert({
               user_id: userId,
-              tier: tierKey,
-              amount: formattedAmount,
-              product_id: productId,
+              tier_key: tierKey,
+              is_active: true,
               stripe_subscription_id: subscription.id,
-              event_type: event.type,
-            },
-            is_read: false,
-          });
-          logStep("Admin notification sent for subscription", { email, tierKey });
+              expires_at: expiresAt,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "user_id,tier_key" });
+
+          if (error) logStep("web_user_subscriptions upsert error", { error: error.message });
+          else logStep("web_user_subscriptions synced");
+        } else {
+          const { error } = await supabase
+            .from("web_user_subscriptions")
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq("user_id", userId)
+            .eq("tier_key", tierKey);
+
+          if (error) logStep("Deactivation error", { error: error.message });
+          else logStep("Subscription deactivated in DB");
         }
       } else {
-        // Deactivate
-        const { error } = await supabase
-          .from("web_user_subscriptions")
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq("user_id", userId)
-          .eq("tier_key", tierKey);
+        logStep("No Supabase user found — tracked in stripe_customers only", { email });
+      }
 
-        if (error) logStep("Deactivation error", { error: error.message });
-        else logStep("Subscription deactivated in DB");
+      // ──────────────────────────────────────────────
+      // 3) Admin notification
+      // ──────────────────────────────────────────────
+      const formattedAmount = priceAmount ? `$${(priceAmount / 100).toFixed(2)} ${currency.toUpperCase()}` : 'N/A';
+      const hasAccount = matchedUser ? '✅ Has site account' : '⚠️ No site account';
 
-        // Notify admin of cancellation
+      if (isActive && (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated")) {
+        const eventLabel = event.type === "customer.subscription.created" ? "New Subscription" : "Subscription Renewed";
+        await supabase.from("admin_notifications").insert({
+          notification_type: "payment_confirmed",
+          title: `💳 ${eventLabel}`,
+          message: `${customer.name || email} subscribed to ${tierKey.toUpperCase()} tier\n\n💰 Amount: ${formattedAmount}\n📅 Expires: ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}\n👤 ${hasAccount}`,
+          metadata: {
+            email,
+            customer_name: customer.name,
+            user_id: matchedUser?.id || null,
+            tier: tierKey,
+            amount: formattedAmount,
+            product_id: productId,
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscription.id,
+            event_type: event.type,
+            has_site_account: !!matchedUser,
+          },
+          is_read: false,
+        });
+      } else if (!isActive) {
         await supabase.from("admin_notifications").insert({
           notification_type: "transaction",
           title: "❌ Subscription Cancelled",
-          message: `${email} cancelled their ${tierKey.toUpperCase()} subscription`,
-          metadata: { email, user_id: userId, tier: tierKey, event_type: event.type },
+          message: `${customer.name || email} cancelled their ${tierKey.toUpperCase()} subscription`,
+          metadata: { email, user_id: matchedUser?.id || null, tier: tierKey, event_type: event.type },
           is_read: false,
         });
       }
