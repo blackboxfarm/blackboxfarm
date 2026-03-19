@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,15 +23,17 @@ interface AdminNotification {
   created_at: string;
 }
 
-type TabCategory = 'signups' | 'transactions' | 'audit';
+type TabCategory = 'signups' | 'transactions' | 'audit' | 'tickets';
 
 const SIGNUP_TYPES = ['new_signup', 'user_registered', 'account_created'];
 const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap'];
+const TICKET_TYPES = ['support_ticket', 'ticket_reply'];
 const AUDIT_TYPES = ['api_failure_critical', 'api_failure_warning', 'quota_critical', 'quota_warning', 'repeated_failure', 'table_bloat', 'security', 'error', 'rug_pull_detected'];
 
 function categorize(type: string): TabCategory {
   if (SIGNUP_TYPES.includes(type)) return 'signups';
   if (TRANSACTION_TYPES.includes(type)) return 'transactions';
+  if (TICKET_TYPES.includes(type)) return 'tickets';
   return 'audit';
 }
 
@@ -139,6 +141,8 @@ export function AdminNotificationsBadge() {
       case 'quota_critical': case 'quota_warning': return '📊';
       case 'repeated_failure': return '🔁';
       case 'table_bloat': return '💾';
+      case 'support_ticket': return '🎫';
+      case 'ticket_reply': return '📩';
       default: return '🔔';
     }
   };
@@ -146,16 +150,19 @@ export function AdminNotificationsBadge() {
   // Filter by tab
   const signupNotifs = notifications.filter(n => categorize(n.notification_type) === 'signups');
   const transactionNotifs = notifications.filter(n => categorize(n.notification_type) === 'transactions');
+  const ticketNotifs = notifications.filter(n => categorize(n.notification_type) === 'tickets');
   const auditNotifs = notifications.filter(n => categorize(n.notification_type) === 'audit');
 
   const signupUnread = signupNotifs.filter(n => !n.is_read).length;
   const transactionUnread = transactionNotifs.filter(n => !n.is_read).length;
+  const ticketUnread = ticketNotifs.filter(n => !n.is_read).length;
   const auditUnread = auditNotifs.filter(n => !n.is_read).length;
 
   const getTabNotifs = () => {
     switch (activeTab) {
       case 'signups': return signupNotifs;
       case 'transactions': return transactionNotifs;
+      case 'tickets': return ticketNotifs;
       case 'audit': return auditNotifs;
     }
   };
@@ -300,6 +307,18 @@ export function AdminNotificationsBadge() {
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger
+              value="tickets"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-500 data-[state=active]:bg-transparent py-2.5 gap-1.5"
+            >
+              <Ticket className="h-4 w-4 text-teal-500" />
+              <span className="text-xs">Tickets</span>
+              {ticketUnread > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-teal-500/20 text-teal-500 border-0">
+                  {ticketUnread}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="signups" className="mt-0">
@@ -307,6 +326,9 @@ export function AdminNotificationsBadge() {
           </TabsContent>
           <TabsContent value="transactions" className="mt-0">
             {renderNotificationList(transactionNotifs, 'transactions')}
+          </TabsContent>
+          <TabsContent value="tickets" className="mt-0">
+            {renderNotificationList(ticketNotifs, 'tickets')}
           </TabsContent>
           <TabsContent value="audit" className="mt-0">
             {renderNotificationList(auditNotifs, 'audit')}
