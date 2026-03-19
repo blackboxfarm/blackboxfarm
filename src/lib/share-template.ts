@@ -120,7 +120,8 @@ Free report 👉 blackbox.farm/holders?token={ca}`,
   bot_holders: `📊 *Holders Report*
 
 👥 Total: *{totalWallets}*
-❤️ Health: *{healthScore}*/100
+❤️ Health: *{healthGrade}* ({healthScore}/100)
+📈 Momentum: *{momentumGrade}*
 
 *Distribution:*
 \`Whales  {whaleBar} {whalePct}%\`
@@ -220,8 +221,11 @@ export const TEMPLATE_VARIABLES = [
   { var: '{casual}', desc: 'Casual holder count ($1-$49)' },
   { var: '{retail}', desc: 'Retail holder count ($1-$199) - legacy' },
   { var: '{dust}', desc: 'Dust holder count (<$1)' },
-  { var: '{healthGrade}', desc: 'Grade (A+, B+, etc)' },
-  { var: '{healthScore}', desc: 'Score (0-100)' },
+  { var: '{healthGrade}', desc: 'Grade (A++ to F, 14-tier)' },
+  { var: '{healthScore}', desc: 'Blended health score (0-100)' },
+  { var: '{structuralScore}', desc: 'Structural health score (0-100, long-term)' },
+  { var: '{activityScore}', desc: 'Activity/momentum score (0-100, short-term)' },
+  { var: '{momentumGrade}', desc: 'Activity-only letter grade (A++ to F)' },
   { var: '{timestamp}', desc: 'Current UTC timestamp' },
   { var: '{comment1}', desc: 'Milestone comment (Intel posts)' },
   { var: '{ai_summary}', desc: 'AI-generated 1-2 sentence interpretation (when enabled)' },
@@ -260,6 +264,9 @@ export interface TokenShareData {
   retail: number;      // $1-$199 (legacy)
   healthGrade: string;
   healthScore: number;
+  structuralScore?: number;
+  activityScore?: number;
+  momentumGrade?: string;
 
   // Optional Intel/AI enhancements (used by Intel XBot + manual admin posting)
   comment1?: string;
@@ -450,6 +457,9 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{dust\}/g, data.dustCount.toLocaleString())
     .replace(/\{healthGrade\}/g, data.healthGrade)
     .replace(/\{healthScore\}/g, data.healthScore.toString())
+    .replace(/\{structuralScore\}/g, (data.structuralScore ?? '').toString())
+    .replace(/\{activityScore\}/g, (data.activityScore ?? '').toString())
+    .replace(/\{momentumGrade\}/g, data.momentumGrade ?? '')
     .replace(/\{timestamp\}/g, utcTimestamp)
     // Intel/AI variables
     .replace(/\{comment1\}/g, comment1)

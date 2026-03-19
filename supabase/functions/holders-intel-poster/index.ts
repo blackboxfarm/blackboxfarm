@@ -250,6 +250,12 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{healthGrade\}/g, data.healthGrade || 'N/A')
     .replace(/\{HEALTH_SCORE\}/g, String(data.healthScore || 0))
     .replace(/\{healthScore\}/g, String(data.healthScore || 0))
+    .replace(/\{structuralScore\}/g, String(data.structuralScore ?? ''))
+    .replace(/\{STRUCTURAL_SCORE\}/g, String(data.structuralScore ?? ''))
+    .replace(/\{activityScore\}/g, String(data.activityScore ?? ''))
+    .replace(/\{ACTIVITY_SCORE\}/g, String(data.activityScore ?? ''))
+    .replace(/\{momentumGrade\}/g, data.momentumGrade || '')
+    .replace(/\{MOMENTUM_GRADE\}/g, data.momentumGrade || '')
     .replace(/\{TOKEN_ADDRESS\}/g, data.tokenMint || '')
     .replace(/\{ca\}/g, data.tokenMint || '')
     .replace(/\{ai_summary\}/g, aiSummary)
@@ -454,6 +460,9 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         activeCount: asCount(report?.tierBreakdown?.retail ?? report?.simpleTiers?.retail),
         healthGrade: (report?.stabilityGrade ?? report?.healthScore?.grade ?? 'N/A').toString(),
         healthScore: asCount(report?.stabilityScore ?? report?.healthScore?.score),
+        structuralScore: report?.healthScore?.structuralScore ?? null,
+        activityScore: report?.healthScore?.activityScore ?? null,
+        momentumGrade: report?.healthScore?.momentumGrade ?? '',
         // AI summary fields (populated below if enabled)
         aiSummary: '',
         aiOverview: '',
