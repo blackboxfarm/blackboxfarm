@@ -15372,6 +15372,7 @@ export type Database = {
           dev_total_launches: number | null
           dev_trust_level: string | null
           dev_wallets: string[] | null
+          discovery_source: string | null
           graduated_at: string | null
           image_url: string | null
           is_graduated: boolean | null
