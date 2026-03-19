@@ -360,6 +360,7 @@ export function SubscribersDashboard() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
+          <TabsTrigger value="stripe-customers">💳 Stripe Customers</TabsTrigger>
           <TabsTrigger value="subscribers">👥 Subscribers</TabsTrigger>
           <TabsTrigger value="x-codes">🔑 X Codes</TabsTrigger>
           <TabsTrigger value="redemptions">✅ Redemptions</TabsTrigger>
