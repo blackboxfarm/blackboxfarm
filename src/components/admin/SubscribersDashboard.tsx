@@ -132,6 +132,19 @@ export function SubscribersDashboard() {
     }
   }, []);
 
+  const fetchStripeCustomers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('stripe_customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setStripeCustomers((data as any[]) || []);
+    } catch (err) {
+      console.error('Error fetching stripe customers:', err);
+    }
+  }, []);
+
   const fetchCodes = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -167,7 +180,8 @@ export function SubscribersDashboard() {
   useEffect(() => {
     fetchSubscribers();
     fetchCodes();
-  }, [fetchSubscribers, fetchCodes]);
+    fetchStripeCustomers();
+  }, [fetchSubscribers, fetchCodes, fetchStripeCustomers]);
 
   useEffect(() => {
     if (codes.length > 0) fetchRedemptions();
