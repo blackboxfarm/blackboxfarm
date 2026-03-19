@@ -31,6 +31,15 @@ serve(async (req) => {
     console.log(`[signup-notify] New user signup: ${email}`);
 
     // ──────────────────────────────────────────────
+    // 🚨 WATCHED EMAIL ALERT
+    // ──────────────────────────────────────────────
+    const WATCHED_EMAILS = ['mohad222@gmail.com'];
+    const isWatchedEmail = WATCHED_EMAILS.includes(email?.toLowerCase());
+    if (isWatchedEmail) {
+      console.log(`[signup-notify] 🚨 WATCHED EMAIL DETECTED: ${email}`);
+    }
+
+    // ──────────────────────────────────────────────
     // 1) Auto-link Stripe subscription if this email matches a paying customer
     // ──────────────────────────────────────────────
     let linkedTier: string | null = null;
@@ -98,16 +107,27 @@ serve(async (req) => {
       ? `\n🔗 Auto-linked to ${linkedTier.toUpperCase()} Stripe subscription!` 
       : '';
 
+    const watchedNote = isWatchedEmail
+      ? `\n\n🚨🚨🚨 THIS IS A WATCHED EMAIL! Check auto-link status above. 🚨🚨🚨`
+      : '';
+
+    const notifyTitle = isWatchedEmail
+      ? '🚨 WATCHED EMAIL SIGNUP — mohad222@gmail.com'
+      : linkedTier
+        ? '🔗 New Signup (Stripe Linked!)'
+        : 'New User Signup';
+
     const { data, error } = await supabase.functions.invoke('admin-notify', {
       body: {
         type: 'new_signup',
-        title: linkedTier ? '🔗 New Signup (Stripe Linked!)' : 'New User Signup',
-        message: `A new user has registered!\n\n📧 Email: ${email}\n🆔 User ID: ${userId?.slice(0, 8)}...${linkedNote}`,
+        title: notifyTitle,
+        message: `A new user has registered!\n\n📧 Email: ${email}\n🆔 User ID: ${userId?.slice(0, 8)}...${linkedNote}${watchedNote}`,
         metadata: {
           user_id: userId,
           email,
           created_at,
           auto_linked_tier: linkedTier,
+          watched_email: isWatchedEmail,
         },
         channels: ['email', 'telegram', 'database'],
       },
