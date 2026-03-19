@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { RefreshCw, Search, Users, Crown, CreditCard, Shield, Copy, Trash2, Edit, Plus, Check, X } from 'lucide-react';
+import { RefreshCw, Search, Users, Crown, CreditCard, Shield, Copy, Trash2, Edit, Plus, Check, X, ExternalLink, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Subscriber {
@@ -24,6 +24,24 @@ interface Subscriber {
   stripe_subscription_id: string | null;
   created_at: string;
   email?: string;
+}
+
+interface StripeCustomer {
+  id: string;
+  stripe_customer_id: string;
+  stripe_subscription_id: string | null;
+  email: string;
+  name: string | null;
+  tier_key: string;
+  is_active: boolean;
+  amount_cents: number | null;
+  currency: string;
+  interval: string | null;
+  current_period_end: string | null;
+  stripe_product_id: string | null;
+  matched_user_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface CommunityCode {
