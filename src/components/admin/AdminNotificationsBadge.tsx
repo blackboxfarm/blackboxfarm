@@ -141,6 +141,8 @@ export function AdminNotificationsBadge() {
       case 'quota_critical': case 'quota_warning': return '📊';
       case 'repeated_failure': return '🔁';
       case 'table_bloat': return '💾';
+      case 'support_ticket': return '🎫';
+      case 'ticket_reply': return '📩';
       default: return '🔔';
     }
   };
@@ -148,16 +150,19 @@ export function AdminNotificationsBadge() {
   // Filter by tab
   const signupNotifs = notifications.filter(n => categorize(n.notification_type) === 'signups');
   const transactionNotifs = notifications.filter(n => categorize(n.notification_type) === 'transactions');
+  const ticketNotifs = notifications.filter(n => categorize(n.notification_type) === 'tickets');
   const auditNotifs = notifications.filter(n => categorize(n.notification_type) === 'audit');
 
   const signupUnread = signupNotifs.filter(n => !n.is_read).length;
   const transactionUnread = transactionNotifs.filter(n => !n.is_read).length;
+  const ticketUnread = ticketNotifs.filter(n => !n.is_read).length;
   const auditUnread = auditNotifs.filter(n => !n.is_read).length;
 
   const getTabNotifs = () => {
     switch (activeTab) {
       case 'signups': return signupNotifs;
       case 'transactions': return transactionNotifs;
+      case 'tickets': return ticketNotifs;
       case 'audit': return auditNotifs;
     }
   };
