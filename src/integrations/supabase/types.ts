@@ -10602,6 +10602,95 @@ export type Database = {
         }
         Relationships: []
       }
+      support_ticket_replies: {
+        Row: {
+          created_at: string
+          id: string
+          is_internal_note: boolean
+          message: string
+          reply_by: string | null
+          reply_type: string
+          ticket_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_internal_note?: boolean
+          message: string
+          reply_by?: string | null
+          reply_type?: string
+          ticket_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_internal_note?: boolean
+          message?: string
+          reply_by?: string | null
+          reply_type?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_replies_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          assigned_to: string | null
+          category: string
+          created_at: string
+          email: string
+          id: string
+          message: string
+          metadata: Json | null
+          name: string
+          priority: string
+          status: string
+          subject: string
+          ticket_number: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          category: string
+          created_at?: string
+          email: string
+          id?: string
+          message: string
+          metadata?: Json | null
+          name: string
+          priority?: string
+          status?: string
+          subject: string
+          ticket_number?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: string
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string
+          metadata?: Json | null
+          name?: string
+          priority?: string
+          status?: string
+          subject?: string
+          ticket_number?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       survey_responses: {
         Row: {
           completion_time_seconds: number | null
