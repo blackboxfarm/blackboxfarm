@@ -335,14 +335,11 @@ export default function MasterDBTab() {
                 <TableHead>Blacklisted</TableHead>
                 <TableHead>Spammer</TableHead>
                 <TableHead>Legit</TableHead>
-                <TableHead>X Communities</TableHead>
-                <TableHead>Community Names</TableHead>
-                <TableHead>Admins</TableHead>
-                <TableHead>Mods</TableHead>
-                <TableHead>Mesh X</TableHead>
-                <TableHead>Websites</TableHead>
-                <TableHead>ATH 24h</TableHead>
-                <TableHead>Posted</TableHead>
+                    <TableHead>Websites</TableHead>
+                    <TableHead>X Communities</TableHead>
+                    <TableHead>X Handles</TableHead>
+                    <TableHead>ATH 24h</TableHead>
+                    <TableHead>Posted</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
