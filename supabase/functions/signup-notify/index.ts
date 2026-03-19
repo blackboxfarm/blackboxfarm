@@ -31,6 +31,15 @@ serve(async (req) => {
     console.log(`[signup-notify] New user signup: ${email}`);
 
     // ──────────────────────────────────────────────
+    // 🚨 WATCHED EMAIL ALERT
+    // ──────────────────────────────────────────────
+    const WATCHED_EMAILS = ['mohad222@gmail.com'];
+    const isWatchedEmail = WATCHED_EMAILS.includes(email?.toLowerCase());
+    if (isWatchedEmail) {
+      console.log(`[signup-notify] 🚨 WATCHED EMAIL DETECTED: ${email}`);
+    }
+
+    // ──────────────────────────────────────────────
     // 1) Auto-link Stripe subscription if this email matches a paying customer
     // ──────────────────────────────────────────────
     let linkedTier: string | null = null;
