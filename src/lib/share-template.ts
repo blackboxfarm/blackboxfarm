@@ -263,6 +263,9 @@ export interface TokenShareData {
   retail: number;      // $1-$199 (legacy)
   healthGrade: string;
   healthScore: number;
+  structuralScore?: number;
+  activityScore?: number;
+  momentumGrade?: string;
 
   // Optional Intel/AI enhancements (used by Intel XBot + manual admin posting)
   comment1?: string;
