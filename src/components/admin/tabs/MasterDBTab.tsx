@@ -281,6 +281,15 @@ export default function MasterDBTab() {
             </Button>
             <Button
               size="sm"
+              variant={filterPump ? "default" : "outline"}
+              className="h-8 px-3 gap-1.5"
+              onClick={() => { setFilterPump(f => !f); setPage(0); }}
+            >
+              <Pill className="h-3.5 w-3.5" />
+              {filterPump ? "Showing Non-Pump" : "Hide Pump.fun"}
+            </Button>
+            <Button
+              size="sm"
               variant="outline"
               className="h-8 px-3 gap-1.5"
               disabled={backfillMutation.isPending}
