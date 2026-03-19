@@ -191,6 +191,7 @@ export default function MasterDBTab() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [filterPump, setFilterPump] = useState(false);
   const { toast } = useToast();
 
   const backfillMutation = useMutation({
