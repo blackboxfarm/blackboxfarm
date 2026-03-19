@@ -173,6 +173,41 @@ serve(async (req) => {
           },
           is_read: false,
         });
+
+        // ──────────────────────────────────────────────
+        // 4) Send subscriber email via subscriber-welcome
+        // ──────────────────────────────────────────────
+        try {
+          if (event.type === "customer.subscription.created") {
+            // New subscription — send welcome email
+            await supabase.functions.invoke('subscriber-welcome', {
+              body: {
+                emailType: 'subscriber_welcome',
+                email,
+                name: customer.name || null,
+                tierKey,
+                amount: formattedAmount,
+                isNewSubscription: true,
+                needsAccountCreation: !matchedUser,
+              },
+            });
+            logStep("Subscriber welcome email sent", { email, needsAccountCreation: !matchedUser });
+          } else {
+            // Renewal — send payment confirmation
+            await supabase.functions.invoke('subscriber-welcome', {
+              body: {
+                emailType: 'subscription_renewed',
+                email,
+                name: customer.name || null,
+                tierKey,
+                amount: formattedAmount,
+              },
+            });
+            logStep("Renewal confirmation email sent", { email });
+          }
+        } catch (emailErr) {
+          logStep("Failed to send subscriber email", { error: String(emailErr) });
+        }
       } else if (!isActive) {
         await supabase.from("admin_notifications").insert({
           notification_type: "transaction",
@@ -181,6 +216,21 @@ serve(async (req) => {
           metadata: { email, user_id: matchedUser?.id || null, tier: tierKey, event_type: event.type },
           is_read: false,
         });
+
+        // Send cancellation email to subscriber
+        try {
+          await supabase.functions.invoke('subscriber-welcome', {
+            body: {
+              emailType: 'subscription_cancelled',
+              email,
+              name: customer.name || null,
+              tierKey,
+            },
+          });
+          logStep("Cancellation email sent", { email });
+        } catch (emailErr) {
+          logStep("Failed to send cancellation email", { error: String(emailErr) });
+        }
       }
     }
   } catch (err) {
