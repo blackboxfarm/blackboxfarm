@@ -95,9 +95,29 @@ function Section({ title, icon, children, defaultOpen = true }: { title: string;
 }
 
 function ReportView({ report }: { report: MorningReport }) {
+  const [clearedAlerts, setClearedAlerts] = useState<Set<number>>(new Set());
   const totalCalls = Object.values(report.api_usage_summary).reduce((s, v) => s + v.total_calls, 0);
   const totalFails = Object.values(report.api_usage_summary).reduce((s, v) => s + v.failed, 0);
   const totalCredits = Object.values(report.api_usage_summary).reduce((s, v) => s + v.credits_used, 0);
+
+  const subDetails = report.new_subscribers_details as any;
+  const subEntries = subDetails?.entries || (Array.isArray(subDetails) ? subDetails : []);
+  const subSummary = subDetails?.summary || null;
+
+  const copyAlertQuestion = (alert: { level: string; category: string; title: string; detail: string }) => {
+    const question = `Morning Report alert — [${alert.level.toUpperCase()}] ${alert.title}: ${alert.detail}. What should I do about this? What's the root cause and recommended fix?`;
+    navigator.clipboard.writeText(question);
+    toast.success('Question copied to clipboard');
+  };
+
+  const toggleClearAlert = (idx: number) => {
+    setClearedAlerts(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-1">
@@ -110,17 +130,40 @@ function ReportView({ report }: { report: MorningReport }) {
               <span className="font-semibold text-sm text-destructive">Action Required</span>
             </div>
             <div className="space-y-1">
-              {report.alerts.filter(a => a.level === 'critical' || a.level === 'warning').map((alert, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs">
-                  <Badge variant={alert.level === 'critical' ? 'destructive' : 'secondary'} className="text-[10px] shrink-0">
-                    {alert.level}
-                  </Badge>
-                  <div>
-                    <span className="font-medium">{alert.title}</span>
-                    <span className="text-muted-foreground ml-1">— {alert.detail}</span>
+              {report.alerts.filter(a => a.level === 'critical' || a.level === 'warning').map((alert, i) => {
+                const isCleared = clearedAlerts.has(i);
+                return (
+                  <div key={i} className={`flex items-start gap-2 text-xs transition-opacity ${isCleared ? 'opacity-40' : ''}`}>
+                    <Badge variant={alert.level === 'critical' ? 'destructive' : 'secondary'} className="text-[10px] shrink-0">
+                      {alert.level}
+                    </Badge>
+                    <div className={`flex-1 ${isCleared ? 'line-through' : ''}`}>
+                      <span className="font-medium">{alert.title}</span>
+                      <span className="text-muted-foreground ml-1">— {alert.detail}</span>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        title="Copy question about this alert"
+                        onClick={() => copyAlertQuestion(alert)}
+                      >
+                        <Search className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-5 w-5 ${isCleared ? 'text-green-500' : ''}`}
+                        title={isCleared ? 'Unmark as cleared' : 'Mark as cleared'}
+                        onClick={() => toggleClearAlert(i)}
+                      >
+                        <CheckCheck className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -142,12 +185,16 @@ function ReportView({ report }: { report: MorningReport }) {
           <div className="text-lg font-bold">{report.new_signups}</div>
         </Card>
         <Card className="p-3">
-          <div className="text-xs text-muted-foreground">Payments</div>
-          <div className="text-lg font-bold">{report.new_subscribers}</div>
+          <div className="text-xs text-muted-foreground">New Subs</div>
+          <div className="text-lg font-bold">{subSummary?.overnight_new ?? report.new_subscribers}</div>
+          {subSummary?.overnight_revenue_usd > 0 && (
+            <div className="text-xs text-green-500">${subSummary.overnight_revenue_usd.toFixed(2)}</div>
+          )}
         </Card>
         <Card className="p-3">
-          <div className="text-xs text-muted-foreground">Rate Limits</div>
-          <div className="text-lg font-bold">{report.rate_limit_events.length}</div>
+          <div className="text-xs text-muted-foreground">Total Active Subs</div>
+          <div className="text-lg font-bold">{subSummary?.total_active_subscribers ?? '—'}</div>
+          <div className="text-xs text-muted-foreground">{subSummary?.total_linked_accounts ?? 0} linked</div>
         </Card>
         <Card className="p-3">
           <div className="text-xs text-muted-foreground">Unread</div>
@@ -173,6 +220,56 @@ function ReportView({ report }: { report: MorningReport }) {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">No new signups overnight</p>
+            )}
+          </Section>
+
+          {/* Subscribers / Stripe */}
+          <Section title={`Overnight Subscriptions (${subSummary?.overnight_new ?? report.new_subscribers})`} icon={<CreditCard className="w-4 h-4 text-emerald-400" />}>
+            {subEntries.length > 0 ? (
+              <div className="space-y-2">
+                {/* Tier breakdown summary */}
+                {subSummary?.tier_breakdown && Object.keys(subSummary.tier_breakdown).length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    {Object.entries(subSummary.tier_breakdown as Record<string, number>).map(([tier, count]) => (
+                      <Badge key={tier} variant="outline" className="text-[10px] gap-1">
+                        {tier}: {count as number}
+                      </Badge>
+                    ))}
+                    {subSummary.overnight_revenue_usd > 0 && (
+                      <Badge variant="default" className="text-[10px] gap-1 bg-emerald-600">
+                        💰 ${subSummary.overnight_revenue_usd.toFixed(2)} revenue
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                {/* Individual entries */}
+                {subEntries.map((s: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <Badge variant={s.tier_key === 'pro' ? 'default' : s.tier_key === 'dev' ? 'secondary' : 'outline'} className="text-[10px]">
+                      {s.tier_key}
+                    </Badge>
+                    <span className="font-mono">{s.email}</span>
+                    {s.name && <span className="text-muted-foreground">({s.name})</span>}
+                    <span className="text-emerald-500 font-medium">{s.amount}/{s.interval}</span>
+                    {s.linked ? (
+                      <Badge variant="outline" className="text-[10px] text-green-500 border-green-500/30">✅ linked</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-yellow-500 border-yellow-500/30">⏳ unlinked</Badge>
+                    )}
+                    <span className="text-muted-foreground ml-auto">{s.created_at ? format(new Date(s.created_at), 'h:mm a') : ''}</span>
+                  </div>
+                ))}
+                {/* Totals row */}
+                {subSummary && (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1 border-t border-border/50">
+                    <span>Total Active: <span className="font-medium text-foreground">{subSummary.total_active_subscribers}</span></span>
+                    <span>Linked: <span className="font-medium text-foreground">{subSummary.total_linked_accounts}</span></span>
+                    {subSummary.banner_purchases > 0 && <span>Banner Purchases: <span className="font-medium text-foreground">{subSummary.banner_purchases}</span></span>}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No new subscriptions overnight</p>
             )}
           </Section>
 
