@@ -24,6 +24,7 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Pill,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -190,6 +191,7 @@ export default function MasterDBTab() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [filterPump, setFilterPump] = useState(false);
   const { toast } = useToast();
 
   const backfillMutation = useMutation({
@@ -221,13 +223,17 @@ export default function MasterDBTab() {
   }, [searchInput]);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["master-db", page, search],
+    queryKey: ["master-db", page, search, filterPump],
     queryFn: async () => {
       let query = supabase
         .from("master_token_directory" as any)
         .select("*", { count: "exact" })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
         .order("created_at", { ascending: false, nullsFirst: false });
+
+      if (filterPump) {
+        query = query.neq("launchpad", "pump.fun");
+      }
 
       if (search) {
         query = query.or(
@@ -272,6 +278,15 @@ export default function MasterDBTab() {
             />
             <Button type="submit" size="sm" variant="secondary" className="h-8 px-3">
               <Search className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant={filterPump ? "default" : "outline"}
+              className="h-8 px-3 gap-1.5"
+              onClick={() => { setFilterPump(f => !f); setPage(0); }}
+            >
+              <Pill className="h-3.5 w-3.5" />
+              {filterPump ? "Showing Non-Pump" : "Hide Pump.fun"}
             </Button>
             <Button
               size="sm"
