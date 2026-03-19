@@ -7090,17 +7090,29 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          cached_subscription_active: boolean | null
+          cached_subscription_expires_at: string | null
+          cached_tier_key: string | null
           created_at: string
           display_name: string | null
           email_verified: boolean | null
+          feature_usage: Json | null
           id: string
+          last_active_at: string | null
+          last_login_at: string | null
+          login_count: number | null
+          member_since: string | null
           oauth_full_name: string | null
           oauth_provider: string | null
           oauth_provider_id: string | null
           oauth_raw_data: Json | null
           oauth_username: string | null
+          onboarding_completed: boolean | null
           phone_number: string | null
           phone_verified: boolean | null
+          preferred_currency: string | null
+          referral_source: string | null
+          total_session_minutes: number | null
           two_factor_enabled: boolean | null
           two_factor_secret: string | null
           updated_at: string
@@ -7108,17 +7120,29 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          cached_subscription_active?: boolean | null
+          cached_subscription_expires_at?: string | null
+          cached_tier_key?: string | null
           created_at?: string
           display_name?: string | null
           email_verified?: boolean | null
+          feature_usage?: Json | null
           id?: string
+          last_active_at?: string | null
+          last_login_at?: string | null
+          login_count?: number | null
+          member_since?: string | null
           oauth_full_name?: string | null
           oauth_provider?: string | null
           oauth_provider_id?: string | null
           oauth_raw_data?: Json | null
           oauth_username?: string | null
+          onboarding_completed?: boolean | null
           phone_number?: string | null
           phone_verified?: boolean | null
+          preferred_currency?: string | null
+          referral_source?: string | null
+          total_session_minutes?: number | null
           two_factor_enabled?: boolean | null
           two_factor_secret?: string | null
           updated_at?: string
@@ -7126,17 +7150,29 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          cached_subscription_active?: boolean | null
+          cached_subscription_expires_at?: string | null
+          cached_tier_key?: string | null
           created_at?: string
           display_name?: string | null
           email_verified?: boolean | null
+          feature_usage?: Json | null
           id?: string
+          last_active_at?: string | null
+          last_login_at?: string | null
+          login_count?: number | null
+          member_since?: string | null
           oauth_full_name?: string | null
           oauth_provider?: string | null
           oauth_provider_id?: string | null
           oauth_raw_data?: Json | null
           oauth_username?: string | null
+          onboarding_completed?: boolean | null
           phone_number?: string | null
           phone_verified?: boolean | null
+          preferred_currency?: string | null
+          referral_source?: string | null
+          total_session_minutes?: number | null
           two_factor_enabled?: boolean | null
           two_factor_secret?: string | null
           updated_at?: string
@@ -15856,6 +15892,7 @@ export type Database = {
         Args: { new_user_id: string; referral_code_param: string }
         Returns: Json
       }
+      track_user_login: { Args: { p_user_id: string }; Returns: undefined }
       validate_profile_access: {
         Args: { target_user_id: string }
         Returns: boolean
