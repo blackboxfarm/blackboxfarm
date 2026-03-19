@@ -15373,6 +15373,7 @@ export type Database = {
           dev_trust_level: string | null
           dev_wallets: string[] | null
           discovery_source: string | null
+          funnel_sources: string[] | null
           graduated_at: string | null
           image_url: string | null
           is_graduated: boolean | null

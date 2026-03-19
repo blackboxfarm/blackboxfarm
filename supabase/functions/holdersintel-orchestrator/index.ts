@@ -18,6 +18,9 @@ const SLOW_FUNCTIONS: Record<string, number> = {
   'twitter-token-mention-scanner': 3, // every ~15 min
   'token-vigil': 1, // every tick (~5 min) — death detection + mid-growth snapshots
   'allstar-mint-auditor': 6, // every ~30 min — audit allstar wallet families for new mints
+  'ath-24h-backfill': 2, // every ~10 min — cycling ATH backfill for tokens missing ath_24h_usd
+  'social-link-mint-checker': 3, // every ~15 min — check Metaplex + PumpFun for missing socials
+  'x-community-enricher': 4, // every ~20 min — spider unspidered X communities for admin/mod handles
   'ai-pattern-extractor': 2016, // weekly (~every 7 days) — extract recurring patterns from post-mortems
 };
 
