@@ -232,7 +232,7 @@ export default function MasterDBTab() {
         .order("created_at", { ascending: false, nullsFirst: false });
 
       if (filterPump) {
-        query = query.neq("launchpad", "pump.fun");
+        query = query.neq("discovery_source" as any, "pump_monitor");
       }
 
       if (search) {
