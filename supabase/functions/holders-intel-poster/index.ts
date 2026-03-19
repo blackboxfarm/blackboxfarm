@@ -460,6 +460,9 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         activeCount: asCount(report?.tierBreakdown?.retail ?? report?.simpleTiers?.retail),
         healthGrade: (report?.stabilityGrade ?? report?.healthScore?.grade ?? 'N/A').toString(),
         healthScore: asCount(report?.stabilityScore ?? report?.healthScore?.score),
+        structuralScore: report?.healthScore?.structuralScore ?? null,
+        activityScore: report?.healthScore?.activityScore ?? null,
+        momentumGrade: report?.healthScore?.momentumGrade ?? '',
         // AI summary fields (populated below if enabled)
         aiSummary: '',
         aiOverview: '',
