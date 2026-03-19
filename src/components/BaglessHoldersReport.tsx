@@ -1439,6 +1439,15 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                   lpPercentage={lpAnalysis.lpPercentage}
                   top10Concentration={top10Stats.top10Percentage}
                   lpDetectionConfidence={lpAnalysis.confidence}
+                  healthScore={report?.healthScore?.score}
+                  healthGrade={report?.healthScore?.grade}
+                  healthPhase={report?.healthScore?.phase}
+                  healthBreakdown={report?.healthScore?.breakdown}
+                  vitalityPenalties={report?.healthScore?.vitalityPenalties}
+                  pairAgeHours={report?.healthScore?.pairAgeHours}
+                  structuralScore={report?.healthScore?.structuralScore}
+                  activityScore={report?.healthScore?.activityScore}
+                  momentumGrade={report?.healthScore?.momentumGrade}
                 />
               );
             })()}
