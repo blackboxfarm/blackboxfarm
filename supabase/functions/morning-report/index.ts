@@ -905,7 +905,19 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         tgMessage += `  → ${s.email} (${s.provider})\n`;
       }
     }
-    tgMessage += `• New Subscribers/Payments: ${newSubscribers}\n\n`;
+    tgMessage += `• New Subscribers: ${stripeSubCount}`;
+    if (stripeSubCount > 0) {
+      tgMessage += ` ($${(totalRevenueCents / 100).toFixed(2)} revenue)\n`;
+      for (const s of newSubscribersDetails.slice(0, 5)) {
+        tgMessage += `  → ${s.email} — ${s.tier_key} ${s.amount}/${s.interval}${s.linked ? ' ✅ linked' : ' ⏳ unlinked'}\n`;
+      }
+    } else {
+      tgMessage += `\n`;
+    }
+    if (bannerPurchaseCount > 0) {
+      tgMessage += `• Banner Purchases: ${bannerPurchaseCount}\n`;
+    }
+    tgMessage += `• Total Active Subs: ${totalActiveSubscribers || 0} (${totalLinkedAccounts || 0} linked)\n\n`;
 
     // API Overview
     tgMessage += `📊 **API Overview** (${totalApiCalls} total calls)\n`;
