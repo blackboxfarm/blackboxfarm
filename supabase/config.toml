@@ -516,3 +516,6 @@ verify_jwt = false
 
 [functions.service-status]
 verify_jwt = false
+
+[functions.subscriber-welcome]
+verify_jwt = false
