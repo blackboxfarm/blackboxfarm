@@ -309,7 +309,7 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
     if (wallets.length === 0 && body.wallet) {
       wallets = [body.wallet];
     }
-    const maxDepth = body.maxDepth || body.depth || 5;
+    const maxDepth = body.maxDepth || body.depth || 8;
     const minAmountSol = body.minAmountSol || 0.05;
 
     if (!wallets || !Array.isArray(wallets) || wallets.length === 0) {

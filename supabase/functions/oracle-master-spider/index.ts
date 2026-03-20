@@ -710,8 +710,10 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
       }
     }
 
+    const kycLabel = genealogy.kycRoot ? `🏦 CEX Root: ${genealogy.kycRoot.slice(0, 8)}` : 
+      genealogy.parents.length > 0 ? `🔍 Deepest Funder: ${genealogy.parents[genealogy.parents.length - 1].slice(0, 8)} (trail cold)` : 'N/A';
     addStep('Genealogy Trace', 'done',
-      `Depth: ${genealogy.depth}, Parents: ${genealogy.parents.length}, KYC Root: ${genealogy.kycRoot?.slice(0, 8) || 'N/A'}`);
+      `Depth: ${genealogy.depth}, Parents: ${genealogy.parents.length}, ${kycLabel}`);
 
     // ── STEP 4: Discover all tokens by creator ──
     addStep('Token Discovery', 'running', 'Finding all tokens by this creator...');
