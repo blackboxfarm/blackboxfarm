@@ -33,17 +33,28 @@ serve(async (req) => {
       throw new Error('User not found');
     }
 
-    // Get user's 2FA secret from profiles
+    // Check if 2FA is enabled on profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('two_factor_secret, two_factor_enabled')
+      .select('two_factor_enabled')
       .eq('user_id', user.id)
       .single();
 
     if (profileError) throw profileError;
 
-    if (!profile?.two_factor_enabled || !profile?.two_factor_secret) {
+    if (!profile?.two_factor_enabled) {
       throw new Error('Two-factor authentication is not enabled for this user');
+    }
+
+    // Get the 2FA secret from the dedicated secure table
+    const { data: secretData, error: secretError } = await supabase
+      .from('user_2fa_secrets')
+      .select('two_factor_secret')
+      .eq('user_id', user.id)
+      .single();
+
+    if (secretError || !secretData?.two_factor_secret) {
+      throw new Error('Two-factor secret not found');
     }
 
     // Decrypt the secret (assuming it's base64 encoded)
