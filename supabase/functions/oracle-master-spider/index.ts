@@ -704,7 +704,9 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
           }
         }
         genealogy.depth = genealogy.parents.length;
-        genealogy.kycRoot = genealogy.parents.length > 0 ? genealogy.parents[genealogy.parents.length - 1] : null;
+        // Only set kycRoot from DB if relationship is explicitly 'kyc_root' or 'same_kyc_root'
+        // Don't assume last parent = KYC root
+        genealogy.kycRoot = null;
       }
     }
 
