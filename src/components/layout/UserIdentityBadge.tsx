@@ -73,8 +73,8 @@ export function UserIdentityBadge() {
   return (
     <div className="flex items-center gap-2">
       {/* User Identity Chip */}
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-yellow-600/20 to-yellow-500/10 border border-yellow-500/40 shadow-[0_2px_8px_rgba(234,179,8,0.15)]">
-        <User className="h-4 w-4 text-yellow-500" />
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold/10 border border-gold/40 shadow-[0_2px_8px_hsl(var(--gold)/0.15)]">
+        <User className="h-4 w-4 text-gold" />
         <span className="text-sm font-medium text-foreground max-w-[180px] truncate">
           {label}
         </span>
@@ -82,8 +82,8 @@ export function UserIdentityBadge() {
         {/* Gear icon for profile settings */}
         <Popover open={profileOpen} onOpenChange={setProfileOpen}>
           <PopoverTrigger asChild>
-            <button className="p-0.5 rounded hover:bg-yellow-500/20 transition-colors">
-              <Settings className="h-4 w-4 text-yellow-500" />
+            <button className="p-0.5 rounded hover:bg-gold/20 transition-colors">
+              <Settings className="h-4 w-4 text-gold" />
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-64" align="end">
