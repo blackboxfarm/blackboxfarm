@@ -373,6 +373,7 @@ export default function ContactUs() {
           </CardContent>
         </Card>
       </div>
+      )}
       </div>
     </div>
   );
