@@ -674,9 +674,15 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     // Dead token: no volume + aged past initial period
-    if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6) {
+    // BUT exempt tokens with massive holder bases — they're dormant, not dead
+    const hasSubstantialHolders = realHolderCount >= 500;
+    if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6 && !hasSubstantialHolders) {
       catastrophicPenalty += 15;
       vitalityPenalties.push(`Dead token: <$100 vol/24h after ${Math.floor(pairAgeHours)}h`);
+    } else if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6 && hasSubstantialHolders) {
+      // Dormant but structurally alive — activity penalty only, not catastrophic
+      activityPenalty += 10;
+      vitalityPenalties.push(`Dormant volume: <$100 vol/24h but ${realHolderCount.toLocaleString()} real holders — not catastrophic`);
     }
     
     // Apply capped penalties
