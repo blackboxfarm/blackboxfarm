@@ -274,12 +274,20 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       const chainDelay = 1500 + (data?.chain?.length || 0) * 600;
 
       if (data?.kycRoot) {
+        const isCexConfirmed = data.kycConfirmed !== false; // backwards compat: if field missing, assume true
+        const rootLabel = isCexConfirmed 
+          ? `🏦 CEX ROOT IDENTIFIED: ${data.kycRoot.slice(0, 24)}...`
+          : `🔍 DEEPEST FUNDER: ${data.kycRoot.slice(0, 24)}... (trail cold)`;
+        
         setTimeout(() => {
           addTerminalLine('', 'info');
           addTerminalLine('█████████████████████████████████████████', 'highlight');
-          addTerminalLine(`  KYC ROOT IDENTIFIED: ${data.kycRoot.slice(0, 24)}...`, 'highlight');
+          addTerminalLine(`  ${rootLabel}`, 'highlight');
           addTerminalLine(`  CHAIN DEPTH: ${data.chainDepth || data.chain?.length || 0} HOPS`, 'success');
           addTerminalLine(`  WALLETS TRACED: ${data.walletsTraced || 0}`, 'success');
+          if (!isCexConfirmed) {
+            addTerminalLine('  ⚠ NO CEX CONFIRMED — TRAIL WENT COLD', 'warning');
+          }
           addTerminalLine('█████████████████████████████████████████', 'highlight');
         }, chainDelay + 400);
 
@@ -295,7 +303,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           }
           setTimeout(() => {
             refetch();
-            // Center on KYC root node after graph updates
+            // Center on root node after graph updates
             setTimeout(() => {
               if (graphRef.current) {
                 const kycNode = graphRef.current.graphData().nodes.find(
@@ -310,14 +318,17 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
           }, 500);
 
           setKycFound(true);
-          toast.success(`🏦 KYC Root found in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`);
+          const toastMsg = isCexConfirmed 
+            ? `🏦 CEX Root found in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`
+            : `🔍 Deepest funder found (trail cold) in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`;
+          toast.success(toastMsg);
           setTimeout(() => setTerminalVisible(false), 3000);
         }, chainDelay + 1200);
       } else {
         setTimeout(() => {
-          addTerminalLine(`NO KYC ROOT FOUND — ${data?.walletsTraced || 0} WALLETS TRACED`, 'warning');
-          addTerminalLine('CHAIN EXHAUSTED. RETRY WITH DEEPER SCAN.', 'warning');
-          toast.warning(`No KYC root found after tracing ${data?.walletsTraced || 0} wallets`);
+          addTerminalLine(`NO FUNDING CHAIN FOUND — ${data?.walletsTraced || 0} WALLETS TRACED`, 'warning');
+          addTerminalLine('TRAIL EXHAUSTED. NO CEX OR FUNDER DISCOVERED.', 'warning');
+          toast.warning(`No funding chain found after tracing ${data?.walletsTraced || 0} wallets`);
           setTimeout(() => setTerminalVisible(false), 2500);
         }, chainDelay + 400);
       }
