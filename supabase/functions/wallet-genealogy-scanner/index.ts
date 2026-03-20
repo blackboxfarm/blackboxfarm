@@ -215,7 +215,7 @@ async function traceWalletGenealogy(
       depth: currentDepth,
       amount_sol: 0,
       timestamp: null,
-      source_type: visited.has(wallet) ? "wallet" : "unknown",
+      source_type: visited.has(wallet) ? "wallet" : "trail_cold",
       cex_name: null,
       children: [],
     };
