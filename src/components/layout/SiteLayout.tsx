@@ -69,15 +69,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
             )}
             {user ? (
               <>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate('/dashboard')}
-                  className="gap-2"
-                >
-                  <User className="h-4 w-4" />
-                  Dashboard
-                </Button>
+                <UserIdentityBadge />
                 <Button 
                   variant="ghost" 
                   size="sm"
