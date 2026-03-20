@@ -677,11 +677,8 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
         });
 
         if (satRes.ok) {
-          // We just note the genealogy was traced - full satellite detection
-          // would require parsing all transactions which is expensive
-          genealogy.kycRoot = genealogy.parents.length > 0
-            ? genealogy.parents[genealogy.parents.length - 1]
-            : creatorWallet;
+          // Only set kycRoot if it was already confirmed as CEX (line 648)
+          // Do NOT overwrite with last parent — that's just "trail went cold"
         }
 
       } catch (e) {
