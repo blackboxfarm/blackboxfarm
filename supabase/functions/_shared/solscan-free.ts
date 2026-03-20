@@ -73,7 +73,7 @@ export async function fetchSolscanFreeTokenMeta(
       // 404 = token not indexed by Solscan (expected for ungraduated pump.fun tokens)
       // Don't log as failure — only 5xx and rate-limits are real errors
       if (resp.status === 404) {
-        await logger.complete(resp.status, null, true); // silent success — not a real error
+        // Skip logger — don't record as failure, it's just "not indexed"
         console.log(`[Solscan Free] Token not indexed: ${tokenMint.slice(0, 8)}... (404 — expected)`);
         return null;
       }
