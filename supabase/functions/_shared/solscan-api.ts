@@ -67,6 +67,10 @@ export async function fetchTransactionFromSolscan(
   signature: string,
   solscanApiKey: string
 ): Promise<SolscanTxDetailV2 | null> {
+  // DISABLED: Free tier key cannot access pro-api.solscan.io (requires Pro Level 2 $199/mo)
+  // Reversal: Remove this early-return block when upgrading to Solscan Pro
+  console.log('[Solscan Pro] DISABLED — free tier key cannot access pro-api.solscan.io');
+  return null;
   try {
     // Solscan Pro API v2.0 uses query param and 'token' header
     const url = `https://pro-api.solscan.io/v2.0/transaction/detail?tx=${signature}`;
