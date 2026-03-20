@@ -32,7 +32,7 @@ const MeshGraphVisualizer = () => {
   const [enriching, setEnriching] = useState(false);
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
-  const [redFlagDialog, setRedFlagDialog] = useState<{ node: MeshNode; flags: RedFlag[] } | null>(null);
+  const [redFlagDialog, setRedFlagDialog] = useState<{ nodes: MeshNode[]; currentIndex: number } | null>(null);
   const [ctoChecked, setCtoChecked] = useState<Set<string>>(new Set());
 
   const { snapshot: creditSnapshot, startTracking, stopTracking, resetTracking } = useHeliusCreditTracker();
@@ -607,7 +607,7 @@ const MeshGraphVisualizer = () => {
           description: 'Click to view details',
           action: {
             label: 'View',
-            onClick: () => setRedFlagDialog({ node: meshNode, flags: meshNode.redFlags! }),
+            onClick: () => setRedFlagDialog({ nodes: [meshNode], currentIndex: 0 }),
           },
           duration: 5000,
         });
@@ -996,16 +996,37 @@ const MeshGraphVisualizer = () => {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>{displayData.nodes.length} entities</span>
             <span>{displayData.links.length} connections</span>
-            {redFlagCount > 0 && (
-              <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] animate-pulse cursor-pointer"
-                onClick={() => {
-                  const flaggedNode = displayData.nodes.find(n => n.redFlags && n.redFlags.length > 0);
-                  if (flaggedNode) setRedFlagDialog({ node: flaggedNode, flags: flaggedNode.redFlags! });
-                }}
-              >
-                🚩 {redFlagCount} Flagged
-              </Badge>
-            )}
+            {redFlagCount > 0 && (() => {
+              const flaggedNodes = displayData.nodes.filter(n => n.redFlags && n.redFlags.length > 0);
+              // Build summary: group flags by shortLabel, count occurrences
+              const flagSummary = new Map<string, { count: number; severity: string }>();
+              flaggedNodes.forEach(n => n.redFlags!.forEach(f => {
+                const existing = flagSummary.get(f.shortLabel);
+                if (existing) existing.count++;
+                else flagSummary.set(f.shortLabel, { count: 1, severity: f.severity });
+              }));
+              const summaryText = Array.from(flagSummary.entries())
+                .sort((a, b) => (b[1].severity === 'critical' ? 1 : 0) - (a[1].severity === 'critical' ? 1 : 0))
+                .map(([label, { count }]) => count > 1 ? `${label} (${count})` : label)
+                .join(', ');
+              // Tooltip: per-node breakdown
+              const tooltipLines = flaggedNodes.map(n => {
+                const nodeLabel = n.label || n.id.split(':').slice(1).join(':').slice(0, 12) + '...';
+                const flagLabels = n.redFlags!.map(f => `${f.shortLabel} [${f.severity}]`).join(', ');
+                return `${nodeLabel}: ${flagLabels}`;
+              }).join('\n');
+              return (
+                <Badge 
+                  className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] animate-pulse cursor-pointer max-w-xs truncate"
+                  title={tooltipLines}
+                  onClick={() => {
+                    if (flaggedNodes.length > 0) setRedFlagDialog({ nodes: flaggedNodes, currentIndex: 0 });
+                  }}
+                >
+                  🚩 {redFlagCount} Flagged — {summaryText}
+                </Badge>
+              );
+            })()}
             {focusedEntity && (
               <span className="text-primary font-mono">
                 {focusedEntity.id.slice(0, 16)}...
@@ -1367,39 +1388,77 @@ const MeshGraphVisualizer = () => {
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <AlertTriangle className="h-5 w-5" />
               🚩 Intelligence Red Flag
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              {redFlagDialog && (
-                <span className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full inline-block" style={{ backgroundColor: ENTITY_COLORS[redFlagDialog.node.type] }} />
-                  {ENTITY_LABELS[redFlagDialog.node.type]} — {redFlagDialog.node.label}
+              {redFlagDialog && redFlagDialog.nodes.length > 1 && (
+                <span className="text-xs font-normal text-muted-foreground ml-auto">
+                  {redFlagDialog.currentIndex + 1} / {redFlagDialog.nodes.length}
                 </span>
               )}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {redFlagDialog && (() => {
+                const currentNode = redFlagDialog.nodes[redFlagDialog.currentIndex];
+                return (
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full inline-block" style={{ backgroundColor: ENTITY_COLORS[currentNode.type] }} />
+                    {ENTITY_LABELS[currentNode.type]} — {currentNode.label}
+                  </span>
+                );
+              })()}
             </DialogDescription>
           </DialogHeader>
-          {redFlagDialog && (
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-              {redFlagDialog.flags.map((flag, i) => (
-                <div key={i} className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-sm text-red-400">{flag.shortLabel}</span>
-                    <Badge 
-                      variant={flag.severity === 'critical' ? 'destructive' : 'outline'}
-                      className={flag.severity === 'critical' ? '' : 'border-orange-500/50 text-orange-400'}
-                    >
-                      {flag.severity.toUpperCase()}
-                    </Badge>
+          {redFlagDialog && (() => {
+            const currentNode = redFlagDialog.nodes[redFlagDialog.currentIndex];
+            const flags = currentNode.redFlags || [];
+            return (
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                {flags.map((flag, i) => (
+                  <div key={i} className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-sm text-red-400">{flag.shortLabel}</span>
+                      <Badge 
+                        variant={flag.severity === 'critical' ? 'destructive' : 'outline'}
+                        className={flag.severity === 'critical' ? '' : 'border-orange-500/50 text-orange-400'}
+                      >
+                        {flag.severity.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                      {flag.explanation}
+                    </div>
                   </div>
-                  <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                    {flag.explanation}
-                  </div>
+                ))}
+                <div className="text-[10px] text-muted-foreground font-mono break-all pt-2 border-t border-border">
+                  Entity ID: {currentNode.fullId || currentNode.id}
                 </div>
-              ))}
-              <div className="text-[10px] text-muted-foreground font-mono break-all pt-2 border-t border-border">
-                Entity ID: {redFlagDialog.node.fullId || redFlagDialog.node.id}
+                {/* Prev / Next navigation */}
+                {redFlagDialog.nodes.length > 1 && (
+                  <div className="flex items-center justify-between pt-2 border-t border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7"
+                      disabled={redFlagDialog.currentIndex === 0}
+                      onClick={() => setRedFlagDialog({ ...redFlagDialog, currentIndex: redFlagDialog.currentIndex - 1 })}
+                    >
+                      ← Prev
+                    </Button>
+                    <span className="text-[10px] text-muted-foreground">
+                      {redFlagDialog.nodes.length} flagged entities
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7"
+                      disabled={redFlagDialog.currentIndex === redFlagDialog.nodes.length - 1}
+                      onClick={() => setRedFlagDialog({ ...redFlagDialog, currentIndex: redFlagDialog.currentIndex + 1 })}
+                    >
+                      Next →
+                    </Button>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
