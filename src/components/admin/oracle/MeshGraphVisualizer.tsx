@@ -996,16 +996,37 @@ const MeshGraphVisualizer = () => {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>{displayData.nodes.length} entities</span>
             <span>{displayData.links.length} connections</span>
-            {redFlagCount > 0 && (
-              <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] animate-pulse cursor-pointer"
-                onClick={() => {
-                  const flaggedNode = displayData.nodes.find(n => n.redFlags && n.redFlags.length > 0);
-                  if (flaggedNode) setRedFlagDialog({ node: flaggedNode, flags: flaggedNode.redFlags! });
-                }}
-              >
-                🚩 {redFlagCount} Flagged
-              </Badge>
-            )}
+            {redFlagCount > 0 && (() => {
+              const flaggedNodes = displayData.nodes.filter(n => n.redFlags && n.redFlags.length > 0);
+              // Build summary: group flags by shortLabel, count occurrences
+              const flagSummary = new Map<string, { count: number; severity: string }>();
+              flaggedNodes.forEach(n => n.redFlags!.forEach(f => {
+                const existing = flagSummary.get(f.shortLabel);
+                if (existing) existing.count++;
+                else flagSummary.set(f.shortLabel, { count: 1, severity: f.severity });
+              }));
+              const summaryText = Array.from(flagSummary.entries())
+                .sort((a, b) => (b[1].severity === 'critical' ? 1 : 0) - (a[1].severity === 'critical' ? 1 : 0))
+                .map(([label, { count }]) => count > 1 ? `${label} (${count})` : label)
+                .join(', ');
+              // Tooltip: per-node breakdown
+              const tooltipLines = flaggedNodes.map(n => {
+                const nodeLabel = n.label || n.id.split(':').slice(1).join(':').slice(0, 12) + '...';
+                const flagLabels = n.redFlags!.map(f => `${f.shortLabel} [${f.severity}]`).join(', ');
+                return `${nodeLabel}: ${flagLabels}`;
+              }).join('\n');
+              return (
+                <Badge 
+                  className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] animate-pulse cursor-pointer max-w-xs truncate"
+                  title={tooltipLines}
+                  onClick={() => {
+                    if (flaggedNodes.length > 0) setRedFlagDialog({ nodes: flaggedNodes, currentIndex: 0 });
+                  }}
+                >
+                  🚩 {redFlagCount} Flagged — {summaryText}
+                </Badge>
+              );
+            })()}
             {focusedEntity && (
               <span className="text-primary font-mono">
                 {focusedEntity.id.slice(0, 16)}...
