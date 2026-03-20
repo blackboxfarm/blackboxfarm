@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -253,6 +254,8 @@ export default function MasterDBTab() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
+    <div className="space-y-6">
+    <ManualKycOverride />
     <Card className="w-full -mx-6 sm:-mx-6" style={{ width: 'calc(100% + 3rem)' }}>
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -451,5 +454,6 @@ export default function MasterDBTab() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

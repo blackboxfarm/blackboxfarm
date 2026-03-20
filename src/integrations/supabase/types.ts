@@ -5316,6 +5316,42 @@ export type Database = {
         }
         Relationships: []
       }
+      known_cex_wallets: {
+        Row: {
+          added_by: string | null
+          cex_label: string | null
+          cex_name: string
+          chain: string
+          created_at: string
+          id: string
+          is_verified: boolean
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          added_by?: string | null
+          cex_label?: string | null
+          cex_name: string
+          chain?: string
+          created_at?: string
+          id?: string
+          is_verified?: boolean
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          added_by?: string | null
+          cex_label?: string | null
+          cex_name?: string
+          chain?: string
+          created_at?: string
+          id?: string
+          is_verified?: boolean
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       kol_registry: {
         Row: {
           avatar_url: string | null
