@@ -2,32 +2,49 @@
 
 ## Problem
 
-The "🚩 1 Flagged" badge in the Mesh Bubble Map shows that a node is flagged but gives zero context about **why** — no flag type, no severity, no short description. You have to click it to open a dialog, and even then it only jumps to the first flagged node. There's no inline preview of the reason.
+The "🔴 Repeated Failures: solscan" alert fires because:
 
-## Solution
+1. **404s from `solscan-free.ts`** — The FREE public API returns 404 for unindexed tokens (new pump.fun coins). These are **expected** and not real failures. The logging fix was applied earlier today but the 48 historical failures still show in the alert window.
 
-Add an inline explainer next to the Flagged badge so you can immediately see the flag reason without clicking.
+2. **Dormant Pro code still reachable** — `solscan-api.ts` (transaction parsing) and `solscan-intelligence.ts` (wallet intel) contain live `pro-api.solscan.io` calls with no early-return guard. If any code path invokes them, they'll 401 and log as failures. Currently `flipit-repair-positions` can reach `solscan-api.ts` as a Helius fallback.
 
-### Changes
+3. **`is_enabled` is still `true`** — The config table says Solscan is active, so health monitors keep flagging it.
 
-**File: `src/components/admin/oracle/MeshGraphVisualizer.tsx`**
+## Plan (3 changes, all reversible)
 
-1. **Expand the "🚩 X Flagged" badge area** to include a short summary of all flag types detected. Instead of just `🚩 1 Flagged`, show something like:
+### 1. Add disabled guards to Pro endpoint files
 
-   `🚩 1 Flagged — No KYC Link (critical)`
-   
-   or for multiple flags:
-   
-   `🚩 3 Flagged — Circular Funding (2), No KYC Link (1)`
+**`solscan-api.ts`** — Add an early-return at the top of `fetchTransactionFromSolscan()`:
+```
+console.log('[Solscan Pro] DISABLED — free tier key cannot access pro-api.solscan.io');
+return null;
+```
+This propagates to `parseBuyFromSolscan` and `parseSellFromSolscan` automatically.
 
-2. **Add a tooltip on hover** with the full list of flagged entities and their flag short labels, so you get instant context without opening the dialog.
+**`solscan-intelligence.ts`** — Add the same early-return at the top of each exported function so no Pro calls ever fire.
 
-3. **Keep the click behavior** — clicking still opens the detailed explainer dialog, but now the dialog will cycle through ALL flagged nodes (not just the first one), with prev/next navigation.
+**Reversal:** Remove the early-return lines when/if you upgrade to Pro.
 
-### Technical Detail
+### 2. Set `is_enabled = false` in config table
 
-- Collect all flags from `displayData.nodes` into a summary: group by `flag.shortLabel`, count occurrences
-- Render the summary inline after the badge text
-- Add a `title` attribute or Tooltip component with per-node breakdown
-- In the dialog opener, pass all flagged nodes instead of just the first match, and add simple prev/next state to navigate between them
+Run a migration:
+```sql
+UPDATE api_service_config
+SET is_enabled = false,
+    notes = notes || ' | Disabled 2026-03-20: free tier only, Pro endpoints blocked.'
+WHERE service_name = 'solscan';
+```
+
+This stops health monitors from flagging Solscan. The free `solscan-free.ts` calls still work — they don't check this flag.
+
+**Reversal:** `UPDATE api_service_config SET is_enabled = true WHERE service_name = 'solscan';`
+
+### 3. Deploy affected edge functions
+
+Deploy `token-metadata`, `flipit-repair-positions`, and any function importing from `solscan-api.ts` or `solscan-intelligence.ts` to pick up the guards.
+
+### What stays working
+
+- `solscan-free.ts` (public-api.solscan.io) continues to fill metadata gaps — it's the only active Solscan caller and already skips logging 404s.
+- All other token data flows through Helius, DexScreener, and Pump.fun as primary sources.
 
