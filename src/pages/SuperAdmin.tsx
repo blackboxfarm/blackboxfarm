@@ -137,7 +137,6 @@ export default function SuperAdmin() {
             <TabsTrigger value="morning-report" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">☀️ Morning Report</TabsTrigger>
             <TabsTrigger value="allstar" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">⭐ Allstars</TabsTrigger>
             <TabsTrigger value="funnel-feeds" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-lime-500/30 data-[state=active]:to-green-500/20">🔄 Funnel Feeds</TabsTrigger>
-            <TabsTrigger value="funnel-feeds" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-lime-500/30 data-[state=active]:to-green-500/20">🔄 Funnel Feeds</TabsTrigger>
             <TabsTrigger value="monitoring" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-rose-500/20">📡 Monitoring</TabsTrigger>
             <TabsTrigger value="tickets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500/30 data-[state=active]:to-cyan-500/20">🎫 Tickets</TabsTrigger>
           </TabsList>
