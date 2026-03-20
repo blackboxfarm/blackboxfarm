@@ -5,10 +5,11 @@ import { SolPriceDisplay } from '@/components/SolPriceDisplay';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { Button } from '@/components/ui/button';
-import { LogIn, UserPlus, Shield, User, LogOut } from 'lucide-react';
+import { LogIn, UserPlus, Shield, LogOut } from 'lucide-react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
 
 const NAV_ITEMS = [
   { label: 'Overview', path: '/' },
@@ -68,15 +69,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
             )}
             {user ? (
               <>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate('/dashboard')}
-                  className="gap-2"
-                >
-                  <User className="h-4 w-4" />
-                  Dashboard
-                </Button>
+                <UserIdentityBadge />
                 <Button 
                   variant="ghost" 
                   size="sm"
