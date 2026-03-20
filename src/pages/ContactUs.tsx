@@ -116,6 +116,7 @@ export default function ContactUs() {
           </div>
         </div>
 
+      {successContent || (
       <div className="container mx-auto py-12 space-y-12">
         {/* Header */}
         <div className="text-center space-y-6">
