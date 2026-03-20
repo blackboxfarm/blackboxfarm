@@ -45,16 +45,24 @@ serve(async (req) => {
       throw new Error('Invalid TOTP code');
     }
 
-    // Enable 2FA for the user
+    // Enable 2FA flag on profile
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({
-        two_factor_enabled: true,
-        two_factor_secret: secret
-      })
+      .update({ two_factor_enabled: true })
       .eq('user_id', user.id);
 
     if (updateError) throw updateError;
+
+    // Store the secret in the dedicated secure table
+    const { error: secretError } = await supabase
+      .from('user_2fa_secrets')
+      .upsert({
+        user_id: user.id,
+        two_factor_secret: secret,
+        updated_at: new Date().toISOString()
+      });
+
+    if (secretError) throw secretError;
 
     // Send notification
     await supabase

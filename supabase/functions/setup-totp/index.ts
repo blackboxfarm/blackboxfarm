@@ -43,12 +43,13 @@ serve(async (req) => {
     const otpauth = authenticator.keyuri(accountName, serviceName, secret);
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauth)}`;
 
-    // Store secret temporarily (will be permanently saved when 2FA is enabled)
+    // Store secret in the dedicated secure table (will be finalized when 2FA is enabled)
     const { error: updateError } = await supabase
-      .from('profiles')
+      .from('user_2fa_secrets')
       .upsert({
         user_id: user.id,
-        two_factor_secret: secret
+        two_factor_secret: secret,
+        updated_at: new Date().toISOString()
       });
 
     if (updateError) throw updateError;

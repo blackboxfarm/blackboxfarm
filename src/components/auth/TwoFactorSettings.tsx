@@ -65,15 +65,21 @@ export const TwoFactorSettings = () => {
 
     setDisabling(true);
     try {
+      // Disable 2FA flag on profile
       const { error } = await supabase
         .from('profiles')
-        .update({ 
-          two_factor_enabled: false,
-          two_factor_secret: null 
-        })
+        .update({ two_factor_enabled: false })
         .eq('user_id', user.id);
 
       if (error) throw error;
+
+      // Remove the secret from the secure table
+      const { error: secretError } = await supabase
+        .from('user_2fa_secrets')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (secretError) console.error('Error removing 2FA secret:', secretError);
 
       // Remove all trusted devices
       await supabase.functions.invoke('remove-all-trusted-devices', {
