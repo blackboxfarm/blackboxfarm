@@ -215,7 +215,7 @@ Deno.serve(withRunLog('system-health-audit', async (req) => {
       }
     }
 
-    // ── Check 5: Unread admin notifications piling up ──
+    // ── Check 6: Unread admin notifications piling up ──
     const { count: unreadCount } = await supabase
       .from('admin_notifications')
       .select('*', { count: 'exact', head: true })
