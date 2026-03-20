@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
