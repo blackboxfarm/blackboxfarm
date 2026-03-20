@@ -302,11 +302,19 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
   }
 
   try {
-    const { wallets, maxDepth = 5, minAmountSol = 0.05 } = await req.json();
+    const body = await req.json();
+    
+    // Accept both { wallets: [...] } and { wallet: "..." } formats
+    let wallets: string[] = body.wallets || [];
+    if (wallets.length === 0 && body.wallet) {
+      wallets = [body.wallet];
+    }
+    const maxDepth = body.maxDepth || body.depth || 5;
+    const minAmountSol = body.minAmountSol || 0.05;
 
     if (!wallets || !Array.isArray(wallets) || wallets.length === 0) {
       return new Response(
-        JSON.stringify({ error: "wallets array is required" }),
+        JSON.stringify({ error: "wallets array or wallet string is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
