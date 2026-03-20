@@ -136,7 +136,67 @@ Deno.serve(withRunLog('system-health-audit', async (req) => {
       }
     }
 
-    // ── Check 4: Database table bloat (large tables with no cleanup) ──
+    // ── Check 4: Critical function heartbeat (poster, dex-scanner, scheduler) ──
+    const heartbeatFunctions = [
+      { name: 'holders-intel-poster', maxStaleMins: 15, label: 'HoldersIntel Poster' },
+      { name: 'holders-intel-dex-scanner', maxStaleMins: 15, label: 'HoldersIntel Dex Scanner' },
+      { name: 'holders-intel-scheduler', maxStaleMins: 90, label: 'HoldersIntel Scheduler' },
+    ];
+
+    for (const fn of heartbeatFunctions) {
+      const { data: lastRun } = await supabase
+        .from('edge_function_runs')
+        .select('started_at, status, duration_ms, error_message')
+        .eq('function_name', fn.name)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!lastRun) {
+        checks.push({ check: `heartbeat_${fn.name}`, status: 'critical', details: `${fn.label}: No runs found at all!` });
+        alerts.push({
+          title: `🔴 ${fn.label} — Never Ran`,
+          message: `${fn.label} has no recorded runs in edge_function_runs. Cron job may be missing.`,
+          type: `heartbeat_missing_${fn.name}`,
+          metadata: { function_name: fn.name },
+        });
+      } else {
+        const ageMins = (Date.now() - new Date(lastRun.started_at).getTime()) / 60_000;
+        const ageStr = ageMins < 60 ? `${Math.round(ageMins)}m ago` : `${(ageMins / 60).toFixed(1)}h ago`;
+
+        if (ageMins > fn.maxStaleMins * 4) {
+          // Over 4x the expected interval = critical
+          checks.push({ check: `heartbeat_${fn.name}`, status: 'critical', details: `${fn.label}: Last run ${ageStr} (expected every ${fn.maxStaleMins}m)` });
+          alerts.push({
+            title: `🔴 ${fn.label} — DEAD (${ageStr})`,
+            message: `${fn.label} hasn't run in ${ageStr}. Expected every ${fn.maxStaleMins} min. Last status: ${lastRun.status}. Cron job likely missing or function is crashing.${lastRun.error_message ? ` Error: ${lastRun.error_message}` : ''}`,
+            type: `heartbeat_dead_${fn.name}`,
+            metadata: { function_name: fn.name, last_run: lastRun.started_at, age_mins: Math.round(ageMins), last_status: lastRun.status },
+          });
+        } else if (ageMins > fn.maxStaleMins * 2) {
+          // Over 2x = warning
+          checks.push({ check: `heartbeat_${fn.name}`, status: 'warning', details: `${fn.label}: Last run ${ageStr} (stale)` });
+          alerts.push({
+            title: `🟡 ${fn.label} — Stale (${ageStr})`,
+            message: `${fn.label} last ran ${ageStr}. Expected every ${fn.maxStaleMins} min. May be failing silently.`,
+            type: `heartbeat_stale_${fn.name}`,
+            metadata: { function_name: fn.name, last_run: lastRun.started_at, age_mins: Math.round(ageMins) },
+          });
+        } else if (lastRun.status === 'error') {
+          checks.push({ check: `heartbeat_${fn.name}`, status: 'warning', details: `${fn.label}: Last run errored ${ageStr}` });
+          alerts.push({
+            title: `🟡 ${fn.label} — Last Run Failed`,
+            message: `${fn.label} ran ${ageStr} but ended in error: ${lastRun.error_message || 'unknown'}`,
+            type: `heartbeat_error_${fn.name}`,
+            metadata: { function_name: fn.name, last_run: lastRun.started_at, error: lastRun.error_message },
+          });
+        } else {
+          checks.push({ check: `heartbeat_${fn.name}`, status: 'ok', details: `${fn.label}: healthy (${ageStr}, ${lastRun.status})` });
+        }
+      }
+    }
+
+    // ── Check 5: Database table bloat (large tables with no cleanup) ──
     const logTables = ['api_usage_log', 'activity_logs', 'arb_opportunities', 'arb_price_snapshots', 'helius_api_usage'];
     for (const table of logTables) {
       const { count } = await supabase.from(table).select('*', { count: 'exact', head: true });
