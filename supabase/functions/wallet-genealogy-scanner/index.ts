@@ -67,7 +67,7 @@ interface WalletNode {
   depth: number;
   amount_sol: number;
   timestamp: string | null;
-  source_type: "cex" | "wallet" | "program" | "unknown";
+  source_type: "cex" | "wallet" | "program" | "trail_cold";
   cex_name: string | null;
   children: WalletNode[];
   tx_signature?: string;
