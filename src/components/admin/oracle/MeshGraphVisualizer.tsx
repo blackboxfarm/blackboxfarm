@@ -607,7 +607,7 @@ const MeshGraphVisualizer = () => {
           description: 'Click to view details',
           action: {
             label: 'View',
-            onClick: () => setRedFlagDialog({ node: meshNode, flags: meshNode.redFlags! }),
+            onClick: () => setRedFlagDialog({ nodes: [meshNode], currentIndex: 0 }),
           },
           duration: 5000,
         });
