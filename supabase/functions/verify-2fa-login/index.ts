@@ -60,9 +60,9 @@ serve(async (req) => {
     // Decrypt the secret (assuming it's base64 encoded)
     let secret;
     try {
-      secret = atob(profile.two_factor_secret);
+      secret = atob(secretData.two_factor_secret);
     } catch {
-      secret = profile.two_factor_secret; // Fallback if not encoded
+      secret = secretData.two_factor_secret; // Fallback if not encoded
     }
 
     // Verify the TOTP code
