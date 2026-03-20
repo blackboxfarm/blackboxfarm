@@ -60,24 +60,30 @@ export default function ContactUs() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="p-8">
-            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Thank You!</h2>
-            <p className="text-muted-foreground mb-6">
-              Your message has been sent successfully. We'll get back to you within 24 hours.
-            </p>
+  const successContent = isSubmitted ? (
+    <div className="flex items-center justify-center py-20">
+      <Card className="w-full max-w-md text-center">
+        <CardContent className="p-8">
+          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Thank You!</h2>
+          <p className="text-muted-foreground mb-6">
+            Your message has been sent successfully. We'll get back to you within 24 hours.
+          </p>
+          <div className="flex flex-col gap-3">
             <Button onClick={() => setIsSubmitted(false)}>
               Send Another Message
             </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+            <Link to="/">
+              <Button variant="outline" className="w-full">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Home
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -110,6 +116,7 @@ export default function ContactUs() {
           </div>
         </div>
 
+      {successContent || (
       <div className="container mx-auto py-12 space-y-12">
         {/* Header */}
         <div className="text-center space-y-6">
@@ -366,6 +373,7 @@ export default function ContactUs() {
           </CardContent>
         </Card>
       </div>
+      )}
       </div>
     </div>
   );
