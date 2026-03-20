@@ -130,6 +130,27 @@ export function AdminNotificationsBadge() {
     setUnreadCount(0);
   };
 
+  const archiveNotification = async (id: string) => {
+    await (supabase.from('admin_notifications' as any).update({ is_archived: true }).eq('id', id) as any);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setUnreadCount((prev) => {
+      const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
+      return wasUnread ? Math.max(0, prev - 1) : prev;
+    });
+  };
+
+  const archiveAllInTab = async () => {
+    const tabNotifs = getTabNotifs();
+    if (!tabNotifs || tabNotifs.length === 0) return;
+    const ids = tabNotifs.map((n) => n.id);
+    await (supabase.from('admin_notifications' as any).update({ is_archived: true }).in('id', ids) as any);
+    setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+    setUnreadCount((prev) => {
+      const unreadArchived = tabNotifs.filter((n) => !n.is_read).length;
+      return Math.max(0, prev - unreadArchived);
+    });
+  };
+
   const getTypeEmoji = (type: string) => {
     switch (type) {
       case 'new_signup': case 'user_registered': case 'account_created': return '👤';
