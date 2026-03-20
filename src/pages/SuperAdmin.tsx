@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBadge";
 import { LazyLoader } from "@/components/ui/lazy-loader";
 import { PumpFunApiStatus } from "@/components/admin/PumpFunApiStatus";
+import { TabErrorBoundary } from "@/components/ui/TabErrorBoundary";
 
 // Lazy load entire tab content sections - they ONLY load when their tab is clicked
 const UtilitiesTab = lazy(() => import("@/components/admin/tabs/UtilitiesTab"));
