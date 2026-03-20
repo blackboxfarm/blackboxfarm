@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Uniform response to prevent user enumeration
+const UNIFORM_NO_2FA = { requires2FA: false, has2FA: false, isTrustedDevice: false };
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -15,7 +18,11 @@ serve(async (req) => {
     const { email } = await req.json();
 
     if (!email) {
-      throw new Error('Email is required');
+      // Return uniform response instead of error
+      return new Response(
+        JSON.stringify(UNIFORM_NO_2FA),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     }
 
     const supabase = createClient(
@@ -23,13 +30,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get user by email
+    // Get user by email — return uniform response if not found (no enumeration)
     const { data: users, error: userError } = await supabase.auth.admin.listUsers();
-    if (userError) throw userError;
+    if (userError) {
+      console.error('Error listing users:', userError);
+      return new Response(
+        JSON.stringify(UNIFORM_NO_2FA),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
 
     const user = users.users.find(u => u.email === email);
     if (!user) {
-      throw new Error('User not found');
+      // User not found — return same shape as "no 2FA" to prevent enumeration
+      return new Response(
+        JSON.stringify(UNIFORM_NO_2FA),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     }
 
     // Check if user has 2FA enabled
@@ -39,14 +56,20 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      // Profile error — return uniform response
+      return new Response(
+        JSON.stringify(UNIFORM_NO_2FA),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
 
     const has2FA = profile?.two_factor_enabled || false;
 
     // Check if this device is trusted (if 2FA is enabled)
     let isTrustedDevice = false;
     if (has2FA) {
-      const deviceFingerprint = await generateDeviceFingerprint(req);
+      const deviceFingerprint = generateDeviceFingerprint(req);
       
       const { data: trustedDevice, error: deviceError } = await supabase
         .from('trusted_devices')
@@ -80,22 +103,22 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error in check-2fa-requirement:', error);
+    // Return uniform response on any error — never leak user existence
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify(UNIFORM_NO_2FA),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 200,
       }
     );
   }
 });
 
-async function generateDeviceFingerprint(req: Request): Promise<string> {
+function generateDeviceFingerprint(req: Request): string {
   const userAgent = req.headers.get('user-agent') || '';
   const acceptLanguage = req.headers.get('accept-language') || '';
   const acceptEncoding = req.headers.get('accept-encoding') || '';
   
-  // Create a simple fingerprint from headers
   const fingerprint = btoa(userAgent + acceptLanguage + acceptEncoding);
-  return fingerprint.substring(0, 64); // Truncate to reasonable length
+  return fingerprint.substring(0, 64);
 }
