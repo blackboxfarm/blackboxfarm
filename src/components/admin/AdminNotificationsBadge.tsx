@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket, Archive } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +81,7 @@ export function AdminNotificationsBadge() {
     const { data, error } = await (supabase
       .from('admin_notifications' as any)
       .select('*')
+      .eq('is_archived', false)
       .order('created_at', { ascending: false })
       .limit(100) as any);
 
@@ -127,6 +128,27 @@ export function AdminNotificationsBadge() {
     await (supabase.from('admin_notifications' as any).update({ is_read: true, read_at: new Date().toISOString() }).in('id', unreadIds) as any);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
+  };
+
+  const archiveNotification = async (id: string) => {
+    await (supabase.from('admin_notifications' as any).update({ is_archived: true }).eq('id', id) as any);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setUnreadCount((prev) => {
+      const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
+      return wasUnread ? Math.max(0, prev - 1) : prev;
+    });
+  };
+
+  const archiveAllInTab = async () => {
+    const tabNotifs = getTabNotifs();
+    if (!tabNotifs || tabNotifs.length === 0) return;
+    const ids = tabNotifs.map((n) => n.id);
+    await (supabase.from('admin_notifications' as any).update({ is_archived: true }).in('id', ids) as any);
+    setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+    setUnreadCount((prev) => {
+      const unreadArchived = tabNotifs.filter((n) => !n.is_read).length;
+      return Math.max(0, prev - unreadArchived);
+    });
   };
 
   const getTypeEmoji = (type: string) => {
@@ -237,6 +259,15 @@ export function AdminNotificationsBadge() {
                       <Check className="h-4 w-4" />
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-yellow-500"
+                    onClick={() => archiveNotification(notification.id)}
+                    title="Archive this alert"
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
             </div>
@@ -261,12 +292,18 @@ export function AdminNotificationsBadge() {
       <PopoverContent className="w-[420px] p-0" align="end">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="font-semibold text-foreground">Admin Alerts</h3>
-          {unreadCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs">
-              <CheckCheck className="h-4 w-4 mr-1" />
-              Mark all read
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={archiveAllInTab} className="text-xs text-muted-foreground hover:text-yellow-500" title="Archive all in current tab">
+              <Archive className="h-4 w-4 mr-1" />
+              Clear tab
             </Button>
-          )}
+            {unreadCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs">
+                <CheckCheck className="h-4 w-4 mr-1" />
+                Mark all read
+              </Button>
+            )}
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabCategory)} className="w-full">
