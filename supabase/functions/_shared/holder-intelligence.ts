@@ -363,11 +363,10 @@ export async function traceDevGenealogy(
       console.warn('[HolderIntel] Mesh storage error:', e)
     );
 
-    // Determine KYC root (deepest non-CEX wallet, or CEX itself)
+    // Only confirm KYC root if a CEX was actually found
     const deepestParent = genealogy.parentWallets[genealogy.parentWallets.length - 1];
-    const kycRoot = deepestParent?.cexName
-      ? deepestParent.wallet
-      : genealogy.parentWallets.length >= 2 ? deepestParent?.wallet : null;
+    const cexParent = genealogy.parentWallets.find(p => p.cexName);
+    const kycConfirmed = !!cexParent;
 
     return {
       creatorWallet,
@@ -376,11 +375,13 @@ export async function traceDevGenealogy(
         depth: p.depth,
         amountSol: p.amountSol,
         cexName: p.cexName,
-        label: p.cexName ? 'CEX' : (i === genealogy.parentWallets.length - 1 ? 'KYC_ROOT' : 'FUNDER'),
+        label: p.cexName ? 'CEX' : (i === genealogy.parentWallets.length - 1 ? 'DEEPEST_FUNDER' : 'FUNDER'),
       })),
       xAccounts: genealogy.xAccounts,
       cexSources: genealogy.cexSources,
-      kycRootWallet: kycRoot || null,
+      kycRootWallet: cexParent?.wallet || null,
+      kycConfirmed,
+      deepestFunder: !kycConfirmed && deepestParent ? deepestParent.wallet : null,
       alreadyKnown: false,
     };
   } catch (e) {

@@ -25,7 +25,7 @@ const CEX_WALLETS: Record<string, string> = {
   'BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6': 'KuCoin',
 };
 
-const MAX_DEPTH = 6;
+const MAX_DEPTH = 8;
 const MIN_SOL = 0.1;
 
 interface ParentWallet {

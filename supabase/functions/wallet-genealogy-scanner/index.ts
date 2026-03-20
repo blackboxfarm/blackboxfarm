@@ -67,7 +67,7 @@ interface WalletNode {
   depth: number;
   amount_sol: number;
   timestamp: string | null;
-  source_type: "cex" | "wallet" | "program" | "unknown";
+  source_type: "cex" | "wallet" | "program" | "trail_cold";
   cex_name: string | null;
   children: WalletNode[];
   tx_signature?: string;
@@ -215,7 +215,7 @@ async function traceWalletGenealogy(
       depth: currentDepth,
       amount_sol: 0,
       timestamp: null,
-      source_type: visited.has(wallet) ? "wallet" : "unknown",
+      source_type: visited.has(wallet) ? "wallet" : "trail_cold",
       cex_name: null,
       children: [],
     };
@@ -309,7 +309,7 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
     if (wallets.length === 0 && body.wallet) {
       wallets = [body.wallet];
     }
-    const maxDepth = body.maxDepth || body.depth || 5;
+    const maxDepth = body.maxDepth || body.depth || 8;
     const minAmountSol = body.minAmountSol || 0.05;
 
     if (!wallets || !Array.isArray(wallets) || wallets.length === 0) {

@@ -677,11 +677,8 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
         });
 
         if (satRes.ok) {
-          // We just note the genealogy was traced - full satellite detection
-          // would require parsing all transactions which is expensive
-          genealogy.kycRoot = genealogy.parents.length > 0
-            ? genealogy.parents[genealogy.parents.length - 1]
-            : creatorWallet;
+          // Only set kycRoot if it was already confirmed as CEX (line 648)
+          // Do NOT overwrite with last parent — that's just "trail went cold"
         }
 
       } catch (e) {
@@ -707,12 +704,16 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
           }
         }
         genealogy.depth = genealogy.parents.length;
-        genealogy.kycRoot = genealogy.parents.length > 0 ? genealogy.parents[genealogy.parents.length - 1] : null;
+        // Only set kycRoot from DB if relationship is explicitly 'kyc_root' or 'same_kyc_root'
+        // Don't assume last parent = KYC root
+        genealogy.kycRoot = null;
       }
     }
 
+    const kycLabel = genealogy.kycRoot ? `🏦 CEX Root: ${genealogy.kycRoot.slice(0, 8)}` : 
+      genealogy.parents.length > 0 ? `🔍 Deepest Funder: ${genealogy.parents[genealogy.parents.length - 1].slice(0, 8)} (trail cold)` : 'N/A';
     addStep('Genealogy Trace', 'done',
-      `Depth: ${genealogy.depth}, Parents: ${genealogy.parents.length}, KYC Root: ${genealogy.kycRoot?.slice(0, 8) || 'N/A'}`);
+      `Depth: ${genealogy.depth}, Parents: ${genealogy.parents.length}, ${kycLabel}`);
 
     // ── STEP 4: Discover all tokens by creator ──
     addStep('Token Discovery', 'running', 'Finding all tokens by this creator...');

@@ -572,7 +572,7 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                               node.role === 'kyc_root' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' :
                               'bg-green-500/20 text-green-400 border-green-500/40'
                             }`}>
-                              {node.role === 'kyc_root' ? '🔑 KYC Root' : '💰 Funder'}
+                              {node.role === 'kyc_root' ? (node.cexName ? '🏦 CEX Root' : '🔍 Deepest Funder') : '💰 Funder'}
                             </Badge>
                             <span className="text-[9px] text-muted-foreground">↑ {node.relationship.replace(/_/g, ' ')}</span>
                             <a href={solscanLink(node.wallet)} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-400 hover:text-blue-300 underline decoration-dotted">
@@ -641,7 +641,7 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                     // Determine hierarchy role for source & linked
                     const getWalletRole = (id: string, isSource: boolean) => {
                       if (id === result.resolvedWallet) return '⭐ SUBJECT';
-                      if (isKycLink && !isSource) return '🔑 KYC ROOT';
+                      if (isKycLink && !isSource) return '🏦 CEX ROOT';
                       if (isKycLink && isSource) return '📡 SATELLITE';
                       if (isSatellite && isSource) return '📡 SATELLITE';
                       if (isSatellite && !isSource) return '🔑 PARENT';

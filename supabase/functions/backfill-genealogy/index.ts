@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
         console.log(`[backfill-genealogy] Tracing ${wallet.slice(0, 8)}...`);
         
         const { data, error } = await supabase.functions.invoke('wallet-genealogy-scanner', {
-          body: { wallet, depth: 3 },
+          body: { wallet, depth: 5 },
         });
 
         if (error) {
