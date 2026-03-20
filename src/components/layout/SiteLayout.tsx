@@ -5,10 +5,11 @@ import { SolPriceDisplay } from '@/components/SolPriceDisplay';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { Button } from '@/components/ui/button';
-import { LogIn, UserPlus, Shield, User, LogOut } from 'lucide-react';
+import { LogIn, UserPlus, Shield, LogOut } from 'lucide-react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
 
 const NAV_ITEMS = [
   { label: 'Overview', path: '/' },
