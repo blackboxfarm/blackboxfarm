@@ -81,6 +81,7 @@ export function AdminNotificationsBadge() {
     const { data, error } = await (supabase
       .from('admin_notifications' as any)
       .select('*')
+      .eq('is_archived', false)
       .order('created_at', { ascending: false })
       .limit(100) as any);
 
