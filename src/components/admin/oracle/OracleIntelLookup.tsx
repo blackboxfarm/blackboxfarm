@@ -641,7 +641,7 @@ const OracleIntelLookup = ({ initialQuery }: OracleIntelLookupProps) => {
                     // Determine hierarchy role for source & linked
                     const getWalletRole = (id: string, isSource: boolean) => {
                       if (id === result.resolvedWallet) return '⭐ SUBJECT';
-                      if (isKycLink && !isSource) return '🔑 KYC ROOT';
+                      if (isKycLink && !isSource) return '🏦 CEX ROOT';
                       if (isKycLink && isSource) return '📡 SATELLITE';
                       if (isSatellite && isSource) return '📡 SATELLITE';
                       if (isSatellite && !isSource) return '🔑 PARENT';
