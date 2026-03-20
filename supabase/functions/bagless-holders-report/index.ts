@@ -633,6 +633,11 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       }
     }
     
+    // ── Pre-compute real holder count for use in penalty logic ──
+    const realHolderCount = nonLpHolders.length - simpleTiers.dust.count;
+    const totalHolderCount = rankedHolders.length;
+    const totalTxns24h = vitality.txns.h24.buys + vitality.txns.h24.sells;
+    
     // ── STRUCTURAL WEAKNESS BUCKET (cap -15) ──
     if (simpleTiers.dust.percentage > 75) {
       structuralPenalty += 8;
@@ -674,9 +679,15 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     // Dead token: no volume + aged past initial period
-    if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6) {
+    // BUT exempt tokens with substantial holder bases — they're dormant, not dead
+    const hasSubstantialHolders = realHolderCount >= 500;
+    if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6 && !hasSubstantialHolders) {
       catastrophicPenalty += 15;
       vitalityPenalties.push(`Dead token: <$100 vol/24h after ${Math.floor(pairAgeHours)}h`);
+    } else if (vol24 < 100 && pairAgeHours !== null && pairAgeHours > 6 && hasSubstantialHolders) {
+      // Dormant but structurally alive — activity penalty only, not catastrophic
+      activityPenalty += 10;
+      vitalityPenalties.push(`Dormant volume: <$100 vol/24h but ${realHolderCount.toLocaleString()} real holders — downgraded to activity penalty`);
     }
     
     // Apply capped penalties
@@ -694,8 +705,6 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     // ── ABSOLUTE FAILURE FLOORS (hard gates) ──
-    const realHolderCount = nonLpHolders.length - simpleTiers.dust.count;
-    
     if (realHolderCount < 15) {
       healthScore = Math.min(healthScore, 20);
       vitalityPenalties.push(`CRITICAL: Only ${realHolderCount} real holders (non-dust) — automatic F`);
@@ -705,9 +714,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     // ── MARKET MATURITY FLOORS ──
-    // Only broken by catastrophic flags. Uses TOTAL holder count (including dust).
-    const totalHolderCount = rankedHolders.length;
-    const totalTxns24h = vitality.txns.h24.buys + vitality.txns.h24.sells;
+    // Traditional floors: disabled by catastrophic flags
     const hasCatastrophic = cappedCatastrophic > 0;
     
     if (!hasCatastrophic) {
@@ -729,6 +736,35 @@ serve(withRunLog('bagless-holders-report', async (req) => {
           vitalityPenalties.push(`Growth floor (C+): $${(inferredMarketCapUSD / 1e6).toFixed(1)}M mcap + ${totalHolderCount.toLocaleString()} holders → raised from ${Math.round(healthScore)} to ${floor}`);
           healthScore = floor;
         }
+      }
+    }
+    
+    // ── STRUCTURAL HOLDER FLOORS (independent of volume/liquidity/catastrophic) ──
+    // A token with thousands of REAL holders (non-dust) is NOT an F regardless of current volume.
+    // These floors ALWAYS apply — real holder count is an immutable structural fact.
+    if (realHolderCount >= 5000) {
+      const holderFloor = 89; // A
+      if (healthScore < holderFloor) {
+        vitalityPenalties.push(`Massive holder floor (A): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
+        healthScore = holderFloor;
+      }
+    } else if (realHolderCount >= 2000) {
+      const holderFloor = 80; // B+
+      if (healthScore < holderFloor) {
+        vitalityPenalties.push(`Large holder floor (B+): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
+        healthScore = holderFloor;
+      }
+    } else if (realHolderCount >= 1000) {
+      const holderFloor = 70; // B-
+      if (healthScore < holderFloor) {
+        vitalityPenalties.push(`Solid holder floor (B-): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
+        healthScore = holderFloor;
+      }
+    } else if (realHolderCount >= 500) {
+      const holderFloor = 60; // C
+      if (healthScore < holderFloor) {
+        vitalityPenalties.push(`Holder floor (C): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
+        healthScore = holderFloor;
       }
     }
     
