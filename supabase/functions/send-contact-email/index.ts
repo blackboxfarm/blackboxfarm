@@ -17,6 +17,16 @@ interface ContactFormRequest {
   message: string;
 }
 
+// HTML escape to prevent injection
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const CATEGORY_PRIORITY: Record<string, string> = {
   "Technical Support": "high",
   "Bug Report": "high",
@@ -35,18 +45,23 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { name, email, subject, category, message }: ContactFormRequest = await req.json();
 
+    // Sanitize all user inputs
+    const safeName = escapeHtml(name || '');
+    const safeEmail = escapeHtml(email || '');
+    const safeSubject = escapeHtml(subject || '');
+    const safeCategory = escapeHtml(category || '');
+    const safeMessage = escapeHtml(message || '');
+
     // Initialize Supabase admin client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
-    // Determine auto-priority from category
+    // Determine auto-priority from category (use raw category for lookup, safe for display)
     const priority = CATEGORY_PRIORITY[category] || "medium";
 
     // Check if submitter has an account (by email)
     let userId: string | null = null;
-    const { data: users } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1 });
-    // More targeted lookup
     const { data: matchedUsers } = await supabaseAdmin
       .from("profiles")
       .select("user_id")
@@ -56,7 +71,7 @@ const handler = async (req: Request): Promise<Response> => {
       userId = matchedUsers[0].user_id;
     }
 
-    // Save to support_tickets table
+    // Save to support_tickets table (raw values for DB, not HTML-escaped)
     const { data: ticket, error: ticketError } = await supabaseAdmin
       .from("support_tickets")
       .insert({
@@ -83,8 +98,8 @@ const handler = async (req: Request): Promise<Response> => {
       const priorityEmoji = priority === "critical" ? "🔴" : priority === "high" ? "🟠" : priority === "medium" ? "🟡" : "🟢";
       await supabaseAdmin.from("admin_notifications").insert({
         notification_type: "support_ticket",
-        title: `🎫 New Ticket #${ticketNum}: ${subject}`,
-        message: `${priorityEmoji} ${priority.toUpperCase()} | ${category}\nFrom: ${name} (${email})\n\n${message.slice(0, 300)}${message.length > 300 ? "…" : ""}`,
+        title: `🎫 New Ticket #${ticketNum}: ${safeSubject}`,
+        message: `${priorityEmoji} ${priority.toUpperCase()} | ${safeCategory}\nFrom: ${safeName} (${safeEmail})\n\n${message.slice(0, 300)}${message.length > 300 ? "…" : ""}`,
         metadata: {
           ticket_id: ticket.id,
           ticket_number: ticketNum,
@@ -96,26 +111,26 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Send notification to support team
+    // Send notification to support team (using escaped values in HTML)
     const supportEmail = await resend.emails.send({
       from: "BlackBox Farm <noreply@blackbox.farm>",
       to: ["support@blackbox.farm"],
-      subject: `[Ticket #${ticketNum}] ${category} - ${subject}`,
+      subject: `[Ticket #${ticketNum}] ${safeCategory} - ${safeSubject}`,
       html: `
         <h2>New Support Ticket #${ticketNum}</h2>
-        <p><strong>Priority:</strong> ${priority.toUpperCase()}</p>
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Category:</strong> ${category}</p>
-        <p><strong>Subject:</strong> ${subject}</p>
+        <p><strong>Priority:</strong> ${escapeHtml(priority.toUpperCase())}</p>
+        <p><strong>Name:</strong> ${safeName}</p>
+        <p><strong>Email:</strong> ${safeEmail}</p>
+        <p><strong>Category:</strong> ${safeCategory}</p>
+        <p><strong>Subject:</strong> ${safeSubject}</p>
         <h3>Message:</h3>
-        <p>${message.replace(/\n/g, '<br>')}</p>
+        <p>${safeMessage.replace(/\n/g, '<br>')}</p>
         <hr>
         <p><small>Ticket created from BlackBox Farm contact form</small></p>
       `,
     });
 
-    // Send confirmation to user
+    // Send confirmation to user (using escaped values in HTML)
     const userEmail = await resend.emails.send({
       from: "BlackBox Farm <support@blackbox.farm>",
       to: [email],
@@ -127,14 +142,14 @@ const handler = async (req: Request): Promise<Response> => {
             <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">Ticket #${ticketNum}</p>
           </div>
           
-          <p>Hi ${name},</p>
+          <p>Hi ${safeName},</p>
           <p>We've received your message and assigned it ticket number <strong>#${ticketNum}</strong>. Our team will get back to you based on the priority of your inquiry.</p>
           
           <div style="background: #111827; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; margin: 16px 0;">
-            <p><strong>Category:</strong> ${category}</p>
-            <p><strong>Subject:</strong> ${subject}</p>
+            <p><strong>Category:</strong> ${safeCategory}</p>
+            <p><strong>Subject:</strong> ${safeSubject}</p>
             <p><strong>Your message:</strong></p>
-            <p style="font-style: italic; color: #94a3b8;">"${message}"</p>
+            <p style="font-style: italic; color: #94a3b8;">"${safeMessage}"</p>
           </div>
           
           <p style="color: #94a3b8; font-size: 13px;">Expected response times:</p>
