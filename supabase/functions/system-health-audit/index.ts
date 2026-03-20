@@ -273,6 +273,31 @@ Deno.serve(withRunLog('system-health-audit', async (req) => {
       }
     }
 
+    // ── Auto-reconcile cron jobs ──
+    try {
+      const reconcileRes = await fetch(`${supabaseUrl}/functions/v1/reconcile-cron-jobs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+        },
+      });
+      const reconcileData = await reconcileRes.json();
+      if (reconcileData.missing?.length > 0) {
+        checks.push({
+          check: 'cron_reconciliation',
+          status: reconcileData.restored?.length > 0 ? 'warning' : 'critical',
+          details: `${reconcileData.missing.length} cron jobs were missing, ${reconcileData.restored?.length || 0} restored`,
+          metadata: reconcileData,
+        });
+      } else {
+        checks.push({ check: 'cron_reconciliation', status: 'ok', details: `All ${reconcileData.total_required} cron jobs present` });
+      }
+    } catch (e) {
+      console.warn('[health-audit] Cron reconciliation call failed:', e);
+      checks.push({ check: 'cron_reconciliation', status: 'warning', details: `Reconciliation call failed: ${e.message}` });
+    }
+
     console.log(`[health-audit] ${overallStatus.toUpperCase()}: ${checks.length} checks, ${criticalCount} critical, ${warningCount} warnings, ${alertsWritten} new alerts (${elapsed}ms)`);
 
     return new Response(

@@ -15639,6 +15639,7 @@ export type Database = {
       encrypt_secret_secure: { Args: { input_secret: string }; Returns: string }
       encrypt_user_secret: { Args: { input_secret: string }; Returns: string }
       encrypt_wallet_secret: { Args: { input_secret: string }; Returns: string }
+      exec_sql: { Args: { query: string }; Returns: undefined }
       find_common_developer_origins: {
         Args: never
         Returns: {
@@ -15711,6 +15712,12 @@ export type Database = {
           two_factor_secret: string
           updated_at: string
           user_id: string
+        }[]
+      }
+      get_cron_job_names: {
+        Args: never
+        Returns: {
+          jobname: string
         }[]
       }
       get_cron_job_status: {

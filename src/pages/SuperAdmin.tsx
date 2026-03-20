@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBadge";
 import { LazyLoader } from "@/components/ui/lazy-loader";
 import { PumpFunApiStatus } from "@/components/admin/PumpFunApiStatus";
+import { TabErrorBoundary } from "@/components/ui/TabErrorBoundary";
 
 // Lazy load entire tab content sections - they ONLY load when their tab is clicked
 const UtilitiesTab = lazy(() => import("@/components/admin/tabs/UtilitiesTab"));
@@ -137,7 +138,6 @@ export default function SuperAdmin() {
             <TabsTrigger value="morning-report" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">☀️ Morning Report</TabsTrigger>
             <TabsTrigger value="allstar" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">⭐ Allstars</TabsTrigger>
             <TabsTrigger value="funnel-feeds" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-lime-500/30 data-[state=active]:to-green-500/20">🔄 Funnel Feeds</TabsTrigger>
-            <TabsTrigger value="funnel-feeds" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-lime-500/30 data-[state=active]:to-green-500/20">🔄 Funnel Feeds</TabsTrigger>
             <TabsTrigger value="monitoring" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-rose-500/20">📡 Monitoring</TabsTrigger>
             <TabsTrigger value="tickets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500/30 data-[state=active]:to-cyan-500/20">🎫 Tickets</TabsTrigger>
           </TabsList>
@@ -145,115 +145,115 @@ export default function SuperAdmin() {
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
           <TabsContent value="utilities">
             {activeTab === "utilities" && (
-              <Suspense fallback={<TabLoader />}>
-                <UtilitiesTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Utilities">
+                <Suspense fallback={<TabLoader />}><UtilitiesTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="oracle">
             {activeTab === "oracle" && (
-              <Suspense fallback={<TabLoader />}>
-                <OracleTab initialSubTab={oracleSubTab} initialWallet={oracleWallet} />
-              </Suspense>
+              <TabErrorBoundary tabName="Oracle">
+                <Suspense fallback={<TabLoader />}><OracleTab initialSubTab={oracleSubTab} initialWallet={oracleWallet} /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="blackbox">
             {activeTab === "blackbox" && (
-              <Suspense fallback={<TabLoader />}>
-                <BlackBoxTab />
-              </Suspense>
+              <TabErrorBoundary tabName="BlackBox">
+                <Suspense fallback={<TabLoader />}><BlackBoxTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="holders-intel">
             {activeTab === "holders-intel" && (
-              <Suspense fallback={<TabLoader />}>
-                <HoldersIntelTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Holders Intel">
+                <Suspense fallback={<TabLoader />}><HoldersIntelTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="whales-mints">
             {activeTab === "whales-mints" && (
-              <Suspense fallback={<TabLoader />}>
-                <WhalesMINTSTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Whales & MINTS">
+                <Suspense fallback={<TabLoader />}><WhalesMINTSTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="flipit">
             {activeTab === "flipit" && (
-              <Suspense fallback={<TabLoader />}>
-                <FlipItDashboard />
-              </Suspense>
+              <TabErrorBoundary tabName="FlipIt">
+                <Suspense fallback={<TabLoader />}><FlipItDashboard /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="telegram">
             {activeTab === "telegram" && (
-              <Suspense fallback={<TabLoader />}>
-                <TelegramChannelMonitor />
-              </Suspense>
+              <TabErrorBoundary tabName="Telegram">
+                <Suspense fallback={<TabLoader />}><TelegramChannelMonitor /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="twitter-accounts">
             {activeTab === "twitter-accounts" && (
-              <Suspense fallback={<TabLoader />}>
-                <TwitterAccountManager />
-              </Suspense>
+              <TabErrorBoundary tabName="Twitter">
+                <Suspense fallback={<TabLoader />}><TwitterAccountManager /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
 
           <TabsContent value="pumpfun-monitor">
             {activeTab === "pumpfun-monitor" && (
-              <Suspense fallback={<TabLoader />}>
-                <PumpfunMonitorTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Pump.fun Monitor">
+                <Suspense fallback={<TabLoader />}><PumpfunMonitorTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
           <TabsContent value="master-db">
             {activeTab === "master-db" && (
-              <Suspense fallback={<TabLoader />}>
-                <MasterDBTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Master DB">
+                <Suspense fallback={<TabLoader />}><MasterDBTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
           <TabsContent value="morning-report">
             {activeTab === "morning-report" && (
-              <Suspense fallback={<TabLoader />}>
-                <MorningReportTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Morning Report">
+                <Suspense fallback={<TabLoader />}><MorningReportTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
           <TabsContent value="allstar">
             {activeTab === "allstar" && (
-              <Suspense fallback={<TabLoader />}>
-                <AllstarTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Allstars">
+                <Suspense fallback={<TabLoader />}><AllstarTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
           <TabsContent value="funnel-feeds">
             {activeTab === "funnel-feeds" && (
-              <Suspense fallback={<TabLoader />}>
-                <FunnelFeedsTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Funnel Feeds">
+                <Suspense fallback={<TabLoader />}><FunnelFeedsTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
           <TabsContent value="monitoring">
             {activeTab === "monitoring" && (
-              <Suspense fallback={<TabLoader />}>
-                <MonitoringTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Monitoring">
+                <Suspense fallback={<TabLoader />}><MonitoringTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
           <TabsContent value="tickets">
             {activeTab === "tickets" && (
-              <Suspense fallback={<TabLoader />}>
-                <TicketsTab />
-              </Suspense>
+              <TabErrorBoundary tabName="Tickets">
+                <Suspense fallback={<TabLoader />}><TicketsTab /></Suspense>
+              </TabErrorBoundary>
             )}
           </TabsContent>
         </Tabs>
