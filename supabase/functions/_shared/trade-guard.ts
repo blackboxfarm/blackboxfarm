@@ -702,9 +702,14 @@ export async function validateBuyQuote(
     ? ((executablePrice - displayPriceUsd) / displayPriceUsd) * 100
     : 0;
   
-  // Extreme premium sanity check (>90% means something is very wrong)
-  if (Math.abs(premiumPct) > 90) {
-    console.error(`[TradeGuard] ❌ BLOCKED: Extreme price deviation (${premiumPct.toFixed(1)}%) - quote likely garbage`);
+  // Extreme premium sanity check
+  // For BUYS: negative deviation means executable price is LOWER = user gets MORE tokens = GOOD
+  // Only block if executable is HIGHER (user overpaying) or if deviation is suspiciously large in either direction (>500%)
+  const isFavorableDeviation = premiumPct < 0; // executable cheaper than display
+  const deviationThreshold = isFavorableDeviation ? 500 : 90; // allow larger favorable deviations
+  
+  if (Math.abs(premiumPct) > deviationThreshold) {
+    console.error(`[TradeGuard] ❌ BLOCKED: Extreme price deviation (${premiumPct.toFixed(1)}%, threshold: ${deviationThreshold}%) - quote likely garbage`);
     return {
       isValid: false,
       displayPrice: displayPriceUsd,
@@ -715,6 +720,11 @@ export async function validateBuyQuote(
       solPrice: solPriceUsed,
       blockReason: `EXTREME_DEVIATION: Price deviation is ${Math.abs(premiumPct).toFixed(0)}% which indicates a quote error or extreme volatility. Display: $${displayPriceUsd.toFixed(10)}, Executable: $${executablePrice.toFixed(10)} (venue: ${venueUsed})`,
     };
+  }
+  
+  // Log favorable deviations as info, not error
+  if (isFavorableDeviation && Math.abs(premiumPct) > 50) {
+    console.log(`[TradeGuard] ℹ️ Large favorable deviation (${premiumPct.toFixed(1)}%) - executable price is cheaper than display. Allowing trade.`);
   }
   
   console.log(`[TradeGuard] Price comparison:`);
