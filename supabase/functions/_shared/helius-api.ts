@@ -131,17 +131,57 @@ export async function parseBuyFromHelius(
       }
     }
 
-    // METHOD 2: Use accountData balance changes (fallback, but accurate)
+    // METHOD 2: Use tokenTransfers (reliable per-transfer amounts, not balances)
+    const tokenTransfers = (tx as any).tokenTransfers;
+    if (tokenTransfers && Array.isArray(tokenTransfers)) {
+      const incomingTransfer = tokenTransfers.find(
+        (t: any) => t.mint === tokenMint && t.toUserAccount === walletPubkey
+      );
+      if (incomingTransfer) {
+        const tokenDecimals = incomingTransfer.rawTokenAmount?.decimals ?? 6;
+        const tokensReceivedRaw = incomingTransfer.rawTokenAmount?.tokenAmount || String(incomingTransfer.tokenAmount || 0);
+        const tokensReceived = incomingTransfer.tokenAmount 
+          ? Number(incomingTransfer.tokenAmount)
+          : Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
+
+        // SOL spent from nativeBalanceChange
+        let solSpent = 0;
+        if (tx.accountData) {
+          const walletData = tx.accountData.find(a => a.account === walletPubkey);
+          if (walletData && walletData.nativeBalanceChange < 0) {
+            solSpent = Math.abs(walletData.nativeBalanceChange) / 1e9;
+          }
+        }
+
+        if (solSpent > 0 && tokensReceived > 0) {
+          console.log(`VERIFIED BUY (tokenTransfers): ${solSpent} SOL → ${tokensReceived} tokens on ${tx.source}`);
+          return {
+            tokenMint,
+            tokenDecimals,
+            tokensReceived,
+            tokensReceivedRaw,
+            solSpent,
+            fee: tx.fee / 1e9,
+            timestamp: tx.timestamp,
+            platform: tx.source || 'unknown',
+            success: true
+          };
+        }
+      }
+    }
+
+    // METHOD 3: accountData balance changes (CAUTION: rawTokenAmount can be absolute post-balance)
+    // Only use nativeBalanceChange for SOL; for tokens, prefer tokenTransfers above
     if (tx.accountData) {
       const walletData = tx.accountData.find(a => a.account === walletPubkey);
       
       if (walletData) {
-        // SOL spent = negative balance change
         const solSpent = walletData.nativeBalanceChange < 0 
           ? Math.abs(walletData.nativeBalanceChange) / 1e9 
           : 0;
 
-        // Token received
+        // WARNING: tokenBalanceChanges.rawTokenAmount.tokenAmount may be the 
+        // ABSOLUTE post-tx balance, NOT the delta. Log both for debugging.
         let tokensReceived = 0;
         let tokensReceivedRaw = "0";
         let tokenDecimals = 6;
@@ -151,25 +191,11 @@ export async function parseBuyFromHelius(
           tokenDecimals = tokenChange.rawTokenAmount.decimals;
           tokensReceivedRaw = tokenChange.rawTokenAmount.tokenAmount;
           tokensReceived = Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
-        }
-
-        // Also check other accounts for token transfers TO our wallet
-        if (tokensReceived <= 0) {
-          for (const acc of tx.accountData) {
-            const tc = acc.tokenBalanceChanges?.find(
-              t => t.mint === tokenMint && t.userAccount === walletPubkey
-            );
-            if (tc && Number(tc.rawTokenAmount.tokenAmount) > 0) {
-              tokenDecimals = tc.rawTokenAmount.decimals;
-              tokensReceivedRaw = tc.rawTokenAmount.tokenAmount;
-              tokensReceived = Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
-              break;
-            }
-          }
+          console.warn(`[accountData fallback] tokenBalanceChange raw=${tokensReceivedRaw} (may be absolute balance, not delta!)`);
         }
 
         if (solSpent > 0 && tokensReceived > 0) {
-          console.log(`VERIFIED BUY (accountData): ${solSpent} SOL → ${tokensReceived} tokens on ${tx.source}`);
+          console.log(`VERIFIED BUY (accountData - use with caution): ${solSpent} SOL → ${tokensReceived} tokens on ${tx.source}`);
           return {
             tokenMint,
             tokenDecimals,
