@@ -84,6 +84,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           <TabsTrigger value="whitelist" className="data-[state=active]:bg-green-500/20">
             ✅ Whitelist Mesh
           </TabsTrigger>
+          <TabsTrigger value="kyc-override" className="data-[state=active]:bg-amber-500/20">
+            🔑 KYC Override
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="spider" className="space-y-4">
