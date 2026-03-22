@@ -14629,6 +14629,315 @@ export type Database = {
           },
         ]
       }
+      wallet_families: {
+        Row: {
+          allstar_id: string | null
+          created_at: string
+          family_name: string | null
+          id: string
+          last_rescored_at: string | null
+          risk_score: number | null
+          seed_wallet: string
+          total_mints_detected: number
+          total_wallets: number
+          updated_at: string
+        }
+        Insert: {
+          allstar_id?: string | null
+          created_at?: string
+          family_name?: string | null
+          id?: string
+          last_rescored_at?: string | null
+          risk_score?: number | null
+          seed_wallet: string
+          total_mints_detected?: number
+          total_wallets?: number
+          updated_at?: string
+        }
+        Update: {
+          allstar_id?: string | null
+          created_at?: string
+          family_name?: string | null
+          id?: string
+          last_rescored_at?: string | null
+          risk_score?: number | null
+          seed_wallet?: string
+          total_mints_detected?: number
+          total_wallets?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_families_allstar_id_fkey"
+            columns: ["allstar_id"]
+            isOneToOne: false
+            referencedRelation: "allstar_dev_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_family_edges: {
+        Row: {
+          confidence: number
+          edge_type: string
+          evidence_count: number
+          family_id: string
+          first_seen_at: string
+          from_wallet: string
+          id: string
+          last_seen_at: string
+          to_wallet: string
+          weight: number
+        }
+        Insert: {
+          confidence?: number
+          edge_type: string
+          evidence_count?: number
+          family_id: string
+          first_seen_at?: string
+          from_wallet: string
+          id?: string
+          last_seen_at?: string
+          to_wallet: string
+          weight?: number
+        }
+        Update: {
+          confidence?: number
+          edge_type?: string
+          evidence_count?: number
+          family_id?: string
+          first_seen_at?: string
+          from_wallet?: string
+          id?: string
+          last_seen_at?: string
+          to_wallet?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_family_edges_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_family_evidence: {
+        Row: {
+          amount_sol: number | null
+          created_at: string
+          evidence_type: string
+          family_id: string
+          id: string
+          mint: string | null
+          program_id: string | null
+          raw_json: Json | null
+          related_wallet: string | null
+          score_delta: number
+          timestamp: string | null
+          tx_signature: string | null
+          wallet: string
+        }
+        Insert: {
+          amount_sol?: number | null
+          created_at?: string
+          evidence_type: string
+          family_id: string
+          id?: string
+          mint?: string | null
+          program_id?: string | null
+          raw_json?: Json | null
+          related_wallet?: string | null
+          score_delta?: number
+          timestamp?: string | null
+          tx_signature?: string | null
+          wallet: string
+        }
+        Update: {
+          amount_sol?: number | null
+          created_at?: string
+          evidence_type?: string
+          family_id?: string
+          id?: string
+          mint?: string | null
+          program_id?: string | null
+          raw_json?: Json | null
+          related_wallet?: string | null
+          score_delta?: number
+          timestamp?: string | null
+          tx_signature?: string | null
+          wallet?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_family_evidence_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_family_members: {
+        Row: {
+          confidence_score: number
+          created_at: string
+          family_id: string
+          first_seen_at: string
+          id: string
+          label: string
+          last_activity_at: string | null
+          last_polled_at: string | null
+          last_signature: string | null
+          status: string
+          tier: string
+          wallet_address: string
+        }
+        Insert: {
+          confidence_score?: number
+          created_at?: string
+          family_id: string
+          first_seen_at?: string
+          id?: string
+          label?: string
+          last_activity_at?: string | null
+          last_polled_at?: string | null
+          last_signature?: string | null
+          status?: string
+          tier?: string
+          wallet_address: string
+        }
+        Update: {
+          confidence_score?: number
+          created_at?: string
+          family_id?: string
+          first_seen_at?: string
+          id?: string
+          label?: string
+          last_activity_at?: string | null
+          last_polled_at?: string | null
+          last_signature?: string | null
+          status?: string
+          tier?: string
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_family_members_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_family_mint_events: {
+        Row: {
+          acknowledged_at: string | null
+          confidence: number
+          created_at: string
+          detected_by_wallet: string
+          event_type: string
+          family_id: string
+          id: string
+          is_acknowledged: boolean
+          launchpad: string | null
+          mint_address: string
+          token_name: string | null
+          token_symbol: string | null
+          tx_signature: string | null
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          confidence?: number
+          created_at?: string
+          detected_by_wallet: string
+          event_type?: string
+          family_id: string
+          id?: string
+          is_acknowledged?: boolean
+          launchpad?: string | null
+          mint_address: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tx_signature?: string | null
+        }
+        Update: {
+          acknowledged_at?: string | null
+          confidence?: number
+          created_at?: string
+          detected_by_wallet?: string
+          event_type?: string
+          family_id?: string
+          id?: string
+          is_acknowledged?: boolean
+          launchpad?: string | null
+          mint_address?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tx_signature?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_family_mint_events_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_family_poll_queue: {
+        Row: {
+          burst_mode_until: string | null
+          created_at: string
+          fail_count: number
+          family_id: string
+          id: string
+          last_polled_at: string | null
+          last_result: string | null
+          next_poll_at: string
+          poll_interval_sec: number
+          priority: string
+          wallet_address: string
+        }
+        Insert: {
+          burst_mode_until?: string | null
+          created_at?: string
+          fail_count?: number
+          family_id: string
+          id?: string
+          last_polled_at?: string | null
+          last_result?: string | null
+          next_poll_at?: string
+          poll_interval_sec?: number
+          priority?: string
+          wallet_address: string
+        }
+        Update: {
+          burst_mode_until?: string | null
+          created_at?: string
+          fail_count?: number
+          family_id?: string
+          id?: string
+          last_polled_at?: string | null
+          last_result?: string | null
+          next_poll_at?: string
+          poll_interval_sec?: number
+          priority?: string
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_family_poll_queue_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_follows: {
         Row: {
           alert_on_movement: boolean | null
