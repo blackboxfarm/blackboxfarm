@@ -301,17 +301,48 @@ Deno.serve(async (req) => {
         total_wallets: count || 0, last_rescored_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }).eq('id', familyId);
 
-      // ═══ CROSS-FEED 5: Admin alert ═══
+      // ═══ CROSS-FEED 5: Admin alert + TG Broadcast ═══
       if (discoveredCount > 0) {
+        const alertTitle = `🕸️ Family Discovery: ${discoveredCount} wallets found`;
+        const alertMsg = `Family "${allstar.twitter_handle || seedWallet.slice(0, 8)}" expanded by ${discoveredCount} wallets (${count} total). Synced to reputation mesh + allstar registry.`;
+        const alertMeta = {
+          family_id: familyId, seed_wallet: seedWallet, allstar_id: allstar.id,
+          discovered_count: discoveredCount, total_members: count, new_wallets: newWalletAddresses.slice(0, 10),
+        };
+
         await supabase.from('admin_notifications').insert({
-          notification_type: 'family_discovery',
-          title: `🕸️ Family Discovery: ${discoveredCount} wallets found`,
-          message: `Family "${allstar.twitter_handle || seedWallet.slice(0, 8)}" expanded by ${discoveredCount} wallets (${count} total). Synced to reputation mesh + allstar registry.`,
-          metadata: {
-            family_id: familyId, seed_wallet: seedWallet, allstar_id: allstar.id,
-            discovered_count: discoveredCount, total_members: count, new_wallets: newWalletAddresses.slice(0, 10),
-          },
+          notification_type: 'family_discovery', title: alertTitle, message: alertMsg, metadata: alertMeta,
         });
+
+        // ═══ Telegram BlackBox Broadcast ═══
+        const walletList = newWalletAddresses.slice(0, 5).map(w => `  └ \`${w.slice(0, 8)}…${w.slice(-4)}\``).join('\n');
+        const tgMessage = [
+          `🕸️ *FAMILY INTEL — New Wallets Discovered*`,
+          ``,
+          `👤 *Dev:* ${allstar.twitter_handle ? `@${allstar.twitter_handle}` : `\`${seedWallet.slice(0, 8)}…\``}`,
+          `🏠 *Family:* \`${familyId.slice(0, 8)}\``,
+          `📊 *New Wallets:* ${discoveredCount} | *Total Family:* ${count}`,
+          ``,
+          `🔗 *Discovered Wallets:*`,
+          walletList,
+          newWalletAddresses.length > 5 ? `  └ …and ${newWalletAddresses.length - 5} more` : '',
+          ``,
+          `✅ Auto-synced → Reputation Mesh + Allstar Registry`,
+          `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'UTC' })} UTC`,
+        ].filter(Boolean).join('\n');
+
+        try {
+          const { data: tgTargets } = await supabase
+            .from('telegram_message_targets').select('id, chat_id, label, resolved_name').eq('label', 'BLACKBOX');
+          for (const target of (tgTargets || [])) {
+            await supabase.functions.invoke('telegram-mtproto-auth', {
+              body: { action: 'send_message', chatId: Number(target.chat_id), message: tgMessage },
+            });
+            await supabase.from('telegram_message_targets').update({ last_used_at: new Date().toISOString() }).eq('id', target.id);
+          }
+        } catch (tgErr) {
+          console.warn('[FamilyDiscovery] TG broadcast failed:', tgErr);
+        }
       }
 
       totalFamiliesProcessed++;
