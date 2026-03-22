@@ -1,11 +1,12 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Star, Bell, Plus, Activity, UserPlus } from 'lucide-react';
+import { Star, Bell, Plus, Activity, UserPlus, Network } from 'lucide-react';
 import { AllstarRegistry } from '../allstar/AllstarRegistry';
 import { AllstarMintAlerts } from '../allstar/AllstarMintAlerts';
 import { AllstarAddForm } from '../allstar/AllstarAddForm';
 import { AllstarAuditFeed } from '../allstar/AllstarAuditFeed';
 import { MissingAdminPanel } from '../allstar/MissingAdminPanel';
+import { FamilyIntelTab } from '../allstar/FamilyIntelTab';
 
 export default function AllstarTab() {
   return (
@@ -25,6 +26,10 @@ export default function AllstarTab() {
           <TabsTrigger value="registry" className="flex items-center gap-2">
             <Star className="h-4 w-4" />
             Registry
+          </TabsTrigger>
+          <TabsTrigger value="family-intel" className="flex items-center gap-2">
+            <Network className="h-4 w-4" />
+            Family Intel
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
@@ -46,6 +51,9 @@ export default function AllstarTab() {
 
         <TabsContent value="registry">
           <AllstarRegistry />
+        </TabsContent>
+        <TabsContent value="family-intel">
+          <FamilyIntelTab />
         </TabsContent>
         <TabsContent value="alerts">
           <AllstarMintAlerts />
