@@ -260,7 +260,7 @@ export default function MasterDBTab() {
 
   return (
     <div className="space-y-6">
-    <ManualKycOverride />
+    
     <div className="flex items-center gap-1 mb-4">
       <Button
         variant={activeView === "directory" ? "default" : "ghost"}

@@ -6,6 +6,7 @@ import OracleIntelLookup from "@/components/admin/oracle/OracleIntelLookup";
 import OracleClassificationsFeed from "@/components/admin/oracle/OracleClassificationsFeed";
 import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus";
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
+import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 
 const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
 
