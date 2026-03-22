@@ -66,7 +66,10 @@ export function AllstarAddForm() {
 
         if (insertError) throw insertError;
 
-        toast.success(`✅ Added ${symbol || 'developer'} to Allstar Registry (wallet: ${resolvedWallet.slice(0, 8)}...)`);
+        // Immediately seed into Family Intel
+        await seedIntoFamilyIntel(resolvedWallet, symbol || twitterHandle.trim() || resolvedWallet.slice(0, 8));
+
+        toast.success(`✅ Added ${symbol || 'developer'} to Allstar Registry + Family Intel (wallet: ${resolvedWallet.slice(0, 8)}...)`);
       } else {
         // Direct wallet add
         const { error: insertError } = await supabase
