@@ -484,6 +484,7 @@ export default function MasterDBTab() {
         </div>
       </CardContent>
     </Card>
+    )}
     </div>
   );
 }
