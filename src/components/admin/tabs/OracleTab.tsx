@@ -152,6 +152,10 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
             <PumpfunWhitelist />
           </Suspense>
         </TabsContent>
+
+        <TabsContent value="kyc-override" className="space-y-4">
+          <ManualKycOverride />
+        </TabsContent>
       </Tabs>
     </div>
   );
