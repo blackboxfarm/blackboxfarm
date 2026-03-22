@@ -9,6 +9,56 @@ import { Plus, Loader2, Rocket } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+async function seedIntoFamilyIntel(wallet: string, name: string) {
+  try {
+    // Check if family already exists for this wallet
+    const { data: existing } = await supabase
+      .from('wallet_families')
+      .select('id')
+      .eq('seed_wallet', wallet)
+      .maybeSingle();
+
+    if (existing) return; // Already in Family Intel
+
+    // Create the family
+    const { data: family, error: famErr } = await supabase
+      .from('wallet_families')
+      .insert({
+        seed_wallet: wallet,
+        family_name: `${name} Family`,
+        total_wallets: 1,
+        risk_score: 0,
+        total_mints_detected: 0,
+      })
+      .select('id')
+      .single();
+
+    if (famErr || !family) throw famErr;
+
+    // Add seed as first member
+    await supabase.from('wallet_family_members').insert({
+      family_id: family.id,
+      wallet_address: wallet,
+      label: 'seed',
+      tier: 'A',
+      confidence_score: 100,
+      status: 'active',
+    });
+
+    // Add to poll queue at P1 priority
+    await supabase.from('wallet_family_poll_queue').insert({
+      wallet_address: wallet,
+      family_id: family.id,
+      priority: 'P1',
+      poll_interval_sec: 300,
+      next_poll_at: new Date().toISOString(),
+      fail_count: 0,
+    });
+  } catch (err) {
+    console.error('Family Intel seeding failed (non-blocking):', err);
+  }
+}
+
 export function AllstarAddForm() {
   const [loading, setLoading] = useState(false);
   const [tokenMint, setTokenMint] = useState('');
@@ -66,7 +116,10 @@ export function AllstarAddForm() {
 
         if (insertError) throw insertError;
 
-        toast.success(`✅ Added ${symbol || 'developer'} to Allstar Registry (wallet: ${resolvedWallet.slice(0, 8)}...)`);
+        // Immediately seed into Family Intel
+        await seedIntoFamilyIntel(resolvedWallet, symbol || twitterHandle.trim() || resolvedWallet.slice(0, 8));
+
+        toast.success(`✅ Added ${symbol || 'developer'} to Allstar Registry + Family Intel (wallet: ${resolvedWallet.slice(0, 8)}...)`);
       } else {
         // Direct wallet add
         const { error: insertError } = await supabase
@@ -81,7 +134,10 @@ export function AllstarAddForm() {
 
         if (insertError) throw insertError;
 
-        toast.success(`✅ Added wallet ${masterWallet.slice(0, 8)}... to Allstar Registry`);
+        // Immediately seed into Family Intel
+        await seedIntoFamilyIntel(masterWallet.trim(), twitterHandle.trim() || masterWallet.slice(0, 8));
+
+        toast.success(`✅ Added wallet ${masterWallet.slice(0, 8)}... to Allstar Registry + Family Intel`);
       }
 
       // Reset form
