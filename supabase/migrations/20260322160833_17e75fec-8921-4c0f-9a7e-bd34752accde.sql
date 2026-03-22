@@ -1,0 +1,1 @@
+GRANT SELECT ON master_token_directory TO authenticated;
