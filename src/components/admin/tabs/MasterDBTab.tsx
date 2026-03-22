@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, lazy, Suspense } from "react";
 import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ import {
   Check,
   RefreshCw,
   Pill,
+  History,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -34,6 +35,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { LazyLoader } from "@/components/ui/lazy-loader";
+
+const MasterDBHistory = lazy(() => import("@/components/admin/MasterDBHistory"));
 
 const PAGE_SIZE = 100;
 
@@ -193,6 +197,7 @@ export default function MasterDBTab() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [filterPump, setFilterPump] = useState(false);
+  const [activeView, setActiveView] = useState<"directory" | "history">("directory");
   const { toast } = useToast();
 
   const backfillMutation = useMutation({
@@ -256,6 +261,31 @@ export default function MasterDBTab() {
   return (
     <div className="space-y-6">
     <ManualKycOverride />
+    <div className="flex items-center gap-1 mb-4">
+      <Button
+        variant={activeView === "directory" ? "default" : "ghost"}
+        size="sm"
+        className="h-7 text-xs gap-1"
+        onClick={() => setActiveView("directory")}
+      >
+        <Database className="h-3.5 w-3.5" />
+        Directory
+      </Button>
+      <Button
+        variant={activeView === "history" ? "default" : "ghost"}
+        size="sm"
+        className="h-7 text-xs gap-1"
+        onClick={() => setActiveView("history")}
+      >
+        <History className="h-3.5 w-3.5" />
+        History
+      </Button>
+    </div>
+    {activeView === "history" ? (
+      <Suspense fallback={<LazyLoader />}>
+        <MasterDBHistory />
+      </Suspense>
+    ) : (
     <Card className="w-full -mx-6 sm:-mx-6" style={{ width: 'calc(100% + 3rem)' }}>
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -454,6 +484,7 @@ export default function MasterDBTab() {
         </div>
       </CardContent>
     </Card>
+    )}
     </div>
   );
 }
