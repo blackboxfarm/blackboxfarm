@@ -35,6 +35,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { LazyLoader } from "@/components/ui/lazy-loader";
+
+const MasterDBHistory = lazy(() => import("@/components/admin/MasterDBHistory"));
 
 const PAGE_SIZE = 100;
 
