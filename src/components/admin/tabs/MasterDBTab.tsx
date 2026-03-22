@@ -193,6 +193,7 @@ export default function MasterDBTab() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [filterPump, setFilterPump] = useState(false);
+  const [activeView, setActiveView] = useState<"directory" | "history">("directory");
   const { toast } = useToast();
 
   const backfillMutation = useMutation({
