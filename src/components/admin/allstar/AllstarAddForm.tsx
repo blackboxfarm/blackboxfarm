@@ -84,7 +84,10 @@ export function AllstarAddForm() {
 
         if (insertError) throw insertError;
 
-        toast.success(`✅ Added wallet ${masterWallet.slice(0, 8)}... to Allstar Registry`);
+        // Immediately seed into Family Intel
+        await seedIntoFamilyIntel(masterWallet.trim(), twitterHandle.trim() || masterWallet.slice(0, 8));
+
+        toast.success(`✅ Added wallet ${masterWallet.slice(0, 8)}... to Allstar Registry + Family Intel`);
       }
 
       // Reset form
