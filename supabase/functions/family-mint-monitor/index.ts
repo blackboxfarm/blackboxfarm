@@ -191,17 +191,51 @@ Deno.serve(async (req) => {
             }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
           }
 
-          // ═══ CROSS-FEED 5: Admin alert for mint ═══
+          // ═══ CROSS-FEED 5: Admin alert + TG Broadcast for mint ═══
+          const mintAlertTitle = `🚨 Family Mint: ${det.eventType.replace(/_/g, ' ')}`;
+          const mintAlertMsg = `Wallet ${item.wallet_address.slice(0,8)}... from family "${familyData?.family_name || 'Unknown'}" minted ${det.mintAddress.slice(0,8)}... via ${det.launchpad || 'unknown'}. Auto-added to Master DB. Burst mode activated.`;
+          const mintAlertMeta = {
+            mint_address: det.mintAddress, detecting_wallet: item.wallet_address,
+            family_id: item.family_id, family_name: familyData?.family_name,
+            event_type: det.eventType, confidence, launchpad: det.launchpad, tx_signature: det.txSignature,
+          };
+
           await supabase.from('admin_notifications').insert({
-            notification_type: 'family_mint_detected',
-            title: `🚨 Family Mint: ${det.eventType.replace(/_/g, ' ')}`,
-            message: `Wallet ${item.wallet_address.slice(0,8)}... from family "${familyData?.family_name || 'Unknown'}" minted ${det.mintAddress.slice(0,8)}... via ${det.launchpad || 'unknown'}. Auto-added to Master DB. Burst mode activated.`,
-            metadata: {
-              mint_address: det.mintAddress, detecting_wallet: item.wallet_address,
-              family_id: item.family_id, family_name: familyData?.family_name,
-              event_type: det.eventType, confidence, launchpad: det.launchpad, tx_signature: det.txSignature,
-            },
+            notification_type: 'family_mint_detected', title: mintAlertTitle, message: mintAlertMsg, metadata: mintAlertMeta,
           });
+
+          // ═══ Telegram BlackBox Broadcast ═══
+          const eventLabel = det.eventType.replace(/_/g, ' ').toLowerCase();
+          const confidenceEmoji = confidence >= 90 ? '🔴' : confidence >= 70 ? '🟠' : '🟡';
+          const tgMintMessage = [
+            `🚨 *FAMILY MINT ALERT — ${eventLabel.toUpperCase()}*`,
+            ``,
+            `🪙 *Token:* \`${det.mintAddress}\``,
+            `👛 *Detecting Wallet:* \`${item.wallet_address.slice(0, 8)}…${item.wallet_address.slice(-4)}\``,
+            `🏠 *Family:* ${familyData?.family_name || 'Unknown'} (\`${item.family_id.slice(0, 8)}\`)`,
+            `🌐 *Launchpad:* ${det.launchpad || 'Unknown'}`,
+            `${confidenceEmoji} *Confidence:* ${confidence}%`,
+            `📋 *Event:* ${eventLabel}`,
+            ``,
+            `🔗 *TX:* \`${det.txSignature.slice(0, 20)}…\``,
+            ``,
+            `✅ Auto-added to Master DB pipeline (\`pending_triage\`)`,
+            `⚡ Burst mode active — all family wallets polling every 60s for 10min`,
+            `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'UTC' })} UTC`,
+          ].join('\n');
+
+          try {
+            const { data: tgTargets } = await supabase
+              .from('telegram_message_targets').select('id, chat_id, label, resolved_name').eq('label', 'BLACKBOX');
+            for (const target of (tgTargets || [])) {
+              await supabase.functions.invoke('telegram-mtproto-auth', {
+                body: { action: 'send_message', chatId: Number(target.chat_id), message: tgMintMessage },
+              });
+              await supabase.from('telegram_message_targets').update({ last_used_at: new Date().toISOString() }).eq('id', target.id);
+            }
+          } catch (tgErr) {
+            console.warn('[FamilyMintMonitor] TG broadcast failed:', tgErr);
+          }
 
           mintsFound++;
           totalMintsDetected++;
