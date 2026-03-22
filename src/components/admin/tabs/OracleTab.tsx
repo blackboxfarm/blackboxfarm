@@ -6,6 +6,7 @@ import OracleIntelLookup from "@/components/admin/oracle/OracleIntelLookup";
 import OracleClassificationsFeed from "@/components/admin/oracle/OracleClassificationsFeed";
 import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus";
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
+import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 
 const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
 
@@ -83,6 +84,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           <TabsTrigger value="whitelist" className="data-[state=active]:bg-green-500/20">
             ✅ Whitelist Mesh
           </TabsTrigger>
+          <TabsTrigger value="kyc-override" className="data-[state=active]:bg-amber-500/20">
+            🔑 KYC Override
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="spider" className="space-y-4">
@@ -147,6 +151,10 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           <Suspense fallback={<LazyLoader />}>
             <PumpfunWhitelist />
           </Suspense>
+        </TabsContent>
+
+        <TabsContent value="kyc-override" className="space-y-4">
+          <ManualKycOverride />
         </TabsContent>
       </Tabs>
     </div>
