@@ -261,6 +261,31 @@ export default function MasterDBTab() {
   return (
     <div className="space-y-6">
     <ManualKycOverride />
+    <div className="flex items-center gap-1 mb-4">
+      <Button
+        variant={activeView === "directory" ? "default" : "ghost"}
+        size="sm"
+        className="h-7 text-xs gap-1"
+        onClick={() => setActiveView("directory")}
+      >
+        <Database className="h-3.5 w-3.5" />
+        Directory
+      </Button>
+      <Button
+        variant={activeView === "history" ? "default" : "ghost"}
+        size="sm"
+        className="h-7 text-xs gap-1"
+        onClick={() => setActiveView("history")}
+      >
+        <History className="h-3.5 w-3.5" />
+        History
+      </Button>
+    </div>
+    {activeView === "history" ? (
+      <Suspense fallback={<LazyLoader />}>
+        <MasterDBHistory />
+      </Suspense>
+    ) : (
     <Card className="w-full -mx-6 sm:-mx-6" style={{ width: 'calc(100% + 3rem)' }}>
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
