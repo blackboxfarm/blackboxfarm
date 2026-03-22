@@ -26,6 +26,7 @@ import {
   Check,
   RefreshCw,
   Pill,
+  History,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
