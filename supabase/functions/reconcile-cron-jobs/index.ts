@@ -277,6 +277,12 @@ const REQUIRED_CRONS: CronDef[] = [
     schedule: '*/15 * * * *',
     command: httpPost('family-mint-monitor', '{\\\"priority\\\": \\\"all\\\", \\\"batchSize\\\": 20}'),
   },
+  // ── Allstar Promotion Engine ──
+  {
+    jobname: 'allstar-promotion-engine-30min',
+    schedule: '*/30 * * * *',
+    command: httpPost('allstar-promotion-engine', '{\\\"min_ath_usd\\\": 100000, \\\"max_promotions\\\": 15}'),
+  },
 ];
 
 Deno.serve(async (req) => {
