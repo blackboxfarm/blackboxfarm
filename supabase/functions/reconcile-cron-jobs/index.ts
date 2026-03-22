@@ -260,6 +260,23 @@ const REQUIRED_CRONS: CronDef[] = [
     schedule: '0 0 1 * *',
     command: 'SELECT public.archive_old_morning_reports();',
   },
+
+  // ── Family Surveillance Engine ──
+  {
+    jobname: 'family-discovery-engine-10min',
+    schedule: '*/10 * * * *',
+    command: httpPost('family-discovery-engine', '{\\\"maxSeeds\\\": 3, \\\"maxTxPerWallet\\\": 30}'),
+  },
+  {
+    jobname: 'family-mint-monitor-p1-5min',
+    schedule: '*/5 * * * *',
+    command: httpPost('family-mint-monitor', '{\\\"priority\\\": \\\"P1\\\", \\\"batchSize\\\": 10}'),
+  },
+  {
+    jobname: 'family-mint-monitor-all-15min',
+    schedule: '*/15 * * * *',
+    command: httpPost('family-mint-monitor', '{\\\"priority\\\": \\\"all\\\", \\\"batchSize\\\": 20}'),
+  },
 ];
 
 Deno.serve(async (req) => {
