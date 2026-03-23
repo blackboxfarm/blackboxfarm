@@ -26,8 +26,8 @@ interface TokenData {
   website?: string;
 }
 
-// Cloudflare Worker URL - proven to bypass 403s
-const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
+// Cloudflare worker suspended — now using internal dex-top-200 edge function
+// const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
 
 // Fallback: Fetch mint AND socials from DexScreener pair endpoint
 async function fetchPairDetails(pairId: string): Promise<{ 
