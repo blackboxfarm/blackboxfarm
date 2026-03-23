@@ -144,7 +144,6 @@ export function TokenMetadataDisplay({
   dexStatus,
   creatorInfo,
   shareData,
-  shareCardPageUrl
 }: TokenMetadataDisplayProps) {
   
   if (isLoading) {
