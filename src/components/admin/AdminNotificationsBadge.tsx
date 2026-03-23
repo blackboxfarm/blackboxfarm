@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket, Archive } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket, Archive, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -244,15 +244,30 @@ export function AdminNotificationsBadge() {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {categorize(notification.notification_type) === 'audit' && (
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 rounded-full border border-border bg-secondary text-foreground hover:bg-accent hover:text-accent-foreground"
-                      onClick={() => copyAuditPrompt(notification)}
-                      title="Copy prompt to ask about this alert"
-                    >
-                      <span className="text-sm font-bold leading-none">?</span>
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 border-border/50 hover:bg-purple-500/20 hover:text-purple-300"
+                        onClick={() => {
+                          const question = `Morning Report alert — [${notification.notification_type.toUpperCase()}] ${notification.title}: ${notification.message}. What should I do about this? What's the root cause and recommended fix?`;
+                          navigator.clipboard.writeText(question);
+                          toast({ title: "Copied!", description: "Investigation question copied to clipboard" });
+                        }}
+                        title="Copy investigation question to clipboard"
+                      >
+                        <Search className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 border-border/50 hover:bg-amber-500/20 hover:text-amber-300"
+                        onClick={() => copyAuditPrompt(notification)}
+                        title="Copy audit help prompt"
+                      >
+                        <span className="text-sm font-bold leading-none">?</span>
+                      </Button>
+                    </>
                   )}
                   {!notification.is_read && (
                     <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => markAsRead(notification.id)}>
