@@ -258,6 +258,13 @@ export default function SuperAdmin() {
               </TabErrorBoundary>
             )}
           </TabsContent>
+          <TabsContent value="top-200">
+            {activeTab === "top-200" && (
+              <TabErrorBoundary tabName="Top 200">
+                <Suspense fallback={<TabLoader />}><Top200Tab /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
