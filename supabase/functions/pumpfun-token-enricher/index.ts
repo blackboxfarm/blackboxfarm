@@ -1352,15 +1352,18 @@ serve(withRunLog('pumpfun-token-enricher', async (req) => {
       
       const stats = await enrichTokenBatch(supabase, pendingTokens, config);
       
+      const pumpStats = getPumpFunRunStats();
       console.log('\n📊 Enrichment Summary:');
       console.log(`   Enriched: ${stats.enriched}`);
       console.log(`   Promoted: ${stats.promoted}`);
       console.log(`   Rejected (permanent): ${stats.rejected}`);
       console.log(`   Rejected (soft): ${stats.softRejected}`);
+      console.log(`   Pump.fun API: ${pumpStats.totalCalls} calls, ${pumpStats.successCalls} ok, ${pumpStats.failedCalls} failed, ${pumpStats.rateLimitHits} rate-limited`);
       
       return new Response(JSON.stringify({
         success: true,
-        stats
+        stats,
+        pumpfun_api_stats: pumpStats
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
