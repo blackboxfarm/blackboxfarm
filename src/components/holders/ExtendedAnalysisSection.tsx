@@ -69,6 +69,7 @@ interface ExtendedAnalysisSectionProps {
   securityAlerts: SecurityAlert[];
   lpAnalysis: LPAnalysisData;
   liquidityPoolsDetected: number;
+  isPro?: boolean;
 }
 
 export function ExtendedAnalysisSection({
