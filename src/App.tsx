@@ -48,7 +48,7 @@ const BannerCheckout = lazy(() => import("./pages/BannerCheckout"));
 const BannerPreview = lazy(() => import("./pages/BannerPreview"));
 const MyBanners = lazy(() => import("./pages/MyBanners"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
-const ShareCardDemoPage = lazy(() => import("./pages/ShareCardDemo"));
+
 const IntelReport = lazy(() => import("./pages/IntelReport"));
 const BumpBotLanding = lazy(() => import("./pages/BumpBotLanding"));
 const VolumeBotLanding = lazy(() => import("./pages/VolumeBotLanding"));
