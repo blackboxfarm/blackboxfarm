@@ -140,6 +140,14 @@ async function solscanScrapeFundingInfoWithFirecrawl(
     return { fundedByLabel: null, fundedByWallet: null };
   }
 
+  // Check rate-limit budget before calling
+  const { checkFirecrawlBudget, handleFirecrawlError } = await import('./firecrawl-guard.ts');
+  const budget = checkFirecrawlBudget('solscan-intelligence');
+  if (!budget.allowed) {
+    apiErrors.push(`Firecrawl self-throttled: ${budget.reason}`);
+    return { fundedByLabel: null, fundedByWallet: null };
+  }
+
   try {
     const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
