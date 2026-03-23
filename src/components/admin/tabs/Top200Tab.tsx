@@ -406,8 +406,8 @@ export default function Top200Tab() {
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{stats.total} live</span>
-          <span>{stats.ranked} ranked</span>
+          <span>{stats.ranked} in top 200</span>
+          <span>{stats.overflow} overflow</span>
           <span>{stats.graduated} graduated</span>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5 ml-2">
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
