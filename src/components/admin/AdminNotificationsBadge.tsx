@@ -308,8 +308,8 @@ export function AdminNotificationsBadge() {
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="font-semibold text-foreground">Admin Alerts</h3>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={archiveAllInTab} className="text-xs text-muted-foreground hover:text-yellow-500" title="Archive all in current tab">
-              <Archive className="h-4 w-4 mr-1" />
+            <Button variant="ghost" size="sm" onClick={archiveAllInTab} className="text-xs text-destructive hover:text-destructive/80" title="Clear all notifications in current tab">
+              <CheckCheck className="h-4 w-4 mr-1" />
               Clear tab
             </Button>
             {unreadCount > 0 && (
