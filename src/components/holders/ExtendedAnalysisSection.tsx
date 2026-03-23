@@ -83,8 +83,10 @@ export function ExtendedAnalysisSection({
   securityAlerts,
   lpAnalysis,
   liquidityPoolsDetected,
+  isPro = false,
 }: ExtendedAnalysisSectionProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = React.useState(false);
 
   // Not logged in - show teaser
