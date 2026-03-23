@@ -336,15 +336,11 @@ async function fetchJupiterPrice(mint: string): Promise<number | null> {
 
 // Composite metric fetcher
 async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
-  // Try pump.fun first
+  // Try pump.fun first — using shared wrapper with backoff + admin alerts
   try {
-    const response = await fetchWithBackoff(
-      `https://frontend-api-v3.pump.fun/coins/${mint}`,
-      { headers: { 'Accept': 'application/json' } }
-    );
+    const data = await fetchPumpFunCoin(mint, 'watchlist-monitor');
 
-    if (response.ok) {
-      const data = await response.json();
+    if (data) {
       const virtualSolReserves = data.virtual_sol_reserves || 0;
       const virtualTokenReserves = data.virtual_token_reserves || 0;
       const totalSupply = data.total_supply || 1000000000000000;
