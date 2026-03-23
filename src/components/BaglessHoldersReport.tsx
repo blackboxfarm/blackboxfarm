@@ -2020,6 +2020,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                         lpBalance: report.lpBalance,
                       }}
                       liquidityPoolsDetected={report.liquidityPoolsDetected}
+                      isPro={isPro}
                     />
                   );
                 })()}
