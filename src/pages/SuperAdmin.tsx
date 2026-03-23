@@ -27,6 +27,7 @@ const AllstarTab = lazy(() => import("@/components/admin/tabs/AllstarTab"));
 const FunnelFeedsTab = lazy(() => import("@/components/admin/tabs/FunnelFeedsTab"));
 const MonitoringTab = lazy(() => import("@/components/admin/tabs/MonitoringTab"));
 const TicketsTab = lazy(() => import("@/components/admin/tabs/TicketsTab"));
+const Top200Tab = lazy(() => import("@/components/admin/tabs/Top200Tab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
