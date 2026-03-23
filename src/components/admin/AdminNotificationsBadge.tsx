@@ -242,16 +242,16 @@ export function AdminNotificationsBadge() {
                     {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {category === 'audit' && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {categorize(notification.notification_type) === 'audit' && (
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="icon"
-                      className="h-8 w-8 border-purple-500/50 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 hover:border-purple-400"
+                      className="h-8 w-8 shrink-0 rounded-full border border-border bg-secondary text-foreground hover:bg-accent hover:text-accent-foreground"
                       onClick={() => copyAuditPrompt(notification)}
                       title="Copy prompt to ask about this alert"
                     >
-                      <HelpCircle className="h-5 w-5" />
+                      <span className="text-sm font-bold leading-none">?</span>
                     </Button>
                   )}
                   {!notification.is_read && (
