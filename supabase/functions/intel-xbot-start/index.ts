@@ -50,6 +50,11 @@ const CRON_JOBS = [
     name: 'ath-24h-backfill-30min',
     schedule: '*/30 * * * *',
     function: 'ath-24h-backfill'
+  },
+  {
+    name: 'dex-top-200-30min',
+    schedule: '*/30 * * * *',
+    function: 'dex-top-200'
   }
   // Twitter scanner disabled - X API credits exhausted
 ];
