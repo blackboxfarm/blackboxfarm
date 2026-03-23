@@ -43,8 +43,6 @@ export function ShareToXButton({
   casual = 0,
   healthGrade,
   healthScore,
-  shareCardPageUrl,
-  isGenerating = false,
   variant = "full",
 }: ShareToXButtonProps) {
   const { toast } = useToast();
