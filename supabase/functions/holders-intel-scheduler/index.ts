@@ -202,60 +202,50 @@ async function upsertProvenDevTokens(supabase: any, tokens: TrendingToken[], cur
 }
 
 async function fetchTrendingTokens(): Promise<TrendingToken[]> {
-  console.log('[scheduler] Fetching from Cloudflare KV worker...');
+  console.log('[scheduler] Fetching from internal dex-top-200 edge function...');
   
   try {
-    const response = await fetch(CLOUDFLARE_WORKER_URL);
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/dex-top-200`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
     
     if (!response.ok) {
-      console.error('[scheduler] Worker fetch failed:', response.status);
+      console.error('[scheduler] dex-top-200 fetch failed:', response.status);
       return [];
     }
     
     const data = await response.json();
     
-    if (data.stale) {
-      console.warn('[scheduler] Warning: Worker data is stale');
+    if (!data.success) {
+      console.error('[scheduler] dex-top-200 returned error:', data.error);
+      return [];
     }
     
-    console.log(`[scheduler] Got ${data.countPairsResolved || 0}/${data.countPairsRequested || 0} resolved pairs from worker`);
+    console.log(`[scheduler] Got ${data.total || 0} ranked tokens from dex-top-200 (${data.resolved || 0} resolved)`);
     
-    const allPairs = data.pairs || [];
     const tokens: TrendingToken[] = [];
     
-    // Process ALL pairs, not just resolved ones
-    for (let i = 0; i < Math.min(allPairs.length, 100); i++) {
-      const p = allPairs[i];
-      
-      if (p.ok && p.tokenMint) {
-        // Worker resolved it - use directly
+    for (const t of (data.tokens || [])) {
+      if (t.tokenMint) {
         tokens.push({
-          mint: p.tokenMint,
-          symbol: p.symbol || 'UNKNOWN',
-          name: p.name || 'Unknown Token',
-          marketCap: p.fdv || 0,
+          mint: t.tokenMint,
+          symbol: t.symbol || 'UNKNOWN',
+          name: t.name || 'Unknown Token',
+          marketCap: t.fdv || t.marketCap || 0,
           priceChange24h: 0,
         });
-      } else if (p.pairId) {
-        // Worker didn't resolve - fetch from DexScreener ourselves
-        console.log(`[scheduler] Resolving unresolved pair #${i + 1}: ${p.pairId}`);
-        const resolved = await fetchMintFromPair(p.pairId);
-        
-        if (resolved.mint) {
-          tokens.push({
-            mint: resolved.mint,
-            symbol: resolved.symbol,
-            name: resolved.name,
-            marketCap: p.fdv || 0,
-            priceChange24h: 0,
-          });
-        } else {
-          console.warn(`[scheduler] Could not resolve pair ${p.pairId}`);
-        }
       }
     }
     
-    console.log(`[scheduler] Total tokens after resolution: ${tokens.length}`);
+    console.log(`[scheduler] Total tokens from dex-top-200: ${tokens.length}`);
     if (tokens.length > 0) {
       console.log(`[scheduler] Sample: ${tokens.slice(0, 5).map((t: TrendingToken) => t.symbol).join(', ')}`);
     }
@@ -263,7 +253,7 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
     return tokens;
     
   } catch (error) {
-    console.error('[scheduler] Error fetching from Cloudflare worker:', error);
+    console.error('[scheduler] Error fetching from dex-top-200:', error);
     return [];
   }
 }

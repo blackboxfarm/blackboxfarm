@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const WORKER_URL = "https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana";
-
 interface TrendingPair {
+  rank: number;
   pairId: string;
   tokenMint: string;
   symbol: string | null;
@@ -18,7 +17,6 @@ interface TrendingPair {
   priceUsd: string | null;
   fdv: number | null;
   url: string;
-  // enriched from our DB
   dbStatus?: 'not_seen' | 'seen' | 'posted' | 'queued';
 }
 
@@ -32,33 +30,38 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 export function DexCloudFlareFeed() {
   const [pairs, setPairs] = useState<TrendingPair[]>([]);
   const [loading, setLoading] = useState(true);
-  const [workerMeta, setWorkerMeta] = useState<{ timestamp?: number; stale?: boolean }>({});
+  const [health, setHealth] = useState<any>(null);
   const { toast } = useToast();
 
   const fetchTrending = async () => {
     setLoading(true);
     try {
-      // 1) Fetch from CloudFlare worker
-      const res = await fetch(WORKER_URL);
-      if (!res.ok) throw new Error(`Worker returned ${res.status}`);
-      const data = await res.json();
+      // Fetch from internal dex-top-200 edge function (Firecrawl-powered)
+      const { data, error } = await supabase.functions.invoke('dex-top-200', { body: {} });
 
-      setWorkerMeta({ timestamp: data.timestamp, stale: data.stale });
-      const workerPairs: TrendingPair[] = (data.pairs || []).filter((p: any) => p.ok).map((p: any) => ({
-        pairId: p.pairId,
-        tokenMint: p.tokenMint,
-        symbol: p.symbol,
-        name: p.name,
-        liquidityUsd: p.liquidityUsd,
-        volume24h: p.volume24h,
-        priceUsd: p.priceUsd,
-        fdv: p.fdv,
-        url: p.url,
-        dbStatus: 'not_seen' as const,
-      }));
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Unknown error');
 
-      // 2) Cross-reference with our DB: check seen tokens + post queue
-      const mints = workerPairs.map(p => p.tokenMint);
+      setHealth(data.health);
+
+      const topPairs: TrendingPair[] = (data.tokens || [])
+        .filter((t: any) => t.tokenMint)
+        .map((t: any) => ({
+          rank: t.rank,
+          pairId: t.pairId,
+          tokenMint: t.tokenMint,
+          symbol: t.symbol,
+          name: t.name,
+          liquidityUsd: t.liquidityUsd,
+          volume24h: t.volume24h,
+          priceUsd: t.priceUsd,
+          fdv: t.fdv,
+          url: t.url || `https://dexscreener.com/solana/${t.pairId}`,
+          dbStatus: 'not_seen' as const,
+        }));
+
+      // Cross-reference with our DB
+      const mints = topPairs.map(p => p.tokenMint);
 
       const [seenRes, queueRes] = await Promise.all([
         supabase.from('holders_intel_seen_tokens').select('token_mint').in('token_mint', mints),
@@ -71,8 +74,7 @@ export function DexCloudFlareFeed() {
         queueMap.set(q.token_mint, q.status);
       }
 
-      // 3) Enrich status
-      for (const p of workerPairs) {
+      for (const p of topPairs) {
         const queueStatus = queueMap.get(p.tokenMint);
         if (queueStatus === 'posted') p.dbStatus = 'posted';
         else if (queueStatus) p.dbStatus = 'queued';
@@ -80,7 +82,7 @@ export function DexCloudFlareFeed() {
         else p.dbStatus = 'not_seen';
       }
 
-      setPairs(workerPairs);
+      setPairs(topPairs);
     } catch (err: any) {
       toast({ title: "Error fetching trending", description: err.message, variant: "destructive" });
     }
@@ -91,9 +93,7 @@ export function DexCloudFlareFeed() {
 
   const shortMint = (m: string) => `${m.slice(0, 6)}…${m.slice(-4)}`;
   const fmtUsd = (n: number | null) => n == null ? '—' : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`;
-  const workerAge = workerMeta.timestamp ? `${Math.floor((Date.now() / 1000 - workerMeta.timestamp) / 60)}m ago` : '';
 
-  // Stats
   const newCount = pairs.filter(p => p.dbStatus === 'not_seen').length;
   const seenCount = pairs.filter(p => p.dbStatus === 'seen').length;
   const queuedCount = pairs.filter(p => p.dbStatus === 'queued').length;
@@ -104,8 +104,10 @@ export function DexCloudFlareFeed() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <p className="text-sm text-muted-foreground">
-            {pairs.length} trending tokens {workerAge && `· refreshed ${workerAge}`}
-            {workerMeta.stale && <span className="text-yellow-400 ml-1">(stale cache)</span>}
+            {pairs.length} trending tokens (Firecrawl Top 200)
+            {health && !health.page1_ok && <span className="text-red-400 ml-1">⚠ Page 1 failed</span>}
+            {health && !health.page2_ok && <span className="text-red-400 ml-1">⚠ Page 2 failed</span>}
+            {health?.retry_used && <span className="text-yellow-400 ml-1">(retry used)</span>}
           </p>
           <div className="flex gap-2 text-xs">
             <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400">{newCount} New</Badge>
@@ -120,15 +122,15 @@ export function DexCloudFlareFeed() {
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground">Fetching DexScreener trending…</div>
+        <div className="text-center py-8 text-muted-foreground">Fetching DexScreener Top 200…</div>
       ) : pairs.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">No trending data from worker.</div>
+        <div className="text-center py-8 text-muted-foreground">No trending data available.</div>
       ) : (
         <div className="max-h-[600px] overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead compact>#</TableHead>
+                <TableHead compact>Rank</TableHead>
                 <TableHead compact>Token</TableHead>
                 <TableHead compact>Mint</TableHead>
                 <TableHead compact>Liquidity</TableHead>
@@ -138,11 +140,11 @@ export function DexCloudFlareFeed() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pairs.map((p, i) => {
+              {pairs.map((p) => {
                 const st = statusConfig[p.dbStatus || 'not_seen'];
                 return (
                   <TableRow key={p.pairId}>
-                    <TableCell compact className="text-muted-foreground text-xs">{i + 1}</TableCell>
+                    <TableCell compact className="text-muted-foreground text-xs font-mono">#{p.rank}</TableCell>
                     <TableCell compact className="font-medium">
                       {p.symbol ? `$${p.symbol}` : '—'}
                       {p.name && <span className="text-muted-foreground ml-1 text-xs">{p.name}</span>}

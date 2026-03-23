@@ -196,77 +196,62 @@ Deno.serve(async (req) => {
     );
 
     console.log('[DexCompiler] 🚀 Multi-Source Token Discovery + Mesh Building');
-    console.log('[DexCompiler] 📊 Phase 1: Fetching top 50 trending from Cloudflare Worker');
+    console.log('[DexCompiler] 📊 Phase 1: Fetching top 200 trending from dex-top-200');
 
     const discoveredTokens = new Map<string, TokenData>();
     const capturedAt = new Date().toISOString();
 
-    // PRIMARY SOURCE: Cloudflare Worker (bypasses 403s, returns top 50 trending)
-    console.log('[DexCompiler] 🌐 Fetching from Cloudflare Worker...');
+    // PRIMARY SOURCE: Internal dex-top-200 edge function (Firecrawl scrape, 200 tokens)
+    console.log('[DexCompiler] 🌐 Fetching from dex-top-200...');
     try {
-      const workerResponse = await fetch(CLOUDFLARE_WORKER_URL);
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
       
-      if (workerResponse.ok) {
-        const workerData = await workerResponse.json();
+      const topResponse = await fetch(`${supabaseUrl}/functions/v1/dex-top-200`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      
+      if (topResponse.ok) {
+        const topData = await topResponse.json();
         
-        if (workerData.stale) {
-          console.warn('[DexCompiler] ⚠️ Warning: Worker data is stale');
-        }
-        
-        console.log(`[DexCompiler] ✅ Got ${workerData.countPairsResolved || 0}/${workerData.countPairsRequested || 0} resolved pairs from worker`);
-        
-        const allPairs = workerData.pairs || [];
-        
-        // Process ALL pairs - resolve missing mints and fetch socials
-        for (let i = 0; i < Math.min(allPairs.length, 50); i++) {
-          const p = allPairs[i];
+        if (topData.success && topData.tokens) {
+          console.log(`[DexCompiler] ✅ Got ${topData.tokens.length} ranked tokens from dex-top-200`);
           
-          if (p.ok && p.tokenMint) {
-            // Worker resolved it - fetch socials
-            const socials = await fetchTokenSocials(p.tokenMint);
-            discoveredTokens.set(p.tokenMint, {
-              address: p.tokenMint,
-              symbol: p.symbol || 'UNKNOWN',
-              name: p.name || 'Unknown Token',
-              fdv: p.fdv,
-              marketCap: p.fdv,
-              discoverySource: 'cf_worker',
-              twitter: socials.twitter,
-              telegram: socials.telegram,
-              website: socials.website,
-            });
-          } else if (p.pairId) {
-            // Worker didn't resolve - fetch from DexScreener ourselves
-            console.log(`[DexCompiler] 🔄 Resolving unresolved pair #${i + 1}: ${p.pairId}`);
-            const resolved = await fetchPairDetails(p.pairId);
-            
-            if (resolved.mint) {
-              discoveredTokens.set(resolved.mint, {
-                address: resolved.mint,
-                symbol: resolved.symbol,
-                name: resolved.name,
-                fdv: resolved.fdv,
-                marketCap: resolved.fdv,
-                discoverySource: 'cf_worker_resolved',
-                twitter: resolved.twitter,
-                telegram: resolved.telegram,
-                website: resolved.website,
+          for (const t of topData.tokens) {
+            if (t.tokenMint) {
+              // Fetch socials for each token
+              const socials = await fetchTokenSocials(t.tokenMint);
+              discoveredTokens.set(t.tokenMint, {
+                address: t.tokenMint,
+                symbol: t.symbol || 'UNKNOWN',
+                name: t.name || 'Unknown Token',
+                fdv: t.fdv,
+                marketCap: t.marketCap || t.fdv,
+                discoverySource: 'dex_top_200',
+                twitter: socials.twitter,
+                telegram: socials.telegram,
+                website: socials.website,
               });
-            } else {
-              console.warn(`[DexCompiler] ⚠️ Could not resolve pair ${p.pairId}`);
+              
+              // Small delay to avoid rate limits on socials fetch
+              if (discoveredTokens.size % 10 === 0) await new Promise(r => setTimeout(r, 200));
             }
           }
           
-          // Small delay to avoid rate limits
-          if (i % 10 === 9) await new Promise(r => setTimeout(r, 200));
+          console.log(`[DexCompiler] ✅ Total tokens from dex-top-200: ${discoveredTokens.size}`);
+        } else {
+          console.error('[DexCompiler] ❌ dex-top-200 returned error:', topData.error);
         }
-        
-        console.log(`[DexCompiler] ✅ Total tokens from Cloudflare Worker: ${discoveredTokens.size}`);
       } else {
-        console.error('[DexCompiler] ❌ Cloudflare Worker fetch failed:', workerResponse.status);
+        console.error('[DexCompiler] ❌ dex-top-200 fetch failed:', topResponse.status);
       }
     } catch (error) {
-      console.error('[DexCompiler] ❌ Failed to fetch from Cloudflare Worker:', error);
+      console.error('[DexCompiler] ❌ Failed to fetch from dex-top-200:', error);
     }
 
     // SECONDARY SOURCE: Top Boosted Tokens (promoted tokens)
