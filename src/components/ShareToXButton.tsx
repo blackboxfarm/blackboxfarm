@@ -26,8 +26,6 @@ interface ShareToXButtonProps {
   casual?: number;
   healthGrade: string;
   healthScore: number;
-  shareCardPageUrl?: string;
-  isGenerating?: boolean;
   variant?: "full" | "icon";
 }
 
