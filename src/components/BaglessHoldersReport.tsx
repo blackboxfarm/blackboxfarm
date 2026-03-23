@@ -307,7 +307,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const { tierInfo, meetsMinimumTier, isAnonymous } = useUserTier();
+  const { tierInfo, meetsMinimumTier, isAnonymous, isPro } = useUserTier();
   // Background data collection - builds historical data for premium features
   useTokenDataCollection(
     report?.tokenMint || null,
