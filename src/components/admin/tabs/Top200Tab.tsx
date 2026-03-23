@@ -241,14 +241,14 @@ export default function Top200Tab() {
   const { data: allTokens, isLoading, refetch } = useQuery({
     queryKey: ["dex-top-500-leaderboard"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("dex-top-200", {
+      const { data: edgeData, error: invokeError } = await supabase.functions.invoke("dex-top-200", {
         body: {},
       });
 
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Unknown error");
+      if (invokeError) throw invokeError;
+      if (!edgeData?.success) throw new Error(edgeData?.error || "Unknown error");
 
-      const tokens = (data.tokens || [])
+      const tokens = (edgeData.tokens || [])
         .filter((t: any) => t.tokenMint)
         .filter((t: any) => !SOL_MINTS.has(t.tokenMint))
         .filter((t: any) => !(t.symbol === "SOL" && t.name === "Solana"));
@@ -262,12 +262,12 @@ export default function Top200Tab() {
 
       // Cross-reference with our DB for editable fields
       const mints = uniqueTokens.map((t: any) => t.tokenMint);
-      const { data: dbTokens, error } = await supabase
+      const { data: dbTokens, error: dbError } = await supabase
         .from("token_lifecycle")
         .select("*")
         .in("token_mint", mints);
 
-      if (error) throw error;
+      if (dbError) throw dbError;
 
       const dbMap = new Map((dbTokens || []).map((token: any) => [token.token_mint, token]));
 
