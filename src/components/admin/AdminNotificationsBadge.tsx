@@ -304,7 +304,7 @@ export function AdminNotificationsBadge() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[420px] p-0" align="end">
+      <PopoverContent className="w-[400px] max-w-[400px] p-0 overflow-hidden" align="end">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="font-semibold text-foreground">Admin Alerts</h3>
           <div className="flex items-center gap-1">
