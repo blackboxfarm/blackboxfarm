@@ -72,7 +72,7 @@ export function useUserTier() {
               tierKey: 'pro',
               displayName: 'Pro',
               aiAccessLevel: 'full',
-              features: { basic_report: true, health_dashboard: true, whale_warnings: true, ai_panel: true, full_ai: true, charts: true, csv_export: true, comparisons: true, extended_analysis: true, risk_assessment: true, dev_reputation: true },
+              features: { basic_report: true, health_dashboard: true, whale_warnings: true, ai_panel: true, full_ai: true, charts: true, csv_export: true, comparisons: true, extended_analysis: true, risk_assessment: true, dev_reputation: true, ad_free: true },
               maxReportsPerDay: 100,
               isXSubscriber: false,
               xHandleLinked: null,
