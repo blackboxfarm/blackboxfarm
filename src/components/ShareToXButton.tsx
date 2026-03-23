@@ -128,19 +128,9 @@ export function ShareToXButton({
           variant="outline" 
           className={variant === "full" ? "w-full gap-2 text-sm" : "h-8 w-8"} 
           size={variant === "icon" ? "icon" : "default"}
-          disabled={isGenerating}
         >
-          {isGenerating ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {variant === "full" && "Preparing Share Card..."}
-            </>
-          ) : (
-            <>
-              <Share2 className="h-4 w-4" />
-              {variant === "full" && `Share $${ticker} Report`}
-            </>
-          )}
+          <Share2 className="h-4 w-4" />
+          {variant === "full" && `Share $${ticker} Report`}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="w-48">
