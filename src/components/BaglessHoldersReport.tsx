@@ -2028,7 +2028,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
 
               {/* Pro Feature Teasers - Risk Assessment & Dev Reputation */}
               <div className="mb-4 md:mb-6">
-                <ProFeatureTeasers isPro={isPro} tokenSymbol={report.symbol} />
+                <ProFeatureTeasers isPro={isPro} />
               </div>
 
               {/* Telegram Bot & X Community Promos */}
