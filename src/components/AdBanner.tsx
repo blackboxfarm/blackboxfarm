@@ -15,9 +15,6 @@ export function AdBanner({ size, position }: AdBannerProps) {
   const [banner, setBanner] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Pro subscribers ($9.99/mo) get ad-free experience
-  if (hasFeature('ad_free')) return null;
-
   // Read token address and utm_community from URL for position 1 token-specific banners
   const urlParams = typeof window !== 'undefined' 
     ? new URLSearchParams(window.location.search) 
