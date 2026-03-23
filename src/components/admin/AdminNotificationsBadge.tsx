@@ -206,8 +206,8 @@ export function AdminNotificationsBadge() {
               <div className="flex items-start gap-2 max-w-full overflow-hidden">
                 <span className="text-lg mt-0.5 shrink-0">{getTypeEmoji(notification.notification_type)}</span>
                 <div className="flex-1 min-w-0 overflow-hidden">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-medium text-sm truncate text-foreground">
+                  <div className="flex items-center gap-2 mb-0.5 overflow-hidden">
+                    <span className="font-medium text-sm truncate block text-foreground">
                       {notification.title}
                     </span>
                   </div>
