@@ -329,18 +329,31 @@ export default function Top200Tab() {
     );
   }, [allTokens, search]);
 
-  const page1 = useMemo(() => (search ? filtered : filtered.filter((r: any) => r._rank <= 200)), [filtered, search]);
-  const page2 = useMemo(() => (search ? [] : filtered.filter((r: any) => r._rank > 200)), [filtered, search]);
+  const filteredOverflow = useMemo(() => {
+    if (!overflowTokens) return [];
+    if (!search) return overflowTokens;
+    const q = search.toLowerCase();
+    return overflowTokens.filter(
+      (r: any) =>
+        r.symbol?.toLowerCase().includes(q) ||
+        r.name?.toLowerCase().includes(q) ||
+        r.token_mint?.toLowerCase().includes(q) ||
+        r.creator_wallet?.toLowerCase().includes(q),
+    );
+  }, [overflowTokens, search]);
+
+  const page1 = useMemo(() => filtered, [filtered]);
+  const page2 = useMemo(() => filteredOverflow, [filteredOverflow]);
   const displayRows = activePage === "top200" ? page1 : page2;
 
   const stats = useMemo(() => {
-    if (!allTokens) return { total: 0, ranked: 0, graduated: 0 };
     return {
-      total: allTokens.length,
-      ranked: allTokens.filter((t: any) => t._rank <= 200).length,
-      graduated: allTokens.filter((t: any) => t.current_status === "graduated").length,
+      total: (allTokens?.length || 0) + (overflowTokens?.length || 0),
+      ranked: allTokens?.length || 0,
+      overflow: overflowTokens?.length || 0,
+      graduated: allTokens?.filter((t: any) => t.current_status === "graduated").length || 0,
     };
-  }, [allTokens]);
+  }, [allTokens, overflowTokens]);
 
   const saveMut = useMutation({
     mutationFn: async (s: EditState) => {
