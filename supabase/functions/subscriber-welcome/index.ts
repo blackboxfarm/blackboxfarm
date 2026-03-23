@@ -385,7 +385,7 @@ function generateSubscriptionRenewalEmail(email: string, name: string | undefine
             <tr>
               <td style="background: #080812; padding: 24px 40px; border-top: 1px solid #1e293b;">
                 <p style="color: #475569; font-size: 12px; text-align: center; margin: 0;">
-                  BlackBox Farm · <a href="https://blackbox.farm/pricing" style="color: #00e5ff60; text-decoration: none;">Manage Subscription</a> · <a href="https://blackbox.farm/contact" style="color: #00e5ff60; text-decoration: none;">Support</a>
+                  BlackBox Farm · <a href="https://blackbox.farm/pricing" style="color: #D4AF37; text-decoration: none;">Manage Subscription</a> · <a href="https://blackbox.farm/contact" style="color: #D4AF37; text-decoration: none;">Support</a>
                 </p>
               </td>
             </tr>
