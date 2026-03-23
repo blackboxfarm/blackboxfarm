@@ -205,13 +205,13 @@ export function AdminNotificationsBadge() {
             >
               <div className="flex items-start gap-2 max-w-full overflow-hidden">
                 <span className="text-lg mt-0.5 shrink-0">{getTypeEmoji(notification.notification_type)}</span>
-                <div className="flex-1 min-w-0 overflow-hidden">
+                <div className="flex-1 min-w-0 max-w-[220px] overflow-hidden">
                   <div className="flex items-center gap-2 mb-0.5 overflow-hidden">
                     <span className="font-medium text-sm truncate block text-foreground">
                       {notification.title}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground whitespace-pre-line line-clamp-2 break-all overflow-hidden">
+                  <p className="text-xs text-muted-foreground whitespace-pre-line line-clamp-2 break-words overflow-hidden">
                     {notification.message}
                   </p>
                   {notification.metadata && Object.keys(notification.metadata).length > 0 && (
