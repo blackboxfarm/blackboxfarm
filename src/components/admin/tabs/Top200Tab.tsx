@@ -45,9 +45,6 @@ import {
 } from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 
-// Use our own edge function that scrapes DexScreener directly
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const SOL_MINTS = new Set(["So11111111111111111111111111111111111111112"]);
 
 interface WorkerPair {
@@ -244,25 +241,14 @@ export default function Top200Tab() {
   const { data: allTokens, isLoading, refetch } = useQuery({
     queryKey: ["dex-top-500-leaderboard"],
     queryFn: async () => {
-      // Call our edge function that scrapes DexScreener directly
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/dex-top-200`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
-        body: JSON.stringify({}),
+      const { data: edgeData, error: invokeError } = await supabase.functions.invoke("dex-top-200", {
+        body: {},
       });
 
-      if (!res.ok) {
-        throw new Error(`Edge function returned ${res.status}`);
-      }
+      if (invokeError) throw invokeError;
+      if (!edgeData?.success) throw new Error(edgeData?.error || "Unknown error");
 
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Unknown error');
-
-      const tokens = (data.tokens || [])
+      const tokens = (edgeData.tokens || [])
         .filter((t: any) => t.tokenMint)
         .filter((t: any) => !SOL_MINTS.has(t.tokenMint))
         .filter((t: any) => !(t.symbol === "SOL" && t.name === "Solana"));
@@ -276,12 +262,12 @@ export default function Top200Tab() {
 
       // Cross-reference with our DB for editable fields
       const mints = uniqueTokens.map((t: any) => t.tokenMint);
-      const { data: dbTokens, error } = await supabase
+      const { data: dbTokens, error: dbError } = await supabase
         .from("token_lifecycle")
         .select("*")
         .in("token_mint", mints);
 
-      if (error) throw error;
+      if (dbError) throw dbError;
 
       const dbMap = new Map((dbTokens || []).map((token: any) => [token.token_mint, token]));
 
@@ -323,10 +309,10 @@ export default function Top200Tab() {
   const displayRows = activePage === "top200" ? page1 : page2;
 
   const stats = useMemo(() => {
-    if (!allTokens) return { total: 0, boosted: 0, graduated: 0 };
+    if (!allTokens) return { total: 0, ranked: 0, graduated: 0 };
     return {
       total: allTokens.length,
-      boosted: allTokens.filter((t: any) => t.active_boosts > 0).length,
+      ranked: allTokens.filter((t: any) => t._rank <= 200).length,
       graduated: allTokens.filter((t: any) => t.current_status === "graduated").length,
     };
   }, [allTokens]);
@@ -378,12 +364,12 @@ export default function Top200Tab() {
             <Trophy className="h-6 w-6 text-amber-400" /> Dex Top 200
           </h2>
           <p className="text-sm text-muted-foreground">
-            Live mirror of the Dex/Cloudflare worker order — edit tokens inline
+            Direct mirror of DexScreener page 1 + page 2 order — edit tokens inline
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>{stats.total} live</span>
-          <span>{stats.boosted} boosted</span>
+          <span>{stats.ranked} ranked</span>
           <span>{stats.graduated} graduated</span>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5 ml-2">
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
