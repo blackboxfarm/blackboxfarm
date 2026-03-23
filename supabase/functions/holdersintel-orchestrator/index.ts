@@ -15,6 +15,7 @@ const INTEL_FUNCTIONS = [
 
 // Slower functions with custom tick intervals
 const SLOW_FUNCTIONS: Record<string, number> = {
+  'dex-top-200': 6, // every ~30 min — scrape DexScreener top 200 via Firecrawl
   'twitter-token-mention-scanner': 3, // every ~15 min
   'token-vigil': 1, // every tick (~5 min) — death detection + mid-growth snapshots
   'allstar-mint-auditor': 6, // every ~30 min — audit allstar wallet families for new mints

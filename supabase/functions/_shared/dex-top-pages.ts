@@ -106,6 +106,17 @@ async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markd
   if (!response.ok) {
     const errMsg = data?.error || `Firecrawl scrape failed for ${url} (${response.status})`;
     
+    // Detect rate limit / payment / block errors specifically
+    if (response.status === 402) {
+      throw new Error(`FIRECRAWL_CREDITS_EXHAUSTED: ${errMsg}`);
+    }
+    if (response.status === 429) {
+      throw new Error(`FIRECRAWL_RATE_LIMITED: ${errMsg}`);
+    }
+    if (response.status === 403) {
+      throw new Error(`FIRECRAWL_BLOCKED: Possible IP/fingerprint block (${response.status})`);
+    }
+    
     // Retry with next config if available
     if (configIndex + 1 < SCRAPE_CONFIGS.length) {
       console.warn(`[DexTop200] Attempt ${attempt} failed for ${url}: ${errMsg}. Retrying...`);
