@@ -1012,7 +1012,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               mediumWallets: report.mediumWallets,
               healthScore: report.healthScore
             } : undefined}
-            shareCardPageUrl={shareCardPageUrl}
           />
         </div>
       )}
