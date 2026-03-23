@@ -419,8 +419,8 @@ Deno.serve(async (req) => {
       console.log(`[DexCompiler] ✅ Updated ${updateCount} existing tokens`);
     }
 
-    // Create ranking snapshot based on discovery order (Cloudflare worker returns in rank order)
-    const rankingSnapshot = allTokens.slice(0, 100).map((token, index) => ({
+    // Create ranking snapshot based on discovery order (dex-top-200 returns in rank order)
+    const rankingSnapshot = allTokens.slice(0, 200).map((token, index) => ({
       token_mint: token.address,
       rank: index + 1,
       captured_at: capturedAt,
