@@ -81,7 +81,7 @@ export function useUserTier() {
               tierKey: 'dev',
               displayName: 'Developer',
               aiAccessLevel: 'api',
-              features: { basic_report: true, health_dashboard: true, whale_warnings: true, ai_panel: true, full_ai: true, charts: true, csv_export: true, comparisons: true, api_access: true },
+              features: { basic_report: true, health_dashboard: true, whale_warnings: true, ai_panel: true, full_ai: true, charts: true, csv_export: true, comparisons: true, api_access: true, ad_free: true },
               maxReportsPerDay: 200,
               isXSubscriber: false,
               xHandleLinked: null,
