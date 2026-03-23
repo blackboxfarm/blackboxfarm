@@ -1370,11 +1370,14 @@ serve(withRunLog('pumpfun-watchlist-monitor', async (req) => {
     const action = url.searchParams.get('action') || 'monitor';
 
     console.log(`🎯 pumpfun-watchlist-monitor v2 action: ${action}`);
+    resetPumpFunRunStats();
 
     switch (action) {
       case 'monitor': {
         const stats = await monitorWatchlistTokens(supabase);
-        return jsonResponse({ success: true, stats });
+        const pumpStats = getPumpFunRunStats();
+        console.log(`[watchlist-monitor] 📊 Pump.fun API stats: ${pumpStats.totalCalls} calls, ${pumpStats.successCalls} ok, ${pumpStats.failedCalls} failed, ${pumpStats.rateLimitHits} rate-limited`);
+        return jsonResponse({ success: true, stats, pumpfun_api_stats: pumpStats });
       }
 
       case 'status': {
