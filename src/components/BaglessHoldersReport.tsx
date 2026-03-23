@@ -33,6 +33,8 @@ import { AIInterpretationLocked } from '@/components/holders/AIInterpretationLoc
 import { AISummaryTeaser } from '@/components/premium/AISummaryTeaser';
 import { TierGate } from '@/components/premium/TierGate';
 import { useUserTier } from '@/hooks/useUserTier';
+import { ProFeatureTeasers } from '@/components/holders/ProFeatureTeasers';
+import { SubscriberPromoSection } from '@/components/holders/SubscriberPromoSection';
 
 interface TokenHolder {
   owner: string;
