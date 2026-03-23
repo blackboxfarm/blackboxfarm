@@ -299,10 +299,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   const [holderViewMode, setHolderViewMode] = useState<'simple' | 'granular'>('simple');
   const [sedimentViewMode, setSedimentViewMode] = useState<'simple' | 'granular'>('simple');
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
-  // Share card state
-  const [shareCardImageUrl, setShareCardImageUrl] = useState<string | null>(null);
-  const [shareCardPageUrl, setShareCardPageUrl] = useState<string | null>(null);
-  const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
@@ -373,8 +369,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     if (previousTokenRef.current && previousTokenRef.current !== normalized && normalized) {
       // Token changed - clear old report to allow new generation
       setReport(null);
-      setShareCardImageUrl(null);
-      setShareCardPageUrl(null);
       setKolMatches([]);
     }
     previousTokenRef.current = normalized;
@@ -672,9 +666,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         ` (Price: $${data.tokenPriceUSD.toFixed(8)}${data.priceSource ? ` from ${data.priceSource}` : ''})` : 
         ' (Price: Failed to fetch)';
       
-      // Generate share card image in background (non-blocking)
-      generateShareCard(data);
-      
       // Notify BlackBox TG group about the report generation (fire-and-forget)
       notifyTelegramGroup(data, tokenMint.trim());
       
@@ -692,88 +683,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     }
   };
 
-  // Generate share card image for social sharing (runs after report generation)
-  const generateShareCard = async (reportData: HoldersReport) => {
-    if (!reportData || !tokenData?.metadata?.symbol) return;
-    
-    setIsGeneratingShareCard(true);
-    try {
-      // Calculate top 10 and top 25 percentage for share card
-      const nonLpHolders = reportData.holders.filter(h => !h.isLiquidityPool);
-      const top10Holdings = nonLpHolders.slice(0, 10).reduce((sum, h) => sum + h.percentageOfSupply, 0);
-      const top25Holdings = nonLpHolders.slice(0, 25).reduce((sum, h) => sum + h.percentageOfSupply, 0);
-      
-      // Calculate market cap from price and supply if available
-      const totalSupply = reportData.totalBalance || 0;
-      const priceUsd = reportData.tokenPriceUSD || tokenData?.priceInfo?.priceUsd || 0;
-      const marketCapUsd = priceUsd > 0 && totalSupply > 0 ? priceUsd * totalSupply : undefined;
-      
-      const tokenStats = {
-        symbol: tokenData.metadata.symbol,
-        name: tokenData.metadata.name || tokenData.metadata.symbol,
-        tokenAddress: tokenMint.trim(),
-        tokenImage: tokenData.metadata.logoURI || tokenData.metadata.image || '',
-        totalHolders: reportData.totalHolders,
-        realHolders: reportData.realHolders || 
-          reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length,
-        // Detailed holder breakdown
-        trueWhaleCount: reportData.holders.filter(h => h.isTrueWhaleWallet).length,
-        babyWhaleCount: reportData.holders.filter(h => h.isBabyWhaleWallet).length,
-        superBossCount: reportData.holders.filter(h => h.isSuperBossWallet).length,
-        kingpinCount: reportData.holders.filter(h => h.isKingpinWallet).length,
-        bossCount: reportData.holders.filter(h => h.isBossWallet).length,
-        largeCount: reportData.holders.filter(h => h.isLargeWallet).length,
-        mediumCount: reportData.holders.filter(h => h.isMediumWallet).length,
-        smallCount: reportData.holders.filter(h => h.isSmallWallet).length,
-        dustCount: reportData.simpleTiers?.dust?.count || reportData.holders.filter(h => h.isDustWallet).length,
-        lpCount: reportData.liquidityPoolsDetected || reportData.holders.filter(h => h.isLiquidityPool).length,
-        // Simple tier counts (matching the exact terminology)
-        whaleCount: reportData.simpleTiers?.whales?.count || 0,   // >$1000
-        strongCount: reportData.simpleTiers?.serious?.count || 0, // $200-$1000
-        activeCount: reportData.simpleTiers?.retail?.count || 0,  // $1-$199
-        dustPercentage: Math.round((reportData.holders.filter(h => h.isDustWallet).length / reportData.totalHolders) * 100),
-        // Top holder concentration
-        top10Percentage: Math.round(top10Holdings * 10) / 10,
-        top25Percentage: Math.round(top25Holdings * 10) / 10,
-        lpPercentage: Math.round((reportData.lpPercentageOfSupply || 0) * 10) / 10,
-        // Health metrics
-        healthScore: reportData.healthScore?.score || 50,
-        healthGrade: reportData.healthScore?.grade || 'C',
-        // Market data
-        marketCapUsd: marketCapUsd,
-        priceUsd: priceUsd,
-        // DEX status
-        dexPaid: reportData.dexStatus?.hasDexPaid || false,
-        dexBoosts: reportData.dexStatus?.activeBoosts || 0,
-        hasMarketing: reportData.dexStatus?.hasAds || false,
-        // Timestamp
-        generatedAt: new Date().toISOString(),
-      };
-
-      console.log('⏱️ [PERF] Generating share card image with stats:', tokenStats);
-      const { data, error } = await supabase.functions.invoke('generate-share-card-satori', {
-        body: { tokenStats }
-      });
-      
-      if (error) {
-        console.error('Share card generation error:', error);
-        return;
-      }
-      
-      if (data?.imageUrl) {
-        setShareCardImageUrl(data.imageUrl);
-        console.log('✅ Share card generated:', data.imageUrl);
-      }
-      if (data?.sharePageUrl) {
-        setShareCardPageUrl(data.sharePageUrl);
-        console.log('✅ Share page URL:', data.sharePageUrl);
-      }
-    } catch (err) {
-      console.error('Failed to generate share card:', err);
-    } finally {
-      setIsGeneratingShareCard(false);
-    }
-  };
 
   const exportToCSV = () => {
     if (!report) return;
@@ -1103,7 +1012,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               mediumWallets: report.mediumWallets,
               healthScore: report.healthScore
             } : undefined}
-            shareCardPageUrl={shareCardPageUrl}
           />
         </div>
       )}
@@ -1932,76 +1840,8 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                   casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
                   healthGrade={report?.healthScore?.grade || 'C'}
                   healthScore={report?.healthScore?.score || 50}
-                  shareCardPageUrl={shareCardPageUrl}
-                  isGenerating={isGeneratingShareCard}
                 />
               </div>
-
-              {/* AI Share Card Preview - Show after generating */}
-              {(shareCardImageUrl || isGeneratingShareCard) && (
-                <div className="mb-4">
-                  <Card className="border-purple-500/30 bg-purple-500/5">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-purple-400" />
-                        AI Share Card Preview
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {/* Desktop: Side-by-side layout with smaller card */}
-                      <div className="flex flex-col md:flex-row gap-4">
-                        {/* Left: Preview Card - Smaller on desktop */}
-                        <div className="w-full md:w-2/5 lg:w-1/3 flex-shrink-0">
-                          {isGeneratingShareCard ? (
-                            <div className="aspect-[1200/628] bg-gradient-to-br from-purple-900/30 via-background to-blue-900/30 rounded-lg border border-purple-500/20 flex flex-col items-center justify-center gap-2">
-                              <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
-                              <span className="text-xs text-purple-300">Generating...</span>
-                            </div>
-                          ) : shareCardImageUrl ? (
-                            <div className="aspect-[1200/628] rounded-lg border border-purple-500/20 overflow-hidden shadow-lg">
-                              <img 
-                                src={shareCardImageUrl} 
-                                alt="AI Generated Share Card" 
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ) : null}
-                        </div>
-                        
-                        {/* Right: Explainer Blurb - Desktop only */}
-                        <div className="hidden md:flex flex-1 flex-col justify-center space-y-3 text-sm">
-                          <div className="flex items-start gap-2">
-                            <Share2 className="h-4 w-4 text-purple-400 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="font-medium text-foreground">Share Your Analysis</p>
-                              <p className="text-muted-foreground text-xs">This card appears when you post on X/Twitter with the share link.</p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <Sparkles className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="font-medium text-foreground">AI-Generated</p>
-                              <p className="text-muted-foreground text-xs">Unique visual with holder breakdown, health grade, and token stats.</p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <Eye className="h-4 w-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="font-medium text-foreground">Stand Out</p>
-                              <p className="text-muted-foreground text-xs">Eye-catching cards get more engagement than plain text posts.</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Mobile: Caption under card */}
-                      <p className="text-xs text-muted-foreground text-center mt-3 md:hidden">
-                        This card appears when you share on X/Twitter
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
 
               {/* Extended Analysis Section - Logged-in users only */}
               <div className="mb-4 md:mb-6">
@@ -2713,8 +2553,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
                 healthGrade={report?.healthScore?.grade || 'C'}
                 healthScore={report?.healthScore?.score || 50}
-                shareCardPageUrl={shareCardPageUrl}
-                isGenerating={isGeneratingShareCard}
                   />
                 </div>
               </div>

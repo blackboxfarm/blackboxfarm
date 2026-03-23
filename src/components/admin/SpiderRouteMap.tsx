@@ -22,7 +22,7 @@ const ALL_ROUTES: RouteInfo[] = [
   { path: "/holders-info", label: "Holders Landing", category: "marketing", description: "Holders tool info page" },
   { path: "/blackbox", label: "BlackBox", category: "public", description: "Alternative landing" },
   { path: "/demo", label: "Demo", category: "public", description: "Demo page" },
-  { path: "/share-card-demo", label: "Share Card Demo", category: "public", description: "Social share card generator" },
+  
   { path: "/token-analysis", label: "Token Analysis", category: "public", description: "Token analysis download" },
   
   // Apps & Services

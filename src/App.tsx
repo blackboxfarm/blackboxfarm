@@ -48,7 +48,7 @@ const BannerCheckout = lazy(() => import("./pages/BannerCheckout"));
 const BannerPreview = lazy(() => import("./pages/BannerPreview"));
 const MyBanners = lazy(() => import("./pages/MyBanners"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
-const ShareCardDemoPage = lazy(() => import("./pages/ShareCardDemo"));
+
 const IntelReport = lazy(() => import("./pages/IntelReport"));
 const BumpBotLanding = lazy(() => import("./pages/BumpBotLanding"));
 const VolumeBotLanding = lazy(() => import("./pages/VolumeBotLanding"));
@@ -81,7 +81,7 @@ const App = () => {
         <NotificationsProvider>
           <TooltipProvider>
             <div className="min-h-screen flex flex-col">
-              {/* Intel XBot controls moved to /share-card-demo */}
+              
               <Toaster />
               <Sonner />
               <BrowserRouter>
@@ -123,7 +123,7 @@ const App = () => {
                       <Route path="/breadcrumbs" element={<SuperAdminRoute><BreadCrumbs /></SuperAdminRoute>} />
                       <Route path="/helius-usage" element={<SuperAdminRoute><HeliusUsage /></SuperAdminRoute>} />
                       <Route path="/token-analysis" element={<SuperAdminRoute><TokenAnalysisDownload /></SuperAdminRoute>} />
-                      <Route path="/share-card-demo" element={<SuperAdminRoute><ShareCardDemoPage /></SuperAdminRoute>} />
+                      
                       <Route path="/bumpbot" element={<BumpBotLanding />} />
                       <Route path="/volumebot" element={<VolumeBotLanding />} />
                       <Route path="/holders-info" element={<HoldersLanding />} />

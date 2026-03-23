@@ -117,7 +117,6 @@ interface TokenMetadataDisplayProps {
   dexStatus?: DexStatus;
   creatorInfo?: CreatorInfo;
   shareData?: ShareData;
-  shareCardPageUrl?: string;
 }
 
 const LAUNCHPAD_LOGOS: Record<string, string> = {
@@ -145,7 +144,6 @@ export function TokenMetadataDisplay({
   dexStatus,
   creatorInfo,
   shareData,
-  shareCardPageUrl
 }: TokenMetadataDisplayProps) {
   
   if (isLoading) {
@@ -660,7 +658,6 @@ export function TokenMetadataDisplay({
             casual={(shareData?.smallWallets || 0) + (shareData?.mediumWallets || 0) + (shareData?.largeWallets || 0)}
             healthGrade={shareData?.healthScore?.grade || 'C'}
             healthScore={shareData?.healthScore?.score || 50}
-            shareCardPageUrl={shareCardPageUrl}
           />
         </div>
       </CardContent>
