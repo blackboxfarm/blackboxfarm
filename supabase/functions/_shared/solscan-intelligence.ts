@@ -167,7 +167,9 @@ async function solscanScrapeFundingInfoWithFirecrawl(
     const payload = await resp.json().catch(() => null);
     if (!resp.ok) {
       const detail = payload?.error || payload?.message || `HTTP ${resp.status}`;
-      apiErrors.push(`Firecrawl scrape ${resp.status}: ${String(detail).slice(0, 200)}`);
+      // Fire targeted alert for known Firecrawl errors (402/429/403)
+      const tagged = await handleFirecrawlError('solscan-intelligence', resp.status, String(detail).slice(0, 200));
+      apiErrors.push(tagged);
       return { fundedByLabel: null, fundedByWallet: null };
     }
 

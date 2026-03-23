@@ -83,6 +83,13 @@ async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markd
     throw new Error("FIRECRAWL_API_KEY not configured");
   }
 
+  // Check centralized rate-limit budget
+  const { checkFirecrawlBudget, handleFirecrawlError } = await import('./firecrawl-guard.ts');
+  const budget = checkFirecrawlBudget('dex-top-200');
+  if (!budget.allowed) {
+    throw new Error(`FIRECRAWL_SELF_THROTTLED: ${budget.reason}`);
+  }
+
   const config = SCRAPE_CONFIGS[configIndex] || SCRAPE_CONFIGS[0];
   const attempt = configIndex + 1;
   console.log(`[DexTop200] Scraping ${url} (attempt ${attempt}, waitFor=${config.waitFor})...`);
