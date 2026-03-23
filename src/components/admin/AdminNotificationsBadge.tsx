@@ -261,7 +261,7 @@ export function AdminNotificationsBadge() {
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-7 w-7 shrink-0 border-border/50 hover:bg-amber-500/20 hover:text-amber-300"
+                        className="h-6 w-6 shrink-0 border-border/50 hover:bg-amber-500/20 hover:text-amber-300"
                         onClick={() => copyAuditPrompt(notification)}
                         title="Copy audit help prompt"
                       >
