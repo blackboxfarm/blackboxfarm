@@ -242,13 +242,13 @@ export function AdminNotificationsBadge() {
                     {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                   {categorize(notification.notification_type) === 'audit' && (
                     <>
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-7 w-7 shrink-0 border-border/50 hover:bg-purple-500/20 hover:text-purple-300"
+                        className="h-6 w-6 shrink-0 border-border/50 hover:bg-purple-500/20 hover:text-purple-300"
                         onClick={() => {
                           const question = `Morning Report alert — [${notification.notification_type.toUpperCase()}] ${notification.title}: ${notification.message}. What should I do about this? What's the root cause and recommended fix?`;
                           navigator.clipboard.writeText(question);
