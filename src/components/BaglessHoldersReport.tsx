@@ -666,9 +666,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         ` (Price: $${data.tokenPriceUSD.toFixed(8)}${data.priceSource ? ` from ${data.priceSource}` : ''})` : 
         ' (Price: Failed to fetch)';
       
-      // Generate share card image in background (non-blocking)
-      generateShareCard(data);
-      
       // Notify BlackBox TG group about the report generation (fire-and-forget)
       notifyTelegramGroup(data, tokenMint.trim());
       
