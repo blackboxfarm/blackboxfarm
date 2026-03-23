@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, Shield, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserTier } from '@/hooks/useUserTier';
 
 interface AdBannerProps {
   size: 'leaderboard' | 'rectangle' | 'mobile';
@@ -10,8 +11,12 @@ interface AdBannerProps {
 }
 
 export function AdBanner({ size, position }: AdBannerProps) {
+  const { hasFeature } = useUserTier();
   const [banner, setBanner] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Pro subscribers ($9.99/mo) get ad-free experience
+  if (hasFeature('ad_free')) return null;
 
   // Read token address and utm_community from URL for position 1 token-specific banners
   const urlParams = typeof window !== 'undefined' 

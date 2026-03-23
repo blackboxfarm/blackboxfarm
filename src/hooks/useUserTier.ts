@@ -90,7 +90,7 @@ export function useUserTier() {
               tierKey: 'enterprise',
               displayName: 'Enterprise',
               aiAccessLevel: 'api',
-              features: { basic_report: true, health_dashboard: true, whale_warnings: true, ai_panel: true, full_ai: true, charts: true, csv_export: true, comparisons: true, api_access: true, team_seats: true },
+              features: { basic_report: true, health_dashboard: true, whale_warnings: true, ai_panel: true, full_ai: true, charts: true, csv_export: true, comparisons: true, api_access: true, team_seats: true, ad_free: true },
               maxReportsPerDay: 500,
               isXSubscriber: false,
               xHandleLinked: null,
