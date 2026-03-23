@@ -117,7 +117,6 @@ interface TokenMetadataDisplayProps {
   dexStatus?: DexStatus;
   creatorInfo?: CreatorInfo;
   shareData?: ShareData;
-  shareCardPageUrl?: string;
 }
 
 const LAUNCHPAD_LOGOS: Record<string, string> = {
