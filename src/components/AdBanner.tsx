@@ -106,6 +106,9 @@ export function AdBanner({ size, position }: AdBannerProps) {
     }
   };
 
+  // Pro subscribers ($9.99/mo) get ad-free experience
+  if (hasFeature('ad_free')) return null;
+
   if (loading || !banner) return null;
 
   const IconComponent = banner.icon === 'Shield' ? Shield : banner.icon === 'Zap' ? Zap : TrendingUp;
