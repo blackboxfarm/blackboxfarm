@@ -45,7 +45,9 @@ import {
 } from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 
-const WORKER_URL = "https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana";
+// Use our own edge function that scrapes DexScreener directly
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const SOL_MINTS = new Set(["So11111111111111111111111111111111111111112"]);
 
 interface WorkerPair {
