@@ -41,7 +41,7 @@ const AUTH_TIER: TierInfo = {
   tierKey: 'auth',
   displayName: 'Free Account',
   aiAccessLevel: 'analysis',
-  features: { basic_report: true, health_dashboard: true, whale_warnings: true, ai_panel: true },
+  features: { basic_report: true, health_dashboard: true, security_alerts_critical: true },
   maxReportsPerDay: 10,
   isXSubscriber: false,
   xHandleLinked: null,
