@@ -229,7 +229,7 @@ export default function Top200Tab() {
   const page2 = useMemo(() => (search ? [] : filtered.filter((r) => r._rank > 200)), [filtered, search]);
   const displayRows = activePage === "top200" ? page1 : page2;
 
-  // Edit mutation — update holders_intel_seen_tokens (the underlying table)
+  // Edit mutation — update source tables
   const saveMut = useMutation({
     mutationFn: async (s: EditState) => {
       const mods = s.community_mod_handles
@@ -241,30 +241,39 @@ export default function Top200Tab() {
         .map((h) => h.trim().replace(/^@/, ""))
         .filter(Boolean);
 
-      // Update the source table
-      const { error } = await supabase
-        .from("holders_intel_seen_tokens")
+      // Update ATH on token_lifecycle
+      const athVal = s.ath_24h_usd ? parseFloat(s.ath_24h_usd) : null;
+      const { error: tlErr } = await supabase
+        .from("token_lifecycle")
         .update({
-          community_mod_handles: mods.length ? mods : null,
-          community_admin_handles: admins.length ? admins : null,
-          ath_24h_usd: s.ath_24h_usd ? parseFloat(s.ath_24h_usd) : null,
+          ath_24h_usd: athVal,
           current_status: s.is_rug ? "rugged" : "active",
         })
         .eq("token_mint", s.token_mint);
-      if (error) throw error;
+      if (tlErr) console.warn("token_lifecycle update:", tlErr.message);
 
-      // Also update token_lifecycle if rug
-      if (s.is_rug) {
-        await supabase
-          .from("token_lifecycle")
-          .update({ current_status: "rugged" })
-          .eq("token_mint", s.token_mint);
+      // Update community handles on x_communities via the linked token
+      // Find communities linked to this token
+      const { data: communities } = await supabase
+        .from("x_communities")
+        .select("id, linked_token_mints")
+        .contains("linked_token_mints", [s.token_mint]);
+
+      if (communities && communities.length > 0) {
+        // Update the first linked community
+        const { error: xcErr } = await supabase
+          .from("x_communities")
+          .update({
+            moderator_usernames: mods.length ? mods : null,
+            admin_usernames: admins.length ? admins : null,
+          })
+          .eq("id", communities[0].id);
+        if (xcErr) console.warn("x_communities update:", xcErr.message);
       }
     },
     onSuccess: () => {
-      toast({ title: "Token updated", description: "Changes saved. Refresh materialized view to see them in directory." });
+      toast({ title: "Token updated", description: "Changes saved. Refreshing view…" });
       setEditState(null);
-      // Refresh the master directory view
       supabase.rpc("refresh_master_token_directory" as any).then(() => refetch());
     },
     onError: (err: any) => {
