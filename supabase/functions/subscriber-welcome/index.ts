@@ -135,10 +135,10 @@ function generateWelcomeEmail(data: SubscriberWelcomeRequest): string {
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/holders" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ Token Analysis Dashboard</a>
+                          <a href="https://blackbox.farm/holders" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ Token Analysis Dashboard</a>
                         </td>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/pricing" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ Manage Subscription</a>
+                          <a href="https://blackbox.farm/pricing" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ Manage Subscription</a>
                         </td>
                       </tr>
                       <tr>
