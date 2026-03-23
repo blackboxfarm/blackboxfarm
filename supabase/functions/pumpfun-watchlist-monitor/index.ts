@@ -146,12 +146,9 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
 // === MAYHEM MODE CHECK ===
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!response.ok) return false;
+    const data = await fetchPumpFunCoin(tokenMint, 'watchlist-monitor');
+    if (!data) return false;
     
-    const data = await response.json();
     const totalSupply = data.total_supply || 0;
     const program = data.program || null;
     
