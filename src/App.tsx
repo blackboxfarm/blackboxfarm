@@ -123,7 +123,7 @@ const App = () => {
                       <Route path="/breadcrumbs" element={<SuperAdminRoute><BreadCrumbs /></SuperAdminRoute>} />
                       <Route path="/helius-usage" element={<SuperAdminRoute><HeliusUsage /></SuperAdminRoute>} />
                       <Route path="/token-analysis" element={<SuperAdminRoute><TokenAnalysisDownload /></SuperAdminRoute>} />
-                      <Route path="/share-card-demo" element={<SuperAdminRoute><ShareCardDemoPage /></SuperAdminRoute>} />
+                      
                       <Route path="/bumpbot" element={<BumpBotLanding />} />
                       <Route path="/volumebot" element={<VolumeBotLanding />} />
                       <Route path="/holders-info" element={<HoldersLanding />} />

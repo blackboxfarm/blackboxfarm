@@ -658,7 +658,6 @@ export function TokenMetadataDisplay({
             casual={(shareData?.smallWallets || 0) + (shareData?.mediumWallets || 0) + (shareData?.largeWallets || 0)}
             healthGrade={shareData?.healthScore?.grade || 'C'}
             healthScore={shareData?.healthScore?.score || 50}
-            shareCardPageUrl={shareCardPageUrl}
           />
         </div>
       </CardContent>
