@@ -201,13 +201,13 @@ export function AdminNotificationsBadge() {
           {items.map((notification) => (
             <div
               key={notification.id}
-              className={`p-3 hover:bg-muted/50 transition-colors ${!notification.is_read ? 'bg-primary/5' : ''}`}
+              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''}`}
             >
-              <div className="flex items-start gap-3">
-                <span className="text-lg mt-0.5">{getTypeEmoji(notification.notification_type)}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-medium text-sm truncate text-foreground">
+              <div className="flex items-start gap-2 max-w-full overflow-hidden">
+                <span className="text-lg mt-0.5 shrink-0">{getTypeEmoji(notification.notification_type)}</span>
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-2 mb-0.5 overflow-hidden">
+                    <span className="font-medium text-sm truncate block text-foreground">
                       {notification.title}
                     </span>
                   </div>
@@ -304,7 +304,7 @@ export function AdminNotificationsBadge() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[420px] p-0" align="end">
+      <PopoverContent className="w-[400px] max-w-[400px] p-0 overflow-hidden" align="end">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="font-semibold text-foreground">Admin Alerts</h3>
           <div className="flex items-center gap-1">
@@ -322,7 +322,7 @@ export function AdminNotificationsBadge() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabCategory)} className="w-full">
-          <TabsList className="w-full rounded-none border-b border-border bg-transparent h-auto p-0">
+          <TabsList className="w-full rounded-none border-b border-border bg-transparent h-auto p-0 flex-nowrap">
             <TabsTrigger
               value="signups"
               className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-green-500 data-[state=active]:bg-transparent py-2.5 gap-1.5"
