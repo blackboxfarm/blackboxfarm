@@ -291,6 +291,31 @@ export default function Top200Tab() {
     },
   });
 
+  // Fetch overflow tokens (previously in top 200, now fallen out)
+  const { data: overflowTokens, isLoading: overflowLoading } = useQuery({
+    queryKey: ["dex-overflow-201-500"],
+    queryFn: async () => {
+      // Get tokens that have highest_rank set (were in top 200 before) but are NOT currently in top 200
+      const { data, error } = await supabase
+        .from("token_lifecycle")
+        .select("*")
+        .eq("is_currently_top_200", false)
+        .not("highest_rank", "is", null)
+        .order("last_seen_at", { ascending: false })
+        .limit(300);
+
+      if (error) throw error;
+
+      return (data || [])
+        .filter((t: any) => !SOL_MINTS.has(t.token_mint))
+        .map((t: any, index: number) => ({
+          ...t,
+          dex_url: `https://dexscreener.com/solana/${t.token_mint}`,
+          _rank: 201 + index,
+        }));
+    },
+  });
+
   const filtered = useMemo(() => {
     if (!allTokens) return [];
     if (!search) return allTokens;
