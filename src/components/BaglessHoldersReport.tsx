@@ -1757,7 +1757,13 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                       }`}>
                         {report.healthScore.grade}
                       </div>
-                      <div className="text-xs text-muted-foreground">{report.healthScore.score}/100</div>
+                      {!isAnonymous ? (
+                        <div className="text-xs text-muted-foreground">{report.healthScore.score}/100</div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Lock className="h-2.5 w-2.5" /> Sign up to see score
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1819,8 +1825,11 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                       variant={holderViewMode === 'granular' ? 'default' : 'outline'} 
                       size="sm" 
                       className="h-6 px-2 text-xs"
-                      onClick={() => setHolderViewMode('granular')}
+                      onClick={() => isPro ? setHolderViewMode('granular') : undefined}
+                      disabled={!isPro}
+                      title={!isPro ? 'Pro feature — upgrade to unlock granular view' : undefined}
                     >
+                      {!isPro && <Lock className="h-2.5 w-2.5 mr-1" />}
                       Granular
                     </Button>
                   </div>
@@ -2395,8 +2404,11 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                       variant={sedimentViewMode === 'granular' ? 'default' : 'outline'} 
                       size="sm" 
                       className="h-6 px-2 text-xs"
-                      onClick={() => setSedimentViewMode('granular')}
+                      onClick={() => isPro ? setSedimentViewMode('granular') : undefined}
+                      disabled={!isPro}
+                      title={!isPro ? 'Pro feature — upgrade to unlock granular view' : undefined}
                     >
+                      {!isPro && <Lock className="h-2.5 w-2.5 mr-1" />}
                       Granular
                     </Button>
                   </div>
@@ -2978,14 +2990,18 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                             ${(holder.usdValue || 0).toFixed(2)}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleFlagWallet(holder.owner)}
-                              className="h-7 w-7 p-0"
-                            >
-                              <Flag className="h-3 w-3" />
-                            </Button>
+                            {isPro ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleFlagWallet(holder.owner)}
+                                className="h-7 w-7 p-0"
+                              >
+                                <Flag className="h-3 w-3" />
+                              </Button>
+                            ) : (
+                              <Lock className="h-3 w-3 text-muted-foreground" />
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -3006,14 +3022,18 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                           <div className="font-mono text-sm font-bold text-green-600">
                             ${(holder.usdValue || 0).toFixed(2)}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleFlagWallet(holder.owner)}
-                            className="h-7 w-7 p-0"
-                          >
-                            <Flag className="h-3 w-3" />
-                          </Button>
+                          {isPro ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleFlagWallet(holder.owner)}
+                              className="h-7 w-7 p-0"
+                            >
+                              <Flag className="h-3 w-3" />
+                            </Button>
+                          ) : (
+                            <Lock className="h-3 w-3 text-muted-foreground" />
+                          )}
                         </div>
                       </div>
                       <div className="space-y-1">
