@@ -245,13 +245,13 @@ export function AdminNotificationsBadge() {
                 <div className="flex items-center gap-1 shrink-0">
                   {category === 'audit' && (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-primary"
+                      className="h-7 w-7 border-border/50 text-foreground hover:text-purple-400 hover:border-purple-400/50"
                       onClick={() => copyAuditPrompt(notification)}
                       title="Copy prompt to ask about this alert"
                     >
-                      <HelpCircle className="h-3.5 w-3.5" />
+                      <HelpCircle className="h-4 w-4" />
                     </Button>
                   )}
                   {!notification.is_read && (
