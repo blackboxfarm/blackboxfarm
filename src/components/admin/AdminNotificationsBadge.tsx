@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket, Archive } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket, Archive, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
