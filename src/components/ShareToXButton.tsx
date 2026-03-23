@@ -1,4 +1,4 @@
-import { Share2, MessageCircle, Send, Loader2 } from "lucide-react";
+import { Share2, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

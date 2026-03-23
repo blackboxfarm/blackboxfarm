@@ -2621,8 +2621,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
                 healthGrade={report?.healthScore?.grade || 'C'}
                 healthScore={report?.healthScore?.score || 50}
-                shareCardPageUrl={shareCardPageUrl}
-                isGenerating={isGeneratingShareCard}
                   />
                 </div>
               </div>
