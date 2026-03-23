@@ -1310,6 +1310,7 @@ serve(withRunLog('pumpfun-token-enricher', async (req) => {
 
     if (action === 'enrich') {
       console.log('🔄 Starting token enrichment...');
+      resetPumpFunRunStats();
       
       const config = await getConfig(supabase);
       console.log('Config:', config);
