@@ -71,7 +71,8 @@ function getPreviousSnapshotSlots(currentSlot: string): string[] {
   return slots;
 }
 
-const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
+// Cloudflare worker suspended — now using internal dex-top-200 edge function
+// const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
 
 // Fetch mint address from DexScreener pair page if worker didn't resolve it
 async function fetchMintFromPair(pairId: string): Promise<{ mint: string | null; symbol: string; name: string }> {
