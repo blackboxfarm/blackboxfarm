@@ -211,7 +211,7 @@ export function AdminNotificationsBadge() {
                       {notification.title}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground whitespace-pre-line line-clamp-2">
+                  <p className="text-xs text-muted-foreground whitespace-pre-line line-clamp-2 break-all overflow-hidden">
                     {notification.message}
                   </p>
                   {notification.metadata && Object.keys(notification.metadata).length > 0 && (
