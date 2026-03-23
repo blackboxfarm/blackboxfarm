@@ -106,8 +106,8 @@ export function AdBanner({ size, position }: AdBannerProps) {
     }
   };
 
-  // Pro subscribers ($9.99/mo) get ad-free experience
-  if (hasFeature('ad_free')) return null;
+  // Pro subscribers ($9.99/mo) get ad-free on banners 1, 2, 3 — banner 4 always shows
+  if (hasFeature('ad_free') && position <= 3) return null;
 
   if (loading || !banner) return null;
 
