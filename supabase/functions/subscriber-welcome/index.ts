@@ -436,7 +436,7 @@ function generateCancellationEmail(email: string, name: string | undefined, tier
             <tr>
               <td style="background: #080812; padding: 24px 40px; border-top: 1px solid #1e293b;">
                 <p style="color: #475569; font-size: 12px; text-align: center; margin: 0;">
-                  BlackBox Farm · <a href="https://blackbox.farm" style="color: #00e5ff60; text-decoration: none;">blackbox.farm</a>
+                  BlackBox Farm · <a href="https://blackbox.farm" style="color: #D4AF37; text-decoration: none;">blackbox.farm</a>
                 </p>
               </td>
             </tr>
