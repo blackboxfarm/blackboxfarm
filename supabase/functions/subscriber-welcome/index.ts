@@ -159,7 +159,7 @@ function generateWelcomeEmail(data: SubscriberWelcomeRequest): string {
                 <td style="padding: 0 40px 40px;">
                   <div style="background: #0d1a2d; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; text-align: center;">
                     <p style="color: #64748b; font-size: 14px; margin: 0 0 8px 0;">Need help getting started?</p>
-                    <a href="https://blackbox.farm/contact" style="color: #00e5ff; text-decoration: none; font-weight: 600;">Contact our support team →</a>
+                    <a href="https://blackbox.farm/contact" style="color: #D4AF37; text-decoration: none; font-weight: 600;">Contact our support team →</a>
                   </div>
                 </td>
               </tr>
