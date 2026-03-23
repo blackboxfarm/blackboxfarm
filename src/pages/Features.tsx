@@ -76,8 +76,9 @@ const TIERS = [
     color: "border-primary",
     badge: "bg-primary text-primary-foreground",
     highlight: true,
-    features: [
+     features: [
       { name: "Everything in X Subscriber", included: true },
+      { name: "Ad-Free Experience", included: true },
       { name: "Full AI Risk Assessment", included: true },
       { name: "Dev Reputation History", included: true },
       { name: "Extended Analysis (all cards)", included: true },

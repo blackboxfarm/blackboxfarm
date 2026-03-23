@@ -40,6 +40,7 @@ const features: PricingFeature[] = [
   { label: 'API Access', free: false, auth: false, xSub: false, pro: false, dev: true, enterprise: true, comingSoon: true },
   { label: 'Webhooks', free: false, auth: false, xSub: false, pro: false, dev: true, enterprise: true, comingSoon: true },
   { label: 'Team Seats', free: '1', auth: '1', xSub: '1', pro: '1', dev: '1', enterprise: '4', comingSoon: true },
+  { label: 'Ad-Free Experience', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   { label: 'Priority Support', free: false, auth: false, xSub: false, pro: false, dev: false, enterprise: true, comingSoon: true },
   // Telegram Bot features
   { label: '🤖 TG Bot: /holders', free: false, auth: 'Lite', xSub: 'Full', pro: 'Full+', dev: 'Full+', enterprise: 'Full+' },
