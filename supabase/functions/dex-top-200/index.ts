@@ -61,6 +61,20 @@ async function batchResolvePairs(pairIds: string[]): Promise<Map<string, Resolve
   return resolved;
 }
 
+// Classify error type for targeted alerts
+function classifyError(error: string): { type: string; severity: string; emoji: string; action: string } {
+  if (error.includes('FIRECRAWL_CREDITS_EXHAUSTED')) {
+    return { type: 'credits_exhausted', severity: 'CRITICAL', emoji: '💳', action: 'Top up Firecrawl credits immediately — scraping is halted.' };
+  }
+  if (error.includes('FIRECRAWL_RATE_LIMITED')) {
+    return { type: 'rate_limited', severity: 'WARNING', emoji: '⏱️', action: 'Rate limited by Firecrawl. Will auto-recover on next tick. If persistent, reduce frequency.' };
+  }
+  if (error.includes('FIRECRAWL_BLOCKED')) {
+    return { type: 'blocked', severity: 'CRITICAL', emoji: '🚫', action: 'Possible IP/fingerprint block. Check Firecrawl dashboard and consider rotating approach.' };
+  }
+  return { type: 'unknown', severity: 'ERROR', emoji: '❌', action: 'Investigate logs for root cause.' };
+}
+
 // Log scrape health to DB and fire admin alert on failure
 async function logScrapeHealth(
   supabase: any,
@@ -100,29 +114,36 @@ async function logScrapeHealth(
     console.error('[DexTop200] Failed to log run:', e);
   }
 
+  // Detect specific Firecrawl error types from page errors
+  const allErrors = [health.page1_error, health.page2_error, error].filter(Boolean);
+  const firecrawlIssue = allErrors.map(e => classifyError(e!)).find(c => c.type !== 'unknown');
+
   // Fire admin alert on failure or partial
   if (isFailed || isPartial) {
-    const severity = isFailed ? '🔴 CRITICAL' : '🟡 WARNING';
+    const classification = firecrawlIssue || { type: 'scrape_failure', severity: isFailed ? 'CRITICAL' : 'WARNING', emoji: isFailed ? '🔴' : '🟡', action: 'Check DexScreener page structure for changes.' };
+
     const details = [
       `Page 1: ${health.page1_ok ? `✅ ${health.page1_count} tokens` : `❌ ${health.page1_error}`}`,
       `Page 2: ${health.page2_ok ? `✅ ${health.page2_count} tokens` : `❌ ${health.page2_error}`}`,
       `Total parsed: ${health.total_parsed}`,
       health.retry_used ? '⚠️ Retry was used (possible intermittent block)' : '',
+      `\n🔧 Action: ${classification.action}`,
       error ? `Error: ${error}` : '',
     ].filter(Boolean).join('\n');
 
     try {
       await supabase.from('admin_notifications').insert({
-        notification_type: 'scrape_health',
-        title: `${severity} DexScreener Scrape ${isFailed ? 'FAILED' : 'Partial'}`,
+        notification_type: firecrawlIssue ? `firecrawl_${firecrawlIssue.type}` : 'scrape_health',
+        title: `${classification.emoji} ${classification.severity}: DexScreener Scrape ${isFailed ? 'FAILED' : 'Partial'} — ${classification.type}`,
         message: details,
         metadata: {
           scrape_status: status,
+          error_type: classification.type,
           health,
           elapsed_ms: elapsed,
         },
       });
-      console.log(`[DexTop200] Admin alert fired: ${status}`);
+      console.log(`[DexTop200] Admin alert fired: ${classification.type} (${status})`);
     } catch (e) {
       console.error('[DexTop200] Failed to create admin alert:', e);
     }
@@ -142,9 +163,9 @@ async function logScrapeHealth(
 
       if (consecutiveFailures >= 3) {
         await supabase.from('admin_notifications').insert({
-          notification_type: 'scrape_health',
-          title: '🚨 ESCALATION: DexScreener scrape failing repeatedly',
-          message: `${consecutiveFailures} consecutive failures detected. Possible persistent block by DexScreener or Firecrawl issue. Manual investigation required.\n\nRecent errors:\n${recentRuns?.slice(0, 3).map((r: any) => r.metadata?.page1_error || r.metadata?.page2_error || 'unknown').join('\n')}`,
+          notification_type: 'scrape_escalation',
+          title: `🚨 ESCALATION: DexScreener scrape failing ${consecutiveFailures}x in a row`,
+          message: `${consecutiveFailures} consecutive failures detected.\n\nError types:\n${recentRuns?.slice(0, 3).map((r: any) => r.metadata?.error_type || r.metadata?.page1_error || 'unknown').join('\n')}\n\nManual investigation required.`,
           metadata: { consecutive_failures: consecutiveFailures },
         });
         console.error(`[DexTop200] 🚨 ESCALATION: ${consecutiveFailures} consecutive failures`);
