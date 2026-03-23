@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { scrapeDexTopPages } from "../_shared/dex-top-pages.ts";
 
 const corsHeaders = {
@@ -61,19 +61,131 @@ async function batchResolvePairs(pairIds: string[]): Promise<Map<string, Resolve
   return resolved;
 }
 
-serve(async (req) => {
+// Log scrape health to DB and fire admin alert on failure
+async function logScrapeHealth(
+  supabase: any,
+  health: any,
+  elapsed: number,
+  resolvedCount: number,
+  totalCount: number,
+  error?: string
+) {
+  const isHealthy = health.page1_ok && health.page2_ok && health.total_parsed >= 150;
+  const isPartial = (health.page1_ok || health.page2_ok) && health.total_parsed > 0 && health.total_parsed < 150;
+  const isFailed = !health.page1_ok && !health.page2_ok;
+
+  const status = isFailed ? 'failed' : isPartial ? 'partial' : 'healthy';
+
+  // Log to edge_function_runs
+  try {
+    await supabase.from('edge_function_runs').insert({
+      function_name: 'dex-top-200',
+      status: isFailed ? 'error' : 'success',
+      duration_ms: elapsed,
+      metadata: {
+        scrape_status: status,
+        page1_ok: health.page1_ok,
+        page2_ok: health.page2_ok,
+        page1_count: health.page1_count,
+        page2_count: health.page2_count,
+        page1_error: health.page1_error,
+        page2_error: health.page2_error,
+        total_parsed: health.total_parsed,
+        resolved: resolvedCount,
+        retry_used: health.retry_used,
+        error: error || null,
+      },
+    });
+  } catch (e) {
+    console.error('[DexTop200] Failed to log run:', e);
+  }
+
+  // Fire admin alert on failure or partial
+  if (isFailed || isPartial) {
+    const severity = isFailed ? '🔴 CRITICAL' : '🟡 WARNING';
+    const details = [
+      `Page 1: ${health.page1_ok ? `✅ ${health.page1_count} tokens` : `❌ ${health.page1_error}`}`,
+      `Page 2: ${health.page2_ok ? `✅ ${health.page2_count} tokens` : `❌ ${health.page2_error}`}`,
+      `Total parsed: ${health.total_parsed}`,
+      health.retry_used ? '⚠️ Retry was used (possible intermittent block)' : '',
+      error ? `Error: ${error}` : '',
+    ].filter(Boolean).join('\n');
+
+    try {
+      await supabase.from('admin_notifications').insert({
+        notification_type: 'scrape_health',
+        title: `${severity} DexScreener Scrape ${isFailed ? 'FAILED' : 'Partial'}`,
+        message: details,
+        metadata: {
+          scrape_status: status,
+          health,
+          elapsed_ms: elapsed,
+        },
+      });
+      console.log(`[DexTop200] Admin alert fired: ${status}`);
+    } catch (e) {
+      console.error('[DexTop200] Failed to create admin alert:', e);
+    }
+
+    // Check consecutive failures
+    try {
+      const { data: recentRuns } = await supabase
+        .from('edge_function_runs')
+        .select('status, metadata')
+        .eq('function_name', 'dex-top-200')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const consecutiveFailures = recentRuns?.filter(
+        (r: any) => r.status === 'error' || r.metadata?.scrape_status === 'failed'
+      ).length || 0;
+
+      if (consecutiveFailures >= 3) {
+        await supabase.from('admin_notifications').insert({
+          notification_type: 'scrape_health',
+          title: '🚨 ESCALATION: DexScreener scrape failing repeatedly',
+          message: `${consecutiveFailures} consecutive failures detected. Possible persistent block by DexScreener or Firecrawl issue. Manual investigation required.\n\nRecent errors:\n${recentRuns?.slice(0, 3).map((r: any) => r.metadata?.page1_error || r.metadata?.page2_error || 'unknown').join('\n')}`,
+          metadata: { consecutive_failures: consecutiveFailures },
+        });
+        console.error(`[DexTop200] 🚨 ESCALATION: ${consecutiveFailures} consecutive failures`);
+      }
+    } catch (e) {
+      console.error('[DexTop200] Failed to check consecutive failures:', e);
+    }
+  }
+}
+
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, serviceKey);
+
   try {
     const startTime = Date.now();
-    const rankedPairs = await scrapeDexTopPages();
+    const { pairs: rankedPairs, health } = await scrapeDexTopPages();
+
+    // If total failure, log and return error
+    if (rankedPairs.length === 0) {
+      const elapsed = Date.now() - startTime;
+      await logScrapeHealth(supabase, health, elapsed, 0, 0, 'Zero tokens parsed from both pages');
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Scrape returned 0 tokens — possible block or page change',
+        health,
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const resolved = await batchResolvePairs([...new Set(rankedPairs.map((pair) => pair.pairId))]);
 
     const finalTokens = rankedPairs.map((entry) => {
       const detail = resolved.get(entry.pairId.toLowerCase());
-
       return {
         rank: entry.rank,
         pairId: entry.pairId,
@@ -91,6 +203,10 @@ serve(async (req) => {
 
     const elapsed = Date.now() - startTime;
     const resolvedCount = finalTokens.filter((token) => !!token.tokenMint).length;
+
+    // Log health (async, don't block response)
+    logScrapeHealth(supabase, health, elapsed, resolvedCount, finalTokens.length).catch(() => {});
+
     console.log(`[DexTop200] ✅ Done in ${elapsed}ms: ${finalTokens.length} ranked, ${resolvedCount} resolved`);
 
     return new Response(JSON.stringify({
@@ -100,13 +216,25 @@ serve(async (req) => {
       elapsed_ms: elapsed,
       total: finalTokens.length,
       resolved: resolvedCount,
+      health,
       tokens: finalTokens,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
+    const elapsed = Date.now() - Date.now();
     console.error('[DexTop200] Error:', error);
+
+    // Log the catastrophic failure
+    await logScrapeHealth(supabase, {
+      page1_ok: false, page2_ok: false,
+      page1_count: 0, page2_count: 0,
+      page1_error: error instanceof Error ? error.message : String(error),
+      page2_error: null,
+      total_parsed: 0, retry_used: false,
+    }, 0, 0, 0, error instanceof Error ? error.message : String(error));
+
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : String(error),
