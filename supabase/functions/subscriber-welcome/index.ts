@@ -143,10 +143,10 @@ function generateWelcomeEmail(data: SubscriberWelcomeRequest): string {
                       </tr>
                       <tr>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/tgbot" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ Telegram Bot Setup</a>
+                          <a href="https://blackbox.farm/tgbot" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ Telegram Bot Setup</a>
                         </td>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/features" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ All Features</a>
+                          <a href="https://blackbox.farm/features" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ All Features</a>
                         </td>
                       </tr>
                     </table>
