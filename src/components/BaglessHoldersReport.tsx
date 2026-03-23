@@ -2398,8 +2398,11 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                       variant={sedimentViewMode === 'granular' ? 'default' : 'outline'} 
                       size="sm" 
                       className="h-6 px-2 text-xs"
-                      onClick={() => setSedimentViewMode('granular')}
+                      onClick={() => isPro ? setSedimentViewMode('granular') : undefined}
+                      disabled={!isPro}
+                      title={!isPro ? 'Pro feature — upgrade to unlock granular view' : undefined}
                     >
+                      {!isPro && <Lock className="h-2.5 w-2.5 mr-1" />}
                       Granular
                     </Button>
                   </div>
