@@ -72,6 +72,9 @@ function classifyError(error: string): { type: string; severity: string; emoji: 
   if (error.includes('FIRECRAWL_BLOCKED')) {
     return { type: 'blocked', severity: 'CRITICAL', emoji: '🚫', action: 'Possible IP/fingerprint block. Check Firecrawl dashboard and consider rotating approach.' };
   }
+  if (error.includes('FIRECRAWL_SELF_THROTTLED')) {
+    return { type: 'self_throttled', severity: 'WARNING', emoji: '⚠️', action: 'Internal rate limiter activated to protect credits. Will auto-resume after cooldown.' };
+  }
   return { type: 'unknown', severity: 'ERROR', emoji: '❌', action: 'Investigate logs for root cause.' };
 }
 
