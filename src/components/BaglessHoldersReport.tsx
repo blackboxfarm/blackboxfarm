@@ -2984,14 +2984,18 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                             ${(holder.usdValue || 0).toFixed(2)}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleFlagWallet(holder.owner)}
-                              className="h-7 w-7 p-0"
-                            >
-                              <Flag className="h-3 w-3" />
-                            </Button>
+                            {isPro ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleFlagWallet(holder.owner)}
+                                className="h-7 w-7 p-0"
+                              >
+                                <Flag className="h-3 w-3" />
+                              </Button>
+                            ) : (
+                              <Lock className="h-3 w-3 text-muted-foreground" />
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
