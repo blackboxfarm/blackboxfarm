@@ -45,7 +45,9 @@ import {
 } from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 
-const WORKER_URL = "https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana";
+// Use our own edge function that scrapes DexScreener directly
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const SOL_MINTS = new Set(["So11111111111111111111111111111111111111112"]);
 
 interface WorkerPair {
@@ -242,24 +244,38 @@ export default function Top200Tab() {
   const { data: allTokens, isLoading, refetch } = useQuery({
     queryKey: ["dex-top-500-leaderboard"],
     queryFn: async () => {
-      const workerResponse = await fetch(WORKER_URL);
-      if (!workerResponse.ok) {
-        throw new Error(`Cloudflare worker returned ${workerResponse.status}`);
+      // Call our edge function that scrapes DexScreener directly
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/dex-top-200`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Edge function returned ${res.status}`);
       }
 
-      const workerData = await workerResponse.json();
-      const workerPairs: WorkerPair[] = (workerData.pairs || [])
-        .filter((pair: any) => pair.ok && pair.tokenMint)
-        .filter((pair: any) => !SOL_MINTS.has(pair.tokenMint))
-        .filter((pair: any) => !(pair.symbol === "SOL" && pair.name === "Solana"));
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Unknown error');
 
-      const uniquePairs = workerPairs.filter(
-        (pair, index, arr) => arr.findIndex((entry) => entry.tokenMint === pair.tokenMint) === index,
+      const tokens = (data.tokens || [])
+        .filter((t: any) => t.tokenMint)
+        .filter((t: any) => !SOL_MINTS.has(t.tokenMint))
+        .filter((t: any) => !(t.symbol === "SOL" && t.name === "Solana"));
+
+      // Dedupe by tokenMint
+      const uniqueTokens = tokens.filter(
+        (t: any, i: number, arr: any[]) => arr.findIndex((e: any) => e.tokenMint === t.tokenMint) === i,
       );
 
-      if (uniquePairs.length === 0) return [];
+      if (uniqueTokens.length === 0) return [];
 
-      const mints = uniquePairs.map((pair) => pair.tokenMint);
+      // Cross-reference with our DB for editable fields
+      const mints = uniqueTokens.map((t: any) => t.tokenMint);
       const { data: dbTokens, error } = await supabase
         .from("token_lifecycle")
         .select("*")
@@ -269,20 +285,21 @@ export default function Top200Tab() {
 
       const dbMap = new Map((dbTokens || []).map((token: any) => [token.token_mint, token]));
 
-      return uniquePairs.slice(0, 500).map((pair, index) => {
-        const dbToken: any = dbMap.get(pair.tokenMint) || {};
+      return uniqueTokens.map((t: any, index: number) => {
+        const dbToken: any = dbMap.get(t.tokenMint) || {};
 
         return {
           ...dbToken,
-          token_mint: pair.tokenMint,
-          symbol: dbToken.symbol ?? pair.symbol ?? null,
-          name: dbToken.name ?? pair.name ?? null,
-          liquidity_usd: pair.liquidityUsd ?? dbToken.liquidity_usd ?? null,
-          volume_24h: pair.volume24h ?? dbToken.volume_24h ?? null,
-          price_usd: pair.priceUsd ?? dbToken.price_usd ?? null,
-          fdv: pair.fdv ?? dbToken.fdv ?? null,
-          dex_url: pair.url,
-          _rank: index + 1,
+          token_mint: t.tokenMint,
+          symbol: dbToken.symbol ?? t.symbol ?? null,
+          name: dbToken.name ?? t.name ?? null,
+          liquidity_usd: t.liquidityUsd ?? dbToken.liquidity_usd ?? null,
+          volume_24h: t.volume24h ?? dbToken.volume_24h ?? null,
+          price_usd: t.priceUsd ?? dbToken.price_usd ?? null,
+          fdv: t.fdv ?? dbToken.fdv ?? null,
+          market_cap: t.marketCap ?? dbToken.market_cap ?? null,
+          dex_url: t.url,
+          _rank: t.rank || (index + 1),
         };
       });
     },
