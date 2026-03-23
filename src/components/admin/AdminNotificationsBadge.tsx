@@ -247,11 +247,11 @@ export function AdminNotificationsBadge() {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-7 w-7 border-border/50 text-foreground hover:text-purple-400 hover:border-purple-400/50"
+                      className="h-8 w-8 border-purple-500/50 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 hover:border-purple-400"
                       onClick={() => copyAuditPrompt(notification)}
                       title="Copy prompt to ask about this alert"
                     >
-                      <HelpCircle className="h-4 w-4" />
+                      <HelpCircle className="h-5 w-5" />
                     </Button>
                   )}
                   {!notification.is_read && (
