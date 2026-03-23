@@ -22,13 +22,13 @@ const TIERS = [
     badge: "bg-muted text-muted-foreground",
     features: [
       { name: "Basic Holder Breakdown", included: true },
-      { name: "Top 25 Holders Table", included: true },
-      { name: "Liquidity & Supply Stats", included: true },
-      { name: "Stability Score", included: true },
-      { name: "Telegram /quick command", included: true },
-      { name: "AI Analysis", included: false },
-      { name: "Bubble Map", included: false },
-      { name: "Wallet Deep Scan", included: false },
+      { name: "Health Grade (letter only)", included: true },
+      { name: "Simple 4-Tier View", included: true },
+      { name: "AI Summary Teaser", included: "partial" },
+      { name: "3 reports/day", included: true },
+      { name: "Extended Analysis", included: false },
+      { name: "Risk Assessment", included: false },
+      { name: "Dev Reputation", included: false },
     ]
   },
   {
@@ -40,13 +40,13 @@ const TIERS = [
     badge: "bg-primary/10 text-primary",
     features: [
       { name: "Everything in Free", included: true },
-      { name: "Extended Analysis Panel", included: true },
-      { name: "Security Alerts & Flags", included: true },
-      { name: "Reputation Cross-Reference", included: true },
+      { name: "Health Score + Grade", included: true },
+      { name: "Distribution Integrity", included: true },
+      { name: "Security Alerts (critical)", included: true },
+      { name: "10 reports/day", included: true },
       { name: "Telegram /holders, /ca", included: true },
-      { name: "AI Narrative Reports", included: false },
-      { name: "Bubble Map (limited)", included: "partial" },
-      { name: "Oracle Deep Scan", included: false },
+      { name: "Risk Assessment", included: false },
+      { name: "Dev Reputation", included: false },
     ]
   },
   {
@@ -59,13 +59,13 @@ const TIERS = [
     highlight: false,
     features: [
       { name: "Everything in Signed In", included: true },
-      { name: "AI Analysis & Risk Scores", included: true },
+      { name: "AI Analysis Overview", included: true },
       { name: "Telegram /risk, /ai", included: true },
       { name: "Bubble Map (good access)", included: true },
-      { name: "Dev Wallet Tracing", included: true },
-      { name: "KYC Root Discovery", included: "partial" },
-      { name: "Full Oracle Network", included: false },
-      { name: "API Access", included: false },
+      { name: "Dev Wallet Tracing", included: "partial" },
+      { name: "X Community Access", included: "partial" },
+      { name: "Full Extended Analysis", included: false },
+      { name: "Dev Reputation History", included: false },
     ]
   },
   {
@@ -78,13 +78,13 @@ const TIERS = [
     highlight: true,
     features: [
       { name: "Everything in X Subscriber", included: true },
-      { name: "Full AI Narrative Reports", included: true },
-      { name: "Bubble Map (unlimited)", included: true },
-      { name: "Oracle Deep + Spider Scan", included: true },
-      { name: "KYC Root Network Mapping", included: true },
-      { name: "Recycled Identity Detection", included: true },
+      { name: "Full AI Risk Assessment", included: true },
+      { name: "Dev Reputation History", included: true },
+      { name: "Extended Analysis (all cards)", included: true },
+      { name: "Whale Tracking + Retention", included: true },
+      { name: "Private X Community Alerts", included: true },
       { name: "Full Telegram Bot Suite", included: true },
-      { name: "Priority API Access", included: true },
+      { name: "CSV Export + Unlimited", included: true },
     ]
   },
 ];

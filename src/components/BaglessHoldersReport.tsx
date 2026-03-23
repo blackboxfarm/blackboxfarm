@@ -33,6 +33,8 @@ import { AIInterpretationLocked } from '@/components/holders/AIInterpretationLoc
 import { AISummaryTeaser } from '@/components/premium/AISummaryTeaser';
 import { TierGate } from '@/components/premium/TierGate';
 import { useUserTier } from '@/hooks/useUserTier';
+import { ProFeatureTeasers } from '@/components/holders/ProFeatureTeasers';
+import { SubscriberPromoSection } from '@/components/holders/SubscriberPromoSection';
 
 interface TokenHolder {
   owner: string;
@@ -305,7 +307,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const { tierInfo, meetsMinimumTier, isAnonymous } = useUserTier();
+  const { tierInfo, meetsMinimumTier, isAnonymous, isPro } = useUserTier();
   // Background data collection - builds historical data for premium features
   useTokenDataCollection(
     report?.tokenMint || null,
@@ -2018,12 +2020,23 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                         lpBalance: report.lpBalance,
                       }}
                       liquidityPoolsDetected={report.liquidityPoolsDetected}
+                      isPro={isPro}
                     />
                   );
                 })()}
               </div>
 
-              {/* Security Alerts Card - Hidden per user request */}
+              {/* Pro Feature Teasers - Risk Assessment & Dev Reputation */}
+              <div className="mb-4 md:mb-6">
+                <ProFeatureTeasers isPro={isPro} />
+              </div>
+
+              {/* Telegram Bot & X Community Promos */}
+              <div className="mb-4 md:mb-6">
+                <SubscriberPromoSection />
+              </div>
+
+
               {false && (() => {
                 const alerts = detectSuspiciousPatterns();
                 if (alerts.length === 0) return null;

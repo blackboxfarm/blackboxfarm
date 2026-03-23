@@ -2,8 +2,9 @@ import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Lock, Sparkles, TrendingUp, Shield, AlertTriangle, Users } from 'lucide-react';
+import { Lock, Sparkles, TrendingUp, Shield, AlertTriangle, Users, Crown } from 'lucide-react';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { useNavigate } from 'react-router-dom';
 import { StabilityScoreCard } from './StabilityScoreCard';
 import { SecurityAlertsCard } from './SecurityAlertsCard';
 import { Top25HoldersCard } from './Top25HoldersCard';
@@ -68,6 +69,7 @@ interface ExtendedAnalysisSectionProps {
   securityAlerts: SecurityAlert[];
   lpAnalysis: LPAnalysisData;
   liquidityPoolsDetected: number;
+  isPro?: boolean;
 }
 
 export function ExtendedAnalysisSection({
@@ -81,8 +83,10 @@ export function ExtendedAnalysisSection({
   securityAlerts,
   lpAnalysis,
   liquidityPoolsDetected,
+  isPro = false,
 }: ExtendedAnalysisSectionProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = React.useState(false);
 
   // Not logged in - show teaser
@@ -143,7 +147,57 @@ export function ExtendedAnalysisSection({
     );
   }
 
-  // Logged in - show full extended analysis
+  // Logged in but not Pro - show upgrade teaser
+  if (!isPro) {
+    return (
+      <>
+        <Card className="border-primary/30 bg-gradient-to-br from-primary/5 via-background to-primary/10 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent" />
+          <CardContent className="py-8 text-center relative z-10">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+              <Crown className="h-8 w-8 text-yellow-400/70" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2 text-foreground">Extended Analysis</h3>
+            <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+              Upgrade to Pro to unlock whale movement tracking, retention analysis, full Top 25 holder intel, and real-time security alerts.
+            </p>
+            
+            {/* Feature Preview Pills */}
+            <div className="flex flex-wrap justify-center gap-2 mb-6">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/50 rounded-full text-xs">
+                <TrendingUp className="h-3 w-3 text-green-500" />
+                <span>Stability Score</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/50 rounded-full text-xs">
+                <AlertTriangle className="h-3 w-3 text-orange-500" />
+                <span>Security Alerts</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/50 rounded-full text-xs">
+                <Users className="h-3 w-3 text-blue-500" />
+                <span>Top 25 Analysis</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/50 rounded-full text-xs">
+                <Shield className="h-3 w-3 text-purple-500" />
+                <span>Whale Alerts</span>
+              </div>
+            </div>
+            
+            <FeatureThumbnailGallery />
+            
+            <Button 
+              onClick={() => navigate('/pricing')}
+              className="bg-gradient-to-r from-primary to-primary/70"
+            >
+              <Crown className="mr-2 h-4 w-4" />
+              Upgrade to Pro
+            </Button>
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
+
+  // Pro user - show full extended analysis
   return (
     <div className="space-y-4">
       {/* Section Header */}
