@@ -81,7 +81,7 @@ const App = () => {
         <NotificationsProvider>
           <TooltipProvider>
             <div className="min-h-screen flex flex-col">
-              {/* Intel XBot controls moved to /share-card-demo */}
+              
               <Toaster />
               <Sonner />
               <BrowserRouter>
