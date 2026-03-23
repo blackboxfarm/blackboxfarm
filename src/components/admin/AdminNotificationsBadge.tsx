@@ -201,11 +201,11 @@ export function AdminNotificationsBadge() {
           {items.map((notification) => (
             <div
               key={notification.id}
-              className={`p-3 hover:bg-muted/50 transition-colors ${!notification.is_read ? 'bg-primary/5' : ''}`}
+              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''}`}
             >
-              <div className="flex items-start gap-3">
-                <span className="text-lg mt-0.5">{getTypeEmoji(notification.notification_type)}</span>
-                <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-2 max-w-full overflow-hidden">
+                <span className="text-lg mt-0.5 shrink-0">{getTypeEmoji(notification.notification_type)}</span>
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="font-medium text-sm truncate text-foreground">
                       {notification.title}
