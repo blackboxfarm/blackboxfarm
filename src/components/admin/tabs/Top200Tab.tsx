@@ -162,18 +162,46 @@ export default function Top200Tab() {
 
   const doSearch = useCallback(() => { setSearch(searchInput.trim()); }, [searchInput]);
 
-  // Fetch top 500 from token_lifecycle by liquidity
+  // Known native SOL wrapped token mints to exclude
+  const SOL_MINTS = new Set([
+    'So11111111111111111111111111111111111111112',
+  ]);
+
+  // Fetch top 500 from token_lifecycle — show ALL tokens, not just those with liquidity
   const { data: allTokens, isLoading, refetch } = useQuery({
     queryKey: ["dex-top-500-leaderboard"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("token_lifecycle")
-        .select("*")
-        .not("liquidity_usd", "is", null)
-        .order("liquidity_usd", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data as any[]).map((t, i) => ({ ...t, _rank: i + 1 }));
+      // Fetch tokens with liquidity first, then fill remaining slots with newest tokens
+      const [withLiq, newest] = await Promise.all([
+        supabase
+          .from("token_lifecycle")
+          .select("*")
+          .not("liquidity_usd", "is", null)
+          .order("liquidity_usd", { ascending: false })
+          .limit(500),
+        supabase
+          .from("token_lifecycle")
+          .select("*")
+          .is("liquidity_usd", null)
+          .order("first_seen_at", { ascending: false })
+          .limit(500),
+      ]);
+      if (withLiq.error) throw withLiq.error;
+      if (newest.error) throw newest.error;
+
+      // Merge: liquidity-ranked first, then newest without liquidity
+      const seen = new Set<string>();
+      const merged: any[] = [];
+      for (const t of [...(withLiq.data || []), ...(newest.data || [])]) {
+        // Filter out native SOL tokens (symbol=SOL + name=Solana, or known mints)
+        if (SOL_MINTS.has(t.token_mint)) continue;
+        if (t.symbol === 'SOL' && t.name === 'Solana') continue;
+        if (seen.has(t.token_mint)) continue;
+        seen.add(t.token_mint);
+        merged.push(t);
+        if (merged.length >= 500) break;
+      }
+      return merged.map((t, i) => ({ ...t, _rank: i + 1 }));
     },
   });
 
