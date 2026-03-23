@@ -1757,7 +1757,13 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                       }`}>
                         {report.healthScore.grade}
                       </div>
-                      <div className="text-xs text-muted-foreground">{report.healthScore.score}/100</div>
+                      {!isAnonymous ? (
+                        <div className="text-xs text-muted-foreground">{report.healthScore.score}/100</div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Lock className="h-2.5 w-2.5" /> Sign up to see score
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
