@@ -2026,7 +2026,17 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 })()}
               </div>
 
-              {/* Security Alerts Card - Hidden per user request */}
+              {/* Pro Feature Teasers - Risk Assessment & Dev Reputation */}
+              <div className="mb-4 md:mb-6">
+                <ProFeatureTeasers isPro={isPro} tokenSymbol={report.symbol} />
+              </div>
+
+              {/* Telegram Bot & X Community Promos */}
+              <div className="mb-4 md:mb-6">
+                <SubscriberPromoSection />
+              </div>
+
+
               {false && (() => {
                 const alerts = detectSuspiciousPatterns();
                 if (alerts.length === 0) return null;
