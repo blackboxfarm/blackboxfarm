@@ -4,26 +4,72 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import {
-  Trophy, Search, ExternalLink, Copy, Check, RefreshCw, Edit2, Save, X,
-  Crown, Shield, TrendingUp, TrendingDown, Flame,
+  Trophy,
+  Search,
+  ExternalLink,
+  Copy,
+  Check,
+  RefreshCw,
+  Edit2,
+  Save,
+  X,
+  TrendingUp,
+  TrendingDown,
+  Flame,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 
-// ── helpers ──────────────────────────────────────────────────
+const WORKER_URL = "https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana";
+const SOL_MINTS = new Set(["So11111111111111111111111111111111111111112"]);
+
+interface WorkerPair {
+  pairId: string;
+  tokenMint: string;
+  symbol?: string | null;
+  name?: string | null;
+  liquidityUsd?: number | null;
+  volume24h?: number | null;
+  priceUsd?: string | null;
+  fdv?: number | null;
+  url: string;
+}
+
+interface EditState {
+  token_mint: string;
+  symbol: string;
+  name: string;
+  ath_24h_usd: string;
+  current_status: string;
+  launchpad: string;
+  oracle_score: string;
+}
+
 function truncate(s: string | null, n = 16) {
   if (!s) return "—";
   return s.length > n ? s.slice(0, n) + "…" : s;
@@ -39,11 +85,13 @@ function formatUsd(num?: number | null) {
 
 function MintCell({ mint }: { mint: string }) {
   const [copied, setCopied] = useState(false);
+
   const copy = () => {
     navigator.clipboard.writeText(mint);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
   return (
     <span className="flex items-center gap-1 font-mono text-xs">
       {mint.slice(0, 6)}…{mint.slice(-4)}
@@ -65,22 +113,15 @@ const LAUNCHPAD_LOGOS: Record<string, string> = {
   "pump.fun": "/launchpad-logos/pumpfun.png",
   "bonk.fun": "/launchpad-logos/bonkfun.png",
   "bags.fm": "/launchpad-logos/bagsfm.png",
-  "raydium": "/launchpad-logos/raydium.png",
+  raydium: "/launchpad-logos/raydium.png",
 };
 
-// ── edit dialog ──────────────────────────────────────────────
-interface EditState {
-  token_mint: string;
-  symbol: string;
-  name: string;
-  ath_24h_usd: string;
-  current_status: string;
-  launchpad: string;
-  oracle_score: string;
-}
-
 function EditTokenDialog({
-  open, onClose, initial, onSave, saving,
+  open,
+  onClose,
+  initial,
+  onSave,
+  saving,
 }: {
   open: boolean;
   onClose: () => void;
@@ -89,8 +130,13 @@ function EditTokenDialog({
   saving: boolean;
 }) {
   const [state, setState] = useState<EditState | null>(null);
-  React.useEffect(() => { if (initial) setState({ ...initial }); }, [initial]);
+
+  React.useEffect(() => {
+    if (initial) setState({ ...initial });
+  }, [initial]);
+
   if (!state) return null;
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg">
@@ -103,34 +149,62 @@ function EditTokenDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Symbol</Label>
-              <Input value={state.symbol} onChange={(e) => setState({ ...state, symbol: e.target.value })} className="text-sm h-8" />
+              <Input
+                value={state.symbol}
+                onChange={(e) => setState({ ...state, symbol: e.target.value })}
+                className="text-sm h-8"
+              />
             </div>
             <div>
               <Label className="text-xs">Name</Label>
-              <Input value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} className="text-sm h-8" />
+              <Input
+                value={state.name}
+                onChange={(e) => setState({ ...state, name: e.target.value })}
+                className="text-sm h-8"
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">ATH 24h USD</Label>
-              <Input type="number" step="0.000001" value={state.ath_24h_usd}
-                onChange={(e) => setState({ ...state, ath_24h_usd: e.target.value })} className="text-sm h-8" />
+              <Input
+                type="number"
+                step="0.000001"
+                value={state.ath_24h_usd}
+                onChange={(e) => setState({ ...state, ath_24h_usd: e.target.value })}
+                className="text-sm h-8"
+              />
             </div>
             <div>
               <Label className="text-xs">Oracle Score (0-100)</Label>
-              <Input type="number" step="1" value={state.oracle_score}
-                onChange={(e) => setState({ ...state, oracle_score: e.target.value })} className="text-sm h-8" />
+              <Input
+                type="number"
+                step="1"
+                value={state.oracle_score}
+                onChange={(e) => setState({ ...state, oracle_score: e.target.value })}
+                className="text-sm h-8"
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Launchpad</Label>
-              <Input value={state.launchpad} onChange={(e) => setState({ ...state, launchpad: e.target.value })} className="text-sm h-8" placeholder="pump.fun, raydium…" />
+              <Input
+                value={state.launchpad}
+                onChange={(e) => setState({ ...state, launchpad: e.target.value })}
+                className="text-sm h-8"
+                placeholder="pump.fun, raydium…"
+              />
             </div>
             <div>
               <Label className="text-xs">Status</Label>
-              <Select value={state.current_status} onValueChange={(v) => setState({ ...state, current_status: v })}>
-                <SelectTrigger className="w-full h-8 text-sm"><SelectValue /></SelectTrigger>
+              <Select
+                value={state.current_status}
+                onValueChange={(v) => setState({ ...state, current_status: v })}
+              >
+                <SelectTrigger className="w-full h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="active">✅ Active</SelectItem>
                   <SelectItem value="graduated">🎓 Graduated</SelectItem>
@@ -142,7 +216,9 @@ function EditTokenDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}><X className="h-3 w-3 mr-1" />Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-3 w-3 mr-1" />Cancel
+          </Button>
           <Button size="sm" disabled={saving} onClick={() => onSave(state)}>
             <Save className="h-3 w-3 mr-1" />{saving ? "Saving…" : "Save"}
           </Button>
@@ -152,7 +228,6 @@ function EditTokenDialog({
   );
 }
 
-// ── main ─────────────────────────────────────────────────────
 export default function Top200Tab() {
   const [activePage, setActivePage] = useState<"top200" | "rising">("top200");
   const [search, setSearch] = useState("");
@@ -160,80 +235,85 @@ export default function Top200Tab() {
   const [editState, setEditState] = useState<EditState | null>(null);
   const { toast } = useToast();
 
-  const doSearch = useCallback(() => { setSearch(searchInput.trim()); }, [searchInput]);
+  const doSearch = useCallback(() => {
+    setSearch(searchInput.trim());
+  }, [searchInput]);
 
-  // Known native SOL wrapped token mints to exclude
-  const SOL_MINTS = new Set([
-    'So11111111111111111111111111111111111111112',
-  ]);
-
-  // Fetch top 500 from token_lifecycle — show ALL tokens, not just those with liquidity
   const { data: allTokens, isLoading, refetch } = useQuery({
     queryKey: ["dex-top-500-leaderboard"],
     queryFn: async () => {
-      // Fetch tokens with liquidity first, then fill remaining slots with newest tokens
-      const [withLiq, newest] = await Promise.all([
-        supabase
-          .from("token_lifecycle")
-          .select("*")
-          .not("liquidity_usd", "is", null)
-          .order("liquidity_usd", { ascending: false })
-          .limit(500),
-        supabase
-          .from("token_lifecycle")
-          .select("*")
-          .is("liquidity_usd", null)
-          .order("first_seen_at", { ascending: false })
-          .limit(500),
-      ]);
-      if (withLiq.error) throw withLiq.error;
-      if (newest.error) throw newest.error;
-
-      // Merge: liquidity-ranked first, then newest without liquidity
-      const seen = new Set<string>();
-      const merged: any[] = [];
-      for (const t of [...(withLiq.data || []), ...(newest.data || [])]) {
-        // Filter out native SOL tokens (symbol=SOL + name=Solana, or known mints)
-        if (SOL_MINTS.has(t.token_mint)) continue;
-        if (t.symbol === 'SOL' && t.name === 'Solana') continue;
-        if (seen.has(t.token_mint)) continue;
-        seen.add(t.token_mint);
-        merged.push(t);
-        if (merged.length >= 500) break;
+      const workerResponse = await fetch(WORKER_URL);
+      if (!workerResponse.ok) {
+        throw new Error(`Cloudflare worker returned ${workerResponse.status}`);
       }
-      return merged.map((t, i) => ({ ...t, _rank: i + 1 }));
+
+      const workerData = await workerResponse.json();
+      const workerPairs: WorkerPair[] = (workerData.pairs || [])
+        .filter((pair: any) => pair.ok && pair.tokenMint)
+        .filter((pair: any) => !SOL_MINTS.has(pair.tokenMint))
+        .filter((pair: any) => !(pair.symbol === "SOL" && pair.name === "Solana"));
+
+      const uniquePairs = workerPairs.filter(
+        (pair, index, arr) => arr.findIndex((entry) => entry.tokenMint === pair.tokenMint) === index,
+      );
+
+      if (uniquePairs.length === 0) return [];
+
+      const mints = uniquePairs.map((pair) => pair.tokenMint);
+      const { data: dbTokens, error } = await supabase
+        .from("token_lifecycle")
+        .select("*")
+        .in("token_mint", mints);
+
+      if (error) throw error;
+
+      const dbMap = new Map((dbTokens || []).map((token: any) => [token.token_mint, token]));
+
+      return uniquePairs.slice(0, 500).map((pair, index) => {
+        const dbToken: any = dbMap.get(pair.tokenMint) || {};
+
+        return {
+          ...dbToken,
+          token_mint: pair.tokenMint,
+          symbol: dbToken.symbol ?? pair.symbol ?? null,
+          name: dbToken.name ?? pair.name ?? null,
+          liquidity_usd: pair.liquidityUsd ?? dbToken.liquidity_usd ?? null,
+          volume_24h: pair.volume24h ?? dbToken.volume_24h ?? null,
+          price_usd: pair.priceUsd ?? dbToken.price_usd ?? null,
+          fdv: pair.fdv ?? dbToken.fdv ?? null,
+          dex_url: pair.url,
+          _rank: index + 1,
+        };
+      });
     },
   });
 
-  // Filter by search
   const filtered = useMemo(() => {
     if (!allTokens) return [];
     if (!search) return allTokens;
     const q = search.toLowerCase();
     return allTokens.filter(
-      (r) =>
+      (r: any) =>
         r.symbol?.toLowerCase().includes(q) ||
         r.name?.toLowerCase().includes(q) ||
         r.token_mint?.toLowerCase().includes(q) ||
-        r.creator_wallet?.toLowerCase().includes(q)
+        r.creator_wallet?.toLowerCase().includes(q),
     );
   }, [allTokens, search]);
 
-  const page1 = useMemo(() => (search ? filtered : filtered.filter((r) => r._rank <= 200)), [filtered, search]);
-  const page2 = useMemo(() => (search ? [] : filtered.filter((r) => r._rank > 200)), [filtered, search]);
+  const page1 = useMemo(() => (search ? filtered : filtered.filter((r: any) => r._rank <= 200)), [filtered, search]);
+  const page2 = useMemo(() => (search ? [] : filtered.filter((r: any) => r._rank > 200)), [filtered, search]);
   const displayRows = activePage === "top200" ? page1 : page2;
 
-  // Stats
   const stats = useMemo(() => {
     if (!allTokens) return { total: 0, boosted: 0, graduated: 0 };
     return {
       total: allTokens.length,
-      boosted: allTokens.filter((t) => t.active_boosts > 0).length,
-      graduated: allTokens.filter((t) => t.current_status === "graduated").length,
+      boosted: allTokens.filter((t: any) => t.active_boosts > 0).length,
+      graduated: allTokens.filter((t: any) => t.current_status === "graduated").length,
     };
   }, [allTokens]);
 
-  // Edit mutation — directly update token_lifecycle
   const saveMut = useMutation({
     mutationFn: async (s: EditState) => {
       const updates: Record<string, any> = {
@@ -275,18 +355,17 @@ export default function Top200Tab() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <Trophy className="h-6 w-6 text-amber-400" /> Dex Top 200
           </h2>
           <p className="text-sm text-muted-foreground">
-            Live leaderboard from Dex/Cloudflare feed ranked by liquidity — edit tokens inline
+            Live mirror of the Dex/Cloudflare worker order — edit tokens inline
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{stats.total} tracked</span>
+          <span>{stats.total} live</span>
           <span>{stats.boosted} boosted</span>
           <span>{stats.graduated} graduated</span>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5 ml-2">
@@ -295,28 +374,42 @@ export default function Top200Tab() {
         </div>
       </div>
 
-      {/* Page toggle + search */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant={activePage === "top200" ? "default" : "outline"} size="sm" className="gap-1.5"
-          onClick={() => setActivePage("top200")}>
+        <Button
+          variant={activePage === "top200" ? "default" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setActivePage("top200")}
+        >
           <TrendingUp className="h-3.5 w-3.5" /> Top 200
-          <Badge variant="secondary" className="text-[10px] ml-1">{page1.length}</Badge>
+          <Badge variant="secondary" className="text-[10px] ml-1">
+            {page1.length}
+          </Badge>
         </Button>
-        <Button variant={activePage === "rising" ? "default" : "outline"} size="sm" className="gap-1.5"
-          onClick={() => setActivePage("rising")}>
+        <Button
+          variant={activePage === "rising" ? "default" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setActivePage("rising")}
+        >
           <TrendingDown className="h-3.5 w-3.5" /> 201–500
-          <Badge variant="secondary" className="text-[10px] ml-1">{page2.length}</Badge>
+          <Badge variant="secondary" className="text-[10px] ml-1">
+            {page2.length}
+          </Badge>
         </Button>
         <form onSubmit={(e) => { e.preventDefault(); doSearch(); }} className="flex gap-1.5 ml-auto">
-          <Input placeholder="Search symbol, name, mint…" value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)} className="text-sm h-8 w-56" />
+          <Input
+            placeholder="Search symbol, name, mint…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="text-sm h-8 w-56"
+          />
           <Button type="submit" size="sm" variant="secondary" className="h-8 px-3">
             <Search className="h-3.5 w-3.5" />
           </Button>
         </form>
       </div>
 
-      {/* Table */}
       <Card className="w-full -mx-6 sm:-mx-6" style={{ width: "calc(100% + 3rem)" }}>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -354,20 +447,31 @@ export default function Top200Tab() {
                   </TableRow>
                 ) : displayRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={20} className="text-center py-8 text-muted-foreground">No tokens found</TableCell>
+                    <TableCell colSpan={20} className="text-center py-8 text-muted-foreground">
+                      No tokens found
+                    </TableCell>
                   </TableRow>
                 ) : (
                   displayRows.map((r: any) => (
-                    <TableRow key={r.token_mint}
+                    <TableRow
+                      key={r.token_mint}
                       className={`[&>td]:px-2 [&>td]:py-1.5 [&>td]:whitespace-nowrap hover:bg-muted/50 ${
-                        r.current_status === "rugged" ? "bg-destructive/10 line-through opacity-60" :
-                        r._rank <= 10 ? "bg-amber-500/5" : r._rank <= 50 ? "bg-yellow-500/5" : ""
-                      }`}>
+                        r.current_status === "rugged"
+                          ? "bg-destructive/10 line-through opacity-60"
+                          : r._rank <= 10
+                            ? "bg-amber-500/5"
+                            : r._rank <= 50
+                              ? "bg-yellow-500/5"
+                              : ""
+                      }`}
+                    >
                       <TableCell><RankBadge rank={r._rank} /></TableCell>
                       <TableCell>
                         {r.image_url ? (
                           <img src={r.image_url} alt="" className="h-5 w-5 rounded-full object-cover" loading="lazy" />
-                        ) : <div className="h-5 w-5 rounded-full bg-muted" />}
+                        ) : (
+                          <div className="h-5 w-5 rounded-full bg-muted" />
+                        )}
                       </TableCell>
                       <TableCell className="font-semibold">{r.symbol ?? "—"}</TableCell>
                       <TableCell>{truncate(r.name, 20)}</TableCell>
@@ -410,8 +514,12 @@ export default function Top200Tab() {
                       </TableCell>
                       <TableCell>
                         {r.oracle_score != null ? (
-                          <Badge variant={r.oracle_score >= 70 ? "default" : r.oracle_score >= 40 ? "secondary" : "destructive"}
-                            className="text-[10px] font-mono">{r.oracle_score}</Badge>
+                          <Badge
+                            variant={r.oracle_score >= 70 ? "default" : r.oracle_score >= 40 ? "secondary" : "destructive"}
+                            className="text-[10px] font-mono"
+                          >
+                            {r.oracle_score}
+                          </Badge>
                         ) : "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-[10px]">
@@ -425,8 +533,12 @@ export default function Top200Tab() {
                       </TableCell>
                       <TableCell>
                         {r.creator_wallet ? (
-                          <a href={`https://solscan.io/account/${r.creator_wallet}`} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300">
+                          <a
+                            href={`https://solscan.io/account/${r.creator_wallet}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300"
+                          >
                             {r.creator_wallet.slice(0, 6)}…{r.creator_wallet.slice(-4)}
                             <ExternalLink className="h-2.5 w-2.5 shrink-0" />
                           </a>
