@@ -12821,8 +12821,10 @@ export type Database = {
           first_seen_at: string
           highest_rank: number | null
           image_url: string | null
+          is_currently_top_200: boolean | null
           last_fetched_at: string | null
           last_seen_at: string
+          last_top_200_rank: number | null
           launchpad: string | null
           liquidity_usd: number | null
           lowest_rank: number | null
@@ -12855,8 +12857,10 @@ export type Database = {
           first_seen_at: string
           highest_rank?: number | null
           image_url?: string | null
+          is_currently_top_200?: boolean | null
           last_fetched_at?: string | null
           last_seen_at: string
+          last_top_200_rank?: number | null
           launchpad?: string | null
           liquidity_usd?: number | null
           lowest_rank?: number | null
@@ -12889,8 +12893,10 @@ export type Database = {
           first_seen_at?: string
           highest_rank?: number | null
           image_url?: string | null
+          is_currently_top_200?: boolean | null
           last_fetched_at?: string | null
           last_seen_at?: string
+          last_top_200_rank?: number | null
           launchpad?: string | null
           liquidity_usd?: number | null
           lowest_rank?: number | null

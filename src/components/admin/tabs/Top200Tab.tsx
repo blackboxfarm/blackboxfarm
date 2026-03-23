@@ -291,6 +291,31 @@ export default function Top200Tab() {
     },
   });
 
+  // Fetch overflow tokens (previously in top 200, now fallen out)
+  const { data: overflowTokens, isLoading: overflowLoading } = useQuery({
+    queryKey: ["dex-overflow-201-500"],
+    queryFn: async () => {
+      // Get tokens that have highest_rank set (were in top 200 before) but are NOT currently in top 200
+      const { data, error } = await supabase
+        .from("token_lifecycle")
+        .select("*")
+        .eq("is_currently_top_200", false)
+        .not("highest_rank", "is", null)
+        .order("last_seen_at", { ascending: false })
+        .limit(300);
+
+      if (error) throw error;
+
+      return (data || [])
+        .filter((t: any) => !SOL_MINTS.has(t.token_mint))
+        .map((t: any, index: number) => ({
+          ...t,
+          dex_url: `https://dexscreener.com/solana/${t.token_mint}`,
+          _rank: 201 + index,
+        }));
+    },
+  });
+
   const filtered = useMemo(() => {
     if (!allTokens) return [];
     if (!search) return allTokens;
@@ -304,18 +329,31 @@ export default function Top200Tab() {
     );
   }, [allTokens, search]);
 
-  const page1 = useMemo(() => (search ? filtered : filtered.filter((r: any) => r._rank <= 200)), [filtered, search]);
-  const page2 = useMemo(() => (search ? [] : filtered.filter((r: any) => r._rank > 200)), [filtered, search]);
+  const filteredOverflow = useMemo(() => {
+    if (!overflowTokens) return [];
+    if (!search) return overflowTokens;
+    const q = search.toLowerCase();
+    return overflowTokens.filter(
+      (r: any) =>
+        r.symbol?.toLowerCase().includes(q) ||
+        r.name?.toLowerCase().includes(q) ||
+        r.token_mint?.toLowerCase().includes(q) ||
+        r.creator_wallet?.toLowerCase().includes(q),
+    );
+  }, [overflowTokens, search]);
+
+  const page1 = useMemo(() => filtered, [filtered]);
+  const page2 = useMemo(() => filteredOverflow, [filteredOverflow]);
   const displayRows = activePage === "top200" ? page1 : page2;
 
   const stats = useMemo(() => {
-    if (!allTokens) return { total: 0, ranked: 0, graduated: 0 };
     return {
-      total: allTokens.length,
-      ranked: allTokens.filter((t: any) => t._rank <= 200).length,
-      graduated: allTokens.filter((t: any) => t.current_status === "graduated").length,
+      total: (allTokens?.length || 0) + (overflowTokens?.length || 0),
+      ranked: allTokens?.length || 0,
+      overflow: overflowTokens?.length || 0,
+      graduated: allTokens?.filter((t: any) => t.current_status === "graduated").length || 0,
     };
-  }, [allTokens]);
+  }, [allTokens, overflowTokens]);
 
   const saveMut = useMutation({
     mutationFn: async (s: EditState) => {
@@ -368,8 +406,8 @@ export default function Top200Tab() {
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{stats.total} live</span>
-          <span>{stats.ranked} ranked</span>
+          <span>{stats.ranked} in top 200</span>
+          <span>{stats.overflow} overflow</span>
           <span>{stats.graduated} graduated</span>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5 ml-2">
             <RefreshCw className="h-3.5 w-3.5" /> Refresh

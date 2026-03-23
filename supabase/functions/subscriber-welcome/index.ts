@@ -135,18 +135,18 @@ function generateWelcomeEmail(data: SubscriberWelcomeRequest): string {
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/holders" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ Token Analysis Dashboard</a>
+                          <a href="https://blackbox.farm/holders" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ Token Analysis Dashboard</a>
                         </td>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/pricing" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ Manage Subscription</a>
+                          <a href="https://blackbox.farm/pricing" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ Manage Subscription</a>
                         </td>
                       </tr>
                       <tr>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/tgbot" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ Telegram Bot Setup</a>
+                          <a href="https://blackbox.farm/tgbot" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ Telegram Bot Setup</a>
                         </td>
                         <td style="padding: 6px 0;">
-                          <a href="https://blackbox.farm/features" style="color: #00e5ff; text-decoration: none; font-size: 14px;">→ All Features</a>
+                          <a href="https://blackbox.farm/features" style="color: #D4AF37; text-decoration: none; font-size: 14px;">→ All Features</a>
                         </td>
                       </tr>
                     </table>
@@ -159,7 +159,7 @@ function generateWelcomeEmail(data: SubscriberWelcomeRequest): string {
                 <td style="padding: 0 40px 40px;">
                   <div style="background: #0d1a2d; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; text-align: center;">
                     <p style="color: #64748b; font-size: 14px; margin: 0 0 8px 0;">Need help getting started?</p>
-                    <a href="https://blackbox.farm/contact" style="color: #00e5ff; text-decoration: none; font-weight: 600;">Contact our support team →</a>
+                    <a href="https://blackbox.farm/contact" style="color: #D4AF37; text-decoration: none; font-weight: 600;">Contact our support team →</a>
                   </div>
                 </td>
               </tr>
@@ -170,9 +170,9 @@ function generateWelcomeEmail(data: SubscriberWelcomeRequest): string {
                   <p style="color: #475569; font-size: 12px; text-align: center; margin: 0; line-height: 1.8;">
                     BlackBox Farm — Solana Intelligence Platform<br>
                     This email was sent to ${email} because you subscribed to BlackBox.<br>
-                    <a href="https://blackbox.farm" style="color: #00e5ff60; text-decoration: none;">blackbox.farm</a> · 
-                    <a href="https://blackbox.farm/privacy" style="color: #00e5ff60; text-decoration: none;">Privacy</a> · 
-                    <a href="https://blackbox.farm/terms" style="color: #00e5ff60; text-decoration: none;">Terms</a>
+                    <a href="https://blackbox.farm" style="color: #D4AF37; text-decoration: none;">blackbox.farm</a> · 
+                    <a href="https://blackbox.farm/privacy" style="color: #D4AF37; text-decoration: none;">Privacy</a> · 
+                    <a href="https://blackbox.farm/terms" style="color: #D4AF37; text-decoration: none;">Terms</a>
                   </p>
                 </td>
               </tr>
@@ -385,7 +385,7 @@ function generateSubscriptionRenewalEmail(email: string, name: string | undefine
             <tr>
               <td style="background: #080812; padding: 24px 40px; border-top: 1px solid #1e293b;">
                 <p style="color: #475569; font-size: 12px; text-align: center; margin: 0;">
-                  BlackBox Farm · <a href="https://blackbox.farm/pricing" style="color: #00e5ff60; text-decoration: none;">Manage Subscription</a> · <a href="https://blackbox.farm/contact" style="color: #00e5ff60; text-decoration: none;">Support</a>
+                  BlackBox Farm · <a href="https://blackbox.farm/pricing" style="color: #D4AF37; text-decoration: none;">Manage Subscription</a> · <a href="https://blackbox.farm/contact" style="color: #D4AF37; text-decoration: none;">Support</a>
                 </p>
               </td>
             </tr>
@@ -436,7 +436,7 @@ function generateCancellationEmail(email: string, name: string | undefined, tier
             <tr>
               <td style="background: #080812; padding: 24px 40px; border-top: 1px solid #1e293b;">
                 <p style="color: #475569; font-size: 12px; text-align: center; margin: 0;">
-                  BlackBox Farm · <a href="https://blackbox.farm" style="color: #00e5ff60; text-decoration: none;">blackbox.farm</a>
+                  BlackBox Farm · <a href="https://blackbox.farm" style="color: #D4AF37; text-decoration: none;">blackbox.farm</a>
                 </p>
               </td>
             </tr>

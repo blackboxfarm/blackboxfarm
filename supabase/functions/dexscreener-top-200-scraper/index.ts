@@ -447,6 +447,66 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============ PHASE 2.5: MARK TOP 200 STATUS ============
+    // Get current top 200 mints
+    const currentTop200Mints = allTokens.slice(0, 200).map(t => t.address).filter(Boolean);
+    
+    if (currentTop200Mints.length > 0) {
+      // First, clear all is_currently_top_200 flags
+      const { error: clearErr } = await supabase
+        .from('token_lifecycle')
+        .update({ is_currently_top_200: false })
+        .eq('is_currently_top_200', true);
+      
+      if (clearErr) {
+        console.error('[DexCompiler] ⚠️ Failed to clear top 200 flags:', clearErr);
+      }
+
+      // Mark current top 200 tokens and update their rank
+      let markedCount = 0;
+      for (let i = 0; i < currentTop200Mints.length; i++) {
+        const mint = currentTop200Mints[i];
+        const rank = i + 1;
+        
+        const { error: markErr } = await supabase
+          .from('token_lifecycle')
+          .update({ 
+            is_currently_top_200: true, 
+            last_top_200_rank: rank,
+            highest_rank: supabase.rpc ? undefined : rank, // Will use SQL below
+          })
+          .eq('token_mint', mint);
+        
+        if (!markErr) markedCount++;
+      }
+      
+      // Update highest_rank where new rank is better (lower number)
+      for (let i = 0; i < currentTop200Mints.length; i++) {
+        const mint = currentTop200Mints[i];
+        const rank = i + 1;
+        
+        await supabase
+          .from('token_lifecycle')
+          .update({ highest_rank: rank })
+          .eq('token_mint', mint)
+          .or(`highest_rank.is.null,highest_rank.gt.${rank}`);
+      }
+
+      // Update lowest_rank where new rank is worse (higher number)
+      for (let i = 0; i < currentTop200Mints.length; i++) {
+        const mint = currentTop200Mints[i];
+        const rank = i + 1;
+        
+        await supabase
+          .from('token_lifecycle')
+          .update({ lowest_rank: rank })
+          .eq('token_mint', mint)
+          .or(`lowest_rank.is.null,lowest_rank.lt.${rank}`);
+      }
+
+      console.log(`[DexCompiler] ✅ Marked ${markedCount}/${currentTop200Mints.length} tokens as currently in top 200`);
+    }
+
     // ============ PHASE 3: BUILD REPUTATION MESH ============
     console.log('[DexCompiler] 🕸️ Phase 3: Building Reputation Mesh...');
     let meshLinksAdded = 0;
