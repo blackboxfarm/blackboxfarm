@@ -4,6 +4,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
+import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**

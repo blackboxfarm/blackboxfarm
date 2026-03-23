@@ -648,16 +648,9 @@ async function checkTokenAuthorities(
   }
 }
 
-// Fetch token data from pump.fun API for price/volume
+// Fetch token data from pump.fun API for price/volume — uses shared wrapper with backoff + alerts
 async function fetchPumpFunData(mint: string): Promise<any> {
-  try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.error(`Error fetching pump.fun data for ${mint}:`, error);
-    return null;
-  }
+  return await fetchPumpFunCoin(mint, 'token-enricher');
 }
 
 // Fetch RugCheck analysis for a token
