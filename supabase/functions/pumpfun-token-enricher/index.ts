@@ -6,6 +6,7 @@ import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
+import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
