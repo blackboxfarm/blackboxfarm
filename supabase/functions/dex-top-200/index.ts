@@ -1,14 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { scrapeDexTopPages } from "../_shared/dex-top-pages.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const CF_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
+interface ResolvedPair {
+  tokenMint: string | null;
+  symbol: string | null;
+  name: string | null;
+  priceUsd: string | null;
+  liquidityUsd: number | null;
+  volume24h: number | null;
+  fdv: number | null;
+  marketCap: number | null;
+  url: string | null;
+}
 
-// Batch resolve pair IDs via DexScreener API (30 per request)
-async function batchResolvePairs(pairIds: string[]): Promise<Map<string, any>> {
+async function batchResolvePairs(pairIds: string[]): Promise<Map<string, ResolvedPair>> {
   const resolved = new Map<string, any>();
   const batchSize = 30;
 
@@ -17,7 +27,7 @@ async function batchResolvePairs(pairIds: string[]): Promise<Map<string, any>> {
     try {
       const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${batch.join(',')}`, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': 'Mozilla/5.0',
           'Accept': 'application/json',
         }
       });
@@ -27,24 +37,26 @@ async function batchResolvePairs(pairIds: string[]): Promise<Map<string, any>> {
         for (const p of pairs) {
           if (p.baseToken?.address) {
             resolved.set(p.pairAddress?.toLowerCase(), {
-              tokenMint: p.baseToken.address,
-              symbol: p.baseToken.symbol,
-              name: p.baseToken.name,
-              priceUsd: p.priceUsd,
-              liquidityUsd: p.liquidity?.usd,
-              volume24h: p.volume?.h24,
-              fdv: p.fdv,
-              marketCap: p.marketCap || p.fdv,
-              url: p.url,
+              tokenMint: p.baseToken.address || null,
+              symbol: p.baseToken.symbol || null,
+              name: p.baseToken.name || null,
+              priceUsd: p.priceUsd || null,
+              liquidityUsd: p.liquidity?.usd ?? null,
+              volume24h: p.volume?.h24 ?? null,
+              fdv: p.fdv ?? null,
+              marketCap: p.marketCap || p.fdv || null,
+              url: p.url || null,
             });
           }
         }
         console.log(`[DexTop200] Batch ${Math.floor(i/batchSize)+1}: ${pairs.length}/${batch.length}`);
+      } else {
+        console.error(`[DexTop200] Batch failed (${res.status}) for ${batch.length} ids`);
       }
     } catch (e) {
       console.error(`[DexTop200] Batch error:`, e);
     }
-    if (i + batchSize < pairIds.length) await new Promise(r => setTimeout(r, 300));
+    if (i + batchSize < pairIds.length) await new Promise(r => setTimeout(r, 250));
   }
   return resolved;
 }
@@ -56,184 +68,38 @@ serve(async (req) => {
 
   try {
     const startTime = Date.now();
-    const seenMints = new Set<string>();
-    const finalTokens: any[] = [];
+    const rankedPairs = await scrapeDexTopPages();
+    const resolved = await batchResolvePairs([...new Set(rankedPairs.map((pair) => pair.pairId))]);
 
-    // ===== SOURCE 1: CF Worker trending (top ~30-74) =====
-    console.log('[DexTop200] Source 1: CF Worker trending...');
-    try {
-      const workerRes = await fetch(CF_WORKER_URL);
-      if (workerRes.ok) {
-        const workerData = await workerRes.json();
-        const allPairs = workerData.pairs || [];
-        
-        // Collect resolved and unresolved
-        const unresolvedIds: string[] = [];
-        
-        for (const p of allPairs) {
-          if (p.ok && p.tokenMint && !seenMints.has(p.tokenMint)) {
-            seenMints.add(p.tokenMint);
-            finalTokens.push({
-              rank: finalTokens.length + 1,
-              pairId: p.pairId,
-              tokenMint: p.tokenMint,
-              symbol: p.symbol,
-              name: p.name,
-              priceUsd: p.priceUsd,
-              liquidityUsd: p.liquidityUsd,
-              volume24h: p.volume24h,
-              fdv: p.fdv,
-              url: p.url || `https://dexscreener.com/solana/${p.pairId}`,
-            });
-          } else if (p.pairId && !p.ok) {
-            unresolvedIds.push(p.pairId);
-          }
-        }
+    const finalTokens = rankedPairs.map((entry) => {
+      const detail = resolved.get(entry.pairId.toLowerCase());
 
-        // Batch resolve unresolved pairs
-        if (unresolvedIds.length > 0) {
-          console.log(`[DexTop200] Batch resolving ${unresolvedIds.length} unresolved CF pairs...`);
-          const resolved = await batchResolvePairs(unresolvedIds);
-          
-          // Add in original order
-          for (const pairId of unresolvedIds) {
-            const detail = resolved.get(pairId.toLowerCase());
-            if (detail && !seenMints.has(detail.tokenMint)) {
-              seenMints.add(detail.tokenMint);
-              finalTokens.push({
-                rank: finalTokens.length + 1,
-                pairId,
-                ...detail,
-              });
-            }
-          }
-        }
-
-        console.log(`[DexTop200] After CF worker: ${finalTokens.length} tokens`);
-      }
-    } catch (e) {
-      console.error('[DexTop200] CF worker error:', e);
-    }
-
-    // ===== SOURCE 2: DexScreener Token Boosts (additional trending tokens) =====
-    console.log('[DexTop200] Source 2: Token Boosts...');
-    try {
-      const boostRes = await fetch('https://api.dexscreener.com/token-boosts/top/v1', {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-        }
-      });
-      if (boostRes.ok) {
-        const boosts = await boostRes.json();
-        const solanaBoosted = (boosts || []).filter((b: any) => b.chainId === 'solana' && b.tokenAddress);
-        
-        // Batch resolve the boosted token mints
-        const boostMints = solanaBoosted
-          .map((b: any) => b.tokenAddress)
-          .filter((m: string) => !seenMints.has(m));
-
-        if (boostMints.length > 0) {
-          // Fetch pair data for these mints
-          for (let i = 0; i < boostMints.length; i += 30) {
-            const batch = boostMints.slice(i, i + 30);
-            for (const mint of batch) {
-              try {
-                const tokenRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'application/json',
-                  }
-                });
-                if (tokenRes.ok) {
-                  const tokenData = await tokenRes.json();
-                  const pairs = tokenData.pairs || [];
-                  // Get the main Solana pair (highest liquidity)
-                  const mainPair = pairs
-                    .filter((p: any) => p.chainId === 'solana')
-                    .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
-                  
-                  if (mainPair && !seenMints.has(mint)) {
-                    seenMints.add(mint);
-                    finalTokens.push({
-                      rank: finalTokens.length + 1,
-                      pairId: mainPair.pairAddress,
-                      tokenMint: mint,
-                      symbol: mainPair.baseToken?.symbol,
-                      name: mainPair.baseToken?.name,
-                      priceUsd: mainPair.priceUsd,
-                      liquidityUsd: mainPair.liquidity?.usd,
-                      volume24h: mainPair.volume?.h24,
-                      fdv: mainPair.fdv,
-                      marketCap: mainPair.marketCap || mainPair.fdv,
-                      url: mainPair.url,
-                    });
-                  }
-                }
-              } catch (_) {}
-            }
-            if (i + 30 < boostMints.length) await new Promise(r => setTimeout(r, 300));
-          }
-        }
-        console.log(`[DexTop200] After boosts: ${finalTokens.length} tokens`);
-      }
-    } catch (e) {
-      console.error('[DexTop200] Boosts error:', e);
-    }
-
-    // ===== SOURCE 3: DexScreener search for popular Solana pairs =====
-    // This helps fill remaining slots toward 200
-    if (finalTokens.length < 150) {
-      console.log('[DexTop200] Source 3: DexScreener search API for more Solana tokens...');
-      try {
-        const searchRes = await fetch('https://api.dexscreener.com/latest/dex/search?q=SOL', {
-          headers: {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': 'application/json',
-          }
-        });
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          const solanaPairs = (searchData.pairs || [])
-            .filter((p: any) => p.chainId === 'solana' && p.baseToken?.address)
-            .sort((a: any, b: any) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
-          
-          for (const p of solanaPairs) {
-            if (seenMints.has(p.baseToken.address)) continue;
-            seenMints.add(p.baseToken.address);
-            finalTokens.push({
-              rank: finalTokens.length + 1,
-              pairId: p.pairAddress,
-              tokenMint: p.baseToken.address,
-              symbol: p.baseToken.symbol,
-              name: p.baseToken.name,
-              priceUsd: p.priceUsd,
-              liquidityUsd: p.liquidity?.usd,
-              volume24h: p.volume?.h24,
-              fdv: p.fdv,
-              marketCap: p.marketCap || p.fdv,
-              url: p.url,
-            });
-            if (finalTokens.length >= 200) break;
-          }
-          console.log(`[DexTop200] After search: ${finalTokens.length} tokens`);
-        }
-      } catch (e) {
-        console.error('[DexTop200] Search error:', e);
-      }
-    }
-
-    // Re-number ranks
-    finalTokens.forEach((t, i) => t.rank = i + 1);
+      return {
+        rank: entry.rank,
+        pairId: entry.pairId,
+        tokenMint: detail?.tokenMint || null,
+        symbol: detail?.symbol || entry.fallbackSymbol || null,
+        name: detail?.name || entry.fallbackName || null,
+        priceUsd: detail?.priceUsd || null,
+        liquidityUsd: detail?.liquidityUsd || null,
+        volume24h: detail?.volume24h || null,
+        fdv: detail?.fdv || null,
+        marketCap: detail?.marketCap || null,
+        url: detail?.url || entry.url,
+      };
+    });
 
     const elapsed = Date.now() - startTime;
-    console.log(`[DexTop200] ✅ Done in ${elapsed}ms: ${finalTokens.length} tokens total`);
+    const resolvedCount = finalTokens.filter((token) => !!token.tokenMint).length;
+    console.log(`[DexTop200] ✅ Done in ${elapsed}ms: ${finalTokens.length} ranked, ${resolvedCount} resolved`);
 
     return new Response(JSON.stringify({
       success: true,
+      source: 'dexscreener-pages',
       timestamp: Math.floor(Date.now() / 1000),
       elapsed_ms: elapsed,
       total: finalTokens.length,
+      resolved: resolvedCount,
       tokens: finalTokens,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
