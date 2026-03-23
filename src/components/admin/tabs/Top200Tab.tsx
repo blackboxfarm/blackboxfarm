@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Trophy, TrendingUp, TrendingDown, Search, ExternalLink, Copy, Check,
-  RefreshCw, Edit2, Save, X, AlertTriangle, Crown, Shield,
+  Trophy, Search, ExternalLink, Copy, Check, RefreshCw, Edit2, Save, X,
+  Crown, Shield, TrendingUp, TrendingDown, Flame,
 } from "lucide-react";
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -24,11 +21,20 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { formatDistanceToNow } from "date-fns";
 
 // ── helpers ──────────────────────────────────────────────────
 function truncate(s: string | null, n = 16) {
   if (!s) return "—";
   return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function formatUsd(num?: number | null) {
+  if (num == null) return "—";
+  if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+  if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+  if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
+  return `$${num.toFixed(2)}`;
 }
 
 function MintCell({ mint }: { mint: string }) {
@@ -48,39 +54,6 @@ function MintCell({ mint }: { mint: string }) {
   );
 }
 
-/** Composite quality score 0-100 used for ranking */
-function qualityScore(r: any): number {
-  let score = 0;
-  // ATH value (log scale, max 25)
-  if (r.ath_24h_usd && r.ath_24h_usd > 0) {
-    const log = Math.log10(r.ath_24h_usd * 1e6); // shift so small prices still score
-    score += Math.min(25, Math.max(0, log * 4));
-  }
-  // Dev reputation (max 20)
-  if (r.dev_reputation_score != null) score += Math.min(20, (r.dev_reputation_score / 100) * 20);
-  // Graduated +15
-  if (r.is_graduated) score += 15;
-  // Legitimate builder +10
-  if (r.dev_is_legitimate_builder) score += 10;
-  // Not rugged +10 / rugged -15
-  if (r.dev_tokens_rugged != null && r.dev_tokens_rugged > 0) score -= 15;
-  else score += 10;
-  // Not blacklisted +5
-  if (!r.dev_auto_blacklisted) score += 5;
-  // Was posted +5
-  if (r.was_posted) score += 5;
-  // KYC verified +5
-  if (r.kyc_verified) score += 5;
-  // Successful tokens bonus (max 5)
-  if (r.dev_tokens_successful != null) score += Math.min(5, r.dev_tokens_successful * 1.5);
-  return Math.round(Math.max(0, Math.min(100, score)));
-}
-
-function ScoreBadge({ score }: { score: number }) {
-  const variant = score >= 70 ? "default" : score >= 45 ? "secondary" : "destructive";
-  return <Badge variant={variant} className="text-[10px] font-mono">{score}</Badge>;
-}
-
 function RankBadge({ rank }: { rank: number }) {
   if (rank <= 10) return <span className="text-amber-400 font-bold">🏆 {rank}</span>;
   if (rank <= 50) return <span className="text-yellow-500 font-semibold">{rank}</span>;
@@ -88,14 +61,22 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="text-muted-foreground">{rank}</span>;
 }
 
+const LAUNCHPAD_LOGOS: Record<string, string> = {
+  "pump.fun": "/launchpad-logos/pumpfun.png",
+  "bonk.fun": "/launchpad-logos/bonkfun.png",
+  "bags.fm": "/launchpad-logos/bagsfm.png",
+  "raydium": "/launchpad-logos/raydium.png",
+};
+
 // ── edit dialog ──────────────────────────────────────────────
 interface EditState {
   token_mint: string;
   symbol: string;
-  community_mod_handles: string;
-  community_admin_handles: string;
+  name: string;
   ath_24h_usd: string;
-  is_rug: boolean;
+  current_status: string;
+  launchpad: string;
+  oracle_score: string;
 }
 
 function EditTokenDialog({
@@ -115,52 +96,49 @@ function EditTokenDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Edit2 className="h-4 w-4" /> Edit {state.symbol || "Token"}
+            <Edit2 className="h-4 w-4" /> Edit {state.symbol || state.token_mint.slice(0, 8)}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div>
-            <Label className="text-xs">Community Mod Handles (comma-separated @handles)</Label>
-            <Textarea
-              value={state.community_mod_handles}
-              onChange={(e) => setState({ ...state, community_mod_handles: e.target.value })}
-              placeholder="@mod1, @mod2, @mod3"
-              className="text-sm h-16"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Symbol</Label>
+              <Input value={state.symbol} onChange={(e) => setState({ ...state, symbol: e.target.value })} className="text-sm h-8" />
+            </div>
+            <div>
+              <Label className="text-xs">Name</Label>
+              <Input value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} className="text-sm h-8" />
+            </div>
           </div>
-          <div>
-            <Label className="text-xs">Community Admin Handles (comma-separated @handles)</Label>
-            <Textarea
-              value={state.community_admin_handles}
-              onChange={(e) => setState({ ...state, community_admin_handles: e.target.value })}
-              placeholder="@admin1, @admin2"
-              className="text-sm h-16"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">ATH 24h USD</Label>
+              <Input type="number" step="0.000001" value={state.ath_24h_usd}
+                onChange={(e) => setState({ ...state, ath_24h_usd: e.target.value })} className="text-sm h-8" />
+            </div>
+            <div>
+              <Label className="text-xs">Oracle Score (0-100)</Label>
+              <Input type="number" step="1" value={state.oracle_score}
+                onChange={(e) => setState({ ...state, oracle_score: e.target.value })} className="text-sm h-8" />
+            </div>
           </div>
-          <div>
-            <Label className="text-xs">ATH 24h USD</Label>
-            <Input
-              type="number"
-              step="0.000001"
-              value={state.ath_24h_usd}
-              onChange={(e) => setState({ ...state, ath_24h_usd: e.target.value })}
-              className="text-sm h-8"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <Label className="text-xs">Status</Label>
-            <Select
-              value={state.is_rug ? "rug" : "active"}
-              onValueChange={(v) => setState({ ...state, is_rug: v === "rug" })}
-            >
-              <SelectTrigger className="w-32 h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">✅ Active</SelectItem>
-                <SelectItem value="rug">🚫 Rug</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Launchpad</Label>
+              <Input value={state.launchpad} onChange={(e) => setState({ ...state, launchpad: e.target.value })} className="text-sm h-8" placeholder="pump.fun, raydium…" />
+            </div>
+            <div>
+              <Label className="text-xs">Status</Label>
+              <Select value={state.current_status} onValueChange={(v) => setState({ ...state, current_status: v })}>
+                <SelectTrigger className="w-full h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">✅ Active</SelectItem>
+                  <SelectItem value="graduated">🎓 Graduated</SelectItem>
+                  <SelectItem value="rugged">🚫 Rugged</SelectItem>
+                  <SelectItem value="dormant">💤 Dormant</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
         <DialogFooter>
@@ -174,107 +152,81 @@ function EditTokenDialog({
   );
 }
 
-// ── main component ───────────────────────────────────────────
+// ── main ─────────────────────────────────────────────────────
 export default function Top200Tab() {
   const [activePage, setActivePage] = useState<"top200" | "rising">("top200");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [editState, setEditState] = useState<EditState | null>(null);
   const { toast } = useToast();
-  const qc = useQueryClient();
 
-  const doSearch = useCallback(() => {
-    setSearch(searchInput.trim());
-  }, [searchInput]);
+  const doSearch = useCallback(() => { setSearch(searchInput.trim()); }, [searchInput]);
 
-  // Fetch 500 tokens from master directory with relevant fields
+  // Fetch top 500 from token_lifecycle by liquidity
   const { data: allTokens, isLoading, refetch } = useQuery({
-    queryKey: ["top-200-leaderboard"],
+    queryKey: ["dex-top-500-leaderboard"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("master_token_directory" as any)
+        .from("token_lifecycle")
         .select("*")
-        .order("created_at", { ascending: false })
+        .not("liquidity_usd", "is", null)
+        .order("liquidity_usd", { ascending: false })
         .limit(500);
       if (error) throw error;
-      return data as any[];
+      return (data as any[]).map((t, i) => ({ ...t, _rank: i + 1 }));
     },
   });
 
-  // Score + rank
-  const ranked = useMemo(() => {
-    if (!allTokens) return [];
-    const scored = allTokens.map((t) => ({
-      ...t,
-      _score: qualityScore(t),
-    }));
-    scored.sort((a, b) => b._score - a._score);
-    return scored.map((t, i) => ({ ...t, _rank: i + 1 }));
-  }, [allTokens]);
-
-  // Filter
+  // Filter by search
   const filtered = useMemo(() => {
-    if (!search) return ranked;
+    if (!allTokens) return [];
+    if (!search) return allTokens;
     const q = search.toLowerCase();
-    return ranked.filter(
+    return allTokens.filter(
       (r) =>
         r.symbol?.toLowerCase().includes(q) ||
         r.name?.toLowerCase().includes(q) ||
-        r.token_mint?.toLowerCase().includes(q)
+        r.token_mint?.toLowerCase().includes(q) ||
+        r.creator_wallet?.toLowerCase().includes(q)
     );
-  }, [ranked, search]);
+  }, [allTokens, search]);
 
-  // Split into pages
   const page1 = useMemo(() => (search ? filtered : filtered.filter((r) => r._rank <= 200)), [filtered, search]);
   const page2 = useMemo(() => (search ? [] : filtered.filter((r) => r._rank > 200)), [filtered, search]);
   const displayRows = activePage === "top200" ? page1 : page2;
 
-  // Edit mutation — update source tables
+  // Stats
+  const stats = useMemo(() => {
+    if (!allTokens) return { total: 0, boosted: 0, graduated: 0 };
+    return {
+      total: allTokens.length,
+      boosted: allTokens.filter((t) => t.active_boosts > 0).length,
+      graduated: allTokens.filter((t) => t.current_status === "graduated").length,
+    };
+  }, [allTokens]);
+
+  // Edit mutation — directly update token_lifecycle
   const saveMut = useMutation({
     mutationFn: async (s: EditState) => {
-      const mods = s.community_mod_handles
-        .split(",")
-        .map((h) => h.trim().replace(/^@/, ""))
-        .filter(Boolean);
-      const admins = s.community_admin_handles
-        .split(",")
-        .map((h) => h.trim().replace(/^@/, ""))
-        .filter(Boolean);
+      const updates: Record<string, any> = {
+        symbol: s.symbol || null,
+        name: s.name || null,
+        current_status: s.current_status,
+        launchpad: s.launchpad || null,
+      };
+      if (s.ath_24h_usd) updates.ath_24h_usd = parseFloat(s.ath_24h_usd);
+      if (s.oracle_score) updates.oracle_score = parseInt(s.oracle_score);
 
-      // Update ATH on token_lifecycle
-      const athVal = s.ath_24h_usd ? parseFloat(s.ath_24h_usd) : null;
-      const { error: tlErr } = await supabase
+      const { error } = await supabase
         .from("token_lifecycle")
-        .update({
-          ath_24h_usd: athVal,
-          current_status: s.is_rug ? "rugged" : "active",
-        })
+        .update(updates)
         .eq("token_mint", s.token_mint);
-      if (tlErr) console.warn("token_lifecycle update:", tlErr.message);
-
-      // Update community handles on x_communities via the linked token
-      // Find communities linked to this token
-      const { data: communities } = await supabase
-        .from("x_communities")
-        .select("id, linked_token_mints")
-        .contains("linked_token_mints", [s.token_mint]);
-
-      if (communities && communities.length > 0) {
-        // Update the first linked community
-        const { error: xcErr } = await supabase
-          .from("x_communities")
-          .update({
-            moderator_usernames: mods.length ? mods : null,
-            admin_usernames: admins.length ? admins : null,
-          })
-          .eq("id", communities[0].id);
-        if (xcErr) console.warn("x_communities update:", xcErr.message);
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Token updated", description: "Changes saved. Refreshing view…" });
+      toast({ title: "Token updated" });
       setEditState(null);
-      supabase.rpc("refresh_master_token_directory" as any).then(() => refetch());
+      refetch();
     },
     onError: (err: any) => {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
@@ -285,10 +237,11 @@ export default function Top200Tab() {
     setEditState({
       token_mint: r.token_mint,
       symbol: r.symbol || "",
-      community_mod_handles: (r.community_mod_handles || []).join(", "),
-      community_admin_handles: (r.community_admin_handles || []).join(", "),
+      name: r.name || "",
       ath_24h_usd: r.ath_24h_usd?.toString() || "",
-      is_rug: r.dev_tokens_rugged > 0 || r.current_status === "rugged",
+      current_status: r.current_status || "active",
+      launchpad: r.launchpad || "",
+      oracle_score: r.oracle_score?.toString() || "",
     });
   };
 
@@ -298,47 +251,37 @@ export default function Top200Tab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Trophy className="h-6 w-6 text-amber-400" /> Top 200 Leaderboard
+            <Trophy className="h-6 w-6 text-amber-400" /> Dex Top 200
           </h2>
           <p className="text-sm text-muted-foreground">
-            Quality-ranked tokens that shift position based on ATH, reputation, graduation &amp; dev trust
+            Live leaderboard from Dex/Cloudflare feed ranked by liquidity — edit tokens inline
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5">
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </Button>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>{stats.total} tracked</span>
+          <span>{stats.boosted} boosted</span>
+          <span>{stats.graduated} graduated</span>
+          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5 ml-2">
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Page toggle + search */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant={activePage === "top200" ? "default" : "outline"}
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setActivePage("top200")}
-        >
+        <Button variant={activePage === "top200" ? "default" : "outline"} size="sm" className="gap-1.5"
+          onClick={() => setActivePage("top200")}>
           <TrendingUp className="h-3.5 w-3.5" /> Top 200
-          <Badge variant="secondary" className="text-[10px] ml-1">{ranked.filter((r) => r._rank <= 200).length}</Badge>
+          <Badge variant="secondary" className="text-[10px] ml-1">{page1.length}</Badge>
         </Button>
-        <Button
-          variant={activePage === "rising" ? "default" : "outline"}
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setActivePage("rising")}
-        >
-          <TrendingDown className="h-3.5 w-3.5" /> Rising / Falling (201-500)
-          <Badge variant="secondary" className="text-[10px] ml-1">{ranked.filter((r) => r._rank > 200).length}</Badge>
+        <Button variant={activePage === "rising" ? "default" : "outline"} size="sm" className="gap-1.5"
+          onClick={() => setActivePage("rising")}>
+          <TrendingDown className="h-3.5 w-3.5" /> 201–500
+          <Badge variant="secondary" className="text-[10px] ml-1">{page2.length}</Badge>
         </Button>
-        <form
-          onSubmit={(e) => { e.preventDefault(); doSearch(); }}
-          className="flex gap-1.5 ml-auto"
-        >
-          <Input
-            placeholder="Search symbol, name, mint…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="text-sm h-8 w-56"
-          />
+        <form onSubmit={(e) => { e.preventDefault(); doSearch(); }} className="flex gap-1.5 ml-auto">
+          <Input placeholder="Search symbol, name, mint…" value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)} className="text-sm h-8 w-56" />
           <Button type="submit" size="sm" variant="secondary" className="h-8 px-3">
             <Search className="h-3.5 w-3.5" />
           </Button>
@@ -353,24 +296,24 @@ export default function Top200Tab() {
               <TableHeader>
                 <TableRow className="[&>th]:whitespace-nowrap [&>th]:px-2 [&>th]:py-2 [&>th]:text-[11px] [&>th]:font-semibold">
                   <TableHead>Rank</TableHead>
-                  <TableHead>Score</TableHead>
                   <TableHead>Img</TableHead>
                   <TableHead>Symbol</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Mint</TableHead>
-                  <TableHead>Launchpad</TableHead>
-                  <TableHead>Websites</TableHead>
-                  <TableHead>X Communities</TableHead>
-                  <TableHead>X Handles</TableHead>
+                  <TableHead>Liquidity</TableHead>
+                  <TableHead>Market Cap</TableHead>
+                  <TableHead>Volume 24h</TableHead>
+                  <TableHead>Price</TableHead>
                   <TableHead>ATH 24h</TableHead>
-                  <TableHead>Grad</TableHead>
+                  <TableHead>FDV</TableHead>
+                  <TableHead>Boosts</TableHead>
+                  <TableHead>Launchpad</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Oracle</TableHead>
+                  <TableHead>Pair Created</TableHead>
+                  <TableHead>First Seen</TableHead>
+                  <TableHead>Last Fetched</TableHead>
                   <TableHead>Dev Wallet</TableHead>
-                  <TableHead>Rep Score</TableHead>
-                  <TableHead>Trust</TableHead>
-                  <TableHead>Rugged</TableHead>
-                  <TableHead>Successful</TableHead>
-                  <TableHead>KYC</TableHead>
-                  <TableHead>Posted</TableHead>
                   <TableHead>Edit</TableHead>
                 </TableRow>
               </TableHeader>
@@ -383,149 +326,84 @@ export default function Top200Tab() {
                   </TableRow>
                 ) : displayRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={20} className="text-center py-8 text-muted-foreground">
-                      No tokens found
-                    </TableCell>
+                    <TableCell colSpan={20} className="text-center py-8 text-muted-foreground">No tokens found</TableCell>
                   </TableRow>
                 ) : (
                   displayRows.map((r: any) => (
-                    <TableRow
-                      key={r.token_mint}
+                    <TableRow key={r.token_mint}
                       className={`[&>td]:px-2 [&>td]:py-1.5 [&>td]:whitespace-nowrap hover:bg-muted/50 ${
+                        r.current_status === "rugged" ? "bg-destructive/10 line-through opacity-60" :
                         r._rank <= 10 ? "bg-amber-500/5" : r._rank <= 50 ? "bg-yellow-500/5" : ""
-                      }`}
-                    >
+                      }`}>
                       <TableCell><RankBadge rank={r._rank} /></TableCell>
-                      <TableCell><ScoreBadge score={r._score} /></TableCell>
                       <TableCell>
                         {r.image_url ? (
                           <img src={r.image_url} alt="" className="h-5 w-5 rounded-full object-cover" loading="lazy" />
-                        ) : (
-                          <div className="h-5 w-5 rounded-full bg-muted" />
-                        )}
+                        ) : <div className="h-5 w-5 rounded-full bg-muted" />}
                       </TableCell>
                       <TableCell className="font-semibold">{r.symbol ?? "—"}</TableCell>
                       <TableCell>{truncate(r.name, 20)}</TableCell>
                       <TableCell><MintCell mint={r.token_mint} /></TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-[10px]">{r.launchpad ?? "—"}</Badge>
+                      <TableCell className="font-mono text-green-400">{formatUsd(r.liquidity_usd)}</TableCell>
+                      <TableCell className="font-mono">{formatUsd(r.market_cap)}</TableCell>
+                      <TableCell className="font-mono">{formatUsd(r.volume_24h)}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {r.price_usd != null ? `$${Number(r.price_usd).toPrecision(4)}` : "—"}
                       </TableCell>
-                      {/* Websites */}
-                      <TableCell>
-                        {r.websites?.length ? (
-                          <div className="flex flex-col gap-0.5 max-w-[180px]">
-                            {r.websites.slice(0, 2).map((url: string, i: number) => {
-                              let display = url;
-                              try { display = new URL(url).hostname.replace("www.", ""); } catch {}
-                              return (
-                                <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                                  className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate">
-                                  🌐 {display} <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                                </a>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      {/* X Communities with admin/mod badges */}
-                      <TableCell>
-                        <div className="flex flex-col gap-0.5 max-w-[260px]">
-                          {r.x_community_urls?.length ? (
-                            r.x_community_urls.slice(0, 2).map((url: string, i: number) => {
-                              const name = r.x_community_names?.[i] || url.split("/").pop() || "Community";
-                              return (
-                                <div key={i} className="border border-border/50 rounded px-1 py-0.5 bg-muted/30">
-                                  <a href={url} target="_blank" rel="noopener noreferrer"
-                                    className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate">
-                                    🏛️ {truncate(name, 24)} <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                                  </a>
-                                  {r.community_admin_handles?.length > 0 && (
-                                    <div className="flex flex-wrap gap-0.5 mt-0.5">
-                                      {r.community_admin_handles.map((h: string, j: number) => (
-                                        <a key={j} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer">
-                                          <Badge variant="default" className="text-[9px] px-1 py-0 bg-amber-600/80 hover:bg-amber-500">
-                                            <Crown className="h-2 w-2 mr-0.5" />@{h}
-                                          </Badge>
-                                        </a>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {r.community_mod_handles?.length > 0 && (
-                                    <div className="flex flex-wrap gap-0.5 mt-0.5">
-                                      {r.community_mod_handles.slice(0, 4).map((h: string, j: number) => (
-                                        <a key={j} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer">
-                                          <Badge variant="secondary" className="text-[9px] px-1 py-0">
-                                            <Shield className="h-2 w-2 mr-0.5" />@{h}
-                                          </Badge>
-                                        </a>
-                                      ))}
-                                      {r.community_mod_handles.length > 4 && (
-                                        <Badge variant="outline" className="text-[9px] px-1 py-0">+{r.community_mod_handles.length - 4}</Badge>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      {/* X Handles */}
-                      <TableCell>
-                        {r.mesh_x_handles?.length ? (
-                          <div className="flex flex-wrap gap-0.5 max-w-[160px]">
-                            {r.mesh_x_handles.slice(0, 3).map((h: string, i: number) => (
-                              <a key={i} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer">
-                                <Badge variant="outline" className="text-[10px] px-1 py-0 text-blue-400 hover:text-blue-300">@{h}</Badge>
-                              </a>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="font-mono">
                         {r.ath_24h_usd != null ? `$${Number(r.ath_24h_usd).toFixed(6)}` : "—"}
                       </TableCell>
-                      <TableCell>{r.is_graduated ? "✅" : "—"}</TableCell>
+                      <TableCell className="font-mono text-muted-foreground">{formatUsd(r.fdv)}</TableCell>
                       <TableCell>
-                        {(() => {
-                          const w = r.creator_wallet || r.dev_wallets?.[0];
-                          if (!w) return <span className="text-muted-foreground">—</span>;
-                          return (
-                            <a href={`https://solscan.io/account/${w}`} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300">
-                              {w.slice(0, 6)}…{w.slice(-4)}
-                              <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                            </a>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        {r.dev_reputation_score != null ? (
-                          <Badge
-                            variant={Number(r.dev_reputation_score) >= 70 ? "default" : Number(r.dev_reputation_score) >= 40 ? "secondary" : "destructive"}
-                            className="text-[10px]"
-                          >
-                            {Number(r.dev_reputation_score).toFixed(0)}
+                        {r.active_boosts > 0 ? (
+                          <Badge variant="default" className="text-[10px] gap-0.5">
+                            <Flame className="h-2.5 w-2.5" />{r.active_boosts}
                           </Badge>
                         ) : "—"}
                       </TableCell>
-                      <TableCell>{r.dev_trust_level ?? "—"}</TableCell>
                       <TableCell>
-                        {r.dev_tokens_rugged > 0 ? (
-                          <span className="text-red-400 flex items-center gap-0.5">
-                            <AlertTriangle className="h-3 w-3" /> {r.dev_tokens_rugged}
-                          </span>
+                        {r.launchpad ? (
+                          <div className="flex items-center gap-1">
+                            {LAUNCHPAD_LOGOS[r.launchpad.toLowerCase()] && (
+                              <img src={LAUNCHPAD_LOGOS[r.launchpad.toLowerCase()]} alt="" className="w-4 h-4 object-contain" />
+                            )}
+                            <span className="text-[10px]">{r.launchpad}</span>
+                          </div>
                         ) : "—"}
                       </TableCell>
-                      <TableCell>{r.dev_tokens_successful ?? "—"}</TableCell>
-                      <TableCell>{r.kyc_verified ? "✅" : "—"}</TableCell>
-                      <TableCell>{r.was_posted ? "✅" : "—"}</TableCell>
+                      <TableCell>
+                        {r.current_status === "rugged" ? (
+                          <Badge variant="destructive" className="text-[10px]">🚫 Rug</Badge>
+                        ) : r.current_status === "graduated" ? (
+                          <Badge variant="default" className="text-[10px]">🎓</Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-[10px]">{r.current_status || "—"}</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {r.oracle_score != null ? (
+                          <Badge variant={r.oracle_score >= 70 ? "default" : r.oracle_score >= 40 ? "secondary" : "destructive"}
+                            className="text-[10px] font-mono">{r.oracle_score}</Badge>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-[10px]">
+                        {r.pair_created_at ? formatDistanceToNow(new Date(r.pair_created_at), { addSuffix: true }) : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-[10px]">
+                        {r.first_seen_at ? formatDistanceToNow(new Date(r.first_seen_at), { addSuffix: true }) : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-[10px]">
+                        {r.last_fetched_at ? formatDistanceToNow(new Date(r.last_fetched_at), { addSuffix: true }) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {r.creator_wallet ? (
+                          <a href={`https://solscan.io/account/${r.creator_wallet}`} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300">
+                            {r.creator_wallet.slice(0, 6)}…{r.creator_wallet.slice(-4)}
+                            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                          </a>
+                        ) : "—"}
+                      </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(r)}>
                           <Edit2 className="h-3 w-3" />
@@ -537,19 +415,17 @@ export default function Top200Tab() {
               </TableBody>
             </Table>
           </div>
-          {/* Summary bar */}
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <span className="text-xs text-muted-foreground">
               {activePage === "top200"
-                ? `Showing ranks 1–200 · ${page1.length} tokens`
-                : `Showing ranks 201–500 · ${page2.length} tokens`}
-              {search && ` (filtered: ${filtered.length} results)`}
+                ? `Ranks 1–200 · ${page1.length} tokens`
+                : `Ranks 201–500 · ${page2.length} tokens`}
+              {search && ` (filtered: ${filtered.length})`}
             </span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Edit dialog */}
       <EditTokenDialog
         open={!!editState}
         onClose={() => setEditState(null)}
