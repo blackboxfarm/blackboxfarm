@@ -141,24 +141,24 @@ function ReportView({ report }: { report: MorningReport }) {
                       <span className="font-medium">{alert.title}</span>
                       <span className="text-muted-foreground ml-1">— {alert.detail}</span>
                     </div>
-                    <div className="flex items-center gap-0.5 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="icon"
-                        className="h-5 w-5"
-                        title="Copy question about this alert"
+                        className="h-7 w-7 border-border/50 hover:bg-purple-500/20 hover:text-purple-300"
+                        title="Copy investigation question to clipboard"
                         onClick={() => copyAlertQuestion(alert)}
                       >
-                        <Search className="w-3 h-3" />
+                        <Search className="w-4 h-4" />
                       </Button>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="icon"
-                        className={`h-5 w-5 ${isCleared ? 'text-green-500' : ''}`}
+                        className={`h-7 w-7 border-border/50 ${isCleared ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'hover:bg-green-500/20 hover:text-green-300'}`}
                         title={isCleared ? 'Unmark as cleared' : 'Mark as cleared'}
                         onClick={() => toggleClearAlert(i)}
                       >
-                        <CheckCheck className="w-3 h-3" />
+                        <CheckCheck className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
