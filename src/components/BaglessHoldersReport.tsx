@@ -369,8 +369,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     if (previousTokenRef.current && previousTokenRef.current !== normalized && normalized) {
       // Token changed - clear old report to allow new generation
       setReport(null);
-      setShareCardImageUrl(null);
-      setShareCardPageUrl(null);
       setKolMatches([]);
     }
     previousTokenRef.current = normalized;
