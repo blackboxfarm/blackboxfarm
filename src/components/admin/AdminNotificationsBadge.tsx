@@ -322,7 +322,7 @@ export function AdminNotificationsBadge() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabCategory)} className="w-full">
-          <TabsList className="w-full rounded-none border-b border-border bg-transparent h-auto p-0">
+          <TabsList className="w-full rounded-none border-b border-border bg-transparent h-auto p-0 flex-nowrap">
             <TabsTrigger
               value="signups"
               className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-green-500 data-[state=active]:bg-transparent py-2.5 gap-1.5"
