@@ -170,9 +170,9 @@ function generateWelcomeEmail(data: SubscriberWelcomeRequest): string {
                   <p style="color: #475569; font-size: 12px; text-align: center; margin: 0; line-height: 1.8;">
                     BlackBox Farm — Solana Intelligence Platform<br>
                     This email was sent to ${email} because you subscribed to BlackBox.<br>
-                    <a href="https://blackbox.farm" style="color: #00e5ff60; text-decoration: none;">blackbox.farm</a> · 
-                    <a href="https://blackbox.farm/privacy" style="color: #00e5ff60; text-decoration: none;">Privacy</a> · 
-                    <a href="https://blackbox.farm/terms" style="color: #00e5ff60; text-decoration: none;">Terms</a>
+                    <a href="https://blackbox.farm" style="color: #D4AF37; text-decoration: none;">blackbox.farm</a> · 
+                    <a href="https://blackbox.farm/privacy" style="color: #D4AF37; text-decoration: none;">Privacy</a> · 
+                    <a href="https://blackbox.farm/terms" style="color: #D4AF37; text-decoration: none;">Terms</a>
                   </p>
                 </td>
               </tr>
