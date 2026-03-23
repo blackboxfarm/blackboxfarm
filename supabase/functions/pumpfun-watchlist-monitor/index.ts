@@ -4,6 +4,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
+import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**
@@ -145,12 +146,9 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
 // === MAYHEM MODE CHECK ===
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!response.ok) return false;
+    const data = await fetchPumpFunCoin(tokenMint, 'watchlist-monitor');
+    if (!data) return false;
     
-    const data = await response.json();
     const totalSupply = data.total_supply || 0;
     const program = data.program || null;
     
@@ -338,15 +336,11 @@ async function fetchJupiterPrice(mint: string): Promise<number | null> {
 
 // Composite metric fetcher
 async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
-  // Try pump.fun first
+  // Try pump.fun first — using shared wrapper with backoff + admin alerts
   try {
-    const response = await fetchWithBackoff(
-      `https://frontend-api-v3.pump.fun/coins/${mint}`,
-      { headers: { 'Accept': 'application/json' } }
-    );
+    const data = await fetchPumpFunCoin(mint, 'watchlist-monitor');
 
-    if (response.ok) {
-      const data = await response.json();
+    if (data) {
       const virtualSolReserves = data.virtual_sol_reserves || 0;
       const virtualTokenReserves = data.virtual_token_reserves || 0;
       const totalSupply = data.total_supply || 1000000000000000;
@@ -1376,11 +1370,14 @@ serve(withRunLog('pumpfun-watchlist-monitor', async (req) => {
     const action = url.searchParams.get('action') || 'monitor';
 
     console.log(`🎯 pumpfun-watchlist-monitor v2 action: ${action}`);
+    resetPumpFunRunStats();
 
     switch (action) {
       case 'monitor': {
         const stats = await monitorWatchlistTokens(supabase);
-        return jsonResponse({ success: true, stats });
+        const pumpStats = getPumpFunRunStats();
+        console.log(`[watchlist-monitor] 📊 Pump.fun API stats: ${pumpStats.totalCalls} calls, ${pumpStats.successCalls} ok, ${pumpStats.failedCalls} failed, ${pumpStats.rateLimitHits} rate-limited`);
+        return jsonResponse({ success: true, stats, pumpfun_api_stats: pumpStats });
       }
 
       case 'status': {

@@ -6,6 +6,7 @@ import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
+import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -647,16 +648,9 @@ async function checkTokenAuthorities(
   }
 }
 
-// Fetch token data from pump.fun API for price/volume
+// Fetch token data from pump.fun API for price/volume — uses shared wrapper with backoff + alerts
 async function fetchPumpFunData(mint: string): Promise<any> {
-  try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.error(`Error fetching pump.fun data for ${mint}:`, error);
-    return null;
-  }
+  return await fetchPumpFunCoin(mint, 'token-enricher');
 }
 
 // Fetch RugCheck analysis for a token
@@ -1316,6 +1310,7 @@ serve(withRunLog('pumpfun-token-enricher', async (req) => {
 
     if (action === 'enrich') {
       console.log('🔄 Starting token enrichment...');
+      resetPumpFunRunStats();
       
       const config = await getConfig(supabase);
       console.log('Config:', config);
@@ -1357,15 +1352,18 @@ serve(withRunLog('pumpfun-token-enricher', async (req) => {
       
       const stats = await enrichTokenBatch(supabase, pendingTokens, config);
       
+      const pumpStats = getPumpFunRunStats();
       console.log('\n📊 Enrichment Summary:');
       console.log(`   Enriched: ${stats.enriched}`);
       console.log(`   Promoted: ${stats.promoted}`);
       console.log(`   Rejected (permanent): ${stats.rejected}`);
       console.log(`   Rejected (soft): ${stats.softRejected}`);
+      console.log(`   Pump.fun API: ${pumpStats.totalCalls} calls, ${pumpStats.successCalls} ok, ${pumpStats.failedCalls} failed, ${pumpStats.rateLimitHits} rate-limited`);
       
       return new Response(JSON.stringify({
         success: true,
-        stats
+        stats,
+        pumpfun_api_stats: pumpStats
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
