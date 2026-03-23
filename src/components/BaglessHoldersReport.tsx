@@ -299,10 +299,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   const [holderViewMode, setHolderViewMode] = useState<'simple' | 'granular'>('simple');
   const [sedimentViewMode, setSedimentViewMode] = useState<'simple' | 'granular'>('simple');
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
-  // Share card state
-  const [shareCardImageUrl, setShareCardImageUrl] = useState<string | null>(null);
-  const [shareCardPageUrl, setShareCardPageUrl] = useState<string | null>(null);
-  const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
