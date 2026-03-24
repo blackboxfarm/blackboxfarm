@@ -3525,6 +3525,36 @@ export type Database = {
         }
         Relationships: []
       }
+      edge_function_registry: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          data_in: string | null
+          data_out: string | null
+          description: string | null
+          function_name: string
+          is_active: boolean | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          data_in?: string | null
+          data_out?: string | null
+          description?: string | null
+          function_name: string
+          is_active?: boolean | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          data_in?: string | null
+          data_out?: string | null
+          description?: string | null
+          function_name?: string
+          is_active?: boolean | null
+        }
+        Relationships: []
+      }
       edge_function_runs: {
         Row: {
           created_at: string | null
