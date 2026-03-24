@@ -213,8 +213,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     setCapBroken(false);
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
-  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active, trigger it
-  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active;
+  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active AND hasn't already run
+  const spiderHasError = !!spiderStatus.error;
+  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !hasSpideredOnce;
 
   useEffect(() => {
     if (shouldOfferSpider && searchInput.trim() && !hasSpideredOnce) {
@@ -1073,6 +1074,35 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                   Resolving dev wallet, funding chain, tokens, and socials for{' '}
                   <span className="font-mono text-xs text-primary">{focusedEntity?.id.slice(0, 16)}...</span>
                 </p>
+              </div>
+            </div>
+          ) : focusedEntity && displayData.nodes.length === 0 && hasSpideredOnce ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center space-y-4 max-w-md px-6">
+                <p className="text-4xl">🔍</p>
+                <h3 className="text-lg font-semibold text-foreground">No mesh data found</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {spiderHasError ? spiderStatus.error : 'The spider completed but found no connections for this entity.'}
+                </p>
+                {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+                  <div className="text-left bg-muted/30 rounded-lg p-3 text-xs space-y-1 font-mono">
+                    {spiderStatus.diagnostics.map((d, i) => (
+                      <div key={i} className="text-muted-foreground">{d}</div>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setHasSpideredOnce(false);
+                    clearCooldown(searchInput.trim());
+                    triggerSpider(searchInput.trim(), 'deep');
+                    setHasSpideredOnce(true);
+                  }}
+                >
+                  <Radar className="h-4 w-4 mr-2" /> Retry Spider
+                </Button>
               </div>
             </div>
           ) : (
