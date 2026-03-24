@@ -222,7 +222,7 @@ function processTemplate(template: string, data: any): string {
   // Sanitize URL-like names to prevent Twitter hijacking the OG preview
   const tokenName = sanitizeUrlLikeName(rawName);
   // Pass trigger_comment to allow DEX scanner overrides
-  const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment);
+  const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment, data.tokenAge);
   const timestamp = formatTimestamp();
   
   // AI summary defaults to empty if not provided or disabled
