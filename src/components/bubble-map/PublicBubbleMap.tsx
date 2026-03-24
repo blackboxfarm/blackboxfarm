@@ -851,12 +851,76 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         </CardContent>
       </Card>
 
+      {/* Dev Wallet Bar — auto-filled above graph */}
+      {devWalletAddress && (
+        <div className="rounded-lg border border-primary/20 bg-card/80 backdrop-blur px-4 py-2 flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-green-400">●</span>
+            <span>📡 Dev Wallet</span>
+            <span className="font-semibold text-foreground">{devWalletAddress.slice(0, 6)}...{devWalletAddress.slice(-4)}</span>
+          </div>
+          <code className="font-mono text-[10px] text-muted-foreground select-all flex-1 truncate">{devWalletAddress}</code>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0"
+            onClick={() => {
+              navigator.clipboard.writeText(devWalletAddress);
+              setCopiedDevWallet(true);
+              toast.success('Dev wallet copied!');
+              setTimeout(() => setCopiedDevWallet(false), 2000);
+            }}>
+            {copiedDevWallet ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+          </Button>
+          <Badge variant="secondary" className="text-[10px]">
+            {displayData.links.filter(l => {
+              const srcId = typeof l.source === 'string' ? l.source : (l.source as any).id;
+              const tgtId = typeof l.target === 'string' ? l.target : (l.target as any).id;
+              return srcId?.includes(devWalletAddress) || tgtId?.includes(devWalletAddress);
+            }).length} conn
+          </Badge>
+        </div>
+      )}
+      {devWalletLoading && (
+        <div className="rounded-lg border border-muted/20 bg-card/50 px-4 py-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Resolving dev wallet...
+        </div>
+      )}
+
       {/* Graph Canvas */}
       <Card className="overflow-hidden">
         <div ref={containerRef} className="w-full relative" style={{ height: '600px', background: 'hsl(var(--background))' }}>
           {/* Hacker Terminal Overlay */}
           <HackerTerminal lines={terminalLines} visible={terminalVisible} title={terminalTitle} />
 
+          {/* Action Buttons Overlay — top-left inside graph */}
+          {graphData.nodes.length > 0 && (
+            <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
+              <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching || kycFound}
+                className={`text-xs h-7 justify-start backdrop-blur bg-background/70 ${kycFound
+                  ? 'border-muted/30 text-muted-foreground opacity-50 cursor-not-allowed'
+                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'}`}>
+                {kycSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Key className="h-3 w-3 mr-1" />}
+                {kycFound ? 'KYC Root Found ✓' : 'Find KYC Root'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleFindTokens} disabled={tokenSearching}
+                className="text-xs h-7 justify-start backdrop-blur bg-background/70 border-yellow-500/30 hover:bg-yellow-500/10 text-yellow-400">
+                {tokenSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Coins className="h-3 w-3 mr-1" />}
+                Find All Tokens
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleSpider} disabled={spiderStatus.active}
+                className="text-xs h-7 justify-start backdrop-blur bg-background/70">
+                <Radar className="h-3 w-3 mr-1" /> Deep Spider
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching || revealingXAccounts}
+                className={`text-xs h-7 justify-start backdrop-blur bg-background/70 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
+                  hasSpideredOnce && !communitySearching && !xAccountsRevealed ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
+                }`}>
+                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : (
+                  <img src={xIcon} alt="X" className="h-3 w-3 mr-1 rounded-sm" />
+                )}
+                Map X Community
+              </Button>
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-3">
