@@ -18,6 +18,8 @@ import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
 const NODE_CAP_DEFAULT = 80;
+const NODE_CAP_MOBILE = 40;
+const isMobileDevice = () => typeof window !== 'undefined' && window.innerWidth < 768;
 
 interface PublicBubbleMapProps {
   showUpgradePrompt?: boolean;
@@ -36,7 +38,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [kycSearching, setKycSearching] = useState(false);
   const [kycFound, setKycFound] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
-  const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
+  const [nodeCap, setNodeCap] = useState(isMobileDevice() ? NODE_CAP_MOBILE : NODE_CAP_DEFAULT);
+  const isMobile = isMobileDevice();
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
   const [spreadFactor, setSpreadFactor] = useState(3);
@@ -219,7 +222,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
   useEffect(() => {
     if (shouldOfferSpider && searchInput.trim() && !hasSpideredOnce) {
-      triggerSpider(searchInput.trim(), 'deep');
+      triggerSpider(searchInput.trim(), isMobile ? 'quick' : 'deep');
       setHasSpideredOnce(true);
     }
   }, [shouldOfferSpider, searchInput, triggerSpider, hasSpideredOnce]);
@@ -1123,16 +1126,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 const nameLabel = n.displayName ? `${n.displayName}\n` : '';
                 return `${devLabel}${nameLabel}${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
-              cooldownTicks={80}
-              d3AlphaDecay={0.03}
+              cooldownTicks={isMobile ? 40 : 80}
+              d3AlphaDecay={isMobile ? 0.05 : 0.03}
               d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
-              d3AlphaMin={0.005}
+              d3AlphaMin={isMobile ? 0.01 : 0.005}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
-              linkDirectionalParticles={1}
+              linkDirectionalParticles={isMobile ? 0 : 1}
               linkDirectionalParticleWidth={2}
               linkDirectionalParticleSpeed={0.005}
-              linkDirectionalParticleColor={(link: any) => {
+              linkDirectionalParticleColor={isMobile ? undefined : (link: any) => {
                 const rel = link.relationship || '';
                 if (rel.includes('funded')) return 'rgba(34,197,94,0.7)';
                 if (rel.includes('created')) return 'rgba(234,179,8,0.7)';
