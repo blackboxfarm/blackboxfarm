@@ -698,35 +698,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
             </Button>
           </div>
 
-          {/* Action Buttons */}
-          {graphData.nodes.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching || kycFound}
-                className={`text-xs h-7 ${kycFound 
-                  ? 'border-muted/30 text-muted-foreground opacity-50 cursor-not-allowed' 
-                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'}`}>
-                {kycSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Key className="h-3 w-3 mr-1" />}
-                {kycFound ? 'KYC Root Found ✓' : 'Find KYC Root'}
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleFindTokens} disabled={tokenSearching}
-                className="text-xs h-7 border-yellow-500/30 hover:bg-yellow-500/10 text-yellow-400">
-                {tokenSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Coins className="h-3 w-3 mr-1" />}
-                Find All Tokens
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleSpider} disabled={spiderStatus.active} className="text-xs h-7">
-                <Radar className="h-3 w-3 mr-1" /> Deep Spider
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching || revealingXAccounts}
-                className={`text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
-                  hasSpideredOnce && !communitySearching && !xAccountsRevealed ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
-                }`}>
-                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : (
-                  <img src={xIcon} alt="X" className="h-3 w-3 mr-1 rounded-sm" />
-                )}
-                Map X Community
-              </Button>
-            </div>
-          )}
+          {/* Action buttons moved to unified control bar below */}
 
           {/* Action buttons moved to overlay inside graph canvas */}
 
