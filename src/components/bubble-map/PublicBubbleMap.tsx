@@ -153,12 +153,39 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
   }, [graphData, viewMode, dimensions.width, spreadFactor]);
 
+  // Auto-resolve dev wallet when a token mint is searched
+  const [copiedDevWallet, setCopiedDevWallet] = useState(false);
+  useEffect(() => {
+    const input = searchInput.trim();
+    if (!input || input.length < 20 || input.startsWith('@')) {
+      setDevWalletAddress(null);
+      return;
+    }
+    // Check from graph data first
+    const devNode = graphData.nodes.find(n => n.type === 'wallet' && n.isDev);
+    if (devNode) {
+      setDevWalletAddress(devNode.fullId || devNode.id.replace(/^wallet:/, ''));
+      return;
+    }
+    // If no dev node in graph yet, try API lookup
+    if (!devWalletLoading && !devWalletAddress) {
+      setDevWalletLoading(true);
+      supabase.functions.invoke('solscan-creator-lookup', { body: { tokenMint: input } })
+        .then(({ data }) => {
+          if (data?.creatorWallet) setDevWalletAddress(data.creatorWallet);
+        })
+        .catch(() => {})
+        .finally(() => setDevWalletLoading(false));
+    }
+  }, [searchInput, graphData.nodes]);
+
   // Reset reveal state on new search
   const handleSearch = useCallback(() => {
     if (!searchInput.trim()) {
       resetView();
       setXAccountsRevealed(false);
       setKycFound(false);
+      setDevWalletAddress(null);
       return;
     }
     if (!canSearch) {
@@ -167,11 +194,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
     recordSearch();
     setXAccountsRevealed(false);
-    setHasSpideredOnce(false); // Reset so auto-spider can fire for new entity
-    clearCooldown(searchInput.trim()); // Clear any stale cooldown for this entity
+    setHasSpideredOnce(false);
+    setDevWalletAddress(null);
+    clearCooldown(searchInput.trim());
     let type = 'wallet';
     const rawInput = searchInput.trim();
-    // Normalize X handles: strip @ and lowercase to match DB storage
     let normalizedId = rawInput;
     if (rawInput.startsWith('@')) {
       type = 'x_account';
