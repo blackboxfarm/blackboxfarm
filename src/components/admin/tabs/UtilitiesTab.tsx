@@ -43,6 +43,9 @@ export default function UtilitiesTab() {
         <TabsTrigger value="apify-breakdown">🤖 Apify Usage</TabsTrigger>
       </TabsList>
 
+      <TabsContent value="function-ops">
+        {activeSubTab === "function-ops" && <Suspense fallback={<LazyLoader />}><FunctionOperationsDashboard /></Suspense>}
+      </TabsContent>
       <TabsContent value="api-resources">
         {activeSubTab === "api-resources" && <Suspense fallback={<LazyLoader />}><ApiResourceManager /></Suspense>}
       </TabsContent>
