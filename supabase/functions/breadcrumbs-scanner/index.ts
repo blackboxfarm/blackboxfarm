@@ -129,7 +129,7 @@ serve(withRunLog('breadcrumbs-scanner', async (req) => {
       }
     );
   }
-});
+}));
 
 async function fetchOnChainMetadata(mint: string): Promise<TokenProfile | null> {
   try {
