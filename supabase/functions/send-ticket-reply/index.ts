@@ -78,4 +78,4 @@ serve(withRunLog('send-ticket-reply', async (req: Request) => {
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
-});
+}));
