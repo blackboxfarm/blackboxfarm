@@ -702,6 +702,29 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                   <Plus className="h-3 w-3" />
                 </Button>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={() => {
+                  if (graphRef.current) {
+                    const gd = graphRef.current.graphData();
+                    const w = dimensions.width || 800;
+                    const h = 600;
+                    gd.nodes.forEach((node: any) => {
+                      node.x = (Math.random() - 0.5) * w * 0.8;
+                      node.y = (Math.random() - 0.5) * h * 0.8;
+                      node.vx = (Math.random() - 0.5) * 5;
+                      node.vy = (Math.random() - 0.5) * 5;
+                    });
+                    graphRef.current.graphData(gd);
+                    graphRef.current.d3ReheatSimulation();
+                  }
+                }}
+                title="Randomize positions and re-settle the graph"
+              >
+                🫨 Shakey-Shake!
+              </Button>
             </div>
           </div>
         </CardHeader>
