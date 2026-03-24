@@ -570,6 +570,15 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 <GitBranch className="h-3 w-3 mr-1" /> Tree
               </Button>
             </div>
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
