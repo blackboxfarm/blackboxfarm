@@ -79,23 +79,25 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
   useEffect(() => {
     if (graphRef.current) {
+      const sf = spreadFactor;
       const linkForce = graphRef.current.d3Force('link');
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) return viewMode === 'tree' ? 25 : 15;
-          if (['created', 'created_by'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
-          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 45 : 28;
-          if (rel.includes('funded') || rel.includes('kyc') || rel.includes('is_kyc_root')) return viewMode === 'tree' ? 35 : 22;
-          return viewMode === 'tree' ? 50 : 35;
+          let base: number;
+          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) base = viewMode === 'tree' ? 25 : 15;
+          else if (['created', 'created_by'].includes(rel)) base = viewMode === 'tree' ? 30 : 18;
+          else if (['community_for', 'social_account'].includes(rel)) base = viewMode === 'tree' ? 45 : 28;
+          else if (rel.includes('funded') || rel.includes('kyc') || rel.includes('is_kyc_root')) base = viewMode === 'tree' ? 35 : 22;
+          else base = viewMode === 'tree' ? 50 : 35;
+          return base * sf;
         }).strength((link: any) => {
-          // Stronger pull for funding/KYC chain links to keep them visually connected
           const rel = link.relationship || '';
           if (rel.includes('funded') || rel.includes('kyc') || rel.includes('created')) return 1.5;
           return 0.7;
         });
       }
-      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -150 : -50);
+      graphRef.current.d3Force('charge')?.strength((viewMode === 'tree' ? -150 : -50) * sf);
       
       // Add center gravity to keep the graph cohesive instead of flying apart
       graphRef.current.d3Force('center')?.strength(0.05);
