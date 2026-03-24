@@ -487,6 +487,13 @@ export async function detectFreshWallets(
       const SOLANA_GENESIS_MS = new Date('2020-03-16').getTime();
       const AVG_EPOCH_DURATION_MS = 2.5 * 24 * 60 * 60 * 1000;
       const estimatedCreationMs = SOLANA_GENESIS_MS + (rentEpoch * AVG_EPOCH_DURATION_MS);
+      
+      // Guard against invalid dates (rentEpoch can be MAX_U64 on rent-exempt accounts)
+      if (!Number.isFinite(estimatedCreationMs) || estimatedCreationMs < 0 || estimatedCreationMs > now + 86400000) {
+        walletAges.push({ wallet: walletsToCheck[i], createdAt: null, ageHours: null, isFresh: false });
+        continue;
+      }
+      
       const ageMs = now - estimatedCreationMs;
       const ageHours = Math.max(0, Math.round(ageMs / 3600000));
 
