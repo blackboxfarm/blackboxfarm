@@ -518,7 +518,7 @@ export default function Features() {
           </CardContent>
         </Card>
 
-        <div className="text-center mt-8">
+        <div className="flex flex-wrap justify-center gap-3 mt-8">
           <Button 
             variant="outline" 
             size="lg"
@@ -528,6 +528,15 @@ export default function Features() {
             <Network className="w-4 h-4" />
             Try the Bubble Map
             <ArrowRight className="w-4 h-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="lg"
+            onClick={() => navigate("/bubbles-how-to")}
+            className="gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <Eye className="w-4 h-4" />
+            Bubble Map Overview &amp; Guide
           </Button>
         </div>
       </section>
