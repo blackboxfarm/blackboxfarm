@@ -1076,6 +1076,35 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 </p>
               </div>
             </div>
+          ) : focusedEntity && displayData.nodes.length === 0 && hasSpideredOnce ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center space-y-4 max-w-md px-6">
+                <p className="text-4xl">🔍</p>
+                <h3 className="text-lg font-semibold text-foreground">No mesh data found</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {spiderHasError ? spiderStatus.error : 'The spider completed but found no connections for this entity.'}
+                </p>
+                {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+                  <div className="text-left bg-muted/30 rounded-lg p-3 text-xs space-y-1 font-mono">
+                    {spiderStatus.diagnostics.map((d, i) => (
+                      <div key={i} className="text-muted-foreground">{d}</div>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setHasSpideredOnce(false);
+                    clearCooldown(searchInput.trim());
+                    triggerSpider(searchInput.trim(), 'deep');
+                    setHasSpideredOnce(true);
+                  }}
+                >
+                  <Radar className="h-4 w-4 mr-2" /> Retry Spider
+                </Button>
+              </div>
+            </div>
           ) : (
             <ForceGraph2D
               ref={graphRef}
