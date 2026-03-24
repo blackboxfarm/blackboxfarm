@@ -13,6 +13,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserTier } from "@/hooks/useUserTier";
 
 export default function BubblesHowTo() {
+  const { user } = useAuth();
+  const { isPro } = useUserTier();
+  const bubbleMapLink = (user && isPro) ? "/bubblemap" : "/bubblepromo";
+
   return (
     <SiteLayout>
       <div className="max-w-4xl mx-auto px-4 py-10 space-y-10">
