@@ -96,7 +96,7 @@ serve(withRunLog('arb-opportunity-scanner', async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
 
 async function fetchEthPrice(rpcUrl: string, chain: 'mainnet' | 'base' = 'mainnet'): Promise<number> {
   try {
