@@ -184,7 +184,7 @@ Deno.serve(withRunLog('backfill-wallet-transactions', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
-})
+}));
 
 function deriveSwapFromTransfers(txData: any, walletAddress: string) {
   try {
