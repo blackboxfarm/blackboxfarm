@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit } from "lucide-react";
 import { xIcon } from "@/components/token/SocialIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 
 type ViewMode = 'bubble' | 'tree';
+type SolarMode = 'minimum' | 'clusters';
 const NODE_CAP_DEFAULT = 80;
 
 interface PublicBubbleMapProps {
@@ -39,6 +40,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
   const [spreadFactor, setSpreadFactor] = useState(3);
+  const [solarMode, setSolarMode] = useState<SolarMode>('minimum');
   const [hasSpideredOnce, setHasSpideredOnce] = useState(false);
   const [devWalletAddress, setDevWalletAddress] = useState<string | null>(null);
   const [devWalletLoading, setDevWalletLoading] = useState(false);
@@ -531,6 +533,64 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       baseNodes = baseNodes.filter(n => n.type !== 'x_account');
     }
 
+    // Solar Minimum: BFS from token node, only immediate ecosystem + max 4 wallet hops
+    if (solarMode === 'minimum' && baseNodes.length > 0) {
+      const tokenNode = baseNodes.find(n => n.type === 'token');
+      if (tokenNode) {
+        const allowedIds = new Set<string>();
+        const walletHops = new Map<string, number>(); // track wallet hop depth
+        const queue: Array<{ id: string; walletDepth: number }> = [{ id: tokenNode.id, walletDepth: 0 }];
+        allowedIds.add(tokenNode.id);
+
+        // Build adjacency from ALL graph links (not just filtered)
+        const adj = new Map<string, Array<{ neighbor: string; rel: string }>>();
+        for (const link of graphData.links) {
+          const srcId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+          const tgtId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+          const rel = (link as any).relationship || '';
+          if (!adj.has(srcId)) adj.set(srcId, []);
+          if (!adj.has(tgtId)) adj.set(tgtId, []);
+          adj.get(srcId)!.push({ neighbor: tgtId, rel });
+          adj.get(tgtId)!.push({ neighbor: srcId, rel });
+        }
+
+        while (queue.length > 0) {
+          const { id, walletDepth } = queue.shift()!;
+          const neighbors = adj.get(id) || [];
+          for (const { neighbor, rel } of neighbors) {
+            if (allowedIds.has(neighbor)) continue;
+            const neighborNode = baseNodes.find(n => n.id === neighbor);
+            if (!neighborNode) continue;
+
+            const nType = neighborNode.type;
+
+            // Always allow: website, x_community, x_account, kyc_root
+            if (['website', 'x_community', 'x_account', 'kyc_root'].includes(nType)) {
+              allowedIds.add(neighbor);
+              queue.push({ id: neighbor, walletDepth });
+              continue;
+            }
+
+            // Wallet nodes: allow if within 4 hops from dev wallet
+            if (nType === 'wallet') {
+              const newDepth = walletDepth + 1;
+              if (newDepth <= 4) {
+                allowedIds.add(neighbor);
+                walletHops.set(neighbor, newDepth);
+                queue.push({ id: neighbor, walletDepth: newDepth });
+              }
+              continue;
+            }
+
+            // Token: only the searched token (already added)
+            // Skip other tokens in minimum mode
+          }
+        }
+
+        baseNodes = baseNodes.filter(n => allowedIds.has(n.id));
+      }
+    }
+
     const nodeIds = new Set(baseNodes.map(n => n.id));
     const baseLinks = graphData.links.filter(l =>
       nodeIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
@@ -538,7 +598,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     );
 
     return { nodes: baseNodes, links: baseLinks };
-  }, [graphData, nodeCap, capBroken, xAccountsRevealed]);
+  }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode]);
 
   const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
@@ -616,22 +676,32 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 Interactive visualization of the reputation mesh. Enter any entity to explore.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-              <Button variant={viewMode === 'bubble' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('bubble')}>
-                <Network className="h-3 w-3 mr-1" /> Bubble
-              </Button>
-              <Button variant={viewMode === 'tree' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('tree')}>
-                <GitBranch className="h-3 w-3 mr-1" /> Tree
-              </Button>
-            </div>
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
-                <Minus className="h-3 w-3" />
-              </Button>
-              <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
-                <Plus className="h-3 w-3" />
-              </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                <Button variant={solarMode === 'minimum' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('minimum')}>
+                  <Sun className="h-3 w-3 mr-1" /> Solar Min
+                </Button>
+                <Button variant={solarMode === 'clusters' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('clusters')}>
+                  <Orbit className="h-3 w-3 mr-1" /> Solar Clusters
+                </Button>
+              </div>
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                <Button variant={viewMode === 'bubble' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('bubble')}>
+                  <Network className="h-3 w-3 mr-1" /> Bubble
+                </Button>
+                <Button variant={viewMode === 'tree' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('tree')}>
+                  <GitBranch className="h-3 w-3 mr-1" /> Tree
+                </Button>
+              </div>
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
