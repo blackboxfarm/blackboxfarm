@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus } from "lucide-react";
 import { xIcon } from "@/components/token/SocialIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +37,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
+  const [spreadFactor, setSpreadFactor] = useState(3);
   const [hasSpideredOnce, setHasSpideredOnce] = useState(false);
 
   // Showmanship state
@@ -78,23 +79,25 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
   useEffect(() => {
     if (graphRef.current) {
+      const sf = spreadFactor;
       const linkForce = graphRef.current.d3Force('link');
       if (linkForce) {
         linkForce.distance((link: any) => {
           const rel = link.relationship || '';
-          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) return viewMode === 'tree' ? 25 : 15;
-          if (['created', 'created_by'].includes(rel)) return viewMode === 'tree' ? 30 : 18;
-          if (['community_for', 'social_account'].includes(rel)) return viewMode === 'tree' ? 45 : 28;
-          if (rel.includes('funded') || rel.includes('kyc') || rel.includes('is_kyc_root')) return viewMode === 'tree' ? 35 : 22;
-          return viewMode === 'tree' ? 50 : 35;
+          let base: number;
+          if (['admin_of', 'mod_of', 'co_mod', 'community_admin', 'community_mod'].includes(rel)) base = viewMode === 'tree' ? 25 : 15;
+          else if (['created', 'created_by'].includes(rel)) base = viewMode === 'tree' ? 30 : 18;
+          else if (['community_for', 'social_account'].includes(rel)) base = viewMode === 'tree' ? 45 : 28;
+          else if (rel.includes('funded') || rel.includes('kyc') || rel.includes('is_kyc_root')) base = viewMode === 'tree' ? 35 : 22;
+          else base = viewMode === 'tree' ? 50 : 35;
+          return base * sf;
         }).strength((link: any) => {
-          // Stronger pull for funding/KYC chain links to keep them visually connected
           const rel = link.relationship || '';
           if (rel.includes('funded') || rel.includes('kyc') || rel.includes('created')) return 1.5;
           return 0.7;
         });
       }
-      graphRef.current.d3Force('charge')?.strength(viewMode === 'tree' ? -150 : -50);
+      graphRef.current.d3Force('charge')?.strength((viewMode === 'tree' ? -150 : -50) * sf);
       
       // Add center gravity to keep the graph cohesive instead of flying apart
       graphRef.current.d3Force('center')?.strength(0.05);
@@ -116,12 +119,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         });
       });
       
-      if (prevViewModeRef.current !== viewMode) {
-        prevViewModeRef.current = viewMode;
-        graphRef.current.d3ReheatSimulation();
-      }
+      // Reheat on view mode or spread factor change
+      graphRef.current.d3ReheatSimulation();
     }
-  }, [graphData, viewMode, dimensions.width]);
+  }, [graphData, viewMode, dimensions.width, spreadFactor]);
 
   // Reset reveal state on new search
   const handleSearch = useCallback(() => {
@@ -565,6 +566,15 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               </Button>
               <Button variant={viewMode === 'tree' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('tree')}>
                 <GitBranch className="h-3 w-3 mr-1" /> Tree
+              </Button>
+            </div>
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
+                <Plus className="h-3 w-3" />
               </Button>
             </div>
           </div>
