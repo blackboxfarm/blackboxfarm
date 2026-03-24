@@ -124,7 +124,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         graphRef.current.d3ReheatSimulation();
       }
     }
-  }, [graphData, viewMode, dimensions.width]);
+  }, [graphData, viewMode, dimensions.width, spreadFactor]);
 
   // Reset reveal state on new search
   const handleSearch = useCallback(() => {
