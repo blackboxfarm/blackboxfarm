@@ -37,6 +37,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
+  const [spreadFactor, setSpreadFactor] = useState(3);
   const [hasSpideredOnce, setHasSpideredOnce] = useState(false);
 
   // Showmanship state
