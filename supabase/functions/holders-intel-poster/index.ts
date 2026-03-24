@@ -440,14 +440,15 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         throw new Error(report?.error || 'Empty report returned');
       }
       
-      // Get current times_posted from seen_tokens to determine comment
+      // Get current times_posted + age info from seen_tokens to determine comment
       const { data: seenToken } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('times_posted')
+        .select('times_posted, minted_at, first_seen_at')
         .eq('token_mint', item.token_mint)
         .maybeSingle();
       
       const currentTimesPosted = (seenToken?.times_posted || 0) + 1; // +1 because this will be the next post
+      const tokenAge = { mintedAt: seenToken?.minted_at, firstSeenAt: seenToken?.first_seen_at };
       
       // Extract + normalize stats from report (match manual ShareCardDemo mapping)
       const totalHolders = asCount(report?.totalHolders);
