@@ -18,6 +18,8 @@ import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
 const NODE_CAP_DEFAULT = 80;
+const NODE_CAP_MOBILE = 40;
+const isMobileDevice = () => typeof window !== 'undefined' && window.innerWidth < 768;
 
 interface PublicBubbleMapProps {
   showUpgradePrompt?: boolean;
