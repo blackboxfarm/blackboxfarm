@@ -462,9 +462,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     const isFocused = focusedEntity && meshNode.id.includes(focusedEntity.id);
     if (isFocused) { ctx.shadowColor = color; ctx.shadowBlur = 15; }
     if (meshNode.type === 'token') {
+      // Thick white border ring for the searched token in Solar Min
+      const isSearchedToken = focusedEntity && meshNode.id.includes(focusedEntity.id);
+      const ringSize = isSearchedToken && solarMode === 'minimum' ? size + 4 : size + 2;
+      const ringWidth = isSearchedToken && solarMode === 'minimum' ? 3 : 1.5;
       ctx.beginPath();
-      ctx.arc(meshNode.x, meshNode.y, size + 2, 0, 2 * Math.PI);
-      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.4; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.arc(meshNode.x, meshNode.y, ringSize, 0, 2 * Math.PI);
+      ctx.strokeStyle = isSearchedToken && solarMode === 'minimum' ? '#fff' : color;
+      ctx.lineWidth = ringWidth;
+      ctx.globalAlpha = isSearchedToken && solarMode === 'minimum' ? 0.9 : 0.4;
+      ctx.stroke(); ctx.globalAlpha = 1;
     }
     ctx.beginPath();
     ctx.arc(meshNode.x, meshNode.y, size, 0, 2 * Math.PI);
