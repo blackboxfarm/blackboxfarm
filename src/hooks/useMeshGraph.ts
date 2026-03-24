@@ -433,8 +433,17 @@ export function useMeshGraph(initialEntityId?: string) {
         console.warn('[MeshSpider] Pump.fun metadata fetch failed:', e);
       }
 
-      // 3. Extract X Community URL from any source
-      communityUrl = allSocialUrls.find(u => u.includes('/communities/')) || null;
+      // 3. Classify URLs properly — devs often put X community links in the telegram field
+      // Re-classify any URL that contains x.com or twitter.com as an X URL, not telegram
+      const xRelatedUrls = allSocialUrls.filter(u => 
+        u.includes('x.com/') || u.includes('twitter.com/')
+      );
+      const telegramUrls = allSocialUrls.filter(u => 
+        u.includes('t.me/') || u.includes('telegram.me/')
+      );
+      
+      // Extract X Community URL from any source (including those misplaced in telegram field)
+      communityUrl = allSocialUrls.find(u => u.includes('/communities/') && /communities\/\d+/.test(u)) || null;
 
       // 4. Extract X handles — support both profile URLs and status URLs
       const xUrls = allSocialUrls.filter(u =>
