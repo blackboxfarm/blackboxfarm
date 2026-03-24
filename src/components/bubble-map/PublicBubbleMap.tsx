@@ -1126,16 +1126,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 const nameLabel = n.displayName ? `${n.displayName}\n` : '';
                 return `${devLabel}${nameLabel}${ENTITY_LABELS[n.type] || n.type}\n${rawId}\n${Math.round(n.val)} connections`;
               }}
-              cooldownTicks={80}
-              d3AlphaDecay={0.03}
+              cooldownTicks={isMobile ? 40 : 80}
+              d3AlphaDecay={isMobile ? 0.05 : 0.03}
               d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
-              d3AlphaMin={0.005}
+              d3AlphaMin={isMobile ? 0.01 : 0.005}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
-              linkDirectionalParticles={1}
+              linkDirectionalParticles={isMobile ? 0 : 1}
               linkDirectionalParticleWidth={2}
               linkDirectionalParticleSpeed={0.005}
-              linkDirectionalParticleColor={(link: any) => {
+              linkDirectionalParticleColor={isMobile ? undefined : (link: any) => {
                 const rel = link.relationship || '';
                 if (rel.includes('funded')) return 'rgba(34,197,94,0.7)';
                 if (rel.includes('created')) return 'rgba(234,179,8,0.7)';
