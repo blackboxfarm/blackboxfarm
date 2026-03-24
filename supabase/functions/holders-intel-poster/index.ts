@@ -37,12 +37,24 @@ function asCount(value: any): number {
   return 0;
 }
 
-function getPostComment(timesPosted: number, triggerComment?: string | null): string {
+function getPostComment(timesPosted: number, triggerComment?: string | null, tokenAge?: { mintedAt?: string | null; firstSeenAt?: string | null }): string {
   // If a trigger comment is provided (from DEX scanner), use it
   if (triggerComment) return triggerComment;
   
+  // Don't say "First call out" if the token is actually old (>24h since mint or first seen)
+  // — we may have just discovered it via a new funnel, but the token isn't new
+  if (timesPosted <= 1 && tokenAge) {
+    const refTime = tokenAge.mintedAt || tokenAge.firstSeenAt;
+    if (refTime) {
+      const ageMs = Date.now() - new Date(refTime).getTime();
+      if (ageMs > 24 * 60 * 60 * 1000) {
+        return ' 📡 New Discovery';  // We just found it, but it's not a new token
+      }
+    }
+  }
+  
   // Milestone-based comments — no colon prefix to avoid looking like a health description
-  if (timesPosted <= 1) return ' 🆕 First call out';
+  if (timesPosted <= 1) return ' 🆕 First call out!';
   if (timesPosted === 2) return ' 📡 Still on the Chart';
   return ' 💪 Steady & Strong';
 }
@@ -210,7 +222,7 @@ function processTemplate(template: string, data: any): string {
   // Sanitize URL-like names to prevent Twitter hijacking the OG preview
   const tokenName = sanitizeUrlLikeName(rawName);
   // Pass trigger_comment to allow DEX scanner overrides
-  const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment);
+  const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment, data.tokenAge);
   const timestamp = formatTimestamp();
   
   // AI summary defaults to empty if not provided or disabled
@@ -428,14 +440,15 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         throw new Error(report?.error || 'Empty report returned');
       }
       
-      // Get current times_posted from seen_tokens to determine comment
+      // Get current times_posted + age info from seen_tokens to determine comment
       const { data: seenToken } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('times_posted')
+        .select('times_posted, minted_at, first_seen_at')
         .eq('token_mint', item.token_mint)
         .maybeSingle();
       
       const currentTimesPosted = (seenToken?.times_posted || 0) + 1; // +1 because this will be the next post
+      const tokenAge = { mintedAt: seenToken?.minted_at, firstSeenAt: seenToken?.first_seen_at };
       
       // Extract + normalize stats from report (match manual ShareCardDemo mapping)
       const totalHolders = asCount(report?.totalHolders);
@@ -450,6 +463,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         timesPosted: currentTimesPosted,
         // Pass trigger_comment from queue item (used by DEX scanner triggers)
         triggerComment: item.trigger_comment || null,
+        tokenAge,
         // bagless-holders-report sets realHolders = realWalletCount ($50-$199)
         realHolders: asCount(report?.realHolders ?? report?.realWalletCount),
         dustCount,
