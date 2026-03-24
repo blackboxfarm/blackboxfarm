@@ -683,6 +683,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
             </div>
           )}
 
+          {/* Action buttons moved to overlay inside graph canvas */}
+
           {/* Type Filters */}
           <div className="flex flex-wrap gap-1">
             {Object.entries(ENTITY_LABELS).map(([type, label]) => (
