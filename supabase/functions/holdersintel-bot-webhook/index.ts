@@ -268,22 +268,36 @@ async function logUsage(telegramUserId: string, command: string, tokenMint?: str
   });
 }
 
-/** Call an internal edge function */
-async function invokeFunction(fnName: string, body: Record<string, unknown>): Promise<any> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error(`[bot] ${fnName} error (${res.status}):`, errText);
+/** Call an internal edge function with a 25s timeout to prevent webhook hangs */
+async function invokeFunction(fnName: string, body: Record<string, unknown>, timeoutMs = 25000): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[bot] ${fnName} error (${res.status}):`, errText);
+      return null;
+    }
+    return res.json();
+  } catch (err: any) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') {
+      console.error(`[bot] ${fnName} TIMEOUT after ${timeoutMs}ms — aborting to prevent webhook hang`);
+    } else {
+      console.error(`[bot] ${fnName} fetch error:`, err.message);
+    }
     return null;
   }
-  return res.json();
 }
 
 // ─── Gate check: returns tier string or sends denial message ───
