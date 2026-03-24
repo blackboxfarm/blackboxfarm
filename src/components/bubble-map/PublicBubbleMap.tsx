@@ -902,42 +902,99 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         </div>
       )}
 
+      {/* Unified Control Bar */}
+      {graphData.nodes.length > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/80 backdrop-blur">
+          {/* Solar Mode */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            <Button variant={solarMode === 'minimum' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('minimum')}>
+              <Sun className="h-3 w-3 mr-1" /> Solar Min
+            </Button>
+            <Button variant={solarMode === 'clusters' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('clusters')}>
+              <Orbit className="h-3 w-3 mr-1" /> Solar Clusters
+            </Button>
+          </div>
+          {/* View Mode */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            <Button variant={viewMode === 'bubble' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('bubble')}>
+              <Network className="h-3 w-3 mr-1" /> Bubble
+            </Button>
+            <Button variant={viewMode === 'tree' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('tree')}>
+              <GitBranch className="h-3 w-3 mr-1" /> Tree
+            </Button>
+          </div>
+          {/* Spacing */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
+              <Minus className="h-3 w-3" />
+            </Button>
+            <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+          {/* Divider */}
+          <div className="w-px h-5 bg-border mx-1" />
+          {/* Action Buttons */}
+          <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching || kycFound}
+            className={`text-xs h-7 ${kycFound 
+              ? 'border-muted/30 text-muted-foreground opacity-50 cursor-not-allowed' 
+              : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'}`}>
+            {kycSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Key className="h-3 w-3 mr-1" />}
+            {kycFound ? 'KYC ✓' : 'Find KYC Root'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleFindTokens} disabled={tokenSearching}
+            className="text-xs h-7 border-yellow-500/30 hover:bg-yellow-500/10 text-yellow-400">
+            {tokenSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Coins className="h-3 w-3 mr-1" />}
+            Find All Tokens
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleSpider} disabled={spiderStatus.active}
+            className="text-xs h-7">
+            <Radar className="h-3 w-3 mr-1" /> Deep Spider
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching || revealingXAccounts}
+            className={`text-xs h-7 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
+              hasSpideredOnce && !communitySearching && !xAccountsRevealed ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
+            }`}>
+            {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : (
+              <img src={xIcon} alt="X" className="h-3 w-3 mr-1 rounded-sm" />
+            )}
+            Map X Community
+          </Button>
+          {/* Divider */}
+          <div className="w-px h-5 bg-border mx-1" />
+          {/* Shakey-Shake */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs px-2"
+            onClick={() => {
+              if (graphRef.current) {
+                const gd = graphRef.current.graphData();
+                const w = dimensions.width || 800;
+                const h = 600;
+                gd.nodes.forEach((node: any) => {
+                  node.x = (Math.random() - 0.5) * w * 0.8;
+                  node.y = (Math.random() - 0.5) * h * 0.8;
+                  node.vx = (Math.random() - 0.5) * 5;
+                  node.vy = (Math.random() - 0.5) * 5;
+                });
+                graphRef.current.graphData(gd);
+                graphRef.current.d3ReheatSimulation();
+              }
+            }}
+            title="Resets Bubble Layout"
+          >
+            🫨 Shakey-Shake!
+          </Button>
+        </div>
+      )}
+
       {/* Graph Canvas */}
       <Card className="overflow-hidden">
         <div ref={containerRef} className="w-full relative" style={{ height: '600px', background: 'hsl(var(--background))' }}>
           {/* Hacker Terminal Overlay */}
           <HackerTerminal lines={terminalLines} visible={terminalVisible} title={terminalTitle} />
-
-          {/* Action Buttons Overlay — top-left inside graph */}
-          {graphData.nodes.length > 0 && (
-            <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
-              <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching || kycFound}
-                className={`text-xs h-7 justify-start backdrop-blur bg-background/70 ${kycFound
-                  ? 'border-muted/30 text-muted-foreground opacity-50 cursor-not-allowed'
-                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'}`}>
-                {kycSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Key className="h-3 w-3 mr-1" />}
-                {kycFound ? 'KYC Root Found ✓' : 'Find KYC Root'}
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleFindTokens} disabled={tokenSearching}
-                className="text-xs h-7 justify-start backdrop-blur bg-background/70 border-yellow-500/30 hover:bg-yellow-500/10 text-yellow-400">
-                {tokenSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Coins className="h-3 w-3 mr-1" />}
-                Find All Tokens
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleSpider} disabled={spiderStatus.active}
-                className="text-xs h-7 justify-start backdrop-blur bg-background/70">
-                <Radar className="h-3 w-3 mr-1" /> Deep Spider
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleDiscoverCommunity} disabled={communitySearching || revealingXAccounts}
-                className={`text-xs h-7 justify-start backdrop-blur bg-background/70 border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 ${
-                  hasSpideredOnce && !communitySearching && !xAccountsRevealed ? 'animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] border-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.3)]' : ''
-                }`}>
-                {communitySearching || revealingXAccounts ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : (
-                  <img src={xIcon} alt="X" className="h-3 w-3 mr-1 rounded-sm" />
-                )}
-                Map X Community
-              </Button>
-            </div>
-          )}
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-3">
