@@ -38,7 +38,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [kycSearching, setKycSearching] = useState(false);
   const [kycFound, setKycFound] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
-  const [nodeCap, setNodeCap] = useState(NODE_CAP_DEFAULT);
+  const [nodeCap, setNodeCap] = useState(isMobileDevice() ? NODE_CAP_MOBILE : NODE_CAP_DEFAULT);
+  const isMobile = isMobileDevice();
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
   const [spreadFactor, setSpreadFactor] = useState(3);
