@@ -119,10 +119,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         });
       });
       
-      if (prevViewModeRef.current !== viewMode) {
-        prevViewModeRef.current = viewMode;
-        graphRef.current.d3ReheatSimulation();
-      }
+      // Reheat on view mode or spread factor change
+      graphRef.current.d3ReheatSimulation();
     }
   }, [graphData, viewMode, dimensions.width, spreadFactor]);
 
