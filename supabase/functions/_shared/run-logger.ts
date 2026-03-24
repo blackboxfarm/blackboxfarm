@@ -40,17 +40,23 @@ export function createRunLogger(
 ): RunLogger {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
   const meta: Record<string, unknown> = {};
 
   // Fire-and-forget insert of the 'running' row
   const supabase = getSupabase();
+  const startInsertPromise = supabase
+    ? supabase.from('edge_function_runs').insert({
+        id: runId,
+        function_name: functionName,
+        invocation_source: invocationSource,
+        status: 'running',
+        started_at: startedAt,
+      })
+    : null;
+
   if (supabase) {
-    supabase.from('edge_function_runs').insert({
-      id: runId,
-      function_name: functionName,
-      invocation_source: invocationSource,
-      status: 'running',
-    }).then(({ error }) => {
+    startInsertPromise?.then(({ error }) => {
       if (error) console.warn(`[RunLogger] insert failed: ${error.message}`);
     });
   }
@@ -60,13 +66,42 @@ export function createRunLogger(
     const finalMeta = { ...meta, ...extraMeta };
     if (!supabase) return;
     try {
-      await supabase.from('edge_function_runs').update({
+      if (startInsertPromise) {
+        const { error: insertError } = await startInsertPromise;
+        if (insertError) {
+          console.warn(`[RunLogger] insert await failed: ${insertError.message}`);
+        }
+      }
+
+      const { data: updatedRow, error: updateError } = await supabase.from('edge_function_runs').update({
         finished_at: new Date().toISOString(),
         duration_ms: durationMs,
         status,
         error_message: errorMessage?.slice(0, 2000),
         metadata: finalMeta,
-      }).eq('id', runId);
+      }).eq('id', runId).select('id').maybeSingle();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      if (!updatedRow) {
+        const { error: upsertError } = await supabase.from('edge_function_runs').upsert({
+          id: runId,
+          function_name: functionName,
+          invocation_source: invocationSource,
+          started_at: startedAt,
+          finished_at: new Date().toISOString(),
+          duration_ms: durationMs,
+          status,
+          error_message: errorMessage?.slice(0, 2000),
+          metadata: finalMeta,
+        });
+
+        if (upsertError) {
+          throw upsertError;
+        }
+      }
     } catch (e) {
       console.warn(`[RunLogger] update failed:`, e);
     }
