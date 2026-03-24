@@ -16,6 +16,26 @@ interface ServiceStats {
   top_errors: { error: string; count: number }[];
 }
 
+const EDGE_FUNCTION_CONTEXT: Record<string, { purpose: string; ignoreRunningNoise?: boolean }> = {
+  'holdersintel-bot-webhook': {
+    purpose: 'Powers the HoldersIntel Telegram bot by receiving Telegram webhook updates and generating bot replies/alerts in DMs and group chats.',
+    ignoreRunningNoise: true,
+  },
+  'holders-intel-poster': {
+    purpose: 'Publishes automated HoldersIntel posts so fresh token intelligence reaches X on schedule.',
+  },
+  'holders-intel-dex-scanner': {
+    purpose: 'Scans Dex and launch activity to discover tokens and feed the HoldersIntel pipeline.',
+  },
+  'holders-intel-scheduler': {
+    purpose: 'Schedules the HoldersIntel automation jobs that keep scans and posting running.',
+  },
+};
+
+function getEdgeFunctionPurpose(functionName: string): string {
+  return EDGE_FUNCTION_CONTEXT[functionName]?.purpose || 'Supports internal automation or monitoring workflows.';
+}
+
 Deno.serve(withRunLog('morning-report', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -608,20 +628,41 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     try {
       const { data: funcRuns } = await supabase
         .from('edge_function_runs')
-        .select('function_name, status, duration_ms, error_message')
+        .select('function_name, status, duration_ms, error_message, started_at')
         .gte('started_at', periodStart.toISOString())
         .lte('started_at', periodEnd.toISOString())
         .limit(5000);
 
       if (funcRuns && funcRuns.length > 0) {
-        const byFunc: Record<string, { total: number; ok: number; error: number; totalMs: number; errors: string[] }> = {};
+        const byFunc: Record<string, { total: number; terminal: number; ok: number; error: number; running: number; staleRunning: number; totalMs: number; errors: string[] }> = {};
         for (const run of funcRuns) {
-          if (!byFunc[run.function_name]) byFunc[run.function_name] = { total: 0, ok: 0, error: 0, totalMs: 0, errors: [] };
+          if (!byFunc[run.function_name]) byFunc[run.function_name] = { total: 0, terminal: 0, ok: 0, error: 0, running: 0, staleRunning: 0, totalMs: 0, errors: [] };
           const f = byFunc[run.function_name];
           f.total++;
-          if (run.status === 'success') f.ok++;
-          else { f.error++; if (run.error_message && f.errors.length < 3) f.errors.push(run.error_message.slice(0, 100)); }
-          f.totalMs += run.duration_ms || 0;
+
+          if (run.status === 'success') {
+            f.ok++;
+            f.terminal++;
+            f.totalMs += run.duration_ms || 0;
+            continue;
+          }
+
+          if (run.status === 'error') {
+            f.error++;
+            f.terminal++;
+            if (run.error_message && f.errors.length < 3) f.errors.push(run.error_message.slice(0, 100));
+            f.totalMs += run.duration_ms || 0;
+            continue;
+          }
+
+          if (run.status === 'running') {
+            f.running++;
+            const startedAt = run.started_at ? new Date(run.started_at).getTime() : 0;
+            const ageMs = startedAt ? Date.now() - startedAt : 0;
+            if (ageMs > 10 * 60 * 1000) {
+              f.staleRunning++;
+            }
+          }
         }
 
         functionHealth = {
@@ -632,23 +673,34 @@ Deno.serve(withRunLog('morning-report', async (req) => {
               .sort((a, b) => b[1].total - a[1].total)
               .map(([name, stats]) => [name, {
                 runs: stats.total,
+                terminal_runs: stats.terminal,
                 errors: stats.error,
-                fail_pct: stats.total > 0 ? Math.round((stats.error / stats.total) * 1000) / 10 : 0,
-                avg_ms: stats.total > 0 ? Math.round(stats.totalMs / stats.total) : 0,
+                running: stats.running,
+                stale_running: stats.staleRunning,
+                fail_pct: stats.terminal > 0 ? Math.round((stats.error / stats.terminal) * 1000) / 10 : 0,
+                avg_ms: stats.terminal > 0 ? Math.round(stats.totalMs / stats.terminal) : 0,
                 top_errors: stats.errors,
               }])
           ),
         };
 
-        // Alert on functions with >50% failure rate
+        // Alert on functions with >50% terminal failure rate
         for (const [fname, stats] of Object.entries(byFunc)) {
-          if (stats.error > 0 && stats.total >= 3 && (stats.error / stats.total) >= 0.5) {
+          const failRate = stats.terminal > 0 ? (stats.error / stats.terminal) : 0;
+          const context = EDGE_FUNCTION_CONTEXT[fname];
+
+          if (stats.error > 0 && stats.terminal >= 3 && failRate >= 0.5) {
             alerts.push({
-              level: (stats.error / stats.total) >= 0.9 ? 'critical' : 'warning',
+              level: failRate >= 0.9 ? 'critical' : 'warning',
               category: 'function_health',
-              title: `${fname}: ${Math.round((stats.error / stats.total) * 100)}% failure rate`,
-              detail: `${stats.error}/${stats.total} runs failed. Error: ${stats.errors[0] || 'unknown'}`,
+              title: `${fname}: ${Math.round(failRate * 100)}% failure rate`,
+              detail: `${stats.error}/${stats.terminal} completed runs failed. Error: ${stats.errors[0] || 'unknown'}. Purpose: ${getEdgeFunctionPurpose(fname)}`,
             });
+            continue;
+          }
+
+          if (context?.ignoreRunningNoise && stats.terminal >= 3 && stats.error === 0 && stats.staleRunning > 0) {
+            console.log(`[morning-report] Ignoring stale running noise for ${fname}: ${stats.staleRunning} stale running rows, ${stats.terminal} completed runs, 0 terminal errors`);
           }
         }
       }
