@@ -101,9 +101,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       graphRef.current.d3Force('charge')?.strength((viewMode === 'tree' ? -150 : -50) * sf);
       
       // Collision force: enforce minimum 2.5 bubble-diameters gap between nodes
-      const collisionForce = forceCollide((node: any) => {
+      // d3-force-collide is bundled with react-force-graph-2d via d3
+      const d3 = await import('d3-force');
+      const collisionForce = d3.forceCollide((node: any) => {
         const nodeSize = Math.max(4, Math.min((node.val || 1) * 3 + 3, 20));
-        return nodeSize * 3 * Math.sqrt(sf); // 3x radius = ~2.5 diameters gap, scales with spread
+        return nodeSize * 3 * Math.sqrt(sf);
       }).strength(1).iterations(3);
       graphRef.current.d3Force('collision', collisionForce);
       
