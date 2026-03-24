@@ -135,7 +135,7 @@ export function FunctionOperationsDashboard() {
   const mergedRows = useMemo(() => {
     let rows = registry.map(r => ({
       ...r,
-      stats: runMap[r.function_name] || { total: 0, successes: 0, failures: 0, avg_duration: 0 },
+      stats: runMap[r.function_name] || { function_name: r.function_name, total: 0, successes: 0, failures: 0, avg_duration: 0 },
     }));
 
     // Also add functions in runs but not in registry
