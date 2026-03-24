@@ -943,14 +943,26 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
                 const gd = graphRef.current.graphData();
                 const w = dimensions.width || 800;
                 const h = 600;
+                // Randomize positions with velocity kicks
                 gd.nodes.forEach((node: any) => {
                   node.x = (Math.random() - 0.5) * w * 0.8;
                   node.y = (Math.random() - 0.5) * h * 0.8;
-                  node.vx = (Math.random() - 0.5) * 5;
-                  node.vy = (Math.random() - 0.5) * 5;
+                  node.vx = (Math.random() - 0.5) * 10;
+                  node.vy = (Math.random() - 0.5) * 10;
+                  // Clear any pinned state
+                  node.fx = undefined;
+                  node.fy = undefined;
                 });
-                graphRef.current.graphData(gd);
+                // Force new object reference so react-force-graph detects the change
+                graphRef.current.graphData({ nodes: [...gd.nodes], links: [...gd.links] });
+                // Reheat with full energy
                 graphRef.current.d3ReheatSimulation();
+                // Zoom to fit after settling
+                setTimeout(() => {
+                  if (graphRef.current) {
+                    graphRef.current.zoomToFit(800, 40);
+                  }
+                }, 2000);
               }
             }}
             title="Resets Bubble Layout"
