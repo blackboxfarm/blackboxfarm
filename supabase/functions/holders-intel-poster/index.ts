@@ -384,14 +384,29 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
     // BATCH MODE: fetch up to 5 candidates, post up to 3 per tick
     const MAX_POSTS_PER_TICK = 3;
     const BATCH_SIZE = 5; // fetch extra in case some skip/fail
+    const STALE_HOURS = 6; // auto-expire anything older than this
     const now = new Date().toISOString();
+    const staleCutoff = new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000).toISOString();
+
+    // Auto-expire stale pending items (older than 6h) so they don't clog the queue
+    const { count: expiredCount } = await supabase
+      .from('holders_intel_post_queue')
+      .update({ status: 'expired', error_message: `Auto-expired: older than ${STALE_HOURS}h` })
+      .eq('status', 'pending')
+      .lt('created_at', staleCutoff)
+      .select('*', { count: 'exact', head: true });
     
+    if (expiredCount && expiredCount > 0) {
+      console.log(`[poster] Auto-expired ${expiredCount} stale items (>${STALE_HOURS}h old)`);
+    }
+
+    // Fetch NEWEST discoveries first — most relevant tokens get posted first
     const { data: pendingItems, error: fetchError } = await supabase
       .from('holders_intel_post_queue')
       .select('*')
       .eq('status', 'pending')
       .lte('scheduled_at', now)
-      .order('scheduled_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(BATCH_SIZE);
     
     if (fetchError) {
