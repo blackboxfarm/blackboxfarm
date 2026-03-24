@@ -30,6 +30,18 @@ const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction'
 const TICKET_TYPES = ['support_ticket', 'ticket_reply'];
 const AUDIT_TYPES = ['api_failure_critical', 'api_failure_warning', 'quota_critical', 'quota_warning', 'repeated_failure', 'table_bloat', 'security', 'error', 'rug_pull_detected'];
 
+function describeNotificationPurpose(title: string, notificationType: string) {
+  if (title.includes('holdersintel-bot-webhook')) {
+    return 'This powers the HoldersIntel Telegram bot webhook, which receives Telegram messages and returns bot replies, alerts, and command results.';
+  }
+
+  if (notificationType.includes('api_failure')) {
+    return 'This affects an external API dependency that supplies live data or enrichment to the product.';
+  }
+
+  return 'This affects a monitored system feature or automation.';
+}
+
 function categorize(type: string): TabCategory {
   if (SIGNUP_TYPES.includes(type)) return 'signups';
   if (TRANSACTION_TYPES.includes(type)) return 'transactions';
@@ -250,7 +262,7 @@ export function AdminNotificationsBadge() {
                         size="icon"
                         className="h-6 w-6 shrink-0 border-border/50 hover:bg-purple-500/20 hover:text-purple-300"
                         onClick={() => {
-                          const question = `Morning Report alert — [${notification.notification_type.toUpperCase()}] ${notification.title}: ${notification.message}. What should I do about this? What's the root cause and recommended fix?`;
+                            const question = `Morning Report alert — [${notification.notification_type.toUpperCase()}] ${notification.title}: ${notification.message}. ${describeNotificationPurpose(notification.title, notification.notification_type)} What should I do about this? What's the root cause and recommended fix?`;
                           navigator.clipboard.writeText(question);
                           toast({ title: "Copied!", description: "Investigation question copied to clipboard" });
                         }}
