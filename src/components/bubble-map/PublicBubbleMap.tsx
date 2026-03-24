@@ -533,6 +533,64 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       baseNodes = baseNodes.filter(n => n.type !== 'x_account');
     }
 
+    // Solar Minimum: BFS from token node, only immediate ecosystem + max 4 wallet hops
+    if (solarMode === 'minimum' && baseNodes.length > 0) {
+      const tokenNode = baseNodes.find(n => n.type === 'token');
+      if (tokenNode) {
+        const allowedIds = new Set<string>();
+        const walletHops = new Map<string, number>(); // track wallet hop depth
+        const queue: Array<{ id: string; walletDepth: number }> = [{ id: tokenNode.id, walletDepth: 0 }];
+        allowedIds.add(tokenNode.id);
+
+        // Build adjacency from ALL graph links (not just filtered)
+        const adj = new Map<string, Array<{ neighbor: string; rel: string }>>();
+        for (const link of graphData.links) {
+          const srcId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+          const tgtId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+          const rel = (link as any).relationship || '';
+          if (!adj.has(srcId)) adj.set(srcId, []);
+          if (!adj.has(tgtId)) adj.set(tgtId, []);
+          adj.get(srcId)!.push({ neighbor: tgtId, rel });
+          adj.get(tgtId)!.push({ neighbor: srcId, rel });
+        }
+
+        while (queue.length > 0) {
+          const { id, walletDepth } = queue.shift()!;
+          const neighbors = adj.get(id) || [];
+          for (const { neighbor, rel } of neighbors) {
+            if (allowedIds.has(neighbor)) continue;
+            const neighborNode = baseNodes.find(n => n.id === neighbor);
+            if (!neighborNode) continue;
+
+            const nType = neighborNode.type;
+
+            // Always allow: website, x_community, x_account, kyc_root
+            if (['website', 'x_community', 'x_account', 'kyc_root'].includes(nType)) {
+              allowedIds.add(neighbor);
+              queue.push({ id: neighbor, walletDepth });
+              continue;
+            }
+
+            // Wallet nodes: allow if within 4 hops from dev wallet
+            if (nType === 'wallet') {
+              const newDepth = walletDepth + 1;
+              if (newDepth <= 4) {
+                allowedIds.add(neighbor);
+                walletHops.set(neighbor, newDepth);
+                queue.push({ id: neighbor, walletDepth: newDepth });
+              }
+              continue;
+            }
+
+            // Token: only the searched token (already added)
+            // Skip other tokens in minimum mode
+          }
+        }
+
+        baseNodes = baseNodes.filter(n => allowedIds.has(n.id));
+      }
+    }
+
     const nodeIds = new Set(baseNodes.map(n => n.id));
     const baseLinks = graphData.links.filter(l =>
       nodeIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
@@ -540,7 +598,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     );
 
     return { nodes: baseNodes, links: baseLinks };
-  }, [graphData, nodeCap, capBroken, xAccountsRevealed]);
+  }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode]);
 
   const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
