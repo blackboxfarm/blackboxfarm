@@ -324,7 +324,7 @@ Deno.serve(withRunLog('ai-token-pattern-matcher', async (req) => {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));
 
 // ============ Feature Extraction ============
 
