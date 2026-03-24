@@ -37,12 +37,24 @@ function asCount(value: any): number {
   return 0;
 }
 
-function getPostComment(timesPosted: number, triggerComment?: string | null): string {
+function getPostComment(timesPosted: number, triggerComment?: string | null, tokenAge?: { mintedAt?: string | null; firstSeenAt?: string | null }): string {
   // If a trigger comment is provided (from DEX scanner), use it
   if (triggerComment) return triggerComment;
   
+  // Don't say "First call out" if the token is actually old (>24h since mint or first seen)
+  // — we may have just discovered it via a new funnel, but the token isn't new
+  if (timesPosted <= 1 && tokenAge) {
+    const refTime = tokenAge.mintedAt || tokenAge.firstSeenAt;
+    if (refTime) {
+      const ageMs = Date.now() - new Date(refTime).getTime();
+      if (ageMs > 24 * 60 * 60 * 1000) {
+        return ' 📡 New Discovery';  // We just found it, but it's not a new token
+      }
+    }
+  }
+  
   // Milestone-based comments — no colon prefix to avoid looking like a health description
-  if (timesPosted <= 1) return ' 🆕 First call out';
+  if (timesPosted <= 1) return ' 🆕 First call out!';
   if (timesPosted === 2) return ' 📡 Still on the Chart';
   return ' 💪 Steady & Strong';
 }
