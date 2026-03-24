@@ -433,8 +433,17 @@ export function useMeshGraph(initialEntityId?: string) {
         console.warn('[MeshSpider] Pump.fun metadata fetch failed:', e);
       }
 
-      // 3. Extract X Community URL from any source
-      communityUrl = allSocialUrls.find(u => u.includes('/communities/')) || null;
+      // 3. Classify URLs properly — devs often put X community links in the telegram field
+      // Re-classify any URL that contains x.com or twitter.com as an X URL, not telegram
+      const xRelatedUrls = allSocialUrls.filter(u => 
+        u.includes('x.com/') || u.includes('twitter.com/')
+      );
+      const telegramUrls = allSocialUrls.filter(u => 
+        u.includes('t.me/') || u.includes('telegram.me/')
+      );
+      
+      // Extract X Community URL from any source (including those misplaced in telegram field)
+      communityUrl = allSocialUrls.find(u => u.includes('/communities/') && /communities\/\d+/.test(u)) || null;
 
       // 4. Extract X handles — support both profile URLs and status URLs
       const xUrls = allSocialUrls.filter(u =>
@@ -482,6 +491,83 @@ export function useMeshGraph(initialEntityId?: string) {
               .update({ evidence: { community_name: data.communityName, source: 'x-community-enricher' } })
               .eq('linked_type', 'x_community')
               .eq('linked_id', communityMatch[1]);
+          }
+        }
+      }
+
+      // 6. FALLBACK: If no community URL found, scrape X profile(s) for pinned communities
+      if (!communityUrl) {
+        const discoveredHandles = xUrls
+          .map(u => u.match(/(?:x\.com|twitter\.com)\/(@?([a-zA-Z0-9_]+))/i))
+          .filter(Boolean)
+          .map(m => (m![2] || m![1]).replace(/^@/, '').toLowerCase())
+          .filter(h => {
+            const reserved = ['i', 'intent', 'search', 'home', 'explore', 'hashtag', 'settings',
+              'notifications', 'messages', 'compose', 'lists', 'bookmarks', 'communities',
+              'spaces', 'tos', 'privacy', 'help', 'about', 'login', 'signup', 'share', 'status'];
+            return h && !reserved.includes(h) && h.length <= 15;
+          });
+
+        for (const handle of discoveredHandles.slice(0, 2)) {
+          try {
+            console.log(`[MeshSpider] Scraping X profile @${handle} for pinned community...`);
+            const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('firecrawl-scrape', {
+              body: {
+                url: `https://x.com/${handle}`,
+                options: { formats: ['links', 'markdown'], onlyMainContent: false, waitFor: 3000 },
+              },
+            });
+
+            if (scrapeError) {
+              console.warn(`[MeshSpider] Firecrawl scrape failed for @${handle}:`, scrapeError);
+              continue;
+            }
+
+            // Extract community URLs from scraped links and markdown content
+            const scrapedLinks: string[] = scrapeData?.data?.links || scrapeData?.links || [];
+            const scrapedMarkdown: string = scrapeData?.data?.markdown || scrapeData?.markdown || '';
+            
+            // Search for community URLs in links
+            let profileCommunityUrl = scrapedLinks.find((l: string) => 
+              l.includes('/communities/') && /communities\/\d+/.test(l)
+            );
+
+            // Also regex the markdown for community URLs
+            if (!profileCommunityUrl) {
+              const communityMatch = scrapedMarkdown.match(/x\.com\/i\/communities\/(\d+)/);
+              if (communityMatch) {
+                profileCommunityUrl = `https://x.com/i/communities/${communityMatch[1]}`;
+              }
+            }
+
+            if (profileCommunityUrl) {
+              console.log(`[MeshSpider] 🎯 Found pinned community on @${handle}'s profile: ${profileCommunityUrl}`);
+              communityUrl = profileCommunityUrl;
+
+              // Now enrich this community
+              const { data: enrichData, error: enrichError } = await supabase.functions.invoke('x-community-enricher', {
+                body: {
+                  communityUrl: profileCommunityUrl,
+                  linkedTokenMint: tokenMint,
+                  linkedWallet: walletAddress,
+                },
+              });
+              if (!enrichError && enrichData) {
+                console.log(`[MeshSpider] Community enriched from profile scrape: ${enrichData.admins?.length || 0} admins, ${enrichData.moderators?.length || 0} mods`);
+                const cMatch = profileCommunityUrl.match(/communities\/(\d+)/);
+                if (cMatch && enrichData.communityName) {
+                  await supabase.from('reputation_mesh')
+                    .update({ evidence: { community_name: enrichData.communityName, source: 'x-profile-scrape' } })
+                    .eq('linked_type', 'x_community')
+                    .eq('linked_id', cMatch[1]);
+                }
+              }
+              break; // Found a community, stop checking other handles
+            } else {
+              console.log(`[MeshSpider] No pinned community found on @${handle}'s profile`);
+            }
+          } catch (e) {
+            console.warn(`[MeshSpider] Error scraping X profile @${handle}:`, e);
           }
         }
       }
