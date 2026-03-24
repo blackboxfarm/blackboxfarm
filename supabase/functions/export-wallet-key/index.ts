@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
@@ -15,7 +16,7 @@ const WALLET_SOURCES = [
   { table: 'airdrop_wallets', secretCol: 'secret_key_encrypted', encrypted: true },
 ];
 
-serve(async (req) => {
+serve(withRunLog('export-wallet-key', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -148,4 +149,5 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
+

@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=deno'
 
 const corsHeaders = {
@@ -5,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('grant-super-admin', async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -108,4 +109,5 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
-})
+}));
+

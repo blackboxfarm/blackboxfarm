@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Keypair } from "https://esm.sh/@solana/web3.js@1.87.6";
@@ -114,7 +115,7 @@ function validatePrivateKey(privateKey: string): { pubkey: string; valid: boolea
   }
 }
 
-serve(async (req) => {
+serve(withRunLog('rent-reclaimer-wallets', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -273,4 +274,5 @@ serve(async (req) => {
     console.error("Rent Reclaimer Wallets error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
+

@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -52,7 +53,7 @@ interface FantasyPosition {
   total_invested_usd: number;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('execute-copy-trade', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }

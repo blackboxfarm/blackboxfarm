@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
@@ -16,7 +17,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(withRunLog('liquidity-lock-checker', async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -502,4 +503,5 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));
+

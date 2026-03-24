@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 const corsHeaders = {
@@ -19,7 +20,7 @@ interface BrowseRequest {
   timeout?: number;
 }
 
-serve(async (req) => {
+serve(withRunLog('agentic-browser', async (req) => {
   console.log('=== Agentic Browser Function Started ===');
   console.log('Function called with method:', req.method);
   
@@ -551,4 +552,5 @@ serve(async (req) => {
       }
     );
   }
-});
+}));
+

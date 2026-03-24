@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 
 const corsHeaders = {
@@ -11,7 +12,7 @@ interface AddWalletRequest {
   is_active?: boolean
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('add-monitored-wallet', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -92,4 +93,5 @@ Deno.serve(async (req) => {
     console.error('add-monitored-wallet unexpected error:', e)
     return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: corsHeaders })
   }
-})
+}));
+

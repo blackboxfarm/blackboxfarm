@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Connection, PublicKey } from "npm:@solana/web3.js@1.95.3";
@@ -12,7 +13,7 @@ const RPC_URL = HELIUS_API_KEY
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
   : "https://api.mainnet-beta.solana.com";
 
-serve(async (req) => {
+serve(withRunLog('verify-channel-payment', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -107,4 +108,5 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }
-});
+}));
+

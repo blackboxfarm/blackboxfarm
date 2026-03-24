@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 /**
  * AI Pattern Extractor — Periodic analysis of all post-mortems to extract recurring rules.
  * 
@@ -22,7 +23,7 @@ const corsHeaders = {
 
 const AI_GATEWAY = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('ai-pattern-extractor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -203,4 +204,5 @@ Deno.serve(async (req) => {
     JSON.stringify({ ...stats, elapsed }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
-});
+}));
+

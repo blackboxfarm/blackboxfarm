@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 
 const corsHeaders = {
@@ -74,7 +75,7 @@ function extractTokensFromHtml(html: string): string[] {
   return tokens.slice(0, 100); // Limit to 100 tokens per day
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('oracle-historical-backfill', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -297,4 +298,5 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));
+

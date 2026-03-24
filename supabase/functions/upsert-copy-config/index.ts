@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -16,7 +17,7 @@ type UpsertBody = {
   max_position_size_usd?: number
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('upsert-copy-config', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -96,4 +97,5 @@ Deno.serve(async (req) => {
     console.error('upsert-copy-config unexpected error:', e)
     return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: corsHeaders })
   }
-})
+}));
+

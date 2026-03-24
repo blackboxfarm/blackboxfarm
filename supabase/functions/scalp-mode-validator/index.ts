@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
@@ -149,7 +150,7 @@ function checkHardRejectKeywords(messageText: string): { reject: boolean; reason
   return { reject: false, reason: null };
 }
 
-serve(async (req) => {
+serve(withRunLog('scalp-mode-validator', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -406,4 +407,5 @@ serve(async (req) => {
     console.error("Scalp mode validator error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
+

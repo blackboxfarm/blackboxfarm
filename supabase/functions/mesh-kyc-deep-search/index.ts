@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { createApiLogger } from '../_shared/api-logger.ts';
 
@@ -126,7 +127,7 @@ async function discoverSiblings(
 
 // Deep KYC root search: traces funding chain upward (depth 5+) AND discovers sibling wallets
 // Now powered by Helius /v1/wallet/{address}/funded-by + enhanced transactions
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -335,4 +336,5 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));
+

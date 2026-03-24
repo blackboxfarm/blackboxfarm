@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 enableHeliusTracking('get-wallet-transactions');
@@ -8,7 +9,7 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('get-wallet-transactions', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -63,4 +64,5 @@ Deno.serve(async (req) => {
     console.error('get-wallet-transactions unexpected error:', e)
     return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: corsHeaders })
   }
-})
+}));
+

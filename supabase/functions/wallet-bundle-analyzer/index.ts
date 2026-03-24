@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 
@@ -309,7 +310,7 @@ function extractSwapActivity(txs: any[], walletPubkey: string): SwapActivity[] {
 
 // ─── Main Analysis ────────────────────────────────────────────
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('wallet-bundle-analyzer', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -580,4 +581,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
+

@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRestUrl, getHeliusRpcUrl, redactHeliusSecrets, requireHeliusApiKey } from '../_shared/helius-client.ts';
@@ -27,7 +28,7 @@ interface TokenTransfer {
   destinationType: string; // 'burn' | 'self' | 'cex' | 'unknown_wallet'
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('token-flow-tracer', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -429,4 +430,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: corsHeaders }
     );
   }
-});
+}));
+

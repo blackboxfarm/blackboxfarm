@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
 const corsHeaders = {
@@ -107,7 +108,7 @@ async function decryptData(encryptedData: string): Promise<string> {
   }
 }
 
-serve(async (req) => {
+serve(withRunLog('encrypt-data', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -153,4 +154,5 @@ serve(async (req) => {
       }
     );
   }
-});
+}));
+

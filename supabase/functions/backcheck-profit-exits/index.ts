@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -173,7 +174,7 @@ async function feedbackWinReputation(
   return isNegative ? 'negative' : 'positive';
 }
 
-serve(async (req) => {
+serve(withRunLog('backcheck-profit-exits', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -386,4 +387,5 @@ serve(async (req) => {
     console.error('[profit-backcheck] Fatal error:', err);
     return jsonResponse({ success: false, error: String(err) }, 500);
   }
-});
+}));
+

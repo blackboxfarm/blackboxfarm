@@ -17,9 +17,10 @@ const DatabaseHousekeeping = lazy(() => import("@/components/admin/DatabaseHouse
 const HeliusUsageBreakdown = lazy(() => import("@/components/admin/HeliusUsageBreakdown").then(m => ({ default: m.HeliusUsageBreakdown })));
 const SolscanUsageBreakdown = lazy(() => import("@/components/admin/SolscanUsageBreakdown").then(m => ({ default: m.SolscanUsageBreakdown })));
 const ApifyUsageBreakdown = lazy(() => import("@/components/admin/ApifyUsageBreakdown").then(m => ({ default: m.ApifyUsageBreakdown })));
+const FunctionOperationsDashboard = lazy(() => import("@/components/admin/FunctionOperationsDashboard").then(m => ({ default: m.FunctionOperationsDashboard })));
 
 export default function UtilitiesTab() {
-  const [activeSubTab, setActiveSubTab] = useState("api-resources");
+  const [activeSubTab, setActiveSubTab] = useState("function-ops");
 
   return (
     <div className="space-y-4">
@@ -27,6 +28,7 @@ export default function UtilitiesTab() {
       <HealthModeToggles />
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
+        <TabsTrigger value="function-ops">⚙️ Function Ops</TabsTrigger>
         <TabsTrigger value="api-resources">📊 API Resources</TabsTrigger>
         <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
         <TabsTrigger value="api-usage">📡 API Usage</TabsTrigger>
@@ -41,6 +43,9 @@ export default function UtilitiesTab() {
         <TabsTrigger value="apify-breakdown">🤖 Apify Usage</TabsTrigger>
       </TabsList>
 
+      <TabsContent value="function-ops">
+        {activeSubTab === "function-ops" && <Suspense fallback={<LazyLoader />}><FunctionOperationsDashboard /></Suspense>}
+      </TabsContent>
       <TabsContent value="api-resources">
         {activeSubTab === "api-resources" && <Suspense fallback={<LazyLoader />}><ApiResourceManager /></Suspense>}
       </TabsContent>

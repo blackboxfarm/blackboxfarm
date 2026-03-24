@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Connection, Keypair } from "npm:@solana/web3.js@1.95.3";
@@ -64,7 +65,7 @@ async function refundToFunder(connection: Connection, owner: Keypair): Promise<s
   }
 }
 
-serve(async (req) => {
+serve(withRunLog('blackbox-wallet-withdrawal', async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -187,4 +188,5 @@ serve(async (req) => {
       }
     );
   }
-});
+}));
+

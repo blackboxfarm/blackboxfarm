@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Connection, PublicKey } from 'npm:@solana/web3.js@1.95.8'
 import { getTwitterRegistry, NameRegistryState } from 'npm:@bonfida/spl-name-service@0.1.51'
@@ -24,7 +25,7 @@ interface WalletLookupResult {
   cachedUntil?: string
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('wallet-sns-lookup', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }

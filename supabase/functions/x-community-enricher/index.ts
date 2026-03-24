@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { validateCommunityExists } from "../_shared/x-community-validator.ts";
 import { alertAndLogCommunityDeletion, CommunityAlertInfo } from "../_shared/x-community-alerts.ts";
@@ -52,7 +53,7 @@ function normalizeScreenName(screenName?: string | null): string | null {
   return normalized || null;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('x-community-enricher', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -555,4 +556,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
+

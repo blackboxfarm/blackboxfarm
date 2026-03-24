@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
@@ -401,7 +402,7 @@ function calculateRiskScore(
   return { score: Math.max(0, Math.min(100, score)), factors };
 }
 
-serve(async (req) => {
+serve(withRunLog('rug-investigator', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -674,4 +675,5 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
+

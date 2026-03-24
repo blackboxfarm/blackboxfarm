@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /**
@@ -18,7 +19,7 @@ const corsHeaders = {
 const BATCH_SIZE = 5; // Process 5 entities per run
 const SPIDER_TIMEOUT_MS = 25000; // 25s timeout per entity
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('mesh-spider-processor', async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -136,4 +137,5 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}));
+

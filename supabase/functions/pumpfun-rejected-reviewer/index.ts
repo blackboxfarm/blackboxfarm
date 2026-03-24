@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -298,7 +299,7 @@ async function reviewRejectedTokens(supabase: any): Promise<ReviewerStats> {
   return stats;
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-rejected-reviewer', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -355,4 +356,5 @@ serve(async (req) => {
     console.error('Error in pumpfun-rejected-reviewer:', error);
     return errorResponse(String(error), 500);
   }
-});
+}));
+

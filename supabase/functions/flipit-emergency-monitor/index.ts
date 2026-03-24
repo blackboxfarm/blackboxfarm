@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
@@ -59,7 +60,7 @@ async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
   return null;
 }
 
-serve(async (req) => {
+serve(withRunLog('flipit-emergency-monitor', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -229,4 +230,5 @@ serve(async (req) => {
     console.error("Emergency monitor error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
+

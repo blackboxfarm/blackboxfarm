@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRestUrl, requireHeliusApiKey } from '../_shared/helius-client.ts';
@@ -289,7 +290,7 @@ function countStats(node: OffspringWallet): { offspring: number; minters: number
   return { offspring, minters };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('offspring-mint-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -394,4 +395,5 @@ Also checking known child wallet: ${includeKnownChildWallet}`);
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));
+

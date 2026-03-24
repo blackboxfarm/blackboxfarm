@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 
 const corsHeaders = {
@@ -65,7 +66,7 @@ function generateRecommendation(score: number, stats: ClassificationResult['stat
   return `🔵 VERIFIED BUILDER - ${stats.successfulTokens} successful tokens with ${stats.avgLifespanHours.toFixed(0)}hr avg lifespan. Lower risk.`;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('oracle-auto-classifier', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -250,4 +251,5 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));
+

@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
@@ -55,7 +56,7 @@ function parseKeypair(secret: string): Keypair {
   throw new Error("Invalid secret key format");
 }
 
-serve(async (req) => {
+serve(withRunLog('burn-token', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -258,4 +259,5 @@ serve(async (req) => {
     console.error("[burn-token] Error:", error);
     return bad(error.message || "Internal server error", 500);
   }
-});
+}));
+

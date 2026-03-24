@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { fetchXCommunityAboutAdmin } from "../_shared/x-community-about-admin.ts";
 
@@ -14,7 +15,7 @@ const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
  * Uses Browserless to scrape the /about page for each community
  * and extract the admin handle. No Apify. No member scraping.
  */
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('bulk-community-enricher', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -240,4 +241,5 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));
+

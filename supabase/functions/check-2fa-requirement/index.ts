@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
@@ -9,7 +10,7 @@ const corsHeaders = {
 // Uniform response to prevent user enumeration
 const UNIFORM_NO_2FA = { requires2FA: false, has2FA: false, isTrustedDevice: false };
 
-serve(async (req) => {
+serve(withRunLog('check-2fa-requirement', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

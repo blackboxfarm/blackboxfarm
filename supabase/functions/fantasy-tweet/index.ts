@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createHmac } from "node:crypto";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
@@ -166,7 +167,7 @@ function buildTweetText(template: string, data: FantasyTweetRequest): string {
   return text;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('fantasy-tweet', async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
@@ -266,4 +267,5 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}));
+

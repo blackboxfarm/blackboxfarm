@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 
 const corsHeaders = {
@@ -11,7 +12,7 @@ const corsHeaders = {
  * Designed to run every 10 minutes via pg_cron, processing a small batch
  * to stay within Helius rate limits.
  */
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('backfill-genealogy', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -114,4 +115,5 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));
+

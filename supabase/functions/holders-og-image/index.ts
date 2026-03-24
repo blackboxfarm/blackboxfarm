@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 
 const corsHeaders = {
@@ -41,7 +42,7 @@ async function fetchImage(url: string): Promise<Response | null> {
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('holders-og-image', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -129,4 +130,5 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "text/plain; charset=utf-8" },
     });
   }
-});
+}));
+

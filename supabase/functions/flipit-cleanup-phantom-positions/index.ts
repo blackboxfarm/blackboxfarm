@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.87.6";
@@ -24,7 +25,7 @@ function bad(message: string, status = 400) {
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
-serve(async (req) => {
+serve(withRunLog('flipit-cleanup-phantom-positions', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -253,4 +254,5 @@ serve(async (req) => {
     console.error("Cleanup error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
+

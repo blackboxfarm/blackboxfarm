@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -12,7 +13,7 @@ interface EmailRequest {
   textContent: string;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('send-ai-analysis-email', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -84,4 +85,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
+

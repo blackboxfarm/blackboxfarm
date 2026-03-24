@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 /**
  * FLIPIT REPAIR POSITIONS
  * 
@@ -81,7 +82,7 @@ async function getSolPrice(): Promise<number> {
   return await fetchSolPrice();
 }
 
-serve(async (req) => {
+serve(withRunLog('flipit-repair-positions', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -388,4 +389,5 @@ serve(async (req) => {
     console.error("flipit-repair-positions error:", e);
     return bad(`Unexpected error: ${(e as Error).message}`, 500);
   }
-});
+}));
+

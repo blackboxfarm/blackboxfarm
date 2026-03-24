@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
@@ -24,7 +25,7 @@ const PRODUCT_TO_TIER: Record<string, string> = {
   "prod_U5rC0NjxwWKDTV": "enterprise",
 };
 
-serve(async (req) => {
+serve(withRunLog('stripe-webhook', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -242,4 +243,5 @@ serve(async (req) => {
     headers: { "Content-Type": "application/json" },
     status: 200,
   });
-});
+}));
+
