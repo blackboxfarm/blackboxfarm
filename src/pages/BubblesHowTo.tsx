@@ -9,6 +9,8 @@ import {
   ArrowRight, Fingerprint, Globe, Users, Compass, Eye, Zap,
   Share2, ChevronRight
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserTier } from "@/hooks/useUserTier";
 
 export default function BubblesHowTo() {
   return (
