@@ -10,17 +10,31 @@
  * 
  * Or for non-serve contexts:
  *   const logger = createRunLogger('my-function', 'cron');
- *   try { ... await logger.success({ tokensProcessed: 5 }); }
- *   catch (e) { await logger.fail(e.message); throw e; }
+ *   logger.info('Starting batch processing');
+ *   try { ... logger.info('Processed 23 records'); await logger.success({ tokensProcessed: 5 }); }
+ *   catch (e) { logger.error('Fatal: DB timeout'); await logger.fail(e.message); throw e; }
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+interface LogEvent {
+  level: 'info' | 'warn' | 'error';
+  msg: string;
+  data?: unknown;
+  ts: string;
+}
 
 interface RunLogger {
   success: (metadata?: Record<string, unknown>) => Promise<void>;
   fail: (errorMessage: string, metadata?: Record<string, unknown>) => Promise<void>;
   /** Add metadata mid-run without completing */
   addMeta: (key: string, value: unknown) => void;
+  /** Log an informational event */
+  info: (msg: string, data?: unknown) => void;
+  /** Log a warning event */
+  warn: (msg: string, data?: unknown) => void;
+  /** Log an error event (does NOT complete the run — call fail() for that) */
+  error: (msg: string, data?: unknown) => void;
 }
 
 function getSupabase() {
@@ -42,6 +56,16 @@ export function createRunLogger(
   const runId = crypto.randomUUID();
   const startedAt = new Date().toISOString();
   const meta: Record<string, unknown> = {};
+  const events: LogEvent[] = [];
+
+  const logEvent = (level: LogEvent['level'], msg: string, data?: unknown) => {
+    events.push({ level, msg, data, ts: new Date().toISOString() });
+    // Also console log for Supabase function logs viewer
+    const prefix = `[${functionName}]`;
+    if (level === 'error') console.error(prefix, msg, data ?? '');
+    else if (level === 'warn') console.warn(prefix, msg, data ?? '');
+    else console.log(prefix, msg, data ?? '');
+  };
 
   // Fire-and-forget insert of the 'running' row
   const supabase = getSupabase();
@@ -63,7 +87,7 @@ export function createRunLogger(
 
   const complete = async (status: 'success' | 'error', errorMessage?: string, extraMeta?: Record<string, unknown>) => {
     const durationMs = Date.now() - startTime;
-    const finalMeta = { ...meta, ...extraMeta };
+    const finalMeta = { ...meta, ...extraMeta, events };
     if (!supabase) return;
     try {
       if (startInsertPromise) {
@@ -111,16 +135,22 @@ export function createRunLogger(
     success: (metadata) => complete('success', undefined, metadata),
     fail: (errorMessage, metadata) => complete('error', errorMessage, metadata),
     addMeta: (key, value) => { meta[key] = value; },
+    info: (msg, data?) => logEvent('info', msg, data),
+    warn: (msg, data?) => logEvent('warn', msg, data),
+    error: (msg, data?) => logEvent('error', msg, data),
   };
 }
 
 /**
  * Wrap a Deno.serve handler with automatic run logging.
  * Detects invocation source from request body `{ source: 'orchestrator' }`.
+ * 
+ * The logger is attached to the request as `req._logger` for functions
+ * that want to add rich context events during execution.
  */
 export function withRunLog(
   functionName: string,
-  handler: (req: Request) => Promise<Response> | Response
+  handler: (req: Request, logger?: RunLogger) => Promise<Response> | Response
 ): (req: Request) => Promise<Response> {
   return async (req: Request) => {
     // Pass through OPTIONS
@@ -144,7 +174,7 @@ export function withRunLog(
     const logger = createRunLogger(functionName, invocationSource);
 
     try {
-      const response = await handler(req);
+      const response = await handler(req, logger);
       const status = response.status;
       if (status >= 200 && status < 400) {
         await logger.success({ httpStatus: status });
