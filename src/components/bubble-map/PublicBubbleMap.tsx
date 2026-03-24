@@ -213,8 +213,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     setCapBroken(false);
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
-  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active, trigger it
-  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active;
+  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active AND hasn't already run
+  const spiderHasError = !!spiderStatus.error;
+  const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !hasSpideredOnce;
 
   useEffect(() => {
     if (shouldOfferSpider && searchInput.trim() && !hasSpideredOnce) {
