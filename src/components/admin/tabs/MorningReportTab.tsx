@@ -58,6 +58,17 @@ interface MorningReport {
   created_at: string;
 }
 
+const alertFeatureLabels: Record<string, string> = {
+  function_health: 'Edge function health — background automations and bot/webhook features',
+  api_failure: 'External API reliability — data feeds and enrichment services',
+  rate_limit: 'API quota pressure — integrations may throttle or stall',
+  dlq: 'Dead Letter Queue — retries exhausted and manual recovery may be needed',
+};
+
+function getAlertFeatureLabel(category: string) {
+  return alertFeatureLabels[category] || 'System health signal';
+}
+
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
     healthy: { variant: "default", icon: <CheckCircle className="w-3 h-3" /> },
@@ -105,7 +116,7 @@ function ReportView({ report }: { report: MorningReport }) {
   const subSummary = subDetails?.summary || null;
 
   const copyAlertQuestion = (alert: { level: string; category: string; title: string; detail: string }) => {
-    const question = `Morning Report alert — [${alert.level.toUpperCase()}] ${alert.title}: ${alert.detail}. What should I do about this? What's the root cause and recommended fix?`;
+    const question = `Morning Report alert — [${alert.level.toUpperCase()}] ${alert.title}: ${alert.detail}. This affects: ${getAlertFeatureLabel(alert.category)}. What should I do about this? What's the root cause and recommended fix?`;
     navigator.clipboard.writeText(question);
     toast.success('Question copied to clipboard');
   };
