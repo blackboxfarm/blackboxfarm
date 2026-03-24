@@ -9,8 +9,14 @@ import {
   ArrowRight, Fingerprint, Globe, Users, Compass, Eye, Zap,
   Share2, ChevronRight
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserTier } from "@/hooks/useUserTier";
 
 export default function BubblesHowTo() {
+  const { user } = useAuth();
+  const { isPro } = useUserTier();
+  const bubbleMapLink = (user && isPro) ? "/bubblemap" : "/bubblepromo";
+
   return (
     <SiteLayout>
       <div className="max-w-4xl mx-auto px-4 py-10 space-y-10">
@@ -213,16 +219,18 @@ export default function BubblesHowTo() {
 
         {/* CTA */}
         <div className="flex flex-wrap justify-center gap-4">
-          <Link to="/bubblemap">
+          <Link to={bubbleMapLink}>
             <Button size="lg" className="gap-2">
               <Network className="w-4 h-4" /> Open Bubble Map
             </Button>
           </Link>
-          <Link to="/pricing">
-            <Button size="lg" variant="outline" className="gap-2 border-purple-500/30 text-purple-400 hover:bg-purple-500/10">
-              <Crown className="w-4 h-4" /> Upgrade for Unlimited Access
-            </Button>
-          </Link>
+          {!isPro && (
+            <Link to="/pricing">
+              <Button size="lg" variant="outline" className="gap-2 border-primary/30 text-primary hover:bg-primary/10">
+                <Crown className="w-4 h-4" /> Upgrade for Unlimited Access
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </SiteLayout>

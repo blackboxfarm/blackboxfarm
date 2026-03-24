@@ -42,6 +42,15 @@ const features: PricingFeature[] = [
   { label: 'Team Seats', free: '1', auth: '1', xSub: '1', pro: '1', dev: '1', enterprise: '4', comingSoon: true },
   { label: 'Ad-Free Experience', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   { label: 'Priority Support', free: false, auth: false, xSub: false, pro: false, dev: false, enterprise: true, comingSoon: true },
+  // Bubble Map features
+  { label: '🫧 Bubble Map Lookups/Day', free: '2', auth: '2', xSub: '10', pro: '∞', dev: '∞', enterprise: '∞' },
+  { label: '🫧 Graph Visualization', free: true, auth: true, xSub: true, pro: true, dev: true, enterprise: true },
+  { label: '🫧 Auto-Spider', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
+  { label: '🫧 Find KYC Root', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
+  { label: '🫧 Find All Tokens', free: false, auth: false, xSub: '3/day', pro: true, dev: true, enterprise: true },
+  { label: '🫧 Deep Spider', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
+  { label: '🫧 Node Cap', free: '20', auth: '40', xSub: '80', pro: '∞', dev: '∞', enterprise: '∞' },
+  { label: '🫧 Export Graph Data', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   // Telegram Bot features
   { label: '🤖 TG Bot: /holders', free: false, auth: 'Lite', xSub: 'Full', pro: 'Full+', dev: 'Full+', enterprise: 'Full+' },
   { label: '🤖 TG Bot: /risk', free: false, auth: '🟢/🔴', xSub: '✓ Full', pro: '✓ Full', dev: '✓ Full', enterprise: '✓ Full' },

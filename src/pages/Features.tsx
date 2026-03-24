@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { SocialIcon } from "@/components/token/SocialIcon";
 import holdersLogo from "@/assets/holders-logo.png";
+import { SiteLayout } from "@/components/layout/SiteLayout";
 
 const TIERS = [
   {
@@ -182,7 +183,7 @@ export default function Features() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-background">
+    <SiteLayout>
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(180_100%_50%/0.08),transparent_60%)]" />
@@ -517,7 +518,7 @@ export default function Features() {
           </CardContent>
         </Card>
 
-        <div className="text-center mt-8">
+        <div className="flex flex-wrap justify-center gap-3 mt-8">
           <Button 
             variant="outline" 
             size="lg"
@@ -527,6 +528,15 @@ export default function Features() {
             <Network className="w-4 h-4" />
             Try the Bubble Map
             <ArrowRight className="w-4 h-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="lg"
+            onClick={() => navigate("/bubbles-how-to")}
+            className="gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <Eye className="w-4 h-4" />
+            Bubble Map Overview &amp; Guide
           </Button>
         </div>
       </section>
@@ -555,6 +565,6 @@ export default function Features() {
           </div>
         </div>
       </section>
-    </div>
+    </SiteLayout>
   );
 }
