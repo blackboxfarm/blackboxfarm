@@ -100,14 +100,31 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
       }
       graphRef.current.d3Force('charge')?.strength((viewMode === 'tree' ? -150 : -50) * sf);
       
-      // Collision force: enforce minimum 2.5 bubble-diameters gap between nodes
-      // d3-force-collide is bundled with react-force-graph-2d via d3
-      const d3 = await import('d3-force');
-      const collisionForce = d3.forceCollide((node: any) => {
+      // Custom collision force: enforce minimum 2.5 bubble-diameters gap
+      const getNodeRadius = (node: any) => {
         const nodeSize = Math.max(4, Math.min((node.val || 1) * 3 + 3, 20));
         return nodeSize * 3 * Math.sqrt(sf);
-      }).strength(1).iterations(3);
-      graphRef.current.d3Force('collision', collisionForce);
+      };
+      graphRef.current.d3Force('collision', () => {
+        const nodes = graphData.nodes as any[];
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i], b = nodes[j];
+            if (a.x == null || b.x == null) continue;
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const minDist = getNodeRadius(a) + getNodeRadius(b);
+            if (dist < minDist) {
+              const push = (minDist - dist) * 0.5;
+              const nx = dx / dist, ny = dy / dist;
+              a.vx -= nx * push * 0.05;
+              a.vy -= ny * push * 0.05;
+              b.vx += nx * push * 0.05;
+              b.vy += ny * push * 0.05;
+            }
+          }
+        }
+      });
       
       // Add center gravity to keep the graph cohesive instead of flying apart
       graphRef.current.d3Force('center')?.strength(0.05);
