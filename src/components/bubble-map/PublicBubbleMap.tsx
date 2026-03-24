@@ -507,7 +507,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         ? '#60a5fa' : 'rgba(255,255,255,0.9)';
       ctx.fillStyle = labelColor; ctx.fillText(labelText, meshNode.x, meshNode.y + size + 3);
     }
-  }, [focusedEntity]);
+  }, [focusedEntity, solarMode]);
 
   const paintLink = useCallback((link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const src = link.source; const tgt = link.target;
