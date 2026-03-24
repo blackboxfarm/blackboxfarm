@@ -463,6 +463,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         timesPosted: currentTimesPosted,
         // Pass trigger_comment from queue item (used by DEX scanner triggers)
         triggerComment: item.trigger_comment || null,
+        tokenAge,
         // bagless-holders-report sets realHolders = realWalletCount ($50-$199)
         realHolders: asCount(report?.realHolders ?? report?.realWalletCount),
         dustCount,
