@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 
@@ -330,4 +331,4 @@ const handler = async (req: Request): Promise<Response> => {
   }
 };
 
-serve(handler);
+serve(withRunLog('send-auth-email', handler));
