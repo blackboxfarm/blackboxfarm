@@ -677,54 +677,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                <Button variant={solarMode === 'minimum' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('minimum')}>
-                  <Sun className="h-3 w-3 mr-1" /> Solar Min
-                </Button>
-                <Button variant={solarMode === 'clusters' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('clusters')}>
-                  <Orbit className="h-3 w-3 mr-1" /> Solar Clusters
-                </Button>
-              </div>
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                <Button variant={viewMode === 'bubble' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('bubble')}>
-                  <Network className="h-3 w-3 mr-1" /> Bubble
-                </Button>
-                <Button variant={viewMode === 'tree' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('tree')}>
-                  <GitBranch className="h-3 w-3 mr-1" /> Tree
-                </Button>
-              </div>
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs px-2"
-                onClick={() => {
-                  if (graphRef.current) {
-                    const gd = graphRef.current.graphData();
-                    const w = dimensions.width || 800;
-                    const h = 600;
-                    gd.nodes.forEach((node: any) => {
-                      node.x = (Math.random() - 0.5) * w * 0.8;
-                      node.y = (Math.random() - 0.5) * h * 0.8;
-                      node.vx = (Math.random() - 0.5) * 5;
-                      node.vy = (Math.random() - 0.5) * 5;
-                    });
-                    graphRef.current.graphData(gd);
-                    graphRef.current.d3ReheatSimulation();
-                  }
-                }}
-                title="Randomize positions and re-settle the graph"
-              >
-                🫨 Shakey-Shake!
-              </Button>
             </div>
           </div>
         </CardHeader>
