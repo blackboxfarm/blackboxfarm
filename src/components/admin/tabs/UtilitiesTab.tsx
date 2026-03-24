@@ -20,7 +20,7 @@ const ApifyUsageBreakdown = lazy(() => import("@/components/admin/ApifyUsageBrea
 const FunctionOperationsDashboard = lazy(() => import("@/components/admin/FunctionOperationsDashboard").then(m => ({ default: m.FunctionOperationsDashboard })));
 
 export default function UtilitiesTab() {
-  const [activeSubTab, setActiveSubTab] = useState("api-resources");
+  const [activeSubTab, setActiveSubTab] = useState("function-ops");
 
   return (
     <div className="space-y-4">
