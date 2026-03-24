@@ -28,6 +28,7 @@ export default function UtilitiesTab() {
       <HealthModeToggles />
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
+        <TabsTrigger value="function-ops">⚙️ Function Ops</TabsTrigger>
         <TabsTrigger value="api-resources">📊 API Resources</TabsTrigger>
         <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
         <TabsTrigger value="api-usage">📡 API Usage</TabsTrigger>
