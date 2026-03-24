@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 
 type ViewMode = 'bubble' | 'tree';
+type SolarMode = 'minimum' | 'clusters';
 const NODE_CAP_DEFAULT = 80;
 
 interface PublicBubbleMapProps {
