@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram } from "npm:@solana/web3.js@1.95.3";
@@ -11,7 +12,7 @@ const corsHeaders = {
 // YOUR REVENUE WALLET - Replace with your actual Solana wallet
 const PLATFORM_REVENUE_WALLET = "YOUR_ACTUAL_SOLANA_WALLET_ADDRESS_HERE";
 
-serve(async (req) => {
+serve(withRunLog('enhanced-revenue-collector', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -123,4 +124,5 @@ serve(async (req) => {
       }
     );
   }
-});
+}));
+

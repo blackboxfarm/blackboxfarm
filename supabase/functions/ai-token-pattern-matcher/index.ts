@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 /**
  * AI Token Pattern Matcher — Uses historical post-mortems + mid-growth assessments
  * to predict outcomes for new/growing tokens.
@@ -23,7 +24,7 @@ const corsHeaders = {
 
 const AI_GATEWAY = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('ai-token-pattern-matcher', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

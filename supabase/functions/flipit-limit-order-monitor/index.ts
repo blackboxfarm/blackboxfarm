@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
@@ -164,7 +165,7 @@ async function sendTelegramAlert(supabase: any, alertData: {
   }
 }
 
-serve(async (req) => {
+serve(withRunLog('flipit-limit-order-monitor', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -458,4 +459,5 @@ Your limit order has been successfully executed and a new position has been crea
     console.error("FlipIt limit order monitor error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
+

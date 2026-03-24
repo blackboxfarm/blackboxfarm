@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getHeliusApiKey, getHeliusRpcUrl, getHeliusRestUrl } from '../_shared/helius-client.ts';
@@ -388,7 +389,7 @@ async function monitorDevWallets(supabase: any): Promise<MonitorStats> {
   return stats;
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-dev-wallet-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -466,4 +467,5 @@ serve(async (req) => {
     console.error('Error:', error);
     return jsonResponse({ error: error.message }, 500);
   }
-});
+}));
+

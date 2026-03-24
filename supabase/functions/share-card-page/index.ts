@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -36,7 +37,7 @@ function isBot(userAgent: string | null): boolean {
   return BOT_USER_AGENTS.some(bot => ua.includes(bot));
 }
 
-serve(async (req) => {
+serve(withRunLog('share-card-page', async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -164,4 +165,5 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "text/plain; charset=utf-8" },
     });
   }
-});
+}));
+

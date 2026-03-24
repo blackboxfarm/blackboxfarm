@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 
 const corsHeaders = {
@@ -69,7 +70,7 @@ async function fetchAth24h(tokenMint: string): Promise<number | null> {
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('ath-24h-backfill', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -159,4 +160,5 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));
+

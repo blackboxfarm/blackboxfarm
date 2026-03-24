@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 /**
  * X Community Health Check
  * Scheduled function to validate all tracked communities for deletion
@@ -20,7 +21,7 @@ interface HealthCheckResult {
   error?: string;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('x-community-health-check', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -190,4 +191,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
+

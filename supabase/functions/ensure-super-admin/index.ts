@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -8,7 +9,7 @@ const corsHeaders = {
 const SUPER_ADMIN_EMAIL = 'admin@blackbox.farm'
 const SUPER_ADMIN_PASSWORD = 'SuperAdmin2024!'
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('ensure-super-admin', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -90,4 +91,5 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
-})
+}));
+

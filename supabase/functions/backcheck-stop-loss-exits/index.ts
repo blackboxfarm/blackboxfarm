@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -12,7 +13,7 @@ const jsonResponse = (data: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
-serve(async (req) => {
+serve(withRunLog('backcheck-stop-loss-exits', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -228,4 +229,5 @@ serve(async (req) => {
     console.error('[backcheck] Fatal error:', err);
     return jsonResponse({ success: false, error: String(err) }, 500);
   }
-});
+}));
+

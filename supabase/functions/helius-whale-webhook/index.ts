@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -37,7 +38,7 @@ interface HeliusTransaction {
 // KILL SWITCH - Set to true to disable all processing
 const WEBHOOK_DISABLED = false;
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('helius-whale-webhook', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -405,4 +406,5 @@ Deno.serve(async (req) => {
       headers: corsHeaders 
     })
   }
-})
+}));
+

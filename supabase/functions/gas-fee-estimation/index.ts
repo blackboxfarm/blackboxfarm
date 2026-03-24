@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
@@ -41,7 +42,7 @@ interface FeeEstimation {
   };
 }
 
-serve(async (req) => {
+serve(withRunLog('gas-fee-estimation', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -170,4 +171,5 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));
+

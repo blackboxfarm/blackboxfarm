@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const corsHeaders = {
@@ -50,7 +51,7 @@ const platformAdapters: PlatformAdapter[] = [
   { key: 'solanafm', type: 'scrape', priority: 50, url: 'https://solana.fm/address/{MINT}' }
 ];
 
-serve(async (req) => {
+serve(withRunLog('breadcrumbs-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

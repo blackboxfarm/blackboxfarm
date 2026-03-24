@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
@@ -23,7 +24,7 @@ interface WalletTransaction {
   timestamp: string;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('wallet-monitor', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -327,4 +328,5 @@ Deno.serve(async (req) => {
   }
 
   return response
-})
+}));
+

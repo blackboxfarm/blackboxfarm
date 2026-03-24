@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 /**
  * FLIPIT IMPORT POSITION
  * 
@@ -29,7 +30,7 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
-serve(async (req) => {
+serve(withRunLog('flipit-import-position', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -255,4 +256,5 @@ serve(async (req) => {
     console.error("flipit-import-position error:", e);
     return bad(`Unexpected error: ${(e as Error).message}`, 500);
   }
-});
+}));
+

@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
@@ -10,7 +11,7 @@ const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
 const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
 const twilioPhoneNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
 
-serve(async (req) => {
+serve(withRunLog('send-verification', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -82,4 +83,5 @@ serve(async (req) => {
       }
     );
   }
-});
+}));
+

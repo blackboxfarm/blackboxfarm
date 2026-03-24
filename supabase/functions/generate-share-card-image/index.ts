@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -30,7 +31,7 @@ function escapeHtml(s: string) {
     .replaceAll("'", "&#039;");
 }
 
-serve(async (req) => {
+serve(withRunLog('generate-share-card-image', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -283,4 +284,5 @@ STYLE: Clean, minimal, fintech look. NO busy backgrounds. MAXIMUM TEXT READABILI
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}));
+

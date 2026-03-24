@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 // Admin notification service - broadcasts to Telegram groups from database (inlined v2)
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.54.0";
 import { Resend } from "npm:resend@2.0.0";
@@ -50,7 +51,7 @@ interface NotifyRequest {
   channels?: ("email" | "telegram" | "database")[];
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('admin-notify', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -197,4 +198,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
+

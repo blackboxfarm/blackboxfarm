@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.54.0";
 
@@ -15,7 +16,7 @@ const corsHeaders = {
  * 3. Updates HELIUS_API_KEY secret via Supabase Management API
  * 4. Updates api_service_config rotation dates
  */
-serve(async (req) => {
+serve(withRunLog('rotate-helius-key', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -210,4 +211,5 @@ serve(async (req) => {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));
+

@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { getHeliusApiKey } from '../_shared/helius-client.ts';
@@ -36,7 +37,7 @@ function athToTier(ath: number): number {
   return 1;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -399,4 +400,5 @@ Deno.serve(async (req) => {
       error: error instanceof Error ? error.message : 'Unknown error' 
     }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-});
+}));
+

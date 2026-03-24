@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=deno'
 import { logHeliusCall } from '../_shared/helius-logger.ts';
 import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
@@ -58,7 +59,7 @@ async function getTokenMeta(mint: string, supabase: any) {
   return meta;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('backfill-wallet-transactions', async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });

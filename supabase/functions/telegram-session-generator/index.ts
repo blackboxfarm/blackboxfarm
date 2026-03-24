@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -9,7 +10,7 @@ const corsHeaders = {
 // Note: gramJS requires a session string for MTProto authentication
 // This function handles the login flow to generate and store the session
 
-serve(async (req) => {
+serve(withRunLog('telegram-session-generator', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -267,4 +268,5 @@ serve(async (req) => {
       error: error.message
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
   }
-});
+}));
+

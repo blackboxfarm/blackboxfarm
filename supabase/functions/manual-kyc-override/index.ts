@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 
 const corsHeaders = {
@@ -7,7 +8,7 @@ const corsHeaders = {
 
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('manual-kyc-override', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -216,4 +217,5 @@ Deno.serve(async (req) => {
       status: err.message.includes('Not authorized') ? 403 : 500,
     });
   }
-});
+}));
+

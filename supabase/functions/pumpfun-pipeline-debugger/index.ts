@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -1902,7 +1903,7 @@ async function pruneDeadTokens(supabase: any): Promise<any> {
   };
 }
 
-serve(async (req) => {
+serve(withRunLog('pumpfun-pipeline-debugger', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -1963,4 +1964,5 @@ serve(async (req) => {
     console.error('[Pipeline Debugger] Error:', err);
     return jsonResponse({ error: err.message }, 500);
   }
-});
+}));
+

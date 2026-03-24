@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 
 const corsHeaders = {
@@ -35,7 +36,7 @@ function slugifyVersion(v: string): string {
   return v.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48);
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('holders-og', async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -235,4 +236,5 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "text/plain; charset=utf-8" },
     });
   }
-});
+}));
+

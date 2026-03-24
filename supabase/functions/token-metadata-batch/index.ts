@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { meshFeed } from '../_shared/mesh-feeder.ts';
@@ -55,7 +56,7 @@ async function fetchDexScreenerData(mint: string): Promise<Partial<TokenInfo>> {
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('token-metadata-batch', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -111,4 +112,5 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+}));
+

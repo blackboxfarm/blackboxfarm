@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -24,7 +25,7 @@ const RUGCHECK_CONFIG = {
 // Rate limiting: 1 request per second
 const RATE_LIMIT_MS = 1000;
 
-serve(async (req) => {
+serve(withRunLog('rugcheck-backfill', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -210,4 +211,5 @@ serve(async (req) => {
       status: 500
     });
   }
-});
+}));
+

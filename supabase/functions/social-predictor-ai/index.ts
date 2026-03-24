@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -107,7 +108,7 @@ async function searchTopic(query: string): Promise<{ results: Array<{ title: str
   }
 }
 
-serve(async (req) => {
+serve(withRunLog('social-predictor-ai', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -329,4 +330,5 @@ IMPORTANT: Only cite information that appears in the search results above. Use t
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
+

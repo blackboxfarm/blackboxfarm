@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -9,7 +10,7 @@ const corsHeaders = {
  * SERVICE STATUS — Public endpoint returning current service health
  * Reads from the service_status table populated by system-health-audit
  */
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('service-status', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -46,4 +47,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
+

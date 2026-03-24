@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
@@ -104,7 +105,7 @@ async function resolveOnChainCreator(tokenMint: string, heliusKey: string): Prom
   return creatorWallet;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('token-creator-linker', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -255,4 +256,5 @@ Deno.serve(async (req) => {
       status: 500,
     });
   }
-});
+}));
+

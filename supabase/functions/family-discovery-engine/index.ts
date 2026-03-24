@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getHeliusRpcUrl, redactHeliusSecrets } from '../_shared/helius-client.ts';
 
@@ -116,7 +117,7 @@ function analyzeTransaction(tx: any, seedWallet: string): Evidence[] {
   return evidences;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withRunLog('family-discovery-engine', async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
@@ -357,4 +358,5 @@ Deno.serve(async (req) => {
     console.error('[FamilyDiscovery] Fatal error:', redactHeliusSecrets(String(err)));
     return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-});
+}));
+

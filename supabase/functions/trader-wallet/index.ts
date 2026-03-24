@@ -1,3 +1,4 @@
+import { withRunLog } from '../_shared/run-logger.ts';
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1.95.3";
@@ -53,7 +54,7 @@ function parseKeypair(secret: string): Keypair {
   }
 }
 
-serve(async (req) => {
+serve(withRunLog('trader-wallet', async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -321,4 +322,5 @@ slog(`Params: tokenMint=${tokenMint ?? 'none'} getAllTokens=${getAllTokens}`);
     console.error("trader-wallet error", e);
     return bad(`Unexpected error: ${(e as Error).message}`, 500);
   }
-});
+}));
+
