@@ -563,6 +563,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
         while (queue.length > 0) {
           const { id, walletDepth } = queue.shift()!;
+          const currentNode = baseNodes.find(n => n.id === id);
+          const currentType = currentNode?.type || '';
           const neighbors = adj.get(id) || [];
           for (const { neighbor, rel } of neighbors) {
             if (allowedIds.has(neighbor)) continue;
@@ -571,8 +573,18 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
             const nType = neighborNode.type;
 
-            // Always allow: website, x_community, x_account, kyc_root
-            if (['website', 'x_community', 'x_account', 'kyc_root'].includes(nType)) {
+            // Social nodes (website, x_community, x_account) should only attach to TOKEN nodes
+            // not directly to wallets — this prevents the dev wallet from stealing social links
+            if (['website', 'x_community', 'x_account'].includes(nType)) {
+              if (currentType === 'token' || currentType === 'x_community') {
+                allowedIds.add(neighbor);
+                queue.push({ id: neighbor, walletDepth });
+              }
+              continue;
+            }
+
+            // KYC root: always allow
+            if (nType === 'kyc_root') {
               allowedIds.add(neighbor);
               queue.push({ id: neighbor, walletDepth });
               continue;
