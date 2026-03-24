@@ -68,6 +68,8 @@ const Features = lazy(() => import("./pages/Features"));
 const BubblePromo = lazy(() => import("./pages/BubblePromo"));
 const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
+const HoldersHowTo = lazy(() => import("./pages/HoldersHowTo"));
+const BubblesHowTo = lazy(() => import("./pages/BubblesHowTo"));
 
 const queryClient = new QueryClient();
 
@@ -142,6 +144,8 @@ const App = () => {
                       <Route path="/features" element={<Features />} />
                       <Route path="/bubblepromo" element={<BubblePromo />} />
                       <Route path="/bubblemap" element={<BubbleMapPage />} />
+                      <Route path="/holders-how-to" element={<HoldersHowTo />} />
+                      <Route path="/bubbles-how-to" element={<BubblesHowTo />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>

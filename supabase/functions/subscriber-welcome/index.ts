@@ -242,43 +242,63 @@ function generateNewUserWelcomeEmail(email: string): string {
                 </td>
               </tr>
 
-              <!-- What You Can Do -->
+              <!-- 3 Core Features -->
               <tr>
                 <td style="padding: 0 40px 40px;">
-                  <h3 style="color: #e2e8f0; font-size: 20px; font-weight: 700; margin: 0 0 24px 0;">🔓 What's Unlocked</h3>
+                  <h3 style="color: #e2e8f0; font-size: 20px; font-weight: 700; margin: 0 0 24px 0;">🚀 3 Tools — Ready to Use Now</h3>
                   
-                  <div style="background: #1a2332; border-radius: 12px; padding: 20px; margin-bottom: 12px; border-left: 4px solid #00e5ff;">
-                    <p style="color: #e2e8f0; font-size: 15px; font-weight: 600; margin: 0 0 6px 0;">🔍 Token Holder Analysis</p>
-                    <p style="color: #64748b; font-size: 13px; margin: 0;">Analyze any Solana token — holder distribution, health score, whale activity, and AI insights.</p>
+                  <!-- Feature 1: Holder Analysis -->
+                  <div style="background: #1a2332; border-radius: 12px; padding: 24px; margin-bottom: 16px; border-left: 4px solid #00e5ff;">
+                    <p style="color: #e2e8f0; font-size: 17px; font-weight: 700; margin: 0 0 8px 0;">🔍 Token Holder Analysis</p>
+                    <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 12px 0;">
+                      Paste any Solana token address and get an instant health report — holder distribution, whale activity, 
+                      risk flags, and AI insights. See who's holding, how concentrated the supply is, and whether it's safe.
+                    </p>
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="padding-right: 16px;">
+                        <a href="https://blackbox.farm/holders" style="display: inline-block; background: linear-gradient(135deg, #00e5ff, #00b8d4); color: #0a0a1a; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 13px;">Try It Now →</a>
+                      </td>
+                      <td>
+                        <a href="https://blackbox.farm/holders-how-to" style="color: #D4AF37; text-decoration: none; font-size: 13px; font-weight: 600;">How-To Guide →</a>
+                      </td>
+                    </tr></table>
                   </div>
                   
-                  <div style="background: #1a2332; border-radius: 12px; padding: 20px; margin-bottom: 12px; border-left: 4px solid #22c55e;">
-                    <p style="color: #e2e8f0; font-size: 15px; font-weight: 600; margin: 0 0 6px 0;">🤖 AI Quick Summary</p>
-                    <p style="color: #64748b; font-size: 13px; margin: 0;">Get instant AI-generated risk assessment and trading signals on any token.</p>
+                  <!-- Feature 2: Bubble Map -->
+                  <div style="background: #1a2332; border-radius: 12px; padding: 24px; margin-bottom: 16px; border-left: 4px solid #a855f7;">
+                    <p style="color: #e2e8f0; font-size: 17px; font-weight: 700; margin: 0 0 8px 0;">🫧 Bubble Map</p>
+                    <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 12px 0;">
+                      Visualize wallet networks in an interactive graph. See the developer's launch history, trace funding sources, 
+                      discover connected wallets, and overlay social data from X/Twitter — all from one token address.
+                    </p>
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="padding-right: 16px;">
+                        <a href="https://blackbox.farm/bubblemap" style="display: inline-block; background: linear-gradient(135deg, #a855f7, #7c3aed); color: #ffffff; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 13px;">Open Bubble Map →</a>
+                      </td>
+                      <td>
+                        <a href="https://blackbox.farm/bubbles-how-to" style="color: #D4AF37; text-decoration: none; font-size: 13px; font-weight: 600;">How-To Guide →</a>
+                      </td>
+                    </tr></table>
                   </div>
                   
-                  <div style="background: #1a2332; border-radius: 12px; padding: 20px; margin-bottom: 12px; border-left: 4px solid #f59e0b;">
-                    <p style="color: #e2e8f0; font-size: 15px; font-weight: 600; margin: 0 0 6px 0;">📊 10 Reports Per Day</p>
-                    <p style="color: #64748b; font-size: 13px; margin: 0;">Free accounts get 10 full reports daily. Upgrade to Pro for 50+ reports and premium features.</p>
+                  <!-- Feature 3: Telegram Bot -->
+                  <div style="background: #1a2332; border-radius: 12px; padding: 24px; border-left: 4px solid #22c55e;">
+                    <p style="color: #e2e8f0; font-size: 17px; font-weight: 700; margin: 0 0 8px 0;">🤖 Telegram Bot</p>
+                    <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 12px 0;">
+                      Get token analysis on-the-go in Telegram. Link your account in your 
+                      <a href="https://blackbox.farm/dashboard" style="color: #00e5ff; text-decoration: none;">Dashboard</a>, 
+                      then message <a href="https://t.me/holdersintel_bot" style="color: #00e5ff; text-decoration: none;">@holdersintel_bot</a> 
+                      to run quick lookups, get alerts, and share reports in group chats.
+                    </p>
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="padding-right: 16px;">
+                        <a href="https://t.me/holdersintel_bot" style="display: inline-block; background: linear-gradient(135deg, #22c55e, #16a34a); color: #ffffff; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 13px;">Open Bot →</a>
+                      </td>
+                      <td>
+                        <a href="https://blackbox.farm/tgbot" style="color: #D4AF37; text-decoration: none; font-size: 13px; font-weight: 600;">Full Guide →</a>
+                      </td>
+                    </tr></table>
                   </div>
-                  
-                  <div style="background: #1a2332; border-radius: 12px; padding: 20px; border-left: 4px solid #a855f7;">
-                    <p style="color: #e2e8f0; font-size: 15px; font-weight: 600; margin: 0 0 6px 0;">🐳 Whale Warnings</p>
-                    <p style="color: #64748b; font-size: 13px; margin: 0;">See when major holders are moving — before it hits the price.</p>
-                  </div>
-                </td>
-              </tr>
-
-              <!-- CTA -->
-              <tr>
-                <td style="padding: 0 40px 40px; text-align: center;">
-                  <a href="https://blackbox.farm/holders" 
-                     style="display: inline-block; background: linear-gradient(135deg, #00e5ff 0%, #00b8d4 100%); 
-                            color: #0a0a1a; text-decoration: none; padding: 16px 48px; border-radius: 12px; 
-                            font-weight: 800; font-size: 16px; letter-spacing: 0.5px;
-                            box-shadow: 0 8px 32px rgba(0, 229, 255, 0.35); text-transform: uppercase;">
-                    🔍 Analyze Your First Token
-                  </a>
                 </td>
               </tr>
 
