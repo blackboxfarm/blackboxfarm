@@ -68,6 +68,8 @@ const Features = lazy(() => import("./pages/Features"));
 const BubblePromo = lazy(() => import("./pages/BubblePromo"));
 const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
+const HoldersHowTo = lazy(() => import("./pages/HoldersHowTo"));
+const BubblesHowTo = lazy(() => import("./pages/BubblesHowTo"));
 
 const queryClient = new QueryClient();
 
