@@ -40,6 +40,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
   const [communitySearching, setCommunitySearching] = useState(false);
   const [spreadFactor, setSpreadFactor] = useState(3);
   const [hasSpideredOnce, setHasSpideredOnce] = useState(false);
+  const [devWalletAddress, setDevWalletAddress] = useState<string | null>(null);
+  const [devWalletLoading, setDevWalletLoading] = useState(false);
 
   // Showmanship state
   const [xAccountsRevealed, setXAccountsRevealed] = useState(false);
