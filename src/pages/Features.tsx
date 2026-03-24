@@ -183,7 +183,7 @@ export default function Features() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-background">
+    <SiteLayout>
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(180_100%_50%/0.08),transparent_60%)]" />
