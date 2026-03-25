@@ -989,6 +989,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
                     action: 'send_message',
                     chatId: chatId,
                     message: publicMessage,
+                    parseMode: 'markdown',
                   },
                 });
                 
