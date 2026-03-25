@@ -115,7 +115,7 @@ serve(withRunLog('coin-scanner', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
-})
+}))
 
 // Fetch live trending tokens from DexScreener API
 async function fetchTrendingTokens(): Promise<any[]> {
