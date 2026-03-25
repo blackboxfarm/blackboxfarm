@@ -438,7 +438,8 @@ export default function Home() {
                       </Button>
                     )}
                   </div>
-            </Card>
+                </CardContent>
+              </Card>
           ))}
         </div>
       </section>
