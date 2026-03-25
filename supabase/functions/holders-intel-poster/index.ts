@@ -1034,6 +1034,153 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       
       postsThisTick++;
       results.push({ symbol: stats.symbol, action: 'posted', tweetId: tweetResult.tweetId });
+
+      // === ADVERT INTERLEAVING ===
+      try {
+        // Check if advert system is enabled
+        const { data: advertConfigRows } = await supabase
+          .from('holders_intel_config')
+          .select('key, value')
+          .in('key', ['advert_enabled', 'advert_frequency', 'advert_post_counter', 'advert_last_x_template', 'advert_last_tg_template']);
+
+        if (advertConfigRows) {
+          const cfg: Record<string, string> = {};
+          for (const r of advertConfigRows) cfg[r.key] = r.value;
+
+          if (cfg.advert_enabled === 'true') {
+            const frequency = parseInt(cfg.advert_frequency || '5', 10);
+            const counter = parseInt(cfg.advert_post_counter || '0', 10) + 1;
+
+            if (counter >= frequency) {
+              console.log(`[poster] Advert trigger! Counter ${counter} >= frequency ${frequency}`);
+
+              // --- X ADVERT ---
+              try {
+                // Get all enabled X advert templates
+                const { data: xAdverts } = await supabase
+                  .from('holders_intel_templates')
+                  .select('template_name, template_text')
+                  .like('template_name', 'x_advert_%')
+                  .eq('is_active', true)
+                  .order('template_name');
+
+                if (xAdverts && xAdverts.length > 0) {
+                  const lastX = cfg.advert_last_x_template || 'x_advert_1';
+                  // Find next template in rotation
+                  const lastIdx = xAdverts.findIndex(t => t.template_name === lastX);
+                  const nextIdx = (lastIdx + 1) % xAdverts.length;
+                  const nextXAdvert = xAdverts[nextIdx];
+
+                  console.log(`[poster] Posting X advert: ${nextXAdvert.template_name}`);
+
+                  try {
+                    const { data: xAdResult, error: xAdErr } = await supabase.functions.invoke('post-share-card-twitter', {
+                      body: { tweetText: nextXAdvert.template_text, twitterHandle: TWITTER_HANDLE },
+                    });
+                    if (xAdErr) {
+                      console.warn('[poster] X advert post failed:', xAdErr);
+                    } else {
+                      console.log(`[poster] X advert posted: ${nextXAdvert.template_name}`, xAdResult?.tweetId);
+                    }
+                  } catch (xPostErr) {
+                    console.warn('[poster] X advert post error:', xPostErr);
+                  }
+
+                  // Update last used X template
+                  await supabase.from('holders_intel_config')
+                    .update({ value: nextXAdvert.template_name, updated_at: new Date().toISOString() })
+                    .eq('key', 'advert_last_x_template');
+                }
+              } catch (xAdErr) {
+                console.warn('[poster] X advert rotation error:', xAdErr);
+              }
+
+              // --- TG ADVERT (to INTEL_PUBLIC channel) ---
+              try {
+                const { data: tgAdverts } = await supabase
+                  .from('holders_intel_templates')
+                  .select('template_name, template_text')
+                  .like('template_name', 'tg_advert_%')
+                  .eq('is_active', true)
+                  .order('template_name');
+
+                if (tgAdverts && tgAdverts.length > 0) {
+                  const lastTg = cfg.advert_last_tg_template || 'tg_advert_1';
+                  const lastTgIdx = tgAdverts.findIndex(t => t.template_name === lastTg);
+                  const nextTgIdx = (lastTgIdx + 1) % tgAdverts.length;
+                  const nextTgAdvert = tgAdverts[nextTgIdx];
+
+                  console.log(`[poster] Posting TG advert: ${nextTgAdvert.template_name}`);
+
+                  // Check if broadcast not suspended
+                  const { data: suspCheck } = await supabase
+                    .from('system_settings')
+                    .select('value')
+                    .eq('key', 'telegram_broadcast_suspended')
+                    .maybeSingle();
+
+                  if (suspCheck?.value !== true) {
+                    const { data: pubTarget } = await supabase
+                      .from('telegram_message_targets')
+                      .select('chat_id')
+                      .eq('label', 'INTEL_PUBLIC')
+                      .maybeSingle();
+
+                    if (pubTarget?.chat_id) {
+                      try {
+                        await supabase.functions.invoke('telegram-mtproto-auth', {
+                          body: {
+                            action: 'send_message',
+                            chatId: Number(pubTarget.chat_id),
+                            message: nextTgAdvert.template_text,
+                          },
+                        });
+                        console.log(`[poster] TG advert sent: ${nextTgAdvert.template_name}`);
+                      } catch (tgSendErr) {
+                        console.warn('[poster] TG advert send error:', tgSendErr);
+                      }
+                    }
+                  }
+
+                  // Also send to BlackBox admin group via admin-notify
+                  try {
+                    await supabase.functions.invoke('admin-notify', {
+                      body: {
+                        type: 'intel_xbot_post',
+                        title: `📣 TG Advert: ${nextTgAdvert.template_name}`,
+                        message: nextTgAdvert.template_text,
+                        channels: ['telegram'],
+                      },
+                    });
+                  } catch (_) {}
+
+                  // Update last used TG template
+                  await supabase.from('holders_intel_config')
+                    .update({ value: nextTgAdvert.template_name, updated_at: new Date().toISOString() })
+                    .eq('key', 'advert_last_tg_template');
+                }
+              } catch (tgAdErr) {
+                console.warn('[poster] TG advert rotation error:', tgAdErr);
+              }
+
+              // Reset counter
+              await supabase.from('holders_intel_config')
+                .update({ value: '0', updated_at: new Date().toISOString() })
+                .eq('key', 'advert_post_counter');
+
+              console.log('[poster] Advert cycle complete, counter reset to 0');
+            } else {
+              // Increment counter
+              await supabase.from('holders_intel_config')
+                .update({ value: String(counter), updated_at: new Date().toISOString() })
+                .eq('key', 'advert_post_counter');
+              console.log(`[poster] Advert counter: ${counter}/${frequency}`);
+            }
+          }
+        }
+      } catch (advertErr) {
+        console.warn('[poster] Advert interleaving error (non-fatal):', advertErr);
+      }
       
     } catch (postError: any) {
       console.error(`[poster] Error processing ${item.symbol}:`, postError);
