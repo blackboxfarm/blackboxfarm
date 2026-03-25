@@ -420,6 +420,24 @@ export default function Features() {
                     </li>
                   ))}
                 </ul>
+                
+                <div className="pt-2">
+                  {tier.cta.action === "external" ? (
+                    <a href={tier.cta.to} target="_blank" rel="noopener noreferrer" className="block">
+                      <Button variant={tier.highlight ? "default" : "outline"} className="w-full gap-2">
+                        {tier.cta.label} <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </a>
+                  ) : (
+                    <Button 
+                      variant={tier.highlight ? "default" : "outline"} 
+                      className="w-full gap-2"
+                      onClick={() => navigate(tier.cta.to)}
+                    >
+                      {tier.cta.label} <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
