@@ -10980,6 +10980,57 @@ export type Database = {
           },
         ]
       }
+      telegram_bot_interactions: {
+        Row: {
+          args_preview: string | null
+          chat_id: number
+          chat_type: string
+          command: string | null
+          created_at: string
+          first_name: string | null
+          id: string
+          is_new_user: boolean
+          last_name: string | null
+          linked_user_id: string | null
+          response_status: string
+          telegram_user_id: string
+          telegram_username: string | null
+          token_mint: string | null
+        }
+        Insert: {
+          args_preview?: string | null
+          chat_id: number
+          chat_type?: string
+          command?: string | null
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_new_user?: boolean
+          last_name?: string | null
+          linked_user_id?: string | null
+          response_status?: string
+          telegram_user_id: string
+          telegram_username?: string | null
+          token_mint?: string | null
+        }
+        Update: {
+          args_preview?: string | null
+          chat_id?: number
+          chat_type?: string
+          command?: string | null
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_new_user?: boolean
+          last_name?: string | null
+          linked_user_id?: string | null
+          response_status?: string
+          telegram_user_id?: string
+          telegram_username?: string | null
+          token_mint?: string | null
+        }
+        Relationships: []
+      }
       telegram_bot_usage: {
         Row: {
           command: string
@@ -11457,6 +11508,51 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           watch_mode_fantasy_only?: boolean | null
+        }
+        Relationships: []
+      }
+      telegram_channel_members: {
+        Row: {
+          chat_id: number
+          chat_title: string | null
+          created_at: string
+          event_type: string
+          first_name: string | null
+          id: string
+          invited_by_user_id: string | null
+          last_name: string | null
+          new_status: string | null
+          old_status: string | null
+          telegram_user_id: string
+          telegram_username: string | null
+        }
+        Insert: {
+          chat_id: number
+          chat_title?: string | null
+          created_at?: string
+          event_type: string
+          first_name?: string | null
+          id?: string
+          invited_by_user_id?: string | null
+          last_name?: string | null
+          new_status?: string | null
+          old_status?: string | null
+          telegram_user_id: string
+          telegram_username?: string | null
+        }
+        Update: {
+          chat_id?: number
+          chat_title?: string | null
+          created_at?: string
+          event_type?: string
+          first_name?: string | null
+          id?: string
+          invited_by_user_id?: string | null
+          last_name?: string | null
+          new_status?: string | null
+          old_status?: string | null
+          telegram_user_id?: string
+          telegram_username?: string | null
         }
         Relationships: []
       }
