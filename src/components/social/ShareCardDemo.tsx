@@ -552,7 +552,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </CardHeader>
         <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
-          <TabsList className="grid w-full grid-cols-6">
+           <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="small" className="relative text-xs">
               Small
               {activeIntelTemplate === 'small' && (
@@ -571,11 +571,12 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             </TabsTrigger>
             <TabsTrigger value="subscription" className="text-xs">💎 Sub</TabsTrigger>
             <TabsTrigger value="shares" className="text-xs">Shares</TabsTrigger>
-            <TabsTrigger value="tg_posted" className="text-xs">TG Posted</TabsTrigger>
+            <TabsTrigger value="tg_posted" className="text-xs">TG Admin</TabsTrigger>
+            <TabsTrigger value="tg_public_post" className="text-xs">📢 TG Public</TabsTrigger>
             <TabsTrigger value="tg_search" className="text-xs">TG Report</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_search'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (

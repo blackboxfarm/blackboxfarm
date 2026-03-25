@@ -836,6 +836,129 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         console.warn('[poster] TG notification failed:', tgErr);
       }
       
+      // === PUBLIC CHANNEL BROADCAST (INTEL_PUBLIC) ===
+      try {
+        // Check if broadcast is suspended
+        const { data: suspendedSetting } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'telegram_broadcast_suspended')
+          .maybeSingle();
+        
+        const isSuspended = suspendedSetting?.value === true;
+        
+        if (!isSuspended) {
+          // Fetch public channel template
+          let publicTemplate = `🔎 $\{ticker} Holder Analysis\n\n📊 {totalWallets} Wallets → ✅ {realHolders} Real\nHealth: {healthGrade} | {dustPct}% Dust\n\n🐋 {whales} Whales | 😎 {serious} Serious\n\n🐦 {tweetUrl}\n\n💎 Want full reports, AI summaries & whale alerts?\n👉 Subscribe for $9.99/mo: blackbox.farm/pricing`;
+          
+          try {
+            const { data: pubTplData } = await supabase
+              .from('holders_intel_templates')
+              .select('template_text')
+              .eq('template_name', 'tg_public_post')
+              .maybeSingle();
+            
+            if (pubTplData?.template_text) {
+              publicTemplate = pubTplData.template_text;
+              console.log('[poster] Using tg_public_post template from database');
+            }
+          } catch (tplErr) {
+            console.warn('[poster] Failed to fetch tg_public_post template, using fallback');
+          }
+          
+          // Process template with same variables
+          const publicMessage = publicTemplate
+            .replace(/\$\{ticker\}/g, `$${stats.symbol.toUpperCase()}`)
+            .replace(/\$\{TICKER\}/g, `$${stats.symbol.toUpperCase()}`)
+            .replace(/\{ticker\}/g, stats.symbol.toUpperCase())
+            .replace(/\{TICKER\}/g, stats.symbol.toUpperCase())
+            .replace(/\{totalWallets\}/g, stats.totalHolders.toLocaleString())
+            .replace(/\{realHolders\}/g, stats.realHolders.toLocaleString())
+            .replace(/\{healthGrade\}/g, stats.healthGrade)
+            .replace(/\{timesPosted\}/g, String(stats.timesPosted))
+            .replace(/\{whales\}/g, stats.whaleCount.toLocaleString())
+            .replace(/\{serious\}/g, stats.seriousCount.toLocaleString())
+            .replace(/\{retail\}/g, stats.activeCount.toLocaleString())
+            .replace(/\{dust\}/g, stats.dustCount.toLocaleString())
+            .replace(/\{whaleBar\}/g, generateAsciiBar(whalePct))
+            .replace(/\{seriousBar\}/g, generateAsciiBar(seriousPct))
+            .replace(/\{retailBar\}/g, generateAsciiBar(retailPct))
+            .replace(/\{dustBar\}/g, generateAsciiBar(dustPctVal))
+            .replace(/\{whalePct\}/g, whalePct.toString().padStart(2))
+            .replace(/\{seriousPct\}/g, seriousPct.toString().padStart(2))
+            .replace(/\{retailPct\}/g, retailPct.toString().padStart(2))
+            .replace(/\{dustPct\}/g, dustPctVal.toString().padStart(2))
+            .replace(/\{tweetUrl\}/g, tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`)
+            .replace(/\{name\}/g, stats.name || stats.symbol)
+            .replace(/\{ca\}/g, item.token_mint);
+          
+          // Fetch INTEL_PUBLIC target
+          const { data: publicTarget } = await supabase
+            .from('telegram_message_targets')
+            .select('id, chat_id, label')
+            .eq('label', 'INTEL_PUBLIC')
+            .maybeSingle();
+          
+          if (publicTarget?.chat_id) {
+            const chatId = Number(publicTarget.chat_id);
+            
+            let pubTgSuccess = false;
+            for (let attempt = 1; attempt <= 2 && !pubTgSuccess; attempt++) {
+              try {
+                const { data: sendResult, error: sendErr } = await supabase.functions.invoke('telegram-mtproto-auth', {
+                  body: {
+                    action: 'send_message',
+                    chatId: chatId,
+                    message: publicMessage,
+                  },
+                });
+                
+                if (!sendErr && sendResult?.success) {
+                  pubTgSuccess = true;
+                  console.log(`[poster] Public TG channel sent (attempt ${attempt})`);
+                  
+                  // Update last_used_at
+                  await supabase
+                    .from('telegram_message_targets')
+                    .update({ last_used_at: new Date().toISOString() })
+                    .eq('id', publicTarget.id);
+                } else if (attempt === 1) {
+                  console.warn(`[poster] Public TG attempt ${attempt} failed, retrying...`);
+                  await new Promise(r => setTimeout(r, 1500));
+                }
+              } catch (attemptErr) {
+                if (attempt === 1) {
+                  console.warn(`[poster] Public TG attempt ${attempt} error, retrying...`);
+                  await new Promise(r => setTimeout(r, 1500));
+                } else {
+                  console.warn('[poster] Public TG channel failed after retries:', attemptErr);
+                }
+              }
+            }
+            
+            // Log delivery
+            try {
+              await supabase.from('notification_delivery_log').insert({
+                channel: 'telegram',
+                target_id: publicTarget.id,
+                target_label: 'INTEL_PUBLIC',
+                status: pubTgSuccess ? 'delivered' : 'failed',
+                message_preview: publicMessage.slice(0, 200),
+                source_function: 'holders-intel-poster',
+              });
+            } catch (logErr) {
+              console.warn('[poster] Failed to log public TG delivery:', logErr);
+            }
+          } else {
+            console.warn('[poster] No INTEL_PUBLIC target found in telegram_message_targets');
+          }
+        } else {
+          console.log('[poster] Public TG broadcast skipped — broadcasts suspended');
+        }
+      } catch (pubTgErr) {
+        console.warn('[poster] Public TG channel broadcast failed:', pubTgErr);
+      }
+      
       postsThisTick++;
       results.push({ symbol: stats.symbol, action: 'posted', tweetId: tweetResult.tweetId });
       
