@@ -1,50 +1,65 @@
 
 
-# Auto-Queue Top 200 "New" Tokens for X Posting
+# Telegram Public Channel Broadcasting for HoldersIntel
 
-## Problem
-The Dex Top 200 feed shows 111 tokens marked "New" — these are trending on DexScreener but have never been posted to X. Currently the Top 200 is **display-only**; there's no pipeline that automatically feeds new discoveries into the `holders_intel_post_queue` for the Intel XBot to post.
+## Answers
 
-Only two sources currently feed the posting queue:
-1. **funnel-feed-scanner** (Telegram funnel discoveries)
-2. **holders-intel-dex-scanner** (boost/CTO/ads triggers)
+### 1. Deploy Status
+The `check-2fa-requirement` fix from earlier is in place — it uses `Deno.serve` with the helper function above the serve block. The `dex-top-200` auto-queue changes are also deployed. Both should be live.
 
-The Top 200 is a major discovery signal that's being wasted.
+### 2. Current TG Broadcast Architecture
+The TG broadcasting is **partially configurable but hardwired to BLACKBOX only**:
+- The `holders-intel-poster` posts to X, then sends a TG notification via `admin-notify` → which broadcasts to all `telegram_message_targets` rows with `label = "BLACKBOX"`
+- The TG message template (`tg_posted`) IS managed in the `holders_intel_templates` table — so that part is editable from the DB/admin UI
+- But the **target channel** is hardcoded to `BLACKBOX` label, and the template is specific to the private admin group format — not a public-facing promotional format
 
-## Plan
+---
 
-### 1. Add a "Queue New from Top 200" action to the `dex-top-200` edge function
+## Plan: Public Channel Broadcast with Manageable Templates
 
-After scraping and resolving the top 200, automatically insert any tokens marked "New" (not in `holders_intel_seen_tokens` or `holders_intel_post_queue`) into the posting queue with:
-- `trigger_source: 'dex_top_200'`
-- `trigger_comment` based on rank (e.g., "🔥 DexScreener #3")
-- `scheduled_at: NOW()` so the poster picks them up immediately
-- Priority weighting: top-ranked tokens get queued first
+### What we're building
+Every time the Intel XBot posts to X, it will also send a **separate, public-facing message** to your new Telegram channel (`-1003659015482`) using a dedicated template you can edit from the admin UI. This template will be designed for conversion — teasing the data and driving users to subscribe.
 
-This runs every time the scraper fires (every ~5 min via cron), so new entries are caught automatically.
+### Step 1: Add the new channel as a broadcast target (DB migration)
+- Insert a new row into `telegram_message_targets` with:
+  - `chat_id`: `-1003659015482`
+  - `label`: `INTEL_PUBLIC`
+  - `resolved_name`: `HoldersIntel Public`
 
-### 2. Deduplication guard
+### Step 2: Add a new template `tg_public_post` (DB migration)
+- Expand the `holders_intel_templates` check constraint to allow `tg_public_post`
+- Insert a default conversion-focused template, e.g.:
+```
+🔎 ${ticker} Holder Analysis
 
-Before inserting, check both:
-- `holders_intel_post_queue` (any status) — don't re-queue posted/skipped/expired tokens
-- `holders_intel_seen_tokens` — don't queue tokens we've already analyzed and dismissed
+📊 {totalWallets} Wallets → ✅ {realHolders} Real
+Health: {healthGrade} | {dustPct}% Dust
 
-### 3. Add a manual "Queue All New" button to the DexCloudFlareFeed UI
+🐋 {whales} Whales | 😎 {serious} Serious
 
-On the admin panel, add a button next to Refresh that bulk-queues all currently displayed "New" tokens. This gives you manual control alongside the automatic flow.
+🐦 {tweetUrl}
 
-### 4. Rate limiting
+💎 Want full reports, AI summaries & whale alerts?
+👉 Subscribe for $9.99/mo: blackbox.farm/pricing
+```
 
-Cap auto-queuing to ~20 tokens per scrape tick to avoid flooding the poster. The highest-ranked "New" tokens get priority.
+### Step 3: Update `holders-intel-poster` to dual-broadcast
+After posting to X, the poster currently sends to `admin-notify` (BLACKBOX only). We'll add a second broadcast specifically for `INTEL_PUBLIC`:
+- Fetch the `tg_public_post` template from `holders_intel_templates`
+- Process it with the same variable substitution system
+- Send directly via `telegram-mtproto-auth` to the `INTEL_PUBLIC` target
+- Independent of the BLACKBOX broadcast (different template, different channel)
+- Respects the existing suspension toggle
 
-## Technical Details
+### Step 4: Admin UI for the public channel template
+- Add a new template editor entry in the existing templates management UI for `tg_public_post`
+- Label it "TG Public Channel Post" so you can edit the conversion copy anytime without code changes
 
-**Edge function changes** (`supabase/functions/dex-top-200/index.ts`):
-- After building `finalTokens`, filter for tokens not in seen/queue tables
-- Insert up to 20 into `holders_intel_post_queue` with `trigger_source: 'dex_top_200'`
+### Technical Details
 
-**Frontend changes** (`src/components/admin/funnel-feeds/DexCloudFlareFeed.tsx`):
-- Add "Queue New" button that calls `dex-top-200` with `{ action: 'queue_new' }` or directly inserts via Supabase client
+**Files changed:**
+- `supabase/functions/holders-intel-poster/index.ts` — add public channel broadcast after X post (lines ~806-837 area, parallel to existing BLACKBOX send)
+- 2 SQL migrations: (1) insert target row, (2) expand template constraint + insert default template
 
-**No migration needed** — the `holders_intel_post_queue` table already has all required columns including `trigger_source`.
+**No new edge functions needed** — reuses existing `telegram-mtproto-auth` for sending and `holders_intel_templates` for template management.
 
