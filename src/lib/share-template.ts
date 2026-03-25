@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'tg_advert_1' | 'tg_advert_2';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
