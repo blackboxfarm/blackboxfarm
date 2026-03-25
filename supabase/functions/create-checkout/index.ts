@@ -23,6 +23,12 @@ serve(withRunLog('create-checkout', async (req) => {
     Deno.env.get("SUPABASE_ANON_KEY") ?? ""
   );
 
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
+
   try {
     logStep("Function started");
 
@@ -58,6 +64,20 @@ serve(withRunLog('create-checkout', async (req) => {
     });
 
     logStep("Checkout session created", { sessionId: session.id });
+
+    // Record checkout intent for abandoned cart tracking
+    try {
+      await supabaseAdmin.from('checkout_intents').insert({
+        user_id: user.id,
+        email: user.email,
+        stripe_session_id: session.id,
+        price_id: priceId,
+        status: 'pending',
+      });
+      logStep("Checkout intent recorded");
+    } catch (intentErr) {
+      logStep("Failed to record checkout intent (non-fatal)", { error: String(intentErr) });
+    }
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

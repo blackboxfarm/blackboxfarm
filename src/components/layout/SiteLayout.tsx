@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FarmBanner } from '@/components/FarmBanner';
+import { AbandonedCheckoutBanner } from '@/components/premium/AbandonedCheckoutBanner';
 import { SolPriceDisplay } from '@/components/SolPriceDisplay';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRoles } from '@/hooks/useUserRoles';
@@ -131,6 +132,9 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </div>
+
+      {/* Abandoned Checkout Reminder */}
+      <AbandonedCheckoutBanner />
 
       {/* Body */}
       <main>

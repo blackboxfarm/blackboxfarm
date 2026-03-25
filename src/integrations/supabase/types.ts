@@ -2298,6 +2298,48 @@ export type Database = {
           },
         ]
       }
+      checkout_intents: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          email: string
+          id: string
+          price_id: string
+          reminded_at: string | null
+          reminder_count: number | null
+          status: string
+          stripe_session_id: string | null
+          tier_key: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          email: string
+          id?: string
+          price_id: string
+          reminded_at?: string | null
+          reminder_count?: number | null
+          status?: string
+          stripe_session_id?: string | null
+          tier_key?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          price_id?: string
+          reminded_at?: string | null
+          reminder_count?: number | null
+          status?: string
+          stripe_session_id?: string | null
+          tier_key?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       coingecko_error_alerts: {
         Row: {
           context: string | null
