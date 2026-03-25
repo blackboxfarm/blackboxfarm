@@ -2591,6 +2591,89 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, targe
   }
 }
 
+// ─── Handle chat_member: track user joins/leaves in channels ───
+async function handleChatMember(update: any) {
+  const cm = update.chat_member;
+  if (!cm) return;
+
+  const chat = cm.chat;
+  const newStatus = cm.new_chat_member?.status;
+  const oldStatus = cm.old_chat_member?.status;
+  const user = cm.new_chat_member?.user || cm.from;
+  const invitedBy = cm.from;
+
+  // Map status changes to event types
+  let eventType = 'unknown';
+  if ((newStatus === 'member' || newStatus === 'administrator') && oldStatus === 'left') eventType = 'joined';
+  else if ((newStatus === 'member' || newStatus === 'administrator') && oldStatus === 'kicked') eventType = 'joined';
+  else if (newStatus === 'left') eventType = 'left';
+  else if (newStatus === 'kicked') eventType = 'kicked';
+  else if (newStatus === 'restricted') eventType = 'restricted';
+  else if (newStatus === 'banned') eventType = 'banned';
+  else eventType = `${oldStatus}->${newStatus}`;
+
+  try {
+    await supabase.from("telegram_channel_members").insert({
+      chat_id: chat.id,
+      chat_title: chat.title || null,
+      telegram_user_id: String(user?.id || ''),
+      telegram_username: user?.username || null,
+      first_name: user?.first_name || null,
+      last_name: user?.last_name || null,
+      event_type: eventType,
+      invited_by_user_id: invitedBy?.id !== user?.id ? String(invitedBy?.id || '') : null,
+      old_status: oldStatus || null,
+      new_status: newStatus || null,
+    });
+    console.log(`[bot] Channel member event: ${eventType} user ${user?.id} in ${chat.title} (${chat.id})`);
+  } catch (e) {
+    console.error("[bot] Failed to log channel member event:", e);
+  }
+}
+
+// ─── Log bot interaction with rich metadata ───
+async function logBotInteraction(
+  telegramUserId: string,
+  from: any,
+  chatId: number,
+  chatType: string,
+  command: string,
+  args: string,
+  tokenMint: string | null,
+  responseStatus: string
+) {
+  try {
+    // Check if this is a new user (first interaction ever)
+    const { count } = await supabase
+      .from("telegram_bot_interactions")
+      .select("id", { count: "exact", head: true })
+      .eq("telegram_user_id", telegramUserId)
+      .limit(1);
+
+    const isNewUser = (count ?? 0) === 0;
+
+    // Try to find linked web user
+    const linked = await getLinkedUser(telegramUserId);
+
+    await supabase.from("telegram_bot_interactions").insert({
+      telegram_user_id: telegramUserId,
+      telegram_username: from?.username || null,
+      first_name: from?.first_name || null,
+      last_name: from?.last_name || null,
+      chat_id: chatId,
+      chat_type: chatType,
+      command: command || null,
+      args_preview: args ? args.substring(0, 100) : null,
+      token_mint: tokenMint || null,
+      linked_user_id: linked?.user_id || null,
+      response_status: responseStatus,
+      is_new_user: isNewUser,
+    });
+  } catch (e) {
+    console.error("[bot] Failed to log interaction:", e);
+  }
+}
+
 // ─── Handle my_chat_member: auto-register when bot is added/removed from groups ───
 async function handleMyChatMember(update: any) {
   const myChatMember = update.my_chat_member;
@@ -2679,7 +2762,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
       const res = await fetch(`${TELEGRAM_API}/setWebhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message", "my_chat_member"] }),
+        body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message", "my_chat_member", "chat_member"] }),
       });
       const data = await res.json();
       return new Response(JSON.stringify(data), {
@@ -2699,6 +2782,12 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
 
   try {
     const update: any = await req.json();
+
+    // ─── Handle chat_member events (user joins/leaves channels) ───
+    if (update.chat_member) {
+      await handleChatMember(update);
+      return new Response("OK");
+    }
 
     // ─── Handle my_chat_member events (bot added/removed from groups) ───
     if (update.my_chat_member) {

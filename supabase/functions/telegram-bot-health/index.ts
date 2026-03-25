@@ -124,7 +124,7 @@ Deno.serve(withRunLog('telegram-bot-health', async (req) => {
       const setWebhook = await callTelegram(botToken, "setWebhook", {
         url: expectedWebhookUrl,
         drop_pending_updates: true,
-        allowed_updates: ["message", "my_chat_member"],
+        allowed_updates: ["message", "my_chat_member", "chat_member"],
       });
 
       console.log("[telegram-bot-health] setWebhook response:", JSON.stringify(setWebhook));
