@@ -5,6 +5,7 @@ import { PricingTable } from "@/components/premium/PricingTable";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTier } from "@/hooks/useUserTier";
+import { supabase } from "@/integrations/supabase/client";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
