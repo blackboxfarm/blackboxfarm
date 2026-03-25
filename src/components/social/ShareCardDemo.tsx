@@ -90,6 +90,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     bot_verdict_lite: false,
     bot_oracle: false,
     bot_wallet: false,
+    x_advert_1: false,
+    x_advert_2: false,
+    tg_advert_1: false,
+    tg_advert_2: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
