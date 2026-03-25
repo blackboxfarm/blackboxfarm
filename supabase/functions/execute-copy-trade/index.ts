@@ -126,7 +126,7 @@ Deno.serve(withRunLog('execute-copy-trade', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
-})
+}));
 
 async function processCopyTrade(
   supabase: any,
