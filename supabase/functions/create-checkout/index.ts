@@ -65,6 +65,20 @@ serve(withRunLog('create-checkout', async (req) => {
 
     logStep("Checkout session created", { sessionId: session.id });
 
+    // Record checkout intent for abandoned cart tracking
+    try {
+      await supabaseAdmin.from('checkout_intents').insert({
+        user_id: user.id,
+        email: user.email,
+        stripe_session_id: session.id,
+        price_id: priceId,
+        status: 'pending',
+      });
+      logStep("Checkout intent recorded");
+    } catch (intentErr) {
+      logStep("Failed to record checkout intent (non-fatal)", { error: String(intentErr) });
+    }
+
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
