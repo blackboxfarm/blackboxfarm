@@ -11,19 +11,28 @@ interface Props {
 
 export function AdvertTemplateToggle({ templateName }: Props) {
   const [isActive, setIsActive] = useState(true);
+  const [shownCount, setShownCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
-        .from("holders_intel_templates")
-        .select("is_active")
-        .eq("template_name", templateName)
-        .maybeSingle();
-      if (data) setIsActive(data.is_active ?? true);
+    const fetchData = async () => {
+      const [templateRes, counterRes] = await Promise.all([
+        supabase
+          .from("holders_intel_templates")
+          .select("is_active")
+          .eq("template_name", templateName)
+          .maybeSingle(),
+        supabase
+          .from("holders_intel_config" as any)
+          .select("value")
+          .eq("key", `advert_shown_${templateName}`)
+          .maybeSingle(),
+      ]);
+      if (templateRes.data) setIsActive(templateRes.data.is_active ?? true);
+      if ((counterRes.data as any)?.value) setShownCount(parseInt((counterRes.data as any).value, 10));
       setLoading(false);
     };
-    fetch();
+    fetchData();
   }, [templateName]);
 
   const toggle = async (checked: boolean) => {
@@ -44,18 +53,25 @@ export function AdvertTemplateToggle({ templateName }: Props) {
   if (loading) return null;
 
   return (
-    <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
-      <Checkbox
-        id={`advert-toggle-${templateName}`}
-        checked={isActive}
-        onCheckedChange={(checked) => toggle(!!checked)}
-      />
-      <Label htmlFor={`advert-toggle-${templateName}`} className="text-sm cursor-pointer">
-        Include in rotation
-        <span className="text-xs text-muted-foreground ml-2">
-          {isActive ? "✅ Active — will be used" : "⏸ Skipped — excluded from rotation"}
+    <div className="flex items-center justify-between gap-2 p-2 bg-muted/30 rounded-lg">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={`advert-toggle-${templateName}`}
+          checked={isActive}
+          onCheckedChange={(checked) => toggle(!!checked)}
+        />
+        <Label htmlFor={`advert-toggle-${templateName}`} className="text-sm cursor-pointer">
+          Include in rotation
+          <span className="text-xs text-muted-foreground ml-2">
+            {isActive ? "✅ Active — will be used" : "⏸ Skipped — excluded from rotation"}
+          </span>
+        </Label>
+      </div>
+      {shownCount !== null && (
+        <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full whitespace-nowrap">
+          📢 Shown {shownCount} time{shownCount !== 1 ? "s" : ""}
         </span>
-      </Label>
+      )}
     </div>
   );
 }
