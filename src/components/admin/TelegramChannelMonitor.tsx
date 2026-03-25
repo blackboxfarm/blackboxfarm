@@ -56,7 +56,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { formatDistanceToNow } from 'date-fns';
-import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard, WhaleLeaderboard, TelegramBotApiStatusCard } from './telegram';
+import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard, WhaleLeaderboard, TelegramBotApiStatusCard, TelegramInteractionsPanel } from './telegram';
 import type { TelegramTarget } from './telegram';
 import { TelegramBroadcastToggle } from './TelegramBroadcastToggle';
 
@@ -1197,6 +1197,9 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
             <Users className="w-3 h-3" /> Channel Config
           </TabsTrigger>
           <TabsTrigger value="settings">Trading Rules</TabsTrigger>
+          <TabsTrigger value="accounts" className="flex items-center gap-1">
+            👤 Accounts
+          </TabsTrigger>
         </TabsList>
 
         {/* Signal Analysis - New! */}
