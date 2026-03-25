@@ -9,6 +9,7 @@ const BubblesFeed = lazy(() => import("../funnel-feeds/BubblesFeed").then(m => (
 const BotDmFeed = lazy(() => import("../funnel-feeds/BotDmFeed").then(m => ({ default: m.BotDmFeed })));
 const HoldersInputFeed = lazy(() => import("../funnel-feeds/HoldersInputFeed").then(m => ({ default: m.HoldersInputFeed })));
 const FunnelOverview = lazy(() => import("../funnel-feeds/FunnelOverview").then(m => ({ default: m.FunnelOverview })));
+const PostingQueueViewer = lazy(() => import("../funnel-feeds/PostingQueueViewer").then(m => ({ default: m.PostingQueueViewer })));
 
 export default function FunnelFeedsTab() {
   const [subTab, setSubTab] = useState("telegram");
