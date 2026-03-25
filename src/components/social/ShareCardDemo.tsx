@@ -592,9 +592,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsTrigger value="x_advert_2" className="text-xs">📣 X Ad2</TabsTrigger>
             <TabsTrigger value="tg_advert_1" className="text-xs">📣 TG Ad1</TabsTrigger>
             <TabsTrigger value="tg_advert_2" className="text-xs">📣 TG Ad2</TabsTrigger>
+            <TabsTrigger value="tg_advert_3" className="text-xs">📣 TG Ad3</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
