@@ -108,7 +108,24 @@ export function DexCloudFlareFeed() {
     }
     setQueueing(true);
     try {
-      const rows = newPairs.map(p => ({
+      // Deduplicate: check which mints are already in queue
+      const mints = newPairs.map(p => p.tokenMint!);
+      const { data: existingQueue } = await supabase
+        .from('holders_intel_post_queue')
+        .select('token_mint')
+        .in('token_mint', mints)
+        .in('status', ['pending', 'processing']);
+      
+      const alreadyQueued = new Set((existingQueue || []).map(r => r.token_mint));
+      const deduped = newPairs.filter(p => !alreadyQueued.has(p.tokenMint));
+      
+      if (deduped.length === 0) {
+        toast({ title: "All tokens already queued" });
+        setQueueing(false);
+        return;
+      }
+
+      const rows = deduped.map(p => ({
         token_mint: p.tokenMint,
         symbol: p.symbol || null,
         name: p.name || null,
