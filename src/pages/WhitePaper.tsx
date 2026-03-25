@@ -1,196 +1,188 @@
-import { FarmBanner } from "@/components/FarmBanner";
-import { AuthButton } from "@/components/auth/AuthButton";
-import { NotificationCenter } from "@/components/NotificationCenter";
-import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
+import { SiteLayout } from "@/components/layout/SiteLayout";
 
 const WhitePaper = () => {
-  const { user } = useAuth();
-  
   return (
-    <div className="min-h-screen bg-background">
-      {/* Farm Banner Header */}
-      <FarmBanner />
-      <div className="container mx-auto py-6 space-y-8">
-        {/* Main Header Section */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
-          <div className="text-center md:text-left flex-1 space-y-4">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <img 
-                src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
-                alt="BlackBox Cube Logo" 
-                className="w-10 h-10 md:w-12 md:h-12"
-              />
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                BlackBox Farm
-              </h1>
-            </div>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
-              Putting the needle in the haystack — follow the wallets.
-            </p>
-            <div className="flex justify-center md:hidden space-x-3">
-              <AuthButton />
-            </div>
-          </div>
-          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
-            <NotificationCenter />
-            <AuthButton />
-          </div>
-        </div>
-
+    <SiteLayout>
       <div className="container max-w-4xl mx-auto px-4 py-12">
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/" className="hover:opacity-80 transition-opacity">
-            <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
-          </Link>
-          <h1 className="text-4xl font-bold text-foreground">BlackBox Farm White Paper</h1>
-        </div>
-        <div className="prose prose-slate dark:prose-invert max-w-none space-y-8 text-foreground">
-          <p className="text-sm text-muted-foreground">Version 1.0 | {new Date().toLocaleDateString()}</p>
-          
+        <h1 className="text-4xl font-bold text-foreground mb-2">BlackBox Farm — Technical White Paper</h1>
+        <p className="text-sm text-muted-foreground mb-10">Version 2.0 | March 2025</p>
+
+        <div className="prose prose-slate dark:prose-invert max-w-none space-y-10 text-foreground">
+
           <section>
             <h2 className="text-3xl font-semibold mb-4">Abstract</h2>
-            <p className="text-lg leading-relaxed">BlackBox Farm represents a revolutionary approach to decentralized finance (DeFi) operations on the Solana blockchain. Our platform combines automated trading strategies, community-driven campaigns, and advanced wallet management to democratize access to sophisticated trading tools while maintaining security and transparency.</p>
+            <p className="text-lg leading-relaxed">
+              BlackBox Farm is an AI-powered on-chain intelligence platform built on Solana. It combines automated holder analysis, 
+              developer reputation profiling, wallet family graph mapping, and multi-source token discovery to provide traders with 
+              actionable intelligence on memecoins and emerging tokens. The platform surfaces insider activity, bundle detection, 
+              and developer track records — information previously accessible only to sophisticated on-chain analysts.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-3xl font-semibold mb-4">1. Introduction</h2>
-            <p>The decentralized finance ecosystem has experienced explosive growth, yet accessibility to advanced trading tools remains limited to sophisticated users. BlackBox Farm bridges this gap by providing a comprehensive platform that combines:</p>
+            <h2 className="text-3xl font-semibold mb-4">1. Problem Statement</h2>
+            <p>The Solana memecoin ecosystem generates thousands of new token launches daily. Traders face systemic information asymmetry:</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>Automated trading bots with customizable strategies</li>
-              <li>Community-driven investment campaigns</li>
-              <li>Secure wallet generation and management</li>
-              <li>Real-time analytics and monitoring</li>
+              <li><strong>Bundled Supply</strong> — Developers distribute tokens across dozens of wallets to disguise insider holdings, making tokens appear more distributed than they are.</li>
+              <li><strong>Wallet Recycling</strong> — Bad actors deploy from fresh wallets while funneling profits back to the same master wallets, evading simple wallet checks.</li>
+              <li><strong>Channel Recycling</strong> — The same Telegram groups and X accounts are used to promote successive rug pulls, building fake social proof each time.</li>
+              <li><strong>CTO Manipulation</strong> — "Community Takeover" narratives are manufactured by insiders who retain hidden supply positions.</li>
+              <li><strong>Data Fragmentation</strong> — The on-chain data to detect all of the above exists, but requires cross-referencing multiple sources (Helius, DexScreener, Pump.fun, Telegram) in real time.</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-3xl font-semibold mb-4">2. Problem Statement</h2>
-            <h3 className="text-xl font-medium mb-2">2.1 Complexity Barriers</h3>
-            <p>Traditional DeFi platforms require extensive technical knowledge, limiting participation to experienced users. Complex interfaces and manual processes create significant barriers to entry.</p>
+            <h2 className="text-3xl font-semibold mb-4">2. Platform Architecture</h2>
             
-            <h3 className="text-xl font-medium mb-2 mt-4">2.2 Lack of Automation</h3>
-            <p>Most retail traders lack access to sophisticated automated trading strategies, giving institutional players unfair advantages in market participation.</p>
+            <h3 className="text-xl font-medium mb-2">2.1 AI Holder Analysis Engine</h3>
+            <p>The core product — accessible at <code>/holders</code> — takes any Solana token mint address and produces a comprehensive holder intelligence report:</p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li>Top holder distribution with wallet age and transaction history</li>
+              <li>Bundle detection via funding source clustering</li>
+              <li>Insider wallet identification through timing and size analysis</li>
+              <li>GPT-powered narrative summary with risk assessment score</li>
+              <li>Historical holder snapshots for trend analysis</li>
+            </ul>
+
+            <h3 className="text-xl font-medium mb-2 mt-6">2.2 Developer Reputation System</h3>
+            <p>Every token creator is profiled with a persistent identity across launches:</p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li><strong>Developer Profiles</strong> — Launch history, best/worst performing tokens, associated wallets</li>
+              <li><strong>Reputation Mesh</strong> — Graph database linking wallets by funding relationships, co-minting patterns, and profit flows</li>
+              <li><strong>AllStar Registry</strong> — Tiered ranking (T1–T8) for developers whose tokens achieve significant market caps ($100K+ ATH)</li>
+              <li><strong>Wallet Family Engine</strong> — Automated discovery of related wallets using relationship scoring: direct funding (+40), co-minting (+25), profit returns (+20), CEX gateways</li>
+            </ul>
+
+            <h3 className="text-xl font-medium mb-2 mt-6">2.3 Token Discovery Pipeline</h3>
+            <p>Multi-source ingestion ensures comprehensive market coverage:</p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li><strong>DexScreener Top 200</strong> — Scraped every 30 minutes, tracking rank changes, boosts, and ATH progression</li>
+              <li><strong>Telegram Monitor</strong> — Ingests calls from tracked alpha channels with deduplication</li>
+              <li><strong>Pump.fun API</strong> — Monitors new token deployments from tracked developer wallets</li>
+              <li><strong>Helius RPC</strong> — Watches for <code>initializeMint</code> instructions from wallet family members</li>
+              <li><strong>Bot DMs</strong> — Accepts token submissions via Telegram bot with automated analysis</li>
+            </ul>
+
+            <h3 className="text-xl font-medium mb-2 mt-6">2.4 Automated Publishing</h3>
+            <p>The <strong>@HoldersIntel</strong> X account is powered by an automated pipeline:</p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li>Tokens pass through a post queue with status tracking (New → Queued → Posted)</li>
+              <li>AI-generated analysis images are composited with holder data</li>
+              <li>Automated posting with attribution tracking per discovery source</li>
+              <li>Reconciliation engine syncs post status from X API</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-3xl font-semibold mb-4">3. Intelligence Systems</h2>
             
-            <h3 className="text-xl font-medium mb-2 mt-4">2.3 Security Concerns</h3>
-            <p>Wallet management and private key security remain major obstacles for mainstream DeFi adoption, with users frequently losing funds due to poor security practices.</p>
+            <h3 className="text-xl font-medium mb-2">3.1 Wallet Family Surveillance Engine</h3>
+            <p>A graph-based discovery and monitoring system that clusters developer wallets into families:</p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li>Relationship types: Seed, Parent, Sibling, Child, CEX Gateway</li>
+              <li>Tiered polling: 5–15 minute intervals with "Burst Mode" (60s polling for 10 minutes) triggered by mint detection</li>
+              <li>Automatic cross-feeding into reputation_mesh, pumpfun_watchlist, and allstar_dev_registry</li>
+              <li>Interactive family graph visualization powered by React Flow</li>
+            </ul>
+
+            <h3 className="text-xl font-medium mb-2 mt-6">3.2 AllStar Promotion Engine</h3>
+            <p>Automated identification and tracking of high-performing developers:</p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li>Scans token_lifecycle for tokens achieving ATH ≥ $100K</li>
+              <li>Tier assignment: $100K→T1, $250K→T2, $500K→T3, $1M→T4, $5M→T5, $10M→T6</li>
+              <li>Auto-seeds wallet family surveillance for qualifying developers</li>
+              <li>Telegram alerts broadcast to BLACKBOX group on promotions</li>
+            </ul>
+
+            <h3 className="text-xl font-medium mb-2 mt-6">3.3 Mint Alert System</h3>
+            <p>Real-time detection when tracked developers launch new tokens:</p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li>Monitors all wallets in expanded wallet families</li>
+              <li>Alert levels based on developer tier and wallet depth</li>
+              <li>Notifications via Telegram with full context (tier, best previous token, ATH)</li>
+            </ul>
           </section>
 
           <section>
-            <h2 className="text-3xl font-semibold mb-4">3. Solution Architecture</h2>
-            <h3 className="text-xl font-medium mb-2">3.1 Core Components</h3>
+            <h2 className="text-3xl font-semibold mb-4">4. Technical Stack</h2>
+            <ul className="list-disc pl-6 space-y-2">
+              <li><strong>Frontend</strong> — React + TypeScript + Tailwind CSS + shadcn/ui</li>
+              <li><strong>Backend</strong> — Supabase (PostgreSQL, Edge Functions, Auth, Storage, Realtime)</li>
+              <li><strong>Blockchain</strong> — Solana via @solana/web3.js, Helius RPC, Pump.fun API</li>
+              <li><strong>AI/ML</strong> — OpenAI GPT-4 for holder analysis narratives and risk scoring</li>
+              <li><strong>Data Sources</strong> — DexScreener API, Helius, BirdEye, Jupiter, CoinGecko</li>
+              <li><strong>Automation</strong> — Supabase cron jobs, Telegram Bot API, X API v2</li>
+              <li><strong>Visualization</strong> — Recharts, React Flow (wallet family graphs), react-force-graph-2d (bubble maps)</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-3xl font-semibold mb-4">5. Business Model</h2>
+            <h3 className="text-xl font-medium mb-2">5.1 Revenue Streams</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li><strong>Subscription Tiers</strong> — Free (limited scans), Pro (unlimited analysis), Enterprise (API access)</li>
+              <li><strong>Banner Advertising</strong> — Self-serve banner placements on holder analysis pages, paid in SOL (24hr: $40, 48hr: $70, 72hr: $100, 1 Week: $175)</li>
+              <li><strong>Telegram Bot Premium</strong> — Enhanced features and priority analysis queue</li>
+              <li><strong>API Access</strong> — Programmatic access to holder analysis and developer profiles</li>
+            </ul>
+
+            <h3 className="text-xl font-medium mb-2 mt-6">5.2 Token Discovery Monetization</h3>
+            <p>Promoted token placements and featured analysis reports provide non-intrusive revenue while maintaining editorial independence of the intelligence layer.</p>
+          </section>
+
+          <section>
+            <h2 className="text-3xl font-semibold mb-4">6. Roadmap</h2>
             
-            <h4 className="text-lg font-medium mb-2 mt-4">Automated Trading Engine</h4>
-            <p>Our proprietary trading engine executes strategies based on:</p>
+            <h3 className="text-xl font-medium mb-2">Phase 1: Intelligence Foundation ✅</h3>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Market analysis algorithms</li>
-              <li>Risk management protocols</li>
-              <li>User-defined parameters</li>
-              <li>Real-time price feeds</li>
+              <li>AI Holder Analysis engine with GPT-powered reports</li>
+              <li>Developer reputation profiling and AllStar registry</li>
+              <li>DexScreener Top 200 auto-ingestion pipeline</li>
+              <li>@HoldersIntel automated X posting</li>
+              <li>Wallet family surveillance engine</li>
             </ul>
 
-            <h4 className="text-lg font-medium mb-2 mt-4">Campaign Management System</h4>
-            <p>Community-driven campaigns enable collective participation in trading strategies with features including:</p>
+            <h3 className="text-xl font-medium mb-2 mt-4">Phase 2: Scale & Monetize 🔄</h3>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Transparent fund allocation</li>
-              <li>Automated profit distribution</li>
-              <li>Real-time performance tracking</li>
-              <li>Democratic governance mechanisms</li>
+              <li>Self-serve banner advertising with SOL payments</li>
+              <li>Subscription tiers with Stripe integration</li>
+              <li>Telegram bot premium features</li>
+              <li>API access for third-party integrations</li>
+              <li>X post reconciliation from API</li>
             </ul>
 
-            <h4 className="text-lg font-medium mb-2 mt-4">Secure Wallet Infrastructure</h4>
-            <p>Advanced wallet management provides:</p>
+            <h3 className="text-xl font-medium mb-2 mt-4">Phase 3: Network Effects 🔮</h3>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Hardware-grade encryption</li>
-              <li>Multi-signature capabilities</li>
-              <li>Automated backup systems</li>
-              <li>Recovery mechanisms</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-3xl font-semibold mb-4">4. Technical Implementation</h2>
-            <h3 className="text-xl font-medium mb-2">4.1 Blockchain Integration</h3>
-            <p>BlackBox Farm leverages Solana's high-performance blockchain for:</p>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>Low transaction costs</li>
-              <li>Fast confirmation times</li>
-              <li>Scalable infrastructure</li>
-              <li>Advanced smart contract capabilities</li>
-            </ul>
-
-            <h3 className="text-xl font-medium mb-2 mt-4">4.2 Security Framework</h3>
-            <p>Multi-layered security approach includes:</p>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>End-to-end encryption</li>
-              <li>Two-factor authentication</li>
-              <li>Regular security audits</li>
-              <li>Decentralized key management</li>
+              <li>Community-contributed wallet family tips</li>
+              <li>Cross-chain expansion (Base, Ethereum memecoins)</li>
+              <li>Mobile app with push notifications for mint alerts</li>
+              <li>Machine learning model for rug prediction scoring</li>
+              <li>DAO governance for platform development priorities</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-3xl font-semibold mb-4">5. Economic Model</h2>
-            <h3 className="text-xl font-medium mb-2">5.1 Fee Structure</h3>
-            <p>Transparent and competitive fee model:</p>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>Campaign creation fees</li>
-              <li>Performance-based commissions</li>
-              <li>Premium feature subscriptions</li>
-              <li>Network transaction costs</li>
+            <h2 className="text-3xl font-semibold mb-4">7. Security & Privacy</h2>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>All private keys encrypted at rest with Supabase vault</li>
+              <li>Row-level security on all database tables</li>
+              <li>Role-based access control with security definer functions</li>
+              <li>No user wallet connections required for analysis (read-only on-chain data)</li>
+              <li>Rate limiting and fingerprinting to prevent abuse</li>
             </ul>
-
-            <h3 className="text-xl font-medium mb-2 mt-4">5.2 Value Distribution</h3>
-            <p>Revenue sharing model ensures sustainable ecosystem growth while rewarding participants and maintaining platform development.</p>
-          </section>
-
-          <section>
-            <h2 className="text-3xl font-semibold mb-4">6. Risk Management</h2>
-            <h3 className="text-xl font-medium mb-2">6.1 Smart Contract Security</h3>
-            <p>Comprehensive testing and audit procedures ensure smart contract reliability and fund protection.</p>
-
-            <h3 className="text-xl font-medium mb-2 mt-4">6.2 Market Risk Mitigation</h3>
-            <p>Built-in risk controls include position limits, stop-loss mechanisms, and diversification requirements.</p>
-          </section>
-
-          <section>
-            <h2 className="text-3xl font-semibold mb-4">7. Roadmap</h2>
-            <h3 className="text-xl font-medium mb-2">Phase 1: Foundation (Q1 2024)</h3>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>Core platform launch</li>
-              <li>Basic trading features</li>
-              <li>Wallet management system</li>
-            </ul>
-
-            <h3 className="text-xl font-medium mb-2 mt-4">Phase 2: Enhancement (Q2-Q3 2024)</h3>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>Advanced trading strategies</li>
-              <li>Campaign management system</li>
-              <li>Community features</li>
-            </ul>
-
-            <h3 className="text-xl font-medium mb-2 mt-4">Phase 3: Expansion (Q4 2024)</h3>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>Multi-chain support</li>
-              <li>Advanced analytics</li>
-              <li>Mobile applications</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-3xl font-semibold mb-4">8. Conclusion</h2>
-            <p className="text-lg leading-relaxed">BlackBox Farm represents the next evolution in DeFi accessibility, combining powerful automation with user-friendly interfaces and robust security. By democratizing access to advanced trading tools, we aim to level the playing field and enable broader participation in the decentralized finance ecosystem.</p>
           </section>
 
           <section>
             <h2 className="text-3xl font-semibold mb-4">Disclaimer</h2>
-            <p className="text-sm text-muted-foreground italic">This white paper is for informational purposes only and does not constitute investment advice. Cryptocurrency trading involves substantial risk of loss. Past performance does not guarantee future results.</p>
+            <p className="text-sm text-muted-foreground italic">
+              This white paper is for informational purposes only and does not constitute investment advice. 
+              BlackBox Farm provides on-chain intelligence tools — trading decisions remain the sole responsibility of the user. 
+              Cryptocurrency markets involve substantial risk. Past developer performance does not guarantee future results.
+            </p>
           </section>
         </div>
       </div>
-      </div>
-    </div>
+    </SiteLayout>
   );
 };
 
