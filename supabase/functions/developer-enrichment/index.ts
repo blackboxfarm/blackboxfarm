@@ -1,5 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
@@ -107,7 +107,7 @@ interface DeveloperEnrichmentResult {
   rugcheckSkipReason: string | null;
 }
 
-serve(withRunLog('developer-enrichment', async (req) => {
+Deno.serve(withRunLog('developer-enrichment', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -316,7 +316,7 @@ serve(withRunLog('developer-enrichment', async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}));
 
 // ============================================================================
 // RUGCHECK API INTEGRATION
