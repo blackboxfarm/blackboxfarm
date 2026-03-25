@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Send } from "lucide-react";
+import { RefreshCw, Send, CheckCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface TrendingPair {
@@ -108,6 +108,26 @@ export function DexCloudFlareFeed() {
   const queuedCount = pairs.filter(p => p.dbStatus === 'queued').length;
   const postedCount = pairs.filter(p => p.dbStatus === 'posted').length;
 
+  const [reconciling, setReconciling] = useState(false);
+
+  const reconcileFromX = async () => {
+    setReconciling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('reconcile-x-posts', {
+        body: { max_results: 100 },
+      });
+      if (error) throw new Error(error.message);
+      toast({
+        title: "Reconciliation complete",
+        description: `Scanned ${data.tweets_scanned} tweets • ${data.unique_mints_found} mints found • ${data.queue_reconciled} queue updated • ${data.seen_reconciled} seen updated • ${data.already_correct} already correct`,
+      });
+      await fetchTrending();
+    } catch (err: any) {
+      toast({ title: "Reconcile error", description: err.message, variant: "destructive" });
+    }
+    setReconciling(false);
+  };
+
   const queueAllNew = async () => {
     const newPairs = pairs.filter(p => p.dbStatus === 'not_seen' && p.tokenMint);
     if (newPairs.length === 0) {
@@ -180,6 +200,11 @@ export function DexCloudFlareFeed() {
               Queue {newCount} New
             </Button>
           )}
+          <Button onClick={reconcileFromX} size="sm" variant="outline" disabled={reconciling || loading}
+            className="text-green-400 border-green-500/30 hover:bg-green-500/10">
+            <CheckCheck className={`h-4 w-4 mr-1 ${reconciling ? 'animate-pulse' : ''}`} />
+            {reconciling ? 'Reconciling…' : 'Reconcile from 𝕏'}
+          </Button>
           <Button onClick={fetchTrending} size="sm" variant="outline" disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </Button>
