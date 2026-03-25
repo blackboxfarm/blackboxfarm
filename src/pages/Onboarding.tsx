@@ -21,6 +21,16 @@ export default function Onboarding() {
       checkSubscription();
       localStorage.setItem('bbx_onboarding_done', '1');
       setSearchParams({}, { replace: true });
+
+      // Mark any pending checkout intents as completed
+      if (user) {
+        supabase.from('checkout_intents')
+          .update({ status: 'completed', completed_at: new Date().toISOString() } as any)
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .then(() => {});
+      }
+
       // Give webhook a moment to process, then redirect
       setTimeout(() => navigate('/dashboard', { replace: true }), 2000);
     } else if (searchParams.get('canceled') === 'true') {
