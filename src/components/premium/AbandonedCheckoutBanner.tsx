@@ -8,13 +8,13 @@ import { useNavigate } from 'react-router-dom';
 
 export function AbandonedCheckoutBanner() {
   const { user } = useAuth();
-  const { tierKey } = useUserTier();
+  const { tierInfo } = useUserTier();
   const navigate = useNavigate();
   const [hasPendingCheckout, setHasPendingCheckout] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (!user || tierKey !== 'free') return;
+    if (!user || tierInfo.tier_key !== 'free') return;
 
     // Check if dismissed this session
     const dismissedKey = `bbx_checkout_dismissed_${user.id}`;
