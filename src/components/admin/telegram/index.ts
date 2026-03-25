@@ -12,3 +12,4 @@ export { WhaleLeaderboard } from './WhaleLeaderboard';
 export { TelegramBotApiStatusCard } from './TelegramBotApiStatusCard';
 export { default as TelegramTargetManager } from './TelegramTargetManager';
 export type { TelegramTarget } from './TelegramTargetManager';
+export { TelegramInteractionsPanel } from './TelegramInteractionsPanel';

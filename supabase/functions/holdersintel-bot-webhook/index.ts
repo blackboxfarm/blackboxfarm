@@ -3013,6 +3013,11 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           }
           break;
       }
+
+      // Log the interaction asynchronously (fire-and-forget)
+      const tokenFromArgs = args?.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/)?.[0] || null;
+      logBotInteraction(telegramUserId, message.from, chatId, chatType, command, args, tokenFromArgs, "success")
+        .catch(e => console.error("[bot] interaction log failed:", e));
     }
   } catch (err) {
     console.error("[bot] Webhook error:", err);
