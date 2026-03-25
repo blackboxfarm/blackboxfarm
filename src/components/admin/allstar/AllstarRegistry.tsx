@@ -94,9 +94,21 @@ export function AllstarRegistry() {
             <Star className="h-5 w-5 text-yellow-400" />
             Tracked Developers ({filtered.length})
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1">
-            <RefreshCw className="h-3 w-3" /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={backfillFromTop200} 
+              disabled={backfilling}
+              className="gap-1 border-primary/50 text-primary hover:bg-primary/10"
+            >
+              {backfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+              Backfill from Top 200
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1">
+              <RefreshCw className="h-3 w-3" /> Refresh
+            </Button>
+          </div>
         </div>
         <div className="relative mt-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
