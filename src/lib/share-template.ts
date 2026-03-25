@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'tg_advert_1' | 'tg_advert_2';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'tg_advert_1'    | 'tg_advert_2' | 'tg_advert_3';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -261,6 +261,17 @@ The number 1 holder analysis tool on Solana
 ✅ Community momentum signals
 
 Start free 👉 blackbox.farm`,
+
+  tg_advert_3: `💎 *Premium Holder Intelligence*
+
+Stop guessing. Start analyzing.
+
+📊 Health scores for any Solana token
+🐋 Whale movement alerts
+🧠 AI-powered holder insights
+🔮 Developer reputation checks
+
+Join the smart money 👉 blackbox.farm`,
 };
 
 // Legacy default for backwards compatibility

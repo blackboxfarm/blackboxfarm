@@ -95,6 +95,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     x_advert_2: false,
     tg_advert_1: false,
     tg_advert_2: false,
+    tg_advert_3: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
@@ -565,7 +566,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </CardHeader>
         <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
-           <TabsList className="grid w-full grid-cols-11">
+           <TabsList className="flex flex-wrap gap-1 h-auto p-1">
             <TabsTrigger value="small" className="relative text-xs">
               Small
               {activeIntelTemplate === 'small' && (
@@ -591,9 +592,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsTrigger value="x_advert_2" className="text-xs">📣 X Ad2</TabsTrigger>
             <TabsTrigger value="tg_advert_1" className="text-xs">📣 TG Ad1</TabsTrigger>
             <TabsTrigger value="tg_advert_2" className="text-xs">📣 TG Ad2</TabsTrigger>
+            <TabsTrigger value="tg_advert_3" className="text-xs">📣 TG Ad3</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
@@ -671,7 +673,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
-              {(name === 'tg_advert_1' || name === 'tg_advert_2') && (
+              {(name === 'tg_advert_1' || name === 'tg_advert_2' || name === 'tg_advert_3') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <Label className="font-medium text-amber-300">📣 Telegram Advert {name === 'tg_advert_1' ? '1' : '2'}</Label>
                   <p className="text-xs text-muted-foreground">
