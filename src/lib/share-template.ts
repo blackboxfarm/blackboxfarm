@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -90,6 +90,19 @@ Analyze any token 👉 blackbox.farm/holders`,
 🌱 Retail: {retail} | 💨 Dust: {dust}
 
 🔗 blackbox.farm/holders?token={ca}`,
+
+  tg_public_post: `🔎 $\{ticker} Holder Analysis
+
+📊 {totalWallets} Wallets → ✅ {realHolders} Real
+Health: {healthGrade} | {dustPct}% Dust
+
+🐋 {whales} Whales | 😎 {serious} Serious
+🌱 {retail} Retail | 💨 {dust} Dust
+
+🐦 {tweetUrl}
+
+💎 Want full reports, AI summaries & whale alerts?
+👉 Subscribe for $9.99/mo: blackbox.farm/pricing`,
 
   subscription: `🔎 Holder Analysis: $\{ticker}
 
