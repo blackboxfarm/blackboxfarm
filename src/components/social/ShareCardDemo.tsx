@@ -16,6 +16,7 @@ import PromoTweetManager from '@/components/admin/PromoTweetManager';
 import { OGImageManager } from '@/components/admin/OGImageManager';
 import { IntelTemplateModeToggle } from '@/components/admin/funnel-feeds/IntelTemplateModeToggle';
 import { AdvertTemplateConfig } from '@/components/admin/funnel-feeds/AdvertTemplateConfig';
+import { AdvertTemplateToggle } from '@/components/admin/funnel-feeds/AdvertTemplateToggle';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
