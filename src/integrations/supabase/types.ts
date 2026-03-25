@@ -4949,6 +4949,24 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_intel_config: {
+        Row: {
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       holders_intel_dex_triggers: {
         Row: {
           boost_count: number | null
@@ -5169,6 +5187,7 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean | null
+          last_used_at: string | null
           template_name: string
           template_text: string
           updated_at: string | null
@@ -5178,6 +5197,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          last_used_at?: string | null
           template_name: string
           template_text: string
           updated_at?: string | null
@@ -5187,6 +5207,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          last_used_at?: string | null
           template_name?: string
           template_text?: string
           updated_at?: string | null
