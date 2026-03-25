@@ -321,6 +321,19 @@ export default function Features() {
         </div>
       </section>
 
+      {/* View Pricing CTA */}
+      <section className="max-w-6xl mx-auto px-4 py-10 text-center">
+        <Button 
+          size="lg" 
+          variant="outline"
+          onClick={() => navigate("/pricing")}
+          className="gap-2"
+        >
+          View Pricing
+          <ArrowRight className="w-4 h-4" />
+        </Button>
+      </section>
+
       {/* Unique Signals */}
       <section className="border-t border-border bg-card/50">
         <div className="max-w-6xl mx-auto px-4 py-20">
