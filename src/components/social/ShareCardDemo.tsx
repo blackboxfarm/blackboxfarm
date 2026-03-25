@@ -661,6 +661,26 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
+              {(name === 'x_advert_1' || name === 'x_advert_2') && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name === 'x_advert_1' ? '1' : '2'}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Promotional template interleaved with normal intel posts on X. 
+                    Alternates between Ad1 and Ad2 automatically.
+                  </p>
+                </div>
+              )}
+
+              {(name === 'tg_advert_1' || name === 'tg_advert_2') && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <Label className="font-medium text-amber-300">📣 Telegram Advert {name === 'tg_advert_1' ? '1' : '2'}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Promotional template interleaved with normal intel broadcasts on Telegram.
+                    Alternates between Ad1 and Ad2 automatically.
+                  </p>
+                </div>
+              )}
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Template</Label>
