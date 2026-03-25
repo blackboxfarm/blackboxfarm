@@ -11,6 +11,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { XSubscriberVerification } from './XSubscriberVerification';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { CheckoutTransitionModal } from './CheckoutTransitionModal';
 
 interface PricingFeature {
   label: string;
