@@ -7,8 +7,9 @@ import {
   Shield, Brain, Bot, Network, Eye, Lock, Zap, Users, 
   TrendingUp, Search, AlertTriangle, Globe, ArrowRight,
   CheckCircle2, XCircle, Star, Crown, Rocket, Target,
-  MessageSquare, BarChart3, Fingerprint, ExternalLink
+  MessageSquare, BarChart3, Fingerprint, ExternalLink, MessageCircle
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { SocialIcon } from "@/components/token/SocialIcon";
 import holdersLogo from "@/assets/holders-logo.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
@@ -216,16 +217,7 @@ export default function Features() {
               className="gap-2 shadow-glow"
             >
               <Rocket className="w-4 h-4" />
-              Launch App
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline"
-              onClick={() => navigate("/pricing")}
-              className="gap-2"
-            >
-              View Pricing
-              <ArrowRight className="w-4 h-4" />
+              Holders Analysis
             </Button>
             <a
               href="https://t.me/holdersintel_bot"
@@ -233,10 +225,44 @@ export default function Features() {
               rel="noopener noreferrer"
             >
               <Button size="lg" variant="outline" className="gap-2">
-                <Bot className="w-4 h-4" />
-                Try Telegram Bot
+                🤖 HoldersIntel Bot
               </Button>
             </a>
+            <Button 
+              size="lg" 
+              variant="outline"
+              onClick={() => navigate("/bubblepromo")}
+              className="gap-2"
+            >
+              🫧 BubbleMap
+            </Button>
+          </div>
+
+          {/* Channel vs Bot clarification */}
+          <div className="mt-8 max-w-xl mx-auto space-y-3">
+            <div className="rounded-lg border border-muted/30 bg-primary/5 p-4 text-center space-y-1">
+              <p className="text-sm font-bold text-foreground">The Bot is NOT the Channel and the Channel is NOT the Bot!!</p>
+              <div className="flex flex-col sm:flex-row justify-center gap-3 text-xs text-muted-foreground">
+                <p><span className="font-semibold text-blue-400">Channel</span> = Public Feed of the Hottest Tokens on-chain</p>
+                <p><span className="font-semibold text-primary">Intel Bot</span> = Your Private Query Bot for $TICKER Lookups</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 backdrop-blur-sm p-4 flex items-center gap-4">
+              <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <MessageCircle className="w-5 h-5 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">📢 Join the Holders Intel Channel Also!!</p>
+                <p className="text-xs font-bold text-green-400">FREE! Hop in!</p>
+                <p className="text-xs text-muted-foreground">Live alerts, alpha drops, and token intel — straight to your Telegram.</p>
+              </div>
+              <Button size="sm" variant="outline" className="shrink-0 border-blue-400/30 text-blue-400 hover:bg-blue-500/10 gap-1" asChild>
+                <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer">
+                  Join <ExternalLink className="w-3 h-3" />
+                </a>
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -293,6 +319,19 @@ export default function Features() {
             </Card>
           ))}
         </div>
+      </section>
+
+      {/* View Pricing CTA */}
+      <section className="max-w-6xl mx-auto px-4 py-10 text-center">
+        <Button 
+          size="lg" 
+          variant="outline"
+          onClick={() => navigate("/pricing")}
+          className="gap-2"
+        >
+          View Pricing
+          <ArrowRight className="w-4 h-4" />
+        </Button>
       </section>
 
       {/* Unique Signals */}
