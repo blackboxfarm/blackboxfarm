@@ -292,6 +292,54 @@ function processTemplate(template: string, data: any): string {
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
   try {
+    // Check template mode config
+    const { data: modeRow } = await supabase
+      .from('holders_intel_config')
+      .select('value')
+      .eq('key', 'template_mode')
+      .maybeSingle();
+
+    const mode = modeRow?.value || 'active_only';
+    console.log(`[poster] Template mode: ${mode}`);
+
+    if (mode === 'alternating') {
+      // Get last used template name
+      const { data: lastRow } = await supabase
+        .from('holders_intel_config')
+        .select('value')
+        .eq('key', 'last_used_template')
+        .maybeSingle();
+
+      const lastUsed = lastRow?.value || 'large';
+      const nextName = lastUsed === 'large' ? 'small' : 'large';
+
+      const { data, error } = await supabase
+        .from('holders_intel_templates')
+        .select('template_text, template_name')
+        .eq('template_name', nextName)
+        .maybeSingle();
+
+      if (error || !data) {
+        console.log(`[poster] Alternating: failed to fetch '${nextName}', falling back`);
+        return FALLBACK_TEMPLATE;
+      }
+
+      // Update last_used_template and last_used_at
+      await supabase
+        .from('holders_intel_config')
+        .update({ value: nextName, updated_at: new Date().toISOString() })
+        .eq('key', 'last_used_template');
+
+      await supabase
+        .from('holders_intel_templates')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('template_name', nextName);
+
+      console.log(`[poster] Alternating: using '${nextName}' template (last was '${lastUsed}')`);
+      return data.template_text;
+    }
+
+    // Default: active_only mode — use whichever is_active
     const { data, error } = await supabase
       .from('holders_intel_templates')
       .select('template_text')
