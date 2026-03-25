@@ -15,6 +15,7 @@ import { SurgeAlertsPanel } from '@/components/admin/SurgeAlertsPanel';
 import PromoTweetManager from '@/components/admin/PromoTweetManager';
 import { OGImageManager } from '@/components/admin/OGImageManager';
 import { IntelTemplateModeToggle } from '@/components/admin/funnel-feeds/IntelTemplateModeToggle';
+import { AdvertTemplateConfig } from '@/components/admin/funnel-feeds/AdvertTemplateConfig';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -549,6 +550,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       {/* Template Mode Toggle */}
       <IntelTemplateModeToggle />
 
+      {/* Advert Interleaving Config */}
+      <AdvertTemplateConfig />
+
       {/* Tweet Templates Card */}
       <Card className="bg-card/50 border-border">
         <CardHeader className="pb-3">
@@ -561,7 +565,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </CardHeader>
         <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
-           <TabsList className="grid w-full grid-cols-7">
+           <TabsList className="grid w-full grid-cols-11">
             <TabsTrigger value="small" className="relative text-xs">
               Small
               {activeIntelTemplate === 'small' && (
@@ -583,9 +587,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsTrigger value="tg_posted" className="text-xs">TG Admin</TabsTrigger>
             <TabsTrigger value="tg_public_post" className="text-xs">📢 TG Public</TabsTrigger>
             <TabsTrigger value="tg_search" className="text-xs">TG Report</TabsTrigger>
+            <TabsTrigger value="x_advert_1" className="text-xs">📣 X Ad1</TabsTrigger>
+            <TabsTrigger value="x_advert_2" className="text-xs">📣 X Ad2</TabsTrigger>
+            <TabsTrigger value="tg_advert_1" className="text-xs">📣 TG Ad1</TabsTrigger>
+            <TabsTrigger value="tg_advert_2" className="text-xs">📣 TG Ad2</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
