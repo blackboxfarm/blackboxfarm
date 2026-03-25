@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { TelegramClient, MemoryStorage } from "@mtcute/deno";
 import { convertFromTelethonSession } from "@mtcute/convert";
+import { md } from "@mtcute/markdown-parser";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -346,7 +347,7 @@ serve(withRunLog('telegram-mtproto-auth', async (req) => {
     }
 
     if (action === 'send_message') {
-      const { chatUsername, chatId, message } = body;
+      const { chatUsername, chatId, message, parseMode } = body;
       
       // Support both username (public groups) and chatId (private groups)
       const targetChat = chatId || chatUsername;
@@ -401,7 +402,9 @@ serve(withRunLog('telegram-mtproto-auth', async (req) => {
 
         console.log(`[telegram-mtproto-auth] Connected, sending message to ${peerDisplay}`);
 
-        const result = await client.sendText(peer, message);
+        // If parseMode is 'markdown', parse the message for entities (links, bold, etc.)
+        const textInput = (parseMode === 'markdown' || parseMode === 'md') ? md(message) : message;
+        const result = await client.sendText(peer, textInput);
 
         await supabase
           .from('telegram_mtproto_session')
