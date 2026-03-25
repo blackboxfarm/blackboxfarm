@@ -291,7 +291,7 @@ Deno.serve(withRunLog('dex-top-200', async (req) => {
     // Auto-queue new tokens into the posting pipeline
     const queuedCount = await autoQueueNewTokens(supabase, finalTokens);
 
-    console.log(`[DexTop200] ✅ Done in ${elapsed}ms: ${finalTokens.length} ranked, ${resolvedCount} resolved`);
+    console.log(`[DexTop200] ✅ Done in ${elapsed}ms: ${finalTokens.length} ranked, ${resolvedCount} resolved, ${queuedCount} queued`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -300,6 +300,7 @@ Deno.serve(withRunLog('dex-top-200', async (req) => {
       elapsed_ms: elapsed,
       total: finalTokens.length,
       resolved: resolvedCount,
+      auto_queued: queuedCount,
       health,
       tokens: finalTokens,
     }), {
