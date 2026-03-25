@@ -511,16 +511,63 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
     // ============ PHASE 3: BUILD REPUTATION MESH ============
     console.log('[DexCompiler] 🕸️ Phase 3: Building Reputation Mesh...');
     let meshLinksAdded = 0;
+    let communitiesDiscovered = 0;
     const creatorsToSpider: string[] = [];
 
     // For each token with socials, add mesh links
     for (const token of allTokens) {
-      const xHandle = extractXHandle(token.twitter);
-      
-      if (xHandle) {
-        // Link: Token -> X Account
-        await addMeshLink(supabase, 'token', token.address, 'x_account', xHandle, 'official_twitter');
-        meshLinksAdded++;
+      // Check if twitter URL is actually an X Community
+      if (token.twitter && token.twitter.includes('/communities/')) {
+        const communityMatch = token.twitter.match(/communities\/(\d+)/);
+        if (communityMatch) {
+          const communityId = communityMatch[1];
+          const communityUrl = `https://x.com/i/communities/${communityId}`;
+          
+          // Link: X Community -> Token
+          await addMeshLink(supabase, 'x_community', communityId, 'token', token.address, 'community_for', 95, 'dex-scraper');
+          meshLinksAdded++;
+          
+          // Upsert into x_communities table
+          const { error: communityUpsertErr } = await supabase
+            .from('x_communities')
+            .upsert({
+              community_id: communityId,
+              community_url: communityUrl,
+              linked_token_mints: [token.address],
+            }, { onConflict: 'community_id', ignoreDuplicates: false });
+          
+          if (!communityUpsertErr) {
+            communitiesDiscovered++;
+            // Also append token_mint to linked_token_mints if community already exists
+            const { data: existing } = await supabase
+              .from('x_communities')
+              .select('linked_token_mints')
+              .eq('community_id', communityId)
+              .maybeSingle();
+            
+            if (existing?.linked_token_mints && !existing.linked_token_mints.includes(token.address)) {
+              await supabase
+                .from('x_communities')
+                .update({ linked_token_mints: [...existing.linked_token_mints, token.address] })
+                .eq('community_id', communityId);
+            }
+          }
+          
+          // Fire-and-forget: trigger community enricher to scrape admins/mods
+          supabase.functions.invoke('x-community-enricher', {
+            body: {
+              communityUrl,
+              linkedTokenMint: token.address,
+            }
+          }).catch(e => console.warn(`[DexCompiler] Community enricher trigger failed: ${e}`));
+        }
+      } else {
+        const xHandle = extractXHandle(token.twitter);
+        if (xHandle) {
+          // Link: Token -> X Account
+          await addMeshLink(supabase, 'token', token.address, 'x_account', xHandle, 'official_twitter');
+          meshLinksAdded++;
+        }
       }
       
       if (token.telegram) {
@@ -535,6 +582,8 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
         meshLinksAdded++;
       }
     }
+    
+    console.log(`[DexCompiler] 🏘️ Discovered ${communitiesDiscovered} X Communities`);
     
     console.log(`[DexCompiler] 🕸️ Added ${meshLinksAdded} mesh links`);
 
