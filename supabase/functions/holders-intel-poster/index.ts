@@ -674,10 +674,9 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         }
       }
       
-      // Generate network risk assessment (always, lightweight computation)
-      const templateUsesRisk = tweetTemplate.includes('{risk}') || tweetTemplate.includes('{RISK}') ||
-                                tweetTemplate.includes('{risk_detail}') || tweetTemplate.includes('{RISK_DETAIL}');
-      if (templateUsesRisk) {
+      // Generate network risk assessment — always run since TG templates may use {risk} even if X template doesn't
+      {
+        console.log('[poster] Generating network risk assessment...');
         console.log('[poster] Generating network risk assessment...');
         const riskResult = assessNetworkRisk({
           healthScore: stats.healthScore,
