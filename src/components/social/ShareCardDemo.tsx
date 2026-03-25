@@ -673,7 +673,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
-              {(name === 'tg_advert_1' || name === 'tg_advert_2') && (
+              {(name === 'tg_advert_1' || name === 'tg_advert_2' || name === 'tg_advert_3') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <Label className="font-medium text-amber-300">📣 Telegram Advert {name === 'tg_advert_1' ? '1' : '2'}</Label>
                   <p className="text-xs text-muted-foreground">
