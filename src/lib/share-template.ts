@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'tg_advert_1' | 'tg_advert_2';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -216,6 +216,51 @@ _Upgrade to X Subscriber for detailed sizing recommendations._`,
 {riskFlags}
 
 💡 {summary}`,
+
+  x_advert_1: `📢 SPONSORED
+
+Check out our premium holder analysis tools!
+
+🔍 Real-time holder tracking
+📊 AI-powered insights  
+🐋 Whale alerts
+
+Try free 👉 blackbox.farm/holders
+
+#Solana #CryptoTools`,
+
+  x_advert_2: `🚀 BlackBox Farm
+
+The #1 holder analysis tool on Solana
+
+✅ Holder health scores
+✅ Dust wallet detection
+✅ Developer reputation
+
+Start analyzing 👉 blackbox.farm
+
+#Solana #DeFi`,
+
+  tg_advert_1: `📢 *Sponsored*
+
+🔍 Want to know who REALLY holds a token?
+
+BlackBox Farm gives you:
+• Real vs dust holder counts
+• Whale tracking and alerts
+• AI-powered analysis
+
+👉 blackbox.farm/holders`,
+
+  tg_advert_2: `🚀 *BlackBox Farm*
+
+The number 1 holder analysis tool on Solana
+
+✅ Health scores for any token
+✅ Developer reputation checks
+✅ Community momentum signals
+
+Start free 👉 blackbox.farm`,
 };
 
 // Legacy default for backwards compatibility

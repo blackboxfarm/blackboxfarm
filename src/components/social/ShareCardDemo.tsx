@@ -15,6 +15,7 @@ import { SurgeAlertsPanel } from '@/components/admin/SurgeAlertsPanel';
 import PromoTweetManager from '@/components/admin/PromoTweetManager';
 import { OGImageManager } from '@/components/admin/OGImageManager';
 import { IntelTemplateModeToggle } from '@/components/admin/funnel-feeds/IntelTemplateModeToggle';
+import { AdvertTemplateConfig } from '@/components/admin/funnel-feeds/AdvertTemplateConfig';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -90,6 +91,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     bot_verdict_lite: false,
     bot_oracle: false,
     bot_wallet: false,
+    x_advert_1: false,
+    x_advert_2: false,
+    tg_advert_1: false,
+    tg_advert_2: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
@@ -545,6 +550,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       {/* Template Mode Toggle */}
       <IntelTemplateModeToggle />
 
+      {/* Advert Interleaving Config */}
+      <AdvertTemplateConfig />
+
       {/* Tweet Templates Card */}
       <Card className="bg-card/50 border-border">
         <CardHeader className="pb-3">
@@ -557,7 +565,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </CardHeader>
         <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
-           <TabsList className="grid w-full grid-cols-7">
+           <TabsList className="grid w-full grid-cols-11">
             <TabsTrigger value="small" className="relative text-xs">
               Small
               {activeIntelTemplate === 'small' && (
@@ -579,9 +587,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsTrigger value="tg_posted" className="text-xs">TG Admin</TabsTrigger>
             <TabsTrigger value="tg_public_post" className="text-xs">📢 TG Public</TabsTrigger>
             <TabsTrigger value="tg_search" className="text-xs">TG Report</TabsTrigger>
+            <TabsTrigger value="x_advert_1" className="text-xs">📣 X Ad1</TabsTrigger>
+            <TabsTrigger value="x_advert_2" className="text-xs">📣 X Ad2</TabsTrigger>
+            <TabsTrigger value="tg_advert_1" className="text-xs">📣 TG Ad1</TabsTrigger>
+            <TabsTrigger value="tg_advert_2" className="text-xs">📣 TG Ad2</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
@@ -645,6 +657,26 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                   <p className="text-xs text-muted-foreground">
                     Sent to BlackBox Telegram group when a holders report is generated on /holders.
                     Uses Markdown formatting (*bold*, \`code\`).
+                  </p>
+                </div>
+              )}
+
+              {(name === 'x_advert_1' || name === 'x_advert_2') && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name === 'x_advert_1' ? '1' : '2'}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Promotional template interleaved with normal intel posts on X. 
+                    Alternates between Ad1 and Ad2 automatically.
+                  </p>
+                </div>
+              )}
+
+              {(name === 'tg_advert_1' || name === 'tg_advert_2') && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <Label className="font-medium text-amber-300">📣 Telegram Advert {name === 'tg_advert_1' ? '1' : '2'}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Promotional template interleaved with normal intel broadcasts on Telegram.
+                    Alternates between Ad1 and Ad2 automatically.
                   </p>
                 </div>
               )}
