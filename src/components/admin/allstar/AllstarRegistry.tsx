@@ -24,6 +24,30 @@ const TIER_LABELS: Record<number, { label: string; color: string }> = {
 
 export function AllstarRegistry() {
   const [search, setSearch] = useState('');
+  const [backfilling, setBackfilling] = useState(false);
+
+  const backfillFromTop200 = async () => {
+    setBackfilling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('backfill-allstars', {
+        body: { max_resolve: 30 },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(
+          `Backfill complete: ${data.creators_resolved} creators resolved, ${data.newly_promoted} promoted, ${data.upgraded} upgraded`,
+          { duration: 8000 }
+        );
+        refetch();
+      } else {
+        toast.error(data?.error || 'Backfill failed');
+      }
+    } catch (err: any) {
+      toast.error(`Backfill error: ${err.message}`);
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   const { data: devs, isLoading, refetch } = useQuery({
     queryKey: ['allstar-registry'],
