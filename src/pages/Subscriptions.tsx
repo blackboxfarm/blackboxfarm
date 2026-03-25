@@ -179,18 +179,25 @@ export default function Subscriptions() {
               <div className="flex-1 text-center md:text-left space-y-2">
                 <div className="flex items-center justify-center md:justify-start gap-2">
                   <h3 className="text-lg font-bold">Telegram Bot</h3>
-                  <Badge variant="outline" className="text-xs border-blue-400/30 text-blue-400">Coming Soon</Badge>
+                  <Badge className="text-xs bg-green-500/10 text-green-400 border-green-500/30">Live</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Get holder analysis, risk assessments, and momentum scores right in your Telegram DMs. 
                   Your subscription tier carries over automatically.
                 </p>
               </div>
-              <Button variant="outline" className="shrink-0 border-blue-400/30 text-blue-400 hover:bg-blue-500/10" asChild>
-                <Link to="/tgbot">
-                  Learn More <ArrowRight className="w-4 h-4 ml-1" />
-                </Link>
-              </Button>
+              <div className="flex flex-col gap-2 shrink-0">
+                <Button variant="outline" className="border-blue-400/30 text-blue-400 hover:bg-blue-500/10 gap-1" asChild>
+                  <a href="https://t.me/holdersintel_bot" target="_blank" rel="noopener noreferrer">
+                    Open Bot <ArrowRight className="w-4 h-4" />
+                  </a>
+                </Button>
+                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1" asChild>
+                  <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer">
+                    📢 Join Channel
+                  </a>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </section>
