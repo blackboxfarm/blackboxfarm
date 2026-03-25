@@ -180,6 +180,62 @@ async function logScrapeHealth(
   }
 }
 
+// Auto-queue "New" tokens into holders_intel_post_queue (capped at 20 per tick)
+async function autoQueueNewTokens(supabase: any, finalTokens: any[]): Promise<number> {
+  const MAX_QUEUE_PER_TICK = 20;
+
+  // Only tokens with resolved mints
+  const withMints = finalTokens.filter(t => t.tokenMint);
+  if (withMints.length === 0) return 0;
+
+  const mints = withMints.map(t => t.tokenMint);
+
+  try {
+    // Check what's already in queue or seen
+    const [queueRes, seenRes] = await Promise.all([
+      supabase.from('holders_intel_post_queue').select('token_mint').in('token_mint', mints),
+      supabase.from('holders_intel_seen_tokens').select('token_mint').in('token_mint', mints),
+    ]);
+
+    const alreadyQueued = new Set((queueRes.data || []).map((r: any) => r.token_mint));
+    const alreadySeen = new Set((seenRes.data || []).map((r: any) => r.token_mint));
+
+    // Filter to truly new tokens, sorted by rank (lowest rank = highest priority)
+    const newTokens = withMints
+      .filter(t => !alreadyQueued.has(t.tokenMint) && !alreadySeen.has(t.tokenMint))
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, MAX_QUEUE_PER_TICK);
+
+    if (newTokens.length === 0) {
+      console.log('[DexTop200] No new tokens to queue');
+      return 0;
+    }
+
+    const rows = newTokens.map(t => ({
+      token_mint: t.tokenMint,
+      symbol: t.symbol || null,
+      name: t.name || null,
+      market_cap: t.marketCap || t.fdv || null,
+      trigger_source: 'dex_top_200',
+      trigger_comment: `🔥 DexScreener Trending #${t.rank}`,
+      scheduled_at: new Date().toISOString(),
+      status: 'pending',
+    }));
+
+    const { error } = await supabase.from('holders_intel_post_queue').insert(rows);
+    if (error) {
+      console.error('[DexTop200] Queue insert error:', error.message);
+      return 0;
+    }
+
+    console.log(`[DexTop200] ✅ Auto-queued ${newTokens.length} new tokens for posting`);
+    return newTokens.length;
+  } catch (e) {
+    console.error('[DexTop200] Auto-queue error:', e);
+    return 0;
+  }
+}
+
 Deno.serve(withRunLog('dex-top-200', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -231,6 +287,9 @@ Deno.serve(withRunLog('dex-top-200', async (req) => {
 
     // Log health (async, don't block response)
     logScrapeHealth(supabase, health, elapsed, resolvedCount, finalTokens.length).catch(() => {});
+
+    // Auto-queue new tokens into the posting pipeline
+    const queuedCount = await autoQueueNewTokens(supabase, finalTokens);
 
     console.log(`[DexTop200] ✅ Done in ${elapsed}ms: ${finalTokens.length} ranked, ${resolvedCount} resolved`);
 
