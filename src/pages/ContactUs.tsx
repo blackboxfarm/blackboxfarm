@@ -6,12 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Mail, MessageSquare, Phone, MapPin, Clock, Send, CheckCircle, ArrowLeft } from "lucide-react";
+import { Mail, MessageSquare, Phone, Clock, Send, CheckCircle, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { FarmBanner } from "@/components/FarmBanner";
-import { AuthButton } from "@/components/auth/AuthButton";
-import { NotificationCenter } from "@/components/NotificationCenter";
+import { SiteLayout } from "@/components/layout/SiteLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
 
@@ -86,38 +84,9 @@ export default function ContactUs() {
   ) : null;
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Farm Banner Header */}
-      <FarmBanner />
-      <div className="container mx-auto py-6 space-y-8">
-        {/* Main Header Section */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
-          <div className="text-center md:text-left flex-1 space-y-4">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <img 
-                src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
-                alt="BlackBox Cube Logo" 
-                className="w-10 h-10 md:w-12 md:h-12"
-              />
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                BlackBox Farm
-              </h1>
-            </div>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
-              Putting the needle in the haystack — follow the wallets.
-            </p>
-            <div className="flex justify-center md:hidden space-x-3">
-              <AuthButton />
-            </div>
-          </div>
-          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
-            <NotificationCenter />
-            <AuthButton />
-          </div>
-        </div>
-
+    <SiteLayout>
       {successContent || (
-      <div className="container mx-auto py-12 space-y-12">
+      <div className="container mx-auto py-12 space-y-12 px-4">
         {/* Header */}
         <div className="text-center space-y-6">
           <div className="flex items-center justify-center gap-4 mb-8">
@@ -331,41 +300,41 @@ export default function ContactUs() {
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-medium mb-2">How do I get started with BlackBox Farm?</h3>
+                  <h3 className="font-medium mb-2">How do I get started?</h3>
                   <p className="text-sm text-muted-foreground">
-                    Simply create an account, complete the security verification process, and you can start using our fee calculator immediately. No upfront payments required.
+                    Just head to the Holders Analysis page and paste any Solana token address. Basic analysis is free with no account needed. Sign up free to unlock AI panels and deeper intel.
                   </p>
                 </div>
                 <div>
-                  <h3 className="font-medium mb-2">What makes your pricing different?</h3>
+                  <h3 className="font-medium mb-2">What does Holders Intel actually do?</h3>
                   <p className="text-sm text-muted-foreground">
-                    We use smart pricing that automatically chooses between batch processing and per-transaction fees based on your trading volume, typically saving 70-90% compared to competitors.
+                    We analyze token holder distributions, trace developer wallets, detect recycled scammer identities, and map the entire network from token to KYC root — using AI to surface the signals that matter.
                   </p>
                 </div>
                 <div>
-                  <h3 className="font-medium mb-2">Is my data secure?</h3>
+                  <h3 className="font-medium mb-2">How does the Telegram Bot work?</h3>
                   <p className="text-sm text-muted-foreground">
-                    Yes, we use enterprise-grade encryption, 2FA, and follow industry best practices. All sensitive data is encrypted and we never store your private keys in plain text.
+                    Message @holdersintel_bot with a token address or $TICKER to get instant analysis. Free users get /quick lookups. Registered users unlock /holders, /risk, /ai, and more. Your subscription tier carries over automatically.
                   </p>
                 </div>
               </div>
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-medium mb-2">Do you offer custom solutions?</h3>
+                  <h3 className="font-medium mb-2">What's the difference between the Bot and the Channel?</h3>
                   <p className="text-sm text-muted-foreground">
-                    Yes, we provide custom enterprise solutions for high-volume traders and institutions. Contact our partnerships team for details.
+                    The @holdersintel_bot is your private query bot for looking up specific tokens. The @HoldersIntel channel is a public feed broadcasting the hottest tokens on-chain — free for everyone.
                   </p>
                 </div>
                 <div>
-                  <h3 className="font-medium mb-2">What about community campaigns?</h3>
+                  <h3 className="font-medium mb-2">Who handles billing?</h3>
                   <p className="text-sm text-muted-foreground">
-                    Community campaigns allow users to pool resources for larger operations while maintaining individual control and transparency. Perfect for coordinated trading strategies.
+                    All subscriptions are processed via Stripe under our parent company, System Reset (systemreset.ca). You can manage your subscription from the Subscriptions page or via the Stripe customer portal.
                   </p>
                 </div>
                 <div>
-                  <h3 className="font-medium mb-2">How can I track my usage and costs?</h3>
+                  <h3 className="font-medium mb-2">Do you offer enterprise or API access?</h3>
                   <p className="text-sm text-muted-foreground">
-                    Our analytics dashboard provides real-time monitoring of all your campaigns, costs, and performance metrics with detailed breakdowns and historical data.
+                    Yes — Developer and Enterprise tiers include API access, higher rate limits, and priority support. Contact us for custom integrations or white-label solutions.
                   </p>
                 </div>
               </div>
@@ -374,7 +343,6 @@ export default function ContactUs() {
         </Card>
       </div>
       )}
-      </div>
-    </div>
+    </SiteLayout>
   );
 }
