@@ -448,6 +448,54 @@ function ReportView({ report }: { report: MorningReport }) {
             </div>
           </Section>
 
+          {/* Database Size Watchdog */}
+          {(report as any).db_size_info && (
+            <Section title="Database Size Watchdog" icon={<HardDrive className="w-4 h-4 text-orange-400" />}>
+              {(() => {
+                const db = (report as any).db_size_info;
+                const usagePct = db.usage_pct || 0;
+                const barColor = usagePct >= 80 ? 'bg-destructive' : usagePct >= 50 ? 'bg-yellow-500' : 'bg-green-500';
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-medium">
+                            {db.is_estimate ? '~' : ''}{db.total_size_mb}MB used
+                          </span>
+                          <span className="text-muted-foreground">{db.plan_limit_mb}MB limit ({usagePct}%)</span>
+                        </div>
+                        <div className="h-3 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(usagePct, 100)}%` }} />
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold">{db.total_rows?.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">total rows</div>
+                      </div>
+                    </div>
+                    {db.is_estimate && (
+                      <p className="text-[10px] text-muted-foreground italic">* Estimated from row counts (~0.5KB/row avg). Actual size may vary.</p>
+                    )}
+                    {db.top_tables && db.top_tables.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">Top tables by row count:</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
+                          {db.top_tables.slice(0, 12).map((t: any) => (
+                            <div key={t.name} className="flex items-center justify-between text-[11px] p-1.5 rounded bg-muted/30">
+                              <span className="font-mono truncate mr-2">{t.name}</span>
+                              <span className="shrink-0 font-medium">{t.rows.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </Section>
+          )}
+
           {/* Table Health */}
           <Section title="Table Health" icon={<Database className="w-4 h-4 text-indigo-400" />} defaultOpen={false}>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
