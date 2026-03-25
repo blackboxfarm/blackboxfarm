@@ -368,6 +368,76 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // 7.1. DATABASE SIZE & DISK USAGE WATCHDOG
+    // ═══════════════════════════════════════════════════════════════
+    let dbSizeInfo: Record<string, any> | null = null;
+    try {
+      // Total database size
+      const { data: dbSizeData } = await supabase.rpc('get_db_size_stats');
+      
+      if (!dbSizeData) {
+        // Fallback: estimate from table counts
+        const bigTables: { name: string; rows: number; est_size_mb: number }[] = [];
+        for (const [table, info] of Object.entries(tableHealth)) {
+          if (info.row_count > 0) {
+            // Rough estimate: ~0.5KB per row average
+            const estMb = Math.round((info.row_count * 0.5) / 1024 * 10) / 10;
+            bigTables.push({ name: table, rows: info.row_count, est_size_mb: estMb });
+          }
+        }
+        
+        // Also check biggest tables not in the monitored list
+        const heavyTables = [
+          'reputation_mesh', 'token_lifecycle', 'x_communities', 'developer_wallets',
+          'allstar_dev_registry', 'holders_intel_post_queue', 'holders_intel_seen_tokens',
+          'twitter_accounts', 'wallet_families', 'wallet_family_members',
+        ];
+        for (const table of heavyTables) {
+          if (!tableHealth[table]) {
+            try {
+              const { count } = await supabase.from(table as any).select('*', { count: 'exact', head: true });
+              if (count && count > 0) {
+                const estMb = Math.round((count * 0.5) / 1024 * 10) / 10;
+                bigTables.push({ name: table, rows: count, est_size_mb: estMb });
+              }
+            } catch { /* skip */ }
+          }
+        }
+
+        bigTables.sort((a, b) => b.rows - a.rows);
+        const totalEstMb = bigTables.reduce((s, t) => s + t.est_size_mb, 0);
+        const totalRows = bigTables.reduce((s, t) => s + t.rows, 0);
+
+        dbSizeInfo = {
+          total_size_mb: Math.round(totalEstMb),
+          total_rows: totalRows,
+          top_tables: bigTables.slice(0, 15),
+          is_estimate: true,
+          plan_limit_mb: 500, // Supabase free tier = 500MB
+          usage_pct: Math.round((totalEstMb / 500) * 100),
+        };
+
+        if (totalEstMb > 400) {
+          alerts.push({
+            level: 'critical',
+            category: 'database_size',
+            title: `Database ~${Math.round(totalEstMb)}MB estimated (80%+ of 500MB limit)`,
+            detail: `Top table: ${bigTables[0]?.name} (${bigTables[0]?.rows.toLocaleString()} rows). Consider pruning old api_usage_log, activity_logs, or arb_ tables.`,
+          });
+        } else if (totalEstMb > 250) {
+          alerts.push({
+            level: 'warning',
+            category: 'database_size',
+            title: `Database ~${Math.round(totalEstMb)}MB estimated (50%+ of limit)`,
+            detail: `Top table: ${bigTables[0]?.name} (${bigTables[0]?.rows.toLocaleString()} rows)`,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to estimate DB size:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // 7.5. HOLDERSINTEL TWITTER ACCOUNT METRICS
     // ═══════════════════════════════════════════════════════════════
     let holdersIntelMetrics: Record<string, any> | null = null;
