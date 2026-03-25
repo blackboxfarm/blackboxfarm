@@ -683,6 +683,7 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
         totalInDatabase: totalCount,
         discoveryBreakdown: sourceBreakdown,
         meshLinksAdded,
+        communitiesDiscovered,
         creatorsSpidered: creatorsToSpider.length,
         timestamp: capturedAt
       }),
