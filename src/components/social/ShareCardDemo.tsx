@@ -625,6 +625,16 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
+              {name === 'tg_public_post' && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                  <Label className="font-medium text-emerald-300">📢 TG Public Channel Post</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Sent to the HoldersIntel Public Telegram channel alongside each X post.
+                    Designed for conversion — teases data and drives subscriptions.
+                  </p>
+                </div>
+              )}
+
               {name === 'tg_search' && (
                 <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                   <Label className="font-medium text-green-300">📊 Telegram: Holders Report</Label>
