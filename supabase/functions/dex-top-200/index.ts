@@ -27,12 +27,21 @@ async function batchResolvePairs(pairIds: string[]): Promise<Map<string, Resolve
   for (let i = 0; i < pairIds.length; i += batchSize) {
     const batch = pairIds.slice(i, i + batchSize);
     try {
+      const apiLogger = createApiLogger({
+        serviceName: 'dexscreener',
+        endpoint: `/latest/dex/pairs/solana/${batch.length}-pairs`,
+        method: 'GET',
+        functionName: 'dex-top-200',
+        requestType: 'market_data',
+        credits: 0,
+      });
       const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${batch.join(',')}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Accept': 'application/json',
         }
       });
+      await apiLogger.complete(res.status);
       if (res.ok) {
         const data = await res.json();
         const pairs = data.pairs || (data.pair ? [data.pair] : []);
