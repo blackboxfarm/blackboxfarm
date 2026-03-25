@@ -169,13 +169,14 @@ export default function HoldersBotLanding() {
         </div>
 
         {/* Telegram Channel Promo */}
-        <Card className="mb-8 border-blue-500/20 bg-blue-500/5">
+        <Card className="mb-4 border-blue-500/20 bg-blue-500/5">
           <CardContent className="p-6 flex items-center gap-4">
             <div className="shrink-0 w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
               <MessageCircle className="w-6 h-6 text-blue-400" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-foreground">📢 Holders Intel Channel</p>
+              <p className="font-semibold text-foreground">📢 Join the Holders Intel Channel Also!!</p>
+              <p className="text-sm font-bold text-green-400">FREE! Hop in!</p>
               <p className="text-sm text-muted-foreground">Live alerts, alpha drops, and token intel — straight to your Telegram.</p>
             </div>
             <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer">
@@ -183,6 +184,16 @@ export default function HoldersBotLanding() {
                 Join <ArrowRight className="w-3 h-3" />
               </Button>
             </a>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-8 border-muted/30 bg-muted/10">
+          <CardContent className="p-5 text-center space-y-2">
+            <p className="font-bold text-foreground">The Bot is NOT the Channel and the Channel is NOT the Bot!!</p>
+            <div className="flex flex-col sm:flex-row justify-center gap-4 text-sm text-muted-foreground">
+              <p><span className="font-semibold text-blue-400">Channel</span> = Public Feed of the Hottest Tokens on-chain</p>
+              <p><span className="font-semibold text-primary">Intel Bot</span> = Your Private Query Bot for $TICKER Lookups</p>
+            </div>
           </CardContent>
         </Card>
 
