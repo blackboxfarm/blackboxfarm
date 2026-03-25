@@ -261,6 +261,17 @@ The number 1 holder analysis tool on Solana
 ✅ Community momentum signals
 
 Start free 👉 blackbox.farm`,
+
+  tg_advert_3: `💎 *Premium Holder Intelligence*
+
+Stop guessing. Start analyzing.
+
+📊 Health scores for any Solana token
+🐋 Whale movement alerts
+🧠 AI-powered holder insights
+🔮 Developer reputation checks
+
+Join the smart money 👉 blackbox.farm`,
 };
 
 // Legacy default for backwards compatibility
