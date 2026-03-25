@@ -138,14 +138,27 @@ export function PricingTable() {
     if (pendingCheckoutTier) {
       const tier = pendingCheckoutTier;
       setPendingCheckoutTier(null);
+      // Show transition modal instead of immediately opening Stripe
       setTimeout(async () => {
         const { data } = await supabase.auth.getUser();
         if (data.user) {
-          await continueCheckoutAfterAuth(tier);
+          setTransitionIsNewAccount(true);
+          setShowTransitionModal(true);
+          // Store tier for when transition completes
+          setPendingCheckoutTier(tier);
         }
-      }, 500);
+      }, 300);
     }
   };
+
+  const handleTransitionComplete = useCallback(async () => {
+    setShowTransitionModal(false);
+    if (pendingCheckoutTier) {
+      const tier = pendingCheckoutTier;
+      setPendingCheckoutTier(null);
+      await continueCheckoutAfterAuth(tier);
+    }
+  }, [pendingCheckoutTier, continueCheckoutAfterAuth]);
 
   const handleManageSubscription = async () => {
     setLoadingTier('manage');
