@@ -891,7 +891,15 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
             .replace(/\{dustPct\}/g, dustPctVal.toString().padStart(2))
             .replace(/\{tweetUrl\}/g, tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`)
             .replace(/\{name\}/g, stats.name || stats.symbol)
-            .replace(/\{ca\}/g, item.token_mint);
+            .replace(/\{ca\}/g, item.token_mint)
+            .replace(/\{healthScore\}/g, String(stats.healthScore || ''))
+            .replace(/\{structuralScore\}/g, String(stats.structuralScore ?? ''))
+            .replace(/\{activityScore\}/g, String(stats.activityScore ?? ''))
+            .replace(/\{momentumGrade\}/g, stats.momentumGrade || '')
+            .replace(/\{devRep\}/g, stats.devRep || '')
+            .replace(/\{risk\}/g, stats.risk || '')
+            .replace(/\{riskDetail\}/g, stats.riskDetail || '')
+            .replace(/\{marketCap\}/g, item.market_cap ? (item.market_cap >= 1e6 ? `$${(item.market_cap / 1e6).toFixed(1)}M` : `$${(item.market_cap / 1e3).toFixed(0)}K`) : '—');
           
           // Fetch INTEL_PUBLIC target
           const { data: publicTarget } = await supabase
