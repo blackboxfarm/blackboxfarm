@@ -445,6 +445,13 @@ export function PricingTable() {
         onClose={handleAuthModalClose}
         defaultTab="signup"
       />
+
+      {/* Transition modal between auth and Stripe */}
+      <CheckoutTransitionModal
+        isOpen={showTransitionModal}
+        onComplete={handleTransitionComplete}
+        isNewAccount={transitionIsNewAccount}
+      />
     </div>
   );
 }
