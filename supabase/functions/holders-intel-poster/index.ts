@@ -812,7 +812,11 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
           .replace(/\{devRep\}/g, stats.devRep || '')
           .replace(/\{risk\}/g, stats.risk || '')
           .replace(/\{riskDetail\}/g, stats.riskDetail || '')
-          .replace(/\{marketCap\}/g, item.market_cap ? (item.market_cap >= 1e6 ? `$${(item.market_cap / 1e6).toFixed(1)}M` : `$${(item.market_cap / 1e3).toFixed(0)}K`) : '—');
+          .replace(/\{marketCap\}/g, item.market_cap ? (item.market_cap >= 1e6 ? `$${(item.market_cap / 1e6).toFixed(1)}M` : `$${(item.market_cap / 1e3).toFixed(0)}K`) : '—')
+          .replace(/\{ai_summary\}/g, stats.aiSummary || '')
+          .replace(/\{aiSummary\}/g, stats.aiSummary || '')
+          .replace(/\{aiOverview\}/g, stats.aiOverview || '')
+          .replace(/\{lifecycle\}/g, stats.lifecycle || '');
         
         // Send with retry (cold start can cause first attempt to fail)
         let tgSuccess = false;
@@ -909,7 +913,11 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
             .replace(/\{devRep\}/g, stats.devRep || '')
             .replace(/\{risk\}/g, stats.risk || '')
             .replace(/\{riskDetail\}/g, stats.riskDetail || '')
-            .replace(/\{marketCap\}/g, item.market_cap ? (item.market_cap >= 1e6 ? `$${(item.market_cap / 1e6).toFixed(1)}M` : `$${(item.market_cap / 1e3).toFixed(0)}K`) : '—');
+            .replace(/\{marketCap\}/g, item.market_cap ? (item.market_cap >= 1e6 ? `$${(item.market_cap / 1e6).toFixed(1)}M` : `$${(item.market_cap / 1e3).toFixed(0)}K`) : '—')
+            .replace(/\{ai_summary\}/g, stats.aiSummary || '')
+            .replace(/\{aiSummary\}/g, stats.aiSummary || '')
+            .replace(/\{aiOverview\}/g, stats.aiOverview || '')
+            .replace(/\{lifecycle\}/g, stats.lifecycle || '');
           
           // Fetch INTEL_PUBLIC target
           const { data: publicTarget } = await supabase
