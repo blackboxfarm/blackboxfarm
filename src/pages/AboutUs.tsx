@@ -1,57 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Shield, Zap, Users, Target, Rocket, Globe, ArrowLeft } from "lucide-react";
-import { FarmBanner } from "@/components/FarmBanner";
-import { AuthButton } from "@/components/auth/AuthButton";
-import { NotificationCenter } from "@/components/NotificationCenter";
-import { useAuth } from "@/hooks/useAuth";
+import { Shield, Zap, Users, Rocket, Eye, Brain, BarChart3, ExternalLink } from "lucide-react";
+import { SiteLayout } from "@/components/layout/SiteLayout";
 import { Link } from "react-router-dom";
 
 export default function AboutUs() {
-  const { user } = useAuth();
-
   return (
-    <div className="min-h-screen bg-background">
-      {/* Farm Banner Header */}
-      <FarmBanner />
-      <div className="container mx-auto py-6 space-y-8">
-        {/* Main Header Section */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
-          <div className="text-center md:text-left flex-1 space-y-4">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <img 
-                src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
-                alt="BlackBox Cube Logo" 
-                className="w-10 h-10 md:w-12 md:h-12"
-              />
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                BlackBox Farm
-              </h1>
-            </div>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
-              Putting the needle in the haystack — follow the wallets.
-            </p>
-            <div className="flex justify-center md:hidden space-x-3">
-              <AuthButton />
-            </div>
-          </div>
-          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
-            <NotificationCenter />
-            <AuthButton />
-          </div>
-        </div>
+    <SiteLayout>
+      <div className="container mx-auto py-6 space-y-8 max-w-5xl px-4">
         {/* Hero Section */}
-        <div className="text-center space-y-6">
-          <div className="flex items-center justify-center gap-4 mb-8">
-            <Link to="/" className="hover:opacity-80 transition-opacity">
-              <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
-            </Link>
-            <h2 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-              About BlackBox Farm
-            </h2>
-          </div>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Revolutionizing DeFi trading with transparent, affordable, and secure automated solutions for the Solana ecosystem.
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+            About BlackBox Farm
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+            AI-powered on-chain intelligence for the Solana ecosystem. We analyze holders, trace wallets, 
+            detect scammers, and surface the signals that matter — so you can trade with clarity.
           </p>
         </div>
 
@@ -61,26 +24,28 @@ export default function AboutUs() {
             <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold text-primary mb-4">Our Mission</h2>
               <p className="text-lg text-muted-foreground max-w-4xl mx-auto">
-                To democratize advanced trading strategies by providing enterprise-grade automation tools at a fraction of traditional costs, 
-                making sophisticated DeFi trading accessible to everyone from individual traders to institutional players.
+                To bring radical transparency to on-chain markets through AI-driven holder analysis, 
+                wallet network tracing, and identity verification — making the hidden connections in 
+                crypto visible, readable, and actionable for everyone.
               </p>
             </div>
           </CardContent>
         </Card>
 
         {/* Core Values */}
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Shield className="h-6 w-6 text-primary" />
-                Security First
+                <Eye className="h-6 w-6 text-primary" />
+                Transparency First
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                Enterprise-grade security with 2FA, phone verification, and military-grade encryption. 
-                Your funds and data are protected by the same standards used by financial institutions.
+                Every token tells a story through its holder data, wallet networks, and social connections. 
+                We decode that story using AI analysis, reputation databases, and recursive wallet tracing — 
+                then present it clearly so you can make informed decisions.
               </p>
             </CardContent>
           </Card>
@@ -88,14 +53,15 @@ export default function AboutUs() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Zap className="h-6 w-6 text-primary" />
-                Transparency
+                <Shield className="h-6 w-6 text-primary" />
+                Scam Protection
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                No hidden fees, no surprise markups. Our smart pricing model automatically chooses the most 
-                cost-effective approach for your trading volume, saving you up to 90% compared to competitors.
+                Our growing bad-actor database cross-references every wallet against known rug-pullers, 
+                blacklisted developers, and recycled identities. We resolve mutable usernames to immutable IDs — 
+                scammers can't hide by changing handles.
               </p>
             </CardContent>
           </Card>
@@ -104,13 +70,14 @@ export default function AboutUs() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-6 w-6 text-primary" />
-                Community Driven
+                Built for the Community
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                Built by traders, for traders. Our community-powered campaigns allow users to pool resources 
-                and share costs while maintaining individual control and transparency.
+                From free holder breakdowns to our public Telegram channel broadcasting the hottest tokens on-chain, 
+                we believe intelligence should be accessible. Our tiered model ensures every trader — from casual to 
+                professional — gets the depth they need.
               </p>
             </CardContent>
           </Card>
@@ -126,115 +93,123 @@ export default function AboutUs() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-muted-foreground">
-              BlackBox Farm was born from frustration with the existing DeFi trading landscape. Traditional trading bots 
-              charged exorbitant fees, lacked transparency, and often failed to deliver on their promises. We saw traders 
-              paying 1-2% in fees while receiving subpar service and limited functionality.
+              BlackBox Farm started with a simple question: <em>why is it so hard to know who's really holding a token?</em> 
+              The Solana ecosystem moves fast — new tokens launch every minute, developers recycle wallets, and scammers 
+              change identities overnight. Existing tools showed surface-level data but missed the deeper patterns.
             </p>
             <p className="text-muted-foreground">
-              Our founders, experienced in both traditional finance and DeFi, decided to build a better solution. 
-              By leveraging cutting-edge batch processing techniques (inspired by successful models like Smithii) 
-              and implementing honest, usage-based pricing, we've created a platform that truly serves traders' interests.
+              We built Holders Intel to solve that. Starting with basic holder distribution analysis, we expanded into 
+              AI-powered risk scoring, recursive KYC root tracing, social identity mapping, and an interactive Bubble Map 
+              that visualizes the entire network around a token — from developer wallets to X community admins to exchange 
+              funding roots.
             </p>
             <p className="text-muted-foreground">
-              Today, BlackBox Farm serves thousands of traders, from DeFi newcomers to seasoned professionals, 
-              helping them execute complex strategies with unprecedented cost efficiency and security.
+              Today, BlackBox Farm delivers intelligence across web, Telegram, and API — helping traders, researchers, and 
+              communities make better decisions with data that goes deeper than anyone else in the space.
             </p>
           </CardContent>
         </Card>
 
-        {/* Technology Advantages */}
+        {/* What We Do */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Target className="h-6 w-6 text-primary" />
-              Technology That Works
+              <Brain className="h-6 w-6 text-primary" />
+              What We Build
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <h3 className="text-xl font-semibold">Smart Pricing Engine</h3>
-                <ul className="space-y-2 text-muted-foreground">
-                  <li>• Dynamic fee calculation based on actual usage</li>
-                  <li>• Batch processing for volume operations</li>
-                  <li>• Micro-transaction optimization for small trades</li>
-                  <li>• Real-time market analysis and adjustment</li>
+                <h3 className="text-lg font-semibold text-foreground">Holders Intel (Web + API)</h3>
+                <ul className="space-y-2 text-muted-foreground text-sm">
+                  <li>• AI-powered holder distribution analysis</li>
+                  <li>• Risk scoring with stability and concentration metrics</li>
+                  <li>• Dev wallet tracing and reputation cross-reference</li>
+                  <li>• KYC root discovery via recursive wallet scanning</li>
+                  <li>• Recycled identity detection across X and Telegram</li>
                 </ul>
               </div>
               <div className="space-y-4">
-                <h3 className="text-xl font-semibold">Advanced Security</h3>
-                <ul className="space-y-2 text-muted-foreground">
-                  <li>• End-to-end encryption for all sensitive data</li>
-                  <li>• Multi-factor authentication and device verification</li>
-                  <li>• Decentralized architecture with no single point of failure</li>
-                  <li>• Regular security audits and penetration testing</li>
+                <h3 className="text-lg font-semibold text-foreground">Telegram Bot + Channel</h3>
+                <ul className="space-y-2 text-muted-foreground text-sm">
+                  <li>• @holdersintel_bot — private query bot for $TICKER lookups</li>
+                  <li>• @HoldersIntel — public feed of trending tokens on-chain</li>
+                  <li>• Tiered access from free /quick to full Pro suite</li>
+                  <li>• Group chat integration with abbreviated intel</li>
+                  <li>• Real-time alerts and alpha drops</li>
+                </ul>
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-foreground">Bubble Map</h3>
+                <ul className="space-y-2 text-muted-foreground text-sm">
+                  <li>• Interactive network graph of token connections</li>
+                  <li>• On-chain, social, and web branches</li>
+                  <li>• Spider scan and deep-trace capabilities</li>
+                  <li>• Bad actor database overlay</li>
+                </ul>
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-foreground">Public Intelligence</h3>
+                <ul className="space-y-2 text-muted-foreground text-sm">
+                  <li>• Automated X posts via @holdersintel</li>
+                  <li>• Dual broadcast to Telegram public channel</li>
+                  <li>• Community-driven scam alerts</li>
+                  <li>• Open analytics for market transparency</li>
                 </ul>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Team Values */}
+        {/* Parent Company */}
         <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
           <CardContent className="p-8">
-            <div className="text-center space-y-6">
-              <h2 className="text-3xl font-bold text-primary">Why Choose BlackBox Farm?</h2>
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="space-y-2">
-                  <Badge variant="secondary" className="text-sm">Cost Effective</Badge>
-                  <p className="text-sm text-muted-foreground">
-                    Save up to 90% on trading fees with our intelligent pricing model
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Badge variant="secondary" className="text-sm">Enterprise Ready</Badge>
-                  <p className="text-sm text-muted-foreground">
-                    Security and reliability standards that institutional clients trust
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Badge variant="secondary" className="text-sm">24/7 Support</Badge>
-                  <p className="text-sm text-muted-foreground">
-                    Round-the-clock monitoring and priority support for all users
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Badge variant="secondary" className="text-sm">Open Source</Badge>
-                  <p className="text-sm text-muted-foreground">
-                    Transparent, auditable code that you can trust and verify
-                  </p>
-                </div>
-              </div>
+            <div className="text-center space-y-4">
+              <h2 className="text-2xl font-bold text-foreground">A Product of System Reset</h2>
+              <p className="text-muted-foreground max-w-3xl mx-auto">
+                BlackBox Farm is developed and operated by{' '}
+                <a 
+                  href="https://systemreset.ca" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  System Reset <ExternalLink className="w-3 h-3" />
+                </a>
+                , our parent company. All billing, subscriptions, and payment processing are handled 
+                through System Reset via Stripe. For billing inquiries or corporate matters, 
+                visit{' '}
+                <a 
+                  href="https://systemreset.ca" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  systemreset.ca
+                </a>.
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Global Impact */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-6 w-6 text-primary" />
-              Global Impact
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-8 text-center">
-              <div>
-                <h3 className="text-3xl font-bold text-primary">$50M+</h3>
-                <p className="text-muted-foreground">Total Volume Processed</p>
-              </div>
-              <div>
-                <h3 className="text-3xl font-bold text-primary">10K+</h3>
-                <p className="text-muted-foreground">Active Traders</p>
-              </div>
-              <div>
-                <h3 className="text-3xl font-bold text-primary">99.9%</h3>
-                <p className="text-muted-foreground">Uptime Guarantee</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* CTA */}
+        <div className="text-center space-y-4 pb-8">
+          <h2 className="text-2xl font-bold text-foreground">Ready to see what's hiding in the data?</h2>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link to="/holders">
+              <span className="inline-flex items-center gap-2 px-6 py-3 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors">
+                <BarChart3 className="w-4 h-4" /> Try Holders Analysis
+              </span>
+            </Link>
+            <Link to="/subscriptions">
+              <span className="inline-flex items-center gap-2 px-6 py-3 rounded-md border border-border text-foreground font-medium hover:bg-accent transition-colors">
+                View Plans
+              </span>
+            </Link>
+          </div>
+        </div>
       </div>
-    </div>
+    </SiteLayout>
   );
 }
