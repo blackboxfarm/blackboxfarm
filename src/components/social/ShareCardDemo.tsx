@@ -566,7 +566,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </CardHeader>
         <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
-           <TabsList className="grid w-full grid-cols-11">
+           <TabsList className="flex flex-wrap gap-1 h-auto p-1">
             <TabsTrigger value="small" className="relative text-xs">
               Small
               {activeIntelTemplate === 'small' && (
