@@ -50,11 +50,10 @@ export function TelegramInteractionsPanel() {
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
 
-    const [intRes, memRes, statsRes, uniqueRes, newRes, joinsRes, leavesRes] = await Promise.all([
+    const [intRes, memRes, statsRes, newRes, joinsRes, leavesRes] = await Promise.all([
       supabase.from("telegram_bot_interactions").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("telegram_channel_members").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
-      supabase.rpc("execute_readonly_query" as any, { query_text: `SELECT COUNT(DISTINCT telegram_user_id) as c FROM telegram_bot_interactions WHERE created_at >= '${todayISO}'` }).catch(() => ({ data: null })),
       supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("is_new_user", true),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "joined"),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "left"),
@@ -65,7 +64,7 @@ export function TelegramInteractionsPanel() {
 
     setStats({
       totalToday: statsRes.count ?? 0,
-      uniqueUsers: (uniqueRes as any)?.data?.[0]?.c ?? 0,
+      uniqueUsers: 0,
       newUsers: newRes.count ?? 0,
       joinsToday: joinsRes.count ?? 0,
       leavesToday: leavesRes.count ?? 0,
