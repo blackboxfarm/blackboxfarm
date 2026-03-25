@@ -750,14 +750,15 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         }
       }
       
+      // Generate ASCII bar for TG messages (shared by both BLACKBOX and PUBLIC broadcasts)
+      const generateAsciiBar = (percentage: number, width: number = 10): string => {
+        const filled = Math.round((percentage / 100) * width);
+        const empty = width - filled;
+        return '█'.repeat(filled) + '░'.repeat(empty);
+      };
+      
       // Also post to BlackBox TG group (fire-and-forget, with retry)
       try {
-        // Generate ASCII bar for TG messages
-        const generateAsciiBar = (percentage: number, width: number = 10): string => {
-          const filled = Math.round((percentage / 100) * width);
-          const empty = width - filled;
-          return '█'.repeat(filled) + '░'.repeat(empty);
-        };
         
         // Calculate tier percentages
         const whalePct = stats.totalHolders > 0 ? Math.round((stats.whaleCount / stats.totalHolders) * 100) : 0;
