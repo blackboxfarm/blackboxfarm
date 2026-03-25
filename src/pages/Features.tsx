@@ -22,6 +22,7 @@ const TIERS = [
     description: "Explore the basics. No account needed.",
     color: "border-muted-foreground/30",
     badge: "bg-muted text-muted-foreground",
+    cta: { label: "Try Free Analysis", action: "navigate", to: "/holders" },
     features: [
       { name: "Basic Holder Breakdown", included: true },
       { name: "Health Grade (letter only)", included: true },
@@ -40,6 +41,7 @@ const TIERS = [
     description: "Create an account to unlock more depth.",
     color: "border-primary/30",
     badge: "bg-primary/10 text-primary",
+    cta: { label: "Sign Up Free", action: "navigate", to: "/subscriptions#plans" },
     features: [
       { name: "Everything in Free", included: true },
       { name: "Health Score + Grade", included: true },
@@ -59,6 +61,7 @@ const TIERS = [
     color: "border-primary/50",
     badge: "bg-primary/20 text-primary",
     highlight: false,
+    cta: { label: "Subscribe on X", action: "external", to: "https://x.com/holdersintel" },
     features: [
       { name: "Everything in Signed In", included: true },
       { name: "AI Analysis Overview", included: true },
@@ -78,7 +81,8 @@ const TIERS = [
     color: "border-primary",
     badge: "bg-primary text-primary-foreground",
     highlight: true,
-     features: [
+    cta: { label: "Upgrade to Pro", action: "navigate", to: "/subscriptions#plans" },
+    features: [
       { name: "Everything in X Subscriber", included: true },
       { name: "Ad-Free Experience", included: true },
       { name: "Full AI Risk Assessment", included: true },
