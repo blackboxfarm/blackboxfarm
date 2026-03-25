@@ -757,14 +757,14 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         return '█'.repeat(filled) + '░'.repeat(empty);
       };
       
+      // Calculate tier percentages (shared by both BLACKBOX and PUBLIC broadcasts)
+      const whalePct = stats.totalHolders > 0 ? Math.round((stats.whaleCount / stats.totalHolders) * 100) : 0;
+      const seriousPct = stats.totalHolders > 0 ? Math.round((stats.seriousCount / stats.totalHolders) * 100) : 0;
+      const retailPct = stats.totalHolders > 0 ? Math.round((stats.activeCount / stats.totalHolders) * 100) : 0;
+      const dustPctVal = stats.totalHolders > 0 ? Math.round((stats.dustCount / stats.totalHolders) * 100) : 0;
+
       // Also post to BlackBox TG group (fire-and-forget, with retry)
       try {
-        
-        // Calculate tier percentages
-        const whalePct = stats.totalHolders > 0 ? Math.round((stats.whaleCount / stats.totalHolders) * 100) : 0;
-        const seriousPct = stats.totalHolders > 0 ? Math.round((stats.seriousCount / stats.totalHolders) * 100) : 0;
-        const retailPct = stats.totalHolders > 0 ? Math.round((stats.activeCount / stats.totalHolders) * 100) : 0;
-        const dustPctVal = stats.totalHolders > 0 ? Math.round((stats.dustCount / stats.totalHolders) * 100) : 0;
         
         // Fetch tg_posted template from database
         let tgTemplate = `📢 *Intel XBot Posted*\n\n🪙 *$\{ticker}*\n├ Holders: {totalWallets}\n├ Real: {realHolders}\n├ Grade: {healthGrade}\n└ Post #{timesPosted}\n\n📈 Distribution\n\`Whales  {whaleBar} {whalePct}%\`\n\`Serious {seriousBar} {seriousPct}%\`\n\`Retail  {retailBar} {retailPct}%\`\n\`Dust    {dustBar} {dustPct}%\`\n\n🐦 {tweetUrl}`;
