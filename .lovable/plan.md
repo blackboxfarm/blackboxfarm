@@ -1,92 +1,50 @@
 
 
-## Current State Assessment
+# Auto-Queue Top 200 "New" Tokens for X Posting
 
-**What exists today:**
-- **`withRunLog` wrapper** — 63 of ~209 functions use it. It records start/end/status/duration to `edge_function_runs` table.
-- **~146 functions have NO run logging at all** — they silently fail with no record.
-- The existing logger only records `success`/`error` + HTTP status code + an optional error message. It does **not** capture rich context like "retrieved 23 records" or "fallback to Helius succeeded".
-- **Monitoring UI** — `MonitoringTab.tsx` has a basic "Function Health (24h)" panel showing runs/errors/avg time, but no per-day calendar view, no function catalog, no data-flow descriptions.
-- **Morning Report** — has `EDGE_FUNCTION_CONTEXT` with purpose descriptions for only ~4 functions.
+## Problem
+The Dex Top 200 feed shows 111 tokens marked "New" — these are trending on DexScreener but have never been posted to X. Currently the Top 200 is **display-only**; there's no pipeline that automatically feeds new discoveries into the `holders_intel_post_queue` for the Intel XBot to post.
 
-**What's missing (your ask):**
-1. Rich success/error context logging with human-readable reasons in every function
-2. A Function Catalog & Daily Operations Dashboard in Utilities
+Only two sources currently feed the posting queue:
+1. **funnel-feed-scanner** (Telegram funnel discoveries)
+2. **holders-intel-dex-scanner** (boost/CTO/ads triggers)
 
----
+The Top 200 is a major discovery signal that's being wasted.
 
 ## Plan
 
-### Step 1: Enhanced Run Logger with Rich Context
+### 1. Add a "Queue New from Top 200" action to the `dex-top-200` edge function
 
-Upgrade `supabase/functions/_shared/run-logger.ts`:
-- Add a `logEvent(level, message, data?)` method to `RunLogger` that appends structured events to a `events` array stored in `metadata.events`
-- Events capture things like: `{ level: 'success', msg: 'Retrieved 23 holders', ts: ... }` or `{ level: 'error', msg: 'Solscan 404 — fallback to Helius', ts: ... }`
-- On completion, the events array is persisted alongside the existing metadata
-- Add convenience methods: `logger.info(msg)`, `logger.warn(msg)`, `logger.error(msg)` that call `logEvent` internally
+After scraping and resolving the top 200, automatically insert any tokens marked "New" (not in `holders_intel_seen_tokens` or `holders_intel_post_queue`) into the posting queue with:
+- `trigger_source: 'dex_top_200'`
+- `trigger_comment` based on rank (e.g., "🔥 DexScreener #3")
+- `scheduled_at: NOW()` so the poster picks them up immediately
+- Priority weighting: top-ranked tokens get queued first
 
-No schema change needed — events go into the existing `metadata` JSONB column.
+This runs every time the scraper fires (every ~5 min via cron), so new entries are caught automatically.
 
-### Step 2: Add `withRunLog` to All Unwrapped Functions
+### 2. Deduplication guard
 
-Batch-wrap the ~146 functions that currently use bare `serve(async (req) => ...)` with `withRunLog('function-name', async (req) => ...)`. This is a mechanical change — add the import and wrap the handler. Functions that are test/utility stubs can be skipped.
+Before inserting, check both:
+- `holders_intel_post_queue` (any status) — don't re-queue posted/skipped/expired tokens
+- `holders_intel_seen_tokens` — don't queue tokens we've already analyzed and dismissed
 
-### Step 3: Add Rich Logging Hooks to Key Functions
+### 3. Add a manual "Queue All New" button to the DexCloudFlareFeed UI
 
-For the most critical ~20-30 functions, add contextual `logger.info()` / `logger.warn()` calls at key decision points. Examples:
-- `pumpfun-token-enricher`: `logger.info('Enriched 12 tokens, 3 skipped')` 
-- `wallet-genealogy-scanner`: `logger.info('Traced 5 hops, found KYC root')` or `logger.warn('Max depth reached without KYC')`
-- `bagless-holders-report`: `logger.info('Generated report for 45 holders')`
+On the admin panel, add a button next to Refresh that bulk-queues all currently displayed "New" tokens. This gives you manual control alongside the automatic flow.
 
-This will be done progressively — the wrapper gives us success/error baseline immediately.
+### 4. Rate limiting
 
-### Step 4: Function Registry Table
+Cap auto-queuing to ~20 tokens per scrape tick to avoid flooding the poster. The highest-ranked "New" tokens get priority.
 
-Create a new DB table `edge_function_registry`:
+## Technical Details
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `function_name` | text PK | Matches `edge_function_runs.function_name` |
-| `description` | text | Brief human description |
-| `data_in` | text | Where it gets data (DB, API, another function) |
-| `data_out` | text | What it does with results (writes DB, posts X, Telegram) |
-| `category` | text | e.g. 'monitoring', 'trading', 'social', 'admin' |
-| `is_active` | boolean | Whether currently deployed/used |
-| `created_at` | timestamptz | |
+**Edge function changes** (`supabase/functions/dex-top-200/index.ts`):
+- After building `finalTokens`, filter for tokens not in seen/queue tables
+- Insert up to 20 into `holders_intel_post_queue` with `trigger_source: 'dex_top_200'`
 
-Seed it with all ~209 functions and their descriptions derived from code inspection.
+**Frontend changes** (`src/components/admin/funnel-feeds/DexCloudFlareFeed.tsx`):
+- Add "Queue New" button that calls `dex-top-200` with `{ action: 'queue_new' }` or directly inserts via Supabase client
 
-### Step 5: New "Function Operations" Utilities Tab
-
-Create `src/components/admin/FunctionOperationsDashboard.tsx` as a new sub-tab in Utilities:
-
-**Layout:**
-- **Date picker** at the top (calendar-style, defaults to today)
-- **Summary bar**: Total runs, total successes, total failures, overall success rate for selected day
-- **Function table** with columns:
-  - Function Name (with category badge)
-  - Description (from registry)
-  - Data In / Data Out (from registry)  
-  - Successes (count, green)
-  - Failures (count, red)
-  - Success Rate (% bar)
-  - Avg Duration
-- **Click a row** to expand and see individual run events for that function on that day, including the rich context messages
-- **Filter/search** by function name or category
-- **Sort** by failures, total runs, or name
-
-**Data source**: Joins `edge_function_runs` (filtered by selected date) with `edge_function_registry` for descriptions.
-
-### Step 6: Wire Into Utilities Tab
-
-Add a new tab trigger `"⚙️ Function Ops"` to `UtilitiesTab.tsx` pointing to the lazy-loaded `FunctionOperationsDashboard`.
-
----
-
-### Technical Details
-
-- **No schema changes to `edge_function_runs`** — rich events go into existing `metadata` JSONB
-- **New table**: `edge_function_registry` — simple reference table, no RLS needed (admin only)
-- **Query optimization**: The daily view will query `edge_function_runs` with a date range filter + `function_name` grouping, using the existing `created_at` index
-- **Progressive rollout**: Step 2 (wrapping all functions) gives immediate visibility. Step 3 (rich logging) can be done incrementally over time for critical functions first.
+**No migration needed** — the `holders_intel_post_queue` table already has all required columns including `trigger_source`.
 
