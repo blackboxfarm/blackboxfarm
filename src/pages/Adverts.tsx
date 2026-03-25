@@ -9,8 +9,7 @@ import {
   DollarSign,
   Megaphone
 } from "lucide-react";
-import { FarmBanner } from "@/components/FarmBanner";
-import { SolPriceDisplay } from "@/components/SolPriceDisplay";
+import { SiteLayout } from "@/components/layout/SiteLayout";
 
 export default function Adverts() {
   const navigate = useNavigate();
@@ -39,27 +38,17 @@ export default function Adverts() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <FarmBanner />
-      
+    <SiteLayout>
       <div className="mx-auto py-8 px-4 max-w-6xl space-y-12">
         
         {/* Hero Section */}
         <div className="text-center space-y-6">
-          <div className="flex items-center justify-center gap-3">
-            <img 
-              src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
-              alt="BlackBox Cube Logo" 
-              className="w-16 h-16"
-            />
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-primary via-accent to-primary/60 bg-clip-text text-transparent">
-              Advertise With Us
-            </h1>
-          </div>
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-primary via-accent to-primary/60 bg-clip-text text-transparent">
+            Advertise With Us
+          </h1>
           <p className="text-2xl text-muted-foreground max-w-3xl mx-auto">
             Get in front of active traders at the exact moment they're making buy decisions
           </p>
-          <SolPriceDisplay size="lg" className="justify-center" />
         </div>
 
         {/* Why Advertise Here */}
@@ -192,6 +181,6 @@ export default function Adverts() {
           </p>
         </div>
       </div>
-    </div>
+    </SiteLayout>
   );
 }
