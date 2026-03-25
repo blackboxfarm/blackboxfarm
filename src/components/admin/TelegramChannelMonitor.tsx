@@ -1437,6 +1437,10 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
             </CardContent>
           </Card>
         </TabsContent>
+        {/* Accounts Tab */}
+        <TabsContent value="accounts" className="space-y-4">
+          <TelegramInteractionsPanel />
+        </TabsContent>
       </Tabs>
     </div>
   );
