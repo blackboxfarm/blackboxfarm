@@ -65,21 +65,29 @@ export function DexCloudFlareFeed() {
       const mints = topPairs.map(p => p.tokenMint);
 
       const [seenRes, queueRes] = await Promise.all([
-        supabase.from('holders_intel_seen_tokens').select('token_mint').in('token_mint', mints),
+        supabase.from('holders_intel_seen_tokens').select('token_mint, was_posted').in('token_mint', mints),
         supabase.from('holders_intel_post_queue').select('token_mint, status').in('token_mint', mints),
       ]);
 
-      const seenSet = new Set((seenRes.data || []).map(r => r.token_mint));
+      const seenMap = new Map<string, boolean>();
+      for (const r of (seenRes.data || [])) {
+        seenMap.set(r.token_mint, r.was_posted ?? false);
+      }
+      // For queue, prioritize 'posted' status over 'pending'/'processing' for same mint
       const queueMap = new Map<string, string>();
       for (const q of (queueRes.data || [])) {
-        queueMap.set(q.token_mint, q.status);
+        const existing = queueMap.get(q.token_mint);
+        if (q.status === 'posted' || !existing) {
+          queueMap.set(q.token_mint, q.status);
+        }
       }
 
       for (const p of topPairs) {
         const queueStatus = queueMap.get(p.tokenMint);
-        if (queueStatus === 'posted') p.dbStatus = 'posted';
+        const wasPosted = seenMap.get(p.tokenMint);
+        if (queueStatus === 'posted' || wasPosted === true) p.dbStatus = 'posted';
         else if (queueStatus) p.dbStatus = 'queued';
-        else if (seenSet.has(p.tokenMint)) p.dbStatus = 'seen';
+        else if (seenMap.has(p.tokenMint)) p.dbStatus = 'seen';
         else p.dbStatus = 'not_seen';
       }
 
