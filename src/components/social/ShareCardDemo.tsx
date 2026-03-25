@@ -80,6 +80,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     shares: false,
     tg_posted: false,
     tg_search: false,
+    tg_public_post: false,
     subscription: false,
     bot_holders: false,
     bot_holders_lite: false,
