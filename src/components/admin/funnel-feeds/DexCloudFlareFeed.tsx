@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface TrendingPair {
@@ -30,6 +30,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 export function DexCloudFlareFeed() {
   const [pairs, setPairs] = useState<TrendingPair[]>([]);
   const [loading, setLoading] = useState(true);
+  const [queueing, setQueueing] = useState(false);
   const [health, setHealth] = useState<any>(null);
   const { toast } = useToast();
 
@@ -99,6 +100,36 @@ export function DexCloudFlareFeed() {
   const queuedCount = pairs.filter(p => p.dbStatus === 'queued').length;
   const postedCount = pairs.filter(p => p.dbStatus === 'posted').length;
 
+  const queueAllNew = async () => {
+    const newPairs = pairs.filter(p => p.dbStatus === 'not_seen' && p.tokenMint);
+    if (newPairs.length === 0) {
+      toast({ title: "No new tokens to queue" });
+      return;
+    }
+    setQueueing(true);
+    try {
+      const rows = newPairs.map(p => ({
+        token_mint: p.tokenMint,
+        symbol: p.symbol || null,
+        name: p.name || null,
+        market_cap: p.fdv || null,
+        trigger_source: 'dex_top_200',
+        trigger_comment: `🔥 DexScreener Trending #${p.rank}`,
+        scheduled_at: new Date().toISOString(),
+        status: 'pending',
+      }));
+
+      const { error } = await supabase.from('holders_intel_post_queue').insert(rows);
+      if (error) throw new Error(error.message);
+
+      toast({ title: `Queued ${newPairs.length} tokens for posting` });
+      await fetchTrending(); // Refresh to update statuses
+    } catch (err: any) {
+      toast({ title: "Queue error", description: err.message, variant: "destructive" });
+    }
+    setQueueing(false);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -116,9 +147,18 @@ export function DexCloudFlareFeed() {
             <Badge variant="outline" className="bg-green-500/20 text-green-400">{postedCount} Posted</Badge>
           </div>
         </div>
-        <Button onClick={fetchTrending} size="sm" variant="outline" disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
-        </Button>
+        <div className="flex gap-2">
+          {newCount > 0 && (
+            <Button onClick={queueAllNew} size="sm" variant="outline" disabled={queueing || loading}
+              className="text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10">
+              <Send className={`h-4 w-4 mr-1 ${queueing ? 'animate-pulse' : ''}`} />
+              Queue {newCount} New
+            </Button>
+          )}
+          <Button onClick={fetchTrending} size="sm" variant="outline" disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {loading ? (
