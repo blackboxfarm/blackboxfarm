@@ -1,65 +1,88 @@
 
 
-# Telegram Public Channel Broadcasting for HoldersIntel
+# Telegram Bot & Channel Interaction Tracking
 
-## Answers
+## Current State
 
-### 1. Deploy Status
-The `check-2fa-requirement` fix from earlier is in place — it uses `Deno.serve` with the helper function above the serve block. The `dex-top-200` auto-queue changes are also deployed. Both should be live.
+**What exists:**
+- `telegram_bot_usage` — logs command + telegram_user_id + token_mint (rate limiting only, no user details like username/first_name)
+- `channel_installations` — tracks when bot is added/removed from groups (via `my_chat_member`)
+- `telegram_link_codes` — maps telegram_user_id to website user_id
+- Webhook `allowed_updates` = `["message", "my_chat_member"]` — does NOT include `chat_member` (channel join/leave events)
 
-### 2. Current TG Broadcast Architecture
-The TG broadcasting is **partially configurable but hardwired to BLACKBOX only**:
-- The `holders-intel-poster` posts to X, then sends a TG notification via `admin-notify` → which broadcasts to all `telegram_message_targets` rows with `label = "BLACKBOX"`
-- The TG message template (`tg_posted`) IS managed in the `holders_intel_templates` table — so that part is editable from the DB/admin UI
-- But the **target channel** is hardcoded to `BLACKBOX` label, and the template is specific to the private admin group format — not a public-facing promotional format
+**What's missing:**
+1. No rich interaction log (username, first/last name, chat context, response status)
+2. No channel member join/leave tracking at all
+3. No admin UI to view bot conversations or channel membership activity
+4. Bot usage table lacks user metadata (username, first_name)
 
----
+## Architecture Decision: Channel Joins/Leaves
 
-## Plan: Public Channel Broadcast with Manageable Templates
+**Channel member join/leave events require the bot** — not MTProto. Here's why:
+- Telegram's `chat_member` update type fires when ANY user joins/leaves a group where the bot is admin
+- MTProto could poll `getParticipants` but that's expensive, rate-limited, and not real-time
+- The bot is already installed in these channels — we just need to add `"chat_member"` to `allowed_updates` in the webhook registration
 
-### What we're building
-Every time the Intel XBot posts to X, it will also send a **separate, public-facing message** to your new Telegram channel (`-1003659015482`) using a dedicated template you can edit from the admin UI. This template will be designed for conversion — teasing the data and driving users to subscribe.
+## Plan
 
-### Step 1: Add the new channel as a broadcast target (DB migration)
-- Insert a new row into `telegram_message_targets` with:
-  - `chat_id`: `-1003659015482`
-  - `label`: `INTEL_PUBLIC`
-  - `resolved_name`: `HoldersIntel Public`
+### Step 1: New database tables
 
-### Step 2: Add a new template `tg_public_post` (DB migration)
-- Expand the `holders_intel_templates` check constraint to allow `tg_public_post`
-- Insert a default conversion-focused template, e.g.:
-```
-🔎 ${ticker} Holder Analysis
+**`telegram_bot_interactions`** — rich log of every bot conversation:
+- `id`, `telegram_user_id`, `telegram_username`, `first_name`, `last_name`
+- `chat_id`, `chat_type` (private/group/supergroup)
+- `command`, `args_preview` (first 100 chars), `token_mint`
+- `linked_user_id` (nullable FK to auth.users — filled if account is linked)
+- `response_status` (success/error/rate_limited/unauthorized)
+- `is_new_user` (boolean — first time seeing this telegram_user_id)
+- `created_at`
+- RLS: service_role only insert, super_admin select
 
-📊 {totalWallets} Wallets → ✅ {realHolders} Real
-Health: {healthGrade} | {dustPct}% Dust
+**`telegram_channel_members`** — join/leave activity log:
+- `id`, `chat_id`, `chat_title`
+- `telegram_user_id`, `telegram_username`, `first_name`, `last_name`
+- `event_type` (joined/left/kicked/banned/restricted)
+- `invited_by_user_id` (nullable — who added them)
+- `old_status`, `new_status`
+- `created_at`
+- RLS: service_role only
 
-🐋 {whales} Whales | 😎 {serious} Serious
+### Step 2: Update webhook to capture `chat_member` events
 
-🐦 {tweetUrl}
+Modify `holdersintel-bot-webhook/index.ts`:
+- Add `"chat_member"` to `allowed_updates` in webhook setup (alongside existing `message` and `my_chat_member`)
+- Add `handleChatMember(update)` handler for `update.chat_member` events — logs join/leave/kick to `telegram_channel_members`
+- Enhance the existing message handler to insert into `telegram_bot_interactions` with full user metadata on every command
+- Detect `is_new_user` by checking if telegram_user_id has any prior rows
 
-💎 Want full reports, AI summaries & whale alerts?
-👉 Subscribe for $9.99/mo: blackbox.farm/pricing
-```
+### Step 3: Update `telegram-bot-health` repair_webhook
 
-### Step 3: Update `holders-intel-poster` to dual-broadcast
-After posting to X, the poster currently sends to `admin-notify` (BLACKBOX only). We'll add a second broadcast specifically for `INTEL_PUBLIC`:
-- Fetch the `tg_public_post` template from `holders_intel_templates`
-- Process it with the same variable substitution system
-- Send directly via `telegram-mtproto-auth` to the `INTEL_PUBLIC` target
-- Independent of the BLACKBOX broadcast (different template, different channel)
-- Respects the existing suspension toggle
+Add `"chat_member"` to the `allowed_updates` array in the repair webhook action so it stays in sync.
 
-### Step 4: Admin UI for the public channel template
-- Add a new template editor entry in the existing templates management UI for `tg_public_post`
-- Label it "TG Public Channel Post" so you can edit the conversion copy anytime without code changes
+### Step 4: Admin UI — "Telegram Accounts" tab content
 
-### Technical Details
+Create `src/components/admin/telegram/TelegramInteractionsPanel.tsx` with two sub-tabs:
 
-**Files changed:**
-- `supabase/functions/holders-intel-poster/index.ts` — add public channel broadcast after X post (lines ~806-837 area, parallel to existing BLACKBOX send)
-- 2 SQL migrations: (1) insert target row, (2) expand template constraint + insert default template
+**Bot Interactions sub-tab:**
+- Table: timestamp, username, command, token, chat_type, response_status, linked account (yes/no)
+- Filters: command type, linked/unlinked, date range
+- Stats cards: total interactions today, unique users, new users, top commands
+- Highlight new registrations (`/register` commands)
 
-**No new edge functions needed** — reuses existing `telegram-mtproto-auth` for sending and `holders_intel_templates` for template management.
+**Channel Members sub-tab:**
+- Table: timestamp, channel name, username, event (joined/left), invited_by
+- Filters: channel, event_type, date range
+- Stats: net joins today, most active channels, churn rate
+
+Wire this into the existing Telegram tab in `SuperAdmin.tsx` or as a new sub-section within `TelegramChannelMonitor`.
+
+### Step 5: Re-register webhook
+
+After deploying, the webhook needs to be re-registered with the new `allowed_updates`. The existing "Repair Webhook" button on the Bot Health panel will handle this automatically (once Step 3 is deployed).
+
+## Technical Notes
+
+- The `chat_member` update type requires the bot to be an **admin** in the group/channel — it already is for installed channels
+- `chat_member` fires for every user join/leave; `my_chat_member` only fires when the bot itself is added/removed
+- We keep the existing `telegram_bot_usage` table untouched (it's used for rate limiting) — the new `telegram_bot_interactions` table is a richer parallel log
+- Channel join/leave volume could be high — we'll add an index on `(chat_id, created_at)` and auto-purge rows older than 90 days via a scheduled cleanup
 
