@@ -110,7 +110,8 @@ export default function TelegramBot() {
                 <MessageCircle className="w-5 h-5 text-blue-400" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">📢 Join the Holders Intel Channel</p>
+                <p className="text-sm font-medium text-foreground">📢 Join the Holders Intel Channel Also!!</p>
+                <p className="text-xs font-bold text-green-400">FREE! Hop in!</p>
                 <p className="text-xs text-muted-foreground">Live alerts, alpha drops, and token intel — straight to your Telegram.</p>
               </div>
               <Button size="sm" variant="outline" className="shrink-0 border-blue-400/30 text-blue-400 hover:bg-blue-500/10 gap-1" asChild>
@@ -118,6 +119,14 @@ export default function TelegramBot() {
                   Join <ExternalLink className="w-3 h-3" />
                 </a>
               </Button>
+            </div>
+
+            <div className="mt-4 max-w-xl mx-auto rounded-lg border border-muted/30 bg-muted/10 p-4 text-center space-y-1">
+              <p className="text-sm font-bold text-foreground">The Bot is NOT the Channel and the Channel is NOT the Bot!!</p>
+              <div className="flex flex-col sm:flex-row justify-center gap-3 text-xs text-muted-foreground">
+                <p><span className="font-semibold text-blue-400">Channel</span> = Public Feed of the Hottest Tokens on-chain</p>
+                <p><span className="font-semibold text-primary">Intel Bot</span> = Your Private Query Bot for $TICKER Lookups</p>
+              </div>
             </div>
           </div>
         </div>
