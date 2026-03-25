@@ -10,6 +10,7 @@ const BotDmFeed = lazy(() => import("../funnel-feeds/BotDmFeed").then(m => ({ de
 const HoldersInputFeed = lazy(() => import("../funnel-feeds/HoldersInputFeed").then(m => ({ default: m.HoldersInputFeed })));
 const FunnelOverview = lazy(() => import("../funnel-feeds/FunnelOverview").then(m => ({ default: m.FunnelOverview })));
 const PostingQueueViewer = lazy(() => import("../funnel-feeds/PostingQueueViewer").then(m => ({ default: m.PostingQueueViewer })));
+const IntelTemplateModeToggle = lazy(() => import("../funnel-feeds/IntelTemplateModeToggle").then(m => ({ default: m.IntelTemplateModeToggle })));
 
 export default function FunnelFeedsTab() {
   const [subTab, setSubTab] = useState("telegram");
@@ -80,7 +81,10 @@ export default function FunnelFeedsTab() {
         <TabsContent value="queue">
           {subTab === "queue" && (
             <Suspense fallback={<LazyLoader />}>
-              <PostingQueueViewer />
+              <div className="space-y-4">
+                <IntelTemplateModeToggle />
+                <PostingQueueViewer />
+              </div>
             </Suspense>
           )}
         </TabsContent>
