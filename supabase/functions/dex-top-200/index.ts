@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { createApiLogger } from '../_shared/api-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { scrapeDexTopPages } from "../_shared/dex-top-pages.ts";
 
@@ -26,12 +27,21 @@ async function batchResolvePairs(pairIds: string[]): Promise<Map<string, Resolve
   for (let i = 0; i < pairIds.length; i += batchSize) {
     const batch = pairIds.slice(i, i + batchSize);
     try {
+      const apiLogger = createApiLogger({
+        serviceName: 'dexscreener',
+        endpoint: `/latest/dex/pairs/solana/${batch.length}-pairs`,
+        method: 'GET',
+        functionName: 'dex-top-200',
+        requestType: 'market_data',
+        credits: 0,
+      });
       const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${batch.join(',')}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Accept': 'application/json',
         }
       });
+      await apiLogger.complete(res.status);
       if (res.ok) {
         const data = await res.json();
         const pairs = data.pairs || (data.pair ? [data.pair] : []);
@@ -236,7 +246,7 @@ async function autoQueueNewTokens(supabase: any, finalTokens: any[]): Promise<nu
   }
 }
 
-Deno.serve(withRunLog('dex-top-200', async (req) => {
+Deno.serve(withRunLog('dex-top-200', async (req, logger) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -247,11 +257,15 @@ Deno.serve(withRunLog('dex-top-200', async (req) => {
 
   try {
     const startTime = Date.now();
+    logger?.info('Starting DexScreener top-200 scrape');
     const { pairs: rankedPairs, health } = await scrapeDexTopPages();
+
+    logger?.info('Scrape complete', { total_parsed: health.total_parsed, page1_ok: health.page1_ok, page2_ok: health.page2_ok });
 
     // If total failure, log and return error
     if (rankedPairs.length === 0) {
       const elapsed = Date.now() - startTime;
+      logger?.error('Zero tokens parsed — possible block or page change');
       await logScrapeHealth(supabase, health, elapsed, 0, 0, 'Zero tokens parsed from both pages');
       return new Response(JSON.stringify({
         success: false,
@@ -285,11 +299,20 @@ Deno.serve(withRunLog('dex-top-200', async (req) => {
     const elapsed = Date.now() - startTime;
     const resolvedCount = finalTokens.filter((token) => !!token.tokenMint).length;
 
+    logger?.info('Pair resolution complete', { resolved: resolvedCount, total: finalTokens.length });
+
     // Log health (async, don't block response)
     logScrapeHealth(supabase, health, elapsed, resolvedCount, finalTokens.length).catch(() => {});
 
     // Auto-queue new tokens into the posting pipeline
     const queuedCount = await autoQueueNewTokens(supabase, finalTokens);
+    logger?.info('Auto-queue complete', { queued: queuedCount });
+
+    // Add summary metadata for the run logger
+    logger?.addMeta('tokens_parsed', finalTokens.length);
+    logger?.addMeta('tokens_resolved', resolvedCount);
+    logger?.addMeta('tokens_auto_queued', queuedCount);
+    logger?.addMeta('elapsed_ms', elapsed);
 
     console.log(`[DexTop200] ✅ Done in ${elapsed}ms: ${finalTokens.length} ranked, ${resolvedCount} resolved, ${queuedCount} queued`);
 
