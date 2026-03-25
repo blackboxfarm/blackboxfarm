@@ -184,7 +184,7 @@ export function ChannelInstallations() {
               <Hash className="h-5 w-5 text-primary" />
               Channel Installations ({installations.length})
             </CardTitle>
-            <CardDescription>Manage your bot installations. 0.25 SOL one-time per channel.</CardDescription>
+            <CardDescription>Manage your bot installations. Free to install — just register your channel.</CardDescription>
           </div>
           <Button variant="ghost" size="sm" onClick={fetchData}>
             <RefreshCw className="h-4 w-4" />

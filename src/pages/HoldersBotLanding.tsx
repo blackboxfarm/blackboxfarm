@@ -26,8 +26,8 @@ export default function HoldersBotLanding() {
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         {/* Status Banner */}
         <div className="text-center mb-8">
-          <Badge variant="outline" className="text-blue-500 border-blue-500/50 bg-blue-500/10 text-lg px-4 py-2">
-            🔧 In Development
+          <Badge variant="outline" className="text-green-500 border-green-500/50 bg-green-500/10 text-lg px-4 py-2">
+            ✅ Live Now
           </Badge>
         </div>
 
@@ -110,14 +110,31 @@ export default function HoldersBotLanding() {
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold flex items-center gap-2">
-                    <Coins className="h-4 w-4 text-primary" />
-                    One-Time Installation Fee
+                    <Coins className="h-4 w-4 text-green-400" />
+                    Free Channel Installation
                   </h4>
-                  <p className="text-sm text-muted-foreground">Lifetime access for your group/channel</p>
+                  <p className="text-sm text-muted-foreground">Register your channel — no payment required</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-primary">0.20 SOL</div>
-                  <p className="text-xs text-muted-foreground">No monthly fees</p>
+                  <div className="text-2xl font-bold text-green-400">FREE</div>
+                  <p className="text-xs text-muted-foreground">Just register & add bot</p>
+                </div>
+              </div>
+            </div>
+            {/* Upgrade Tier */}
+            <div className="bg-amber-500/5 rounded-lg p-4 border border-amber-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-400" />
+                    Upgrade Tier
+                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400">Coming Soon</Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground">Fast Base Dev Token MINT Alerts and more</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-amber-400">TBA</div>
+                  <p className="text-xs text-muted-foreground">Advanced features</p>
                 </div>
               </div>
             </div>
@@ -151,21 +168,45 @@ export default function HoldersBotLanding() {
           </Card>
         </div>
 
+        {/* Telegram Channel Promo */}
+        <Card className="mb-8 border-blue-500/20 bg-blue-500/5">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="shrink-0 w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+              <MessageCircle className="w-6 h-6 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-foreground">📢 Holders Intel Channel</p>
+              <p className="text-sm text-muted-foreground">Live alerts, alpha drops, and token intel — straight to your Telegram.</p>
+            </div>
+            <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm" className="border-blue-400/30 text-blue-400 gap-1">
+                Join <ArrowRight className="w-3 h-3" />
+              </Button>
+            </a>
+          </CardContent>
+        </Card>
+
         {/* CTA */}
         <Card className="bg-muted/30 border-primary/20">
           <CardContent className="p-8 text-center">
-            <h2 className="text-2xl font-bold mb-4">Interested in the Holders Bot?</h2>
+            <h2 className="text-2xl font-bold mb-4">Start Using the Holders Bot</h2>
             <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
-              The Holders Bot is currently in development. Contact us to express interest, 
-              provide feedback, or join the early access waitlist.
+              The Holders Bot is live. Open it in Telegram and paste any contract address to get instant alpha.
             </p>
-            <Link to="/contact">
-              <Button size="lg" className="gap-2">
-                <Mail className="h-4 w-4" />
-                Join the Waitlist
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <a href="https://t.me/holdersintel_bot" target="_blank" rel="noopener noreferrer">
+                <Button size="lg" className="gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  Open @holdersintel_bot
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </a>
+              <Link to="/tgbot">
+                <Button size="lg" variant="outline" className="gap-2">
+                  Learn More <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>

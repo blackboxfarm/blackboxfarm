@@ -49,9 +49,9 @@ export default function TelegramBot() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.08),transparent_60%)]" />
         <div className="relative mx-auto max-w-5xl px-4 py-16 md:py-24">
           <div className="text-center space-y-5">
-            <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-1.5">
-              <MessageCircle className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-medium text-blue-400">Coming Soon</span>
+            <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-4 py-1.5">
+              <MessageCircle className="w-4 h-4 text-green-400" />
+              <span className="text-sm font-medium text-green-400">Live Now</span>
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight">
               <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent">
@@ -65,9 +65,12 @@ export default function TelegramBot() {
               <span className="text-foreground font-medium">Paste a contract address. Get instant alpha.</span>
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Button size="lg" className="gap-2" disabled>
-                <MessageCircle className="w-4 h-4" />
-                Launch Bot (Coming Soon)
+              <Button size="lg" className="gap-2" asChild>
+                <a href="https://t.me/holdersintel_bot" target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="w-4 h-4" />
+                  Launch Bot
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </Button>
               <Button size="lg" variant="outline" asChild>
                 <Link to="/subscriptions">
@@ -99,6 +102,22 @@ export default function TelegramBot() {
                   </a>
                 </Button>
               </div>
+            </div>
+
+            {/* Telegram Channel Promo */}
+            <div className="mt-6 max-w-xl mx-auto rounded-lg border border-blue-500/20 bg-blue-500/5 backdrop-blur-sm p-4 flex items-center gap-4">
+              <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <MessageCircle className="w-5 h-5 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">📢 Join the Holders Intel Channel</p>
+                <p className="text-xs text-muted-foreground">Live alerts, alpha drops, and token intel — straight to your Telegram.</p>
+              </div>
+              <Button size="sm" variant="outline" className="shrink-0 border-blue-400/30 text-blue-400 hover:bg-blue-500/10 gap-1" asChild>
+                <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer">
+                  Join <ExternalLink className="w-3 h-3" />
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -196,20 +215,26 @@ export default function TelegramBot() {
       <section className="mx-auto max-w-3xl px-4 pb-16 text-center space-y-4">
         <h2 className="text-xl font-bold">Ready to get alpha on the go?</h2>
         <p className="text-sm text-muted-foreground">
-          The Telegram Bot is launching soon. Get the best experience by subscribing now — your tier carries over automatically.
+          The Telegram Bot is live. Start getting instant holder analysis in your DMs now.
         </p>
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-3 flex-wrap">
           <Button asChild>
-            <Link to="/subscriptions">
-              View Subscription Plans <ArrowRight className="w-4 h-4 ml-1" />
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href="https://x.com/holdersintel" target="_blank" rel="noopener noreferrer">
-              <SocialIcon platform="twitter" className="w-4 h-4 mr-1" />
-              Follow @holdersintel
+            <a href="https://t.me/holdersintel_bot" target="_blank" rel="noopener noreferrer">
+              <MessageCircle className="w-4 h-4 mr-1" />
+              Open @holdersintel_bot
               <ExternalLink className="w-3 h-3 ml-1" />
             </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer">
+              📢 Join Channel
+              <ExternalLink className="w-3 h-3 ml-1" />
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link to="/subscriptions">
+              View Plans <ChevronRight className="w-4 h-4" />
+            </Link>
           </Button>
         </div>
       </section>
@@ -276,14 +301,31 @@ export default function TelegramBot() {
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold flex items-center gap-2">
-                    <Coins className="h-4 w-4 text-primary" />
-                    One-Time Installation Fee
+                    <Coins className="h-4 w-4 text-green-400" />
+                    Free Channel Installation
                   </h4>
-                  <p className="text-sm text-muted-foreground">Lifetime access for your group/channel</p>
+                  <p className="text-sm text-muted-foreground">Register your channel — no payment required</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-primary">0.25 SOL</div>
-                  <p className="text-xs text-muted-foreground">No monthly fees</p>
+                  <div className="text-2xl font-bold text-green-400">FREE</div>
+                  <p className="text-xs text-muted-foreground">Just register & add bot</p>
+                </div>
+              </div>
+            </div>
+            {/* Upgrade Tier */}
+            <div className="bg-amber-500/5 rounded-lg p-4 border border-amber-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-400" />
+                    Upgrade Tier
+                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400">Coming Soon</Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground">Fast Base Dev Token MINT Alerts and more</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-amber-400">TBA</div>
+                  <p className="text-xs text-muted-foreground">Advanced features</p>
                 </div>
               </div>
             </div>
@@ -325,7 +367,7 @@ export default function TelegramBot() {
               { cmd: '/add', desc: 'Add bot to a channel/group', detail: 'Guides subscriber through adding bot to a channel. Bot generates invite link or instructs user to add @holdersintel_bot as admin. Once added, bot detects the group and registers it in channel_installations.', note: 'DM only. Any registered user can install bot in channels.' },
               { cmd: '/channels', aliases: '/ch', desc: 'List & manage installed channels', detail: 'Shows numbered list of all channels this user has the bot installed in, with status (✅ paid / ⏳ unpaid / 🚫 kicked). User taps a number to enter config mode for that channel.', note: 'DM only. Entry point for all per-channel config.' },
               { cmd: '/config', desc: 'Configure selected channel settings', detail: 'After selecting a channel via /channels, shows interactive config menu with inline keyboard buttons: Delay (ms), Verbose On/Off, Admin-Only On/Off, Dev Alerts On/Off, Toggle Commands, Set Max Tier, Auto-CA On/Off. Each button updates admin_config and confirms.', note: 'DM only. Uses Telegram inline keyboard for interactive config.' },
-              { cmd: '/payment', aliases: '/pay', desc: 'View/generate SOL payment wallet', detail: 'Shows SOL wallet address for selected channel. If none exists, generates one. Displays: wallet address (copyable), required amount (0.25 SOL), current balance, payment status.', note: 'DM only. Wallet generated per channel_installations row.' },
+              { cmd: '/payment', aliases: '/pay', desc: 'Manage upgrade tier payment', detail: 'For future paid upgrade features (e.g. Fast Dev Token MINT Alerts). Free channels do not require payment.', note: 'DM only. Currently TBA — upgrade tier not yet implemented.' },
             ].map(item => (
               <div key={item.cmd} className="bg-muted/30 rounded-lg p-4 border border-border/50">
                 <div className="flex items-center gap-2 mb-2">
@@ -413,22 +455,20 @@ export default function TelegramBot() {
               Channel Installation & Config Model
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              One-time 0.25 SOL activation per channel. All management via DM — no admin commands in groups.
+              Free installation — just register your channel. All management via DM — no admin commands in groups.
             </p>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-muted/30 rounded-lg p-4 space-y-2 border border-border/50">
-                <h4 className="text-sm font-semibold text-foreground">💳 Activation Flow</h4>
+                <h4 className="text-sm font-semibold text-foreground">🚀 Activation Flow</h4>
                 <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
                   <li>User creates website account & registers with bot via DM</li>
                   <li>User runs <code className="text-foreground font-mono">/add</code> in DM</li>
                   <li>Adds bot as admin to their channel/group</li>
                   <li>Bot auto-detects and registers the installation</li>
-                  <li>User runs <code className="text-foreground font-mono">/channels</code> → selects channel</li>
-                  <li>Taps <code className="text-foreground font-mono">[💳 Payment]</code> → gets SOL wallet</li>
-                  <li>Sends 0.25 SOL → taps "Verify Payment"</li>
-                  <li>Bot activates in that channel ✅</li>
+                  <li>Channel is active — no payment required ✅</li>
+                  <li>Use <code className="text-foreground font-mono">/config</code> to customize settings</li>
                 </ol>
               </div>
               <div className="bg-muted/30 rounded-lg p-4 space-y-2 border border-border/50">
