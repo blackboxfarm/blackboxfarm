@@ -9,6 +9,14 @@ const corsHeaders = {
 // Uniform response to prevent user enumeration
 const UNIFORM_NO_2FA = { requires2FA: false, has2FA: false, isTrustedDevice: false };
 
+function generateDeviceFingerprint(req: Request): string {
+  const userAgent = req.headers.get('user-agent') || '';
+  const acceptLanguage = req.headers.get('accept-language') || '';
+  const acceptEncoding = req.headers.get('accept-encoding') || '';
+  const fingerprint = btoa(userAgent + acceptLanguage + acceptEncoding);
+  return fingerprint.substring(0, 64);
+}
+
 Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -18,7 +26,6 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
     const { email } = await req.json();
 
     if (!email) {
-      // Return uniform response instead of error
       return new Response(
         JSON.stringify(UNIFORM_NO_2FA),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -30,7 +37,6 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get user by email — return uniform response if not found (no enumeration)
     const { data: users, error: userError } = await supabase.auth.admin.listUsers();
     if (userError) {
       console.error('Error listing users:', userError);
@@ -40,16 +46,14 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
       );
     }
 
-    const user = users.users.find(u => u.email === email);
+    const user = users.users.find((u: any) => u.email === email);
     if (!user) {
-      // User not found — return same shape as "no 2FA" to prevent enumeration
       return new Response(
         JSON.stringify(UNIFORM_NO_2FA),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
     }
 
-    // Check if user has 2FA enabled
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('two_factor_enabled')
@@ -57,7 +61,6 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
       .single();
 
     if (profileError) {
-      // Profile error — return uniform response
       return new Response(
         JSON.stringify(UNIFORM_NO_2FA),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -66,11 +69,10 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
 
     const has2FA = profile?.two_factor_enabled || false;
 
-    // Check if this device is trusted (if 2FA is enabled)
     let isTrustedDevice = false;
     if (has2FA) {
       const deviceFingerprint = generateDeviceFingerprint(req);
-      
+
       const { data: trustedDevice, error: deviceError } = await supabase
         .from('trusted_devices')
         .select('id')
@@ -81,8 +83,6 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
 
       if (!deviceError && trustedDevice) {
         isTrustedDevice = true;
-        
-        // Update last used timestamp
         await supabase
           .from('trusted_devices')
           .update({ last_used: new Date().toISOString() })
@@ -91,10 +91,10 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         requires2FA: has2FA && !isTrustedDevice,
         has2FA,
-        isTrustedDevice
+        isTrustedDevice,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -103,7 +103,6 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
     );
   } catch (error) {
     console.error('Error in check-2fa-requirement:', error);
-    // Return uniform response on any error — never leak user existence
     return new Response(
       JSON.stringify(UNIFORM_NO_2FA),
       {
@@ -112,13 +111,4 @@ Deno.serve(withRunLog('check-2fa-requirement', async (req) => {
       }
     );
   }
-});
-
-function generateDeviceFingerprint(req: Request): string {
-  const userAgent = req.headers.get('user-agent') || '';
-  const acceptLanguage = req.headers.get('accept-language') || '';
-  const acceptEncoding = req.headers.get('accept-encoding') || '';
-  
-  const fingerprint = btoa(userAgent + acceptLanguage + acceptEncoding);
-  return fingerprint.substring(0, 64);
-}
+}));
