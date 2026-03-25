@@ -13,7 +13,16 @@ serve(withRunLog('holder-retention-analysis', async (req) => {
   }
 
   try {
-    const { token_mint, timeframe = '30d' } = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or missing JSON body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const { token_mint, timeframe = '30d' } = body;
 
     if (!token_mint) {
       return new Response(
