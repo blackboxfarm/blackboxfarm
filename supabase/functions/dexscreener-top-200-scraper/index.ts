@@ -585,7 +585,7 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
     
     console.log(`[DexCompiler] 🏘️ Discovered ${communitiesDiscovered} X Communities`);
     
-    console.log(`[DexCompiler] 🕸️ Added ${meshLinksAdded} mesh links`);
+    console.log(`[DexCompiler] 🕸️ Added ${meshLinksAdded} mesh links (${communitiesDiscovered} communities)`);
 
     // Trigger token-creator-linker for new tokens
     if (newTokens.length > 0) {
