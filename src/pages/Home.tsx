@@ -354,7 +354,7 @@ export default function Home() {
             {UNIQUE_SIGNALS.map((signal) => (
               <Card key={signal.title} className="bg-background border-border hover:border-primary/20 transition-colors">
                 <CardContent className="p-5 space-y-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary animate-[pulse_3s_ease-in-out_infinite]">
                     {signal.icon}
                   </div>
                   <h3 className="font-semibold text-foreground">{signal.title}</h3>
