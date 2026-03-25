@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'tg_advert_1'    | 'tg_advert_2' | 'tg_advert_3';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'x_advert_3' | 'x_advert_4' | 'tg_advert_1' | 'tg_advert_2' | 'tg_advert_3';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -240,6 +240,29 @@ The #1 holder analysis tool on Solana
 Start analyzing 👉 blackbox.farm
 
 #Solana #DeFi`,
+
+  x_advert_3: `🔎 Tired of guessing who holds a token?
+
+BlackBox Farm shows you:
+✅ Real vs dust holders
+🐋 Whale concentration
+📊 Health grades
+
+Free analysis 👉 blackbox.farm/holders
+
+#Solana #CryptoAnalysis`,
+
+  x_advert_4: `📊 Token Due Diligence Made Easy
+
+Before you ape, check the holders.
+
+🔍 Real holder count
+🧠 AI risk assessment
+🔮 Developer reputation
+
+Analyze any token 👉 blackbox.farm
+
+#Solana #DYOR`,
 
   tg_advert_1: `📢 *Sponsored*
 

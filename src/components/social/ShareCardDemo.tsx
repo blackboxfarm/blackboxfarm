@@ -16,6 +16,7 @@ import PromoTweetManager from '@/components/admin/PromoTweetManager';
 import { OGImageManager } from '@/components/admin/OGImageManager';
 import { IntelTemplateModeToggle } from '@/components/admin/funnel-feeds/IntelTemplateModeToggle';
 import { AdvertTemplateConfig } from '@/components/admin/funnel-feeds/AdvertTemplateConfig';
+import { AdvertTemplateToggle } from '@/components/admin/funnel-feeds/AdvertTemplateToggle';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -93,6 +94,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     bot_wallet: false,
     x_advert_1: false,
     x_advert_2: false,
+    x_advert_3: false,
+    x_advert_4: false,
     tg_advert_1: false,
     tg_advert_2: false,
     tg_advert_3: false,
@@ -590,12 +593,14 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsTrigger value="tg_search" className="text-xs">TG Report</TabsTrigger>
             <TabsTrigger value="x_advert_1" className="text-xs">📣 X Ad1</TabsTrigger>
             <TabsTrigger value="x_advert_2" className="text-xs">📣 X Ad2</TabsTrigger>
+            <TabsTrigger value="x_advert_3" className="text-xs">📣 X Ad3</TabsTrigger>
+            <TabsTrigger value="x_advert_4" className="text-xs">📣 X Ad4</TabsTrigger>
             <TabsTrigger value="tg_advert_1" className="text-xs">📣 TG Ad1</TabsTrigger>
             <TabsTrigger value="tg_advert_2" className="text-xs">📣 TG Ad2</TabsTrigger>
             <TabsTrigger value="tg_advert_3" className="text-xs">📣 TG Ad3</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'x_advert_3', 'x_advert_4', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
@@ -663,24 +668,29 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
-              {(name === 'x_advert_1' || name === 'x_advert_2') && (
+              {name.startsWith('x_advert_') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name === 'x_advert_1' ? '1' : '2'}</Label>
+                  <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name.replace('x_advert_', '')}</Label>
                   <p className="text-xs text-muted-foreground">
                     Promotional template interleaved with normal intel posts on X. 
-                    Alternates between Ad1 and Ad2 automatically.
+                    Rotates through all enabled X adverts automatically.
                   </p>
                 </div>
               )}
 
-              {(name === 'tg_advert_1' || name === 'tg_advert_2' || name === 'tg_advert_3') && (
+              {name.startsWith('tg_advert_') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <Label className="font-medium text-amber-300">📣 Telegram Advert {name === 'tg_advert_1' ? '1' : '2'}</Label>
+                  <Label className="font-medium text-amber-300">📣 Telegram Advert {name.replace('tg_advert_', '')}</Label>
                   <p className="text-xs text-muted-foreground">
                     Promotional template interleaved with normal intel broadcasts on Telegram.
-                    Alternates between Ad1 and Ad2 automatically.
+                    Rotates through all enabled TG adverts automatically.
                   </p>
                 </div>
+              )}
+
+              {/* Enable/disable toggle for advert templates */}
+              {(name.startsWith('x_advert_') || name.startsWith('tg_advert_')) && (
+                <AdvertTemplateToggle templateName={name} />
               )}
 
               <div className="grid md:grid-cols-2 gap-4">
