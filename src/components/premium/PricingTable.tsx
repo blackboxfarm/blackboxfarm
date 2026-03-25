@@ -87,9 +87,10 @@ export function PricingTable() {
   const navigate = useNavigate();
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [xSubBillingCycle, setXSubBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingCheckoutTier, setPendingCheckoutTier] = useState<'pro' | 'dev' | 'enterprise' | null>(null);
+  const [showTransitionModal, setShowTransitionModal] = useState(false);
+  const [transitionIsNewAccount, setTransitionIsNewAccount] = useState(true);
 
   // After auth completes, continue to checkout
   const continueCheckoutAfterAuth = useCallback(async (tierKey: 'pro' | 'dev' | 'enterprise') => {
