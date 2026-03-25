@@ -23,6 +23,7 @@ const TIERS = [
     description: "Explore the basics. No account needed.",
     color: "border-muted-foreground/30",
     badge: "bg-muted text-muted-foreground",
+    cta: { label: "Try Free Analysis", action: "navigate", to: "/holders" },
     features: [
       { name: "Basic Holder Breakdown", included: true },
       { name: "Top 25 Holders Table", included: true },
@@ -41,6 +42,7 @@ const TIERS = [
     description: "Create an account to unlock more depth.",
     color: "border-primary/30",
     badge: "bg-primary/10 text-primary",
+    cta: { label: "Sign Up Free", action: "navigate", to: "/subscriptions#plans" },
     features: [
       { name: "Everything in Free", included: true },
       { name: "Extended Analysis Panel", included: true },
@@ -59,6 +61,7 @@ const TIERS = [
     description: "Subscribe via X for premium intel.",
     color: "border-primary/50",
     badge: "bg-primary/20 text-primary",
+    cta: { label: "Subscribe on X", action: "external", to: "https://x.com/holdersintel" },
     features: [
       { name: "Everything in Signed In", included: true },
       { name: "AI Analysis & Risk Scores", included: true },
@@ -78,6 +81,7 @@ const TIERS = [
     color: "border-primary",
     badge: "bg-primary text-primary-foreground",
     highlight: true,
+    cta: { label: "Upgrade to Pro", action: "navigate", to: "/subscriptions#plans" },
     features: [
       { name: "Everything in X Subscriber", included: true },
       { name: "Full AI Narrative Reports", included: true },
@@ -414,9 +418,26 @@ export default function Home() {
                         {f.name}
                       </span>
                     </li>
-                  ))}
-                </ul>
-              </CardContent>
+                    ))}
+                  </ul>
+                  
+                  <div className="pt-2">
+                    {tier.cta.action === "external" ? (
+                      <a href={tier.cta.to} target="_blank" rel="noopener noreferrer" className="block">
+                        <Button variant={tier.highlight ? "default" : "outline"} className="w-full gap-2">
+                          {tier.cta.label} <ArrowRight className="w-4 h-4" />
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button 
+                        variant={tier.highlight ? "default" : "outline"} 
+                        className="w-full gap-2"
+                        onClick={() => navigate(tier.cta.to)}
+                      >
+                        {tier.cta.label} <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
             </Card>
           ))}
         </div>
