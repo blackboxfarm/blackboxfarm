@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { createApiLogger } from '../_shared/api-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { scrapeDexTopPages } from "../_shared/dex-top-pages.ts";
 
