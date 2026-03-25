@@ -578,7 +578,7 @@ export default function Home() {
             We make that story readable.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <Button size="lg" onClick={() => navigate("/holders")} className="gap-2 shadow-glow">
+            <Button size="lg" onClick={() => navigate("/subscriptions#plans")} className="gap-2 shadow-glow">
               <Rocket className="w-4 h-4" />
               Get Started Free
             </Button>

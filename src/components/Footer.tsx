@@ -106,7 +106,7 @@ export function Footer() {
                 <Link to="/tgbot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <MessageCircle className="h-3 w-3 text-blue-400" />
                   Telegram Bot
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-400/30 text-blue-400">Soon</Badge>
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 border-green-400/30 text-green-400">Live</Badge>
                 </Link>
               </li>
               <li className="hidden">
@@ -132,6 +132,12 @@ export function Footer() {
                   <span>✨</span>
                   Features
                 </Link>
+              </li>
+              <li>
+                <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <MessageCircle className="h-3 w-3 text-blue-400" />
+                  HoldersIntel Channel
+                </a>
               </li>
             </ul>
           </div>
@@ -213,6 +219,9 @@ export function Footer() {
               <div className="flex gap-3">
                 <a href="https://x.com/blackbox_farm" className="text-muted-foreground hover:text-primary transition-colors">
                   <Twitter className="h-4 w-4" />
+                </a>
+                <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-blue-400 transition-colors">
+                  <MessageCircle className="h-4 w-4" />
                 </a>
                 <a href="mailto:support@blackbox.farm" className="text-muted-foreground hover:text-primary transition-colors">
                   <Mail className="h-4 w-4" />
