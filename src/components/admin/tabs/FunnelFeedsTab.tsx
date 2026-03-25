@@ -30,6 +30,7 @@ export default function FunnelFeedsTab() {
           <TabsTrigger value="bubbles">🫧 Bubbles</TabsTrigger>
           <TabsTrigger value="holders">🔎 /holders</TabsTrigger>
           <TabsTrigger value="bot-dm">🤖 Bot DM</TabsTrigger>
+          <TabsTrigger value="queue">📋 Live Queue</TabsTrigger>
           <TabsTrigger value="overview">📊 Overview</TabsTrigger>
         </TabsList>
 
@@ -72,6 +73,14 @@ export default function FunnelFeedsTab() {
           {subTab === "bot-dm" && (
             <Suspense fallback={<LazyLoader />}>
               <BotDmFeed />
+            </Suspense>
+          )}
+        </TabsContent>
+
+        <TabsContent value="queue">
+          {subTab === "queue" && (
+            <Suspense fallback={<LazyLoader />}>
+              <PostingQueueViewer />
             </Suspense>
           )}
         </TabsContent>
