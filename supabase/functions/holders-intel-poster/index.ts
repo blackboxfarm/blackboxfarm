@@ -1097,6 +1097,19 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
                   await supabase.from('holders_intel_config')
                     .update({ value: nextXAdvert.template_name, updated_at: new Date().toISOString() })
                     .eq('key', 'advert_last_x_template');
+
+                  // Increment shown counter for this X advert template
+                  const xCounterKey = `advert_shown_${nextXAdvert.template_name}`;
+                  const { data: xCounterRow } = await supabase
+                    .from('holders_intel_config')
+                    .select('value')
+                    .eq('key', xCounterKey)
+                    .maybeSingle();
+                  const xNewCount = String((parseInt(xCounterRow?.value || '0', 10)) + 1);
+                  await supabase.from('holders_intel_config')
+                    .upsert({ key: xCounterKey, value: xNewCount, updated_at: new Date().toISOString() })
+                    .eq('key', xCounterKey);
+                  console.log(`[poster] ${nextXAdvert.template_name} shown count: ${xNewCount}`);
                 }
               } catch (xAdErr) {
                 console.warn('[poster] X advert rotation error:', xAdErr);
@@ -1165,6 +1178,19 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
                   await supabase.from('holders_intel_config')
                     .update({ value: nextTgAdvert.template_name, updated_at: new Date().toISOString() })
                     .eq('key', 'advert_last_tg_template');
+
+                  // Increment shown counter for this TG advert template
+                  const tgCounterKey = `advert_shown_${nextTgAdvert.template_name}`;
+                  const { data: tgCounterRow } = await supabase
+                    .from('holders_intel_config')
+                    .select('value')
+                    .eq('key', tgCounterKey)
+                    .maybeSingle();
+                  const tgNewCount = String((parseInt(tgCounterRow?.value || '0', 10)) + 1);
+                  await supabase.from('holders_intel_config')
+                    .upsert({ key: tgCounterKey, value: tgNewCount, updated_at: new Date().toISOString() })
+                    .eq('key', tgCounterKey);
+                  console.log(`[poster] ${nextTgAdvert.template_name} shown count: ${tgNewCount}`);
                 }
               } catch (tgAdErr) {
                 console.warn('[poster] TG advert rotation error:', tgAdErr);
