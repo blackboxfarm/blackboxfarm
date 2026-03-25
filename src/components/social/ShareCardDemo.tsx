@@ -93,6 +93,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     bot_wallet: false,
     x_advert_1: false,
     x_advert_2: false,
+    x_advert_3: false,
+    x_advert_4: false,
     tg_advert_1: false,
     tg_advert_2: false,
     tg_advert_3: false,
@@ -590,12 +592,14 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsTrigger value="tg_search" className="text-xs">TG Report</TabsTrigger>
             <TabsTrigger value="x_advert_1" className="text-xs">📣 X Ad1</TabsTrigger>
             <TabsTrigger value="x_advert_2" className="text-xs">📣 X Ad2</TabsTrigger>
+            <TabsTrigger value="x_advert_3" className="text-xs">📣 X Ad3</TabsTrigger>
+            <TabsTrigger value="x_advert_4" className="text-xs">📣 X Ad4</TabsTrigger>
             <TabsTrigger value="tg_advert_1" className="text-xs">📣 TG Ad1</TabsTrigger>
             <TabsTrigger value="tg_advert_2" className="text-xs">📣 TG Ad2</TabsTrigger>
             <TabsTrigger value="tg_advert_3" className="text-xs">📣 TG Ad3</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'x_advert_3', 'x_advert_4', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (

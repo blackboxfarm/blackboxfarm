@@ -241,6 +241,29 @@ Start analyzing 👉 blackbox.farm
 
 #Solana #DeFi`,
 
+  x_advert_3: `🔎 Tired of guessing who holds a token?
+
+BlackBox Farm shows you:
+✅ Real vs dust holders
+🐋 Whale concentration
+📊 Health grades
+
+Free analysis 👉 blackbox.farm/holders
+
+#Solana #CryptoAnalysis`,
+
+  x_advert_4: `📊 Token Due Diligence Made Easy
+
+Before you ape, check the holders.
+
+🔍 Real holder count
+🧠 AI risk assessment
+🔮 Developer reputation
+
+Analyze any token 👉 blackbox.farm
+
+#Solana #DYOR`,
+
   tg_advert_1: `📢 *Sponsored*
 
 🔍 Want to know who REALLY holds a token?
