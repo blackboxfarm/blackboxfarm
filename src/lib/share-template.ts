@@ -91,6 +91,19 @@ Analyze any token 👉 blackbox.farm/holders`,
 
 🔗 blackbox.farm/holders?token={ca}`,
 
+  tg_public_post: `🔎 $\{ticker} Holder Analysis
+
+📊 {totalWallets} Wallets → ✅ {realHolders} Real
+Health: {healthGrade} | {dustPct}% Dust
+
+🐋 {whales} Whales | 😎 {serious} Serious
+🌱 {retail} Retail | 💨 {dust} Dust
+
+🐦 {tweetUrl}
+
+💎 Want full reports, AI summaries & whale alerts?
+👉 Subscribe for $9.99/mo: blackbox.farm/pricing`,
+
   subscription: `🔎 Holder Analysis: $\{ticker}
 
 CA: {ca}
