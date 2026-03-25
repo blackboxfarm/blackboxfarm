@@ -14,7 +14,7 @@ export function AbandonedCheckoutBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (!user || tierInfo.tier_key !== 'free') return;
+    if (!user || tierInfo.tierKey !== 'free') return;
 
     // Check if dismissed this session
     const dismissedKey = `bbx_checkout_dismissed_${user.id}`;
@@ -37,7 +37,7 @@ export function AbandonedCheckoutBanner() {
     };
 
     checkPending();
-  }, [user, tierKey]);
+  }, [user, tierInfo.tierKey]);
 
   const handleDismiss = () => {
     setDismissed(true);
