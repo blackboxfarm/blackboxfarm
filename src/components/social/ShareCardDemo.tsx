@@ -667,24 +667,29 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
-              {(name === 'x_advert_1' || name === 'x_advert_2') && (
+              {name.startsWith('x_advert_') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name === 'x_advert_1' ? '1' : '2'}</Label>
+                  <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name.replace('x_advert_', '')}</Label>
                   <p className="text-xs text-muted-foreground">
                     Promotional template interleaved with normal intel posts on X. 
-                    Alternates between Ad1 and Ad2 automatically.
+                    Rotates through all enabled X adverts automatically.
                   </p>
                 </div>
               )}
 
-              {(name === 'tg_advert_1' || name === 'tg_advert_2' || name === 'tg_advert_3') && (
+              {name.startsWith('tg_advert_') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <Label className="font-medium text-amber-300">📣 Telegram Advert {name === 'tg_advert_1' ? '1' : '2'}</Label>
+                  <Label className="font-medium text-amber-300">📣 Telegram Advert {name.replace('tg_advert_', '')}</Label>
                   <p className="text-xs text-muted-foreground">
                     Promotional template interleaved with normal intel broadcasts on Telegram.
-                    Alternates between Ad1 and Ad2 automatically.
+                    Rotates through all enabled TG adverts automatically.
                   </p>
                 </div>
+              )}
+
+              {/* Enable/disable toggle for advert templates */}
+              {(name.startsWith('x_advert_') || name.startsWith('tg_advert_')) && (
+                <AdvertTemplateToggle templateName={name} />
               )}
 
               <div className="grid md:grid-cols-2 gap-4">
