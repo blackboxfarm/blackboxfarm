@@ -40,12 +40,30 @@ serve(withRunLog('holder-retention-analysis', async (req) => {
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     // Get snapshots for the period
-    const { data: snapshots } = await supabase
-      .from('holder_snapshots')
-      .select('*')
-      .eq('token_mint', token_mint)
-      .gte('snapshot_date', startDate)
-      .order('snapshot_date', { ascending: true });
+    // Paginate to avoid 1000-row default limit
+    let allSnapshots: any[] = [];
+    let from = 0;
+    const PAGE_SIZE = 1000;
+    while (true) {
+      const { data: page, error: pageErr } = await supabase
+        .from('holder_snapshots')
+        .select('wallet_address, snapshot_date, tier')
+        .eq('token_mint', token_mint)
+        .gte('snapshot_date', startDate)
+        .order('snapshot_date', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      
+      if (pageErr) {
+        console.error('Snapshot query error:', pageErr);
+        break;
+      }
+      if (!page || page.length === 0) break;
+      allSnapshots = allSnapshots.concat(page);
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    const snapshots = allSnapshots;
 
     if (!snapshots || snapshots.length === 0) {
       console.log(`No snapshot data found for ${token_mint} since ${startDate}`);
