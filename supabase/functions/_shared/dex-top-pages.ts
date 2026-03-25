@@ -105,6 +105,7 @@ async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markd
       formats: ["markdown"],
       onlyMainContent: config.onlyMainContent,
       waitFor: config.waitFor,
+      storeInCache: false,
     }),
   });
 
