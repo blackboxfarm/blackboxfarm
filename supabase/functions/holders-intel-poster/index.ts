@@ -287,7 +287,9 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{website\}/g, website)
     .replace(/\{WEBSITE\}/g, website)
     .replace(/\{ath_24h\}/g, data.ath24h != null ? `$${Number(data.ath24h).toFixed(6)}` : 'N/A')
-    .replace(/\{ATH_24H\}/g, data.ath24h != null ? `$${Number(data.ath24h).toFixed(6)}` : 'N/A');
+    .replace(/\{ATH_24H\}/g, data.ath24h != null ? `$${Number(data.ath24h).toFixed(6)}` : 'N/A')
+    .replace(/\{padre\}/g, `https://trade.padre.gg/rk/blackbox/trade/solana/${data.tokenMint || ''}`)
+    .replace(/\{PADRE\}/g, `https://trade.padre.gg/rk/blackbox/trade/solana/${data.tokenMint || ''}`);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
@@ -862,7 +864,9 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
           .replace(/\{ai_summary\}/g, stats.aiSummary || '')
           .replace(/\{aiSummary\}/g, stats.aiSummary || '')
           .replace(/\{aiOverview\}/g, stats.aiOverview || '')
-          .replace(/\{lifecycle\}/g, stats.lifecycle || '');
+          .replace(/\{lifecycle\}/g, stats.lifecycle || '')
+          .replace(/\{padre\}/g, `https://trade.padre.gg/rk/blackbox/trade/solana/${item.token_mint}`)
+          .replace(/\{PADRE\}/g, `https://trade.padre.gg/rk/blackbox/trade/solana/${item.token_mint}`);
         
         // Send with retry (cold start can cause first attempt to fail)
         let tgSuccess = false;
@@ -963,7 +967,9 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
             .replace(/\{ai_summary\}/g, stats.aiSummary || '')
             .replace(/\{aiSummary\}/g, stats.aiSummary || '')
             .replace(/\{aiOverview\}/g, stats.aiOverview || '')
-            .replace(/\{lifecycle\}/g, stats.lifecycle || '');
+            .replace(/\{lifecycle\}/g, stats.lifecycle || '')
+            .replace(/\{padre\}/g, `https://trade.padre.gg/rk/blackbox/trade/solana/${item.token_mint}`)
+            .replace(/\{PADRE\}/g, `https://trade.padre.gg/rk/blackbox/trade/solana/${item.token_mint}`);
           
           // Fetch INTEL_PUBLIC target
           const { data: publicTarget } = await supabase
