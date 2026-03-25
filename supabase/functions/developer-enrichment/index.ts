@@ -107,7 +107,7 @@ interface DeveloperEnrichmentResult {
   rugcheckSkipReason: string | null;
 }
 
-serve(withRunLog('developer-enrichment', async (req) => {
+Deno.serve(withRunLog('developer-enrichment', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
