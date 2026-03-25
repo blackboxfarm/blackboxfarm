@@ -44,12 +44,12 @@ export default function Subscriptions() {
   }, [searchParams]);
 
   const features = [
-    { icon: Brain, title: 'AI Token Analysis', desc: 'Deep AI interpretation of holder patterns, wallet clustering, and lifecycle staging' },
-    { icon: BarChart3, title: 'Advanced Charts', desc: 'Holder distribution, flow analysis, and comparison charts across tokens' },
-    { icon: Wallet, title: 'Whale Tracking', desc: 'Real-time whale wallet monitoring with automated Telegram & email alerts' },
-    { icon: Activity, title: 'Lifecycle Intel', desc: 'Know exactly where a token sits — Genesis, Expansion, Distribution, or Dormant' },
-    { icon: Shield, title: 'Risk Scoring', desc: 'Bundle detection, dev wallet analysis, and holder quality grading' },
-    { icon: Zap, title: 'Auto-Buy Bot', desc: 'Pro subscribers get wallet management and automated trading via Telegram' },
+    { icon: Brain, title: 'Recycled Identity Detection', desc: 'We resolve mutable usernames to immutable IDs. When a scammer changes their X handle or Telegram channel name, we still know who they are.' },
+    { icon: Shield, title: 'Scammer-in-Possession Alerts', desc: 'Our top-20 holder scan cross-references against dev_wallet_reputation and pumpfun_blacklist. If a known rug-puller is holding your token, you\'ll know.' },
+    { icon: Activity, title: 'KYC Root Tracing', desc: '3-depth recursive wallet scanning discovers master wallets linked to exchanges. Map the entire funding network from dev → funder → KYC root.' },
+    { icon: Wallet, title: 'Cluster & Bundle Analysis', desc: 'RugCheck integration exposes coordinated wallet networks holding concentrated supply. Identify insider groups before they dump.' },
+    { icon: BarChart3, title: 'Social-to-Onchain Mapping', desc: 'Strict topology separates social entities from on-chain entities. Website, X community, and dev wallet chains branch independently from the token node.' },
+    { icon: Zap, title: 'AI Risk Engine', desc: 'Multi-factor AI analysis considers holder distribution, dev reputation, liquidity depth, and social signals to deliver actionable risk assessments.' },
   ];
 
   // Set OG meta tags
