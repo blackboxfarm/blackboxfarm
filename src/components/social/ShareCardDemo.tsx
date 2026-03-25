@@ -14,6 +14,7 @@ import { IntelXBotActivityLog } from './IntelXBotActivityLog';
 import { SurgeAlertsPanel } from '@/components/admin/SurgeAlertsPanel';
 import PromoTweetManager from '@/components/admin/PromoTweetManager';
 import { OGImageManager } from '@/components/admin/OGImageManager';
+import { IntelTemplateModeToggle } from '@/components/admin/funnel-feeds/IntelTemplateModeToggle';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -540,6 +541,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
       {/* OG Image Manager */}
       <OGImageManager />
+
+      {/* Template Mode Toggle */}
+      <IntelTemplateModeToggle />
 
       {/* Tweet Templates Card */}
       <Card className="bg-card/50 border-border">
