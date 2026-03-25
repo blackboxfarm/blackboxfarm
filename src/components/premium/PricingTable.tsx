@@ -11,6 +11,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { XSubscriberVerification } from './XSubscriberVerification';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { CheckoutTransitionModal } from './CheckoutTransitionModal';
 
 interface PricingFeature {
   label: string;
@@ -86,9 +87,10 @@ export function PricingTable() {
   const navigate = useNavigate();
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [xSubBillingCycle, setXSubBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingCheckoutTier, setPendingCheckoutTier] = useState<'pro' | 'dev' | 'enterprise' | null>(null);
+  const [showTransitionModal, setShowTransitionModal] = useState(false);
+  const [transitionIsNewAccount, setTransitionIsNewAccount] = useState(true);
 
   // After auth completes, continue to checkout
   const continueCheckoutAfterAuth = useCallback(async (tierKey: 'pro' | 'dev' | 'enterprise') => {
@@ -136,14 +138,27 @@ export function PricingTable() {
     if (pendingCheckoutTier) {
       const tier = pendingCheckoutTier;
       setPendingCheckoutTier(null);
+      // Show transition modal instead of immediately opening Stripe
       setTimeout(async () => {
         const { data } = await supabase.auth.getUser();
         if (data.user) {
-          await continueCheckoutAfterAuth(tier);
+          setTransitionIsNewAccount(true);
+          setShowTransitionModal(true);
+          // Store tier for when transition completes
+          setPendingCheckoutTier(tier);
         }
-      }, 500);
+      }, 300);
     }
   };
+
+  const handleTransitionComplete = useCallback(async () => {
+    setShowTransitionModal(false);
+    if (pendingCheckoutTier) {
+      const tier = pendingCheckoutTier;
+      setPendingCheckoutTier(null);
+      await continueCheckoutAfterAuth(tier);
+    }
+  }, [pendingCheckoutTier, continueCheckoutAfterAuth]);
 
   const handleManageSubscription = async () => {
     setLoadingTier('manage');
@@ -429,6 +444,13 @@ export function PricingTable() {
         isOpen={showAuthModal}
         onClose={handleAuthModalClose}
         defaultTab="signup"
+      />
+
+      {/* Transition modal between auth and Stripe */}
+      <CheckoutTransitionModal
+        isOpen={showTransitionModal}
+        onComplete={handleTransitionComplete}
+        isNewAccount={transitionIsNewAccount}
       />
     </div>
   );
