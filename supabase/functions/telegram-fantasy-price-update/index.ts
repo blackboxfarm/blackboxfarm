@@ -1,6 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -134,7 +133,7 @@ async function fetchTokenData(tokenMints: string[]): Promise<Record<string, Toke
   return tokenData;
 }
 
-serve(withRunLog('telegram-fantasy-price-update', async (req) => {
+Deno.serve(withRunLog('telegram-fantasy-price-update', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -284,7 +283,7 @@ serve(withRunLog('telegram-fantasy-price-update', async (req) => {
       error: error.message
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
   }
-});
+}));
 
 // Scan for corrupted positions with impossible PnL values
 async function scanCorruptedPositions(supabase: any) {
