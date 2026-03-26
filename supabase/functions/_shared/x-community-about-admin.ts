@@ -1,6 +1,9 @@
-const BROWSERLESS_FUNCTION_URL = 'https://production-sfo.browserless.io/function';
-const ABOUT_PAGE_WAIT_MS = 1500;
-const ABOUT_PAGE_MAX_POLLS = 20;
+/**
+ * X Community About Page Admin Extractor
+ * 
+ * Uses Firecrawl (primary) with Browserless fallback to scrape
+ * the X community about page for admin/moderator handles.
+ */
 
 export interface XCommunityAboutAdminResult {
   adminUsername: string | null;
@@ -8,8 +11,9 @@ export interface XCommunityAboutAdminResult {
   memberCount: number | null;
   httpStatus: number;
   error?: string;
+  scrapeProvider: 'firecrawl' | 'browserless' | 'none';
   rawData: {
-    source: 'browserless_about_page';
+    source: 'firecrawl_about_page' | 'browserless_about_page';
     aboutPageUrl: string;
     finalUrl?: string;
     pageTitle?: string;
@@ -25,10 +29,127 @@ function normalizeHandle(handle: string | null | undefined): string | null {
   return normalized || null;
 }
 
-export async function fetchXCommunityAboutAdmin(
+/**
+ * Parse handles and member count from page text.
+ * Shared between Firecrawl and Browserless paths.
+ */
+function parseAboutPageText(text: string): {
+  adminUsername: string | null;
+  moderatorUsernames: string[];
+  memberCount: number | null;
+} {
+  const allHandles: string[] = [];
+
+  // Extract all handles from the Moderators section
+  const moderatorSection = text.match(/Moderators[\s\S]{0,2000}/i);
+  if (moderatorSection) {
+    const handleMatches = moderatorSection[0].matchAll(/@([A-Za-z0-9_]{1,15})/g);
+    for (const m of handleMatches) {
+      const h = m[1].toLowerCase();
+      if (!allHandles.includes(h)) allHandles.push(h);
+    }
+  }
+
+  // Fallback: "Created by @handle"
+  if (allHandles.length === 0) {
+    const createdMatch = text.match(/Created[\s\S]{0,160}?by\s+@?([A-Za-z0-9_]{1,15})/i);
+    if (createdMatch) allHandles.push(createdMatch[1].toLowerCase());
+  }
+
+  // Also try "Admin" section specifically
+  if (allHandles.length === 0) {
+    const adminSection = text.match(/Admin[\s\S]{0,500}/i);
+    if (adminSection) {
+      const handleMatches = adminSection[0].matchAll(/@([A-Za-z0-9_]{1,15})/g);
+      for (const m of handleMatches) {
+        const h = m[1].toLowerCase();
+        if (!allHandles.includes(h)) allHandles.push(h);
+      }
+    }
+  }
+
+  const memberMatch = text.match(/([\d,]+)\s+Members?\b/i);
+
+  return {
+    adminUsername: allHandles.length > 0 ? allHandles[0] : null,
+    moderatorUsernames: allHandles.slice(1),
+    memberCount: memberMatch ? Number(memberMatch[1].replace(/,/g, '')) : null,
+  };
+}
+
+/**
+ * Primary: Use Firecrawl to scrape the about page.
+ * Firecrawl handles JS rendering and returns markdown/text.
+ */
+async function fetchViaFirecrawl(
+  communityId: string,
+  firecrawlApiKey: string,
+): Promise<XCommunityAboutAdminResult | null> {
+  const aboutPageUrl = `https://x.com/i/communities/${communityId}/about`;
+  
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${firecrawlApiKey}`,
+      },
+      body: JSON.stringify({
+        url: aboutPageUrl,
+        formats: ['markdown'],
+        waitFor: 3000,
+        onlyMainContent: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      console.warn(`[Firecrawl] HTTP ${response.status} for community ${communityId}: ${errBody.slice(0, 200)}`);
+      return null; // Fall through to Browserless
+    }
+
+    const data = await response.json();
+    const markdown: string = data?.data?.markdown || '';
+    
+    if (!markdown || markdown.length < 50) {
+      console.warn(`[Firecrawl] Empty/short response for community ${communityId}`);
+      return null;
+    }
+
+    const parsed = parseAboutPageText(markdown);
+
+    return {
+      adminUsername: normalizeHandle(parsed.adminUsername),
+      moderatorUsernames: parsed.moderatorUsernames
+        .map(h => normalizeHandle(h))
+        .filter(Boolean) as string[],
+      memberCount: parsed.memberCount,
+      httpStatus: response.status,
+      scrapeProvider: 'firecrawl',
+      rawData: {
+        source: 'firecrawl_about_page',
+        aboutPageUrl,
+        textSnippet: markdown.slice(0, 3000),
+        adminUsername: parsed.adminUsername,
+        moderatorUsernames: parsed.moderatorUsernames,
+        memberCount: parsed.memberCount,
+      },
+    };
+  } catch (error) {
+    console.warn(`[Firecrawl] Exception for community ${communityId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Fallback: Use Browserless (if API key available and has quota).
+ */
+const BROWSERLESS_FUNCTION_URL = 'https://production-sfo.browserless.io/function';
+
+async function fetchViaBrowserless(
   communityId: string,
   browserlessApiKey: string,
-): Promise<XCommunityAboutAdminResult> {
+): Promise<XCommunityAboutAdminResult | null> {
   const aboutPageUrl = `https://x.com/i/communities/${communityId}/about`;
 
   const browserlessScript = `
@@ -41,7 +162,7 @@ export async function fetchXCommunityAboutAdmin(
       let text = '';
       let title = '';
 
-      for (let attempt = 0; attempt < ${ABOUT_PAGE_MAX_POLLS}; attempt++) {
+      for (let attempt = 0; attempt < 20; attempt++) {
         title = await page.title();
         text = await page.evaluate(() => document.body.innerText || '');
 
@@ -49,43 +170,13 @@ export async function fetchXCommunityAboutAdmin(
         const hasAboutSignals = /community info|created[\\s\\S]{0,160}?by|rules/i.test(text);
 
         if (!hasChallenge && hasAboutSignals) break;
-        await wait(${ABOUT_PAGE_WAIT_MS});
+        await wait(1500);
       }
 
       title = await page.title();
       text = await page.evaluate(() => document.body.innerText || '');
 
-      // Extract all handles from the Moderators section
-      // The about page lists moderators — first one is the Admin (creator)
-      const allHandles = [];
-      const moderatorSection = text.match(/Moderators[\\s\\S]{0,2000}/i);
-      if (moderatorSection) {
-        const handleMatches = moderatorSection[0].matchAll(/@([A-Za-z0-9_]{1,15})/g);
-        for (const m of handleMatches) {
-          allHandles.push(m[1].toLowerCase());
-        }
-      }
-
-      // Fallback: try "Created by @handle" pattern
-      if (allHandles.length === 0) {
-        const createdMatch = text.match(/Created[\\s\\S]{0,160}?by\\s+@?([A-Za-z0-9_]{1,15})/i);
-        if (createdMatch) allHandles.push(createdMatch[1].toLowerCase());
-      }
-
-      const memberMatch = text.match(/([\\d,]+)\\s+Members?\\b/i);
-
-      // First handle = admin, rest = moderators
-      const adminUsername = allHandles.length > 0 ? allHandles[0] : null;
-      const moderatorUsernames = allHandles.slice(1);
-
-      return {
-        pageTitle: title,
-        finalUrl: page.url(),
-        textSnippet: text.slice(0, 3000),
-        adminUsername,
-        moderatorUsernames,
-        memberCount: memberMatch ? Number(memberMatch[1].replace(/,/g, '')) : null,
-      };
+      return { pageTitle: title, finalUrl: page.url(), text };
     };
   `;
 
@@ -93,70 +184,95 @@ export async function fetchXCommunityAboutAdmin(
     const response = await fetch(`${BROWSERLESS_FUNCTION_URL}?token=${browserlessApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: browserlessScript,
-        context: {},
-      }),
+      body: JSON.stringify({ code: browserlessScript, context: {} }),
     });
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => '');
-      return {
-        adminUsername: null,
-        moderatorUsernames: [],
-        memberCount: null,
-        httpStatus: response.status,
-        error: errorBody.slice(0, 300),
-        rawData: {
-          source: 'browserless_about_page',
-          aboutPageUrl,
-          textSnippet: '',
-          adminUsername: null,
-          moderatorUsernames: [],
-          memberCount: null,
-        },
-      };
+      // Check for free tier limit
+      if (errorBody.includes('units usage limit') || response.status === 402) {
+        console.warn(`[Browserless] Free tier exhausted for community ${communityId}`);
+        return null;
+      }
+      console.warn(`[Browserless] HTTP ${response.status} for community ${communityId}`);
+      return null;
     }
 
     const payload = await response.json();
-    const adminUsername = normalizeHandle(payload?.adminUsername);
-    const moderatorUsernames: string[] = (Array.isArray(payload?.moderatorUsernames) ? payload.moderatorUsernames : [])
-      .map((h: string) => normalizeHandle(h))
-      .filter(Boolean) as string[];
-    const memberCount = typeof payload?.memberCount === 'number' ? payload.memberCount : null;
-    const textSnippet = typeof payload?.textSnippet === 'string' ? payload.textSnippet.slice(0, 3000) : '';
+    const text: string = payload?.text || '';
+    
+    if (!text || text.length < 50) return null;
+
+    const parsed = parseAboutPageText(text);
 
     return {
-      adminUsername,
-      moderatorUsernames,
-      memberCount,
+      adminUsername: normalizeHandle(parsed.adminUsername),
+      moderatorUsernames: parsed.moderatorUsernames
+        .map(h => normalizeHandle(h))
+        .filter(Boolean) as string[],
+      memberCount: parsed.memberCount,
       httpStatus: response.status,
+      scrapeProvider: 'browserless',
       rawData: {
         source: 'browserless_about_page',
         aboutPageUrl,
-        finalUrl: typeof payload?.finalUrl === 'string' ? payload.finalUrl : aboutPageUrl,
-        pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
-        textSnippet,
-        adminUsername,
-        moderatorUsernames,
-        memberCount,
+        finalUrl: payload?.finalUrl,
+        pageTitle: payload?.pageTitle,
+        textSnippet: text.slice(0, 3000),
+        adminUsername: parsed.adminUsername,
+        moderatorUsernames: parsed.moderatorUsernames,
+        memberCount: parsed.memberCount,
       },
     };
   } catch (error) {
-    return {
+    console.warn(`[Browserless] Exception for community ${communityId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Main entry point: tries Firecrawl first, falls back to Browserless.
+ * Returns result with scrapeProvider indicating which was used.
+ */
+export async function fetchXCommunityAboutAdmin(
+  communityId: string,
+  browserlessApiKey: string,
+): Promise<XCommunityAboutAdminResult> {
+  // Try Firecrawl first (paid, reliable)
+  const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+  if (firecrawlKey) {
+    const firecrawlResult = await fetchViaFirecrawl(communityId, firecrawlKey);
+    if (firecrawlResult) {
+      console.log(`[About] Firecrawl success for ${communityId}: admin=${firecrawlResult.adminUsername}, mods=${firecrawlResult.moderatorUsernames.length}`);
+      return firecrawlResult;
+    }
+    console.log(`[About] Firecrawl returned nothing for ${communityId}, trying Browserless...`);
+  }
+
+  // Fallback to Browserless
+  if (browserlessApiKey) {
+    const browserlessResult = await fetchViaBrowserless(communityId, browserlessApiKey);
+    if (browserlessResult) {
+      console.log(`[About] Browserless success for ${communityId}: admin=${browserlessResult.adminUsername}, mods=${browserlessResult.moderatorUsernames.length}`);
+      return browserlessResult;
+    }
+  }
+
+  // Both failed
+  return {
+    adminUsername: null,
+    moderatorUsernames: [],
+    memberCount: null,
+    httpStatus: 0,
+    error: 'Both Firecrawl and Browserless failed or returned no data',
+    scrapeProvider: 'none',
+    rawData: {
+      source: 'firecrawl_about_page',
+      aboutPageUrl: `https://x.com/i/communities/${communityId}/about`,
+      textSnippet: '',
       adminUsername: null,
       moderatorUsernames: [],
       memberCount: null,
-      httpStatus: 0,
-      error: error instanceof Error ? error.message : String(error),
-      rawData: {
-        source: 'browserless_about_page',
-        aboutPageUrl,
-        textSnippet: '',
-        adminUsername: null,
-        moderatorUsernames: [],
-        memberCount: null,
-      },
-    };
-  }
+    },
+  };
 }
