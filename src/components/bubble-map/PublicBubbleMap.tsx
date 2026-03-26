@@ -1175,14 +1175,18 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
         </Card>
       )}
 
-      {/* Social Timeline for focused token */}
-      {focusedEntity?.type === 'token' && (
-        <Card className="border-primary/30">
-          <CardContent className="py-3">
-            <SocialTimeline tokenMint={focusedEntity.id.replace(/^token:/, '')} />
-          </CardContent>
-        </Card>
-      )}
+      {/* Social Timeline — shows for hovered/focused token nodes, hidden when no data */}
+      {(hoveredNode?.type === 'token' || focusedEntity?.type === 'token') && (() => {
+        const mint = (hoveredNode?.type === 'token' ? (hoveredNode.fullId || hoveredNode.id.split(':').slice(1).join(':')) : null) ||
+          focusedEntity?.id.replace(/^token:/, '') || '';
+        return mint ? (
+          <Card className="border-primary/30">
+            <CardContent className="py-3">
+              <SocialTimeline tokenMint={mint} />
+            </CardContent>
+          </Card>
+        ) : null;
+      })()}
     </div>
   );
 };

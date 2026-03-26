@@ -298,10 +298,15 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
           : null;
         const normalizedAdmin = normalizeScreenName(resolvedAdmin?.handle || aboutResult.adminUsername);
 
+        // Normalize moderator handles from about page
+        const normalizedMods = (aboutResult.moderatorUsernames || [])
+          .map((h: string) => normalizeScreenName(h))
+          .filter((h: string | null): h is string => !!h && h !== normalizedAdmin);
+
         communityData = {
           communityId,
           adminUsernames: normalizedAdmin ? [normalizedAdmin] : [],
-          moderatorUsernames: [],
+          moderatorUsernames: normalizedMods,
           memberCount: aboutResult.memberCount ?? existingCommunity?.member_count ?? undefined,
           rawData: {
             ...aboutResult.rawData,

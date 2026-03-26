@@ -38,7 +38,7 @@ export default function SocialTimeline({ tokenMint }: SocialTimelineProps) {
     enabled: !!tokenMint,
   });
 
-  if (isLoading) return <div className="text-xs text-muted-foreground">Loading timeline...</div>;
+  if (isLoading) return null;
   if (!snapshots || snapshots.length === 0) return null;
 
   // Group by phase, take first snapshot per phase
