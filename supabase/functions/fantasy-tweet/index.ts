@@ -170,6 +170,15 @@ function buildTweetText(template: string, data: FantasyTweetRequest): string {
 Deno.serve(withRunLog('fantasy-tweet', async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  // X account suspended — block all tweets
+  const X_POSTING_PAUSED = true;
+  if (X_POSTING_PAUSED) {
+    console.log('[fantasy-tweet] X posting is PAUSED — account suspended');
+    return new Response(JSON.stringify({ success: true, paused: true, reason: 'X posting disabled — account suspended' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     if (!API_KEY || !API_SECRET || !ACCESS_TOKEN || !ACCESS_TOKEN_SECRET) {
       throw new Error("Missing Twitter API credentials");

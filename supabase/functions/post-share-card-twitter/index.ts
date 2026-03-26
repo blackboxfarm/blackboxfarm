@@ -135,6 +135,15 @@ Deno.serve(withRunLog('post-share-card-twitter', async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // X account suspended — block all tweets
+  const X_POSTING_PAUSED = true;
+  if (X_POSTING_PAUSED) {
+    console.log('[post-share-card-twitter] X posting is PAUSED — account suspended');
+    return new Response(JSON.stringify({ success: true, paused: true, reason: 'X posting disabled — account suspended' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const body = await req.json();
     const { tweetText, twitterHandle, tokenStats, communityId, skipTelegram } = body;

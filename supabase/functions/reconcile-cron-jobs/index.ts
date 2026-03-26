@@ -55,12 +55,13 @@ function httpPost(functionName: string, body: string, useServiceRole = false): s
 // CANONICAL CRON REGISTRY — single source of truth
 // ═══════════════════════════════════════════════
 const REQUIRED_CRONS: CronDef[] = [
-  // ── HoldersIntel pipeline (CRITICAL — posts to X) ──
-  {
-    jobname: 'holdersintel-poster-3min',
-    schedule: '*/3 * * * *',
-    command: httpPost('holders-intel-poster', '{}'),
-  },
+  // ── HoldersIntel pipeline ──
+  // PAUSED: X account suspended — poster disabled to save cycles
+  // {
+  //   jobname: 'holdersintel-poster-3min',
+  //   schedule: '*/3 * * * *',
+  //   command: httpPost('holders-intel-poster', '{}'),
+  // },
   {
     jobname: 'holdersintel-dex-scanner-5min',
     schedule: '*/5 * * * *',
