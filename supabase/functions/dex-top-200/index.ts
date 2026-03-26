@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createApiLogger } from '../_shared/api-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { scrapeDexTopPages } from "../_shared/dex-top-pages.ts";
+import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -210,9 +211,9 @@ async function autoQueueNewTokens(supabase: any, finalTokens: any[]): Promise<nu
     const alreadyQueued = new Set((queueRes.data || []).map((r: any) => r.token_mint));
     const alreadySeen = new Set((seenRes.data || []).map((r: any) => r.token_mint));
 
-    // Filter to truly new tokens, sorted by rank (lowest rank = highest priority)
+    // Filter to truly new tokens, excluding infrastructure coins, sorted by rank
     const newTokens = withMints
-      .filter(t => !alreadyQueued.has(t.tokenMint) && !alreadySeen.has(t.tokenMint))
+      .filter(t => !alreadyQueued.has(t.tokenMint) && !alreadySeen.has(t.tokenMint) && !isInfrastructureToken(t.tokenMint))
       .sort((a, b) => a.rank - b.rank)
       .slice(0, MAX_QUEUE_PER_TICK);
 
