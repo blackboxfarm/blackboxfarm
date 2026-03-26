@@ -5114,6 +5114,7 @@ export type Database = {
         Row: {
           banner_url: string | null
           bonded_at: string | null
+          community_checked_at: string | null
           first_seen_at: string
           health_grade: string | null
           image_uri: string | null
@@ -5132,6 +5133,7 @@ export type Database = {
         Insert: {
           banner_url?: string | null
           bonded_at?: string | null
+          community_checked_at?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
@@ -5150,6 +5152,7 @@ export type Database = {
         Update: {
           banner_url?: string | null
           bonded_at?: string | null
+          community_checked_at?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
@@ -10334,6 +10337,7 @@ export type Database = {
       }
       scraped_tokens: {
         Row: {
+          community_checked_at: string | null
           created_at: string
           creator_fetched_at: string | null
           creator_wallet: string | null
@@ -10354,6 +10358,7 @@ export type Database = {
           validation_status: string | null
         }
         Insert: {
+          community_checked_at?: string | null
           created_at?: string
           creator_fetched_at?: string | null
           creator_wallet?: string | null
@@ -10374,6 +10379,7 @@ export type Database = {
           validation_status?: string | null
         }
         Update: {
+          community_checked_at?: string | null
           created_at?: string
           creator_fetched_at?: string | null
           creator_wallet?: string | null
