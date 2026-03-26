@@ -276,6 +276,16 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     console.log(`[scheduler] Current slot: ${currentSlot}`);
     console.log(`[scheduler] Previous slots to filter: ${previousSlots.join(', ')}`);
     
+    // Auto-cleanup: expire stuck "processing" entries older than 30 min
+    const { data: stuckCleaned } = await supabase
+      .from('holders_intel_post_queue')
+      .update({ status: 'failed', trigger_comment: 'auto-cleanup: stuck processing' })
+      .eq('status', 'processing')
+      .lt('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+      .select('id');
+    if (stuckCleaned?.length) {
+      console.log(`[scheduler] 🧹 Cleaned ${stuckCleaned.length} stuck processing entries`);
+    }
     // Fetch trending tokens
     const trendingTokens = await fetchTrendingTokens();
     
@@ -368,7 +378,23 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     }
     
     const qualifiedTokens = newTokens.filter(t => !establishedMints.has(t.mint));
-    console.log(`[scheduler] Final tokens to queue: ${qualifiedTokens.length}`);
+    
+    // CAP: Check current pending count — don't flood the queue beyond 50 pending
+    const { count: currentPending } = await supabase
+      .from('holders_intel_post_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending');
+    
+    const pendingCount = currentPending || 0;
+    const maxPending = 50;
+    const slotsAvailable = Math.max(0, maxPending - pendingCount);
+    
+    const cappedTokens = qualifiedTokens.slice(0, slotsAvailable);
+    
+    if (qualifiedTokens.length > slotsAvailable) {
+      console.log(`[scheduler] ⚠️ Queue cap: ${pendingCount} already pending, only adding ${slotsAvailable} of ${qualifiedTokens.length} qualified`);
+    }
+    console.log(`[scheduler] Final tokens to queue: ${cappedTokens.length} (cap: ${slotsAvailable} slots available)`);
     
     // Insert seen tokens
     if (qualifiedTokens.length > 0) {
@@ -397,7 +423,7 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     const now = new Date();
     let cumulativeDelayMs = 0;
     
-    const queueInserts = qualifiedTokens.map((t, index) => {
+    const queueInserts = cappedTokens.map((t, index) => {
       // Random delay between 3-10 minutes (180000-600000 ms)
       const delayMs = 180000 + Math.floor(Math.random() * 420000);
       cumulativeDelayMs += delayMs;
