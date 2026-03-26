@@ -261,7 +261,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
       const { data: tokensToEnrich, error: enrichErr } = await supabase
         .from('master_token_directory')
         .select('token_mint, symbol, creator_wallet')
-        .is('x_community_urls', null)
+        .or('x_community_urls.is.null,x_community_urls.eq.{}')
         .not('token_mint', 'is', null)
         .limit(batchSize);
 
@@ -311,14 +311,42 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
             const socials = info.socials || [];
             const websites = info.websites || [];
 
-            // Twitter/X from socials
+            // Twitter/X from socials — also detect community URLs in twitter field
             for (const social of socials) {
               if (social.type === 'twitter' && social.url) {
+                // Check if this "twitter" URL is actually a community URL (x.com/i/communities/...)
+                const communityIdFromSocial = extractXCommunityId(social.url);
+                if (communityIdFromSocial) {
+                  const { data: existing } = await supabase
+                    .from('x_communities')
+                    .select('id, linked_token_mints')
+                    .eq('community_id', communityIdFromSocial)
+                    .maybeSingle();
+
+                  if (existing) {
+                    if (!existing.linked_token_mints?.includes(mint)) {
+                      await supabase.from('x_communities').update({
+                        linked_token_mints: [...(existing.linked_token_mints || []), mint],
+                      }).eq('id', existing.id);
+                      results.dexscreener.communitiesAdded++;
+                    }
+                  } else {
+                    const { error: xcErr } = await supabase.from('x_communities').insert({
+                      community_id: communityIdFromSocial,
+                      community_url: social.url.replace(/\/$/, ''),
+                      linked_token_mints: [mint],
+                      scrape_status: 'pending',
+                      is_deleted: false,
+                    });
+                    if (!xcErr) results.dexscreener.communitiesAdded++;
+                  }
+                  continue; // Not a handle — skip handle extraction
+                }
+
                 const handle = extractXHandle(social.url);
                 if (handle) {
                   xHandlesToRegister.push(handle);
 
-                  // Mutable handle link
                   meshLinks.push({
                     source_type: 'x_account',
                     source_id: handle,
@@ -344,7 +372,6 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
                     });
                   }
 
-                  // Resolve to immutable ID (rate-limited: 10 per DexScreener batch)
                   if (results.dexscreener.xResolved < 10) {
                     await resolveAndLinkX(handle, mint, tokenData?.creator_wallet || null, 85, 'dexscreener', meshLinks, results.dexscreener);
                   }
@@ -356,7 +383,6 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
                 if (tgMatch) {
                   const tgUsername = tgMatch[1].toLowerCase();
 
-                  // Mutable username link
                   meshLinks.push({
                     source_type: 'telegram',
                     source_id: tgUsername,
@@ -368,7 +394,6 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
                     discovered_via: 'harvest-token-socials:dexscreener',
                   });
 
-                  // Resolve to immutable channel ID (rate-limited: 15 per DexScreener run)
                   if (results.dexscreener.tgResolved < 15) {
                     await resolveAndLinkTelegram(tgUsername, mint, 80, 'dexscreener', meshLinks, results.dexscreener);
                   }

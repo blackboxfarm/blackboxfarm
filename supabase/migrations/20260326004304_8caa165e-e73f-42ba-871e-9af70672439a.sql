@@ -1,0 +1,1 @@
+DELETE FROM dead_letter_queue;

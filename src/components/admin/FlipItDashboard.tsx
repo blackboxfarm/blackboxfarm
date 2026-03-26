@@ -313,7 +313,7 @@ export function FlipItDashboard() {
   const [lastAutoCheck, setLastAutoCheck] = useState<string | null>(null);
   
   // Auto-refresh state
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const countdownRef = useRef(5);
   
@@ -3172,6 +3172,30 @@ export function FlipItDashboard() {
                                 <RefreshCw className={`h-4 w-4 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
                               </Button>
                             </div>
+                            
+                            {/* Activate Trading button — starts client-side monitoring */}
+                            <Button
+                              size="sm"
+                              variant={autoRefreshEnabled ? "default" : "outline"}
+                              className={`h-9 px-3 ${autoRefreshEnabled ? 'bg-green-600 hover:bg-green-700 text-white' : 'border-green-600 text-green-600'}`}
+                              onClick={() => {
+                                setAutoRefreshEnabled(!autoRefreshEnabled);
+                                if (!autoRefreshEnabled) {
+                                  toast.success('Trading monitor activated');
+                                } else {
+                                  toast.info('Trading monitor paused');
+                                }
+                              }}
+                            >
+                              {autoRefreshEnabled ? (
+                                <>
+                                  <div className="w-2 h-2 rounded-full bg-white animate-pulse mr-1.5" />
+                                  Active
+                                </>
+                              ) : (
+                                'Activate Trading'
+                              )}
+                            </Button>
 
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center gap-2">

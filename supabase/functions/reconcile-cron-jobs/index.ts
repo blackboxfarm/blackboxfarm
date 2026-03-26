@@ -154,11 +154,7 @@ const REQUIRED_CRONS: CronDef[] = [
     body := concat('{\\\"time\\\": \\\"', now(), '\\\"}')::jsonb
   ) AS request_id;`,
   },
-  {
-    jobname: 'flipit-price-monitor-1min',
-    schedule: '* * * * *',
-    command: httpPost('flipit-price-monitor', '{\\\"action\\\": \\\"auto_check\\\"}'),
-  },
+  // flipit-price-monitor removed from cron — activated on-demand via FlipIt dashboard only
 
   // ── Enrichment & backfill ──
   {
