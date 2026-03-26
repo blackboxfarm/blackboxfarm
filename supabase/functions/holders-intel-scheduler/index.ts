@@ -444,10 +444,9 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     });
     
     if (queueInserts.length > 0) {
-      // Use upsert with ignoreDuplicates to prevent any duplicate token_mint entries
       const { error: queueError } = await supabase
         .from('holders_intel_post_queue')
-        .upsert(queueInserts, { onConflict: 'token_mint', ignoreDuplicates: true });
+        .insert(queueInserts);
       
       if (queueError) {
         console.error('[scheduler] Error queuing tokens:', queueError);
