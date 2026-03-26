@@ -13712,6 +13712,48 @@ export type Database = {
           },
         ]
       }
+      token_social_links: {
+        Row: {
+          community_id: string | null
+          community_spidered: boolean | null
+          discovered_at: string | null
+          extracted_handle: string | null
+          id: string
+          is_community: boolean | null
+          link_type: string
+          platform: string | null
+          source: string
+          token_mint: string
+          url: string
+        }
+        Insert: {
+          community_id?: string | null
+          community_spidered?: boolean | null
+          discovered_at?: string | null
+          extracted_handle?: string | null
+          id?: string
+          is_community?: boolean | null
+          link_type?: string
+          platform?: string | null
+          source: string
+          token_mint: string
+          url: string
+        }
+        Update: {
+          community_id?: string | null
+          community_spidered?: boolean | null
+          discovered_at?: string | null
+          extracted_handle?: string | null
+          id?: string
+          is_community?: boolean | null
+          link_type?: string
+          platform?: string | null
+          source?: string
+          token_mint?: string
+          url?: string
+        }
+        Relationships: []
+      }
       token_socials_history: {
         Row: {
           captured_at: string

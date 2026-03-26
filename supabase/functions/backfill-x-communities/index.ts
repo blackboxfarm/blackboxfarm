@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { PUMPFUN_API_BASE, PUMPFUN_HEADERS } from '../_shared/pumpfun-api.ts';
+import { getHeliusApiKey } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,203 +10,270 @@ const corsHeaders = {
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-// ─── Community URL extraction helpers ───
+// ─── URL Classification ───
 
-function extractCommunityId(url: string): string | null {
-  const match = url.match(/communities\/(\d+)/);
-  return match ? match[1] : null;
+interface DiscoveredUrl {
+  url: string;
+  link_type: string;
+  platform: string;
+  extracted_handle: string | null;
+  is_community: boolean;
+  community_id: string | null;
 }
 
-function isTwitterUrl(url: string): boolean {
-  return url.includes('twitter.com') || url.includes('x.com');
-}
+function classifyUrl(rawUrl: string): DiscoveredUrl {
+  const url = rawUrl.trim();
+  const lower = url.toLowerCase();
 
-interface CommunityResult {
-  communityId: string;
-  communityUrl: string;
-  source: string;
-}
-
-/** Extract community from any array of social/website objects or URL strings */
-function extractCommunityFromLinks(links: any[], source: string): CommunityResult | null {
-  for (const item of links) {
-    const url = typeof item === 'string' ? item : (item?.url || item?.uri || '');
-    if (url && isTwitterUrl(url)) {
-      const cid = extractCommunityId(url);
-      if (cid) return { communityId: cid, communityUrl: url, source };
-    }
+  // X Community
+  const communityMatch = url.match(/(?:twitter\.com|x\.com)\/i\/communities\/(\d+)/);
+  if (communityMatch) {
+    return { url, link_type: 'x_community', platform: 'twitter', extracted_handle: communityMatch[1], is_community: true, community_id: communityMatch[1] };
   }
-  return null;
+
+  // X/Twitter handle
+  const handleMatch = url.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]{1,15})\/?$/);
+  if (handleMatch && !['i', 'home', 'search', 'explore', 'settings', 'notifications'].includes(handleMatch[1].toLowerCase())) {
+    return { url, link_type: 'x_handle', platform: 'twitter', extracted_handle: `@${handleMatch[1]}`, is_community: false, community_id: null };
+  }
+
+  // General Twitter/X
+  if (lower.includes('twitter.com') || lower.includes('x.com')) {
+    return { url, link_type: 'twitter', platform: 'twitter', extracted_handle: null, is_community: false, community_id: null };
+  }
+
+  // Discord
+  if (lower.includes('discord.gg') || lower.includes('discord.com')) {
+    const invite = url.match(/discord\.(?:gg|com\/invite)\/([A-Za-z0-9-]+)/);
+    return { url, link_type: 'discord', platform: 'discord', extracted_handle: invite?.[1] || null, is_community: false, community_id: null };
+  }
+
+  // Telegram
+  if (lower.includes('t.me/') || lower.includes('telegram.me/') || lower.includes('telegram.org')) {
+    const tgHandle = url.match(/t\.me\/([A-Za-z0-9_]+)/);
+    return { url, link_type: 'telegram', platform: 'telegram', extracted_handle: tgHandle?.[1] || null, is_community: false, community_id: null };
+  }
+
+  // GitHub
+  if (lower.includes('github.com')) {
+    return { url, link_type: 'github', platform: 'github', extracted_handle: null, is_community: false, community_id: null };
+  }
+
+  // YouTube
+  if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
+    return { url, link_type: 'youtube', platform: 'youtube', extracted_handle: null, is_community: false, community_id: null };
+  }
+
+  // TikTok
+  if (lower.includes('tiktok.com')) {
+    return { url, link_type: 'tiktok', platform: 'tiktok', extracted_handle: null, is_community: false, community_id: null };
+  }
+
+  // Medium
+  if (lower.includes('medium.com')) {
+    return { url, link_type: 'medium', platform: 'medium', extracted_handle: null, is_community: false, community_id: null };
+  }
+
+  // Website (everything else)
+  return { url, link_type: 'website', platform: 'website', extracted_handle: null, is_community: false, community_id: null };
 }
 
-// ─── WATERFALL SOURCE PROVIDERS ───
+// ─── STORE ALL URLs ───
 
-/** Source 1: DexScreener batch API (30 tokens per call) */
-async function fetchDexScreenerBatch(mints: string[]): Promise<Map<string, any>> {
-  const pairsByMint = new Map<string, any>();
+async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], source: string): Promise<DiscoveredUrl[]> {
+  const classified: DiscoveredUrl[] = [];
+  const rows: any[] = [];
+
+  for (const rawUrl of urls) {
+    if (!rawUrl || typeof rawUrl !== 'string' || rawUrl.length < 5) continue;
+    const fullUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    const info = classifyUrl(fullUrl);
+    classified.push(info);
+    rows.push({
+      token_mint: tokenMint,
+      url: info.url,
+      link_type: info.link_type,
+      platform: info.platform,
+      extracted_handle: info.extracted_handle,
+      source,
+      is_community: info.is_community,
+      community_id: info.community_id,
+      community_spidered: false,
+    });
+  }
+
+  if (rows.length > 0) {
+    await supabase.from('token_social_links').upsert(rows, { onConflict: 'token_mint,url,source', ignoreDuplicates: true });
+  }
+
+  return classified;
+}
+
+// ─── SOURCE PROVIDERS (return raw URLs + optional metadata) ───
+
+interface SourceResult {
+  urls: string[];
+  bonded?: { at: string; dexId: string } | null;
+  bannerUrl?: string | null;
+}
+
+/** Source 1: DexScreener batch (FREE, 30 tokens/call) — CHEAPEST */
+async function fetchDexScreenerBatch(mints: string[]): Promise<Map<string, SourceResult>> {
+  const results = new Map<string, SourceResult>();
   try {
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mints.join(',')}`, {
       headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; BlackBox/1.0)' },
       signal: AbortSignal.timeout(10000),
     });
-    if (res.status === 429) {
-      console.warn('[backfill] DexScreener rate limited');
-      return pairsByMint;
-    }
-    if (!res.ok) return pairsByMint;
+    if (res.status === 429 || !res.ok) return results;
     const data = await res.json();
-    if (data?.pairs) {
-      for (const pair of data.pairs) {
-        const mint = pair.baseToken?.address;
-        if (mint && !pairsByMint.has(mint)) pairsByMint.set(mint, pair);
+    if (!data?.pairs) return results;
+
+    // Group pairs by mint (first pair per mint)
+    const pairMap = new Map<string, any>();
+    for (const pair of data.pairs) {
+      const mint = pair.baseToken?.address;
+      if (mint && !pairMap.has(mint)) pairMap.set(mint, pair);
+    }
+
+    for (const [mint, pair] of pairMap) {
+      const urls: string[] = [];
+      if (pair.info?.socials) {
+        for (const s of pair.info.socials) {
+          if (s.url) urls.push(s.url);
+        }
       }
+      if (pair.info?.websites) {
+        for (const w of pair.info.websites) {
+          if (w.url) urls.push(w.url);
+        }
+      }
+
+      const isBonded = pair.dexId && ['raydium', 'orca', 'meteora'].includes(pair.dexId.toLowerCase());
+      results.set(mint, {
+        urls,
+        bonded: isBonded ? { at: pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toISOString() : new Date().toISOString(), dexId: pair.dexId } : null,
+        bannerUrl: pair.info?.header || null,
+      });
     }
   } catch (e) {
     console.error('[backfill] DexScreener batch error:', e);
   }
-  return pairsByMint;
+  return results;
 }
 
-/** Extract community + metadata from a DexScreener pair object */
-function extractFromDexPair(pair: any): CommunityResult | null {
-  if (!pair?.info) return null;
-  // Check socials first
-  const fromSocials = extractCommunityFromLinks(pair.info.socials || [], 'dexscreener');
-  if (fromSocials) return fromSocials;
-  // Check websites
-  return extractCommunityFromLinks(pair.info.websites || [], 'dexscreener');
-}
-
-/** Source 2: Pump.fun API — returns socials for pump tokens */
-async function fetchPumpFunSocials(mint: string): Promise<CommunityResult | null> {
+/** Source 2: Pump.fun API (FREE) */
+async function fetchPumpFunUrls(mint: string): Promise<string[]> {
   try {
     const res = await fetch(`${PUMPFUN_API_BASE}/coins/${mint}`, {
       headers: PUMPFUN_HEADERS,
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json();
-    // pump.fun returns twitter, telegram, website fields
-    if (data.twitter) {
-      const cid = extractCommunityId(data.twitter);
-      if (cid) return { communityId: cid, communityUrl: data.twitter, source: 'pumpfun' };
-    }
-    // Also check website field
-    if (data.website && isTwitterUrl(data.website)) {
-      const cid = extractCommunityId(data.website);
-      if (cid) return { communityId: cid, communityUrl: data.website, source: 'pumpfun' };
-    }
-  } catch (_) { /* silent */ }
-  return null;
+    return [data.twitter, data.telegram, data.website].filter(Boolean);
+  } catch (_) { return []; }
 }
 
-/** Source 3: Solscan free public API — token metadata includes socials */
-async function fetchSolscanSocials(mint: string): Promise<CommunityResult | null> {
+/** Source 3: Solscan public API (FREE) */
+async function fetchSolscanUrls(mint: string): Promise<string[]> {
   try {
-    // Solscan public v2 API (free, no key needed)
     const res = await fetch(`https://api-v2.solscan.io/v2/token/meta?address=${mint}`, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (compatible; BlackBox/1.0)',
-      },
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; BlackBox/1.0)' },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json();
     const meta = data?.data;
-    if (!meta) return null;
-
-    // Solscan returns metadata.twitter, metadata.website
-    const urlsToCheck = [
-      meta.twitter,
-      meta.website,
-      ...(meta.extensions?.twitter ? [meta.extensions.twitter] : []),
-      ...(meta.extensions?.website ? [meta.extensions.website] : []),
+    if (!meta) return [];
+    return [
+      meta.twitter, meta.website, meta.telegram,
+      meta.extensions?.twitter, meta.extensions?.website, meta.extensions?.discord,
+      meta.extensions?.telegram, meta.extensions?.medium, meta.extensions?.github,
     ].filter(Boolean);
-
-    for (const url of urlsToCheck) {
-      const fullUrl = url.startsWith('http') ? url : `https://${url}`;
-      if (isTwitterUrl(fullUrl)) {
-        const cid = extractCommunityId(fullUrl);
-        if (cid) return { communityId: cid, communityUrl: fullUrl, source: 'solscan' };
-      }
-    }
-  } catch (_) { /* silent */ }
-  return null;
+  } catch (_) { return []; }
 }
 
-/** Source 4: Bonk.fun API */
-async function fetchBonkFunSocials(mint: string): Promise<CommunityResult | null> {
+/** Source 4: Bonk.fun API (FREE) */
+async function fetchBonkFunUrls(mint: string): Promise<string[]> {
   try {
     const res = await fetch(`https://api.bonk.fun/token/${mint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json();
-    const urls = [data.twitter, data.website].filter(Boolean);
-    return extractCommunityFromLinks(urls.map(u => ({ url: u })), 'bonkfun');
-  } catch (_) { /* silent */ }
-  return null;
+    return [data.twitter, data.website, data.telegram, data.discord].filter(Boolean);
+  } catch (_) { return []; }
 }
 
-/** Source 5: Bags.fm API */
-async function fetchBagsFmSocials(mint: string): Promise<CommunityResult | null> {
+/** Source 5: Bags.fm API (FREE) */
+async function fetchBagsFmUrls(mint: string): Promise<string[]> {
   try {
     const res = await fetch(`https://api.bags.fm/api/v1/token/${mint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json();
-    const urls = [data.twitter, data.website, data.socials?.twitter].filter(Boolean);
-    return extractCommunityFromLinks(urls.map(u => ({ url: u })), 'bagsfm');
-  } catch (_) { /* silent */ }
-  return null;
+    return [data.twitter, data.website, data.telegram, data.discord, data.socials?.twitter].filter(Boolean);
+  } catch (_) { return []; }
 }
 
-/**
- * WATERFALL: Try each source in order until we find a community.
- * DexScreener is pre-fetched in batch, so we pass the pair directly.
- * Other sources are fetched individually only when DexScreener fails.
- */
-async function waterfallCommunityLookup(
-  mint: string,
-  dexPair: any | null,
-  launchpad: string | null,
-): Promise<CommunityResult | null> {
-  // 1. DexScreener (already fetched in batch)
-  if (dexPair) {
-    const result = extractFromDexPair(dexPair);
-    if (result) return result;
-  }
+/** Source 6: Helius DAS getAsset (1 credit/call — use LAST) */
+async function fetchHeliusUrls(mint: string, apiKey: string): Promise<string[]> {
+  try {
+    const res = await fetch(`https://mainnet.helius-rpc.com/?api-key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 'backfill', method: 'getAsset',
+        params: { id: mint, displayOptions: { showFungible: true } },
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const content = data?.result?.content;
+    if (!content) return [];
 
-  // 2. Pump.fun (only for pump tokens or unknown — it's the biggest launchpad)
-  if (!launchpad || launchpad === 'pump.fun' || mint.endsWith('pump')) {
-    const result = await fetchPumpFunSocials(mint);
-    if (result) return result;
-    await delay(200);
-  }
-
-  // 3. Solscan free API (works for all tokens)
-  const solscanResult = await fetchSolscanSocials(mint);
-  if (solscanResult) return solscanResult;
-  await delay(200);
-
-  // 4. Bonk.fun (only if launchpad matches)
-  if (launchpad === 'bonk.fun') {
-    const result = await fetchBonkFunSocials(mint);
-    if (result) return result;
-    await delay(200);
-  }
-
-  // 5. Bags.fm (only if launchpad matches)
-  if (launchpad === 'bags.fm') {
-    const result = await fetchBagsFmSocials(mint);
-    if (result) return result;
-  }
-
-  return null;
+    const urls: string[] = [];
+    // Off-chain JSON links
+    if (content.json_uri) urls.push(content.json_uri);
+    // Links from metadata
+    const links = content.links || {};
+    if (links.external_url) urls.push(links.external_url);
+    if (Array.isArray(links.social)) {
+      for (const s of links.social) if (s) urls.push(s);
+    }
+    // Also try fetching the off-chain JSON for more socials
+    if (content.json_uri) {
+      try {
+        const jsonRes = await fetch(content.json_uri, { signal: AbortSignal.timeout(5000) });
+        if (jsonRes.ok) {
+          const meta = await jsonRes.json();
+          if (meta.twitter) urls.push(meta.twitter);
+          if (meta.website) urls.push(meta.website);
+          if (meta.telegram) urls.push(meta.telegram);
+          if (meta.discord) urls.push(meta.discord);
+          if (meta.external_url) urls.push(meta.external_url);
+          // Check extensions
+          if (meta.extensions) {
+            for (const [, v] of Object.entries(meta.extensions)) {
+              if (typeof v === 'string' && v.startsWith('http')) urls.push(v);
+            }
+          }
+          // properties.links
+          if (meta.properties?.links) {
+            for (const [, v] of Object.entries(meta.properties.links)) {
+              if (typeof v === 'string' && v.startsWith('http')) urls.push(v);
+            }
+          }
+        }
+      } catch (_) { /* off-chain fetch failed, still have on-chain */ }
+    }
+    return urls;
+  } catch (_) { return []; }
 }
 
 // ─── MAIN FUNCTION ───
@@ -223,6 +291,7 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const batchSize = Math.min(body.batchSize || 300, 300);
+    const heliusKey = getHeliusApiKey();
 
     // Get unchecked tokens from BOTH source tables
     const [{ data: uncheckedScraped }, { data: uncheckedHI }] = await Promise.all([
@@ -230,7 +299,7 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
       supabase.from('holders_intel_seen_tokens').select('token_mint, symbol').is('community_checked_at', null).limit(batchSize),
     ]);
 
-    // Deduplicate by token_mint, keep launchpad info
+    // Deduplicate by token_mint
     const tokenMap = new Map<string, { symbol: string; launchpad: string | null }>();
     for (const t of (uncheckedScraped || [])) {
       tokenMap.set(t.token_mint, { symbol: t.symbol || '', launchpad: t.launchpad || null });
@@ -245,168 +314,227 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
 
     if (allMints.length === 0) {
       return new Response(JSON.stringify({
-        success: true,
-        message: 'All tokens have been checked — backfill complete',
-        processed: 0,
+        success: true, message: 'All tokens checked — backfill complete', processed: 0,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`[backfill-x-communities] Processing ${allMints.length} unchecked tokens (waterfall: DexScreener → Pump.fun → Solscan → Bonk → Bags)`);
+    console.log(`[backfill] Processing ${allMints.length} tokens (waterfall: DexScreener→Pump→Solscan→Bonk→Bags→Helius)`);
 
+    let totalUrlsStored = 0;
     let communitiesFound = 0;
     let communitiesCreated = 0;
     let communitiesUpdated = 0;
-    let noSocials = 0;
-    let bondedUpdated = 0;
     let meshLinksCreated = 0;
+    let bondedUpdated = 0;
+    let heliusCalls = 0;
     const sourceHits: Record<string, number> = {};
 
-    // Process in DexScreener batch chunks (30 per API call)
     const CHUNK_SIZE = 30;
     for (let i = 0; i < allMints.length; i += CHUNK_SIZE) {
       const chunk = allMints.slice(i, i + CHUNK_SIZE);
-
       if (i > 0) await delay(500);
 
-      // Batch fetch DexScreener for the chunk
-      const dexPairs = await fetchDexScreenerBatch(chunk);
+      // 1. DexScreener batch (FREE, fastest)
+      const dexResults = await fetchDexScreenerBatch(chunk);
 
-      // Update bonded_at + banner for any with DexScreener data
       for (const mint of chunk) {
-        const pair = dexPairs.get(mint);
-        if (pair) {
-          const isBonded = pair.dexId && ['raydium', 'orca', 'meteora'].includes(pair.dexId.toLowerCase());
-          if (isBonded) {
-            const bondedTime = pair.pairCreatedAt
-              ? new Date(pair.pairCreatedAt).toISOString()
-              : new Date().toISOString();
+        const info = tokenMap.get(mint)!;
+        let foundCommunityId: string | null = null;
+        let foundCommunityUrl: string | null = null;
+        let communitySource: string | null = null;
+
+        // --- DexScreener ---
+        const dexData = dexResults.get(mint);
+        if (dexData) {
+          // Store bonded + banner
+          if (dexData.bonded) {
             const { error: bondErr } = await supabase
               .from('holders_intel_seen_tokens')
-              .update({ bonded_at: bondedTime })
-              .eq('token_mint', mint)
-              .is('bonded_at', null);
+              .update({ bonded_at: dexData.bonded.at })
+              .eq('token_mint', mint).is('bonded_at', null);
             if (!bondErr) bondedUpdated++;
           }
-          if (pair.info?.header) {
-            await supabase
-              .from('holders_intel_seen_tokens')
-              .update({ banner_url: pair.info.header })
-              .eq('token_mint', mint)
-              .is('banner_url', null);
+          if (dexData.bannerUrl) {
+            await supabase.from('holders_intel_seen_tokens')
+              .update({ banner_url: dexData.bannerUrl })
+              .eq('token_mint', mint).is('banner_url', null);
+          }
+          // Store ALL dex URLs
+          if (dexData.urls.length > 0) {
+            const classified = await storeAllUrls(supabase, mint, dexData.urls, 'dexscreener');
+            totalUrlsStored += dexData.urls.length;
+            sourceHits['dexscreener'] = (sourceHits['dexscreener'] || 0) + dexData.urls.length;
+            // Check for community
+            const comm = classified.find(c => c.is_community);
+            if (comm) {
+              foundCommunityId = comm.community_id;
+              foundCommunityUrl = comm.url;
+              communitySource = 'dexscreener';
+            }
           }
         }
-      }
 
-      // Now waterfall each token to find community
-      for (const mint of chunk) {
-        const pair = dexPairs.get(mint) || null;
-        const info = tokenMap.get(mint)!;
-
-        const community = await waterfallCommunityLookup(mint, pair, info.launchpad);
-
-        if (!community) {
-          noSocials++;
-          continue;
+        // --- Pump.fun (FREE, for pump tokens or if no community yet) ---
+        if (!foundCommunityId && (!info.launchpad || info.launchpad === 'pump.fun' || mint.endsWith('pump'))) {
+          const pumpUrls = await fetchPumpFunUrls(mint);
+          if (pumpUrls.length > 0) {
+            const classified = await storeAllUrls(supabase, mint, pumpUrls, 'pumpfun');
+            totalUrlsStored += pumpUrls.length;
+            sourceHits['pumpfun'] = (sourceHits['pumpfun'] || 0) + pumpUrls.length;
+            const comm = classified.find(c => c.is_community);
+            if (comm && !foundCommunityId) {
+              foundCommunityId = comm.community_id;
+              foundCommunityUrl = comm.url;
+              communitySource = 'pumpfun';
+            }
+          }
+          await delay(150);
         }
 
-        communitiesFound++;
-        sourceHits[community.source] = (sourceHits[community.source] || 0) + 1;
+        // --- Solscan (FREE) ---
+        if (!foundCommunityId) {
+          const solUrls = await fetchSolscanUrls(mint);
+          if (solUrls.length > 0) {
+            const classified = await storeAllUrls(supabase, mint, solUrls, 'solscan');
+            totalUrlsStored += solUrls.length;
+            sourceHits['solscan'] = (sourceHits['solscan'] || 0) + solUrls.length;
+            const comm = classified.find(c => c.is_community);
+            if (comm && !foundCommunityId) {
+              foundCommunityId = comm.community_id;
+              foundCommunityUrl = comm.url;
+              communitySource = 'solscan';
+            }
+          }
+          await delay(150);
+        }
 
-        // Upsert into x_communities
-        const { data: existing } = await supabase
-          .from('x_communities')
-          .select('id, linked_token_mints')
-          .eq('community_id', community.communityId)
-          .single();
+        // --- Bonk.fun (FREE, if launchpad matches) ---
+        if (!foundCommunityId && info.launchpad === 'bonk.fun') {
+          const bonkUrls = await fetchBonkFunUrls(mint);
+          if (bonkUrls.length > 0) {
+            const classified = await storeAllUrls(supabase, mint, bonkUrls, 'bonkfun');
+            totalUrlsStored += bonkUrls.length;
+            sourceHits['bonkfun'] = (sourceHits['bonkfun'] || 0) + bonkUrls.length;
+            const comm = classified.find(c => c.is_community);
+            if (comm) { foundCommunityId = comm.community_id; foundCommunityUrl = comm.url; communitySource = 'bonkfun'; }
+          }
+          await delay(150);
+        }
 
-        if (existing) {
-          const mints = (existing.linked_token_mints as string[]) || [];
-          if (!mints.includes(mint)) {
-            await supabase
-              .from('x_communities')
-              .update({
+        // --- Bags.fm (FREE, if launchpad matches) ---
+        if (!foundCommunityId && info.launchpad === 'bags.fm') {
+          const bagsUrls = await fetchBagsFmUrls(mint);
+          if (bagsUrls.length > 0) {
+            const classified = await storeAllUrls(supabase, mint, bagsUrls, 'bagsfm');
+            totalUrlsStored += bagsUrls.length;
+            sourceHits['bagsfm'] = (sourceHits['bagsfm'] || 0) + bagsUrls.length;
+            const comm = classified.find(c => c.is_community);
+            if (comm) { foundCommunityId = comm.community_id; foundCommunityUrl = comm.url; communitySource = 'bagsfm'; }
+          }
+          await delay(150);
+        }
+
+        // --- Helius DAS (1 credit/call — LAST RESORT, only if no URLs found at all) ---
+        if (!foundCommunityId && heliusKey && totalUrlsStored === 0) {
+          const heliusUrls = await fetchHeliusUrls(mint, heliusKey);
+          heliusCalls++;
+          if (heliusUrls.length > 0) {
+            const classified = await storeAllUrls(supabase, mint, heliusUrls, 'helius');
+            totalUrlsStored += heliusUrls.length;
+            sourceHits['helius'] = (sourceHits['helius'] || 0) + heliusUrls.length;
+            const comm = classified.find(c => c.is_community);
+            if (comm) { foundCommunityId = comm.community_id; foundCommunityUrl = comm.url; communitySource = 'helius'; }
+          }
+          await delay(200);
+        }
+
+        // --- Upsert community if found ---
+        if (foundCommunityId && foundCommunityUrl) {
+          communitiesFound++;
+
+          const { data: existing } = await supabase
+            .from('x_communities')
+            .select('id, linked_token_mints')
+            .eq('community_id', foundCommunityId)
+            .single();
+
+          if (existing) {
+            const mints = (existing.linked_token_mints as string[]) || [];
+            if (!mints.includes(mint)) {
+              await supabase.from('x_communities').update({
                 linked_token_mints: [...mints, mint],
                 updated_at: new Date().toISOString(),
-              })
-              .eq('id', existing.id);
-            communitiesUpdated++;
-          }
-        } else {
-          await supabase
-            .from('x_communities')
-            .insert({
-              community_id: community.communityId,
-              community_url: community.communityUrl,
+              }).eq('id', existing.id);
+              communitiesUpdated++;
+            }
+          } else {
+            await supabase.from('x_communities').insert({
+              community_id: foundCommunityId,
+              community_url: foundCommunityUrl,
               name: info.symbol ? `$${info.symbol} Community` : null,
               linked_token_mints: [mint],
               scrape_status: 'pending',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
-          communitiesCreated++;
-        }
+            communitiesCreated++;
+          }
 
-        // Mesh link
-        const { data: meshExists } = await supabase
-          .from('reputation_mesh')
-          .select('id')
-          .eq('source_type', 'x_community')
-          .eq('source_id', community.communityId)
-          .eq('linked_type', 'token')
-          .eq('linked_id', mint)
-          .maybeSingle();
-
-        if (!meshExists) {
-          await supabase
+          // Mesh link
+          const { data: meshExists } = await supabase
             .from('reputation_mesh')
-            .insert({
+            .select('id')
+            .eq('source_type', 'x_community')
+            .eq('source_id', foundCommunityId)
+            .eq('linked_type', 'token')
+            .eq('linked_id', mint)
+            .maybeSingle();
+
+          if (!meshExists) {
+            await supabase.from('reputation_mesh').insert({
               source_type: 'x_community',
-              source_id: community.communityId,
+              source_id: foundCommunityId,
               linked_type: 'token',
               linked_id: mint,
               relationship: 'community_for',
               confidence: 90,
-              discovered_via: `backfill-${community.source}`,
+              discovered_via: `backfill-${communitySource}`,
               discovered_at: new Date().toISOString(),
             });
-          meshLinksCreated++;
+            meshLinksCreated++;
+          }
         }
       }
 
-      // Mark entire chunk as checked
-      await markChecked(supabase, chunk);
+      // Mark chunk as checked
+      const now = new Date().toISOString();
+      await Promise.all([
+        supabase.from('scraped_tokens').update({ community_checked_at: now }).in('token_mint', chunk),
+        supabase.from('holders_intel_seen_tokens').update({ community_checked_at: now }).in('token_mint', chunk),
+      ]);
     }
 
     const summary = {
       success: true,
       processed: allMints.length,
+      totalUrlsStored,
       communitiesFound,
       communitiesCreated,
       communitiesUpdated,
       meshLinksCreated,
-      noSocials,
       bondedUpdated,
+      heliusCalls,
       sourceHits,
     };
 
-    console.log(`[backfill-x-communities] Done:`, JSON.stringify(summary));
-
+    console.log(`[backfill] Done:`, JSON.stringify(summary));
     return new Response(JSON.stringify(summary), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    console.error('[backfill-x-communities] Error:', error);
+    console.error('[backfill] Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }));
-
-async function markChecked(supabase: any, mints: string[]) {
-  const now = new Date().toISOString();
-  await Promise.all([
-    supabase.from('scraped_tokens').update({ community_checked_at: now }).in('token_mint', mints),
-    supabase.from('holders_intel_seen_tokens').update({ community_checked_at: now }).in('token_mint', mints),
-  ]);
-}
