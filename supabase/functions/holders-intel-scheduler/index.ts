@@ -276,6 +276,16 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     console.log(`[scheduler] Current slot: ${currentSlot}`);
     console.log(`[scheduler] Previous slots to filter: ${previousSlots.join(', ')}`);
     
+    // Auto-cleanup: expire stuck "processing" entries older than 30 min
+    const { data: stuckCleaned } = await supabase
+      .from('holders_intel_post_queue')
+      .update({ status: 'failed', trigger_comment: 'auto-cleanup: stuck processing' })
+      .eq('status', 'processing')
+      .lt('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+      .select('id');
+    if (stuckCleaned?.length) {
+      console.log(`[scheduler] 🧹 Cleaned ${stuckCleaned.length} stuck processing entries`);
+    }
     // Fetch trending tokens
     const trendingTokens = await fetchTrendingTokens();
     
