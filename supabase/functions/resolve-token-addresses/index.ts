@@ -485,7 +485,7 @@ Deno.serve(withRunLog('resolve-token-addresses', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));
 
 function extractTokenAddress(html: string, lowercaseAddress: string): string | null {
   console.log(`🔍 Starting extraction for lowercase: ${lowercaseAddress}`);
