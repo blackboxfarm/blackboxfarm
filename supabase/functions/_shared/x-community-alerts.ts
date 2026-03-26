@@ -15,6 +15,10 @@ export interface CommunityAlertInfo {
   moderatorUsernames?: string[];
   memberCount?: number;
   detectedAt: string;
+  /** If true, linked tokens still have active chart volume — suspicious deletion */
+  hasActiveChart?: boolean;
+  /** Last 24h volume of linked tokens */
+  recentVolumeUsd?: number;
 }
 
 /**
@@ -37,11 +41,19 @@ function formatDeletionAlert(info: CommunityAlertInfo): string {
     ? `${info.communityName} (${info.communityId})`
     : info.communityId;
 
-  return `🚨 *X COMMUNITY DELETED* 🚨
+  // Context-aware severity
+  const isSuspicious = info.hasActiveChart && (info.recentVolumeUsd || 0) > 500;
+  const emoji = isSuspicious ? '🚨' : '📋';
+  const severity = isSuspicious
+    ? '⚠️ SUSPICIOUS: Token still has active chart volume — community deleted while trading is active. Possible rug signal.'
+    : '📝 LOW RISK: Token appears dormant or finished. Community cleanup by a completed project — not necessarily a red flag.';
+
+  return `${emoji} *X COMMUNITY DELETED* ${emoji}
 
 *Community:* ${communityDisplay}
 *URL:* ${info.communityUrl}
 *Last Known Members:* ${info.memberCount || 'Unknown'}
+${info.recentVolumeUsd ? `*Recent 24h Volume:* $${info.recentVolumeUsd.toLocaleString()}` : ''}
 
 *Admins:* ${adminList}
 *Mods:* ${modList}
@@ -51,7 +63,7 @@ function formatDeletionAlert(info: CommunityAlertInfo): string {
 
 *Detected:* ${new Date(info.detectedAt).toUTCString()}
 
-⚠️ This community was deleted by its owners. Linked tokens may be abandoned or rugging.`;
+${severity}`;
 }
 
 /**
