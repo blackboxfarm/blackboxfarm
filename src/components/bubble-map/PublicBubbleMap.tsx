@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useBubbleMapRateLimit } from "@/hooks/useBubbleMapRateLimit";
 import { useNavigate } from "react-router-dom";
 import HackerTerminal, { TerminalLine } from "./HackerTerminal";
+import SocialTimeline from "./SocialTimeline";
 
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
@@ -1170,6 +1171,15 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
             <div className="font-mono text-[10px] text-muted-foreground select-all break-all pl-5">
               {hoveredNode.fullId || hoveredNode.id.split(':').slice(1).join(':')}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Social Timeline for focused token */}
+      {focusedEntity?.type === 'token' && (
+        <Card className="border-primary/30">
+          <CardContent className="py-3">
+            <SocialTimeline tokenMint={focusedEntity.id.replace(/^token:/, '')} />
           </CardContent>
         </Card>
       )}
