@@ -80,7 +80,7 @@ function classifyUrl(rawUrl: string): DiscoveredUrl {
 
 // ─── STORE ALL URLs ───
 
-async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], source: string): Promise<DiscoveredUrl[]> {
+async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], source: string, phase: string = 'discovery'): Promise<DiscoveredUrl[]> {
   const classified: DiscoveredUrl[] = [];
   const rows: any[] = [];
 
@@ -99,6 +99,8 @@ async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], so
       is_community: info.is_community,
       community_id: info.community_id,
       community_spidered: false,
+      phase,
+      is_current: true,
     });
   }
 
@@ -107,6 +109,34 @@ async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], so
   }
 
   return classified;
+}
+
+/** Snapshot socials into token_socials_history with phase tracking */
+async function snapshotSocialsForBackfill(
+  supabase: any,
+  tokenMint: string,
+  classified: DiscoveredUrl[],
+  phase: string,
+  source: string
+): Promise<void> {
+  const twitter = classified.find(c => c.platform === 'twitter' && (c.link_type === 'x_handle' || c.link_type === 'twitter'))?.url || null;
+  const telegram = classified.find(c => c.platform === 'telegram')?.url || null;
+  const website = classified.find(c => c.platform === 'website')?.url || null;
+
+  if (!twitter && !telegram && !website) return;
+
+  const { error } = await supabase.from('token_socials_history').insert({
+    token_mint: tokenMint,
+    twitter,
+    telegram,
+    website,
+    source: `backfill_${source}`,
+    phase,
+  });
+
+  if (error && error.code !== '23505') {
+    console.error(`[backfill] Snapshot error for ${tokenMint}:`, error);
+  }
 }
 
 // ─── SOURCE PROVIDERS (return raw URLs + optional metadata) ───
@@ -361,9 +391,12 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
           }
           // Store ALL dex URLs
           if (dexData.urls.length > 0) {
-            const classified = await storeAllUrls(supabase, mint, dexData.urls, 'dexscreener');
+            const dexPhase = dexData.bonded ? 'dex_paid' : 'launchpad';
+            const classified = await storeAllUrls(supabase, mint, dexData.urls, 'dexscreener', dexPhase);
             totalUrlsStored += dexData.urls.length;
             sourceHits['dexscreener'] = (sourceHits['dexscreener'] || 0) + dexData.urls.length;
+            // Snapshot into history with phase
+            await snapshotSocialsForBackfill(supabase, mint, classified, dexPhase, 'dexscreener');
             // Check for community
             const comm = classified.find(c => c.is_community);
             if (comm) {
@@ -378,9 +411,10 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
         if (!foundCommunityId && (!info.launchpad || info.launchpad === 'pump.fun' || mint.endsWith('pump'))) {
           const pumpUrls = await fetchPumpFunUrls(mint);
           if (pumpUrls.length > 0) {
-            const classified = await storeAllUrls(supabase, mint, pumpUrls, 'pumpfun');
+            const classified = await storeAllUrls(supabase, mint, pumpUrls, 'pumpfun', 'launchpad');
             totalUrlsStored += pumpUrls.length;
             sourceHits['pumpfun'] = (sourceHits['pumpfun'] || 0) + pumpUrls.length;
+            await snapshotSocialsForBackfill(supabase, mint, classified, 'launchpad', 'pumpfun');
             const comm = classified.find(c => c.is_community);
             if (comm && !foundCommunityId) {
               foundCommunityId = comm.community_id;
@@ -395,9 +429,10 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
         if (!foundCommunityId) {
           const solUrls = await fetchSolscanUrls(mint);
           if (solUrls.length > 0) {
-            const classified = await storeAllUrls(supabase, mint, solUrls, 'solscan');
+            const classified = await storeAllUrls(supabase, mint, solUrls, 'solscan', 'launchpad');
             totalUrlsStored += solUrls.length;
             sourceHits['solscan'] = (sourceHits['solscan'] || 0) + solUrls.length;
+            await snapshotSocialsForBackfill(supabase, mint, classified, 'launchpad', 'solscan');
             const comm = classified.find(c => c.is_community);
             if (comm && !foundCommunityId) {
               foundCommunityId = comm.community_id;
@@ -412,7 +447,7 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
         if (!foundCommunityId && info.launchpad === 'bonk.fun') {
           const bonkUrls = await fetchBonkFunUrls(mint);
           if (bonkUrls.length > 0) {
-            const classified = await storeAllUrls(supabase, mint, bonkUrls, 'bonkfun');
+            const classified = await storeAllUrls(supabase, mint, bonkUrls, 'bonkfun', 'launchpad');
             totalUrlsStored += bonkUrls.length;
             sourceHits['bonkfun'] = (sourceHits['bonkfun'] || 0) + bonkUrls.length;
             const comm = classified.find(c => c.is_community);
@@ -425,7 +460,7 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
         if (!foundCommunityId && info.launchpad === 'bags.fm') {
           const bagsUrls = await fetchBagsFmUrls(mint);
           if (bagsUrls.length > 0) {
-            const classified = await storeAllUrls(supabase, mint, bagsUrls, 'bagsfm');
+            const classified = await storeAllUrls(supabase, mint, bagsUrls, 'bagsfm', 'launchpad');
             totalUrlsStored += bagsUrls.length;
             sourceHits['bagsfm'] = (sourceHits['bagsfm'] || 0) + bagsUrls.length;
             const comm = classified.find(c => c.is_community);
@@ -439,7 +474,7 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
           const heliusUrls = await fetchHeliusUrls(mint, heliusKey);
           heliusCalls++;
           if (heliusUrls.length > 0) {
-            const classified = await storeAllUrls(supabase, mint, heliusUrls, 'helius');
+            const classified = await storeAllUrls(supabase, mint, heliusUrls, 'helius', 'launchpad');
             totalUrlsStored += heliusUrls.length;
             sourceHits['helius'] = (sourceHits['helius'] || 0) + heliusUrls.length;
             const comm = classified.find(c => c.is_community);

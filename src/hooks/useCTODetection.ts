@@ -23,7 +23,7 @@ export interface CTODetectionResult {
 export function useCTODetection() {
   const detectCTO = useCallback(async (tokenMint: string): Promise<CTODetectionResult> => {
     try {
-      // 1. Get historical snapshots (ordered oldest first)
+      // 1. Get historical snapshots with phase info (ordered oldest first)
       const { data: history } = await supabase
         .from('token_socials_history')
         .select('*')
@@ -34,34 +34,48 @@ export function useCTODetection() {
         return { isCTO: false, changes: [] };
       }
 
-      // 2. Compare earliest snapshot to latest
-      const earliest = history[0];
-      const latest = history[history.length - 1];
-      const changes: CTOChange[] = [];
+      // 2. Phase-aware comparison: prefer dex_paid vs cto phases
+      //    Fall back to earliest vs latest if no phase data
+      const dexPaidSnapshots = history.filter((h: any) => h.phase === 'dex_paid');
+      const ctoSnapshots = history.filter((h: any) => h.phase === 'cto');
 
-      // Check each social field for REPLACEMENT (not just deletion)
-      const fields = ['twitter', 'telegram', 'website', 'discord'] as const;
-      for (const field of fields) {
-        const before = earliest[field];
-        const after = latest[field];
-        
-        // A CTO change = the field existed before AND now has a DIFFERENT value
-        // OR field was null before and now exists (new community added socials)
-        if (before && after && before !== after) {
-          changes.push({ field, before, after });
-        } else if (!before && after && history.length > 1) {
-          // New social added after initial snapshot — could be CTO adding their links
-          changes.push({ field, before: '(none)', after });
+      let before: any;
+      let after: any;
+
+      if (dexPaidSnapshots.length > 0 && ctoSnapshots.length > 0) {
+        // Best case: compare last dex_paid against first cto
+        before = dexPaidSnapshots[dexPaidSnapshots.length - 1];
+        after = ctoSnapshots[0];
+      } else {
+        // Fallback: earliest vs latest (legacy behavior for pre-phase data)
+        before = history[0];
+        after = history[history.length - 1];
+        // Skip if both are same phase (e.g. launchpad→dex_paid is normal, not CTO)
+        if (before.phase && after.phase && before.phase === after.phase) {
+          return { isCTO: false, changes: [] };
         }
       }
 
-      const isCTO = changes.length >= 2; // 2+ social changes = likely CTO
+      const changes: CTOChange[] = [];
+      const fields = ['twitter', 'telegram', 'website', 'discord'] as const;
+      for (const field of fields) {
+        const beforeVal = before[field];
+        const afterVal = after[field];
+        
+        if (beforeVal && afterVal && beforeVal !== afterVal) {
+          changes.push({ field, before: beforeVal, after: afterVal });
+        } else if (!beforeVal && afterVal && history.length > 1) {
+          changes.push({ field, before: '(none)', after: afterVal });
+        }
+      }
+
+      const isCTO = changes.length >= 2;
 
       return {
         isCTO,
         changes,
-        detectedAt: latest.captured_at,
-        previousSnapshot: earliest.captured_at,
+        detectedAt: after.captured_at,
+        previousSnapshot: before.captured_at,
       };
     } catch (err) {
       console.warn('[CTO Detection] Error:', err);

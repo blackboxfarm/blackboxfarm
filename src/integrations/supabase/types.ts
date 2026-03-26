@@ -13720,9 +13720,12 @@ export type Database = {
           extracted_handle: string | null
           id: string
           is_community: boolean | null
+          is_current: boolean | null
           link_type: string
+          phase: string | null
           platform: string | null
           source: string
+          superseded_at: string | null
           token_mint: string
           url: string
         }
@@ -13733,9 +13736,12 @@ export type Database = {
           extracted_handle?: string | null
           id?: string
           is_community?: boolean | null
+          is_current?: boolean | null
           link_type?: string
+          phase?: string | null
           platform?: string | null
           source: string
+          superseded_at?: string | null
           token_mint: string
           url: string
         }
@@ -13746,9 +13752,12 @@ export type Database = {
           extracted_handle?: string | null
           id?: string
           is_community?: boolean | null
+          is_current?: boolean | null
           link_type?: string
+          phase?: string | null
           platform?: string | null
           source?: string
+          superseded_at?: string | null
           token_mint?: string
           url?: string
         }
@@ -13759,6 +13768,7 @@ export type Database = {
           captured_at: string
           discord: string | null
           id: string
+          phase: string | null
           source: string | null
           telegram: string | null
           token_mint: string
@@ -13769,6 +13779,7 @@ export type Database = {
           captured_at?: string
           discord?: string | null
           id?: string
+          phase?: string | null
           source?: string | null
           telegram?: string | null
           token_mint: string
@@ -13779,6 +13790,7 @@ export type Database = {
           captured_at?: string
           discord?: string | null
           id?: string
+          phase?: string | null
           source?: string | null
           telegram?: string | null
           token_mint?: string
