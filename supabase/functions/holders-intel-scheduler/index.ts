@@ -306,12 +306,16 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     
     // ALSO check post_queue for tokens already posted or currently pending
     // This prevents re-queuing tokens that stay in the Dex Top 200 for days
+    // Now includes ALL statuses + 7-day cooldown for expired/skipped/failed
     const trendingMints = trendingTokens.map(t => t.mint);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    
+    // Check for ANY status - if it was ever queued recently, skip it
     const { data: alreadyQueued, error: queuedError } = await supabase
       .from('holders_intel_post_queue')
       .select('token_mint')
       .in('token_mint', trendingMints)
-      .in('status', ['pending', 'processing', 'posted']);
+      .gte('created_at', sevenDaysAgo);
     
     if (queuedError) {
       console.error('[scheduler] Error checking existing queue:', queuedError);
@@ -372,6 +376,7 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
         status: 'pending',
         market_cap: t.marketCap,
         snapshot_slot: currentSlot,
+        trigger_source: 'scheduler',
       };
     });
     
