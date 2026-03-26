@@ -578,14 +578,20 @@ export function useMeshGraph(initialEntityId?: string) {
 
   // Trigger oracle spider for unknown entities
   const triggerSpider = useCallback(async (input: string, scanMode: 'deep' | 'quick' = 'deep') => {
-    const normalizedInput = input.trim().replace(/^@/, '').toLowerCase();
+    const trimmedInput = input.trim().replace(/^@/, '');
     
     // ═══ INPUT TYPE DETECTION — prevents sending wrong types to wrong APIs ═══
-    const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedInput);
-    const isCommunityId = /^\d{10,25}$/.test(normalizedInput);
-    const isCommunityUrl = normalizedInput.includes('/communities/');
-    const isUrl = normalizedInput.includes('://') || normalizedInput.includes('.com') || normalizedInput.includes('.io');
-    const isXHandle = !isBase58 && !isCommunityId && !isCommunityUrl && !isUrl && normalizedInput.length < 30;
+    // CRITICAL: Detect type BEFORE any case transformation — Solana addresses are case-sensitive Base58
+    const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmedInput);
+    const isCommunityId = /^\d{10,25}$/.test(trimmedInput);
+    const isCommunityUrl = trimmedInput.toLowerCase().includes('/communities/');
+    const isUrl = trimmedInput.includes('://') || trimmedInput.includes('.com') || trimmedInput.includes('.io');
+    const isXHandle = !isBase58 && !isCommunityId && !isCommunityUrl && !isUrl && trimmedInput.length < 30;
+    
+    // Only lowercase X handles — Solana addresses are case-sensitive Base58, lowercasing destroys them
+    const normalizedInput = (isBase58 || isCommunityId || isCommunityUrl || isUrl)
+      ? trimmedInput
+      : trimmedInput.toLowerCase();
     
     // Community IDs and URLs should NOT be sent to oracle-unified-lookup (which calls Helius/Pump.fun)
     // They are handled by the reverse community lookup in the graph query
