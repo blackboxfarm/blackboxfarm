@@ -413,7 +413,7 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     const now = new Date();
     let cumulativeDelayMs = 0;
     
-    const queueInserts = qualifiedTokens.map((t, index) => {
+    const queueInserts = cappedTokens.map((t, index) => {
       // Random delay between 3-10 minutes (180000-600000 ms)
       const delayMs = 180000 + Math.floor(Math.random() * 420000);
       cumulativeDelayMs += delayMs;
