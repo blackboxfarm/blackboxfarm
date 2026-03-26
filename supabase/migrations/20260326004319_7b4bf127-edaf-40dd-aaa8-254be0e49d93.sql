@@ -1,0 +1,1 @@
+SELECT cron.unschedule('flipit-price-monitor-1min');
