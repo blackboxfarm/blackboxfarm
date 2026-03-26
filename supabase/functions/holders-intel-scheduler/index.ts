@@ -446,6 +446,7 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
         trendingFetched: trendingTokens.length,
         alreadySeen: seenMints.size,
         newTokens: newTokens.length,
+        establishedSkipped: establishedMints.size,
         qualifiedTokens: qualifiedTokens.length,
         queued: queueInserts.length,
         tierTracked: tierQualified,
