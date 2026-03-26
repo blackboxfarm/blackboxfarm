@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useBubbleMapRateLimit } from "@/hooks/useBubbleMapRateLimit";
 import { useNavigate } from "react-router-dom";
 import HackerTerminal, { TerminalLine } from "./HackerTerminal";
+import SocialTimeline from "./SocialTimeline";
 
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
