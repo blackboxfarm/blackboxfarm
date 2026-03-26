@@ -10563,6 +10563,36 @@ export type Database = {
         }
         Relationships: []
       }
+      social_posts_log: {
+        Row: {
+          content: string | null
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          platform: string
+          post_id: string | null
+          status: string | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          platform: string
+          post_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          platform?: string
+          post_id?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       sol_price_fetch_logs: {
         Row: {
           created_at: string
