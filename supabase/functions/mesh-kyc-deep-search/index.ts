@@ -31,6 +31,21 @@ async function heliusFundedBy(
   apiKey: string,
   errors: string[]
 ): Promise<HeliusFundedByResult | null> {
+  // Safety net: reject malformed addresses before burning Helius credits
+  const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  if (!base58Regex.test(walletAddress)) {
+    const msg = `Invalid Base58 wallet address: ${walletAddress.slice(0, 16)}... — rejecting to save API credits`;
+    console.error(`[mesh-kyc-deep-search] ${msg}`);
+    errors.push(msg);
+    return null;
+  }
+  // Extra heuristic: all-lowercase 40+ char addresses are likely corrupted mints
+  if (walletAddress.length > 40 && walletAddress === walletAddress.toLowerCase()) {
+    const msg = `Suspiciously all-lowercase address: ${walletAddress.slice(0, 16)}... — likely corrupted Base58`;
+    console.error(`[mesh-kyc-deep-search] ${msg}`);
+    errors.push(msg);
+    return null;
+  }
   try {
     const logger = createApiLogger({
       serviceName: 'helius',
