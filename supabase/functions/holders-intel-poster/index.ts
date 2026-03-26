@@ -502,6 +502,24 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
 
     console.log(`[poster] Processing: ${item.symbol} (${item.token_mint})`);
     
+    // ── HARD DUPLICATE CHECK ──
+    // Before processing, verify this token hasn't already been posted (by any queue entry)
+    const { data: alreadyPosted } = await supabase
+      .from('holders_intel_post_queue')
+      .select('id')
+      .eq('token_mint', item.token_mint)
+      .eq('status', 'posted')
+      .limit(1);
+    
+    if (alreadyPosted && alreadyPosted.length > 0) {
+      console.log(`[poster] DUPLICATE BLOCKED: ${item.symbol} already has a posted entry`);
+      await supabase.from('holders_intel_post_queue')
+        .update({ status: 'skipped', error_message: 'Duplicate: token already posted previously' })
+        .eq('id', item.id);
+      results.push({ symbol: item.symbol, action: 'skipped', reason: 'Already posted (dedup)' });
+      continue;
+    }
+    
     // Mark as processing
     await supabase
       .from('holders_intel_post_queue')
