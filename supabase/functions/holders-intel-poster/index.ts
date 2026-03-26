@@ -3,6 +3,7 @@ import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 import { withRunLog } from "../_shared/run-logger.ts";
+import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -489,6 +490,16 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         console.log(`[poster] Hit ${MAX_POSTS_PER_TICK} posts this tick, stopping`);
         break;
       }
+    // Skip infrastructure/chain-native tokens (JUP, RAY, SOL, USDC etc)
+    if (isInfrastructureToken(item.token_mint)) {
+      console.log(`[poster] Skipping infrastructure token: ${item.symbol} (${item.token_mint})`);
+      await supabase.from('holders_intel_post_queue')
+        .update({ status: 'skipped', error_message: 'Infrastructure/chain-native token — not a meme' })
+        .eq('id', item.id);
+      results.push({ symbol: item.symbol, action: 'skipped', reason: 'Infrastructure token' });
+      continue;
+    }
+
     console.log(`[poster] Processing: ${item.symbol} (${item.token_mint})`);
     
     // Mark as processing

@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from '../_shared/run-logger.ts';
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
+import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -218,6 +219,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
       let inserted = 0;
       for (const q of queued) {
         if (existingSet.has(q.token_mint)) continue;
+        if (isInfrastructureToken(q.token_mint)) continue;
         const scheduledAt = new Date(Date.now() + Math.floor(Math.random() * 1_800_000)).toISOString();
         const { error } = await supabase.from('holders_intel_post_queue').insert({
           token_mint: q.token_mint,
