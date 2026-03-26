@@ -766,6 +766,18 @@ serve(withRunLog('bagless-holders-report', async (req) => {
         vitalityPenalties.push(`Holder floor (C): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
         healthScore = holderFloor;
       }
+    } else if (realHolderCount >= 200) {
+      const holderFloor = 50; // D+
+      if (healthScore < holderFloor) {
+        vitalityPenalties.push(`Moderate holder floor (D+): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
+        healthScore = holderFloor;
+      }
+    } else if (realHolderCount >= 100) {
+      const holderFloor = 45; // D
+      if (healthScore < holderFloor) {
+        vitalityPenalties.push(`Small holder floor (D): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
+        healthScore = holderFloor;
+      }
     }
     
     healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
