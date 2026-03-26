@@ -544,32 +544,41 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
       // Mark chunk as checked in source tables + token_lifecycle audit
       const now = new Date().toISOString();
       
-      // Build per-token lifecycle updates
-      const lifecycleUpdates = chunk.map(mint => {
-        const hasUrls = totalUrlsStored > 0;
-        const hasCommunity = !!tokenMap.get(mint); // simplified — real check below
-        
-        // Determine discovery status for this token
-        // We track what was found across all sources
-        let status = 'checked_none_found';
-        let communityResult = 'no_community';
-        
-        // Check if this specific mint had a community found
-        // (foundCommunityId is per-token in the loop above, so we check x_communities)
-        return supabase.from('token_lifecycle').update({
-          mint_socials_checked_at: now,
-          mint_socials_source: Object.keys(sourceHits).join(',') || 'none',
-          community_checked_at: now,
-          socials_discovery_status: hasUrls ? 'found_partial' : 'checked_none_found',
-          community_discovery_result: 'checked',
-        }).eq('token_mint', mint);
-      });
-
       await Promise.all([
         supabase.from('scraped_tokens').update({ community_checked_at: now }).in('token_mint', chunk),
         supabase.from('holders_intel_seen_tokens').update({ community_checked_at: now }).in('token_mint', chunk),
-        ...lifecycleUpdates,
       ]);
+
+      // Update token_lifecycle audit per chunk (batch update)
+      for (const mint of chunk) {
+        // Check if this mint has stored URLs
+        const { count: urlCount } = await supabase
+          .from('token_social_links')
+          .select('id', { count: 'exact', head: true })
+          .eq('token_mint', mint);
+
+        // Check if community was linked
+        const { data: commLink } = await supabase
+          .from('x_communities')
+          .select('community_id')
+          .contains('linked_token_mints', [mint])
+          .limit(1);
+
+        const hasComm = commLink && commLink.length > 0;
+        const hasUrls = (urlCount || 0) > 0;
+
+        let discoveryStatus = 'checked_none_found';
+        if (hasComm && hasUrls) discoveryStatus = 'found_complete';
+        else if (hasUrls) discoveryStatus = 'found_partial';
+
+        await supabase.from('token_lifecycle').update({
+          mint_socials_checked_at: now,
+          mint_socials_source: Object.keys(sourceHits).join(',') || 'none',
+          community_checked_at: now,
+          socials_discovery_status: discoveryStatus,
+          community_discovery_result: hasComm ? 'found_community' : (hasUrls ? 'found_other_socials' : 'no_community'),
+        }).eq('token_mint', mint);
+      }
     }
 
     const summary = {
