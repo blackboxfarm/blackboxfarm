@@ -7,6 +7,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function generateDeviceFingerprint(req: Request): Promise<string> {
+  const userAgent = req.headers.get('user-agent') || '';
+  const acceptLanguage = req.headers.get('accept-language') || '';
+  const acceptEncoding = req.headers.get('accept-encoding') || '';
+  const fingerprint = btoa(userAgent + acceptLanguage + acceptEncoding + Date.now());
+  return fingerprint.substring(0, 64);
+}
+
 Deno.serve(withRunLog('verify-2fa-login', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -146,14 +154,4 @@ Deno.serve(withRunLog('verify-2fa-login', async (req) => {
       }
     );
   }
-});
-
-async function generateDeviceFingerprint(req: Request): Promise<string> {
-  const userAgent = req.headers.get('user-agent') || '';
-  const acceptLanguage = req.headers.get('accept-language') || '';
-  const acceptEncoding = req.headers.get('accept-encoding') || '';
-  
-  // Create a simple fingerprint from headers
-  const fingerprint = btoa(userAgent + acceptLanguage + acceptEncoding + Date.now());
-  return fingerprint.substring(0, 64); // Truncate to reasonable length
-}
+}));
