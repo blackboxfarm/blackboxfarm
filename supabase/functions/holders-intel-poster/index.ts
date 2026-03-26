@@ -14,7 +14,7 @@ const TWITTER_HANDLE = 'HoldersIntel';
 
 // Quality thresholds
 const MIN_HOLDERS = 50;
-const SKIP_GRADES: string[] = []; // Post all grades — let users decide
+const SKIP_GRADES: string[] = ['F', 'D-', 'D', 'D+']; // Block low-grade tokens from public posting
 
 // Fallback template if DB fetch fails
 const FALLBACK_TEMPLATE = `🔍 $\{TICKER} Holder Analysis
