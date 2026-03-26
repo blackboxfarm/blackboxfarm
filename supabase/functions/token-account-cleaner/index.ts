@@ -215,7 +215,7 @@ interface CleanResult {
   errors: string[];
 }
 
-serve(withRunLog('token-account-cleaner', async (req) => {
+Deno.serve(withRunLog('token-account-cleaner', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -570,7 +570,7 @@ serve(withRunLog('token-account-cleaner', async (req) => {
     console.error("Token Account Cleaner error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
 
 // Find all token accounts with zero balance
 async function findEmptyTokenAccounts(connection: Connection, walletPubkey: PublicKey): Promise<EmptyAccount[]> {
