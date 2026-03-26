@@ -280,6 +280,13 @@ const REQUIRED_CRONS: CronDef[] = [
     schedule: '*/30 * * * *',
     command: httpPost('allstar-promotion-engine', '{\\\"min_ath_usd\\\": 100000, \\\"max_promotions\\\": 15}'),
   },
+
+  // ── X Community Backfill (self-terminating when complete) ──
+  {
+    jobname: 'backfill-x-communities-5min',
+    schedule: '*/5 * * * *',
+    command: httpPost('backfill-x-communities', '{\\\"batchSize\\\": 300}'),
+  },
 ];
 
 Deno.serve(withRunLog('reconcile-cron-jobs', async (req) => {
