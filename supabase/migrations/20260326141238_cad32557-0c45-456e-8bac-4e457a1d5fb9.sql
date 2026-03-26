@@ -1,0 +1,1 @@
+ALTER TABLE public.x_account_registry ADD CONSTRAINT x_account_registry_current_handle_key UNIQUE (current_handle);
