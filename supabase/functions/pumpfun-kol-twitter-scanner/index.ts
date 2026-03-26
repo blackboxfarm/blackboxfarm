@@ -1,5 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Deno.serve used natively
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -129,7 +129,7 @@ function classifyTweet(text: string, tickers: string[], contracts: string[]): { 
   return { type, sentiment, isPromotion };
 }
 
-serve(withRunLog('pumpfun-kol-twitter-scanner', async (req) => {
+Deno.serve(withRunLog('pumpfun-kol-twitter-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -489,7 +489,7 @@ serve(withRunLog('pumpfun-kol-twitter-scanner', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-});
+}));
 
 async function scanKolTimeline(
   supabase: any,
