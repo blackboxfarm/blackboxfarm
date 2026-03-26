@@ -217,6 +217,7 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
 
     let enriched = 0;
     let noTwitter = 0;
+    let bondedUpdated = 0;
     const results: { mint: string; symbol: string; twitterUrl?: string; linked: boolean }[] = [];
 
     // Process SEQUENTIALLY with 300ms delay between each (DexScreener rate limit safe)
@@ -231,10 +232,12 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
       try {
         const result = await enrichSingleToken(supabase, token.token_mint, token.symbol);
         
+        if (result.bondedUpdated) bondedUpdated++;
+        
         if (result.linked) {
           enriched++;
           results.push({ mint: token.token_mint, symbol: token.symbol || '?', twitterUrl: result.twitterUrl, linked: true });
-          console.log(`[enrich] ${i+1}/${maxTokens} Linked ${token.symbol || token.token_mint.slice(0,8)} -> ${result.twitterUrl}`);
+          console.log(`[enrich] ${i+1}/${maxTokens} Linked ${token.symbol || token.token_mint.slice(0,8)} -> ${result.twitterUrl}${result.bondedUpdated ? ' [BONDED]' : ''}`);
         } else {
           noTwitter++;
           results.push({ mint: token.token_mint, symbol: token.symbol || '?', linked: false });
