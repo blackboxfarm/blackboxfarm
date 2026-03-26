@@ -368,7 +368,23 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     }
     
     const qualifiedTokens = newTokens.filter(t => !establishedMints.has(t.mint));
-    console.log(`[scheduler] Final tokens to queue: ${qualifiedTokens.length}`);
+    
+    // CAP: Check current pending count — don't flood the queue beyond 50 pending
+    const { count: currentPending } = await supabase
+      .from('holders_intel_post_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending');
+    
+    const pendingCount = currentPending || 0;
+    const maxPending = 50;
+    const slotsAvailable = Math.max(0, maxPending - pendingCount);
+    
+    const cappedTokens = qualifiedTokens.slice(0, slotsAvailable);
+    
+    if (qualifiedTokens.length > slotsAvailable) {
+      console.log(`[scheduler] ⚠️ Queue cap: ${pendingCount} already pending, only adding ${slotsAvailable} of ${qualifiedTokens.length} qualified`);
+    }
+    console.log(`[scheduler] Final tokens to queue: ${cappedTokens.length} (cap: ${slotsAvailable} slots available)`);
     
     // Insert seen tokens
     if (qualifiedTokens.length > 0) {
