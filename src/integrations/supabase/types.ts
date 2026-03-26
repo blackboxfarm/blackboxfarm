@@ -13006,11 +13006,15 @@ export type Database = {
         Row: {
           active_boosts: number | null
           ath_24h_usd: number | null
+          community_checked_at: string | null
+          community_discovery_result: string | null
           created_at: string | null
           creator_wallet: string | null
           current_status: string | null
           developer_id: string | null
           dex_id: string | null
+          dex_socials_checked_at: string | null
+          dex_socials_source: string | null
           discovery_source: string | null
           fdv: number | null
           first_seen_at: string
@@ -13025,6 +13029,8 @@ export type Database = {
           lowest_rank: number | null
           market_cap: number | null
           metadata: Json | null
+          mint_socials_checked_at: string | null
+          mint_socials_source: string | null
           name: string | null
           oracle_analyzed: boolean | null
           oracle_analyzed_at: string | null
@@ -13032,6 +13038,7 @@ export type Database = {
           pair_address: string | null
           pair_created_at: string | null
           price_usd: number | null
+          socials_discovery_status: string
           symbol: string | null
           times_entered_top_200: number | null
           token_mint: string
@@ -13042,11 +13049,15 @@ export type Database = {
         Insert: {
           active_boosts?: number | null
           ath_24h_usd?: number | null
+          community_checked_at?: string | null
+          community_discovery_result?: string | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
           developer_id?: string | null
           dex_id?: string | null
+          dex_socials_checked_at?: string | null
+          dex_socials_source?: string | null
           discovery_source?: string | null
           fdv?: number | null
           first_seen_at: string
@@ -13061,6 +13072,8 @@ export type Database = {
           lowest_rank?: number | null
           market_cap?: number | null
           metadata?: Json | null
+          mint_socials_checked_at?: string | null
+          mint_socials_source?: string | null
           name?: string | null
           oracle_analyzed?: boolean | null
           oracle_analyzed_at?: string | null
@@ -13068,6 +13081,7 @@ export type Database = {
           pair_address?: string | null
           pair_created_at?: string | null
           price_usd?: number | null
+          socials_discovery_status?: string
           symbol?: string | null
           times_entered_top_200?: number | null
           token_mint: string
@@ -13078,11 +13092,15 @@ export type Database = {
         Update: {
           active_boosts?: number | null
           ath_24h_usd?: number | null
+          community_checked_at?: string | null
+          community_discovery_result?: string | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
           developer_id?: string | null
           dex_id?: string | null
+          dex_socials_checked_at?: string | null
+          dex_socials_source?: string | null
           discovery_source?: string | null
           fdv?: number | null
           first_seen_at?: string
@@ -13097,6 +13115,8 @@ export type Database = {
           lowest_rank?: number | null
           market_cap?: number | null
           metadata?: Json | null
+          mint_socials_checked_at?: string | null
+          mint_socials_source?: string | null
           name?: string | null
           oracle_analyzed?: boolean | null
           oracle_analyzed_at?: string | null
@@ -13104,6 +13124,7 @@ export type Database = {
           pair_address?: string | null
           pair_created_at?: string | null
           price_usd?: number | null
+          socials_discovery_status?: string
           symbol?: string | null
           times_entered_top_200?: number | null
           token_mint?: string
