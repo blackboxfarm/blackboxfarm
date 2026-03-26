@@ -302,8 +302,30 @@ ${holdersUrl.toString()}`;
       const dexData = await dexRes.json();
       const pair = dexData?.pairs?.[0];
       
+      // Update bonded_at if token has graduated (pair exists on Raydium/Orca = bonded)
+      const isBonded = pair?.dexId && ['raydium', 'orca', 'meteora'].includes(pair.dexId.toLowerCase());
+      if (isBonded && !token.bonded_at) {
+        const bondedTime = pair.pairCreatedAt 
+          ? new Date(pair.pairCreatedAt).toISOString() 
+          : new Date().toISOString();
+        await supabase
+          .from('holders_intel_seen_tokens')
+          .update({ bonded_at: bondedTime })
+          .eq('token_mint', token.token_mint);
+        toast.success(`Updated $${token.symbol} → Bonded ✓`);
+      }
+
+      // Update has_paid_dex if DexScreener shows paid header
+      if (pair?.info?.header && !token.has_paid_dex) {
+        await supabase
+          .from('holders_intel_seen_tokens')
+          .update({ banner_url: pair.info.header })
+          .eq('token_mint', token.token_mint);
+      }
+      
       if (!pair?.info?.socials) {
-        toast.error(`No socials found for $${token.symbol}`);
+        toast.info(`$${token.symbol}: ${isBonded ? 'Bonded ✓' : 'Not bonded'} — no socials found`);
+        fetchTokens();
         return;
       }
       
@@ -316,7 +338,8 @@ ${holdersUrl.toString()}`;
       }
       
       if (!twitterUrl) {
-        toast.error(`No Twitter/X URL found for $${token.symbol}`);
+        toast.info(`$${token.symbol}: ${isBonded ? 'Bonded ✓' : 'Not bonded'} — no Twitter/X URL`);
+        fetchTokens();
         return;
       }
       
@@ -350,7 +373,7 @@ ${holdersUrl.toString()}`;
           });
       }
       
-      toast.success(`Linked $${token.symbol} → ${twitterUrl.includes('communities/') ? 'Community' : 'Twitter'}`);
+      toast.success(`$${token.symbol}: ${isBonded ? 'Bonded ✓ + ' : ''}Linked → ${twitterUrl.includes('communities/') ? 'Community' : 'Twitter'}`);
       fetchTokens();
     } catch (err) {
       console.error('Single token enrichment error:', err);

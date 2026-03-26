@@ -52,17 +52,42 @@ async function fetchDexScreenerWithRateLimit(tokenMint: string, retries = 2): Pr
   return null;
 }
 
-// Process a single token
+// Process a single token — also updates bonded_at if graduated
 async function enrichSingleToken(
   supabase: any, 
   tokenMint: string, 
   symbol: string | null
-): Promise<{ linked: boolean; twitterUrl?: string; bannerCreated?: boolean; error?: string }> {
+): Promise<{ linked: boolean; twitterUrl?: string; bannerCreated?: boolean; bondedUpdated?: boolean; error?: string }> {
   const dexData = await fetchDexScreenerWithRateLimit(tokenMint);
   if (!dexData) return { linked: false, error: 'Failed to fetch DexScreener' };
   
   const pair = dexData?.pairs?.[0];
-  if (!pair?.info?.socials) return { linked: false, error: 'No socials' };
+
+  // Update bonded_at if token has graduated (Raydium/Orca/Meteora = bonded)
+  let bondedUpdated = false;
+  const isBonded = pair?.dexId && ['raydium', 'orca', 'meteora'].includes(pair.dexId.toLowerCase());
+  if (isBonded) {
+    const bondedTime = pair.pairCreatedAt 
+      ? new Date(pair.pairCreatedAt).toISOString() 
+      : new Date().toISOString();
+    const { error: bondErr } = await supabase
+      .from('holders_intel_seen_tokens')
+      .update({ bonded_at: bondedTime })
+      .eq('token_mint', tokenMint)
+      .is('bonded_at', null);
+    if (!bondErr) bondedUpdated = true;
+  }
+
+  // Update banner_url if DexScreener has a paid header
+  if (pair?.info?.header) {
+    await supabase
+      .from('holders_intel_seen_tokens')
+      .update({ banner_url: pair.info.header })
+      .eq('token_mint', tokenMint)
+      .is('banner_url', null);
+  }
+
+  if (!pair?.info?.socials) return { linked: false, bondedUpdated, error: 'No socials' };
   
   let twitterUrl: string | null = null;
   for (const social of pair.info.socials) {
@@ -72,7 +97,7 @@ async function enrichSingleToken(
     }
   }
   
-  if (!twitterUrl) return { linked: false, error: 'No Twitter URL' };
+  if (!twitterUrl) return { linked: false, bondedUpdated, error: 'No Twitter URL' };
   
   const communityId = extractCommunityId(twitterUrl);
   const effectiveId = communityId || twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
@@ -112,7 +137,6 @@ async function enrichSingleToken(
   let bannerCreated = false;
   const bannerUrl = pair?.info?.header;
   if (bannerUrl && communityId) {
-    // Check if token_banners entry already exists
     const { data: existingBanner } = await supabase
       .from('token_banners')
       .select('id')
@@ -138,7 +162,7 @@ async function enrichSingleToken(
     }
   }
   
-  return { linked: true, twitterUrl, bannerCreated };
+  return { linked: true, twitterUrl, bannerCreated, bondedUpdated };
 }
 
 Deno.serve(withRunLog('enrich-token-communities', async (req) => {
