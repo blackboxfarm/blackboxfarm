@@ -13,6 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, Sparkles, Lock, Crown } from 'lucide-react';
+import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
 import { ShareToXButton } from '@/components/ShareToXButton';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
@@ -635,6 +636,10 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       if (onReportGenerated) {
         onReportGenerated(tokenMint.trim());
       }
+      // Silently queue token to post pipeline from /holders
+      queueTokenFromFrontend(tokenMint.trim(), 'public_query', {
+        comment: '/holders report generated',
+      });
       
       // Calculate token age from first buyer timestamp (if available)
       if (data.firstBuyers && data.firstBuyers.length > 0) {
