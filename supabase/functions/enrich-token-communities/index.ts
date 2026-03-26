@@ -248,7 +248,7 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
       }
     }
 
-    console.log(`[enrich-token-communities] Complete: ${enriched} enriched, ${noTwitter} no Twitter URL`);
+    console.log(`[enrich-token-communities] Complete: ${enriched} enriched, ${bondedUpdated} bonded, ${noTwitter} no Twitter URL`);
 
     return new Response(JSON.stringify({ 
       success: true, 
@@ -257,6 +257,7 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
       missing: missingTokens.length,
       processed: maxTokens,
       enriched,
+      bondedUpdated,
       noTwitterUrl: noTwitter,
       results
     }), {
