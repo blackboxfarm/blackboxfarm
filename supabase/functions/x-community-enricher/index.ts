@@ -264,15 +264,43 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
           }).eq('community_id', communityId);
 
           if (!existingCommunity?.deletion_alert_sent) {
+            // Check if any linked token still has active chart volume
+            const linkedMints = linkedTokenMint 
+              ? [linkedTokenMint, ...(existingCommunity?.linked_token_mints || [])] 
+              : (existingCommunity?.linked_token_mints || []);
+            
+            let hasActiveChart = false;
+            let recentVolumeUsd = 0;
+            
+            if (linkedMints.length > 0) {
+              try {
+                // Quick DexScreener check on first linked token
+                const checkMint = linkedMints[0];
+                const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${checkMint}`);
+                if (dexRes.ok) {
+                  const dexData = await dexRes.json();
+                  const pair = dexData?.pairs?.[0];
+                  if (pair?.volume?.h24) {
+                    recentVolumeUsd = pair.volume.h24;
+                    hasActiveChart = recentVolumeUsd > 500; // >$500 24h vol = still active
+                  }
+                }
+              } catch (e) {
+                console.warn(`[X Community Enricher] Chart activity check failed:`, e);
+              }
+            }
+
             const alertInfo: CommunityAlertInfo = {
               communityId,
               communityUrl: urlToProcess,
               communityName: existingCommunity?.name,
-              linkedTokens: linkedTokenMint ? [linkedTokenMint, ...(existingCommunity?.linked_token_mints || [])] : (existingCommunity?.linked_token_mints || []),
+              linkedTokens: linkedMints,
               adminUsernames: existingCommunity?.admin_usernames || [],
               moderatorUsernames: existingCommunity?.moderator_usernames || [],
               memberCount: existingCommunity?.member_count,
               detectedAt: currentScrapeAt,
+              hasActiveChart,
+              recentVolumeUsd,
             };
 
             const { alerted } = await alertAndLogCommunityDeletion(supabase as any, alertInfo);
