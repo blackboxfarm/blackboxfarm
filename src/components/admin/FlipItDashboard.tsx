@@ -313,7 +313,7 @@ export function FlipItDashboard() {
   const [lastAutoCheck, setLastAutoCheck] = useState<string | null>(null);
   
   // Auto-refresh state
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const countdownRef = useRef(5);
   
