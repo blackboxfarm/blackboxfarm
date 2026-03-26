@@ -228,7 +228,7 @@ Deno.serve(withRunLog('wallet-sns-lookup', async (req) => {
       headers: corsHeaders
     })
   }
-})
+}))
 
 async function performSNSLookup(
   connection: Connection,
