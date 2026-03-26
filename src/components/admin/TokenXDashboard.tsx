@@ -406,7 +406,7 @@ ${holdersUrl.toString()}`;
       const { data, error } = await supabase.functions.invoke('enrich-token-communities');
       if (error) throw error;
       
-      toast.success(`Communities: ${data?.enriched || 0} linked, ${data?.noTwitterUrl || 0} no Twitter URL`);
+      toast.success(`Communities: ${data?.enriched || 0} linked, ${data?.bondedUpdated || 0} bonded updated, ${data?.noTwitterUrl || 0} no Twitter URL`);
       fetchTokens();
     } catch (err) {
       console.error('Community enrichment error:', err);
