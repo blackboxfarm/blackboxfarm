@@ -1,6 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { 
   Connection, 
   PublicKey, 
@@ -216,7 +215,7 @@ interface CleanResult {
   errors: string[];
 }
 
-serve(withRunLog('token-account-cleaner', async (req) => {
+Deno.serve(withRunLog('token-account-cleaner', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -571,7 +570,7 @@ serve(withRunLog('token-account-cleaner', async (req) => {
     console.error("Token Account Cleaner error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
+}));
 
 // Find all token accounts with zero balance
 async function findEmptyTokenAccounts(connection: Connection, walletPubkey: PublicKey): Promise<EmptyAccount[]> {
