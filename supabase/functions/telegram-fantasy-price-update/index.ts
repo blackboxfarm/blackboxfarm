@@ -133,8 +133,7 @@ async function fetchTokenData(tokenMints: string[]): Promise<Record<string, Toke
   return tokenData;
 }
 
-
-
+Deno.serve(withRunLog('telegram-fantasy-price-update', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
