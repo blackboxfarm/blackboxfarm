@@ -28,6 +28,7 @@ const FunnelFeedsTab = lazy(() => import("@/components/admin/tabs/FunnelFeedsTab
 const MonitoringTab = lazy(() => import("@/components/admin/tabs/MonitoringTab"));
 const TicketsTab = lazy(() => import("@/components/admin/tabs/TicketsTab"));
 const Top200Tab = lazy(() => import("@/components/admin/tabs/Top200Tab"));
+const SocialMediaTab = lazy(() => import("@/components/admin/tabs/SocialMediaTab"));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
@@ -142,6 +143,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="monitoring" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-rose-500/20">📡 Monitoring</TabsTrigger>
             <TabsTrigger value="tickets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500/30 data-[state=active]:to-cyan-500/20">🎫 Tickets</TabsTrigger>
             <TabsTrigger value="top-200" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">🏆 Top 200</TabsTrigger>
+            <TabsTrigger value="social-media" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-purple-500/20">📱 Social</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -262,6 +264,13 @@ export default function SuperAdmin() {
             {activeTab === "top-200" && (
               <TabErrorBoundary tabName="Top 200">
                 <Suspense fallback={<TabLoader />}><Top200Tab /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
+          <TabsContent value="social-media">
+            {activeTab === "social-media" && (
+              <TabErrorBoundary tabName="Social Media">
+                <Suspense fallback={<TabLoader />}><SocialMediaTab /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
