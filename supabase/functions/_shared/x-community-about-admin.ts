@@ -38,22 +38,35 @@ function parseAboutPageText(text: string): {
   moderatorUsernames: string[];
   memberCount: number | null;
 } {
+  // Reserved words that are NOT real handles
+  const RESERVED = new Set([
+    'community', 'communities', 'admin', 'moderator', 'moderators',
+    'rules', 'about', 'members', 'posts', 'join', 'joined', 'created',
+    'i', 'intent', 'search', 'home', 'explore', 'settings', 'help',
+    'notifications', 'messages', 'compose', 'lists', 'bookmarks',
+    'spaces', 'tos', 'privacy', 'login', 'signup', 'share', 'status',
+  ]);
+
   const allHandles: string[] = [];
+
+  function addHandle(h: string) {
+    const clean = h.toLowerCase();
+    if (!RESERVED.has(clean) && clean.length >= 2 && clean.length <= 15 && !allHandles.includes(clean)) {
+      allHandles.push(clean);
+    }
+  }
 
   // Extract all handles from the Moderators section
   const moderatorSection = text.match(/Moderators[\s\S]{0,2000}/i);
   if (moderatorSection) {
     const handleMatches = moderatorSection[0].matchAll(/@([A-Za-z0-9_]{1,15})/g);
-    for (const m of handleMatches) {
-      const h = m[1].toLowerCase();
-      if (!allHandles.includes(h)) allHandles.push(h);
-    }
+    for (const m of handleMatches) addHandle(m[1]);
   }
 
   // Fallback: "Created by @handle"
   if (allHandles.length === 0) {
     const createdMatch = text.match(/Created[\s\S]{0,160}?by\s+@?([A-Za-z0-9_]{1,15})/i);
-    if (createdMatch) allHandles.push(createdMatch[1].toLowerCase());
+    if (createdMatch) addHandle(createdMatch[1]);
   }
 
   // Also try "Admin" section specifically
@@ -61,10 +74,7 @@ function parseAboutPageText(text: string): {
     const adminSection = text.match(/Admin[\s\S]{0,500}/i);
     if (adminSection) {
       const handleMatches = adminSection[0].matchAll(/@([A-Za-z0-9_]{1,15})/g);
-      for (const m of handleMatches) {
-        const h = m[1].toLowerCase();
-        if (!allHandles.includes(h)) allHandles.push(h);
-      }
+      for (const m of handleMatches) addHandle(m[1]);
     }
   }
 
