@@ -645,6 +645,8 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
             .upsert({
               token_mint: item.token_mint,
               ath_24h_usd: ath24h,
+              first_seen_at: new Date().toISOString(),
+              last_seen_at: new Date().toISOString(),
             }, { onConflict: 'token_mint' });
           
           if (athError) {
