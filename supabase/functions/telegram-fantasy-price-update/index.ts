@@ -287,7 +287,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
       error: error.message
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
   }
-});
+}));
 
 // Scan for corrupted positions with impossible PnL values
 async function scanCorruptedPositions(supabase: any) {
