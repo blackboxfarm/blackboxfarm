@@ -96,7 +96,7 @@ serve(withRunLog('holder-retention-analysis', async (req) => {
         tiers.forEach(tier => dailyData[date].byTier[tier] = new Set());
       }
       dailyData[date].wallets.add(snapshot.wallet_address);
-      if (snapshot.tier) {
+      if (snapshot.tier && dailyData[date].byTier[snapshot.tier]) {
         dailyData[date].byTier[snapshot.tier].add(snapshot.wallet_address);
       }
     }
@@ -113,9 +113,9 @@ serve(withRunLog('holder-retention-analysis', async (req) => {
       
       const tierRetention: any = {};
       tiers.forEach(tier => {
-        const firstDayTierWallets = dailyData[firstDate].byTier[tier];
-        const currentTierWallets = dailyData[date].byTier[tier];
-        if (firstDayTierWallets.size > 0) {
+        const firstDayTierWallets = dailyData[firstDate]?.byTier?.[tier];
+        const currentTierWallets = dailyData[date]?.byTier?.[tier];
+        if (firstDayTierWallets && firstDayTierWallets.size > 0 && currentTierWallets) {
           const retained = [...firstDayTierWallets].filter(w => currentTierWallets.has(w)).length;
           tierRetention[tier] = (retained / firstDayTierWallets.size) * 100;
         } else {
