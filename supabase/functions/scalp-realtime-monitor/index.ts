@@ -1,6 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -673,7 +672,11 @@ async function processScalpPosition(
   return null;
 }
 
-serve(withRunLog('scalp-realtime-monitor', async (req) => {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+Deno.serve(withRunLog('scalp-realtime-monitor', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -788,8 +791,4 @@ serve(withRunLog('scalp-realtime-monitor', async (req) => {
     console.error("Scalp realtime monitor error:", err);
     return bad(err.message || "Unknown error", 500);
   }
-});
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+}));
