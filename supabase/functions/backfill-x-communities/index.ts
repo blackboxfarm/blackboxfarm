@@ -1,15 +1,59 @@
 import { withRunLog } from '../_shared/run-logger.ts';
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+function extractCommunityId(url: string): string | null {
+  const match = url.match(/communities\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+function isTwitterUrl(url: string): boolean {
+  return url.includes('twitter.com') || url.includes('x.com');
+}
+
+function extractCommunityFromPair(pair: any): { communityId: string; communityUrl: string } | null {
+  if (!pair?.info) return null;
+
+  // Check socials
+  if (pair.info.socials) {
+    for (const social of pair.info.socials) {
+      if (social.url && isTwitterUrl(social.url)) {
+        const cid = extractCommunityId(social.url);
+        if (cid) return { communityId: cid, communityUrl: social.url };
+      }
+    }
+  }
+
+  // Check websites
+  if (pair.info.websites) {
+    for (const site of pair.info.websites) {
+      const url = typeof site === 'string' ? site : site?.url;
+      if (url && isTwitterUrl(url)) {
+        const cid = extractCommunityId(url);
+        if (cid) return { communityId: cid, communityUrl: url };
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
- * Backfill X Communities from reputation_mesh and token_socials_history.
- * Scans all community links that exist in the mesh but are missing from x_communities table,
- * and also scans DexScreener social links for community URLs not yet indexed.
+ * BACKFILL X COMMUNITIES
+ * 
+ * Queries unchecked tokens from source tables (scraped_tokens + holders_intel_seen_tokens),
+ * hits DexScreener batch API to find X community URLs, and inserts them into x_communities.
+ * 
+ * Uses community_checked_at column to track progress — runs every 5 min via cron
+ * until all tokens are processed, then self-terminates (returns early).
+ * 
+ * Processing rate: ~300 tokens per invocation (10 batches of 30).
  */
 Deno.serve(withRunLog('backfill-x-communities', async (req) => {
   if (req.method === 'OPTIONS') {
@@ -22,167 +66,233 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    const stats = {
-      meshCommunitiesFound: 0,
-      socialsCommunitiesFound: 0,
-      newCommunitiesInserted: 0,
-      meshLinksCreated: 0,
-      enricherTriggered: 0,
-      errors: 0,
-    };
+    const body = await req.json().catch(() => ({}));
+    const batchSize = Math.min(body.batchSize || 300, 300);
 
-    // ============ SOURCE 1: reputation_mesh x_community entries missing from x_communities ============
-    console.log('[Backfill] 🔍 Scanning reputation_mesh for x_community entries...');
-    
-    const { data: meshCommunities } = await supabase
-      .from('reputation_mesh')
-      .select('source_id, linked_id, linked_type')
-      .eq('source_type', 'x_community')
-      .eq('linked_type', 'token');
+    // Get unchecked tokens from BOTH source tables
+    const { data: uncheckedScraped } = await supabase
+      .from('scraped_tokens')
+      .select('token_mint, symbol')
+      .is('community_checked_at', null)
+      .limit(batchSize);
 
-    const meshCommunityIds = new Set<string>();
-    const communityTokenMap = new Map<string, string[]>();
+    const { data: uncheckedHI } = await supabase
+      .from('holders_intel_seen_tokens')
+      .select('token_mint, symbol')
+      .is('community_checked_at', null)
+      .limit(batchSize);
 
-    for (const mc of meshCommunities || []) {
-      meshCommunityIds.add(mc.source_id);
-      const existing = communityTokenMap.get(mc.source_id) || [];
-      if (!existing.includes(mc.linked_id)) {
-        existing.push(mc.linked_id);
-      }
-      communityTokenMap.set(mc.source_id, existing);
+    // Deduplicate by token_mint
+    const tokenMap = new Map<string, string>();
+    for (const t of (uncheckedScraped || [])) tokenMap.set(t.token_mint, t.symbol || '');
+    for (const t of (uncheckedHI || [])) {
+      if (!tokenMap.has(t.token_mint)) tokenMap.set(t.token_mint, t.symbol || '');
     }
 
-    stats.meshCommunitiesFound = meshCommunityIds.size;
-    console.log(`[Backfill] Found ${meshCommunityIds.size} unique communities in mesh`);
+    const allMints = Array.from(tokenMap.keys()).slice(0, batchSize);
 
-    // ============ SOURCE 2: Scan DexScreener token socials for community URLs ============
-    console.log('[Backfill] 🔍 Scanning token_socials_history for community URLs...');
-    
-    const { data: socialsCommunities } = await supabase
-      .from('token_socials_history')
-      .select('twitter, token_mint')
-      .like('twitter', '%/communities/%');
+    if (allMints.length === 0) {
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'All tokens have been checked — backfill complete',
+        processed: 0,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
-    for (const sc of socialsCommunities || []) {
-      const match = sc.twitter?.match(/communities\/(\d+)/);
-      if (match) {
-        const cid = match[1];
-        meshCommunityIds.add(cid);
-        const existing = communityTokenMap.get(cid) || [];
-        if (!existing.includes(sc.token_mint)) {
-          existing.push(sc.token_mint);
+    console.log(`[backfill-x-communities] Processing ${allMints.length} unchecked tokens`);
+
+    let communitiesFound = 0;
+    let communitiesCreated = 0;
+    let communitiesUpdated = 0;
+    let noSocials = 0;
+    let dexFails = 0;
+    let bondedUpdated = 0;
+    let meshLinksCreated = 0;
+
+    // Process in DexScreener batch chunks (30 per API call)
+    const CHUNK_SIZE = 30;
+    for (let i = 0; i < allMints.length; i += CHUNK_SIZE) {
+      const chunk = allMints.slice(i, i + CHUNK_SIZE);
+      const mintsParam = chunk.join(',');
+
+      if (i > 0) await delay(500);
+
+      let dexData: any = null;
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintsParam}`, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; BlackBox/1.0)',
+          }
+        });
+
+        if (res.status === 429) {
+          console.warn(`[backfill] Rate limited at chunk ${i}, stopping early`);
+          break;
         }
-        communityTokenMap.set(cid, existing);
-        stats.socialsCommunitiesFound++;
+        if (res.ok) {
+          dexData = await res.json();
+        } else {
+          console.warn(`[backfill] DexScreener HTTP ${res.status}`);
+          dexFails += chunk.length;
+          // Still mark as checked so we don't retry forever
+          await markChecked(supabase, chunk);
+          continue;
+        }
+      } catch (err) {
+        console.error(`[backfill] Fetch error:`, err);
+        dexFails += chunk.length;
+        await markChecked(supabase, chunk);
+        continue;
       }
-    }
 
-    console.log(`[Backfill] Total unique communities to check: ${meshCommunityIds.size}`);
-
-    // ============ CHECK: Which communities are already in x_communities? ============
-    const { data: existingCommunities } = await supabase
-      .from('x_communities')
-      .select('community_id');
-
-    const existingSet = new Set((existingCommunities || []).map(c => c.community_id));
-    const missingIds = [...meshCommunityIds].filter(id => !existingSet.has(id));
-
-    console.log(`[Backfill] ${existingSet.size} already exist, ${missingIds.length} missing — inserting...`);
-
-    // ============ INSERT missing communities ============
-    const batchSize = 50;
-    for (let i = 0; i < missingIds.length; i += batchSize) {
-      const batch = missingIds.slice(i, i + batchSize);
-      const inserts = batch.map(communityId => ({
-        community_id: communityId,
-        community_url: `https://x.com/i/communities/${communityId}`,
-        linked_token_mints: communityTokenMap.get(communityId) || [],
-        scrape_status: 'pending',
-      }));
-
-      const { error: insertErr } = await supabase
-        .from('x_communities')
-        .upsert(inserts, { onConflict: 'community_id', ignoreDuplicates: true });
-
-      if (insertErr) {
-        console.error(`[Backfill] Batch insert error:`, insertErr);
-        stats.errors++;
-      } else {
-        stats.newCommunitiesInserted += batch.length;
+      // Build mint -> best pair map
+      const pairsByMint = new Map<string, any>();
+      if (dexData?.pairs) {
+        for (const pair of dexData.pairs) {
+          const mint = pair.baseToken?.address;
+          if (mint && !pairsByMint.has(mint)) {
+            pairsByMint.set(mint, pair);
+          }
+        }
       }
-    }
 
-    // ============ ALSO: Create missing mesh links for existing communities ============
-    // For communities from socials that may not have mesh links yet
-    console.log('[Backfill] 🕸️ Creating missing mesh links...');
-    
-    for (const [communityId, tokenMints] of communityTokenMap.entries()) {
-      for (const tokenMint of tokenMints) {
-        // Check if mesh link exists
+      for (const mint of chunk) {
+        const pair = pairsByMint.get(mint);
+
+        if (!pair) {
+          noSocials++;
+          continue;
+        }
+
+        // Update bonded_at if graduated
+        const isBonded = pair.dexId && ['raydium', 'orca', 'meteora'].includes(pair.dexId.toLowerCase());
+        if (isBonded) {
+          const bondedTime = pair.pairCreatedAt
+            ? new Date(pair.pairCreatedAt).toISOString()
+            : new Date().toISOString();
+          const { error: bondErr } = await supabase
+            .from('holders_intel_seen_tokens')
+            .update({ bonded_at: bondedTime })
+            .eq('token_mint', mint)
+            .is('bonded_at', null);
+          if (!bondErr) bondedUpdated++;
+        }
+
+        // Update banner_url
+        if (pair.info?.header) {
+          await supabase
+            .from('holders_intel_seen_tokens')
+            .update({ banner_url: pair.info.header })
+            .eq('token_mint', mint)
+            .is('banner_url', null);
+        }
+
+        // Extract community
+        const community = extractCommunityFromPair(pair);
+        if (!community) {
+          noSocials++;
+          continue;
+        }
+
+        communitiesFound++;
+        const symbol = tokenMap.get(mint) || '';
+
+        // Upsert into x_communities
         const { data: existing } = await supabase
+          .from('x_communities')
+          .select('id, linked_token_mints')
+          .eq('community_id', community.communityId)
+          .single();
+
+        if (existing) {
+          const mints = (existing.linked_token_mints as string[]) || [];
+          if (!mints.includes(mint)) {
+            await supabase
+              .from('x_communities')
+              .update({
+                linked_token_mints: [...mints, mint],
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', existing.id);
+            communitiesUpdated++;
+          }
+        } else {
+          await supabase
+            .from('x_communities')
+            .insert({
+              community_id: community.communityId,
+              community_url: community.communityUrl,
+              name: symbol ? `$${symbol} Community` : null,
+              linked_token_mints: [mint],
+              scrape_status: 'pending',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          communitiesCreated++;
+        }
+
+        // Also create mesh link
+        const { data: meshExists } = await supabase
           .from('reputation_mesh')
           .select('id')
           .eq('source_type', 'x_community')
-          .eq('source_id', communityId)
+          .eq('source_id', community.communityId)
           .eq('linked_type', 'token')
-          .eq('linked_id', tokenMint)
+          .eq('linked_id', mint)
           .maybeSingle();
 
-        if (!existing) {
-          const { error } = await supabase
+        if (!meshExists) {
+          await supabase
             .from('reputation_mesh')
             .insert({
               source_type: 'x_community',
-              source_id: communityId,
+              source_id: community.communityId,
               linked_type: 'token',
-              linked_id: tokenMint,
+              linked_id: mint,
               relationship: 'community_for',
               confidence: 90,
               discovered_via: 'backfill-x-communities',
               discovered_at: new Date().toISOString(),
             });
-
-          if (!error) stats.meshLinksCreated++;
+          meshLinksCreated++;
         }
       }
-      
-      // Rate limit to avoid overwhelming DB
-      if (stats.meshLinksCreated % 50 === 0 && stats.meshLinksCreated > 0) {
-        await new Promise(r => setTimeout(r, 200));
-      }
+
+      // Mark entire chunk as checked
+      await markChecked(supabase, chunk);
     }
 
-    // ============ TRIGGER enricher for un-scraped communities (first 20) ============
-    const { data: unscraped } = await supabase
-      .from('x_communities')
-      .select('community_id, community_url')
-      .or('scrape_status.eq.pending,scrape_status.is.null')
-      .is('admin_usernames', null)
-      .limit(20);
+    const summary = {
+      success: true,
+      processed: allMints.length,
+      communitiesFound,
+      communitiesCreated,
+      communitiesUpdated,
+      meshLinksCreated,
+      noSocials,
+      dexFails,
+      bondedUpdated,
+    };
 
-    for (const community of unscraped || []) {
-      supabase.functions.invoke('x-community-enricher', {
-        body: {
-          communityUrl: community.community_url,
-        }
-      }).catch(e => console.warn(`[Backfill] Enricher trigger failed for ${community.community_id}:`, e));
-      stats.enricherTriggered++;
-      
-      // 2s delay between enricher calls
-      await new Promise(r => setTimeout(r, 2000));
-    }
+    console.log(`[backfill-x-communities] Done:`, JSON.stringify(summary));
 
-    console.log('[Backfill] ✅ Complete:', JSON.stringify(stats));
-
-    return new Response(
-      JSON.stringify({ success: true, ...stats }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify(summary), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   } catch (error: any) {
-    console.error('[Backfill] ❌ Fatal error:', error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error('[backfill-x-communities] Error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 }));
+
+async function markChecked(supabase: any, mints: string[]) {
+  const now = new Date().toISOString();
+  await Promise.all([
+    supabase.from('scraped_tokens').update({ community_checked_at: now }).in('token_mint', mints),
+    supabase.from('holders_intel_seen_tokens').update({ community_checked_at: now }).in('token_mint', mints),
+  ]);
+}
