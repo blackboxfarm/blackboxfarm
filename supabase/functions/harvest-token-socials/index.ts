@@ -261,7 +261,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
       const { data: tokensToEnrich, error: enrichErr } = await supabase
         .from('master_token_directory')
         .select('token_mint, symbol, creator_wallet')
-        .is('x_community_urls', null)
+        .or('x_community_urls.is.null,x_community_urls.eq.{}')
         .not('token_mint', 'is', null)
         .limit(batchSize);
 
