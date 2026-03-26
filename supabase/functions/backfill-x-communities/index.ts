@@ -80,7 +80,7 @@ function classifyUrl(rawUrl: string): DiscoveredUrl {
 
 // ─── STORE ALL URLs ───
 
-async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], source: string): Promise<DiscoveredUrl[]> {
+async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], source: string, phase: string = 'discovery'): Promise<DiscoveredUrl[]> {
   const classified: DiscoveredUrl[] = [];
   const rows: any[] = [];
 
@@ -99,6 +99,8 @@ async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], so
       is_community: info.is_community,
       community_id: info.community_id,
       community_spidered: false,
+      phase,
+      is_current: true,
     });
   }
 
@@ -107,6 +109,34 @@ async function storeAllUrls(supabase: any, tokenMint: string, urls: string[], so
   }
 
   return classified;
+}
+
+/** Snapshot socials into token_socials_history with phase tracking */
+async function snapshotSocialsForBackfill(
+  supabase: any,
+  tokenMint: string,
+  classified: DiscoveredUrl[],
+  phase: string,
+  source: string
+): Promise<void> {
+  const twitter = classified.find(c => c.platform === 'twitter' && (c.link_type === 'x_handle' || c.link_type === 'twitter'))?.url || null;
+  const telegram = classified.find(c => c.platform === 'telegram')?.url || null;
+  const website = classified.find(c => c.platform === 'website')?.url || null;
+
+  if (!twitter && !telegram && !website) return;
+
+  const { error } = await supabase.from('token_socials_history').insert({
+    token_mint: tokenMint,
+    twitter,
+    telegram,
+    website,
+    source: `backfill_${source}`,
+    phase,
+  });
+
+  if (error && error.code !== '23505') {
+    console.error(`[backfill] Snapshot error for ${tokenMint}:`, error);
+  }
 }
 
 // ─── SOURCE PROVIDERS (return raw URLs + optional metadata) ───

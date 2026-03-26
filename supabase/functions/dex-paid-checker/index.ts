@@ -204,7 +204,8 @@ async function snapshotSocialsIfChanged(
   supabase: any,
   tokenMint: string,
   socials: { twitter?: string; website?: string; telegram?: string },
-  isCTO: boolean
+  isCTO: boolean,
+  phase: 'launchpad' | 'dex_paid' | 'cto' = 'dex_paid'
 ): Promise<void> {
   try {
     // Fetch the most recent snapshot for this token
@@ -243,7 +244,7 @@ async function snapshotSocialsIfChanged(
       console.log(`[CTO-Snapshot] First social snapshot for ${tokenMint}`);
     }
 
-    // Insert new snapshot (unique index on token_mint + social combo prevents true dupes)
+    // Insert new snapshot with phase tracking
     const { error } = await supabase
       .from('token_socials_history')
       .insert({
@@ -252,7 +253,18 @@ async function snapshotSocialsIfChanged(
         telegram: currentTelegram,
         website: currentWebsite,
         source: isCTO ? 'dexscreener_cto' : 'dexscreener_paid',
+        phase,
       });
+
+    // Mark old token_social_links as superseded when phase changes
+    if (!error || error.code === '23505') {
+      await supabase
+        .from('token_social_links')
+        .update({ is_current: false, superseded_at: new Date().toISOString() })
+        .eq('token_mint', tokenMint)
+        .eq('is_current', true)
+        .neq('phase', phase);
+    }
 
     if (error) {
       // Unique constraint violation = exact same combo already stored, safe to ignore
@@ -354,7 +366,8 @@ serve(withRunLog('dex-paid-checker', async (req) => {
         // snapshot into token_socials_history so CTO detection pipeline
         // can compare snapshots and flag social replacements.
         if (status.socials && (status.hasCTO || status.hasPaidProfile)) {
-          await snapshotSocialsIfChanged(supabase, status.tokenMint, status.socials, status.hasCTO);
+          const phase = status.hasCTO ? 'cto' : 'dex_paid';
+          await snapshotSocialsIfChanged(supabase, status.tokenMint, status.socials, status.hasCTO, phase);
         }
       }
     }
