@@ -1,60 +1,59 @@
 
 
-# Fix: Lowercase Solana Addresses Breaking Helius API Calls
+# Bulk Backfill X Communities for ALL Tokens
 
-## Root Cause Found
+## Problem Found
 
-**File**: `src/hooks/useMeshGraph.ts`, line 581
+Three compounding issues are preventing community discovery:
 
-```typescript
-const normalizedInput = input.trim().replace(/^@/, '').toLowerCase();
+1. **`harvest-token-socials` queries a materialized view** (`master_token_directory`) which is read-only and stale — the filter `x_community_urls.eq.{}` may not even work correctly with PostgREST for empty arrays
+2. **The view's `x_community_urls` is derived from `x_communities.linked_token_mints`** — the harvest function can never "mark" a token as processed, so it re-processes the same tokens forever or gets 0 results
+3. **No tracking of which tokens have been checked** — there's no flag saying "we already looked at DexScreener for this token's community"
+
+**Current state**: 38,371 tokens with no community data. Only 364 have communities linked. 3,176 total communities exist.
+
+## Plan
+
+### Step 1: Create a dedicated `backfill-x-communities` edge function
+
+A focused, lean function that:
+- Queries tokens from **actual source tables** (`scraped_tokens`, `holders_intel_seen_tokens`) instead of the materialized view
+- LEFT JOINs against `x_communities` to find tokens NOT already linked to any community
+- Hits DexScreener batch API (30 tokens per call) to extract community URLs from both `socials` and `websites` arrays
+- Inserts new communities into `x_communities` with `scrape_status: 'pending'`
+- Tracks progress via a simple `processed_at` marker or by checking `x_communities.linked_token_mints`
+
+Processing rate: ~300 tokens per invocation × 288 runs/day = all 38k tokens in ~1 day
+
+### Step 2: Fix the query in `harvest-token-socials`
+
+Change the DexScreener mode to query source tables directly instead of the materialized view, using a subquery:
+```sql
+SELECT DISTINCT token_mint FROM (
+  SELECT token_mint FROM scraped_tokens
+  UNION SELECT token_mint FROM holders_intel_seen_tokens
+) t
+WHERE NOT EXISTS (
+  SELECT 1 FROM x_communities xc 
+  WHERE t.token_mint = ANY(xc.linked_token_mints)
+)
+LIMIT batchSize
 ```
 
-This `.toLowerCase()` is applied to ALL inputs — including Solana wallet addresses and token mints. It was put there for X handle normalization (handles are case-insensitive), but it destroys Base58-encoded Solana addresses which are case-sensitive.
+This ensures the function always finds un-processed tokens.
 
-The lowercased address then flows into:
-- `oracle-unified-lookup` (line 691) — the oracle itself doesn't lowercase, but receives already-broken input
-- `mesh-kyc-deep-search` (lines 762, 775, 901, 932) — sends lowercased wallet to Helius `/v1/wallet/funded-by` → **400 Bad Request**
-- `reputation_mesh` queries (lines 617, 623, 810) — queries with wrong-case IDs → **silent misses**
+### Step 3: Add a cron job for the backfill
 
-This is why we see 33 Helius failures — every wallet trace from the UI sends a corrupted address.
+Add `backfill-x-communities` to the reconcile-cron-jobs list, running every 5 minutes until all tokens are processed. The function self-terminates (returns early) when no more tokens need processing.
 
-## The Fix
+### Step 4: Refresh the materialized view
 
-**Split normalization by input type** — only lowercase X handles, preserve original case for everything else.
+After backfill batches complete, trigger `REFRESH MATERIALIZED VIEW CONCURRENTLY master_token_directory` so the admin UI reflects new communities.
 
-### Changes to `src/hooks/useMeshGraph.ts`
+## Technical Details
 
-Replace the single `normalizedInput` with type-aware normalization:
-
-```typescript
-const trimmedInput = input.trim().replace(/^@/, '');
-const isBase58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmedInput);
-const isCommunityId = /^\d{10,25}$/.test(trimmedInput);
-const isCommunityUrl = trimmedInput.toLowerCase().includes('/communities/');
-const isUrl = trimmedInput.includes('://') || trimmedInput.includes('.com') || trimmedInput.includes('.io');
-
-// Only lowercase for X handles — Solana addresses are case-sensitive Base58
-const normalizedInput = (isBase58 || isCommunityId || isCommunityUrl || isUrl)
-  ? trimmedInput
-  : trimmedInput.toLowerCase();
-```
-
-This preserves original case for wallets/tokens/URLs while still lowercasing X handles. All downstream references to `normalizedInput` continue working unchanged.
-
-### Safety net in `mesh-kyc-deep-search/index.ts`
-
-Add a validation guard at the entry point so even if bad data somehow arrives, it rejects early with a clear error instead of burning Helius credits:
-
-```typescript
-if (walletAddress !== walletAddress && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
-  throw new Error(`Invalid Base58 wallet address received: ${walletAddress.slice(0,12)}...`);
-}
-```
-
-### Impact
-- Fixes all 33 Helius 400 errors immediately
-- Fixes silent reputation_mesh query misses for case-sensitive IDs
-- No behavioral change for X handle lookups (those are already case-insensitive)
-- Saves wasted Helius API credits
+- **DexScreener rate limit**: 30 tokens per API call, 500ms delay between batches = ~300 tokens/min safely
+- **Community extraction**: Check both `info.socials` (twitter type URLs containing `/communities/`) and `info.websites` for community URLs using `extractXCommunityId()`
+- **Deduplication**: Upsert into `x_communities` by `community_id`, append token mint to `linked_token_mints` array if not already present
+- **Estimated completion**: ~128 runs × 5 min = ~10.5 hours to process all 38,371 tokens
 
