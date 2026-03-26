@@ -187,15 +187,107 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
     const body = await req.json().catch(() => ({}))
     
-    const { tokenMint, action = 'analyze' } = body
+    const { tokenMint, action = 'analyze', source } = body
 
-    console.log('🔍 Token Mint Watchdog: Starting...', { action, tokenMint })
+    console.log('🔍 Token Mint Watchdog: Starting...', { action, tokenMint, source })
 
     if (!solanaTrackerApiKey) {
       console.error('SOLANA_TRACKER_API_KEY not configured')
       return new Response(
         JSON.stringify({ error: 'Solana Tracker API key not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ═══ AUTO-BATCH MODE: When called by orchestrator without a specific token ═══
+    if (!tokenMint && (source === 'orchestrator' || action === 'auto_batch')) {
+      console.log('🤖 Auto-batch mode: processing pending watchdog entries')
+
+      const { data: pendingMints, error: fetchErr } = await supabase
+        .from('token_mint_watchdog')
+        .select('token_mint')
+        .eq('discovery_triggered', false)
+        .order('created_at', { ascending: false })
+        .limit(5) // process 5 at a time to stay within timeout
+
+      if (fetchErr) {
+        console.error('Error fetching pending mints:', fetchErr)
+        return new Response(
+          JSON.stringify({ error: fetchErr.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (!pendingMints || pendingMints.length === 0) {
+        console.log('✅ No pending watchdog entries to process')
+        return new Response(
+          JSON.stringify({ success: true, message: 'No pending entries', processed: 0 }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`Found ${pendingMints.length} pending entries to auto-process`)
+      const results: Array<{ tokenMint: string; status: string; error?: string }> = []
+
+      for (const entry of pendingMints) {
+        try {
+          // Fetch token data from Solana Tracker
+          const tokenResponse = await fetch(
+            `https://data.solanatracker.io/tokens/${entry.token_mint}`,
+            { headers: { 'x-api-key': solanaTrackerApiKey } }
+          )
+
+          if (!tokenResponse.ok) {
+            results.push({ tokenMint: entry.token_mint, status: 'api_error', error: `Status ${tokenResponse.status}` })
+            continue
+          }
+
+          const tokenData: SolanaTrackerResponse = await tokenResponse.json()
+          const bundleAnalysis = analyzeTokenRisk(tokenData)
+          const pool = tokenData.pools?.[0]
+          const creator = tokenData.token?.creation?.creator || pool?.deployer || 'unknown'
+
+          await supabase
+            .from('token_mint_watchdog')
+            .upsert({
+              token_mint: entry.token_mint,
+              creator_wallet: creator,
+              metadata: {
+                name: tokenData.token?.name,
+                symbol: tokenData.token?.symbol,
+                market: pool?.market,
+                marketCapUsd: pool?.marketCap?.usd,
+                liquidityUsd: pool?.liquidity?.usd,
+                priceUsd: pool?.price?.usd,
+                curvePercentage: pool?.curvePercentage,
+                bundleId: pool?.bundleId,
+                txns: pool?.txns,
+              },
+              bundle_analysis: bundleAnalysis,
+              is_bundled: bundleAnalysis.isBundled,
+              bundle_score: bundleAnalysis.bundleScore,
+              analyzed_at: new Date().toISOString(),
+              discovery_triggered: true,
+              deep_analysis_completed: true,
+            }, { onConflict: 'token_mint' })
+
+          results.push({ tokenMint: entry.token_mint, status: 'success' })
+          console.log(`✅ Auto-analyzed ${tokenData.token?.symbol || entry.token_mint}`)
+
+          // Rate limit between calls
+          await new Promise(r => setTimeout(r, 300))
+        } catch (e: any) {
+          results.push({ tokenMint: entry.token_mint, status: 'error', error: e.message })
+          console.error(`❌ Failed ${entry.token_mint}:`, e.message)
+        }
+      }
+
+      const successCount = results.filter(r => r.status === 'success').length
+      console.log(`🤖 Auto-batch complete: ${successCount}/${results.length} processed`)
+
+      return new Response(
+        JSON.stringify({ success: true, processed: successCount, total: results.length, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 

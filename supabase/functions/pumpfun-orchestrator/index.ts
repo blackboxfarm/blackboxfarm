@@ -26,6 +26,7 @@ const SLOW_FUNCTIONS: Record<string, number> = {
   'pumpfun-token-enricher': 2,       // every 2nd tick (10 min)
   'pumpfun-comment-scanner': 2,      // every 2nd tick (10 min)
   'social-mesh-linker': 2,           // every 2nd tick (10 min) — auto-links socials to mesh
+  'token-mint-watchdog-monitor': 3,  // every 3rd tick (15 min) — deep analysis of new mints
 };
 
 Deno.serve(withRunLog('pumpfun-orchestrator', async (req) => {
