@@ -302,11 +302,27 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     }
     
     const seenMints = new Set((seenTokens || []).map(t => t.token_mint));
-    console.log(`[scheduler] Already seen tokens: ${seenMints.size}`);
+    console.log(`[scheduler] Already seen tokens (slot-based): ${seenMints.size}`);
     
-    // Filter out already seen tokens
-    const newTokens = trendingTokens.filter(t => !seenMints.has(t.mint));
-    console.log(`[scheduler] New tokens to queue: ${newTokens.length}`);
+    // ALSO check post_queue for tokens already posted or currently pending
+    // This prevents re-queuing tokens that stay in the Dex Top 200 for days
+    const trendingMints = trendingTokens.map(t => t.mint);
+    const { data: alreadyQueued, error: queuedError } = await supabase
+      .from('holders_intel_post_queue')
+      .select('token_mint')
+      .in('token_mint', trendingMints)
+      .in('status', ['pending', 'processing', 'posted']);
+    
+    if (queuedError) {
+      console.error('[scheduler] Error checking existing queue:', queuedError);
+    }
+    
+    const queuedMints = new Set((alreadyQueued || []).map(t => t.token_mint));
+    console.log(`[scheduler] Already queued/posted: ${queuedMints.size}`);
+    
+    // Filter out both seen AND already queued/posted tokens
+    const newTokens = trendingTokens.filter(t => !seenMints.has(t.mint) && !queuedMints.has(t.mint));
+    console.log(`[scheduler] New tokens to queue: ${newTokens.length} (filtered ${queuedMints.size} already in queue)`);
     
     // No filtering here - we take all 50 trending tokens
     // Quality checks happen in the poster (holders count, health grade)
