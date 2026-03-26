@@ -15,6 +15,7 @@ import { useBubbleMapRateLimit } from "@/hooks/useBubbleMapRateLimit";
 import { useNavigate } from "react-router-dom";
 import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 import SocialTimeline from "./SocialTimeline";
+import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
 
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
@@ -215,6 +216,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     focusOnEntity(normalizedId, type);
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
+
+    // Silently queue token mint lookups to the post pipeline
+    if (type !== 'x_account' && rawInput.length >= 30) {
+      queueTokenFromFrontend(rawInput, mode === 'promo' ? 'public_query' : 'subscriber_query', {
+        comment: `Bubblemap ${mode} lookup`,
+      });
+    }
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
   // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active AND hasn't already run
