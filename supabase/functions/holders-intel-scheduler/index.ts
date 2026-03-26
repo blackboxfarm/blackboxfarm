@@ -338,14 +338,12 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     const newTokens = trendingTokens.filter(t => !seenMints.has(t.mint) && !queuedMints.has(t.mint));
     console.log(`[scheduler] New tokens to queue (pre-established filter): ${newTokens.length} (filtered ${queuedMints.size} already in queue)`);
     
-    // Filter out ESTABLISHED tokens: old (>7d) with high mcap (>500k) unless actively boosted
-    // These tokens like $LOOK, $WOJAK don't need repeated posting
+    // Filter out ESTABLISHED tokens: old (>3d) with high mcap (>300k) unless actively boosted
+    // These tokens like $LOOK, $WOJAK don't need repeated posting — only re-post on DEX triggers
     const newMints = newTokens.map(t => t.mint);
     let establishedMints = new Set<string>();
     
     if (newMints.length > 0) {
-      const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      
       // Batch query token_lifecycle for age + boost data
       for (let i = 0; i < newMints.length; i += 50) {
         const batch = newMints.slice(i, i + 50);
@@ -356,24 +354,27 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
         
         if (lifecycleData) {
           for (const lc of lifecycleData) {
-            const pairAge = lc.pair_created_at ? new Date(lc.pair_created_at) : null;
-            const firstSeen = new Date(lc.first_seen_at);
-            const effectiveAge = pairAge || firstSeen;
-            const ageMs = Date.now() - effectiveAge.getTime();
+            // Use pair_created_at if available, otherwise first_seen_at
+            const effectiveDate = lc.pair_created_at || lc.first_seen_at;
+            if (!effectiveDate) continue;
+            
+            const ageMs = Date.now() - new Date(effectiveDate).getTime();
             const ageDays = ageMs / (24 * 60 * 60 * 1000);
             const mcap = lc.market_cap || 0;
             const hasBoosts = (lc.active_boosts || 0) > 0;
             
-            // Established = older than 7 days AND mcap > 500k AND no active boosts
-            if (ageDays > 7 && mcap > 500_000 && !hasBoosts) {
+            // Established = older than 3 days AND mcap > 300k AND no active boosts
+            // Only DEX triggers (boost, CTO, dex_paid) should re-post these
+            if (ageDays > 3 && mcap > 300_000 && !hasBoosts) {
               establishedMints.add(lc.token_mint);
+              console.log(`[scheduler] ⏭ Skip established: ${lc.token_mint} (${Math.round(ageDays)}d old, ${Math.round(mcap/1000)}k mcap)`);
             }
           }
         }
       }
       
       if (establishedMints.size > 0) {
-        console.log(`[scheduler] ⏭ Skipping ${establishedMints.size} established tokens (>7d old, >500k mcap, no boosts)`);
+        console.log(`[scheduler] ⏭ Total skipping ${establishedMints.size} established tokens (>3d old, >300k mcap, no boosts)`);
       }
     }
     
