@@ -171,7 +171,7 @@ serve(withRunLog('process-blackbox-commands', async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
-});
+}));
 
 // Helper function to determine if an action should be executed
 async function shouldExecuteAction(supabaseService: any, commandId: string, action: 'buy' | 'sell', config: any): Promise<boolean> {
