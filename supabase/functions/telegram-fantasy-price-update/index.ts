@@ -134,7 +134,10 @@ async function fetchTokenData(tokenMints: string[]): Promise<Record<string, Toke
   return tokenData;
 }
 
-serve(withRunLog('telegram-fantasy-price-update', async (req) => {
+import { withRunLog } from '../_shared/run-logger.ts';
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
