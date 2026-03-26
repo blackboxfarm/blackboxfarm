@@ -96,7 +96,7 @@ serve(withRunLog('holder-retention-analysis', async (req) => {
         tiers.forEach(tier => dailyData[date].byTier[tier] = new Set());
       }
       dailyData[date].wallets.add(snapshot.wallet_address);
-      if (snapshot.tier) {
+      if (snapshot.tier && dailyData[date].byTier[snapshot.tier]) {
         dailyData[date].byTier[snapshot.tier].add(snapshot.wallet_address);
       }
     }
