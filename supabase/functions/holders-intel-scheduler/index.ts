@@ -326,13 +326,49 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     
     // Filter out both seen AND already queued/posted tokens
     const newTokens = trendingTokens.filter(t => !seenMints.has(t.mint) && !queuedMints.has(t.mint));
-    console.log(`[scheduler] New tokens to queue: ${newTokens.length} (filtered ${queuedMints.size} already in queue)`);
+    console.log(`[scheduler] New tokens to queue (pre-established filter): ${newTokens.length} (filtered ${queuedMints.size} already in queue)`);
     
-    // No filtering here - we take all 50 trending tokens
-    // Quality checks happen in the poster (holders count, health grade)
-    const qualifiedTokens = newTokens;
+    // Filter out ESTABLISHED tokens: old (>7d) with high mcap (>500k) unless actively boosted
+    // These tokens like $LOOK, $WOJAK don't need repeated posting
+    const newMints = newTokens.map(t => t.mint);
+    let establishedMints = new Set<string>();
     
-    console.log(`[scheduler] New tokens to queue: ${qualifiedTokens.length}`);
+    if (newMints.length > 0) {
+      const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      
+      // Batch query token_lifecycle for age + boost data
+      for (let i = 0; i < newMints.length; i += 50) {
+        const batch = newMints.slice(i, i + 50);
+        const { data: lifecycleData } = await supabase
+          .from('token_lifecycle')
+          .select('token_mint, pair_created_at, first_seen_at, market_cap, active_boosts')
+          .in('token_mint', batch);
+        
+        if (lifecycleData) {
+          for (const lc of lifecycleData) {
+            const pairAge = lc.pair_created_at ? new Date(lc.pair_created_at) : null;
+            const firstSeen = new Date(lc.first_seen_at);
+            const effectiveAge = pairAge || firstSeen;
+            const ageMs = Date.now() - effectiveAge.getTime();
+            const ageDays = ageMs / (24 * 60 * 60 * 1000);
+            const mcap = lc.market_cap || 0;
+            const hasBoosts = (lc.active_boosts || 0) > 0;
+            
+            // Established = older than 7 days AND mcap > 500k AND no active boosts
+            if (ageDays > 7 && mcap > 500_000 && !hasBoosts) {
+              establishedMints.add(lc.token_mint);
+            }
+          }
+        }
+      }
+      
+      if (establishedMints.size > 0) {
+        console.log(`[scheduler] ⏭ Skipping ${establishedMints.size} established tokens (>7d old, >500k mcap, no boosts)`);
+      }
+    }
+    
+    const qualifiedTokens = newTokens.filter(t => !establishedMints.has(t.mint));
+    console.log(`[scheduler] Final tokens to queue: ${qualifiedTokens.length}`);
     
     // Insert seen tokens
     if (qualifiedTokens.length > 0) {
@@ -410,6 +446,7 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
         trendingFetched: trendingTokens.length,
         alreadySeen: seenMints.size,
         newTokens: newTokens.length,
+        establishedSkipped: establishedMints.size,
         qualifiedTokens: qualifiedTokens.length,
         queued: queueInserts.length,
         tierTracked: tierQualified,
