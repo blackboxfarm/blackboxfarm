@@ -192,7 +192,7 @@ serve(withRunLog('phanes-x-query', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));
 
 /**
  * DM @Phanes_bot with /x <handle> via MTProto user account, wait for reply, parse & store.
