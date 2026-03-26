@@ -52,17 +52,42 @@ async function fetchDexScreenerWithRateLimit(tokenMint: string, retries = 2): Pr
   return null;
 }
 
-// Process a single token
+// Process a single token — also updates bonded_at if graduated
 async function enrichSingleToken(
   supabase: any, 
   tokenMint: string, 
   symbol: string | null
-): Promise<{ linked: boolean; twitterUrl?: string; bannerCreated?: boolean; error?: string }> {
+): Promise<{ linked: boolean; twitterUrl?: string; bannerCreated?: boolean; bondedUpdated?: boolean; error?: string }> {
   const dexData = await fetchDexScreenerWithRateLimit(tokenMint);
   if (!dexData) return { linked: false, error: 'Failed to fetch DexScreener' };
   
   const pair = dexData?.pairs?.[0];
-  if (!pair?.info?.socials) return { linked: false, error: 'No socials' };
+
+  // Update bonded_at if token has graduated (Raydium/Orca/Meteora = bonded)
+  let bondedUpdated = false;
+  const isBonded = pair?.dexId && ['raydium', 'orca', 'meteora'].includes(pair.dexId.toLowerCase());
+  if (isBonded) {
+    const bondedTime = pair.pairCreatedAt 
+      ? new Date(pair.pairCreatedAt).toISOString() 
+      : new Date().toISOString();
+    const { error: bondErr } = await supabase
+      .from('holders_intel_seen_tokens')
+      .update({ bonded_at: bondedTime })
+      .eq('token_mint', tokenMint)
+      .is('bonded_at', null);
+    if (!bondErr) bondedUpdated = true;
+  }
+
+  // Update banner_url if DexScreener has a paid header
+  if (pair?.info?.header) {
+    await supabase
+      .from('holders_intel_seen_tokens')
+      .update({ banner_url: pair.info.header })
+      .eq('token_mint', tokenMint)
+      .is('banner_url', null);
+  }
+
+  if (!pair?.info?.socials) return { linked: false, bondedUpdated, error: 'No socials' };
   
   let twitterUrl: string | null = null;
   for (const social of pair.info.socials) {
@@ -72,7 +97,7 @@ async function enrichSingleToken(
     }
   }
   
-  if (!twitterUrl) return { linked: false, error: 'No Twitter URL' };
+  if (!twitterUrl) return { linked: false, bondedUpdated, error: 'No Twitter URL' };
   
   const communityId = extractCommunityId(twitterUrl);
   const effectiveId = communityId || twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
@@ -112,7 +137,6 @@ async function enrichSingleToken(
   let bannerCreated = false;
   const bannerUrl = pair?.info?.header;
   if (bannerUrl && communityId) {
-    // Check if token_banners entry already exists
     const { data: existingBanner } = await supabase
       .from('token_banners')
       .select('id')
@@ -138,7 +162,7 @@ async function enrichSingleToken(
     }
   }
   
-  return { linked: true, twitterUrl, bannerCreated };
+  return { linked: true, twitterUrl, bannerCreated, bondedUpdated };
 }
 
 Deno.serve(withRunLog('enrich-token-communities', async (req) => {
@@ -193,6 +217,7 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
 
     let enriched = 0;
     let noTwitter = 0;
+    let bondedUpdated = 0;
     const results: { mint: string; symbol: string; twitterUrl?: string; linked: boolean }[] = [];
 
     // Process SEQUENTIALLY with 300ms delay between each (DexScreener rate limit safe)
@@ -207,10 +232,12 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
       try {
         const result = await enrichSingleToken(supabase, token.token_mint, token.symbol);
         
+        if (result.bondedUpdated) bondedUpdated++;
+        
         if (result.linked) {
           enriched++;
           results.push({ mint: token.token_mint, symbol: token.symbol || '?', twitterUrl: result.twitterUrl, linked: true });
-          console.log(`[enrich] ${i+1}/${maxTokens} Linked ${token.symbol || token.token_mint.slice(0,8)} -> ${result.twitterUrl}`);
+          console.log(`[enrich] ${i+1}/${maxTokens} Linked ${token.symbol || token.token_mint.slice(0,8)} -> ${result.twitterUrl}${result.bondedUpdated ? ' [BONDED]' : ''}`);
         } else {
           noTwitter++;
           results.push({ mint: token.token_mint, symbol: token.symbol || '?', linked: false });
@@ -221,7 +248,7 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
       }
     }
 
-    console.log(`[enrich-token-communities] Complete: ${enriched} enriched, ${noTwitter} no Twitter URL`);
+    console.log(`[enrich-token-communities] Complete: ${enriched} enriched, ${bondedUpdated} bonded, ${noTwitter} no Twitter URL`);
 
     return new Response(JSON.stringify({ 
       success: true, 
@@ -230,6 +257,7 @@ Deno.serve(withRunLog('enrich-token-communities', async (req) => {
       missing: missingTokens.length,
       processed: maxTokens,
       enriched,
+      bondedUpdated,
       noTwitterUrl: noTwitter,
       results
     }), {
