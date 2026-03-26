@@ -113,9 +113,9 @@ serve(withRunLog('holder-retention-analysis', async (req) => {
       
       const tierRetention: any = {};
       tiers.forEach(tier => {
-        const firstDayTierWallets = dailyData[firstDate].byTier[tier];
-        const currentTierWallets = dailyData[date].byTier[tier];
-        if (firstDayTierWallets.size > 0) {
+        const firstDayTierWallets = dailyData[firstDate]?.byTier?.[tier];
+        const currentTierWallets = dailyData[date]?.byTier?.[tier];
+        if (firstDayTierWallets && firstDayTierWallets.size > 0 && currentTierWallets) {
           const retained = [...firstDayTierWallets].filter(w => currentTierWallets.has(w)).length;
           tierRetention[tier] = (retained / firstDayTierWallets.size) * 100;
         } else {
