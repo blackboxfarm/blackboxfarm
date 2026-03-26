@@ -434,7 +434,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
     // BATCH MODE: fetch up to 5 candidates, post up to 3 per tick
     const MAX_POSTS_PER_TICK = 3;
     const BATCH_SIZE = 5; // fetch extra in case some skip/fail
-    const STALE_HOURS = 6; // auto-expire anything older than this
+    const STALE_HOURS = 3; // auto-expire anything older than this — keep queue fresh
     const now = new Date().toISOString();
     const staleCutoff = new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000).toISOString();
 
