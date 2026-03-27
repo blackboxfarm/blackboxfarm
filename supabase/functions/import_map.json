@@ -1,5 +1,6 @@
 {
   "imports": {
-    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.49.1"
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.49.1",
+    "node-gyp-build": "https://esm.sh/node-gyp-build@4.8.4?target=denonext"
   }
 }
