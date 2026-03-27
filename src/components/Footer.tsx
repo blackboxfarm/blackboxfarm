@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart } from "lucide-react";
+import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart, Instagram } from "lucide-react";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
@@ -217,12 +217,24 @@ export function Footer() {
             
             <div className="pt-2">
               <h4 className="font-medium text-sm mb-2">Connect With Us</h4>
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 <XSuspendedPopover>
                   <Twitter className="h-4 w-4" />
                 </XSuspendedPopover>
                 <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-blue-400 transition-colors">
                   <MessageCircle className="h-4 w-4" />
+                </a>
+                <a href="https://www.facebook.com/profile.php?id=61577553852826" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-blue-600 transition-colors">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                </a>
+                <a href="https://www.instagram.com/holdersintel" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-pink-500 transition-colors">
+                  <Instagram className="h-4 w-4" />
+                </a>
+                <a href="https://www.threads.com/@holdersintel" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.59 12c.025 3.086.718 5.496 2.057 7.164 1.432 1.781 3.632 2.695 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.96-.065-1.187.408-2.26 1.33-3.017.88-.724 2.107-1.127 3.553-1.166 1.089-.03 2.09.106 2.988.404-.084-1.003-.455-1.768-1.106-2.28-.737-.578-1.8-.862-3.16-.843l-.04-2.12c1.767-.033 3.248.395 4.4 1.27 1.26.96 1.972 2.38 2.117 4.215l.007.1c.065.088.127.18.185.276.886 1.435 1.238 3.175.988 4.895-.325 2.24-1.503 4.067-3.412 5.293C17.095 23.263 14.873 23.975 12.186 24zm-.09-8.35c-.052 0-.104.001-.157.004-.96.052-1.677.36-2.066.69-.395.336-.56.729-.533 1.205.033.588.353 1.058.925 1.358.599.314 1.378.455 2.186.413 1.07-.058 1.876-.462 2.394-1.2.347-.494.6-1.132.752-1.9-.93-.372-1.95-.57-3.027-.57h-.474z"/></svg>
+                </a>
+                <a href="https://www.tiktok.com/@holdersintel" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
                 </a>
                 <a href="mailto:support@blackbox.farm" className="text-muted-foreground hover:text-primary transition-colors">
                   <Mail className="h-4 w-4" />
