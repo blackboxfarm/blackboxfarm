@@ -93,11 +93,12 @@ export function ShareToXButton({
     return processTemplate(template, tokenData);
   };
 
-  const [xSuspendedOpen, setXSuspendedOpen] = useState(false);
-
   const handleShareToX = () => {
-    // X account is suspended — show popup instead
-    setXSuspendedOpen(true);
+    toast({
+      title: "😱 Uh Oh! X Account Suspended!",
+      description: "Our AI Bad Dev exposés pissed off the wrong people and they reported us! 🔥🕵️ We'll be back stronger 💪",
+      variant: "destructive",
+    });
   };
 
   const handleCopyForDiscord = () => {
