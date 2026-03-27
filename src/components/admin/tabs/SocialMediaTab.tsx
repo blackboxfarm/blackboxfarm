@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Send, Image, Link, RefreshCw, Eye } from "lucide-react";
+import { ContentRepurposer } from "@/components/admin/social/ContentRepurposer";
 
 export default function SocialMediaTab() {
   return (
