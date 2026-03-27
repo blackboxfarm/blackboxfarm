@@ -93,13 +93,11 @@ export function ShareToXButton({
     return processTemplate(template, tokenData);
   };
 
+  const [xSuspendedOpen, setXSuspendedOpen] = useState(false);
+
   const handleShareToX = () => {
-    trackShareClick('x');
-    const tweetText = getShareText();
-    window.open(
-      `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
-      '_blank'
-    );
+    // X account is suspended — show popup instead
+    setXSuspendedOpen(true);
   };
 
   const handleCopyForDiscord = () => {

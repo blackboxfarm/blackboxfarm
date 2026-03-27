@@ -604,12 +604,12 @@ export default function Home() {
               <Rocket className="w-4 h-4" />
               Get Started Free
             </Button>
-            <a href="https://x.com/holdersintel" target="_blank" rel="noopener noreferrer">
+            <XSuspendedPopover>
               <Button size="lg" variant="outline" className="gap-2">
                 <SocialIcon platform="twitter" className="w-4 h-4" />
                 Follow @holdersintel
               </Button>
-            </a>
+            </XSuspendedPopover>
           </div>
         </div>
       </section>

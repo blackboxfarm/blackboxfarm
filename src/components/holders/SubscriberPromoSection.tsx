@@ -64,13 +64,13 @@ export function SubscriberPromoSection() {
                 <span className="flex items-center gap-1"><Crown className="h-3 w-3 text-yellow-400" /> Dev Rep Scores</span>
               </div>
             </div>
-            <a href="https://x.com/holdersintel" target="_blank" rel="noopener noreferrer" className="shrink-0">
+            <XSuspendedPopover>
               <Button variant="outline" size="sm" className="gap-1.5 text-xs">
                 <SocialIcon platform="twitter" className="h-3.5 w-3.5" />
                 Follow
                 <ExternalLink className="h-3 w-3" />
               </Button>
-            </a>
+            </XSuspendedPopover>
           </div>
         </CardContent>
       </Card>
