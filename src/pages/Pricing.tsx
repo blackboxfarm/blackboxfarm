@@ -8,6 +8,7 @@ import { useUserTier } from '@/hooks/useUserTier';
 import { useAuth } from '@/hooks/useAuth';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { SiteLayout } from '@/components/layout/SiteLayout';
+import { XSuspendedPopover } from '@/components/XSuspendedPopover';
 
 export default function Pricing() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,15 +39,12 @@ export default function Pricing() {
           </p>
           <div className="flex items-center justify-center gap-2 text-sm text-blue-400">
             <SocialIcon platform="twitter" className="w-4 h-4" />
-            <a
-              href="https://x.com/holdersintel"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline inline-flex items-center gap-1"
-            >
-              X Subscribers save on every paid plan
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            <XSuspendedPopover>
+              <span className="hover:underline inline-flex items-center gap-1 cursor-pointer">
+                X Subscribers save on every paid plan
+                <ExternalLink className="w-3 h-3" />
+              </span>
+            </XSuspendedPopover>
           </div>
         </div>
 

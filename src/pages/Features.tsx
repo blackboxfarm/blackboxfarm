@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { SocialIcon } from "@/components/token/SocialIcon";
 import holdersLogo from "@/assets/holders-logo.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
+import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 
 const TIERS = [
   {
@@ -617,12 +618,12 @@ export default function Features() {
               <Rocket className="w-4 h-4" />
               Get Started Free
             </Button>
-            <a href="https://x.com/holdersintel" target="_blank" rel="noopener noreferrer">
+            <XSuspendedPopover>
               <Button size="lg" variant="outline" className="gap-2">
                 <SocialIcon platform="twitter" className="w-4 h-4" />
                 Follow @holdersintel
               </Button>
-            </a>
+            </XSuspendedPopover>
           </div>
         </div>
       </section>

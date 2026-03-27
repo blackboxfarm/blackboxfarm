@@ -94,12 +94,11 @@ export function ShareToXButton({
   };
 
   const handleShareToX = () => {
-    trackShareClick('x');
-    const tweetText = getShareText();
-    window.open(
-      `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
-      '_blank'
-    );
+    toast({
+      title: "😱 Uh Oh! X Account Suspended!",
+      description: "Our AI Bad Dev exposés pissed off the wrong people and they reported us! 🔥🕵️ We'll be back stronger 💪",
+      variant: "destructive",
+    });
   };
 
   const handleCopyForDiscord = () => {

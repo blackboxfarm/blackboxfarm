@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { SiteLayout } from "@/components/layout/SiteLayout";
+import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -174,11 +175,11 @@ export default function HoldersHowTo() {
                   <BarChart3 className="w-4 h-4" /> Try It Now
                 </Button>
               </Link>
-              <a href="https://x.com/intent/tweet?text=Check%20out%20BlackBox%20Farm%20for%20Solana%20token%20holder%20analysis%20%E2%80%94%20https%3A%2F%2Fblackbox.farm%2Fholders" target="_blank" rel="noopener noreferrer">
+              <XSuspendedPopover>
                 <Button variant="outline" className="gap-2">
                   <ExternalLink className="w-4 h-4" /> Share on X
                 </Button>
-              </a>
+              </XSuspendedPopover>
             </div>
           </CardContent>
         </Card>

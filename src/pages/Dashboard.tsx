@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BarChart3, Bot, Network, Crown, Settings, ExternalLink, Hash } from "lucide-react";
 import { SiteLayout } from "@/components/layout/SiteLayout";
+import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTier } from "@/hooks/useUserTier";
 import { usePageTracking } from "@/hooks/usePageTracking";
@@ -121,11 +122,11 @@ export default function Dashboard() {
               <Button variant="outline" className="w-full justify-start gap-2" onClick={() => navigate('/features')}>
                 <BarChart3 className="w-4 h-4" /> Platform Features
               </Button>
-              <a href="https://x.com/holdersintel" target="_blank" rel="noopener noreferrer" className="block">
+              <XSuspendedPopover>
                 <Button variant="outline" className="w-full justify-start gap-2">
                   <ExternalLink className="w-4 h-4" /> Follow @holdersintel on X
                 </Button>
-              </a>
+              </XSuspendedPopover>
             </CardContent>
           </Card>
         </div>
