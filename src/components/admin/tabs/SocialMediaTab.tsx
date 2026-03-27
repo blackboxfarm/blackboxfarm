@@ -30,6 +30,7 @@ export default function SocialMediaTab() {
         <TabsList>
           <TabsTrigger value="threads">🧵 Threads</TabsTrigger>
           <TabsTrigger value="instagram">📸 Instagram</TabsTrigger>
+          <TabsTrigger value="repurpose">🔄 Repurposer</TabsTrigger>
           <TabsTrigger value="history">📋 Post History</TabsTrigger>
         </TabsList>
 
@@ -38,6 +39,9 @@ export default function SocialMediaTab() {
         </TabsContent>
         <TabsContent value="instagram">
           <InstagramPanel />
+        </TabsContent>
+        <TabsContent value="repurpose">
+          <ContentRepurposer />
         </TabsContent>
         <TabsContent value="history">
           <PostHistory />
