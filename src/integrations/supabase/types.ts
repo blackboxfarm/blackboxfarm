@@ -2604,6 +2604,56 @@ export type Database = {
         }
         Relationships: []
       }
+      content_drafts: {
+        Row: {
+          created_at: string | null
+          id: string
+          original_image_url: string | null
+          original_text: string | null
+          posted_platforms: Json | null
+          repurposed_image_url: string | null
+          repurposed_text: string | null
+          source_post_id: string | null
+          status: string | null
+          target_platforms: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          original_image_url?: string | null
+          original_text?: string | null
+          posted_platforms?: Json | null
+          repurposed_image_url?: string | null
+          repurposed_text?: string | null
+          source_post_id?: string | null
+          status?: string | null
+          target_platforms?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          original_image_url?: string | null
+          original_text?: string | null
+          posted_platforms?: Json | null
+          repurposed_image_url?: string | null
+          repurposed_text?: string | null
+          source_post_id?: string | null
+          status?: string | null
+          target_platforms?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_drafts_source_post_id_fkey"
+            columns: ["source_post_id"]
+            isOneToOne: false
+            referencedRelation: "repurpose_scraped_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       copy_trades: {
         Row: {
           amount_sol: number | null
@@ -10126,6 +10176,86 @@ export type Database = {
           pubkey?: string
           secret_key_encrypted?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      repurpose_scraped_posts: {
+        Row: {
+          engagement: Json | null
+          id: string
+          image_urls: Json | null
+          is_repurposed: boolean | null
+          posted_at: string | null
+          scraped_at: string | null
+          source_account_id: string | null
+          tweet_id: string
+          tweet_text: string | null
+          tweet_url: string | null
+          username: string
+        }
+        Insert: {
+          engagement?: Json | null
+          id?: string
+          image_urls?: Json | null
+          is_repurposed?: boolean | null
+          posted_at?: string | null
+          scraped_at?: string | null
+          source_account_id?: string | null
+          tweet_id: string
+          tweet_text?: string | null
+          tweet_url?: string | null
+          username: string
+        }
+        Update: {
+          engagement?: Json | null
+          id?: string
+          image_urls?: Json | null
+          is_repurposed?: boolean | null
+          posted_at?: string | null
+          scraped_at?: string | null
+          source_account_id?: string | null
+          tweet_id?: string
+          tweet_text?: string | null
+          tweet_url?: string | null
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repurpose_scraped_posts_source_account_id_fkey"
+            columns: ["source_account_id"]
+            isOneToOne: false
+            referencedRelation: "repurpose_source_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repurpose_source_accounts: {
+        Row: {
+          created_at: string | null
+          display_name: string | null
+          id: string
+          is_active: boolean | null
+          last_scraped_at: string | null
+          notes: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_scraped_at?: string | null
+          notes?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_scraped_at?: string | null
+          notes?: string | null
+          username?: string
         }
         Relationships: []
       }
