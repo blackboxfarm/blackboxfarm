@@ -2608,11 +2608,13 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          locked_at: string | null
           original_image_url: string | null
           original_text: string | null
           posted_platforms: Json | null
           repurposed_image_url: string | null
           repurposed_text: string | null
+          schedule_post_at: string | null
           source_post_id: string | null
           status: string | null
           target_platforms: string[] | null
@@ -2621,11 +2623,13 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          locked_at?: string | null
           original_image_url?: string | null
           original_text?: string | null
           posted_platforms?: Json | null
           repurposed_image_url?: string | null
           repurposed_text?: string | null
+          schedule_post_at?: string | null
           source_post_id?: string | null
           status?: string | null
           target_platforms?: string[] | null
@@ -2634,11 +2638,13 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          locked_at?: string | null
           original_image_url?: string | null
           original_text?: string | null
           posted_platforms?: Json | null
           repurposed_image_url?: string | null
           repurposed_text?: string | null
+          schedule_post_at?: string | null
           source_post_id?: string | null
           status?: string | null
           target_platforms?: string[] | null
@@ -10186,8 +10192,10 @@ export type Database = {
           image_urls: Json | null
           is_repurposed: boolean | null
           posted_at: string | null
+          reviewed_at: string | null
           scraped_at: string | null
           source_account_id: string | null
+          status: string
           tweet_id: string
           tweet_text: string | null
           tweet_url: string | null
@@ -10199,8 +10207,10 @@ export type Database = {
           image_urls?: Json | null
           is_repurposed?: boolean | null
           posted_at?: string | null
+          reviewed_at?: string | null
           scraped_at?: string | null
           source_account_id?: string | null
+          status?: string
           tweet_id: string
           tweet_text?: string | null
           tweet_url?: string | null
@@ -10212,8 +10222,10 @@ export type Database = {
           image_urls?: Json | null
           is_repurposed?: boolean | null
           posted_at?: string | null
+          reviewed_at?: string | null
           scraped_at?: string | null
           source_account_id?: string | null
+          status?: string
           tweet_id?: string
           tweet_text?: string | null
           tweet_url?: string | null

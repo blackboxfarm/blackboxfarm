@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   RefreshCw, Plus, Trash2, Wand2, Send, Image, ExternalLink,
-  CheckCircle, XCircle, Eye, Copy, Sparkles
+  CheckCircle, XCircle, Copy, Sparkles, Clock, Lock, Calendar
 } from "lucide-react";
 
 // ─── Source Accounts Manager ────────────────────────────
@@ -20,6 +20,7 @@ function SourceAccountsPanel() {
   const [newHandle, setNewHandle] = useState("");
   const [loading, setLoading] = useState(false);
   const [scraping, setScraping] = useState<string | null>(null);
+  const [maxTweets, setMaxTweets] = useState(100);
 
   const loadAccounts = async () => {
     const { data } = await supabase
@@ -57,7 +58,7 @@ function SourceAccountsPanel() {
     setScraping(username);
     try {
       const { data, error } = await supabase.functions.invoke('scrape-twitter-posts', {
-        body: { username, max_tweets: 20 },
+        body: { username, max_tweets: maxTweets },
       });
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
@@ -74,7 +75,7 @@ function SourceAccountsPanel() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('scrape-twitter-posts', {
-        body: { max_tweets: 15 },
+        body: { max_tweets: maxTweets },
       });
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
@@ -110,6 +111,19 @@ function SourceAccountsPanel() {
           <Button size="sm" onClick={addAccount} disabled={!newHandle.trim()}>
             <Plus className="h-4 w-4 mr-1" /> Add
           </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">Max tweets per scrape:</Label>
+          <Input
+            type="number"
+            value={maxTweets}
+            onChange={(e) => setMaxTweets(Number(e.target.value) || 20)}
+            className="w-24 text-xs"
+            min={1}
+            max={5000}
+          />
+          <span className="text-xs text-muted-foreground">Set high (e.g. 5000) for full history</span>
         </div>
 
         <div className="space-y-2">
@@ -148,25 +162,60 @@ function SourceAccountsPanel() {
   );
 }
 
-// ─── Scraped Posts Browser ────────────────────────────
+// ─── Scraped Posts Browser (with approve/delete) ────────────────────────────
 function ScrapedPostsBrowser() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [repurposing, setRepurposing] = useState<string | null>(null);
   const [customInstructions, setCustomInstructions] = useState("");
+  const [filter, setFilter] = useState<string>("pending");
 
   const loadPosts = async () => {
     setLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from('repurpose_scraped_posts')
       .select('*')
       .order('posted_at', { ascending: false })
-      .limit(50);
+      .limit(100);
+    
+    if (filter !== 'all') {
+      query = query.eq('status', filter);
+    }
+    
+    const { data } = await query;
     setPosts(data || []);
     setLoading(false);
   };
 
-  useEffect(() => { loadPosts(); }, []);
+  useEffect(() => { loadPosts(); }, [filter]);
+
+  const updatePostStatus = async (id: string, status: string) => {
+    await supabase
+      .from('repurpose_scraped_posts')
+      .update({ status, reviewed_at: new Date().toISOString() })
+      .eq('id', id);
+    toast.success(status === 'approved' ? '✅ Approved for repurposing' : status === 'rejected' ? '❌ Rejected' : 'Updated');
+    loadPosts();
+  };
+
+  const deletePost = async (id: string) => {
+    await supabase.from('repurpose_scraped_posts').delete().eq('id', id);
+    toast.success('Deleted');
+    loadPosts();
+  };
+
+  const bulkApproveAll = async () => {
+    const pendingIds = posts.filter(p => p.status === 'pending').map(p => p.id);
+    if (pendingIds.length === 0) return;
+    for (const id of pendingIds) {
+      await supabase
+        .from('repurpose_scraped_posts')
+        .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+        .eq('id', id);
+    }
+    toast.success(`Approved ${pendingIds.length} posts`);
+    loadPosts();
+  };
 
   const repurposePost = async (postId: string, generateImage: boolean) => {
     setRepurposing(postId);
@@ -181,6 +230,8 @@ function ScrapedPostsBrowser() {
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
       toast.success('Content repurposed! Check the Drafts tab.');
+      // Mark as repurposed
+      await supabase.from('repurpose_scraped_posts').update({ is_repurposed: true }).eq('id', postId);
       loadPosts();
     } catch (err: any) {
       toast.error(err.message || 'Repurpose failed');
@@ -189,18 +240,46 @@ function ScrapedPostsBrowser() {
     }
   };
 
+  const statusColors: Record<string, string> = {
+    pending: 'bg-yellow-500/20 text-yellow-300',
+    approved: 'bg-green-500/20 text-green-300',
+    rejected: 'bg-red-500/20 text-red-300',
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Scraped Posts</span>
-          <Button size="sm" variant="outline" onClick={loadPosts} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <span>Scraped Posts ({posts.length})</span>
+          <div className="flex gap-2">
+            {filter === 'pending' && posts.length > 0 && (
+              <Button size="sm" variant="secondary" onClick={bulkApproveAll}>
+                <CheckCircle className="h-3 w-3 mr-1" /> Approve All
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={loadPosts} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Filter bar */}
+        <div className="flex gap-2">
+          {['pending', 'approved', 'rejected', 'all'].map((f) => (
+            <Button
+              key={f}
+              size="sm"
+              variant={filter === f ? 'default' : 'outline'}
+              onClick={() => setFilter(f)}
+              className="capitalize text-xs"
+            >
+              {f}
+            </Button>
+          ))}
+        </div>
+
         <div className="space-y-2">
           <Label className="text-xs">Custom AI Instructions (optional)</Label>
           <Input
@@ -218,9 +297,12 @@ function ScrapedPostsBrowser() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="font-mono text-xs">@{post.username}</Badge>
+                    <Badge className={statusColors[post.status] || 'bg-muted'}>
+                      {post.status}
+                    </Badge>
                     {post.is_repurposed && (
-                      <Badge className="bg-green-500/20 text-green-300 text-xs">
-                        <CheckCircle className="h-3 w-3 mr-1" /> Repurposed
+                      <Badge className="bg-orange-500/20 text-orange-300 text-xs">
+                        <Sparkles className="h-3 w-3 mr-1" /> Repurposed
                       </Badge>
                     )}
                   </div>
@@ -255,28 +337,49 @@ function ScrapedPostsBrowser() {
                   )}
                 </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => repurposePost(post.id, false)}
-                    disabled={repurposing === post.id}
-                    className="flex-1"
-                  >
-                    <Wand2 className="h-3 w-3 mr-1" />
-                    {repurposing === post.id ? 'Working...' : 'Repurpose Text'}
-                  </Button>
-                  {post.image_urls?.length > 0 && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => repurposePost(post.id, true)}
-                      disabled={repurposing === post.id}
-                      className="flex-1"
-                    >
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      Text + Image
-                    </Button>
+                <div className="flex gap-2 flex-wrap">
+                  {/* Approve / Reject */}
+                  {post.status === 'pending' && (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => updatePostStatus(post.id, 'approved')} className="text-green-400">
+                        <CheckCircle className="h-3 w-3 mr-1" /> Approve
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => updatePostStatus(post.id, 'rejected')} className="text-red-400">
+                        <XCircle className="h-3 w-3 mr-1" /> Reject
+                      </Button>
+                    </>
                   )}
+
+                  {/* Repurpose (only approved) */}
+                  {post.status === 'approved' && !post.is_repurposed && (
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={() => repurposePost(post.id, false)}
+                        disabled={repurposing === post.id}
+                      >
+                        <Wand2 className="h-3 w-3 mr-1" />
+                        {repurposing === post.id ? 'Working...' : 'Repurpose Text'}
+                      </Button>
+                      {post.image_urls?.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => repurposePost(post.id, true)}
+                          disabled={repurposing === post.id}
+                        >
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Text + Image
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Delete */}
+                  <Button size="sm" variant="ghost" onClick={() => deletePost(post.id)}>
+                    <Trash2 className="h-3 w-3 text-red-400" />
+                  </Button>
+
                   {post.tweet_url && (
                     <Button size="sm" variant="ghost" asChild>
                       <a href={post.tweet_url} target="_blank" rel="noopener">
@@ -289,7 +392,7 @@ function ScrapedPostsBrowser() {
             ))}
             {posts.length === 0 && (
               <p className="text-muted-foreground text-center py-8 text-sm">
-                No scraped posts yet. Add accounts and hit Scrape!
+                No posts matching filter. Try scraping some accounts first!
               </p>
             )}
           </div>
@@ -299,7 +402,7 @@ function ScrapedPostsBrowser() {
   );
 }
 
-// ─── Content Drafts ────────────────────────────
+// ─── Content Drafts (with scheduling & multi-platform) ────────────────────────────
 function ContentDrafts() {
   const [drafts, setDrafts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -311,7 +414,7 @@ function ContentDrafts() {
       .from('content_drafts')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(50);
     setDrafts(data || []);
     setLoading(false);
   };
@@ -328,6 +431,17 @@ function ContentDrafts() {
   const setStatus = async (id: string, status: string) => {
     await supabase.from('content_drafts').update({ status }).eq('id', id);
     toast.success(`Draft ${status}`);
+    loadDrafts();
+  };
+
+  const lockForPosting = async (id: string, hoursFromNow: number) => {
+    const scheduleAt = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString();
+    await supabase.from('content_drafts').update({
+      status: 'approved',
+      schedule_post_at: scheduleAt,
+      locked_at: new Date().toISOString(),
+    }).eq('id', id);
+    toast.success(`🔒 Locked for posting at ${new Date(scheduleAt).toLocaleString()}`);
     loadDrafts();
   };
 
@@ -356,9 +470,26 @@ function ContentDrafts() {
         if (error) throw error;
         if (!data.success) throw new Error(data.error);
         toast.success(`Posted to Instagram! ID: ${data.postId}`);
+      } else if (platform === 'facebook') {
+        const { data, error } = await supabase.functions.invoke('post-to-facebook', {
+          body: {
+            message: longText,
+            imageUrl: draft.repurposed_image_url || draft.original_image_url || undefined,
+          },
+        });
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error);
+        toast.success(`Posted to Facebook! ID: ${data.postId}`);
+      } else if (platform === 'twitter') {
+        const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
+          body: { text: shortText },
+        });
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error);
+        toast.success(`Posted to X!`);
       }
 
-      // Update draft status
+      // Update draft
       const postedPlatforms = [...(draft.posted_platforms || []), platform];
       await supabase.from('content_drafts').update({
         posted_platforms: postedPlatforms,
@@ -373,6 +504,26 @@ function ContentDrafts() {
     }
   };
 
+  const reRequestAI = async (draftId: string, type: 'text' | 'image') => {
+    setPosting(draftId);
+    try {
+      const { data, error } = await supabase.functions.invoke('repurpose-content', {
+        body: {
+          draft_id: draftId,
+          regenerate: type,
+        },
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      toast.success(`${type === 'text' ? 'Text' : 'Image'} regenerated!`);
+      loadDrafts();
+    } catch (err: any) {
+      toast.error(err.message || 'Regeneration failed');
+    } finally {
+      setPosting(null);
+    }
+  };
+
   const copyText = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard');
@@ -382,7 +533,7 @@ function ContentDrafts() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Content Drafts</span>
+          <span>Content Drafts ({drafts.length})</span>
           <Button size="sm" variant="outline" onClick={loadDrafts} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -390,29 +541,43 @@ function ContentDrafts() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[550px]">
+        <ScrollArea className="h-[600px]">
           <div className="space-y-4 pr-3">
             {drafts.map((draft) => {
               const [shortText, longText] = (draft.repurposed_text || '').split('\n\n---\n\n');
+              const isLocked = !!draft.locked_at;
               return (
-                <div key={draft.id} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Badge
-                      className={
-                        draft.status === 'posted' ? 'bg-green-500/20 text-green-300' :
-                        draft.status === 'approved' ? 'bg-blue-500/20 text-blue-300' :
-                        draft.status === 'rejected' ? 'bg-red-500/20 text-red-300' :
-                        'bg-yellow-500/20 text-yellow-300'
-                      }
-                    >
-                      {draft.status}
-                    </Badge>
+                <div key={draft.id} className={`border rounded-lg p-4 space-y-3 ${isLocked ? 'border-orange-500/50 bg-orange-500/5' : ''}`}>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        className={
+                          draft.status === 'posted' ? 'bg-green-500/20 text-green-300' :
+                          draft.status === 'approved' ? 'bg-blue-500/20 text-blue-300' :
+                          draft.status === 'rejected' ? 'bg-red-500/20 text-red-300' :
+                          'bg-yellow-500/20 text-yellow-300'
+                        }
+                      >
+                        {draft.status}
+                      </Badge>
+                      {isLocked && (
+                        <Badge className="bg-orange-500/20 text-orange-300">
+                          <Lock className="h-3 w-3 mr-1" /> Locked
+                        </Badge>
+                      )}
+                      {draft.schedule_post_at && (
+                        <Badge variant="outline" className="text-xs">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {new Date(draft.schedule_post_at).toLocaleString()}
+                        </Badge>
+                      )}
+                    </div>
                     <span className="text-xs text-muted-foreground">
                       {new Date(draft.created_at).toLocaleString()}
                     </span>
                   </div>
 
-                  {/* Original vs Repurposed comparison */}
+                  {/* Original vs Repurposed */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Original</Label>
@@ -422,7 +587,7 @@ function ContentDrafts() {
                       )}
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-orange-400">Repurposed (Short)</Label>
+                      <Label className="text-xs text-orange-400">Repurposed (Short / Threads)</Label>
                       <Textarea
                         defaultValue={shortText}
                         onBlur={(e) => updateDraftText(draft.id, `${e.target.value}\n\n---\n\n${longText || ''}`)}
@@ -436,7 +601,7 @@ function ContentDrafts() {
 
                   {longText && (
                     <div className="space-y-1">
-                      <Label className="text-xs text-pink-400">Long Version (Instagram)</Label>
+                      <Label className="text-xs text-pink-400">Long Version (Instagram / Facebook)</Label>
                       <Textarea
                         defaultValue={longText}
                         onBlur={(e) => updateDraftText(draft.id, `${shortText}\n\n---\n\n${e.target.value}`)}
@@ -445,11 +610,33 @@ function ContentDrafts() {
                     </div>
                   )}
 
-                  {/* Actions */}
-                  <div className="flex flex-wrap gap-2">
+                  {/* Re-request AI */}
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" variant="outline" onClick={() => reRequestAI(draft.id, 'text')} disabled={posting === draft.id}>
+                      <Wand2 className="h-3 w-3 mr-1" /> Re-gen Text
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => reRequestAI(draft.id, 'image')} disabled={posting === draft.id}>
+                      <Sparkles className="h-3 w-3 mr-1" /> Re-gen Image
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => copyText(shortText)}>
                       <Copy className="h-3 w-3 mr-1" /> Copy Short
                     </Button>
+                  </div>
+
+                  {/* Schedule / Lock */}
+                  {draft.status !== 'posted' && !isLocked && (
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <Label className="text-xs">Schedule:</Label>
+                      {[1, 2, 4, 8, 24].map((h) => (
+                        <Button key={h} size="sm" variant="outline" className="text-xs" onClick={() => lockForPosting(draft.id, h)}>
+                          <Calendar className="h-3 w-3 mr-1" /> {h}h
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Post buttons - all platforms */}
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
                       className="bg-purple-600 hover:bg-purple-700"
@@ -466,6 +653,22 @@ function ContentDrafts() {
                     >
                       <Image className="h-3 w-3 mr-1" /> Instagram
                     </Button>
+                    <Button
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => postDraft(draft, 'facebook')}
+                      disabled={posting === draft.id}
+                    >
+                      <Send className="h-3 w-3 mr-1" /> Facebook
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-sky-600 hover:bg-sky-700"
+                      onClick={() => postDraft(draft, 'twitter')}
+                      disabled={posting === draft.id}
+                    >
+                      <Send className="h-3 w-3 mr-1" /> X / Twitter
+                    </Button>
                     <div className="flex-1" />
                     {draft.status === 'draft' && (
                       <>
@@ -478,12 +681,21 @@ function ContentDrafts() {
                       </>
                     )}
                   </div>
+
+                  {/* Posted platforms */}
+                  {draft.posted_platforms?.length > 0 && (
+                    <div className="flex gap-1">
+                      {draft.posted_platforms.map((p: string) => (
+                        <Badge key={p} variant="outline" className="text-xs capitalize">{p} ✓</Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
             {drafts.length === 0 && (
               <p className="text-muted-foreground text-center py-8 text-sm">
-                No drafts yet. Repurpose some scraped posts!
+                No drafts yet. Approve scraped posts then repurpose them!
               </p>
             )}
           </div>
@@ -503,7 +715,7 @@ export function ContentRepurposer() {
           Content Repurposer
         </h3>
         <p className="text-xs text-muted-foreground">
-          Scrape tweets → AI repurpose → Post to Threads/Instagram
+          Scrape tweets → Approve → AI repurpose → Schedule & Post to all platforms
         </p>
       </div>
 
@@ -511,7 +723,7 @@ export function ContentRepurposer() {
         <TabsList>
           <TabsTrigger value="accounts">📋 Source Accounts</TabsTrigger>
           <TabsTrigger value="posts">🐦 Scraped Posts</TabsTrigger>
-          <TabsTrigger value="drafts">✨ Drafts</TabsTrigger>
+          <TabsTrigger value="drafts">✨ Drafts & Schedule</TabsTrigger>
         </TabsList>
         <TabsContent value="accounts"><SourceAccountsPanel /></TabsContent>
         <TabsContent value="posts"><ScrapedPostsBrowser /></TabsContent>
