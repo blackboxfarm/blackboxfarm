@@ -57,12 +57,19 @@ export function XSuspendedPopover({ children }: XSuspendedPopoverProps) {
               Intel so good, bad actors had to shut us down
             </p>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            We're working on getting it restored. In the meantime, our <span className="text-foreground font-medium">analysis doesn't stop</span> — catch us on Telegram! 🚀
-          </p>
-          <div className="flex items-center gap-1.5 text-[10px] text-destructive/70 pt-1">
-            <XCircle className="h-3 w-3" />
-            <span>Temporarily unavailable — we'll be back stronger 💪</span>
+          <div className="text-xs text-muted-foreground leading-relaxed space-y-1.5">
+            <p>We're working on getting it restored.</p>
+            <p>In the meantime, our <span className="text-foreground font-medium">analysis doesn't stop!</span></p>
+            <div className="space-y-0.5 text-foreground font-medium">
+              <p>Telegram Channel is LIVE and 24/7! 💪</p>
+              <p>TelegramBot is Strong 💪</p>
+              <p>Website Holders Analysis run hard 💪</p>
+              <p>Website Bubblemaps is fire 🔥</p>
+            </div>
+            <p className="pt-1">— catch us on our Parent Twitter Account for updates!!! 🚀</p>
+            <a href="https://x.com/blackbox_farm" target="_blank" rel="noopener noreferrer" className="text-primary font-bold hover:underline block">
+              x.com/blackbox_farm 😎💎
+            </a>
           </div>
         </div>
       </PopoverContent>
