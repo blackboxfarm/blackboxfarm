@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BarChart3, Bot, Network, Crown, Settings, ExternalLink, Hash } from "lucide-react";
 import { SiteLayout } from "@/components/layout/SiteLayout";
+import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTier } from "@/hooks/useUserTier";
 import { usePageTracking } from "@/hooks/usePageTracking";

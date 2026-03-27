@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Bot, ExternalLink, MessageSquare, Crown, Sparkles, Users } from 'lucide-react';
 import { SocialIcon } from '@/components/token/SocialIcon';
+import { XSuspendedPopover } from '@/components/XSuspendedPopover';
 
 export function SubscriberPromoSection() {
   return (

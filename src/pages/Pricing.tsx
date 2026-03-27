@@ -8,6 +8,7 @@ import { useUserTier } from '@/hooks/useUserTier';
 import { useAuth } from '@/hooks/useAuth';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { SiteLayout } from '@/components/layout/SiteLayout';
+import { XSuspendedPopover } from '@/components/XSuspendedPopover';
 
 export default function Pricing() {
   const [searchParams, setSearchParams] = useSearchParams();
