@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart } from "lucide-react";
+import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
 
@@ -217,9 +218,9 @@ export function Footer() {
             <div className="pt-2">
               <h4 className="font-medium text-sm mb-2">Connect With Us</h4>
               <div className="flex gap-3">
-                <a href="https://x.com/blackbox_farm" className="text-muted-foreground hover:text-primary transition-colors">
+                <XSuspendedPopover>
                   <Twitter className="h-4 w-4" />
-                </a>
+                </XSuspendedPopover>
                 <a href="https://t.me/HoldersIntel" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-blue-400 transition-colors">
                   <MessageCircle className="h-4 w-4" />
                 </a>
