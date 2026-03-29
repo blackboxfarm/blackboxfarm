@@ -657,8 +657,8 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
           // Trigger oracle-unified-lookup to spider this wallet
           supabase.functions.invoke('oracle-unified-lookup', {
             body: { 
-              query: creatorWallet,
-              source: 'dex-mesh-spider'
+              input: creatorWallet,
+              scanMode: 'quick'
             }
           }).catch(err => {
             console.error(`[DexCompiler] ⚠️ Spider failed for ${creatorWallet}:`, err);
