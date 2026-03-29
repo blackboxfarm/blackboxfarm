@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   RefreshCw, Plus, Trash2, Wand2, Send, Image, ExternalLink,
-  CheckCircle, XCircle, Copy, Sparkles, Clock, Lock, Calendar
+  CheckCircle, XCircle, Copy, Sparkles, Clock, Lock, Calendar, Upload
 } from "lucide-react";
 import { StyleGallery } from "./StyleGallery";
 
