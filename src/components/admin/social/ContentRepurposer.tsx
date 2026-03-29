@@ -409,6 +409,37 @@ function ContentDrafts() {
   const [drafts, setDrafts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [posting, setPosting] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+  const imageUploadRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadDraftId, setPendingUploadDraftId] = useState<string | null>(null);
+
+  const handleImageUpload = async (file: File, draftId: string) => {
+    setUploadingImage(draftId);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const fileName = `custom_${draftId.slice(0, 8)}_${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('repurposed-images')
+        .upload(fileName, file, { contentType: file.type, upsert: true });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage
+        .from('repurposed-images')
+        .getPublicUrl(fileName);
+      const publicUrl = urlData?.publicUrl;
+      if (!publicUrl) throw new Error('Failed to get public URL');
+      await (supabase as any).from('content_drafts').update({
+        repurposed_image_url: publicUrl,
+        updated_at: new Date().toISOString(),
+      }).eq('id', draftId);
+      toast.success('Image replaced!');
+      loadDrafts();
+    } catch (err: any) {
+      toast.error(`Upload failed: ${err.message}`);
+    } finally {
+      setUploadingImage(null);
+      setPendingUploadDraftId(null);
+    }
+  };
 
   const loadDrafts = async () => {
     setLoading(true);
