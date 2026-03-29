@@ -163,7 +163,7 @@ function SourceAccountsPanel() {
 }
 
 // ─── Scraped Posts Browser (with approve/delete) ────────────────────────────
-function ScrapedPostsBrowser() {
+function ScrapedPostsBrowser({ onRepurposeSuccess }: { onRepurposeSuccess?: () => void } = {}) {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [repurposing, setRepurposing] = useState<string | null>(null);
@@ -229,10 +229,11 @@ function ScrapedPostsBrowser() {
       });
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
-      toast.success('Content repurposed! Check the Drafts tab.');
+      toast.success('Content repurposed! Switching to Drafts...');
       // Mark as repurposed
       await supabase.from('repurpose_scraped_posts').update({ is_repurposed: true }).eq('id', postId);
       loadPosts();
+      onRepurposeSuccess?.();
     } catch (err: any) {
       toast.error(err.message || 'Repurpose failed');
     } finally {
@@ -707,6 +708,8 @@ function ContentDrafts() {
 
 // ─── Main Export ────────────────────────────
 export function ContentRepurposer() {
+  const [activeTab, setActiveTab] = useState("accounts");
+
   return (
     <div className="space-y-4">
       <div>
@@ -719,14 +722,14 @@ export function ContentRepurposer() {
         </p>
       </div>
 
-      <Tabs defaultValue="accounts" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="accounts">📋 Source Accounts</TabsTrigger>
           <TabsTrigger value="posts">🐦 Scraped Posts</TabsTrigger>
           <TabsTrigger value="drafts">✨ Drafts & Schedule</TabsTrigger>
         </TabsList>
         <TabsContent value="accounts"><SourceAccountsPanel /></TabsContent>
-        <TabsContent value="posts"><ScrapedPostsBrowser /></TabsContent>
+        <TabsContent value="posts"><ScrapedPostsBrowser onRepurposeSuccess={() => setActiveTab("drafts")} /></TabsContent>
         <TabsContent value="drafts"><ContentDrafts /></TabsContent>
       </Tabs>
     </div>
