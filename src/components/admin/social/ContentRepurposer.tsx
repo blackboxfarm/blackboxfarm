@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   RefreshCw, Plus, Trash2, Wand2, Send, Image, ExternalLink,
-  CheckCircle, XCircle, Copy, Sparkles, Clock, Lock, Calendar
+  CheckCircle, XCircle, Copy, Sparkles, Clock, Lock, Calendar, Upload
 } from "lucide-react";
 import { StyleGallery } from "./StyleGallery";
 
@@ -409,6 +409,37 @@ function ContentDrafts() {
   const [drafts, setDrafts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [posting, setPosting] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+  const imageUploadRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadDraftId, setPendingUploadDraftId] = useState<string | null>(null);
+
+  const handleImageUpload = async (file: File, draftId: string) => {
+    setUploadingImage(draftId);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const fileName = `custom_${draftId.slice(0, 8)}_${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('repurposed-images')
+        .upload(fileName, file, { contentType: file.type, upsert: true });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage
+        .from('repurposed-images')
+        .getPublicUrl(fileName);
+      const publicUrl = urlData?.publicUrl;
+      if (!publicUrl) throw new Error('Failed to get public URL');
+      await (supabase as any).from('content_drafts').update({
+        repurposed_image_url: publicUrl,
+        updated_at: new Date().toISOString(),
+      }).eq('id', draftId);
+      toast.success('Image replaced!');
+      loadDrafts();
+    } catch (err: any) {
+      toast.error(`Upload failed: ${err.message}`);
+    } finally {
+      setUploadingImage(null);
+      setPendingUploadDraftId(null);
+    }
+  };
 
   const loadDrafts = async () => {
     setLoading(true);
@@ -620,6 +651,18 @@ function ContentDrafts() {
                     <Button size="sm" variant="outline" onClick={() => reRequestAI(draft.id, 'image')} disabled={posting === draft.id}>
                       <Sparkles className="h-3 w-3 mr-1" /> Re-gen Image
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={uploadingImage === draft.id}
+                      onClick={() => {
+                        setPendingUploadDraftId(draft.id);
+                        imageUploadRef.current?.click();
+                      }}
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      {uploadingImage === draft.id ? 'Uploading...' : 'Upload Image'}
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => copyText(shortText)}>
                       <Copy className="h-3 w-3 mr-1" /> Copy Short
                     </Button>
@@ -702,6 +745,19 @@ function ContentDrafts() {
             )}
           </div>
         </ScrollArea>
+        <input
+          ref={imageUploadRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file && pendingUploadDraftId) {
+              handleImageUpload(file, pendingUploadDraftId);
+            }
+            e.target.value = '';
+          }}
+        />
       </CardContent>
     </Card>
   );
