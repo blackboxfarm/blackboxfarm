@@ -651,6 +651,18 @@ function ContentDrafts() {
                     <Button size="sm" variant="outline" onClick={() => reRequestAI(draft.id, 'image')} disabled={posting === draft.id}>
                       <Sparkles className="h-3 w-3 mr-1" /> Re-gen Image
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={uploadingImage === draft.id}
+                      onClick={() => {
+                        setPendingUploadDraftId(draft.id);
+                        imageUploadRef.current?.click();
+                      }}
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      {uploadingImage === draft.id ? 'Uploading...' : 'Upload Image'}
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => copyText(shortText)}>
                       <Copy className="h-3 w-3 mr-1" /> Copy Short
                     </Button>
