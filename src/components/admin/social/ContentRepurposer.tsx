@@ -745,6 +745,19 @@ function ContentDrafts() {
             )}
           </div>
         </ScrollArea>
+        <input
+          ref={imageUploadRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file && pendingUploadDraftId) {
+              handleImageUpload(file, pendingUploadDraftId);
+            }
+            e.target.value = '';
+          }}
+        />
       </CardContent>
     </Card>
   );
