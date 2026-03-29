@@ -5423,6 +5423,48 @@ export type Database = {
         }
         Relationships: []
       }
+      image_style_presets: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          name: string
+          reference_image_urls: string[] | null
+          style_prompt: string
+          style_type: string
+          thumbnail_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name: string
+          reference_image_urls?: string[] | null
+          style_prompt: string
+          style_type?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name?: string
+          reference_image_urls?: string[] | null
+          style_prompt?: string
+          style_type?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       invalid_scraped_tokens: {
         Row: {
           discovery_source: string
