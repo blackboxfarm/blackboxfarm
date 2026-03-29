@@ -218,7 +218,7 @@ Deno.serve(withRunLog('repurpose-content', async (req) => {
         const originalImage = draft.original_image_url;
         if (!originalImage) throw new Error('No original image to regenerate from');
 
-        const rawImage = await generateImage(LOVABLE_API_KEY, originalImage);
+        const rawImage = await generateImage(LOVABLE_API_KEY, originalImage, supabase);
         let imageUrl: string | null = null;
 
         if (rawImage) {
@@ -264,7 +264,7 @@ Deno.serve(withRunLog('repurpose-content', async (req) => {
     let repurposedImageUrl: string | null = null;
 
     if (generate_image && post.image_urls?.length > 0) {
-      const rawImage = await generateImage(LOVABLE_API_KEY, post.image_urls[0]);
+      const rawImage = await generateImage(LOVABLE_API_KEY, post.image_urls[0], supabase);
       if (rawImage) {
         repurposedImageUrl = await uploadBase64Image(supabase, rawImage, `repurpose_${post_id.slice(0, 8)}`);
         if (!repurposedImageUrl) repurposedImageUrl = rawImage; // fallback
