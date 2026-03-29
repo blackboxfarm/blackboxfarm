@@ -115,7 +115,42 @@ ${customInstructions ? `ADDITIONAL INSTRUCTIONS: ${customInstructions}` : ''}`;
   return { short: data.choices?.[0]?.message?.content || 'Failed to repurpose', long: '' };
 }
 
-async function generateImage(LOVABLE_API_KEY: string, originalImageUrl: string): Promise<string | null> {
+async function getActiveStylePrompt(supabase: any): Promise<{ prompt: string; refUrls: string[] }> {
+  const { data } = await supabase
+    .from('image_style_presets')
+    .select('style_prompt, reference_image_urls')
+    .eq('is_default', true)
+    .eq('is_active', true)
+    .single();
+
+  if (data) {
+    return { prompt: data.style_prompt, refUrls: data.reference_image_urls || [] };
+  }
+  // Fallback to original hardcoded style
+  return {
+    prompt: `Recreate the concept and symbolism of this image in a dark, cyberpunk-crypto style with these brand elements:
+- Color scheme: deep blacks, neon orange (#FF6B00), electric cyan accents
+- Include subtle blockchain/wallet imagery (hex patterns, node networks)
+- Professional, data-driven aesthetic
+- HoldersIntel branding feel — like a premium crypto intelligence platform
+- Keep the core message/concept of the original but make it uniquely ours
+- No text overlay needed`,
+    refUrls: [],
+  };
+}
+
+async function generateImage(LOVABLE_API_KEY: string, originalImageUrl: string, supabase: any): Promise<string | null> {
+  const style = await getActiveStylePrompt(supabase);
+
+  const content: any[] = [
+    { type: 'text', text: style.prompt },
+    { type: 'image_url', image_url: { url: originalImageUrl } },
+  ];
+  // Include reference images so the AI can match the style
+  for (const refUrl of style.refUrls.slice(0, 3)) {
+    content.push({ type: 'image_url', image_url: { url: refUrl } });
+  }
+
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -124,25 +159,7 @@ async function generateImage(LOVABLE_API_KEY: string, originalImageUrl: string):
     },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash-image',
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `Recreate the concept and symbolism of this image in a dark, cyberpunk-crypto style with these brand elements:
-- Color scheme: deep blacks, neon orange (#FF6B00), electric cyan accents
-- Include subtle blockchain/wallet imagery (hex patterns, node networks)
-- Professional, data-driven aesthetic
-- HoldersIntel branding feel — like a premium crypto intelligence platform
-- Keep the core message/concept of the original but make it uniquely ours
-- No text overlay needed`,
-          },
-          {
-            type: 'image_url',
-            image_url: { url: originalImageUrl },
-          },
-        ],
-      }],
+      messages: [{ role: 'user', content }],
       modalities: ['image', 'text'],
     }),
   });
