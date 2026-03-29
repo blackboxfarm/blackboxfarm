@@ -13,6 +13,7 @@ import {
   RefreshCw, Plus, Trash2, Wand2, Send, Image, ExternalLink,
   CheckCircle, XCircle, Copy, Sparkles, Clock, Lock, Calendar
 } from "lucide-react";
+import { StyleGallery } from "./StyleGallery";
 
 // ─── Source Accounts Manager ────────────────────────────
 function SourceAccountsPanel() {
@@ -727,10 +728,12 @@ export function ContentRepurposer() {
           <TabsTrigger value="accounts">📋 Source Accounts</TabsTrigger>
           <TabsTrigger value="posts">🐦 Scraped Posts</TabsTrigger>
           <TabsTrigger value="drafts">✨ Drafts & Schedule</TabsTrigger>
+          <TabsTrigger value="styles">🎨 Image Styles</TabsTrigger>
         </TabsList>
         <TabsContent value="accounts"><SourceAccountsPanel /></TabsContent>
         <TabsContent value="posts"><ScrapedPostsBrowser onRepurposeSuccess={() => setActiveTab("drafts")} /></TabsContent>
         <TabsContent value="drafts"><ContentDrafts /></TabsContent>
+        <TabsContent value="styles"><StyleGallery /></TabsContent>
       </Tabs>
     </div>
   );

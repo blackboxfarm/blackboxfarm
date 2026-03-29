@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  Palette, Plus, Trash2, Upload, Star, Check, Image, X
+  Palette, Plus, Trash2, Upload, Star, Check, X
 } from "lucide-react";
 
 interface StylePreset {
@@ -38,7 +38,7 @@ export function StyleGallery() {
 
   const loadPresets = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from('image_style_presets')
       .select('*')
       .eq('is_active', true)
@@ -51,15 +51,14 @@ export function StyleGallery() {
   useEffect(() => { loadPresets(); }, []);
 
   const setDefault = async (id: string) => {
-    // Unset all defaults first
-    await supabase.from('image_style_presets').update({ is_default: false }).neq('id', '');
-    await supabase.from('image_style_presets').update({ is_default: true }).eq('id', id);
+    await (supabase as any).from('image_style_presets').update({ is_default: false }).neq('id', '');
+    await (supabase as any).from('image_style_presets').update({ is_default: true }).eq('id', id);
     toast.success('Default style updated — AI will use this for new images');
     loadPresets();
   };
 
   const deletePreset = async (id: string) => {
-    await supabase.from('image_style_presets').update({ is_active: false }).eq('id', id);
+    await (supabase as any).from('image_style_presets').update({ is_active: false }).eq('id', id);
     toast.success('Style removed');
     loadPresets();
   };
@@ -92,7 +91,7 @@ export function StyleGallery() {
       toast.error('Name and style prompt are required');
       return;
     }
-    const { error } = await supabase.from('image_style_presets').insert({
+    const { error } = await (supabase as any).from('image_style_presets').insert({
       name: newName.trim(),
       description: newDescription.trim() || null,
       style_type: 'custom',
@@ -120,7 +119,7 @@ export function StyleGallery() {
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2">
-            <Palette className="h-5 w-5 text-purple-400" />
+            <Palette className="h-5 w-5 text-primary" />
             Image Style Gallery
           </span>
           <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
@@ -135,7 +134,6 @@ export function StyleGallery() {
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Create custom style form */}
         {showCreate && (
           <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
             <h4 className="text-sm font-semibold">Create Custom Style</h4>
@@ -176,9 +174,9 @@ export function StyleGallery() {
                     <img src={url} alt="ref" className="h-16 w-16 object-cover rounded border" />
                     <button
                       onClick={() => setNewRefImages(prev => prev.filter((_, idx) => idx !== i))}
-                      className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-1 -right-1 bg-destructive rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <X className="h-3 w-3 text-white" />
+                      <X className="h-3 w-3 text-destructive-foreground" />
                     </button>
                   </div>
                 ))}
@@ -214,7 +212,6 @@ export function StyleGallery() {
           </div>
         )}
 
-        {/* Style presets grid */}
         <ScrollArea className="h-[400px]">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pr-3">
             {presets.map((preset) => (
@@ -246,7 +243,7 @@ export function StyleGallery() {
                     )}
                     {preset.style_type === 'custom' && (
                       <Button size="sm" variant="ghost" onClick={() => deletePreset(preset.id)}>
-                        <Trash2 className="h-3 w-3 text-red-400" />
+                        <Trash2 className="h-3 w-3 text-destructive" />
                       </Button>
                     )}
                   </div>
@@ -256,7 +253,6 @@ export function StyleGallery() {
                   <p className="text-xs text-muted-foreground">{preset.description}</p>
                 )}
 
-                {/* Reference images */}
                 {preset.reference_image_urls?.length > 0 && (
                   <div className="flex gap-1 flex-wrap">
                     {preset.reference_image_urls.map((url, i) => (
