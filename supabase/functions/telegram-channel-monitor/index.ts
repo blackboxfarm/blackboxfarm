@@ -530,11 +530,10 @@ async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
 }> {
   try {
     // Check pump.fun API for bonding curve status
-    const response_data = await fetchPumpFunCoin(tokenMint, 'telegram-channel-monitor'); const response = { ok: !!response_data, json: async () => response_data };
-    if (!response.ok) {
+    const data = await fetchPumpFunCoin(tokenMint, 'telegram-channel-monitor');
+    if (!data) {
       return { isOnCurve: false, bondingPercent: null, hasGraduated: false, isMayhemMode: false };
     }
-    const data = await response.json();
     
     // Pump.fun uses virtual_sol_reserves and real_sol_reserves to calculate progress
     // Token graduates at ~85 SOL in bonding curve

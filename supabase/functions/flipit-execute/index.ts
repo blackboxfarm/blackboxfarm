@@ -111,9 +111,8 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
   if (tokenMint.endsWith('pump')) {
     try {
       console.log(`Fetching metadata from pump.fun API for ${tokenMint}`);
-      const pumpData = await fetchPumpFunCoin(tokenMint, 'flipit-execute'); const pumpRes = { ok: !!pumpData, json: async () => pumpData };
-      if (pumpRes.ok) {
-        const pumpData = await pumpRes.json();
+      const pumpData = await fetchPumpFunCoin(tokenMint, 'flipit-execute');
+      if (pumpData) {
         if (pumpData?.symbol) {
           result = {
             symbol: pumpData.symbol,

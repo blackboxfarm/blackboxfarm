@@ -206,7 +206,6 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
   
   // STEP 1: Pump.fun user-created-coins API (ONLY returns tokens this wallet minted)
   const baseEndpoints = [
-    `https://frontend-api-v3.pump.fun/coins/user-created-coins/${walletAddress}` // TODO: migrate to fetchPumpFunCreatorCoins,
     `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}`
   ];
   
