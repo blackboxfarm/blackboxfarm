@@ -4,6 +4,7 @@ import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 import { withRunLog } from "../_shared/run-logger.ts";
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
+import { upsertHealthSnapshot } from "../_shared/snapshot-writer.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -634,6 +635,19 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       
       console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}, post #${currentTimesPosted}`);
       
+      // EARLY WRITE: Always persist health_grade to seen_tokens as soon as analysis completes,
+      // regardless of whether the token passes quality checks or gets posted.
+      // This ensures the Live Feed always has grade data.
+      if (stats.healthGrade) {
+        await supabase
+          .from('holders_intel_seen_tokens')
+          .update({
+            health_grade: stats.healthGrade,
+          })
+          .eq('token_mint', item.token_mint);
+        console.log(`[poster] Early-wrote health_grade=${stats.healthGrade} for ${item.token_mint.slice(0, 8)}`);
+      }
+      
       // Quality checks
       if (stats.totalHolders < MIN_HOLDERS) {
         console.log(`[poster] Skipping: too few holders (${stats.totalHolders})`);
@@ -708,25 +722,39 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       }
       
       // Generate network risk assessment — always run since TG templates may use {risk} even if X template doesn't
-      {
-        console.log('[poster] Generating network risk assessment...');
-        const riskResult = assessNetworkRisk({
-          healthScore: stats.healthScore,
-          totalHolders: stats.totalHolders,
-          realHolders: stats.realHolders,
-          dustPercentage: stats.dustPercentage,
-          whaleCount: stats.whaleCount,
-          seriousCount: stats.seriousCount,
-          top10Pct: report?.distributionStats?.top10Percentage ?? null,
-          devTrustLevel: report?.devReputation?.trustLevel ?? null,
-          devReputationScore: report?.devReputation?.score ?? null,
-          isBlacklisted: report?.devReputation?.isBlacklisted ?? false,
-        });
-        stats.risk = riskResult.signal;
-        stats.riskDetail = riskResult.detail;
-        console.log(`[poster] Risk: ${riskResult.signal}`);
-      }
+      console.log('[poster] Generating network risk assessment...');
+      const riskResult = assessNetworkRisk({
+        healthScore: stats.healthScore,
+        totalHolders: stats.totalHolders,
+        realHolders: stats.realHolders,
+        dustPercentage: stats.dustPercentage,
+        whaleCount: stats.whaleCount,
+        seriousCount: stats.seriousCount,
+        top10Pct: report?.distributionStats?.top10Percentage ?? null,
+        devTrustLevel: report?.devReputation?.trustLevel ?? null,
+        devReputationScore: report?.devReputation?.score ?? null,
+        isBlacklisted: report?.devReputation?.isBlacklisted ?? false,
+      });
+      stats.risk = riskResult.signal;
+      stats.riskDetail = riskResult.detail;
+      console.log(`[poster] Risk: ${riskResult.signal}`);
       
+      // Write health snapshot for Litmus Strip (fire-and-forget)
+      upsertHealthSnapshot(supabase, {
+        tokenMint: item.token_mint,
+        healthScore: stats.healthScore,
+        healthGrade: stats.healthGrade,
+        riskSignal: riskResult.signal,
+        riskLabel: riskResult.label,
+        riskEmoji: riskResult.emoji,
+        totalHolders: stats.totalHolders,
+        realHolders: stats.realHolders,
+        dustPercentage: stats.dustPercentage,
+        whaleCount: stats.whaleCount,
+        top10Pct: report?.distributionStats?.top10Percentage ?? null,
+        source: 'poster',
+      }).catch(e => console.warn('[poster] Snapshot write failed:', e));
+
       // Build tweet using the active template from database
       const tweetText = processTemplate(tweetTemplate, stats);
 

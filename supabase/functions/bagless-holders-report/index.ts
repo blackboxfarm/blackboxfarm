@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { upsertHealthSnapshot } from '../_shared/snapshot-writer.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { meshFeed } from "../_shared/mesh-feeder.ts"
 import { writeEarlyWarnings, generateWarningsFromHoldersData, generatePatternWarnings } from "../_shared/early-warning-writer.ts"
@@ -1033,6 +1034,19 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     logCompleteSearch(searchId, result, totalTime, rankedHolders.length).catch(e => 
       console.warn('[TokenSearchLogger] Background logging error:', e)
     );
+
+    // Write health snapshot for Litmus Strip (fire-and-forget)
+    upsertHealthSnapshot(supabaseForMesh, {
+      tokenMint,
+      healthScore,
+      healthGrade,
+      totalHolders: rankedHolders.length,
+      realHolders: rankedHolders.length - dustWallets,
+      dustPercentage: simpleTiers.dust.percentage,
+      whaleCount: simpleTiers.whales.count,
+      top10Pct: distributionStats?.top10Percentage ?? null,
+      source: 'holders_query',
+    }).catch(e => console.warn('[bagless] Snapshot write failed:', e));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

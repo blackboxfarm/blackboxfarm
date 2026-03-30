@@ -122,7 +122,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
                     "px-4 py-2.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                     isActive 
                       ? "bg-accent text-accent-foreground" 
-                      : "text-[hsl(270_40%_55%)] hover:text-foreground hover:bg-accent/50"
+                      : "bg-[hsl(270_25%_18%)] text-muted-foreground/80 hover:text-foreground hover:bg-[hsl(270_25%_24%)]"
                   )}
                 >
                   {item.label}

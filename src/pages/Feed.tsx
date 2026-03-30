@@ -13,6 +13,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { LitmusStrip } from '@/components/feed/LitmusStrip';
 
 const PAGE_SIZE = 50;
 
@@ -279,6 +280,17 @@ export default function Feed() {
           </div>
         </div>
 
+        {/* Litmus Strip Legend */}
+        <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="font-medium">12h History:</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-emerald-500 inline-block" /> Strong (A-B+)</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-yellow-400 inline-block" /> Moderate (B-C)</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-orange-500 inline-block" /> Weak (D)</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-red-500 inline-block" /> Critical (F)</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-muted-foreground/20 inline-block" /> No data</span>
+          <span>— Mouse over for hourly snapshots. Click refresh for live analysis.</span>
+        </div>
+
         {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -306,6 +318,7 @@ export default function Feed() {
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                         <RiskSignalBadge grade={item.health_grade} />
                         <WalletInfo holders={item.total_holders} dustPct={item.dust_pct} />
+                        <LitmusStrip tokenMint={item.token_mint} />
                         {item.posted_at && <span>{format(new Date(item.posted_at), 'MMM d, yyyy HH:mm')}</span>}
                       </div>
                     </div>

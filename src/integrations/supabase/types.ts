@@ -13485,6 +13485,60 @@ export type Database = {
         }
         Relationships: []
       }
+      token_health_snapshots: {
+        Row: {
+          created_at: string | null
+          dust_percentage: number | null
+          health_grade: string | null
+          health_score: number | null
+          id: string
+          real_holders: number | null
+          risk_emoji: string | null
+          risk_label: string | null
+          risk_signal: string | null
+          snapshot_hour: string
+          source: string | null
+          token_mint: string
+          top10_pct: number | null
+          total_holders: number | null
+          whale_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          dust_percentage?: number | null
+          health_grade?: string | null
+          health_score?: number | null
+          id?: string
+          real_holders?: number | null
+          risk_emoji?: string | null
+          risk_label?: string | null
+          risk_signal?: string | null
+          snapshot_hour: string
+          source?: string | null
+          token_mint: string
+          top10_pct?: number | null
+          total_holders?: number | null
+          whale_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          dust_percentage?: number | null
+          health_grade?: string | null
+          health_score?: number | null
+          id?: string
+          real_holders?: number | null
+          risk_emoji?: string | null
+          risk_label?: string | null
+          risk_signal?: string | null
+          snapshot_hour?: string
+          source?: string | null
+          token_mint?: string
+          top10_pct?: number | null
+          total_holders?: number | null
+          whale_count?: number | null
+        }
+        Relationships: []
+      }
       token_lifecycle: {
         Row: {
           active_boosts: number | null
