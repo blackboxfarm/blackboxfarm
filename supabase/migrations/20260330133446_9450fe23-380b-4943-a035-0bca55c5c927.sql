@@ -1,0 +1,1 @@
+ALTER TABLE public.morning_reports ADD COLUMN IF NOT EXISTS db_size_info jsonb;
