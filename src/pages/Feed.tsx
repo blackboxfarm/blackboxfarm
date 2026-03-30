@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from '@/components/ui/pagination';
-import { Search, LayoutList, LayoutGrid, MessageCircle, ExternalLink, ChevronDown, ChevronUp, ArrowUpDown, Users, Compass } from 'lucide-react';
+import { Search, LayoutList, LayoutGrid, MessageCircle, ExternalLink, ChevronDown, ChevronUp, ArrowUpDown, Users, Compass, Star } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -18,29 +18,38 @@ import { LitmusStrip } from '@/components/feed/LitmusStrip';
 const PAGE_SIZE = 50;
 
 type FeedItem = {
-  id: string;
+  token_mint: string;
   symbol: string | null;
   name: string | null;
-  token_mint: string;
   posted_at: string | null;
   tweet_id: string | null;
+  trigger_source: string | null;
+  last_top_200_rank: number | null;
+  freshness_tier: number;
+  last_activity: string | null;
   health_grade: string | null;
   image_uri: string | null;
+  banner_url: string | null;
+  // enriched client-side
   total_holders: number | null;
   dust_pct: number | null;
 };
 
-type SortField = 'posted_at' | 'symbol' | 'health_grade';
+type SortField = 'last_activity' | 'symbol' | 'health_grade' | 'freshness_tier';
 type SortDir = 'asc' | 'desc';
 
 const HEALTH_COLORS: Record<string, string> = {
   'A++': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   'A+': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   'A': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+  'A-': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   'B+': 'bg-green-500/15 text-green-400 border-green-500/25',
   'B': 'bg-lime-500/15 text-lime-400 border-lime-500/25',
+  'B-': 'bg-lime-500/10 text-lime-400 border-lime-500/20',
   'C+': 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
   'C': 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+  'C-': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  'D+': 'bg-orange-500/15 text-orange-400 border-orange-500/25',
   'D': 'bg-orange-500/15 text-orange-400 border-orange-500/25',
   'F': 'bg-red-500/15 text-red-400 border-red-500/25',
 };
@@ -49,19 +58,23 @@ const HEALTH_DESCRIPTIONS: Record<string, string> = {
   'A++': 'Exceptional Network',
   'A+': 'Strong Network',
   'A': 'Healthy Distribution',
+  'A-': 'Good Health',
   'B+': 'Above Average',
   'B': 'Moderate Strength',
+  'B-': 'Fair Health',
   'C+': 'Mixed Signals',
   'C': 'Speculative',
+  'C-': 'Weak Signals',
+  'D+': 'Fragile',
   'D': 'Weak Structure',
   'F': 'High Risk',
 };
 
 function getRiskSignal(grade: string | null): { emoji: string; label: string; color: string } {
   if (!grade) return { emoji: '⚪', label: 'Unknown', color: 'text-muted-foreground' };
-  if (['A++', 'A+', 'A'].includes(grade)) return { emoji: '🟢', label: 'Strong', color: 'text-emerald-400' };
-  if (['B+', 'B'].includes(grade)) return { emoji: '🟢', label: 'Moderate', color: 'text-green-400' };
-  if (['C+', 'C'].includes(grade)) return { emoji: '🟡', label: 'Speculative', color: 'text-yellow-400' };
+  if (['A++', 'A+', 'A', 'A-'].includes(grade)) return { emoji: '🟢', label: 'Strong', color: 'text-emerald-400' };
+  if (['B+', 'B', 'B-'].includes(grade)) return { emoji: '🟢', label: 'Moderate', color: 'text-green-400' };
+  if (['C+', 'C', 'C-'].includes(grade)) return { emoji: '🟡', label: 'Speculative', color: 'text-yellow-400' };
   return { emoji: '🔴', label: 'High Risk', color: 'text-red-400' };
 }
 
@@ -97,6 +110,17 @@ function WalletInfo({ holders, dustPct }: { holders: number | null; dustPct: num
   );
 }
 
+function FreshnessBadge({ tier, rank }: { tier: number; rank: number | null }) {
+  if (tier === 1 && rank) {
+    return (
+      <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/30 gap-1">
+        <Star className="h-2.5 w-2.5 fill-amber-400" /> #{rank}
+      </Badge>
+    );
+  }
+  return null;
+}
+
 export default function Feed() {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,10 +129,10 @@ export default function Feed() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [view, setView] = useState<'summary' | 'grid'>('summary');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedMint, setExpandedMint] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<FeedItem | null>(null);
-  const [sortField, setSortField] = useState<SortField>('posted_at');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortField, setSortField] = useState<SortField>('freshness_tier');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [redirectModal, setRedirectModal] = useState<{ type: 'wallet' | 'handle'; value: string } | null>(null);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -137,11 +161,10 @@ export default function Feed() {
     const from = (page - 1) * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
+    // When searching, query the view with filters; otherwise paginate
     let query = supabase
-      .from('holders_intel_post_queue')
-      .select('id, symbol, name, token_mint, posted_at, tweet_id', { count: 'exact' })
-      .eq('status', 'posted')
-      .not('posted_at', 'is', null);
+      .from('live_feed_curated' as any)
+      .select('token_mint, symbol, name, posted_at, tweet_id, trigger_source, last_top_200_rank, freshness_tier, last_activity, health_grade, image_uri, banner_url', { count: 'exact' });
 
     if (debouncedSearch.trim()) {
       const s = debouncedSearch.trim().replace(/^\$/, '');
@@ -152,35 +175,33 @@ export default function Feed() {
       }
     }
 
-    query = query.order(sortField, { ascending: sortDir === 'asc' });
+    // Sort
+    if (sortField === 'freshness_tier') {
+      query = query.order('freshness_tier', { ascending: true }).order('last_activity', { ascending: false });
+    } else if (sortField === 'last_activity') {
+      query = query.order('last_activity', { ascending: sortDir === 'asc' });
+    } else {
+      query = query.order(sortField, { ascending: sortDir === 'asc' });
+    }
+
     query = query.range(from, to);
 
     const { data, count, error } = await query;
-    if (error) { console.error(error); setLoading(false); return; }
+    if (error) { console.error('Feed query error:', error); setLoading(false); return; }
 
-    const mints = (data || []).map(d => d.token_mint);
-    let healthMap: Record<string, { health_grade: string | null; image_uri: string | null }> = {};
+    const rawItems = (data || []) as any[];
+    const mints = rawItems.map((d: any) => d.token_mint);
+
+    // Enrich with holder data
     let holderMap: Record<string, { total_holders: number; dust_pct: number }> = {};
-
     if (mints.length > 0) {
-      // Fetch health grades + images
-      const { data: seenData } = await supabase
-        .from('holders_intel_seen_tokens')
-        .select('token_mint, health_grade, image_uri')
-        .in('token_mint', mints);
-      if (seenData) {
-        seenData.forEach(s => { healthMap[s.token_mint] = { health_grade: s.health_grade, image_uri: s.image_uri }; });
-      }
-
-      // Fetch latest holder summary for wallet counts + dust
       const { data: holderData } = await supabase
         .from('holder_daily_summary')
         .select('token_mint, total_holders, shrimp_count')
         .in('token_mint', mints)
         .order('summary_date', { ascending: false });
       if (holderData) {
-        // Take most recent per mint
-        holderData.forEach(h => {
+        holderData.forEach((h: any) => {
           if (!holderMap[h.token_mint]) {
             const dustPct = h.total_holders > 0 ? ((h.shrimp_count || 0) / h.total_holders) * 100 : 0;
             holderMap[h.token_mint] = { total_holders: h.total_holders, dust_pct: dustPct };
@@ -189,15 +210,19 @@ export default function Feed() {
       }
     }
 
-    const merged: FeedItem[] = (data || []).map(d => ({
-      id: d.id,
+    const merged: FeedItem[] = rawItems.map((d: any) => ({
+      token_mint: d.token_mint,
       symbol: d.symbol,
       name: d.name,
-      token_mint: d.token_mint,
       posted_at: d.posted_at,
       tweet_id: d.tweet_id,
-      health_grade: healthMap[d.token_mint]?.health_grade || null,
-      image_uri: healthMap[d.token_mint]?.image_uri || null,
+      trigger_source: d.trigger_source,
+      last_top_200_rank: d.last_top_200_rank,
+      freshness_tier: d.freshness_tier,
+      last_activity: d.last_activity,
+      health_grade: d.health_grade,
+      image_uri: d.image_uri,
+      banner_url: d.banner_url,
       total_holders: holderMap[d.token_mint]?.total_holders || null,
       dust_pct: holderMap[d.token_mint]?.dust_pct ?? null,
     }));
@@ -218,7 +243,7 @@ export default function Feed() {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDir('desc');
+      setSortDir(field === 'freshness_tier' ? 'asc' : 'desc');
     }
   }
 
@@ -226,7 +251,7 @@ export default function Feed() {
     if (isMobile) {
       setModalItem(item);
     } else {
-      setExpandedId(prev => prev === item.id ? null : item.id);
+      setExpandedMint(prev => prev === item.token_mint ? null : item.token_mint);
     }
   }
 
@@ -243,6 +268,24 @@ export default function Feed() {
     }
     return pages;
   }, [page, totalPages]);
+
+  function ItemActions({ item, onClose }: { item: FeedItem; onClose?: () => void }) {
+    return (
+      <div className="flex gap-2 flex-wrap">
+        {item.tweet_id && (
+          <a href={`https://x.com/HoldersIntel/status/${item.tweet_id}`} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> View on X</Button>
+          </a>
+        )}
+        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(`/holders?token=${item.token_mint}`); }}>
+          <Users className="h-3 w-3" /> Wallet Analysis
+        </Button>
+        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(`/bubblemap?mint=${item.token_mint}`); }}>
+          <Compass className="h-3 w-3" /> Bubble Map!
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <SiteLayout>
@@ -262,7 +305,9 @@ export default function Feed() {
         <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex-1">
             <h1 className="text-2xl font-bold">Live Feed</h1>
-            <p className="text-sm text-muted-foreground">{totalCount.toLocaleString()} token reports posted</p>
+            <p className="text-sm text-muted-foreground">
+              {totalCount.toLocaleString()} tokens curated — Top 200 + Intel Reports + Community Discoveries
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative flex-1 md:w-72">
@@ -288,7 +333,7 @@ export default function Feed() {
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-orange-500 inline-block" /> Weak (D)</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-red-500 inline-block" /> Critical (F)</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-muted-foreground/20 inline-block" /> No data</span>
-          <span>— Mouse over for hourly snapshots. Click refresh for live analysis.</span>
+          <span className="hidden sm:inline">— Hover for hourly snapshots • <Star className="h-2.5 w-2.5 inline fill-amber-400 text-amber-400" /> = Top 200</span>
         </div>
 
         {/* Content */}
@@ -302,15 +347,15 @@ export default function Feed() {
           /* ── Summary View ── */
           <div className="space-y-3">
             {items.map(item => {
-              const risk = getRiskSignal(item.health_grade);
               return (
-                <Card key={item.id} className="p-4 cursor-pointer hover:border-primary/40 transition-colors" onClick={() => handleItemClick(item)}>
+                <Card key={item.token_mint} className="p-4 cursor-pointer hover:border-primary/40 transition-colors" onClick={() => handleItemClick(item)}>
                   <div className="flex items-center gap-3">
                     {item.image_uri && (
                       <img src={item.image_uri} alt="" className="w-10 h-10 rounded-full shrink-0 object-cover" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <FreshnessBadge tier={item.freshness_tier} rank={item.last_top_200_rank} />
                         <span className="font-bold text-sm">${item.symbol || '???'}</span>
                         <span className="text-xs text-muted-foreground truncate">{item.name}</span>
                         <HealthBadge grade={item.health_grade} showDescription />
@@ -319,32 +364,20 @@ export default function Feed() {
                         <RiskSignalBadge grade={item.health_grade} />
                         <WalletInfo holders={item.total_holders} dustPct={item.dust_pct} />
                         <LitmusStrip tokenMint={item.token_mint} />
-                        {item.posted_at && <span>{format(new Date(item.posted_at), 'MMM d, yyyy HH:mm')}</span>}
+                        {item.last_activity && <span>{format(new Date(item.last_activity), 'MMM d, yyyy HH:mm')}</span>}
                       </div>
                     </div>
                     {!isMobile && (
-                      expandedId === item.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      expandedMint === item.token_mint ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     )}
                   </div>
                   {/* Expanded content (desktop) */}
-                  {!isMobile && expandedId === item.id && (
+                  {!isMobile && expandedMint === item.token_mint && (
                     <div className="mt-4 pt-4 border-t border-border space-y-3">
                       <div className="text-sm space-y-1">
                         <div><span className="text-muted-foreground">Mint:</span> <code className="text-xs break-all">{item.token_mint}</code></div>
                       </div>
-                      <div className="flex gap-2">
-                        {item.tweet_id && (
-                          <a href={`https://x.com/HoldersIntel/status/${item.tweet_id}`} target="_blank" rel="noopener noreferrer">
-                            <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> View on X</Button>
-                          </a>
-                        )}
-                        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); navigate(`/holders?token=${item.token_mint}`); }}>
-                          <Users className="h-3 w-3" /> Wallet Analysis
-                        </Button>
-                        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); navigate(`/bubblemap?mint=${item.token_mint}`); }}>
-                          <Compass className="h-3 w-3" /> Bubble Map!
-                        </Button>
-                      </div>
+                      <ItemActions item={item} />
                     </div>
                   )}
                 </Card>
@@ -357,6 +390,9 @@ export default function Feed() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead compact className="cursor-pointer" onClick={() => toggleSort('freshness_tier')}>
+                    <div className="flex items-center gap-1">Rank <ArrowUpDown className="h-3 w-3" /></div>
+                  </TableHead>
                   <TableHead compact className="cursor-pointer" onClick={() => toggleSort('symbol')}>
                     <div className="flex items-center gap-1">$TICKER <ArrowUpDown className="h-3 w-3" /></div>
                   </TableHead>
@@ -365,14 +401,17 @@ export default function Feed() {
                   </TableHead>
                   <TableHead compact>Risk</TableHead>
                   <TableHead compact>Wallets</TableHead>
-                  <TableHead compact className="cursor-pointer" onClick={() => toggleSort('posted_at')}>
+                  <TableHead compact className="cursor-pointer" onClick={() => toggleSort('last_activity')}>
                     <div className="flex items-center gap-1">Date <ArrowUpDown className="h-3 w-3" /></div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map(item => (
-                  <TableRow key={item.id} className="cursor-pointer" onClick={() => handleItemClick(item)}>
+                  <TableRow key={item.token_mint} className="cursor-pointer" onClick={() => handleItemClick(item)}>
+                    <TableCell compact>
+                      <FreshnessBadge tier={item.freshness_tier} rank={item.last_top_200_rank} />
+                    </TableCell>
                     <TableCell compact>
                       <div className="flex items-center gap-2">
                         {item.image_uri && <img src={item.image_uri} alt="" className="w-5 h-5 rounded-full" />}
@@ -382,7 +421,7 @@ export default function Feed() {
                     <TableCell compact><HealthBadge grade={item.health_grade} showDescription /></TableCell>
                     <TableCell compact><RiskSignalBadge grade={item.health_grade} /></TableCell>
                     <TableCell compact><WalletInfo holders={item.total_holders} dustPct={item.dust_pct} /></TableCell>
-                    <TableCell compact>{item.posted_at ? format(new Date(item.posted_at), 'MMM d HH:mm') : '—'}</TableCell>
+                    <TableCell compact>{item.last_activity ? format(new Date(item.last_activity), 'MMM d HH:mm') : '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -422,6 +461,7 @@ export default function Feed() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   {modalItem.image_uri && <img src={modalItem.image_uri} alt="" className="w-8 h-8 rounded-full" />}
+                  <FreshnessBadge tier={modalItem.freshness_tier} rank={modalItem.last_top_200_rank} />
                   ${modalItem.symbol || '???'}
                 </DialogTitle>
               </DialogHeader>
@@ -432,22 +472,13 @@ export default function Feed() {
                   <RiskSignalBadge grade={modalItem.health_grade} />
                 </div>
                 <WalletInfo holders={modalItem.total_holders} dustPct={modalItem.dust_pct} />
+                <LitmusStrip tokenMint={modalItem.token_mint} />
                 <div className="text-xs text-muted-foreground">
-                  {modalItem.posted_at && <span>Posted: {format(new Date(modalItem.posted_at), 'MMM d, yyyy HH:mm')}</span>}
+                  {modalItem.last_activity && <span>Last seen: {format(new Date(modalItem.last_activity), 'MMM d, yyyy HH:mm')}</span>}
                 </div>
                 <div><span className="text-muted-foreground text-xs">Mint:</span> <code className="text-xs break-all">{modalItem.token_mint}</code></div>
-                <div className="flex gap-2 pt-2 flex-wrap">
-                  {modalItem.tweet_id && (
-                    <a href={`https://x.com/HoldersIntel/status/${modalItem.tweet_id}`} target="_blank" rel="noopener noreferrer">
-                      <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> View on X</Button>
-                    </a>
-                  )}
-                  <Button size="sm" variant="outline" className="gap-2" onClick={() => { setModalItem(null); navigate(`/holders?token=${modalItem.token_mint}`); }}>
-                    <Users className="h-3 w-3" /> Wallet Analysis
-                  </Button>
-                  <Button size="sm" variant="outline" className="gap-2" onClick={() => { setModalItem(null); navigate(`/bubblemap?mint=${modalItem.token_mint}`); }}>
-                    <Compass className="h-3 w-3" /> Bubble Map!
-                  </Button>
+                <div className="pt-2">
+                  <ItemActions item={modalItem} onClose={() => setModalItem(null)} />
                 </div>
               </div>
             </>
