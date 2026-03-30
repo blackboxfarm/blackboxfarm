@@ -29,6 +29,7 @@ const MonitoringTab = lazy(() => import("@/components/admin/tabs/MonitoringTab")
 const TicketsTab = lazy(() => import("@/components/admin/tabs/TicketsTab"));
 const Top200Tab = lazy(() => import("@/components/admin/tabs/Top200Tab"));
 const SocialMediaTab = lazy(() => import("@/components/admin/tabs/SocialMediaTab"));
+const TestimonialsManager = lazy(() => import("@/components/admin/TestimonialsManager").then(m => ({ default: m.TestimonialsManager })));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
@@ -144,6 +145,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="tickets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500/30 data-[state=active]:to-cyan-500/20">🎫 Tickets</TabsTrigger>
             <TabsTrigger value="top-200" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">🏆 Top 200</TabsTrigger>
             <TabsTrigger value="social-media" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-purple-500/20">📱 Social</TabsTrigger>
+            <TabsTrigger value="testimonials" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-green-500/20">💬 Testimonials</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -271,6 +273,13 @@ export default function SuperAdmin() {
             {activeTab === "social-media" && (
               <TabErrorBoundary tabName="Social Media">
                 <Suspense fallback={<TabLoader />}><SocialMediaTab /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
+          <TabsContent value="testimonials">
+            {activeTab === "testimonials" && (
+              <TabErrorBoundary tabName="Testimonials">
+                <Suspense fallback={<TabLoader />}><TestimonialsManager /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
