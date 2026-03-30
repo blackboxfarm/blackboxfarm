@@ -1042,6 +1042,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         funnel_metrics: funnelMetrics,
         funnel_feed_throughput: funnelFeedThroughput,
         db_size_info: dbSizeInfo,
+        intelligence_stats: intelligenceStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
