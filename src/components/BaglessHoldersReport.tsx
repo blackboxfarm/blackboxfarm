@@ -1880,6 +1880,13 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                 })()}
               </div>
 
+              {/* Testimonial Carousel - non-subscribers only */}
+              {!isPro && (
+                <div className="mb-4 md:mb-6 max-w-4xl mx-auto">
+                  <TestimonialCarousel />
+                </div>
+              )}
+
               {/* Pro Feature Teasers - Risk Assessment & Dev Reputation */}
               <div className="mb-4 md:mb-6">
                 <ProFeatureTeasers isPro={isPro} />
