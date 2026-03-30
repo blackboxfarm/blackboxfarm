@@ -66,6 +66,8 @@ export function UserIdentityBadge() {
     }
   };
 
+  const { signOut } = useAuth();
+
   if (!user) return null;
 
   const label = displayName || user.email || 'User';
