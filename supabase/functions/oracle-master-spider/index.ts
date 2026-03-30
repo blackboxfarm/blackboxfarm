@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { withRunLog } from '../_shared/run-logger.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -210,12 +211,8 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
         } else {
           // Try pump.fun API
           try {
-            await delay(200);
-            const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${resolvedTokenMint}`, {
-              headers: { 'Accept': 'application/json' }
-            });
-            if (pfRes.ok) {
-              const pfData = await pfRes.json();
+            const pfData = await fetchPumpFunCoin(resolvedTokenMint, 'oracle-master-spider');
+            if (pfData) {
               if (pfData.creator) {
                 inputIsToken = true;
                 tokenInfo = { mint: resolvedTokenMint, name: pfData.name, symbol: pfData.symbol, imageUri: pfData.image_uri };
@@ -354,11 +351,8 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
             addStep('Entity Resolution', 'done', `Token found in lifecycle → Creator: ${creatorWallet?.slice(0, 8)}...`);
           } else {
             try {
-              const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${cleanQuery}`, {
-                headers: { 'Accept': 'application/json' }
-              });
-              if (pfRes.ok) {
-                const pfData = await pfRes.json();
+              const pfData = await fetchPumpFunCoin(cleanQuery, 'oracle-master-spider');
+              if (pfData) {
                 if (pfData.creator) {
                   inputIsToken = true;
                   creatorWallet = pfData.creator;

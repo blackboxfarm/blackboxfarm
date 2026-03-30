@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { fetchPumpFunCreatorCoins } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,29 +36,15 @@ Deno.serve(withRunLog('mesh-wallet-token-discovery', async (req) => {
       'Referer': 'https://pump.fun/',
     };
 
-    const endpoints = [
-      'https://frontend-api-v3.pump.fun/coins/user-created-coins/',
-      'https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/',
-    ];
-
     let pumpSuccess = false;
-    for (const base of endpoints) {
-      if (pumpSuccess) break;
+    {
       let offset = 0;
       const limit = 100;
 
       try {
         while (offset < 2000) {
-          const url = `${base}${walletAddress}?limit=${limit}&offset=${offset}&includeNsfw=true`;
-          const res = await fetch(url, { headers: pumpHeaders, signal: AbortSignal.timeout(10000) });
-
-          if (!res.ok) {
-            errors.push(`Pump.fun ${res.status} at offset ${offset}`);
-            break;
-          }
-
-          const data = await res.json();
-          if (!Array.isArray(data) || data.length === 0) break;
+          const data = await fetchPumpFunCreatorCoins(walletAddress, 'mesh-wallet-token-discovery', limit, offset);
+          if (!data || data.length === 0) break;
 
           for (const t of data) {
             allTokens.push({

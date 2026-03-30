@@ -4,6 +4,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { fetchPumpFunCoin, fetchPumpFunTrades } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-curve-analyzer');
 
 const corsHeaders = {
@@ -97,12 +98,8 @@ function bad(message: string, status = 400) {
 // Fetch token trades from pump.fun API
 async function fetchTokenTrades(tokenMint: string): Promise<any[]> {
   try {
-    const response = await fetch(
-      `https://frontend-api-v3.pump.fun/trades/latest/${tokenMint}?limit=100`,
-      { headers: { 'Accept': 'application/json' } }
-    );
-    if (!response.ok) return [];
-    return await response.json();
+    const result = await fetchPumpFunTrades(tokenMint, 'pumpfun-curve-analyzer');
+    return result || [];
   } catch (error) {
     console.error('Error fetching trades:', error);
     return [];
@@ -112,12 +109,7 @@ async function fetchTokenTrades(tokenMint: string): Promise<any[]> {
 // Fetch token info from pump.fun
 async function fetchTokenInfo(tokenMint: string): Promise<any | null> {
   try {
-    const response = await fetch(
-      `https://frontend-api-v3.pump.fun/coins/${tokenMint}`,
-      { headers: { 'Accept': 'application/json' } }
-    );
-    if (!response.ok) return null;
-    return await response.json();
+    return await fetchPumpFunCoin(tokenMint, 'pumpfun-curve-analyzer');
   } catch (error) {
     console.error('Error fetching token info:', error);
     return null;

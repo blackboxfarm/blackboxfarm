@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { broadcastToBlackBox } from '../_shared/telegram-broadcast.ts';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-fantasy-executor');
 
 /**
@@ -122,11 +123,8 @@ async function getSolPrice(): Promise<number> {
 async function getTokenPrice(mint: string, solPrice: number): Promise<{ priceUsd: number; priceSol: number } | null> {
   // PRIMARY: Pump.fun bonding curve API — deterministic, real-time, best source
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (response.ok) {
-      const data = await response.json();
+    const data = await fetchPumpFunCoin(mint, 'pumpfun-fantasy-executor');
+    if (data) {
       if (data?.virtual_sol_reserves && data?.virtual_token_reserves) {
         const solReserves = data.virtual_sol_reserves / 1e9;
         const tokenReserves = data.virtual_token_reserves / 1e6;
@@ -712,11 +710,8 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
   
   // Try to get token info from pump.fun
   try {
-    const pumpResponse = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (pumpResponse.ok) {
-      const pumpData = await pumpResponse.json();
+    const pumpData = await fetchPumpFunCoin(tokenMint, 'pumpfun-fantasy-executor');
+    if (pumpData) {
       tokenSymbol = pumpData.symbol || tokenSymbol;
       tokenName = pumpData.name || tokenName;
       entryMarketCapUsd = pumpData.usd_market_cap || pumpData.market_cap || null;
