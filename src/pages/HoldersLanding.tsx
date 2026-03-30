@@ -68,8 +68,6 @@ export default function HoldersLanding() {
   return (
     <SiteLayout>
       <div className="container mx-auto px-4 py-12 max-w-5xl">
-      
-      <div className="container mx-auto px-4 py-12 max-w-5xl">
         {/* Top CTA */}
         <div className="text-center mb-8">
           <Link to="/holders">
