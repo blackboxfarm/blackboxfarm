@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FarmBanner } from "@/components/FarmBanner";
+import { SiteLayout } from "@/components/layout/SiteLayout";
+import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
 import { 
   Users, 
   Shield, 
