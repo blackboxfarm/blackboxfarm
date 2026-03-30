@@ -307,6 +307,7 @@ export default function Feed() {
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                         <RiskSignalBadge grade={item.health_grade} />
                         <WalletInfo holders={item.total_holders} dustPct={item.dust_pct} />
+                        <LitmusStrip tokenMint={item.token_mint} />
                         {item.posted_at && <span>{format(new Date(item.posted_at), 'MMM d, yyyy HH:mm')}</span>}
                       </div>
                     </div>
