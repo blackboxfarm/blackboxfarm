@@ -309,20 +309,32 @@ export function HoldersVisitorsDashboard() {
   };
 
   const getSourceBadge = (visit: VisitRecord) => {
-    if (visit.has_og_image) {
-      return <Badge variant="secondary" className="bg-purple-500/20 text-purple-400">OG Share</Badge>;
+    const info = classifyReferrer(visit.referrer_domain, visit.utm_source, visit.utm_medium || null);
+    
+    const categoryColors: Record<string, string> = {
+      social: 'bg-blue-500/20 text-blue-400',
+      search: 'bg-yellow-500/20 text-yellow-400',
+      messaging: 'bg-purple-500/20 text-purple-400',
+      ad: 'bg-red-500/20 text-red-400',
+      crypto: 'bg-emerald-500/20 text-emerald-400',
+      direct: 'border-border text-muted-foreground',
+      other: 'border-border text-muted-foreground',
+    };
+
+    if (info.category === 'direct') {
+      return <Badge variant="outline" className="text-muted-foreground">{info.emoji} Direct</Badge>;
     }
-    if (visit.token_preloaded) {
-      return <Badge variant="secondary" className="bg-blue-500/20 text-blue-400">Token Link</Badge>;
-    }
-    if (visit.utm_source) {
-      return <Badge variant="secondary" className="bg-green-500/20 text-green-400">{visit.utm_source}</Badge>;
-    }
-    if (visit.referrer_domain) {
-      return <Badge variant="outline">{visit.referrer_domain}</Badge>;
-    }
-    return <Badge variant="outline" className="text-muted-foreground">Direct</Badge>;
+
+    return (
+      <Badge variant="secondary" className={categoryColors[info.category] || ''}>
+        {info.emoji} {info.label}
+      </Badge>
+    );
   };
+
+  // Platform & category breakdowns for charts
+  const platformBreakdown = useMemo(() => buildPlatformBreakdown(visits), [visits]);
+  const categoryBreakdown = useMemo(() => buildCategoryBreakdown(visits), [visits]);
 
   if (loading) {
     return (
