@@ -147,6 +147,7 @@ const App = () => {
                       <Route path="/bubblemap" element={<BubbleMapPage />} />
                       <Route path="/holders-how-to" element={<HoldersHowTo />} />
                       <Route path="/bubbles-how-to" element={<BubblesHowTo />} />
+                      <Route path="/testimonial-submit" element={<TestimonialSubmit />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>

@@ -276,6 +276,13 @@ export default function SuperAdmin() {
               </TabErrorBoundary>
             )}
           </TabsContent>
+          <TabsContent value="testimonials">
+            {activeTab === "testimonials" && (
+              <TabErrorBoundary tabName="Testimonials">
+                <Suspense fallback={<TabLoader />}><TestimonialsManager /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
