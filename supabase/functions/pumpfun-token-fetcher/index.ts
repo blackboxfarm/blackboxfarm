@@ -71,34 +71,26 @@ interface FetcherStats {
  */
 async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
   try {
-    // PRIMARY: Use pump.fun API directly (source of truth)
-    console.log('Fetching latest tokens from pump.fun API...');
-    const pumpResponse = await fetch(
-      `https://frontend-api-v3.pump.fun/coins?sort=created_timestamp&order=DESC&limit=${limit}`,
-      {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(10000)
-      }
-    );
+    // PRIMARY: Use pump.fun API via shared wrapper (throttled + backoff)
+    console.log('Fetching latest tokens from pump.fun API via wrapper...');
+    const pumpData = await fetchPumpFunNewCoins('pumpfun-token-fetcher', limit);
 
-    if (pumpResponse.ok) {
-      const pumpData = await pumpResponse.json();
-      if (Array.isArray(pumpData)) {
-        console.log(`Got ${pumpData.length} tokens from pump.fun API`);
-        
-        // Transform pump.fun format to our TokenData format
-        return pumpData.map((coin: any) => ({
-          token: {
-            mint: coin.mint,
-            name: coin.name || 'Unknown',
-            symbol: coin.symbol || 'UNK',
-            decimals: 6, // pump.fun tokens use 6 decimals
-            image: coin.image_uri || coin.metadata?.image,
-          },
-          pools: coin.usd_market_cap ? [{
-            liquidity: { usd: coin.usd_market_cap * 0.1 }, // Estimate
-            price: { usd: coin.usd_market_cap / (coin.total_supply / 1e6) },
-          }] : [],
+    if (pumpData && pumpData.length > 0) {
+      console.log(`Got ${pumpData.length} tokens from pump.fun API`);
+      
+      // Transform pump.fun format to our TokenData format
+      return pumpData.map((coin: any) => ({
+        token: {
+          mint: coin.mint,
+          name: coin.name || 'Unknown',
+          symbol: coin.symbol || 'UNK',
+          decimals: 6, // pump.fun tokens use 6 decimals
+          image: coin.image_uri || coin.metadata?.image,
+        },
+        pools: coin.usd_market_cap ? [{
+          liquidity: { usd: coin.usd_market_cap * 0.1 }, // Estimate
+          price: { usd: coin.usd_market_cap / (coin.total_supply / 1e6) },
+        }] : [],
           events: { createdAt: coin.created_timestamp },
           creator: coin.creator,
           // Include bonding curve data for state tracking
