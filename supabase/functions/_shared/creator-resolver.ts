@@ -33,26 +33,18 @@ export async function resolveTokenCreator(
   supabase: any,
   apiErrors: string[] = []
 ): Promise<CreatorResolution> {
-  // Step 1: Pump.fun API (primary for pump tokens, also works for non-pump sometimes)
+  // Step 1: Pump.fun API via shared wrapper (primary for pump tokens)
   try {
-    const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (pfRes.ok) {
-      const text = await pfRes.text();
-      if (text && text.trim().length > 0) {
-        const data = JSON.parse(text);
-        if (data?.creator) {
-        return {
-          creatorWallet: data.creator,
-          source: 'pumpfun',
-          confidence: 100,
-          errors: [],
-        };
-      }
-      }
-    } else if (pfRes.status !== 404) {
+    const data = await fetchPumpFunCoin(tokenMint, 'creator-resolver');
+    if (data?.creator) {
+      return {
+        creatorWallet: data.creator,
+        source: 'pumpfun',
+        confidence: 100,
+        errors: [],
+      };
+    }
+  } catch (e) {
       apiErrors.push(`Pump.fun API ${pfRes.status} for ${tokenMint.slice(0, 8)}`);
     }
   } catch (e) {
