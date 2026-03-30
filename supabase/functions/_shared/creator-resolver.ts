@@ -12,6 +12,7 @@
  */
 
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from './helius-client.ts';
+import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 
 export interface CreatorResolution {
   creatorWallet: string | null;
