@@ -6,6 +6,7 @@ import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { fetchSolscanFreeTokenMeta } from '../_shared/solscan-free.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('token-metadata');
 
 const METAPLEX_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
@@ -125,17 +126,11 @@ async function fetchPumpFunMetadata(mintAddress: string): Promise<{
 } | null> {
   try {
     console.log(`Fetching pump.fun metadata for ${mintAddress}`);
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mintAddress}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000)
-    });
-    
-    if (!response.ok) {
-      console.log(`Pump.fun API returned ${response.status}`);
+    const data = await fetchPumpFunCoin(mintAddress, 'token-metadata');
+    if (!data) {
+      console.log(`Pump.fun API returned no data`);
       return null;
     }
-    
-    const data = await response.json();
     
     return {
       name: data.name,

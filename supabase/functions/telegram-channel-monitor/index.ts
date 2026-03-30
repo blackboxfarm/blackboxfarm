@@ -4,6 +4,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { validateStaleAlpha } from "../_shared/historical-price.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('telegram-channel-monitor');
 
 const corsHeaders = {
@@ -529,11 +530,10 @@ async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
 }> {
   try {
     // Check pump.fun API for bonding curve status
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
-    if (!response.ok) {
+    const data = await fetchPumpFunCoin(tokenMint, 'telegram-channel-monitor');
+    if (!data) {
       return { isOnCurve: false, bondingPercent: null, hasGraduated: false, isMayhemMode: false };
     }
-    const data = await response.json();
     
     // Pump.fun uses virtual_sol_reserves and real_sol_reserves to calculate progress
     // Token graduates at ~85 SOL in bonding curve

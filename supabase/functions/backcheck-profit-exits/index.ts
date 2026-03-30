@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -254,12 +255,8 @@ serve(withRunLog('backcheck-profit-exits', async (req) => {
 
           // 1. Pump.fun API (primary)
           try {
-            const bcResponse = await fetch(
-              `https://frontend-api-v3.pump.fun/coins/${pos.token_mint}`,
-              { headers: { 'Accept': 'application/json' } }
-            );
-            if (bcResponse.ok) {
-              const bcData = await bcResponse.json();
+            const bcData = await fetchPumpFunCoin(pos.token_mint, 'backcheck-profit-exits');
+            if (bcData) {
               if (bcData) {
                 // Use ONLY the `complete` flag for graduation (not DexScreener fallback)
                 graduated = bcData.complete === true;

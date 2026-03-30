@@ -14,6 +14,7 @@ import { getHeliusRpcUrl, getHeliusApiKey } from "../_shared/helius-client.ts";
 import { createExecutionLogger, type ExecutionLogger } from "../_shared/execution-logger.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { runMeshGuard } from '../_shared/blacklist-mesh-guard.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('flipit-execute');
 
 const corsHeaders = {
@@ -110,9 +111,8 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
   if (tokenMint.endsWith('pump')) {
     try {
       console.log(`Fetching metadata from pump.fun API for ${tokenMint}`);
-      const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
-      if (pumpRes.ok) {
-        const pumpData = await pumpRes.json();
+      const pumpData = await fetchPumpFunCoin(tokenMint, 'flipit-execute');
+      if (pumpData) {
         if (pumpData?.symbol) {
           result = {
             symbol: pumpData.symbol,

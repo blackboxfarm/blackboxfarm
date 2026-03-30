@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('token-creator-linker');
 
 const corsHeaders = {
@@ -15,12 +16,11 @@ const corsHeaders = {
  */
 async function resolvePumpFunCreator(tokenMint: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
-    if (!res.ok) {
-      console.log(`[CreatorLinker] pump.fun API returned ${res.status} for ${tokenMint}`);
+    const data = await fetchPumpFunCoin(tokenMint, 'token-creator-linker');
+    if (!data) {
+      console.log(`[CreatorLinker] pump.fun API returned no data for ${tokenMint}`);
       return null;
     }
-    const data = await res.json();
     const creator = data?.creator;
     if (creator && typeof creator === 'string' && creator.length >= 32) {
       console.log(`[CreatorLinker] pump.fun API resolved creator: ${creator}`);

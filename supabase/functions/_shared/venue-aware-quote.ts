@@ -164,13 +164,8 @@ export async function detectVenue(
     
     // First try pump.fun API
     try {
-      const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(3000)
-      });
-
-      if (pumpRes.ok) {
-        const pumpData = await pumpRes.json();
+      const pumpData = await fetchPumpFunCoin(tokenMint, 'venue-aware-quote');
+      if (pumpData) {
         const isOnCurve = !pumpData.complete && !pumpData.raydium_pool;
         console.log(`[VenueDetect] pump.fun API: complete=${pumpData.complete}, raydium_pool=${!!pumpData.raydium_pool}, isOnCurve=${isOnCurve}`);
         return { venue: 'pumpfun', isOnCurve };
@@ -233,13 +228,8 @@ export async function detectVenue(
   // STEP 1: Check pump.fun via HTTP API (fastest for pump.fun tokens)
   // ============================================
   try {
-    const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(3000)
-    });
-
-    if (pumpRes.ok) {
-      const data = await pumpRes.json();
+    const data = await fetchPumpFunCoin(tokenMint, 'venue-aware-quote');
+    if (data) {
       if (data && !data.complete) {
         return { venue: 'pumpfun', isOnCurve: true };
       }
@@ -516,6 +506,7 @@ async function checkRaydiumLaunchlab(tokenMint: string, heliusApiKey: string): P
 
 // Import the shared SOL price fetcher with logging
 import { getSolPrice as getSharedSolPrice, getSolPriceWithLogging } from "./sol-price-fetcher.ts";
+import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 
 /**
  * Get SOL price for USD conversions - uses shared fetcher with logging
@@ -754,13 +745,8 @@ export async function getVenueAwareQuote(
   if (venue === 'pumpfun' && isOnCurve) {
     // 1) Try pump.fun HTTP API reserves (fast)
     try {
-      const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (pumpRes.ok) {
-        const data = await pumpRes.json();
+      const data = await fetchPumpFunCoin(tokenMint, 'venue-aware-quote');
+      if (data) {
         const virtualSolReserves = Number(data.virtual_sol_reserves);
         const virtualTokenReserves = Number(data.virtual_token_reserves);
 

@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -151,6 +152,13 @@ async function fetchOnChainMetadata(mint: string): Promise<TokenProfile | null> 
 async function fetchFromAPI(adapter: PlatformAdapter, mint: string): Promise<TokenProfile | null> {
   try {
     if (!adapter.apiEndpoint) return null;
+
+    // Route pump.fun calls through throttled wrapper
+    if (adapter.key === 'pumpfun') {
+      const data = await fetchPumpFunCoin(mint, 'breadcrumbs-scanner');
+      if (!data) return null;
+      return parseAPIResponse(adapter.key, data, mint, `pumpfun-fetch:/coins/${mint}`);
+    }
 
     const url = adapter.apiEndpoint.replace('{MINT}', mint);
     

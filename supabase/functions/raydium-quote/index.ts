@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,17 +83,11 @@ async function getPriceUSDFromDexScreener(mint: string): Promise<number | null> 
 // For pump.fun tokens, try pump.fun API first
 async function getPriceUSDFromPumpFun(mint: string): Promise<number | null> {
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000)
-    });
-
-    if (!res.ok) {
-      console.log(`pump.fun API returned ${res.status} for ${mint}`);
+    const data = await fetchPumpFunCoin(mint, 'raydium-quote');
+    if (!data) {
+      console.log(`pump.fun API returned no data for ${mint}`);
       return null;
     }
-
-    const data = await res.json();
 
     // Method 1: Use market cap and supply
     if (data.usd_market_cap && data.total_supply) {

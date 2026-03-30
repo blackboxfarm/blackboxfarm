@@ -3,6 +3,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,16 +53,10 @@ async function validateTokenMint(mint: string): Promise<{ valid: boolean; symbol
 
 // Quick metadata fetch: pump.fun first, then DexScreener fallback
 async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
-  // Try pump.fun first
+  // Try pump.fun first (throttled)
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.ok) {
-      const d = await res.json();
-      if (d.symbol) return { symbol: d.symbol, name: d.name || undefined };
-    }
+    const d = await fetchPumpFunCoin(mint, 'funnel-feed-scanner');
+    if (d?.symbol) return { symbol: d.symbol, name: d.name || undefined };
   } catch { /* fall through */ }
 
   // Fallback: DexScreener

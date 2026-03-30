@@ -13,6 +13,7 @@
 
 import { getVenueAwareQuote, detectVenue, type VenueQuote } from "./venue-aware-quote.ts";
 import { getHeliusRpcUrl, getHeliusApiKey, redactHeliusSecrets } from './helius-client.ts';
+import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 
 export interface TradeGuardConfig {
   maxPricePremiumPct: number;  // e.g., 10 = block if > 10% above display price
@@ -201,12 +202,8 @@ export async function checkTokenTax(tokenMint: string): Promise<TokenTaxInfo> {
   
   // Method 3: Check pump.fun API for token metadata (if it's a pump.fun token)
   try {
-    const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    
-    if (pumpRes.ok) {
-      const pumpData = await pumpRes.json();
+    const pumpData = await fetchPumpFunCoin(tokenMint, 'trade-guard');
+    if (pumpData) {
       // Note: pump.fun tokens typically don't have built-in taxes,
       // but we check just in case the API exposes this info
       if (pumpData.transferFee || pumpData.tax || pumpData.hasTax) {
@@ -362,13 +359,8 @@ async function getBondingCurveQuote(
   try {
     console.log(`[TradeGuard] Fetching pump.fun bonding curve quote for ${tokenMint}`);
     
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000)
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
+    const data = await fetchPumpFunCoin(tokenMint, 'trade-guard');
+    if (data) {
       
       if (data.complete === true) {
         console.log(`[TradeGuard] Token is graduated, bonding curve quote not applicable`);

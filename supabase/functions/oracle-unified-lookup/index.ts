@@ -5,6 +5,7 @@ import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/h
 import { discoverFundingChain } from '../_shared/funding-resolver.ts';
 import { isSolscanUsable } from '../_shared/provider-health.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
@@ -205,7 +206,6 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
   
   // STEP 1: Pump.fun user-created-coins API (ONLY returns tokens this wallet minted)
   const baseEndpoints = [
-    `https://frontend-api-v3.pump.fun/coins/user-created-coins/${walletAddress}`,
     `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}`
   ];
   
@@ -995,12 +995,8 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
       
       const pfCreatorPromises = stillMissingCreator.map(async (mint) => {
         try {
-          const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(3000)
-          });
-          if (res.ok) {
-            const data = await res.json();
+          const data = await fetchPumpFunCoin(mint, 'oracle-unified-lookup');
+          if (data) {
             if (data?.creator) {
               const entry = dbTokenMap.get(mint);
               if (entry) entry.creatorWallet = data.creator;

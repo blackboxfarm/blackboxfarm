@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getHeliusApiKey, getHeliusRpcUrl, getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { fetchPumpFunCreatorCoins } from '../_shared/pumpfun-fetch.ts';
 /**
  * PUMPFUN DEV WALLET MONITOR
  * 
@@ -209,17 +210,9 @@ async function checkDevSold(devWallet: string, tokenMint: string): Promise<boole
 async function checkDevLaunchedNew(devWallet: string, tokenMint: string, tokenCreatedAt: string): Promise<boolean> {
   try {
     // Query pump.fun for tokens created by this wallet after the current token
-    const response = await fetchWithBackoff(
-      `https://frontend-api-v3.pump.fun/coins/user-created-coins/${devWallet}?limit=10`
-    );
+    const coins = await fetchPumpFunCreatorCoins(devWallet, 'pumpfun-dev-wallet-monitor', 10);
     
-    if (!response.ok) {
-      return false;
-    }
-    
-    const coins = await response.json();
-    
-    if (!Array.isArray(coins) || coins.length === 0) {
+    if (!coins || coins.length === 0) {
       return false;
     }
     

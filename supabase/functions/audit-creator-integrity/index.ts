@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -78,20 +79,13 @@ Deno.serve(withRunLog('audit-creator-integrity', async (req) => {
 
     for (const token of tokens) {
       try {
-        const pumpResponse = await fetch(
-          `https://frontend-api-v3.pump.fun/coins/${token.token_mint}`,
-          {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000),
-          }
-        );
+        const pumpData = await fetchPumpFunCoin(token.token_mint, 'audit-creator-integrity');
 
-        if (!pumpResponse.ok) {
+        if (!pumpData) {
           unreachable++;
           continue;
         }
 
-        const pumpData = await pumpResponse.json();
         const realCreator = pumpData.creator;
 
         if (!realCreator) {

@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { fetchPumpFunCreatorCoins } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-dev-analyzer');
 
 const corsHeaders = {
@@ -32,36 +33,15 @@ interface DevAnalysis {
 
 // Fetch all tokens created by a wallet - tries Pump.fun first, then Helius DAS as fallback
 async function fetchDevTokenHistory(walletAddress: string): Promise<any[]> {
-  // Try pump.fun endpoints first with proper headers
-  const pumpEndpoints = [
-    `https://frontend-api-v3.pump.fun/coins/user-created-coins/${walletAddress}?limit=200&offset=0`,
-    `https://client-api-2-74b1891ee9f9.herokuapp.com/coins/user-created-coins/${walletAddress}?limit=200&offset=0`
-  ];
-  
-  const pumpHeaders = {
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Origin': 'https://pump.fun',
-    'Referer': 'https://pump.fun/'
-  };
-  
-  for (const endpoint of pumpEndpoints) {
-    try {
-      console.log(`[DevAnalyzer] Trying pump.fun: ${endpoint.includes('frontend') ? 'frontend-api' : 'client-api'}`);
-      const response = await fetch(endpoint, { headers: pumpHeaders });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          console.log(`[DevAnalyzer] Pump.fun returned ${data.length} tokens`);
-          return data;
-        }
-      } else {
-        console.log(`[DevAnalyzer] Pump.fun returned ${response.status}`);
-      }
-    } catch (error) {
-      console.log(`[DevAnalyzer] Pump.fun error:`, error);
+  // Try pump.fun via throttled wrapper
+  try {
+    const data = await fetchPumpFunCreatorCoins(walletAddress, 'pumpfun-dev-analyzer', 200);
+    if (data && data.length > 0) {
+      console.log(`[DevAnalyzer] Pump.fun returned ${data.length} tokens`);
+      return data;
     }
+  } catch (error) {
+    console.log(`[DevAnalyzer] Pump.fun error:`, error);
   }
   
   // Fallback to Helius DAS API to get tokens created by this wallet

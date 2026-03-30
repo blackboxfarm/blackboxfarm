@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('helius-fast-price');
 
 const corsHeaders = {
@@ -119,16 +120,8 @@ serve(withRunLog('helius-fast-price', async (req) => {
       
       // FALLBACK: Pump.fun bonding curve API for pre-graduation tokens
       try {
-        const pumpController = new AbortController();
-        const pumpTimeout = setTimeout(() => pumpController.abort(), 3000);
-        
-        const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-          signal: pumpController.signal
-        });
-        clearTimeout(pumpTimeout);
-        
-        if (pumpRes.ok) {
-          const pumpData = await pumpRes.json();
+        const pumpData = await fetchPumpFunCoin(tokenMint, 'helius-fast-price');
+        if (pumpData) {
           const vSol = pumpData.virtual_sol_reserves;
           const vToken = pumpData.virtual_token_reserves;
           

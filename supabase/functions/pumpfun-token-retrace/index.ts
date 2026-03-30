@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { fetchPumpFunCoin, fetchPumpFunReplies, fetchPumpFunClips } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,22 +44,7 @@ interface RetraceResult {
 // Fetch token data from pump.fun API
 async function fetchPumpfunToken(mint: string): Promise<PumpfunCoin | null> {
   try {
-    const response = await fetch(
-      `https://frontend-api-v3.pump.fun/coins/${mint}`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'Origin': 'https://pump.fun'
-        }
-      }
-    );
-    
-    if (!response.ok) {
-      console.log(`Pump.fun token fetch failed: ${response.status}`);
-      return null;
-    }
-    
-    return await response.json();
+    return await fetchPumpFunCoin(mint, 'pumpfun-token-retrace');
   } catch (error) {
     console.error('Pump.fun token fetch error:', error);
     return null;
@@ -68,19 +54,7 @@ async function fetchPumpfunToken(mint: string): Promise<PumpfunCoin | null> {
 // Fetch community replies for a token
 async function fetchTokenReplies(mint: string, limit = 50): Promise<any[]> {
   try {
-    // Pump.fun stores replies by mint address
-    const response = await fetch(
-      `https://frontend-api-v3.pump.fun/replies/${mint}?limit=${limit}&offset=0`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'Origin': 'https://pump.fun'
-        }
-      }
-    );
-    
-    if (!response.ok) return [];
-    return await response.json();
+    return await fetchPumpFunReplies(mint, 'pumpfun-token-retrace', limit) || [];
   } catch (error) {
     console.error('Replies fetch error:', error);
     return [];
@@ -90,18 +64,7 @@ async function fetchTokenReplies(mint: string, limit = 50): Promise<any[]> {
 // Check for livestream/clips for a token
 async function checkLivestream(mint: string): Promise<boolean> {
   try {
-    const response = await fetch(
-      `https://frontend-api-v3.pump.fun/clips/${mint}`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'Origin': 'https://pump.fun'
-        }
-      }
-    );
-    
-    if (!response.ok) return false;
-    const data = await response.json();
+    const data = await fetchPumpFunClips(mint, 'pumpfun-token-retrace');
     return Array.isArray(data) && data.length > 0;
   } catch {
     return false;

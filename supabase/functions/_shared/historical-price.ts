@@ -1,4 +1,5 @@
 /**
+import { fetchPumpFunTrades } from './pumpfun-fetch.ts';
  * HISTORICAL PRICE FETCHER - Stale Alpha Protection
  * 
  * Multi-tier approach to fetch token price at a specific historical timestamp:
@@ -101,16 +102,8 @@ async function tryPumpFunTradeHistory(
 ): Promise<{ price: number; source: 'pumpfun_trades' } | null> {
   try {
     // pump.fun API returns recent trades for a token
-    const response = await fetch(
-      `https://frontend-api-v3.pump.fun/trades/latest/${tokenMint}?limit=100`,
-      { signal: AbortSignal.timeout(5000) }
-    );
-    
-    if (!response.ok) return null;
-    
-    const trades = await response.json();
-    
-    if (!Array.isArray(trades) || trades.length === 0) return null;
+    const trades = await fetchPumpFunTrades(tokenMint, 'historical-price');
+    if (!trades || trades.length === 0) return null;
     
     const targetTime = targetTimestamp.getTime();
     

@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,12 +21,8 @@ interface TokenMetadata {
 
 async function fetchPumpFunData(mint: string): Promise<TokenMetadata | null> {
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!res.ok) return null;
-    
-    const data = await res.json();
+    const data = await fetchPumpFunCoin(mint, 'dailies-backfill-socials');
+    if (!data) return null;
     // Only return if we have at least symbol
     if (!data.symbol) return null;
     

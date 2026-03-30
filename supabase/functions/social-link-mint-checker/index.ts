@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from '../_shared/run-logger.ts';
 import { extractXHandle, extractXCommunityId } from '../_shared/x-handle-extractor.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,13 +91,8 @@ async function fetchMetaplexSocials(tokenMint: string): Promise<TokenSocials | n
 
 async function fetchPumpFunSocials(tokenMint: string): Promise<TokenSocials | null> {
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await fetchPumpFunCoin(tokenMint, 'social-link-mint-checker');
+    if (!data) return null;
 
     const socials: TokenSocials = {};
     if (data.twitter) socials.twitter = data.twitter;

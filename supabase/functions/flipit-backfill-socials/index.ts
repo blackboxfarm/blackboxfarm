@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,9 +43,8 @@ serve(withRunLog('flipit-backfill-socials', async (req) => {
         if (position.token_mint.endsWith('pump')) {
           try {
             console.log(`Trying pump.fun API for ${position.token_mint}`);
-            const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${position.token_mint}`);
-            if (pumpRes.ok) {
-              const pumpData = await pumpRes.json();
+            const pumpData = await fetchPumpFunCoin(position.token_mint, 'flipit-backfill-socials');
+            if (pumpData) {
               tokenImage = pumpData.image_uri || pumpData.metadata?.image || null;
               twitterUrl = pumpData.twitter || null;
               websiteUrl = pumpData.website || null;

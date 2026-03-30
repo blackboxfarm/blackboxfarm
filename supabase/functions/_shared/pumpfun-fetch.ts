@@ -186,6 +186,17 @@ export async function fetchPumpFunReplies(mint: string, callerName: string, limi
 }
 
 /**
+ * Convenience: fetch clips/livestreams for a token
+ */
+export async function fetchPumpFunClips(mint: string, callerName: string): Promise<any[] | null> {
+  const result = await pumpfunFetch(
+    `/clips/${mint}`,
+    { callerName, tokenMint: mint }
+  );
+  return result.data ? (Array.isArray(result.data) ? result.data : []) : null;
+}
+
+/**
  * Convenience: fetch new coins listing
  */
 export async function fetchPumpFunNewCoins(callerName: string, limit = 50): Promise<any[] | null> {

@@ -109,11 +109,8 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
   // 1. PRIMARY: Pump.fun bonding curve API — deterministic, real-time, best source for pre-graduation tokens
   for (const mint of mints) {
     try {
-      const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-        headers: { 'Accept': 'application/json' }
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const data = await fetchPumpFunCoin(mint, 'pumpfun-fantasy-sell-monitor');
+      if (data) {
         // Use virtualSolReserves / virtualTokenReserves for deterministic bonding curve price
         if (data?.virtual_sol_reserves && data?.virtual_token_reserves) {
           const solReserves = data.virtual_sol_reserves / 1e9;
@@ -140,8 +137,7 @@ async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<str
           }
         }
       }
-      // Small delay between pump.fun requests
-      if (mints.length > 1) await new Promise(r => setTimeout(r, 150));
+      // Throttling handled by pumpfun-fetch wrapper
     } catch (e) {
       // Continue - pump.fun API can be flaky
     }

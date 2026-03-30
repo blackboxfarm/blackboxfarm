@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -915,13 +916,7 @@ async function runDiscoveryAndIntake(supabase: any): Promise<any> {
 // Fetch token metrics from pump.fun for real-time updates
 async function fetchPumpFunMetrics(mint: string): Promise<any | null> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-      headers: { 'Accept': 'application/json' },
-    });
-    
-    if (!response.ok) return null;
-    
-    const data = await response.json();
+    const data = await fetchPumpFunCoin(mint, 'pumpfun-pipeline-debugger');
     if (!data) return null;
     
     const virtualSolReserves = data.virtual_sol_reserves || 0;

@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -68,12 +69,8 @@ serve(withRunLog('backcheck-stop-loss-exits', async (req) => {
 
           // 1. Try Pump.fun API
           try {
-            const bcResponse = await fetch(
-              `https://frontend-api-v3.pump.fun/coins/${pos.token_mint}`,
-              { headers: { 'Accept': 'application/json' } }
-            );
-            if (bcResponse.ok) {
-              const bcData = await bcResponse.json();
+            const bcData = await fetchPumpFunCoin(pos.token_mint, 'backcheck-stop-loss-exits');
+            if (bcData) {
               if (bcData) {
                 graduated = bcData.complete === true || bcData.raydium_pool !== null;
                 if (bcData.usd_market_cap) {

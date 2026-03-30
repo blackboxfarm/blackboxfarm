@@ -1,4 +1,5 @@
 import { registerXHandlesForPhanes } from './register-x-handle.ts';
+import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 
 /**
  * MESH FEEDER — Universal passive intelligence collector
@@ -432,11 +433,8 @@ export const meshFeed = {
 
     // Fire all 3 launchpad APIs in parallel
     const [pumpResult, bonkResult, bagsResult] = await Promise.allSettled([
-      // 1. Pump.fun
-      fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(5000),
-      }).then(r => r.ok ? r.json() : null).catch(() => null),
+      // 1. Pump.fun (throttled)
+      fetchPumpFunCoin(mint, 'mesh-feeder'),
 
       // 2. Bonk.fun
       fetch(`https://api.bonk.fun/token/${mint}`, {

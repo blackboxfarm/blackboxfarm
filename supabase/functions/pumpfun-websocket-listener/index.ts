@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchPumpFunCreatorCoins } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -202,15 +203,12 @@ async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: 
 async function checkDevWalletHistory(creatorWallet: string): Promise<{ isSerialScammer: boolean; tokenCount: number; reason?: string }> {
   try {
     // Query pump.fun API for creator's token history
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/user-created-coins/${creatorWallet}?limit=50&offset=0`);
-    
-    if (!response.ok) {
+    const coins = await fetchPumpFunCreatorCoins(creatorWallet, 'pumpfun-websocket-listener', 50);
+    if (!coins) {
       console.log(`   ⚠️ Could not fetch dev history for ${creatorWallet.slice(0,8)}...`);
       return { isSerialScammer: false, tokenCount: 0 };
     }
-    
-    const coins = await response.json();
-    const tokenCount = Array.isArray(coins) ? coins.length : 0;
+    const tokenCount = coins.length;
     
     console.log(`   👤 Dev ${creatorWallet.slice(0,8)}... has created ${tokenCount} tokens on pump.fun`);
     
