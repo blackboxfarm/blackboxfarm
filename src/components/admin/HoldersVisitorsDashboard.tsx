@@ -582,20 +582,118 @@ export function HoldersVisitorsDashboard() {
         </Card>
       </div>
 
-      <Tabs defaultValue="referrers" className="space-y-4">
+      <Tabs defaultValue="sources" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="sources">📱 Source Platforms</TabsTrigger>
+          <TabsTrigger value="categories">📊 Categories</TabsTrigger>
           <TabsTrigger value="referrers">Top Referrers</TabsTrigger>
           <TabsTrigger value="tokens">Top Tokens</TabsTrigger>
           <TabsTrigger value="session-tokens">Tokens/Session</TabsTrigger>
           <TabsTrigger value="auth-methods">Auth Methods</TabsTrigger>
           <TabsTrigger value="browsers">Browsers</TabsTrigger>
           <TabsTrigger value="recent">Recent Visits</TabsTrigger>
+          <TabsTrigger value="utm-builder">🔗 Link Builder</TabsTrigger>
         </TabsList>
+
+        {/* Source Platform Breakdown */}
+        <TabsContent value="sources">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Traffic by Platform</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={platformBreakdown.slice(0, 12)} layout="vertical">
+                      <XAxis type="number" />
+                      <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }} 
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Platform</TableHead>
+                      <TableHead className="text-right">Visits</TableHead>
+                      <TableHead className="text-right">%</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {platformBreakdown.slice(0, 15).map((item, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{item.emoji} {item.label}</TableCell>
+                        <TableCell className="text-right">{item.count}</TableCell>
+                        <TableCell className="text-right">
+                          {stats.totalVisits > 0 ? Math.round((item.count / stats.totalVisits) * 100) : 0}%
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Category Breakdown */}
+        <TabsContent value="categories">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Traffic by Category</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryBreakdown.map(c => ({ name: c.category, value: c.count }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {categoryBreakdown.map((_, index) => (
+                          <Cell key={`cat-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3">
+                  {categoryBreakdown.map((cat, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                      <span className="text-sm font-medium">{cat.category}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold">{cat.count}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {stats.totalVisits > 0 ? Math.round((cat.count / stats.totalVisits) * 100) : 0}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="referrers">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Traffic Sources</CardTitle>
+              <CardTitle className="text-sm font-medium">Raw Referrer Domains</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
