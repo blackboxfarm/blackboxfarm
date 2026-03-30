@@ -14,6 +14,7 @@ import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
 
 const NAV_ITEMS = [
   { label: 'Overview', path: '/' },
+  { label: 'Live Feed', path: '/feed' },
   { label: 'AI Holder Analysis', path: '/holders' },
   { label: 'Telegram Bot', path: '/tgbot' },
   { label: 'Bubble Map', path: '/bubblepromo' },
@@ -122,7 +123,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
                     "px-4 py-2.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                     isActive 
                       ? "bg-accent text-accent-foreground" 
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                      : "text-muted-foreground/60 hover:text-foreground hover:bg-accent/50"
                   )}
                 >
                   {item.label}
