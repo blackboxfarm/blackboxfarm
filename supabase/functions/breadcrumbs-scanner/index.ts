@@ -152,6 +152,13 @@ async function fetchFromAPI(adapter: PlatformAdapter, mint: string): Promise<Tok
   try {
     if (!adapter.apiEndpoint) return null;
 
+    // Route pump.fun calls through throttled wrapper
+    if (adapter.key === 'pumpfun') {
+      const data = await fetchPumpFunCoin(mint, 'breadcrumbs-scanner');
+      if (!data) return null;
+      return parseAPIResponse(adapter.key, data, mint, `pumpfun-fetch:/coins/${mint}`);
+    }
+
     const url = adapter.apiEndpoint.replace('{MINT}', mint);
     
     const response = await fetch(url, {
