@@ -102,9 +102,7 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
           }
         }));
       }
-    } else {
-      console.log(`pump.fun API returned ${pumpResponse.status}, falling back to Solana Tracker`);
-    }
+      console.log('pump.fun API returned no data, falling back to Solana Tracker');
   } catch (error) {
     console.error('pump.fun API failed:', error);
   }
