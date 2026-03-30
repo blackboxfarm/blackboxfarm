@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, User } from 'lucide-react';
+import { Settings, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';

@@ -66,7 +66,7 @@ export function TestimonialCarousel({
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      <div className="relative overflow-hidden rounded-lg border border-primary/10 bg-gradient-to-br from-muted/30 to-muted/10 backdrop-blur-sm px-6 py-5 md:px-8 md:py-6">
+      <div className="relative overflow-hidden rounded-lg border border-[hsl(270_30%_35%)] bg-gradient-to-br from-[hsl(270_25%_18%)] to-[hsl(280_20%_14%)] shadow-[0_4px_20px_hsl(270_30%_15%/0.5)] backdrop-blur-sm px-6 py-5 md:px-8 md:py-6">
         {/* Quote icon */}
         <Quote className="absolute top-3 left-3 h-5 w-5 text-primary/20" />
 
