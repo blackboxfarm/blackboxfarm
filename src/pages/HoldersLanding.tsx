@@ -210,6 +210,6 @@ export default function HoldersLanding() {
           </Link>
         </div>
       </div>
-    </div>
+    </SiteLayout>
   );
 }
