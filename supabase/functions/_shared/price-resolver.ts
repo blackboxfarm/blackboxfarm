@@ -10,6 +10,7 @@
 
 import { getSolPriceWithLogging } from './sol-price-fetcher.ts';
 import { getHeliusRpcUrl, redactHeliusSecrets } from './helius-client.ts';
+import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 
 // ============================================
 // TYPES
