@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { upsertHealthSnapshot } from '../_shared/snapshot-writer.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { meshFeed } from "../_shared/mesh-feeder.ts"
 import { writeEarlyWarnings, generateWarningsFromHoldersData, generatePatternWarnings } from "../_shared/early-warning-writer.ts"
