@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { meshFeed } from '../_shared/mesh-feeder.ts';
+import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('token-metadata-batch');
 
 const corsHeaders = {
