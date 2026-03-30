@@ -14,11 +14,11 @@ import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
 
 const NAV_ITEMS = [
   { label: 'Overview', path: '/' },
+  { label: 'Join!', path: '/subscriptions' },
   { label: 'Live Feed', path: '/feed' },
-  { label: 'AI Holder Analysis', path: '/holders' },
-  { label: 'Telegram Bot', path: '/tgbot' },
+  { label: 'Holder Analysis', path: '/holders' },
   { label: 'Bubble Map', path: '/bubblepromo' },
-  { label: 'Subscribe', path: '/subscriptions' },
+  { label: 'Telegram Bot', path: '/tgbot' },
 ];
 
 export function SiteLayout({ children }: { children: React.ReactNode }) {

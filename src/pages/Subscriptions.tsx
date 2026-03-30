@@ -97,9 +97,44 @@ export default function Subscriptions() {
                 <span className="text-foreground"> AI</span>
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                Let AI Handle the Granular Noise — <span className="text-foreground font-semibold">You Handle the Market</span>
+                Let AI Handle the Granular Noise
               </p>
-              <div className="flex items-center justify-center gap-3 pt-2">
+              <p className="text-lg md:text-xl max-w-2xl mx-auto">
+                <span className="text-foreground font-semibold">You Handle the Market</span>
+              </p>
+
+              {/* Quick-access Popular Plans */}
+              <div className="max-w-4xl mx-auto pt-4">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Join now or scroll down and compare packages
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { name: 'Pro', price: '$9.99/mo', badge: 'Most Popular', highlight: true, action: () => document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' }) },
+                    { name: 'Developer', price: '$29.99/mo', badge: null, highlight: false, action: () => document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' }) },
+                    { name: 'Enterprise', price: '$49.99/mo', badge: null, highlight: false, action: () => document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' }) },
+                  ].map((plan) => (
+                    <Card 
+                      key={plan.name}
+                      className={`cursor-pointer transition-all hover:scale-[1.02] ${plan.highlight ? 'border-primary shadow-lg shadow-primary/10' : 'border-border/50'}`}
+                      onClick={plan.action}
+                    >
+                      <CardContent className="p-4 text-center space-y-2">
+                        {plan.badge && (
+                          <Badge className="bg-primary text-primary-foreground text-xs">{plan.badge}</Badge>
+                        )}
+                        <p className="font-bold text-lg">{plan.name}</p>
+                        <p className="text-2xl font-black text-primary">{plan.price}</p>
+                        <Button size="sm" variant={plan.highlight ? 'default' : 'outline'} className="w-full gap-1">
+                          Get Started <ChevronRight className="w-3 h-3" />
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 pt-4">
                 <Button
                   size="lg"
                   className="gap-2"
