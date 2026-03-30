@@ -156,10 +156,9 @@ async function getSolPrice(supabase: any): Promise<number> {
 // Check for Mayhem Mode (hard reject) - ONE TIME ONLY
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
-    if (!response.ok) return false;
+    const data = await fetchPumpFunCoin(tokenMint, 'pumpfun-token-fetcher');
+    if (!data) return false;
     
-    const data = await response.json();
     const totalSupply = data.total_supply || 0;
     const program = data.program || null;
     
