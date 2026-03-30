@@ -722,33 +722,31 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       }
       
       // Generate network risk assessment — always run since TG templates may use {risk} even if X template doesn't
-      {
-        console.log('[poster] Generating network risk assessment...');
-        const riskResult = assessNetworkRisk({
-          healthScore: stats.healthScore,
-          totalHolders: stats.totalHolders,
-          realHolders: stats.realHolders,
-          dustPercentage: stats.dustPercentage,
-          whaleCount: stats.whaleCount,
-          seriousCount: stats.seriousCount,
-          top10Pct: report?.distributionStats?.top10Percentage ?? null,
-          devTrustLevel: report?.devReputation?.trustLevel ?? null,
-          devReputationScore: report?.devReputation?.score ?? null,
-          isBlacklisted: report?.devReputation?.isBlacklisted ?? false,
-        });
-        stats.risk = riskResult.signal;
-        stats.riskDetail = riskResult.detail;
-        console.log(`[poster] Risk: ${riskResult.signal}`);
-      }
+      console.log('[poster] Generating network risk assessment...');
+      const riskResult = assessNetworkRisk({
+        healthScore: stats.healthScore,
+        totalHolders: stats.totalHolders,
+        realHolders: stats.realHolders,
+        dustPercentage: stats.dustPercentage,
+        whaleCount: stats.whaleCount,
+        seriousCount: stats.seriousCount,
+        top10Pct: report?.distributionStats?.top10Percentage ?? null,
+        devTrustLevel: report?.devReputation?.trustLevel ?? null,
+        devReputationScore: report?.devReputation?.score ?? null,
+        isBlacklisted: report?.devReputation?.isBlacklisted ?? false,
+      });
+      stats.risk = riskResult.signal;
+      stats.riskDetail = riskResult.detail;
+      console.log(`[poster] Risk: ${riskResult.signal}`);
       
       // Write health snapshot for Litmus Strip (fire-and-forget)
       upsertHealthSnapshot(supabase, {
         tokenMint: item.token_mint,
         healthScore: stats.healthScore,
         healthGrade: stats.healthGrade,
-        riskSignal: stats.risk,
-        riskLabel: riskResult?.label,
-        riskEmoji: riskResult?.emoji,
+        riskSignal: riskResult.signal,
+        riskLabel: riskResult.label,
+        riskEmoji: riskResult.emoji,
         totalHolders: stats.totalHolders,
         realHolders: stats.realHolders,
         dustPercentage: stats.dustPercentage,
