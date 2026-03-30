@@ -132,6 +132,11 @@ export default function TelegramBot() {
         </div>
       </section>
 
+      {/* Testimonial Carousel */}
+      <section className="max-w-4xl mx-auto px-4 py-6">
+        <TestimonialCarousel />
+      </section>
+
       <section className="mx-auto max-w-5xl px-4 py-16">
         <h2 className="text-2xl font-bold text-center mb-2">Bot Commands</h2>
         <p className="text-sm text-muted-foreground text-center mb-8">
