@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { withRunLog } from '../_shared/run-logger.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('allstar-mint-auditor');
 
 const corsHeaders = {
@@ -21,9 +22,8 @@ const MAX_ABSOLUTE_MINT_AGE_HOURS = 168;
 // Resolve creator for a token via pump.fun API
 async function resolveCreator(tokenMint: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await fetchPumpFunCoin(tokenMint, 'allstar-mint-auditor');
+    if (!data) return null;
     return (data?.creator && typeof data.creator === 'string' && data.creator.length >= 32) ? data.creator : null;
   } catch { return null; }
 }

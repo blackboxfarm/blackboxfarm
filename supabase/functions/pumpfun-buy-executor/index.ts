@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-buy-executor');
 
 /**
@@ -81,12 +82,10 @@ async function getConfig(supabase: any): Promise<BuyConfig> {
 // Check if token is still on bonding curve (pump.fun)
 async function checkBondingCurve(mint: string): Promise<{ onBondingCurve: boolean; bondingCurvePct: number | null }> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (!response.ok) {
+    const data = await fetchPumpFunCoin(mint, 'pumpfun-buy-executor');
+    if (!data) {
       return { onBondingCurve: false, bondingCurvePct: null };
     }
-    
-    const data = await response.json();
     const bondingCurvePct = data.bonding_curve_percentage ?? data.bondingCurvePercentage ?? null;
     
     // If bondingCurvePct is null or 100, it's graduated

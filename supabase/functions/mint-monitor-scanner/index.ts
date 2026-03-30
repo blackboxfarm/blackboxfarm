@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withRunLog } from '../_shared/run-logger.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { requireHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('mint-monitor-scanner');
 
 const corsHeaders = {
@@ -36,7 +37,7 @@ interface TokenMint {
 async function fetchPumpFunData(mint: string): Promise<Partial<TokenMint> & { pumpFunGraduated?: boolean }> {
   try {
     // Try pump.fun API for bonding curve and trading data
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
+    const response_data = await fetchPumpFunCoin(mint, 'mint-monitor-scanner'); const response = { ok: !!response_data, json: async () => response_data };
     if (!response.ok) {
       // If pump.fun returns 404, token might have graduated or doesn't exist on pump
       return { pumpFunGraduated: response.status === 404 ? undefined : undefined };

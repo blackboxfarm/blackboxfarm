@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 // Backfill minted_at and bonded_at timestamps using DexScreener as primary source
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,13 +41,8 @@ async function fetchDexScreenerData(tokenMint: string) {
 // Fetch from pump.fun for minted_at
 async function fetchPumpFunData(tokenMint: string) {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { "Accept": "application/json" },
-    });
-    
-    if (!response.ok) return null;
-    
-    const data = await response.json();
+    const data = await fetchPumpFunCoin(tokenMint, 'backfill-token-timestamps');
+    if (!data) return null;
     return {
       createdTimestamp: data.created_timestamp,
       completeTimestamp: data.complete_timestamp,

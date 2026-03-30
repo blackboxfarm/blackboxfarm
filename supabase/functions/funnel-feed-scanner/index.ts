@@ -3,6 +3,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,7 +55,7 @@ async function validateTokenMint(mint: string): Promise<{ valid: boolean; symbol
 async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
   // Try pump.fun first
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
+    const pfData = await fetchPumpFunCoin(mint, 'funnel-feed-scanner'); const res = { ok: !!pfData, json: async () => pfData }; // was fetch( {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000),
     });

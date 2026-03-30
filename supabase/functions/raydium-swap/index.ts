@@ -62,6 +62,7 @@ async function getTokenBalance(
 const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC (mainnet)
 import bs58 from "https://esm.sh/bs58@5.0.0";
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -322,10 +323,8 @@ async function getPumpCoinSnapshot(mint: string): Promise<{
   if (pumpCoinSnapshotCache.has(mint)) return pumpCoinSnapshotCache.get(mint)!;
 
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (!res.ok) return null;
-
-    const data = await res.json();
+    const data = await fetchPumpFunCoin(mint, 'raydium-swap');
+    if (!data) return null;
     const virtualSolReserves = BigInt(String(data?.virtual_sol_reserves ?? 0));
     const virtualTokenReserves = BigInt(String(data?.virtual_token_reserves ?? 0));
     const baseDecimals = Number(data?.base_decimals ?? 6);
