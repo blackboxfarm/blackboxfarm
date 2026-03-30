@@ -13,6 +13,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { LitmusStrip } from '@/components/feed/LitmusStrip';
 
 const PAGE_SIZE = 50;
 
