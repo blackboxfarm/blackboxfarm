@@ -2032,6 +2032,45 @@ export type Database = {
         }
         Relationships: []
       }
+      boost_entries: {
+        Row: {
+          amount: number
+          boost_date: string
+          boost_type: string
+          created_at: string
+          id: string
+          link_label: string | null
+          link_url: string | null
+          notes: string | null
+          platform: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          boost_date?: string
+          boost_type: string
+          created_at?: string
+          id?: string
+          link_label?: string | null
+          link_url?: string | null
+          notes?: string | null
+          platform: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          boost_date?: string
+          boost_type?: string
+          created_at?: string
+          id?: string
+          link_label?: string | null
+          link_url?: string | null
+          notes?: string | null
+          platform?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bundle_reports: {
         Row: {
           created_at: string
