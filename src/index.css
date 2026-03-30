@@ -60,7 +60,8 @@ All colors MUST be HSL.
     --glow-cyan: 0 0 20px hsl(180 100% 50% / 0.3);
     --glow-soft: 0 0 40px hsl(180 100% 50% / 0.1);
 
-    /* Nav inactive */
+    /* Nav inactive bg */
+    --nav-inactive-bg: 270 30% 20%;
     --nav-inactive: 270 40% 55%;
   }
 
