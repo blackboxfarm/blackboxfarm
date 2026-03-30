@@ -242,10 +242,9 @@ async function fetchTokenMetrics(mint: string): Promise<TokenMetrics | null> {
 // Fetch social info (Twitter, Telegram, Website)
 async function fetchSocialInfo(mint: string): Promise<{ twitter?: string; telegram?: string; website?: string } | null> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (!response.ok) return null;
+    const data = await fetchPumpFunCoin(mint, 'pumpfun-vip-monitor');
+    if (!data) return null;
     
-    const data = await response.json();
     return {
       twitter: data.twitter || null,
       telegram: data.telegram || null,
