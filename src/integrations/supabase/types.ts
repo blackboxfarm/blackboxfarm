@@ -6961,6 +6961,7 @@ export type Database = {
           api_usage_summary: Json
           auth_failure_events: Json
           created_at: string
+          db_size_info: Json | null
           dlq_stats: Json | null
           error_patterns: Json
           execution_time_ms: number | null
@@ -6994,6 +6995,7 @@ export type Database = {
           api_usage_summary?: Json
           auth_failure_events?: Json
           created_at?: string
+          db_size_info?: Json | null
           dlq_stats?: Json | null
           error_patterns?: Json
           execution_time_ms?: number | null
@@ -7027,6 +7029,7 @@ export type Database = {
           api_usage_summary?: Json
           auth_failure_events?: Json
           created_at?: string
+          db_size_info?: Json | null
           dlq_stats?: Json | null
           error_patterns?: Json
           execution_time_ms?: number | null
