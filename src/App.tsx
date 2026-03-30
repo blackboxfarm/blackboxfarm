@@ -71,6 +71,7 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const HoldersHowTo = lazy(() => import("./pages/HoldersHowTo"));
 const BubblesHowTo = lazy(() => import("./pages/BubblesHowTo"));
 const TestimonialSubmit = lazy(() => import("./pages/TestimonialSubmit"));
+const Feed = lazy(() => import("./pages/Feed"));
 
 const queryClient = new QueryClient();
 
