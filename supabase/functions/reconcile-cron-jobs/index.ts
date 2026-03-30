@@ -288,6 +288,25 @@ const REQUIRED_CRONS: CronDef[] = [
     schedule: '*/5 * * * *',
     command: httpPost('backfill-x-communities', '{\\\"batchSize\\\": 300}'),
   },
+
+  // ── Intelligence Tier 1: Behavioral Scoring ──
+  {
+    jobname: 'dev-behavior-scorer-30min',
+    schedule: '*/30 * * * *',
+    command: httpPost('dev-behavior-scorer', '{\\\"batchSize\\\": 50}'),
+  },
+  // ── Intelligence Tier 1: Token Fingerprinting ──
+  {
+    jobname: 'token-fingerprint-scanner-30min',
+    schedule: '*/30 * * * *',
+    command: httpPost('token-fingerprint-scanner', '{\\\"batchSize\\\": 100}'),
+  },
+  // ── Intelligence Tier 1: Co-Mint Cluster Detection ──
+  {
+    jobname: 'co-mint-cluster-detector-15min',
+    schedule: '*/15 * * * *',
+    command: httpPost('co-mint-cluster-detector', '{\\\"windowMinutes\\\": 5, \\\"lookbackHours\\\": 24}'),
+  },
 ];
 
 Deno.serve(withRunLog('reconcile-cron-jobs', async (req) => {

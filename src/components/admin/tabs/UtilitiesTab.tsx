@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LazyLoader } from '@/components/ui/lazy-loader';
 import { HealthModeToggles } from '@/components/admin/HealthModeToggles';
 import { ServiceToggles } from '@/components/admin/ServiceToggles';
+import { IntelligenceFeatureToggles } from '@/components/admin/IntelligenceFeatureToggles';
 
 // Lazy load each utility component
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
@@ -26,6 +27,7 @@ export default function UtilitiesTab() {
     <div className="space-y-4">
       <ServiceToggles />
       <HealthModeToggles />
+      <IntelligenceFeatureToggles />
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
         <TabsTrigger value="function-ops">⚙️ Function Ops</TabsTrigger>

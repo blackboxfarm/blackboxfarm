@@ -111,6 +111,17 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
     console.log(`[FamilyMintMonitor] Polling ${queue.length} wallets (priority=${targetPriority})`);
     let totalMintsDetected = 0;
 
+    // ═══ TIER 2: Check predictive burst mode flag ═══
+    let predictiveBurstEnabled = false;
+    try {
+      const { data: burstFlag } = await supabase
+        .from('intelligence_feature_flags')
+        .select('enabled')
+        .eq('feature_name', 'predictive_burst_mode')
+        .single();
+      predictiveBurstEnabled = burstFlag?.enabled ?? false;
+    } catch { /* flag table may not exist yet */ }
+
     for (const item of queue) {
       await sleep(DELAY_MS);
       const sigs = await fetchNewSignatures(rpcUrl, item.wallet_address, item.last_signature || undefined);
@@ -259,6 +270,38 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
           burst_mode_until: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
           next_poll_at: new Date(now.getTime() + 60000).toISOString(),
         }).eq('family_id', item.family_id);
+      }
+
+      // ═══ TIER 2: Predictive Burst Mode — detect SOL inflows as pre-mint signal ═══
+      if (predictiveBurstEnabled && !mintsFound && sigs.length > 0) {
+        try {
+          for (const sigInfo of sigs.slice(0, 5)) {
+            const tx = await fetchTransaction(rpcUrl, sigInfo.signature);
+            if (!tx?.meta?.preBalances || !tx?.meta?.postBalances) continue;
+            const accountKeys = tx.transaction?.message?.accountKeys?.map((k: any) => typeof k === 'string' ? k : k.pubkey) || [];
+            const walletIdx = accountKeys.indexOf(item.wallet_address);
+            if (walletIdx === -1) continue;
+            const preBal = (tx.meta.preBalances[walletIdx] || 0) / 1e9;
+            const postBal = (tx.meta.postBalances[walletIdx] || 0) / 1e9;
+            const inflow = postBal - preBal;
+            if (inflow >= 0.5) {
+              console.log(`[FamilyMintMonitor] ⚡ PREDICTIVE: ${item.wallet_address.slice(0,8)} received ${inflow.toFixed(2)} SOL — activating burst mode`);
+              await supabase.from('wallet_family_poll_queue').update({
+                burst_mode_until: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
+                next_poll_at: new Date(now.getTime() + 60000).toISOString(),
+              }).eq('family_id', item.family_id);
+              await supabase.from('admin_notifications').insert({
+                notification_type: 'predictive_burst_triggered',
+                title: '⚡ Predictive Burst: SOL Inflow Detected',
+                message: `Wallet ${item.wallet_address.slice(0,8)}... received ${inflow.toFixed(2)} SOL. Burst mode activated for family.`,
+                metadata: { wallet: item.wallet_address, inflow_sol: inflow, family_id: item.family_id },
+              });
+              break;
+            }
+          }
+        } catch (predErr) {
+          console.warn('[FamilyMintMonitor] Predictive burst check failed:', predErr);
+        }
       }
 
       // Backoff for dormant wallets

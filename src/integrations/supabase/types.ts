@@ -2340,6 +2340,36 @@ export type Database = {
         }
         Relationships: []
       }
+      co_mint_clusters: {
+        Row: {
+          block_window: Json | null
+          cluster_id: string
+          confidence: number | null
+          created_at: string
+          id: string
+          mint_addresses: Json
+          wallet_addresses: Json
+        }
+        Insert: {
+          block_window?: Json | null
+          cluster_id: string
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          mint_addresses?: Json
+          wallet_addresses?: Json
+        }
+        Update: {
+          block_window?: Json | null
+          cluster_id?: string
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          mint_addresses?: Json
+          wallet_addresses?: Json
+        }
+        Relationships: []
+      }
       coingecko_error_alerts: {
         Row: {
           context: string | null
@@ -2867,6 +2897,48 @@ export type Database = {
           source_function?: string
           status?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      dev_behavior_scores: {
+        Row: {
+          avg_lifespan_hours: number | null
+          created_at: string
+          dump_velocity_score: number | null
+          evidence: Json | null
+          id: string
+          mint_count: number | null
+          risk_tier: string
+          scored_at: string
+          supply_retention_pct: number | null
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          avg_lifespan_hours?: number | null
+          created_at?: string
+          dump_velocity_score?: number | null
+          evidence?: Json | null
+          id?: string
+          mint_count?: number | null
+          risk_tier?: string
+          scored_at?: string
+          supply_retention_pct?: number | null
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          avg_lifespan_hours?: number | null
+          created_at?: string
+          dump_velocity_score?: number | null
+          evidence?: Json | null
+          id?: string
+          mint_count?: number | null
+          risk_tier?: string
+          scored_at?: string
+          supply_retention_pct?: number | null
+          updated_at?: string
+          wallet_address?: string
         }
         Relationships: []
       }
@@ -5462,6 +5534,27 @@ export type Database = {
           style_type?: string
           thumbnail_url?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      intelligence_feature_flags: {
+        Row: {
+          description: string | null
+          enabled: boolean
+          feature_name: string
+          updated_at: string
+        }
+        Insert: {
+          description?: string | null
+          enabled?: boolean
+          feature_name: string
+          updated_at?: string
+        }
+        Update: {
+          description?: string | null
+          enabled?: boolean
+          feature_name?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -13186,6 +13279,42 @@ export type Database = {
           source_function?: string | null
           token_mint?: string
           warning_type?: string
+        }
+        Relationships: []
+      }
+      token_fingerprints: {
+        Row: {
+          cluster_id: string | null
+          created_at: string
+          description_hash: string | null
+          id: string
+          image_hash: string | null
+          match_count: number | null
+          metadata: Json | null
+          name_hash: string | null
+          token_mint: string
+        }
+        Insert: {
+          cluster_id?: string | null
+          created_at?: string
+          description_hash?: string | null
+          id?: string
+          image_hash?: string | null
+          match_count?: number | null
+          metadata?: Json | null
+          name_hash?: string | null
+          token_mint: string
+        }
+        Update: {
+          cluster_id?: string | null
+          created_at?: string
+          description_hash?: string | null
+          id?: string
+          image_hash?: string | null
+          match_count?: number | null
+          metadata?: Json | null
+          name_hash?: string | null
+          token_mint?: string
         }
         Relationships: []
       }
