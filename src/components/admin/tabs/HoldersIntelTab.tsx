@@ -18,6 +18,7 @@ const DailiesDashboard = lazy(() => import("@/components/admin/DailiesDashboard"
 const TokenXDashboard = lazy(() => import("@/components/admin/TokenXDashboard").then(m => ({ default: m.TokenXDashboard })));
 const SubscribersDashboard = lazy(() => import("@/components/admin/SubscribersDashboard").then(m => ({ default: m.SubscribersDashboard })));
 const TelegramCommandsPlanner = lazy(() => import("@/components/admin/TelegramCommandsPlanner"));
+const BoostsDashboard = lazy(() => import("@/components/admin/BoostsDashboard").then(m => ({ default: m.BoostsDashboard })));
 
 export default function HoldersIntelTab() {
   const [activeSubTab, setActiveSubTab] = useState("subscribers");
@@ -40,6 +41,7 @@ export default function HoldersIntelTab() {
         <TabsTrigger value="dailies">📅 Dailies</TabsTrigger>
         <TabsTrigger value="token-x">🐦 Token X</TabsTrigger>
         <TabsTrigger value="tg-commands">🤖 TG Commands</TabsTrigger>
+        <TabsTrigger value="boosts">🚀 Boosts</TabsTrigger>
       </TabsList>
 
       <TabsContent value="subscribers">
@@ -86,6 +88,9 @@ export default function HoldersIntelTab() {
       </TabsContent>
       <TabsContent value="tg-commands">
         {activeSubTab === "tg-commands" && <Suspense fallback={<LazyLoader />}><TelegramCommandsPlanner /></Suspense>}
+      </TabsContent>
+      <TabsContent value="boosts">
+        {activeSubTab === "boosts" && <Suspense fallback={<LazyLoader />}><BoostsDashboard /></Suspense>}
       </TabsContent>
     </Tabs>
   );
