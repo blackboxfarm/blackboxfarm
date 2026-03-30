@@ -35,6 +35,7 @@ import { AISummaryTeaser } from '@/components/premium/AISummaryTeaser';
 import { TierGate } from '@/components/premium/TierGate';
 import { useUserTier } from '@/hooks/useUserTier';
 import { ProFeatureTeasers } from '@/components/holders/ProFeatureTeasers';
+import { TestimonialCarousel } from '@/components/testimonials/TestimonialCarousel';
 import { SubscriberPromoSection } from '@/components/holders/SubscriberPromoSection';
 
 interface TokenHolder {

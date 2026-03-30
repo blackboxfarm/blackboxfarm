@@ -16,6 +16,7 @@ import aiIntelEntity from "@/assets/ai-intel-entity.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
 
 const TIERS = [
   {

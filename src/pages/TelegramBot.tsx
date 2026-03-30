@@ -26,6 +26,7 @@ import {
   Server,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { TestimonialCarousel } from '@/components/testimonials/TestimonialCarousel';
 
 
 

@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { XSuspendedPopover } from '@/components/XSuspendedPopover';
+import { TestimonialCarousel } from '@/components/testimonials/TestimonialCarousel';
 
 export default function Pricing() {
   const [searchParams, setSearchParams] = useSearchParams();

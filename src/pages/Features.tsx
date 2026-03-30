@@ -14,6 +14,7 @@ import { SocialIcon } from "@/components/token/SocialIcon";
 import holdersLogo from "@/assets/holders-logo.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
+import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
 
 const TIERS = [
   {
