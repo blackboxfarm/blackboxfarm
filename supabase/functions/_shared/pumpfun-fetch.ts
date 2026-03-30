@@ -12,8 +12,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const PUMPFUN_API = 'https://frontend-api-v3.pump.fun';
 
-// ── Global throttle: minimum 2.5 seconds between ANY pump.fun request ──
-const THROTTLE_MS = 2500;
+// ── Global throttle: minimum 5 seconds between ANY pump.fun request ──
+// Plus random jitter (0-3s) so parallel edge function invocations don't collide
+const THROTTLE_MS = 5000;
+const JITTER_MS = 3000;
 let lastRequestTime = 0;
 
 // Track 429s across the entire run to trigger admin alerts
@@ -28,8 +30,10 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function throttle() {
   const now = Date.now();
   const elapsed = now - lastRequestTime;
-  if (elapsed < THROTTLE_MS) {
-    await delay(THROTTLE_MS - elapsed);
+  const jitter = Math.floor(Math.random() * JITTER_MS);
+  const waitTime = THROTTLE_MS + jitter;
+  if (elapsed < waitTime) {
+    await delay(waitTime - elapsed);
   }
   lastRequestTime = Date.now();
 }
@@ -80,8 +84,8 @@ export async function pumpfunFetch(
 
       if (response.status === 429) {
         runRateLimitCount++;
-        const backoffMs = Math.pow(2, attempt) * 3000; // 3s, 6s, 12s (more conservative)
-        console.warn(`[${callerName}] 🚫 429 RATE LIMITED on ${tokenMint} (attempt ${attempt + 1}/${maxRetries}, backing off ${backoffMs}ms)`);
+        const backoffMs = Math.pow(2, attempt) * 10000; // 10s, 20s, 40s (very conservative)
+        console.warn(`[${callerName}] 🚫 429 RATE LIMITED on ${tokenMint} (attempt ${attempt + 1}/${maxRetries}, backing off ${backoffMs / 1000}s)`);
         
         // Send admin alert after 3 rate limits in a single run
         if (runRateLimitCount >= 3 && !alertSent) {
