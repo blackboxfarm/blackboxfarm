@@ -2,6 +2,7 @@
 import type { LaunchpadInfo } from "./lp-detection.ts";
 import { createApiLogger } from "./api-logger.ts";
 import { meshFeed } from "./mesh-feeder.ts";
+import { fetchPumpFunCoin } from "./pumpfun-fetch.ts";
 
 export interface CreatorInfo {
   wallet?: string;
