@@ -191,10 +191,6 @@ export default function Feed() {
 
   return (
     <SiteLayout>
-      <Helmet>
-        <title>Live Feed — BlackBox Token Intel | BlackBox Farm</title>
-        <meta name="description" content="Live feed of Solana token holder analysis reports. Search tokens, view health grades, and track market cap data from BlackBox Farm's intelligence engine." />
-      </Helmet>
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* Telegram Promo Banner */}
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex flex-col sm:flex-row items-center gap-3">
