@@ -14,6 +14,7 @@ import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
 
 const NAV_ITEMS = [
   { label: 'Overview', path: '/' },
+  { label: 'Live Feed', path: '/feed' },
   { label: 'AI Holder Analysis', path: '/holders' },
   { label: 'Telegram Bot', path: '/tgbot' },
   { label: 'Bubble Map', path: '/bubblepromo' },
