@@ -109,9 +109,9 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Nav Menu */}
-      <div className="border-b border-border bg-muted/30">
+      <div className="border-b border-border bg-muted/30 relative">
         <div className="container mx-auto px-4">
-          <nav className="flex items-center gap-1 overflow-x-auto py-1">
+          <nav className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide">
             {NAV_ITEMS.map((item) => {
               const isActive = location.pathname === item.path;
               return (
@@ -122,7 +122,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
                     "px-4 py-2.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                     isActive 
                       ? "bg-accent text-accent-foreground" 
-                      : "text-muted-foreground/60 hover:text-foreground hover:bg-accent/50"
+                      : "text-[hsl(270_40%_55%)] hover:text-foreground hover:bg-accent/50"
                   )}
                 >
                   {item.label}
@@ -130,6 +130,10 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
+        </div>
+        {/* Mobile scroll hint arrow */}
+        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-muted/80 to-transparent flex items-center justify-end pr-1 pointer-events-none md:hidden">
+          <ChevronRight className="h-4 w-4 text-[hsl(270_40%_55%)] animate-pulse" />
         </div>
       </div>
 
