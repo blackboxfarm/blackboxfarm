@@ -7010,6 +7010,7 @@ export type Database = {
           funnel_metrics: Json | null
           holders_intel_metrics: Json | null
           id: string
+          intelligence_stats: Json | null
           mesh_growth: Json | null
           new_signups: number
           new_signups_details: Json
@@ -7044,6 +7045,7 @@ export type Database = {
           funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
+          intelligence_stats?: Json | null
           mesh_growth?: Json | null
           new_signups?: number
           new_signups_details?: Json
@@ -7078,6 +7080,7 @@ export type Database = {
           funnel_metrics?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
+          intelligence_stats?: Json | null
           mesh_growth?: Json | null
           new_signups?: number
           new_signups_details?: Json
