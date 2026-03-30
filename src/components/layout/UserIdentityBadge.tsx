@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, User } from 'lucide-react';
+import { Settings, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
@@ -66,24 +66,26 @@ export function UserIdentityBadge() {
     }
   };
 
+  const { signOut } = useAuth();
+
   if (!user) return null;
 
   const label = displayName || user.email || 'User';
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 md:gap-2">
       {/* User Identity Chip */}
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold/10 border border-gold/40 shadow-[0_2px_8px_hsl(var(--gold)/0.15)]">
-        <User className="h-4 w-4 text-gold" />
-        <span className="text-sm font-medium text-foreground max-w-[180px] truncate">
+      <div className="flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-gold/10 border border-gold/40 shadow-[0_2px_8px_hsl(var(--gold)/0.15)]">
+        <User className="h-3.5 w-3.5 md:h-4 md:w-4 text-gold" />
+        <span className="text-xs md:text-sm font-medium text-foreground max-w-[100px] md:max-w-[180px] truncate">
           {label}
         </span>
 
-        {/* Gear icon for profile settings */}
+        {/* Gear icon for profile settings + logout */}
         <Popover open={profileOpen} onOpenChange={setProfileOpen}>
           <PopoverTrigger asChild>
             <button className="p-0.5 rounded hover:bg-gold/20 transition-colors">
-              <Settings className="h-4 w-4 text-gold" />
+              <Settings className="h-3.5 w-3.5 md:h-4 md:w-4 text-gold" />
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-64" align="end">
@@ -101,6 +103,15 @@ export function UserIdentityBadge() {
               <div className="text-xs text-muted-foreground">{user.email}</div>
               <Button size="sm" className="w-full" onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving...' : 'Save'}
+              </Button>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="w-full text-destructive hover:text-destructive gap-2"
+                onClick={() => { setProfileOpen(false); signOut(); }}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out
               </Button>
             </div>
           </PopoverContent>
