@@ -958,6 +958,51 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       .eq('is_read', false);
 
     // ═══════════════════════════════════════════════════════════════
+    // 16. INTELLIGENCE ENGINE STATS (Tier 1/2 features)
+    // ═══════════════════════════════════════════════════════════════
+    let intelligenceStats: Record<string, any> = {};
+    try {
+      // Feature flags status
+      const { data: flags } = await supabase.from('intelligence_feature_flags').select('*');
+      const enabledFlags = (flags || []).filter((f: any) => f.enabled).map((f: any) => f.feature_name);
+      const disabledFlags = (flags || []).filter((f: any) => !f.enabled).map((f: any) => f.feature_name);
+
+      // Dev behavior scores
+      const { count: totalScored } = await supabase.from('dev_behavior_scores').select('*', { count: 'exact', head: true });
+      const { count: badActors } = await supabase.from('dev_behavior_scores').select('*', { count: 'exact', head: true }).eq('risk_tier', 'bad_actor');
+      const { count: suspicious } = await supabase.from('dev_behavior_scores').select('*', { count: 'exact', head: true }).eq('risk_tier', 'suspicious');
+      const { count: newScoresOvernight } = await supabase.from('dev_behavior_scores').select('*', { count: 'exact', head: true })
+        .gte('scored_at', periodStart.toISOString()).lte('scored_at', periodEnd.toISOString());
+
+      // Token fingerprints
+      const { count: totalFingerprints } = await supabase.from('token_fingerprints').select('*', { count: 'exact', head: true });
+      const { count: clusteredFingerprints } = await supabase.from('token_fingerprints').select('*', { count: 'exact', head: true }).not('cluster_id', 'is', null);
+
+      // Co-mint clusters
+      const { count: totalClusters } = await supabase.from('co_mint_clusters').select('*', { count: 'exact', head: true });
+      const { count: newClustersOvernight } = await supabase.from('co_mint_clusters').select('*', { count: 'exact', head: true })
+        .gte('created_at', periodStart.toISOString()).lte('created_at', periodEnd.toISOString());
+
+      intelligenceStats = {
+        feature_flags: { enabled: enabledFlags, disabled: disabledFlags },
+        behavior_scores: { total: totalScored || 0, bad_actors: badActors || 0, suspicious: suspicious || 0, new_overnight: newScoresOvernight || 0 },
+        fingerprints: { total: totalFingerprints || 0, clustered: clusteredFingerprints || 0 },
+        co_mint_clusters: { total: totalClusters || 0, new_overnight: newClustersOvernight || 0 },
+      };
+
+      if ((badActors || 0) > 0 || (newClustersOvernight || 0) > 0) {
+        alerts.push({
+          level: 'info',
+          category: 'intelligence',
+          title: `Intelligence: ${badActors || 0} bad actors, ${newClustersOvernight || 0} new clusters overnight`,
+          detail: `${totalScored || 0} devs scored, ${totalFingerprints || 0} fingerprints, ${totalClusters || 0} clusters total`,
+        });
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch intelligence stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DETERMINE OVERALL STATUS
     // ═══════════════════════════════════════════════════════════════
     const criticalAlerts = alerts.filter(a => a.level === 'critical').length;
@@ -997,6 +1042,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         funnel_metrics: funnelMetrics,
         funnel_feed_throughput: funnelFeedThroughput,
         db_size_info: dbSizeInfo,
+        intelligence_stats: intelligenceStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -1188,6 +1234,22 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       if (meshGrowth.new_wallets_today > 0 || meshGrowth.new_social_links_today > 0) {
         tgMessage += `• New today: +${meshGrowth.new_wallets_today} wallets, +${meshGrowth.new_social_links_today} social links\n`;
       }
+    }
+
+    // Intelligence Engine section
+    if (intelligenceStats.behavior_scores) {
+      const bs = intelligenceStats.behavior_scores;
+      const fp = intelligenceStats.fingerprints;
+      const cm = intelligenceStats.co_mint_clusters;
+      const flags = intelligenceStats.feature_flags;
+      tgMessage += `\n🧠 **Intelligence Engine**\n`;
+      tgMessage += `• Features: ${flags?.enabled?.length || 0} active, ${flags?.disabled?.length || 0} disabled\n`;
+      tgMessage += `• Dev Scores: ${bs.total} total (🔴 ${bs.bad_actors} bad actors, 🟡 ${bs.suspicious} suspicious)\n`;
+      if (bs.new_overnight > 0) tgMessage += `• New scores overnight: +${bs.new_overnight}\n`;
+      tgMessage += `• Fingerprints: ${fp?.total || 0} (${fp?.clustered || 0} clustered)\n`;
+      tgMessage += `• Co-Mint Clusters: ${cm?.total || 0}`;
+      if ((cm?.new_overnight || 0) > 0) tgMessage += ` (+${cm.new_overnight} overnight)`;
+      tgMessage += `\n`;
     }
 
     if (Object.keys(funnelMetrics).length > 0) {

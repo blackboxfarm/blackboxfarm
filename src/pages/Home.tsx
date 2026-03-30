@@ -12,6 +12,7 @@ import {
 import { Link } from "react-router-dom";
 import { SocialIcon } from "@/components/token/SocialIcon";
 import holdersLogo from "@/assets/holders-logo.png";
+import aiIntelEntity from "@/assets/ai-intel-entity.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
@@ -241,6 +242,50 @@ export default function Home() {
             >
               🫧 BubbleMap
             </Button>
+          </div>
+
+          {/* Intelligence Promo Section */}
+          <div className="mt-10 max-w-5xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center rounded-xl border border-primary/20 bg-gradient-to-br from-background via-primary/5 to-background p-6 md:p-8">
+              {/* Left — AI Entity Image */}
+              <div className="flex justify-center">
+                <img 
+                  src={aiIntelEntity} 
+                  alt="BlackBox AI Intelligence Entity analyzing bubble map data" 
+                  className="rounded-lg max-h-[420px] w-auto object-contain drop-shadow-[0_0_30px_hsl(var(--primary)/0.3)]"
+                  loading="lazy"
+                />
+              </div>
+              {/* Right — Blurbs */}
+              <div className="space-y-5">
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">
+                  Intelligence That Works While You Sleep
+                </h2>
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <span className="text-2xl shrink-0">🛡️</span>
+                    <div>
+                      <p className="font-semibold text-foreground">Smarter Rug Detection</p>
+                      <p className="text-sm text-muted-foreground">Our intelligence engine scores developer behavior patterns, flagging repeat offenders and serial ruggers before they launch their next token. Bad actors can't hide behind fresh wallets anymore.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="text-2xl shrink-0">🔗</span>
+                    <div>
+                      <p className="font-semibold text-foreground">Shadow Network Discovery</p>
+                      <p className="text-sm text-muted-foreground">We detect coordinated wallet clusters that mint together in suspiciously tight windows. If "independent" wallets are secretly working together, we'll find the connection.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="text-2xl shrink-0">⚡</span>
+                    <div>
+                      <p className="font-semibold text-foreground">Pre-Mint Early Warnings</p>
+                      <p className="text-sm text-muted-foreground">Get alerts when known developers receive funding — a signal they're about to launch — giving you a head start before the mint even happens.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Channel vs Bot clarification */}
