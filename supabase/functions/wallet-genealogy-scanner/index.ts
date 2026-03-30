@@ -408,6 +408,45 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
           upstream_wallets: upstreamWallets,
           updated_at: new Date().toISOString(),
         }, { onConflict: "wallet_address" });
+
+      // ═══ TIER 2: Funding Tree Contamination ═══
+      try {
+        const { data: contFlag } = await supabase
+          .from('intelligence_feature_flags')
+          .select('enabled')
+          .eq('feature_name', 'funding_contamination')
+          .single();
+
+        if (contFlag?.enabled) {
+          // Check if any upstream wallets are flagged as bad actors
+          const { data: badScores } = await supabase
+            .from('dev_behavior_scores')
+            .select('wallet_address, risk_tier, dump_velocity_score')
+            .in('wallet_address', upstreamWallets)
+            .in('risk_tier', ['bad_actor', 'suspicious']);
+
+          for (const bad of (badScores || [])) {
+            const contaminationConfidence = bad.risk_tier === 'bad_actor' ? 80 : 55;
+            await supabase.from('reputation_mesh').upsert({
+              source_id: result.root_wallet,
+              source_type: 'wallet',
+              linked_id: bad.wallet_address,
+              linked_type: 'wallet',
+              relationship: 'funded_by_flagged',
+              confidence: contaminationConfidence,
+              discovered_via: 'wallet-genealogy-scanner',
+              evidence: {
+                funder_risk_tier: bad.risk_tier,
+                funder_dump_velocity: bad.dump_velocity_score,
+              },
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+
+            console.log(`[Genealogy] ⚠️ Contamination: ${result.root_wallet.slice(0,8)} funded by ${bad.risk_tier} wallet ${bad.wallet_address.slice(0,8)}`);
+          }
+        }
+      } catch (contErr) {
+        console.warn('[Genealogy] Contamination check failed:', contErr);
+      }
     }
 
     const response = {
