@@ -317,6 +317,11 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Testimonial Carousel */}
+      <section className="max-w-4xl mx-auto px-4 py-6">
+        <TestimonialCarousel />
+      </section>
+
       {/* Three Pillars */}
       <section className="max-w-6xl mx-auto px-4 pb-20">
         <div className="text-center mb-12">
