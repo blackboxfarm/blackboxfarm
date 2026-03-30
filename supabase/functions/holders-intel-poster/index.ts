@@ -4,6 +4,7 @@ import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 import { withRunLog } from "../_shared/run-logger.ts";
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
+import { upsertHealthSnapshot } from "../_shared/snapshot-writer.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
