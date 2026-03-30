@@ -66,8 +66,8 @@ export default function HoldersLanding() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <FarmBanner />
+    <SiteLayout>
+      <div className="container mx-auto px-4 py-12 max-w-5xl">
       
       <div className="container mx-auto px-4 py-12 max-w-5xl">
         {/* Top CTA */}
