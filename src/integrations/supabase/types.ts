@@ -12772,6 +12772,101 @@ export type Database = {
           },
         ]
       }
+      testimonial_invites: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          label: string | null
+          max_uses: number | null
+          token: string
+          use_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          label?: string | null
+          max_uses?: number | null
+          token?: string
+          use_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          label?: string | null
+          max_uses?: number | null
+          token?: string
+          use_count?: number | null
+        }
+        Relationships: []
+      }
+      testimonials: {
+        Row: {
+          approved_at: string | null
+          avatar_url: string | null
+          created_at: string | null
+          display_name: string | null
+          id: string
+          invite_token: string | null
+          is_approved: boolean | null
+          is_internal: boolean | null
+          role_label: string | null
+          sort_order: number | null
+          submitted_at: string | null
+          testimonial_text: string
+          twitter_account_id: string | null
+          twitter_handle: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          invite_token?: string | null
+          is_approved?: boolean | null
+          is_internal?: boolean | null
+          role_label?: string | null
+          sort_order?: number | null
+          submitted_at?: string | null
+          testimonial_text: string
+          twitter_account_id?: string | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          invite_token?: string | null
+          is_approved?: boolean | null
+          is_internal?: boolean | null
+          role_label?: string | null
+          sort_order?: number | null
+          submitted_at?: string | null
+          testimonial_text?: string
+          twitter_account_id?: string | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "testimonials_twitter_account_id_fkey"
+            columns: ["twitter_account_id"]
+            isOneToOne: false
+            referencedRelation: "twitter_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       token_account_cleanup_logs: {
         Row: {
           accounts_closed: number
