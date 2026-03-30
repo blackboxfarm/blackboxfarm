@@ -16626,6 +16626,23 @@ export type Database = {
         }
         Relationships: []
       }
+      live_feed_curated: {
+        Row: {
+          banner_url: string | null
+          freshness_tier: number | null
+          health_grade: string | null
+          image_uri: string | null
+          last_activity: string | null
+          last_top_200_rank: number | null
+          name: string | null
+          posted_at: string | null
+          symbol: string | null
+          token_mint: string | null
+          trigger_source: string | null
+          tweet_id: string | null
+        }
+        Relationships: []
+      }
       master_token_directory: {
         Row: {
           ath_24h_usd: number | null
