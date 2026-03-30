@@ -12,8 +12,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const PUMPFUN_API = 'https://frontend-api-v3.pump.fun';
 
-// ── Global throttle: minimum 2.5 seconds between ANY pump.fun request ──
-const THROTTLE_MS = 2500;
+// ── Global throttle: minimum 5 seconds between ANY pump.fun request ──
+// Plus random jitter (0-3s) so parallel edge function invocations don't collide
+const THROTTLE_MS = 5000;
+const JITTER_MS = 3000;
 let lastRequestTime = 0;
 
 // Track 429s across the entire run to trigger admin alerts
@@ -28,8 +30,10 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function throttle() {
   const now = Date.now();
   const elapsed = now - lastRequestTime;
-  if (elapsed < THROTTLE_MS) {
-    await delay(THROTTLE_MS - elapsed);
+  const jitter = Math.floor(Math.random() * JITTER_MS);
+  const waitTime = THROTTLE_MS + jitter;
+  if (elapsed < waitTime) {
+    await delay(waitTime - elapsed);
   }
   lastRequestTime = Date.now();
 }
