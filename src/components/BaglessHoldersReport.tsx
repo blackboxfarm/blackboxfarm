@@ -35,6 +35,7 @@ import { AISummaryTeaser } from '@/components/premium/AISummaryTeaser';
 import { TierGate } from '@/components/premium/TierGate';
 import { useUserTier } from '@/hooks/useUserTier';
 import { ProFeatureTeasers } from '@/components/holders/ProFeatureTeasers';
+import { TestimonialCarousel } from '@/components/testimonials/TestimonialCarousel';
 import { SubscriberPromoSection } from '@/components/holders/SubscriberPromoSection';
 
 interface TokenHolder {
@@ -1879,6 +1880,13 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                   );
                 })()}
               </div>
+
+              {/* Testimonial Carousel - non-subscribers only */}
+              {!isPro && (
+                <div className="mb-4 md:mb-6 max-w-4xl mx-auto">
+                  <TestimonialCarousel />
+                </div>
+              )}
 
               {/* Pro Feature Teasers - Risk Assessment & Dev Reputation */}
               <div className="mb-4 md:mb-6">

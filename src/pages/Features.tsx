@@ -14,6 +14,7 @@ import { SocialIcon } from "@/components/token/SocialIcon";
 import holdersLogo from "@/assets/holders-logo.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
+import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
 
 const TIERS = [
   {
@@ -369,6 +370,11 @@ export default function Features() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Testimonial Carousel */}
+      <section className="max-w-4xl mx-auto px-4 py-6">
+        <TestimonialCarousel />
       </section>
 
       {/* Tier Comparison */}

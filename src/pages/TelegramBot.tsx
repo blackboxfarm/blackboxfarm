@@ -26,6 +26,7 @@ import {
   Server,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { TestimonialCarousel } from '@/components/testimonials/TestimonialCarousel';
 
 
 
@@ -130,6 +131,11 @@ export default function TelegramBot() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Testimonial Carousel */}
+      <section className="max-w-4xl mx-auto px-4 py-6">
+        <TestimonialCarousel />
       </section>
 
       <section className="mx-auto max-w-5xl px-4 py-16">

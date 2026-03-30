@@ -16,6 +16,7 @@ import aiIntelEntity from "@/assets/ai-intel-entity.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
 
 const TIERS = [
   {
@@ -315,6 +316,11 @@ export default function Home() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Testimonial Carousel */}
+      <section className="max-w-4xl mx-auto px-4 py-6">
+        <TestimonialCarousel />
       </section>
 
       {/* Three Pillars */}

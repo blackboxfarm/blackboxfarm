@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { XSuspendedPopover } from '@/components/XSuspendedPopover';
+import { TestimonialCarousel } from '@/components/testimonials/TestimonialCarousel';
 
 export default function Pricing() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,6 +50,11 @@ export default function Pricing() {
         </div>
 
         <PricingTable />
+
+        {/* Testimonial Carousel */}
+        <div className="max-w-4xl mx-auto py-4">
+          <TestimonialCarousel />
+        </div>
 
         {user && (
           <div className="max-w-md mx-auto">
