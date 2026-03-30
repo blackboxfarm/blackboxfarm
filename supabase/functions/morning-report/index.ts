@@ -1236,6 +1236,22 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
+    // Intelligence Engine section
+    if (intelligenceStats.behavior_scores) {
+      const bs = intelligenceStats.behavior_scores;
+      const fp = intelligenceStats.fingerprints;
+      const cm = intelligenceStats.co_mint_clusters;
+      const flags = intelligenceStats.feature_flags;
+      tgMessage += `\n🧠 **Intelligence Engine**\n`;
+      tgMessage += `• Features: ${flags?.enabled?.length || 0} active, ${flags?.disabled?.length || 0} disabled\n`;
+      tgMessage += `• Dev Scores: ${bs.total} total (🔴 ${bs.bad_actors} bad actors, 🟡 ${bs.suspicious} suspicious)\n`;
+      if (bs.new_overnight > 0) tgMessage += `• New scores overnight: +${bs.new_overnight}\n`;
+      tgMessage += `• Fingerprints: ${fp?.total || 0} (${fp?.clustered || 0} clustered)\n`;
+      tgMessage += `• Co-Mint Clusters: ${cm?.total || 0}`;
+      if ((cm?.new_overnight || 0) > 0) tgMessage += ` (+${cm.new_overnight} overnight)`;
+      tgMessage += `\n`;
+    }
+
     if (Object.keys(funnelMetrics).length > 0) {
       tgMessage += `\n🔬 **Token Funnel** (today)\n`;
       for (const [stage, count] of Object.entries(funnelMetrics)) {
