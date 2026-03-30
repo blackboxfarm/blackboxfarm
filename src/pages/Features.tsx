@@ -371,6 +371,11 @@ export default function Features() {
         </div>
       </section>
 
+      {/* Testimonial Carousel */}
+      <section className="max-w-4xl mx-auto px-4 py-6">
+        <TestimonialCarousel />
+      </section>
+
       {/* Tier Comparison */}
       <section className="max-w-6xl mx-auto px-4 py-20">
         <div className="text-center mb-12">
