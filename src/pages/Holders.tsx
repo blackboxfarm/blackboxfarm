@@ -3,11 +3,13 @@ import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 import { useHoldersPageTracking } from "@/hooks/useHoldersPageTracking";
 import { TelegramWebViewBanner } from "@/components/TelegramWebViewBanner";
 import { SiteLayout } from "@/components/layout/SiteLayout";
-import holdersHero from "@/assets/holders-hero.png";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { AnalysisOverview } from "@/components/holders/AnalysisOverview";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
   const [versionParam, setVersionParam] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<string>("report");
 
   const { trackReportGenerated } = useHoldersPageTracking({
     tokenPreloaded: tokenFromUrl,
@@ -24,14 +26,25 @@ export default function Holders() {
 
   return (
     <SiteLayout>
-      {/* Telegram WebView Banner */}
       <TelegramWebViewBanner />
 
-      {/* Main Content */}
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl">
-        <div className="w-full">
-          <BaglessHoldersReport initialToken={tokenFromUrl} onReportGenerated={trackReportGenerated} />
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="report">Token Holders Report</TabsTrigger>
+            <TabsTrigger value="overview">Analysis Overview</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="report" className="mt-0">
+            <div className="w-full">
+              <BaglessHoldersReport initialToken={tokenFromUrl} onReportGenerated={trackReportGenerated} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="overview" className="mt-0">
+            <AnalysisOverview />
+          </TabsContent>
+        </Tabs>
       </div>
     </SiteLayout>
   );
