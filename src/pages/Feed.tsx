@@ -301,10 +301,26 @@ export default function Feed() {
           </a>
         </div>
 
+        {/* Intelligence Warning Banner */}
+        <div className="rounded-lg border-2 border-amber-500/40 bg-amber-500/5 p-4 md:p-5 space-y-2">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl leading-none mt-0.5">⚠️</span>
+            <div className="space-y-1.5">
+              <p className="text-sm md:text-base font-bold text-amber-400 uppercase tracking-wide">Intelligence Data Notice</p>
+              <p className="text-xs md:text-sm text-foreground/90 leading-relaxed">
+                12-hour <strong>Health &amp; Risk Rating Blocks</strong> of the most recent <strong>active top 500 tokens</strong>, curated from our database of the last 30 days — filtered from the top 12,000 tokens scraped and collected from our <strong>65,000+ token database</strong> and growing daily.
+              </p>
+              <p className="text-xs md:text-sm text-foreground/70 leading-relaxed">
+                Spidered and cross-linked with wallets and community socials. Mouse over blocks for historical snapshots of grades and risk. Use the refresh button for the latest analysis on any token.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Header + Controls */}
         <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">Live Feed</h1>
+            <h1 className="text-2xl font-bold">Live Intel Feed</h1>
             <p className="text-sm text-muted-foreground">
               {totalCount.toLocaleString()} tokens curated — Top 200 + Intel Reports + Community Discoveries
             </p>
