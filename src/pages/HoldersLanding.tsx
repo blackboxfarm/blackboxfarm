@@ -168,6 +168,11 @@ export default function HoldersLanding() {
           </CardContent>
         </Card>
 
+        {/* Testimonial Carousel */}
+        <div className="mb-12 max-w-4xl mx-auto">
+          <TestimonialCarousel />
+        </div>
+
         {/* How It Works */}
         <Card className="mb-12 bg-muted/30">
           <CardHeader>
