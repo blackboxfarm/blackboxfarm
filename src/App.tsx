@@ -149,6 +149,7 @@ const App = () => {
                       <Route path="/holders-how-to" element={<HoldersHowTo />} />
                       <Route path="/bubbles-how-to" element={<BubblesHowTo />} />
                       <Route path="/testimonial-submit" element={<TestimonialSubmit />} />
+                      <Route path="/feed" element={<Feed />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
