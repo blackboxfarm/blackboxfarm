@@ -10,6 +10,7 @@
 
 import { getSolPriceWithLogging } from './sol-price-fetcher.ts';
 import { getHeliusRpcUrl, redactHeliusSecrets } from './helius-client.ts';
+import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 
 // ============================================
 // TYPES
@@ -546,17 +547,13 @@ async function fetchPumpFunApiPrice(tokenMint: string, solPriceUsd: number): Pro
   const start = Date.now();
   
   try {
-    const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000)
-    });
+    const data = await fetchPumpFunCoin(tokenMint, 'price-resolver');
 
-    if (!res.ok) {
-      console.log(`pump.fun API returned ${res.status} for ${tokenMint}`);
+    if (!data) {
+      console.log(`pump.fun API returned no data for ${tokenMint}`);
       return null;
     }
 
-    const data = await res.json();
     const latencyMs = Date.now() - start;
 
     // Check if token has graduated (complete = true means moved to Raydium)

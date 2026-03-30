@@ -1,14 +1,20 @@
 /**
  * Shared Pump.fun API fetch wrapper with:
+ * - Global rate limiter (max 1 request per THROTTLE_MS)
  * - Exponential backoff on 429 rate limits
  * - Structured logging for all calls
  * - Admin notifications on repeated rate limits
  * - Run-level stats tracking
+ * - Support for all endpoint types (/coins, /trades, /replies, /clips, /user-created-coins)
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const PUMPFUN_API = 'https://frontend-api-v3.pump.fun';
+
+// ── Global throttle: minimum 2.5 seconds between ANY pump.fun request ──
+const THROTTLE_MS = 2500;
+let lastRequestTime = 0;
 
 // Track 429s across the entire run to trigger admin alerts
 let runRateLimitCount = 0;
@@ -19,9 +25,18 @@ let alertSent = false;
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+async function throttle() {
+  const now = Date.now();
+  const elapsed = now - lastRequestTime;
+  if (elapsed < THROTTLE_MS) {
+    await delay(THROTTLE_MS - elapsed);
+  }
+  lastRequestTime = Date.now();
+}
+
 interface PumpFunFetchOptions {
   callerName: string;  // e.g. 'token-enricher', 'watchlist-monitor'
-  tokenMint: string;
+  tokenMint?: string;  // for logging context
   maxRetries?: number;
   timeoutMs?: number;
 }
@@ -34,16 +49,20 @@ interface PumpFunFetchResult {
 }
 
 /**
- * Fetch from pump.fun API with backoff, logging, and admin alert on rate limits.
+ * Fetch from pump.fun API with throttle, backoff, logging, and admin alert on rate limits.
  */
 export async function pumpfunFetch(
   endpoint: string,
   options: PumpFunFetchOptions
 ): Promise<PumpFunFetchResult> {
-  const { callerName, tokenMint, maxRetries = 3, timeoutMs = 8000 } = options;
+  const { callerName, tokenMint = 'unknown', maxRetries = 3, timeoutMs = 10000 } = options;
   const url = `${PUMPFUN_API}${endpoint}`;
   
   runTotalCalls++;
+
+  // Global throttle — wait if too soon after last request
+  await throttle();
+
   let lastStatus: number | null = null;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -61,7 +80,7 @@ export async function pumpfunFetch(
 
       if (response.status === 429) {
         runRateLimitCount++;
-        const backoffMs = Math.pow(2, attempt) * 2000; // 2s, 4s, 8s
+        const backoffMs = Math.pow(2, attempt) * 3000; // 3s, 6s, 12s (more conservative)
         console.warn(`[${callerName}] 🚫 429 RATE LIMITED on ${tokenMint} (attempt ${attempt + 1}/${maxRetries}, backing off ${backoffMs}ms)`);
         
         // Send admin alert after 3 rate limits in a single run
@@ -71,6 +90,7 @@ export async function pumpfunFetch(
         }
         
         await delay(backoffMs);
+        lastRequestTime = Date.now(); // Reset throttle after backoff
         continue;
       }
 
@@ -88,7 +108,8 @@ export async function pumpfunFetch(
 
       if (!response.ok) {
         runFailedCalls++;
-        console.warn(`[${callerName}] ⚠️ ${response.status} on ${tokenMint}`);
+        const body = await response.text().catch(() => '');
+        console.warn(`[${callerName}] ⚠️ ${response.status} on ${tokenMint}: ${body.slice(0, 200)}`);
         return { data: null, rateLimited: false, status: response.status, error: `HTTP ${response.status}` };
       }
 
@@ -105,9 +126,10 @@ export async function pumpfunFetch(
         return { data: null, rateLimited: false, status: null, error: 'Timeout' };
       }
       
-      const backoffMs = Math.pow(2, attempt) * 1000;
+      const backoffMs = Math.pow(2, attempt) * 2000;
       console.warn(`[${callerName}] ❌ Fetch error for ${tokenMint}: ${errMsg}, backing off ${backoffMs}ms`);
       await delay(backoffMs);
+      lastRequestTime = Date.now();
     }
   }
 
@@ -123,6 +145,55 @@ export async function pumpfunFetch(
 export async function fetchPumpFunCoin(mint: string, callerName: string): Promise<any | null> {
   const result = await pumpfunFetch(`/coins/${mint}`, { callerName, tokenMint: mint });
   return result.data;
+}
+
+/**
+ * Convenience: fetch user-created coins for a wallet
+ */
+export async function fetchPumpFunCreatorCoins(
+  walletAddress: string,
+  callerName: string,
+  limit = 50,
+  offset = 0
+): Promise<any[] | null> {
+  const result = await pumpfunFetch(
+    `/coins/user-created-coins/${walletAddress}?limit=${limit}&offset=${offset}`,
+    { callerName, tokenMint: walletAddress }
+  );
+  return result.data ? (Array.isArray(result.data) ? result.data : []) : null;
+}
+
+/**
+ * Convenience: fetch latest trades for a token
+ */
+export async function fetchPumpFunTrades(mint: string, callerName: string, limit = 100): Promise<any[] | null> {
+  const result = await pumpfunFetch(
+    `/trades/latest/${mint}?limit=${limit}`,
+    { callerName, tokenMint: mint }
+  );
+  return result.data ? (Array.isArray(result.data) ? result.data : []) : null;
+}
+
+/**
+ * Convenience: fetch replies/comments for a token
+ */
+export async function fetchPumpFunReplies(mint: string, callerName: string, limit = 50): Promise<any[] | null> {
+  const result = await pumpfunFetch(
+    `/replies/${mint}?limit=${limit}&offset=0`,
+    { callerName, tokenMint: mint }
+  );
+  return result.data ? (Array.isArray(result.data) ? result.data : []) : null;
+}
+
+/**
+ * Convenience: fetch new coins listing
+ */
+export async function fetchPumpFunNewCoins(callerName: string, limit = 50): Promise<any[] | null> {
+  const result = await pumpfunFetch(
+    `/coins?sort=created_timestamp&order=DESC&limit=${limit}`,
+    { callerName, tokenMint: 'listing' }
+  );
+  return result.data ? (Array.isArray(result.data) ? result.data : []) : null;
 }
 
 /**

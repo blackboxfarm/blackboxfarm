@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -202,10 +203,9 @@ async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; de
 // Check for Mayhem Mode (hard reject)
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
-    if (!response.ok) return false;
+    const data = await fetchPumpFunCoin(tokenMint, 'pumpfun-new-token-monitor');
+    if (!data) return false;
     
-    const data = await response.json();
     const totalSupply = data.total_supply || 0;
     const program = data.program || null;
     

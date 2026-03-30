@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-vip-monitor');
 
 /**
@@ -213,26 +214,23 @@ async function fetchTokenMetrics(mint: string): Promise<TokenMetrics | null> {
     console.log(`Jupiter failed for ${mint}`);
   }
 
-  // Fallback 3: Pump.fun API
+  // Fallback 3: Pump.fun API via wrapper
   try {
-    const pumpResponse = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (pumpResponse.ok) {
-      const pumpData = await pumpResponse.json();
-      
-      if (pumpData) {
-        return {
-          holders: 0,
-          volumeUsd: 0,
-          priceUsd: pumpData.usd_market_cap && pumpData.total_supply 
-            ? pumpData.usd_market_cap / pumpData.total_supply 
-            : null,
-          liquidityUsd: null,
-          marketCapUsd: pumpData.usd_market_cap || null,
-          buys: 0,
-          sells: 0,
-          source: 'pumpfun',
-        };
-      }
+    const pumpData = await fetchPumpFunCoin(mint, 'pumpfun-vip-monitor');
+    
+    if (pumpData) {
+      return {
+        holders: 0,
+        volumeUsd: 0,
+        priceUsd: pumpData.usd_market_cap && pumpData.total_supply 
+          ? pumpData.usd_market_cap / pumpData.total_supply 
+          : null,
+        liquidityUsd: null,
+        marketCapUsd: pumpData.usd_market_cap || null,
+        buys: 0,
+        sells: 0,
+        source: 'pumpfun',
+      };
     }
   } catch (error) {
     console.log(`Pump.fun failed for ${mint}`);
@@ -244,10 +242,9 @@ async function fetchTokenMetrics(mint: string): Promise<TokenMetrics | null> {
 // Fetch social info (Twitter, Telegram, Website)
 async function fetchSocialInfo(mint: string): Promise<{ twitter?: string; telegram?: string; website?: string } | null> {
   try {
-    const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (!response.ok) return null;
+    const data = await fetchPumpFunCoin(mint, 'pumpfun-vip-monitor');
+    if (!data) return null;
     
-    const data = await response.json();
     return {
       twitter: data.twitter || null,
       telegram: data.telegram || null,

@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { withRunLog } from '../_shared/run-logger.ts';
+import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,21 +132,12 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
             const isPumpToken = token.token_mint?.endsWith('pump') || token.launchpad === 'pump.fun';
             
             if (isPumpToken) {
-              const pumpResponse = await fetch(
-                `https://frontend-api-v3.pump.fun/coins/${token.token_mint}`,
-                {
-                  headers: { 'Accept': 'application/json' },
-                  signal: AbortSignal.timeout(5000),
-                }
-              );
+              const pumpData = await fetchPumpFunCoin(token.token_mint, 'enrich-scraped-tokens');
 
-              if (pumpResponse.ok) {
-                const pumpData = await pumpResponse.json();
-                if (pumpData.creator) {
-                  updates.creator_wallet = pumpData.creator;
-                  updates.creator_fetched_at = new Date().toISOString();
-                  needsUpdate = true;
-                }
+              if (pumpData?.creator) {
+                updates.creator_wallet = pumpData.creator;
+                updates.creator_fetched_at = new Date().toISOString();
+                needsUpdate = true;
               }
             } else {
               // For non-pump tokens, use solscan-creator-lookup
