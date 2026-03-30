@@ -84,8 +84,8 @@ export async function pumpfunFetch(
 
       if (response.status === 429) {
         runRateLimitCount++;
-        const backoffMs = Math.pow(2, attempt) * 3000; // 3s, 6s, 12s (more conservative)
-        console.warn(`[${callerName}] 🚫 429 RATE LIMITED on ${tokenMint} (attempt ${attempt + 1}/${maxRetries}, backing off ${backoffMs}ms)`);
+        const backoffMs = Math.pow(2, attempt) * 10000; // 10s, 20s, 40s (very conservative)
+        console.warn(`[${callerName}] 🚫 429 RATE LIMITED on ${tokenMint} (attempt ${attempt + 1}/${maxRetries}, backing off ${backoffMs / 1000}s)`);
         
         // Send admin alert after 3 rate limits in a single run
         if (runRateLimitCount >= 3 && !alertSent) {
