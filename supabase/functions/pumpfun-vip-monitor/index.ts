@@ -214,26 +214,23 @@ async function fetchTokenMetrics(mint: string): Promise<TokenMetrics | null> {
     console.log(`Jupiter failed for ${mint}`);
   }
 
-  // Fallback 3: Pump.fun API
+  // Fallback 3: Pump.fun API via wrapper
   try {
-    const pumpResponse = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
-    if (pumpResponse.ok) {
-      const pumpData = await pumpResponse.json();
-      
-      if (pumpData) {
-        return {
-          holders: 0,
-          volumeUsd: 0,
-          priceUsd: pumpData.usd_market_cap && pumpData.total_supply 
-            ? pumpData.usd_market_cap / pumpData.total_supply 
-            : null,
-          liquidityUsd: null,
-          marketCapUsd: pumpData.usd_market_cap || null,
-          buys: 0,
-          sells: 0,
-          source: 'pumpfun',
-        };
-      }
+    const pumpData = await fetchPumpFunCoin(mint, 'pumpfun-vip-monitor');
+    
+    if (pumpData) {
+      return {
+        holders: 0,
+        volumeUsd: 0,
+        priceUsd: pumpData.usd_market_cap && pumpData.total_supply 
+          ? pumpData.usd_market_cap / pumpData.total_supply 
+          : null,
+        liquidityUsd: null,
+        marketCapUsd: pumpData.usd_market_cap || null,
+        buys: 0,
+        sells: 0,
+        source: 'pumpfun',
+      };
     }
   } catch (error) {
     console.log(`Pump.fun failed for ${mint}`);
