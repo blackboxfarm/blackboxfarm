@@ -64,9 +64,14 @@ export default function TestimonialSubmit() {
     if (error) {
       toast({ title: 'Submission failed', description: error.message, variant: 'destructive' });
     } else {
-      // Increment use_count
+      // Increment use_count via direct update
       if (token) {
-        await supabase.rpc('increment_invite_use_count' as any, { _token: token }).catch(() => {});
+        try {
+          const { data: inv } = await supabase.from('testimonial_invites').select('use_count').eq('token', token).single();
+          if (inv) {
+            await supabase.from('testimonial_invites').update({ use_count: (inv.use_count || 0) + 1 }).eq('token', token);
+          }
+        } catch {}
       }
       setSubmitted(true);
       toast({ title: 'Thank you!', description: 'Your testimonial has been submitted for review.' });
