@@ -37,74 +37,73 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
       </Link>
 
       {/* Header */}
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-3">
+      <div className="container mx-auto px-4 py-3 md:py-4">
+        <div className="flex items-center justify-between gap-2">
+          {/* Left: Logo + title */}
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            <Link to="/" className="flex items-center gap-2 md:gap-3 shrink-0">
               <img 
                 src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
                 alt="BlackBox Cube Logo" 
-                className="w-10 h-10 md:w-12 md:h-12"
+                className="w-8 h-8 md:w-12 md:h-12"
               />
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              <h1 className="text-xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent whitespace-nowrap">
                 BlackBox Farm
               </h1>
             </Link>
             <SolPriceDisplay size="lg" className="ml-4 hidden md:flex" />
           </div>
-          
-          <p className="text-lg text-muted-foreground md:hidden">
-            Putting the needle in the haystack — follow the wallets.
-          </p>
 
-          <div className="flex items-center gap-3">
+          {/* Right: Auth area - compact on mobile */}
+          <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
             {isSuperAdmin && (
               <Button 
                 onClick={() => navigate("/super-admin")}
                 variant="outline"
                 size="sm"
-                className="border-primary/50 text-primary hover:bg-primary/10"
+                className="border-primary/50 text-primary hover:bg-primary/10 hidden md:flex"
               >
                 <Shield className="mr-2 h-4 w-4" />
                 Super Admin
               </Button>
             )}
+            {isSuperAdmin && (
+              <Button 
+                onClick={() => navigate("/super-admin")}
+                variant="outline"
+                size="icon"
+                className="border-primary/50 text-primary hover:bg-primary/10 md:hidden h-8 w-8"
+              >
+                <Shield className="h-4 w-4" />
+              </Button>
+            )}
             {user ? (
-              <>
-                <UserIdentityBadge />
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => signOut()}
-                  className="gap-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </Button>
-              </>
+              <UserIdentityBadge />
             ) : (
-              <>
+              <div className="flex items-center gap-1.5 md:gap-2">
                 <Button 
                   variant="outline"
+                  size="sm"
                   onClick={() => { setAuthModalTab('signin'); setShowAuthModal(true); }}
-                  className="gap-2"
+                  className="gap-1.5 text-xs md:text-sm h-8 md:h-9 px-2.5 md:px-4"
                 >
-                  <LogIn className="h-4 w-4" />
-                  Sign In
+                  <LogIn className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                  <span className="hidden sm:inline">Sign In</span>
                 </Button>
                 <Button 
+                  size="sm"
                   onClick={() => { setAuthModalTab('signup'); setShowAuthModal(true); }}
-                  className="gap-2"
+                  className="gap-1.5 text-xs md:text-sm h-8 md:h-9 px-2.5 md:px-4"
                 >
-                  <UserPlus className="h-4 w-4" />
-                  Join BlackBox
+                  <UserPlus className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                  <span className="hidden sm:inline">Join BlackBox</span>
                 </Button>
-              </>
+              </div>
             )}
           </div>
         </div>
 
-        <p className="text-lg text-muted-foreground mt-2 hidden md:block">
+        <p className="text-sm md:text-lg text-muted-foreground mt-1 md:mt-2">
           Putting the needle in the haystack — follow the wallets.
         </p>
       </div>
