@@ -12,6 +12,7 @@ import {
 import { Link } from "react-router-dom";
 import { SocialIcon } from "@/components/token/SocialIcon";
 import holdersLogo from "@/assets/holders-logo.png";
+import aiIntelEntity from "@/assets/ai-intel-entity.png";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
