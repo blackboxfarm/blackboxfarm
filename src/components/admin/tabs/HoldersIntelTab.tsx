@@ -89,6 +89,9 @@ export default function HoldersIntelTab() {
       <TabsContent value="tg-commands">
         {activeSubTab === "tg-commands" && <Suspense fallback={<LazyLoader />}><TelegramCommandsPlanner /></Suspense>}
       </TabsContent>
+      <TabsContent value="boosts">
+        {activeSubTab === "boosts" && <Suspense fallback={<LazyLoader />}><BoostsDashboard /></Suspense>}
+      </TabsContent>
     </Tabs>
   );
 }
