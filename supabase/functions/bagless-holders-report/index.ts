@@ -1035,6 +1035,19 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       console.warn('[TokenSearchLogger] Background logging error:', e)
     );
 
+    // Write health snapshot for Litmus Strip (fire-and-forget)
+    upsertHealthSnapshot(supabaseForMesh, {
+      tokenMint,
+      healthScore,
+      healthGrade,
+      totalHolders: rankedHolders.length,
+      realHolders: rankedHolders.length - dustWallets,
+      dustPercentage: simpleTiers.dust.percentage,
+      whaleCount: simpleTiers.whales.count,
+      top10Pct: distributionStats?.top10Percentage ?? null,
+      source: 'holders_query',
+    }).catch(e => console.warn('[bagless] Snapshot write failed:', e));
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
