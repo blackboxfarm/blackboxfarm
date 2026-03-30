@@ -44,8 +44,7 @@ serve(withRunLog('flipit-backfill-socials', async (req) => {
           try {
             console.log(`Trying pump.fun API for ${position.token_mint}`);
             const pumpData = await fetchPumpFunCoin(position.token_mint, 'flipit-backfill-socials');
-            if (pumpRes.ok) {
-              const pumpData = await pumpRes.json();
+            if (pumpData) {
               tokenImage = pumpData.image_uri || pumpData.metadata?.image || null;
               twitterUrl = pumpData.twitter || null;
               websiteUrl = pumpData.website || null;

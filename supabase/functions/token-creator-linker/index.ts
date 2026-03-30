@@ -16,12 +16,11 @@ const corsHeaders = {
  */
 async function resolvePumpFunCreator(tokenMint: string): Promise<string | null> {
   try {
-    const res_data = await fetchPumpFunCoin(tokenMint, 'token-creator-linker');
-    if (!res.ok) {
-      console.log(`[CreatorLinker] pump.fun API returned ${res.status} for ${tokenMint}`);
+    const data = await fetchPumpFunCoin(tokenMint, 'token-creator-linker');
+    if (!data) {
+      console.log(`[CreatorLinker] pump.fun API returned no data for ${tokenMint}`);
       return null;
     }
-    const data = await res.json();
     const creator = data?.creator;
     if (creator && typeof creator === 'string' && creator.length >= 32) {
       console.log(`[CreatorLinker] pump.fun API resolved creator: ${creator}`);

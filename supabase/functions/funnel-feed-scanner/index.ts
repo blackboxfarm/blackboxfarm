@@ -53,16 +53,10 @@ async function validateTokenMint(mint: string): Promise<{ valid: boolean; symbol
 
 // Quick metadata fetch: pump.fun first, then DexScreener fallback
 async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: string }> {
-  // Try pump.fun first
+  // Try pump.fun first (throttled)
   try {
-    const pfData = await fetchPumpFunCoin(mint, 'funnel-feed-scanner'); const res = { ok: !!pfData, json: async () => pfData }; // was fetch( {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.ok) {
-      const d = await res.json();
-      if (d.symbol) return { symbol: d.symbol, name: d.name || undefined };
-    }
+    const d = await fetchPumpFunCoin(mint, 'funnel-feed-scanner');
+    if (d?.symbol) return { symbol: d.symbol, name: d.name || undefined };
   } catch { /* fall through */ }
 
   // Fallback: DexScreener
