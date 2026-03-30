@@ -50,7 +50,7 @@ export function LitmusStrip({ tokenMint, tokenCreatedAt, className, onRefresh }:
 
   const fetchSnapshots = async () => {
     const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from('token_health_snapshots')
       .select('snapshot_hour, health_grade, health_score, risk_emoji, risk_label, total_holders, dust_percentage')
       .eq('token_mint', tokenMint)
