@@ -28,15 +28,11 @@ export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: 
         requestType: 'creator_lookup',
       });
       
-      const pumpResp = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(5000)
-      });
+      const pumpData = await fetchPumpFunCoin(tokenMint, 'creator-api');
       
-      await logger.complete(pumpResp.status);
+      await logger.complete(pumpData ? 200 : 404);
       
-      if (pumpResp.ok) {
-        const pumpData = await pumpResp.json();
+      if (pumpData) {
         creatorInfo.wallet = pumpData.creator;
         creatorInfo.bondingCurveProgress = pumpData.bonding_curve_progress;
         
