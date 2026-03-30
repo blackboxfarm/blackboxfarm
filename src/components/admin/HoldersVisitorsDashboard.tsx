@@ -41,6 +41,8 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
+import { classifyReferrer, buildPlatformBreakdown, buildCategoryBreakdown, type ReferrerPlatform } from '@/utils/referrerPlatformDetector';
+import { UTMLinkBuilder } from './UTMLinkBuilder';
 
 interface VisitRecord {
   id: string;
