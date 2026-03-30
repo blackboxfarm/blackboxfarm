@@ -13,7 +13,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Helmet } from 'react-helmet-async';
+
 
 const PAGE_SIZE = 50;
 
