@@ -897,6 +897,10 @@ export function HoldersVisitorsDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="utm-builder">
+          <UTMLinkBuilder />
+        </TabsContent>
       </Tabs>
     </div>
   );
