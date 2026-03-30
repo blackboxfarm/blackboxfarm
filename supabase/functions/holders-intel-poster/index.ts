@@ -634,6 +634,19 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       
       console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}, post #${currentTimesPosted}`);
       
+      // EARLY WRITE: Always persist health_grade to seen_tokens as soon as analysis completes,
+      // regardless of whether the token passes quality checks or gets posted.
+      // This ensures the Live Feed always has grade data.
+      if (stats.healthGrade) {
+        await supabase
+          .from('holders_intel_seen_tokens')
+          .update({
+            health_grade: stats.healthGrade,
+          })
+          .eq('token_mint', item.token_mint);
+        console.log(`[poster] Early-wrote health_grade=${stats.healthGrade} for ${item.token_mint.slice(0, 8)}`);
+      }
+      
       // Quality checks
       if (stats.totalHolders < MIN_HOLDERS) {
         console.log(`[poster] Skipping: too few holders (${stats.totalHolders})`);
