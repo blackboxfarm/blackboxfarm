@@ -741,6 +741,22 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         console.log(`[poster] Risk: ${riskResult.signal}`);
       }
       
+      // Write health snapshot for Litmus Strip (fire-and-forget)
+      upsertHealthSnapshot(supabase, {
+        tokenMint: item.token_mint,
+        healthScore: stats.healthScore,
+        healthGrade: stats.healthGrade,
+        riskSignal: stats.risk,
+        riskLabel: riskResult?.label,
+        riskEmoji: riskResult?.emoji,
+        totalHolders: stats.totalHolders,
+        realHolders: stats.realHolders,
+        dustPercentage: stats.dustPercentage,
+        whaleCount: stats.whaleCount,
+        top10Pct: report?.distributionStats?.top10Percentage ?? null,
+        source: 'poster',
+      }).catch(e => console.warn('[poster] Snapshot write failed:', e));
+
       // Build tweet using the active template from database
       const tweetText = processTemplate(tweetTemplate, stats);
 
