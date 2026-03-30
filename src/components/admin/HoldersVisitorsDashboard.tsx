@@ -41,6 +41,8 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
+import { classifyReferrer, buildPlatformBreakdown, buildCategoryBreakdown, type ReferrerPlatform } from '@/utils/referrerPlatformDetector';
+import { UTMLinkBuilder } from './UTMLinkBuilder';
 
 interface VisitRecord {
   id: string;
@@ -307,20 +309,32 @@ export function HoldersVisitorsDashboard() {
   };
 
   const getSourceBadge = (visit: VisitRecord) => {
-    if (visit.has_og_image) {
-      return <Badge variant="secondary" className="bg-purple-500/20 text-purple-400">OG Share</Badge>;
+    const info = classifyReferrer(visit.referrer_domain, visit.utm_source, visit.utm_medium || null);
+    
+    const categoryColors: Record<string, string> = {
+      social: 'bg-blue-500/20 text-blue-400',
+      search: 'bg-yellow-500/20 text-yellow-400',
+      messaging: 'bg-purple-500/20 text-purple-400',
+      ad: 'bg-red-500/20 text-red-400',
+      crypto: 'bg-emerald-500/20 text-emerald-400',
+      direct: 'border-border text-muted-foreground',
+      other: 'border-border text-muted-foreground',
+    };
+
+    if (info.category === 'direct') {
+      return <Badge variant="outline" className="text-muted-foreground">{info.emoji} Direct</Badge>;
     }
-    if (visit.token_preloaded) {
-      return <Badge variant="secondary" className="bg-blue-500/20 text-blue-400">Token Link</Badge>;
-    }
-    if (visit.utm_source) {
-      return <Badge variant="secondary" className="bg-green-500/20 text-green-400">{visit.utm_source}</Badge>;
-    }
-    if (visit.referrer_domain) {
-      return <Badge variant="outline">{visit.referrer_domain}</Badge>;
-    }
-    return <Badge variant="outline" className="text-muted-foreground">Direct</Badge>;
+
+    return (
+      <Badge variant="secondary" className={categoryColors[info.category] || ''}>
+        {info.emoji} {info.label}
+      </Badge>
+    );
   };
+
+  // Platform & category breakdowns for charts
+  const platformBreakdown = useMemo(() => buildPlatformBreakdown(visits), [visits]);
+  const categoryBreakdown = useMemo(() => buildCategoryBreakdown(visits), [visits]);
 
   if (loading) {
     return (
@@ -568,20 +582,118 @@ export function HoldersVisitorsDashboard() {
         </Card>
       </div>
 
-      <Tabs defaultValue="referrers" className="space-y-4">
+      <Tabs defaultValue="sources" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="sources">📱 Source Platforms</TabsTrigger>
+          <TabsTrigger value="categories">📊 Categories</TabsTrigger>
           <TabsTrigger value="referrers">Top Referrers</TabsTrigger>
           <TabsTrigger value="tokens">Top Tokens</TabsTrigger>
           <TabsTrigger value="session-tokens">Tokens/Session</TabsTrigger>
           <TabsTrigger value="auth-methods">Auth Methods</TabsTrigger>
           <TabsTrigger value="browsers">Browsers</TabsTrigger>
           <TabsTrigger value="recent">Recent Visits</TabsTrigger>
+          <TabsTrigger value="utm-builder">🔗 Link Builder</TabsTrigger>
         </TabsList>
+
+        {/* Source Platform Breakdown */}
+        <TabsContent value="sources">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Traffic by Platform</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={platformBreakdown.slice(0, 12)} layout="vertical">
+                      <XAxis type="number" />
+                      <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }} 
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Platform</TableHead>
+                      <TableHead className="text-right">Visits</TableHead>
+                      <TableHead className="text-right">%</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {platformBreakdown.slice(0, 15).map((item, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{item.emoji} {item.label}</TableCell>
+                        <TableCell className="text-right">{item.count}</TableCell>
+                        <TableCell className="text-right">
+                          {stats.totalVisits > 0 ? Math.round((item.count / stats.totalVisits) * 100) : 0}%
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Category Breakdown */}
+        <TabsContent value="categories">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Traffic by Category</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryBreakdown.map(c => ({ name: c.category, value: c.count }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {categoryBreakdown.map((_, index) => (
+                          <Cell key={`cat-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3">
+                  {categoryBreakdown.map((cat, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                      <span className="text-sm font-medium">{cat.category}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold">{cat.count}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {stats.totalVisits > 0 ? Math.round((cat.count / stats.totalVisits) * 100) : 0}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="referrers">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Traffic Sources</CardTitle>
+              <CardTitle className="text-sm font-medium">Raw Referrer Domains</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -784,6 +896,10 @@ export function HoldersVisitorsDashboard() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="utm-builder">
+          <UTMLinkBuilder />
         </TabsContent>
       </Tabs>
     </div>
