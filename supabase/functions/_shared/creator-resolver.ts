@@ -44,6 +44,7 @@ export async function resolveTokenCreator(
         confidence: 100,
         errors: [],
       };
+    }
   } catch (e) {
     apiErrors.push(`Pump.fun API error: ${e instanceof Error ? e.message : 'timeout'}`);
   }
