@@ -1,9 +1,10 @@
 import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Twitter, Users, Bot } from "lucide-react";
+import { Twitter, Users, Bot, Send } from "lucide-react";
 import { MentionsTab } from "./twitter/MentionsTab";
 import { KOLsTab } from "./twitter/KOLsTab";
 import { CommentBotScanner } from "./CommentBotScanner";
+import { TGHuntersTab } from "./twitter/TGHuntersTab";
 
 export function TwitterScrapesView() {
   return (
