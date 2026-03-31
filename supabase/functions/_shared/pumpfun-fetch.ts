@@ -151,6 +151,76 @@ export async function pumpfunFetch(
 }
 
 /**
+ * Fallback: try the herokuapp mirror when main API returns 403.
+ * Only works for /coins endpoints.
+ */
+async function tryFallbackFetch(endpoint: string, options: PumpFunFetchOptions): Promise<any | null> {
+  const { callerName, tokenMint = 'unknown', timeoutMs = 10000 } = options;
+  
+  // Only attempt fallback for /coins/* endpoints (the most critical ones)
+  if (!endpoint.startsWith('/coins/')) {
+    console.warn(`[${callerName}] Fallback not available for endpoint: ${endpoint}`);
+    return null;
+  }
+
+  // Try 1: Herokuapp mirror
+  try {
+    const fallbackUrl = `${PUMPFUN_API_FALLBACK}${endpoint}`;
+    console.log(`[${callerName}] 🔄 Trying fallback mirror for ${tokenMint}...`);
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    
+    const response = await fetch(fallbackUrl, {
+      headers: PUMPFUN_HEADERS,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[${callerName}] ✅ Fallback mirror SUCCESS for ${tokenMint}`);
+      return data;
+    }
+    console.warn(`[${callerName}] Fallback mirror returned ${response.status} for ${tokenMint}`);
+  } catch (e) {
+    console.warn(`[${callerName}] Fallback mirror failed for ${tokenMint}:`, e instanceof Error ? e.message : e);
+  }
+
+  // Try 2: DexScreener as metadata-only fallback for /coins/{mint}
+  const mintMatch = endpoint.match(/^\/coins\/([A-Za-z0-9]+)$/);
+  if (mintMatch) {
+    try {
+      const mint = mintMatch[1];
+      console.log(`[${callerName}] 🔄 Trying DexScreener fallback for ${mint}...`);
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      if (dexRes.ok) {
+        const dexData = await dexRes.json();
+        const pair = dexData.pairs?.[0];
+        if (pair?.baseToken?.symbol) {
+          // Map DexScreener data to pump.fun-like shape for compatibility
+          const mapped = {
+            symbol: pair.baseToken.symbol,
+            name: pair.baseToken.name || pair.baseToken.symbol,
+            image_uri: pair.info?.imageUrl || null,
+            usd_market_cap: pair.marketCap || null,
+            twitter: pair.info?.socials?.find((s: any) => s.type === 'twitter')?.url || null,
+            website: pair.info?.websites?.[0]?.url || null,
+            _source: 'dexscreener_fallback',
+          };
+          console.log(`[${callerName}] ✅ DexScreener fallback SUCCESS for ${mint}: $${mapped.symbol}`);
+          return mapped;
+        }
+      }
+    } catch (e) {
+      console.warn(`[${callerName}] DexScreener fallback failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Convenience: fetch coin data from pump.fun
  */
 export async function fetchPumpFunCoin(mint: string, callerName: string): Promise<any | null> {
