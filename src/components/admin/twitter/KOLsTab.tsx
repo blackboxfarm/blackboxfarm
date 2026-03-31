@@ -688,15 +688,23 @@ export function KOLsTab() {
                         </div>
                       </div>
                       
-                      <a
-                        href={tweet.tweet_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </a>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <ReplyDraftButton
+                          tweetText={tweet.tweet_text}
+                          tweetAuthor={tweet.twitter_handle}
+                          detectedTickers={tweet.detected_tickers}
+                          detectedContracts={tweet.detected_contracts}
+                        />
+                        <a
+                          href={tweet.tweet_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </a>
+                      </div>
                     </div>
                   </div>
                 ))}
