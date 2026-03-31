@@ -432,8 +432,13 @@ export function TGHuntersTab() {
                           </div>
 
                           {/* Followers */}
-                          <div className="text-sm min-w-[60px]">
-                            {target.followers > 0 ? target.followers.toLocaleString() : '—'}
+                          <div className="text-sm min-w-[80px]">
+                            {target.followers > 0 ? (
+                              <span title="Followers">
+                                <span className="font-medium">{target.followers.toLocaleString()}</span>
+                                <span className="text-[10px] text-muted-foreground ml-1">followers</span>
+                              </span>
+                            ) : '—'}
                           </div>
 
                           {/* TG Links */}
