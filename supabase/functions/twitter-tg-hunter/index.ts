@@ -288,12 +288,13 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         });
       }
 
-      // Mark handles not returned by Apify as deleted
+      // Mark handles not returned by Apify as deleted + auto-archive
       for (const h of handleList) {
         if (!foundUsernames.has(h)) {
           await supabase.from('twitter_tg_targets').upsert({
             handle: h,
             account_status: 'deleted',
+            is_archived: true,
             last_scanned_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'handle' });
