@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import {
   RefreshCw, Plus, Search, Loader2, ExternalLink, Upload, Scan, MessageCircle, Send, Trash2,
-  ChevronDown, ChevronRight, Twitter, Radio, Zap, Pencil,
+  ChevronDown, ChevronRight, Twitter, Radio, Zap, Pencil, Archive, ArchiveRestore,
 } from "lucide-react";
 import { ReplyDraftButton } from "./ReplyDraftButton";
 
@@ -65,6 +65,7 @@ interface TweetFinding {
 export function TGHuntersTab() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [scanningHandle, setScanningHandle] = useState<string | null>(null);
@@ -73,12 +74,18 @@ export function TGHuntersTab() {
   const [manualTgLink, setManualTgLink] = useState("");
 
   const { data: targets, isLoading } = useQuery({
-    queryKey: ["tg-targets"],
+    queryKey: ["tg-targets", showArchived],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("twitter_tg_targets" as any)
         .select("*")
         .order("priority_score", { ascending: false });
+      
+      if (!showArchived) {
+        query = query.eq("is_archived", false);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as unknown as TGTarget[];
     },
@@ -241,6 +248,21 @@ export function TGHuntersTab() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async ({ id, archive }: { id: string; archive: boolean }) => {
+      const { error } = await supabase
+        .from("twitter_tg_targets" as any)
+        .update({ is_archived: archive } as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { archive }) => {
+      toast.success(archive ? "Target archived" : "Target restored");
+      queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -392,6 +414,16 @@ export function TGHuntersTab() {
                 Scan All Missing TG ({missingTG})
               </>
             )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowArchived(!showArchived)}
+            className={showArchived ? 'border-amber-500/50 text-amber-400' : ''}
+          >
+            <Archive className="h-4 w-4 mr-2" />
+            {showArchived ? 'Hide Archived' : `Show Archived (${deadAccounts})`}
           </Button>
 
           <Button
@@ -629,10 +661,22 @@ export function TGHuntersTab() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-7 w-7 text-amber-400 hover:text-amber-300"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                archiveMutation.mutate({ id: target.id, archive: !(target as any).is_archived });
+                              }}
+                              title={(target as any).is_archived ? "Restore from archive" : "Archive target"}
+                            >
+                              {(target as any).is_archived ? <ArchiveRestore className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-7 w-7 text-destructive hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (confirm(`Remove @${target.handle}?`)) {
+                                if (confirm(`Permanently delete @${target.handle}?`)) {
                                   deleteMutation.mutate(target.id);
                                 }
                               }}
