@@ -135,8 +135,8 @@ async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false)
     // Retry with next config if available
     if (configIndex + 1 < SCRAPE_CONFIGS.length) {
       console.warn(`[DexTop200] Attempt ${attempt} failed for ${url}: ${errMsg}. Retrying...`);
-      await new Promise(r => setTimeout(r, 2000)); // brief cooldown
-      return scrapePageMarkdown(url, configIndex + 1);
+      await new Promise(r => setTimeout(r, 3000));
+      return scrapePageMarkdown(url, configIndex + 1, isPage2);
     }
     
     throw new Error(errMsg);
