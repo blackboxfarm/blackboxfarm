@@ -74,12 +74,18 @@ export function TGHuntersTab() {
   const [manualTgLink, setManualTgLink] = useState("");
 
   const { data: targets, isLoading } = useQuery({
-    queryKey: ["tg-targets"],
+    queryKey: ["tg-targets", showArchived],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("twitter_tg_targets" as any)
         .select("*")
         .order("priority_score", { ascending: false });
+      
+      if (!showArchived) {
+        query = query.eq("is_archived", false);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as unknown as TGTarget[];
     },
