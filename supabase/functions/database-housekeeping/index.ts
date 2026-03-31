@@ -207,6 +207,9 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
       'banner_impressions': 'created_at',
       'banner_clicks': 'created_at',
       'helius_api_usage': 'timestamp',
+      'holder_movements': 'detected_at',
+      'holder_snapshots': 'snapshot_date',
+      'token_rankings': 'created_at',
     };
 
     for (const [table, days] of Object.entries(retention)) {
