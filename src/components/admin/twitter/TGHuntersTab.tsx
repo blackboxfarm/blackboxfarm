@@ -248,6 +248,21 @@ export function TGHuntersTab() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async ({ id, archive }: { id: string; archive: boolean }) => {
+      const { error } = await supabase
+        .from("twitter_tg_targets" as any)
+        .update({ is_archived: archive } as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { archive }) => {
+      toast.success(archive ? "Target archived" : "Target restored");
+      queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
