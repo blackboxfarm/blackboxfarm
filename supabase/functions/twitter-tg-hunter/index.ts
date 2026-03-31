@@ -82,8 +82,9 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         }
       }
 
+      console.log('Clean samples:', samples);
       return new Response(
-        JSON.stringify({ success: true, cleaned, total: all?.length || 0 }),
+        JSON.stringify({ success: true, cleaned, total: all?.length || 0, samples }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
