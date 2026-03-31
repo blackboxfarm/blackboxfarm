@@ -100,14 +100,21 @@ export async function pumpfunFetch(
 
       if (response.status === 403) {
         runFailedCalls++;
-        console.error(`[${callerName}] 🔒 403 FORBIDDEN on ${tokenMint} — pump.fun may be blocking us`);
+        console.error(`[${callerName}] 🔒 403 FORBIDDEN on ${tokenMint} — trying fallback mirror`);
+        
+        // Try fallback API mirror before giving up
+        const fallbackResult = await tryFallbackFetch(endpoint, options);
+        if (fallbackResult) {
+          runSuccessCalls++;
+          return { data: fallbackResult, rateLimited: false, status: 200 };
+        }
         
         if (!alertSent) {
           await sendBlockedAlert(callerName, tokenMint);
           alertSent = true;
         }
         
-        return { data: null, rateLimited: false, status: 403, error: 'Forbidden - possibly blocked' };
+        return { data: null, rateLimited: false, status: 403, error: 'Forbidden - blocked, fallback also failed' };
       }
 
       if (!response.ok) {
