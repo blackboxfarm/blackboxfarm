@@ -223,15 +223,18 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       );
     }
 
-    // ── Scan all missing TG links ──
+    // ── Scan all missing TG links (batch of 5 at a time) ──
     if (action === 'scan-all-missing') {
+      const batchSize = 5;
+
       const { data: targets, error: fetchErr } = await supabase
         .from('twitter_tg_targets')
         .select('handle, account_status')
         .eq('is_active', true)
-        .or('telegram_links.is.null,telegram_links.eq.[]')
+        .or('telegram_links.is.null,telegram_links.eq.{}')
         .not('account_status', 'in', '("suspended","deleted")')
-        .order('last_scanned_at', { ascending: true, nullsFirst: true });
+        .order('last_scanned_at', { ascending: true, nullsFirst: true })
+        .limit(batchSize);
 
       if (fetchErr) throw fetchErr;
 
@@ -244,27 +247,60 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         }
 
         try {
-          const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/twitter-tg-hunter`;
-          const res = await fetch(selfUrl, {
+          // Inline scan instead of self-calling to avoid timeout
+          const clean = cleanHandle(target.handle);
+          const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
+          if (!apiKey) { results.push({ handle: clean, success: false, error: 'No API key' }); continue; }
+
+          const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ action: 'scan-handle', handle: target.handle }),
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: `https://x.com/${clean}`, formats: ['markdown', 'links'], onlyMainContent: false, storeInCache: false }),
           });
-          const result = await res.json();
-          results.push({ handle: target.handle, ...result });
+
+          if (!scrapeResponse.ok) {
+            await handleFirecrawlError('twitter-tg-hunter', scrapeResponse.status, '');
+            results.push({ handle: clean, success: false, error: `Scrape ${scrapeResponse.status}` });
+            continue;
+          }
+
+          const scrapeData = await scrapeResponse.json();
+          const markdown = scrapeData.data?.markdown || '';
+          const links = scrapeData.data?.links || [];
+          const accountStatus = detectAccountStatus(markdown);
+          const allText = markdown + '\n' + links.join('\n');
+          const telegramLinks = extractTelegramLinks(allText);
+
+          let bio = '';
+          const mdLines = markdown.split('\n').filter((l: string) => l.trim());
+          if (mdLines.length > 2) bio = mdLines.slice(1, 4).join(' ').slice(0, 500);
+
+          let followers = 0;
+          const followerMatch = markdown.match(/(\d[\d,.]*[KkMm]?)\s*(?:Followers|followers)/);
+          if (followerMatch) {
+            let num = followerMatch[1].replace(/,/g, '');
+            if (num.endsWith('K') || num.endsWith('k')) followers = Math.round(parseFloat(num) * 1000);
+            else if (num.endsWith('M') || num.endsWith('m')) followers = Math.round(parseFloat(num) * 1_000_000);
+            else followers = parseInt(num) || 0;
+          }
+
+          await supabase.from('twitter_tg_targets').upsert({
+            handle: clean, bio: bio || null, followers, telegram_links: telegramLinks,
+            account_status: accountStatus, last_scanned_at: new Date().toISOString(),
+            scan_count: 1, updated_at: new Date().toISOString(),
+          }, { onConflict: 'handle' });
+
+          results.push({ handle: clean, success: true, telegram_links: telegramLinks, account_status: accountStatus, followers });
         } catch (e) {
           results.push({ handle: target.handle, success: false, error: String(e) });
         }
 
-        // Rate limit: 2s between scrapes
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1500));
       }
 
+      const remaining = (targets?.length || 0) < batchSize ? 0 : -1; // -1 = more exist
       return new Response(
-        JSON.stringify({ success: true, scanned: results.length, total_eligible: targets?.length || 0, results }),
+        JSON.stringify({ success: true, scanned: results.length, total_eligible: targets?.length || 0, has_more: remaining !== 0, results }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

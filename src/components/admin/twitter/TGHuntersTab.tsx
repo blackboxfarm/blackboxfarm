@@ -139,20 +139,37 @@ export function TGHuntersTab() {
     },
   });
 
+  const [scanProgress, setScanProgress] = useState<{ scanned: number; total: number } | null>(null);
+
   const scanAllMissingMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("twitter-tg-hunter", {
-        body: { action: "scan-all-missing" },
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error);
-      return data;
+      let totalScanned = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data, error } = await supabase.functions.invoke("twitter-tg-hunter", {
+          body: { action: "scan-all-missing" },
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error);
+        
+        totalScanned += data.scanned;
+        hasMore = data.has_more && data.scanned > 0;
+        setScanProgress({ scanned: totalScanned, total: totalScanned + (hasMore ? 5 : 0) });
+        queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
+      }
+      
+      return { scanned: totalScanned };
     },
     onSuccess: (data) => {
-      toast.success(`Scanned ${data.scanned}/${data.total_eligible} targets for TG links`);
+      toast.success(`Scanned ${data.scanned} targets for TG links`);
+      setScanProgress(null);
       queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setScanProgress(null);
+    },
   });
 
   // Scrape tweets for a single target
@@ -332,11 +349,16 @@ export function TGHuntersTab() {
             disabled={scanAllMissingMutation.isPending || missingTG === 0}
           >
             {scanAllMissingMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Scanning... {scanProgress ? `(${scanProgress.scanned} done)` : ''}
+              </>
             ) : (
-              <Scan className="h-4 w-4 mr-2" />
+              <>
+                <Scan className="h-4 w-4 mr-2" />
+                Scan All Missing TG ({missingTG})
+              </>
             )}
-            Scan All Missing TG ({missingTG})
           </Button>
 
           <Button
