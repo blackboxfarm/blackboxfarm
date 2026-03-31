@@ -65,6 +65,7 @@ interface TweetFinding {
 export function TGHuntersTab() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [scanningHandle, setScanningHandle] = useState<string | null>(null);
