@@ -231,41 +231,35 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
       let actualDeleted = 0;
 
       if (!dryRun && rowsToDelete > 0) {
-        // Batch delete using small ID batches to stay within PostgREST URL limits
-        const BATCH_SIZE = 200;
-        let remaining = rowsToDelete;
-        let iterations = 0;
-        const MAX_ITERATIONS = 1000; // Safety cap
-        
-        while (remaining > 0 && iterations < MAX_ITERATIONS) {
-          const { data: batch } = await supabase
-            .from(table)
-            .select('id')
-            .lt(col, cutoff)
-            .limit(BATCH_SIZE);
+        // Use server-side RPC for fast bulk delete (no PostgREST URL limits)
+        try {
+          const { data: deletedCount, error: rpcError } = await supabase.rpc('bulk_prune_table', {
+            p_table: table,
+            p_column: col,
+            p_cutoff: cutoff,
+          });
           
-          if (!batch || batch.length === 0) break;
-          
-          const ids = batch.map((r: any) => r.id);
-          const { error: delError } = await supabase
-            .from(table)
-            .delete()
-            .in('id', ids);
-          
-          if (delError) {
-            console.error(`[housekeeping] Batch delete error on ${table}:`, delError.message);
-            break;
+          if (rpcError) {
+            console.error(`[housekeeping] RPC prune error on ${table}:`, rpcError.message);
+            // Fallback to small batch delete
+            const BATCH_SIZE = 200;
+            let iterations = 0;
+            while (iterations < 500) {
+              const { data: batch } = await supabase.from(table).select('id').lt(col, cutoff).limit(BATCH_SIZE);
+              if (!batch || batch.length === 0) break;
+              const ids = batch.map((r: any) => r.id);
+              const { error: delError } = await supabase.from(table).delete().in('id', ids);
+              if (delError) { console.error(`[housekeeping] Batch fallback error on ${table}:`, delError.message); break; }
+              actualDeleted += ids.length;
+              iterations++;
+            }
+          } else {
+            actualDeleted = Number(deletedCount) || 0;
           }
-          
-          actualDeleted += ids.length;
-          remaining -= ids.length;
-          iterations++;
-          
-          if (iterations % 50 === 0) {
-            console.log(`[housekeeping] ${table}: progress ${actualDeleted}/${rowsToDelete} rows deleted`);
-          }
+          console.log(`[housekeeping] ${table}: deleted ${actualDeleted} rows`);
+        } catch (e: any) {
+          console.error(`[housekeeping] Prune failed for ${table}:`, e.message);
         }
-        console.log(`[housekeeping] ${table}: finished — ${actualDeleted} rows deleted in ${iterations} batches`);
       }
 
       results.push({
