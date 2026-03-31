@@ -231,11 +231,11 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
       let actualDeleted = 0;
 
       if (!dryRun && rowsToDelete > 0) {
-        // Batch delete to overcome PostgREST row limits (~1000 per call)
-        const BATCH_SIZE = 5000;
+        // Batch delete using small ID batches to stay within PostgREST URL limits
+        const BATCH_SIZE = 200;
         let remaining = rowsToDelete;
         let iterations = 0;
-        const MAX_ITERATIONS = 200; // Safety cap: 200 * 5000 = 1M rows max
+        const MAX_ITERATIONS = 1000; // Safety cap
         
         while (remaining > 0 && iterations < MAX_ITERATIONS) {
           const { data: batch } = await supabase
@@ -261,8 +261,11 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
           remaining -= ids.length;
           iterations++;
           
-          console.log(`[housekeeping] ${table}: deleted batch ${iterations} (${ids.length} rows, ${remaining} remaining)`);
+          if (iterations % 50 === 0) {
+            console.log(`[housekeeping] ${table}: progress ${actualDeleted}/${rowsToDelete} rows deleted`);
+          }
         }
+        console.log(`[housekeeping] ${table}: finished — ${actualDeleted} rows deleted in ${iterations} batches`);
       }
 
       results.push({
