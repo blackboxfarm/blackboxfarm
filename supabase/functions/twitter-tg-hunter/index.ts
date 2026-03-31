@@ -69,8 +69,10 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       if (fetchErr) throw fetchErr;
 
       let cleaned = 0;
+      const samples: string[] = [];
       for (const row of all || []) {
         const clean = cleanHandle(row.handle);
+        if (samples.length < 3) samples.push(`"${row.handle}" → "${clean}" (match: ${clean === row.handle})`);
         if (clean !== row.handle) {
           const { error } = await supabase
             .from('twitter_tg_targets')
