@@ -210,6 +210,37 @@ export function TGHuntersTab() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const manualTgMutation = useMutation({
+    mutationFn: async ({ id, link }: { id: string; link: string }) => {
+      let normalizedLink = link.trim();
+      if (!normalizedLink.startsWith('http')) normalizedLink = `https://t.me/${normalizedLink.replace(/^@/, '')}`;
+      normalizedLink = normalizedLink.replace('telegram.me', 't.me');
+
+      // Get existing links
+      const { data: existing } = await supabase
+        .from("twitter_tg_targets" as any)
+        .select("telegram_links")
+        .eq("id", id)
+        .single();
+
+      const currentLinks = (existing as any)?.telegram_links || [];
+      const newLinks = [...new Set([...currentLinks, normalizedLink])];
+
+      const { error } = await supabase
+        .from("twitter_tg_targets" as any)
+        .update({ telegram_links: newLinks, updated_at: new Date().toISOString() } as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("TG link added");
+      queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
+      setEditingTgTarget(null);
+      setManualTgLink("");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
