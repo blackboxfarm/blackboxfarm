@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import {
   RefreshCw, Plus, Search, Loader2, ExternalLink, Upload, Scan, MessageCircle, Send, Trash2,
-  ChevronDown, ChevronRight, Twitter, Radio, Zap,
+  ChevronDown, ChevronRight, Twitter, Radio, Zap, Pencil,
 } from "lucide-react";
 import { ReplyDraftButton } from "./ReplyDraftButton";
 
@@ -69,6 +69,8 @@ export function TGHuntersTab() {
   const [importText, setImportText] = useState("");
   const [scanningHandle, setScanningHandle] = useState<string | null>(null);
   const [expandedTarget, setExpandedTarget] = useState<string | null>(null);
+  const [editingTgTarget, setEditingTgTarget] = useState<string | null>(null);
+  const [manualTgLink, setManualTgLink] = useState("");
 
   const { data: targets, isLoading } = useQuery({
     queryKey: ["tg-targets"],
@@ -204,6 +206,37 @@ export function TGHuntersTab() {
     onSuccess: (data) => {
       toast.success(`Added ${data.channel_username} to MTProto monitoring`);
       queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const manualTgMutation = useMutation({
+    mutationFn: async ({ id, link }: { id: string; link: string }) => {
+      let normalizedLink = link.trim();
+      if (!normalizedLink.startsWith('http')) normalizedLink = `https://t.me/${normalizedLink.replace(/^@/, '')}`;
+      normalizedLink = normalizedLink.replace('telegram.me', 't.me');
+
+      // Get existing links
+      const { data: existing } = await supabase
+        .from("twitter_tg_targets" as any)
+        .select("telegram_links")
+        .eq("id", id)
+        .single();
+
+      const currentLinks = (existing as any)?.telegram_links || [];
+      const newLinks = [...new Set([...currentLinks, normalizedLink])];
+
+      const { error } = await supabase
+        .from("twitter_tg_targets" as any)
+        .update({ telegram_links: newLinks, updated_at: new Date().toISOString() } as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("TG link added");
+      queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
+      setEditingTgTarget(null);
+      setManualTgLink("");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -432,8 +465,13 @@ export function TGHuntersTab() {
                           </div>
 
                           {/* Followers */}
-                          <div className="text-sm min-w-[60px]">
-                            {target.followers > 0 ? target.followers.toLocaleString() : '—'}
+                          <div className="text-sm min-w-[80px]">
+                            {target.followers > 0 ? (
+                              <span title="Followers">
+                                <span className="font-medium">{target.followers.toLocaleString()}</span>
+                                <span className="text-[10px] text-muted-foreground ml-1">followers</span>
+                              </span>
+                            ) : '—'}
                           </div>
 
                           {/* TG Links */}
@@ -480,6 +518,51 @@ export function TGHuntersTab() {
                               <Badge variant="outline" className="text-xs bg-green-500/20 text-green-400 border-green-500/50">
                                 <Radio className="h-3 w-3 mr-1" /> Monitored
                               </Badge>
+                            )}
+                            {/* Manual TG link add */}
+                            {editingTgTarget === target.id ? (
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <Input
+                                  placeholder="t.me/group or @group"
+                                  value={manualTgLink}
+                                  onChange={(e) => setManualTgLink(e.target.value)}
+                                  className="h-6 text-xs w-36"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && manualTgLink.trim()) {
+                                      manualTgMutation.mutate({ id: target.id, link: manualTgLink });
+                                    }
+                                    if (e.key === 'Escape') { setEditingTgTarget(null); setManualTgLink(""); }
+                                  }}
+                                  autoFocus
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs text-green-400"
+                                  onClick={() => manualTgLink.trim() && manualTgMutation.mutate({ id: target.id, link: manualTgLink })}
+                                  disabled={manualTgMutation.isPending || !manualTgLink.trim()}
+                                >
+                                  {manualTgMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '✓'}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1 text-xs text-muted-foreground"
+                                  onClick={() => { setEditingTgTarget(null); setManualTgLink(""); }}
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 px-1 text-xs text-muted-foreground hover:text-sky-400"
+                                onClick={(e) => { e.stopPropagation(); setEditingTgTarget(target.id); setManualTgLink(""); }}
+                                title="Manually add TG link"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
                             )}
                           </div>
 
