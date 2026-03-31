@@ -18,17 +18,29 @@ const ALL_ROUTES: RouteInfo[] = [
   { path: "/", label: "Home (BlackBox)", category: "public", description: "Main landing page" },
   { path: "/auth", label: "Auth", category: "public", description: "Login/signup page" },
   { path: "/holders", label: "Holders Report", category: "public", description: "Token holder analysis" },
+  { path: "/holders-demo", label: "Holders Demo", category: "public", description: "Static demo report for AI/LLM consumption" },
   { path: "/holders-marketing", label: "Holders Marketing", category: "marketing", description: "Marketing page for holder reports" },
   { path: "/holders-info", label: "Holders Landing", category: "marketing", description: "Holders tool info page" },
+  { path: "/holders-how-to", label: "Holders How-To", category: "marketing", description: "How to use holders report" },
+  { path: "/holders-bot", label: "Holders Bot", category: "marketing", description: "TG holder analysis bot (In Dev)" },
   { path: "/blackbox", label: "BlackBox", category: "public", description: "Alternative landing" },
+  { path: "/dashboard", label: "Dashboard", category: "public", description: "User dashboard" },
+  { path: "/onboarding", label: "Onboarding", category: "public", description: "New user onboarding" },
   { path: "/demo", label: "Demo", category: "public", description: "Demo page" },
+  { path: "/feed", label: "Feed", category: "public", description: "Activity feed" },
   
-  { path: "/token-analysis", label: "Token Analysis", category: "public", description: "Token analysis download" },
+  // Token Tools
+  { path: "/token-analysis", label: "Token Analysis", category: "admin", description: "Token analysis download" },
+  { path: "/ai-analysis", label: "AI Analysis", category: "public", description: "AI-powered token analysis" },
+  { path: "/competitive-analysis", label: "Competitive Analysis", category: "public", description: "Token competition analysis" },
+  { path: "/intel/:address", label: "Intel Report", category: "dynamic", description: "Per-token intel report" },
+  { path: "/bubblemap", label: "BubbleMap", category: "public", description: "Bubble map visualization" },
+  { path: "/bubbles-how-to", label: "Bubbles How-To", category: "marketing", description: "How to use bubble maps" },
+  { path: "/bubblepromo", label: "Bubble Promo", category: "marketing", description: "Bubble map promo page" },
   
   // Apps & Services
   { path: "/bumpbot", label: "BumpBot Landing", category: "marketing", description: "Token bumping service (PENDING)" },
   { path: "/volumebot", label: "Volume Bot Landing", category: "marketing", description: "Trading volume service (PENDING)" },
-  { path: "/holders-bot", label: "Holders Bot", category: "marketing", description: "TG holder analysis bot (In Dev)" },
   { path: "/security", label: "Security", category: "legal", description: "Platform security info" },
   
   // API & Docs
@@ -37,21 +49,33 @@ const ALL_ROUTES: RouteInfo[] = [
   
   // Advertising
   { path: "/buy-banner", label: "Buy Banner", category: "marketing", description: "Banner ad purchase" },
+  { path: "/my-banners", label: "My Banners", category: "public", description: "Manage your banner ads" },
   { path: "/banner-checkout/:orderId", label: "Banner Checkout", category: "dynamic", description: "Checkout flow" },
   { path: "/banner-preview/:orderId", label: "Banner Preview", category: "dynamic", description: "Preview banner before purchase" },
   { path: "/adverts", label: "Adverts", category: "marketing", description: "Advertising info" },
   
-  // Tools
-  { path: "/copy-trading", label: "Copy Trading", category: "public", description: "Copy trading tool" },
-  { path: "/breadcrumbs", label: "BreadCrumbs", category: "public", description: "Wallet tracking" },
+  // Subscription & Pricing
+  { path: "/pricing", label: "Pricing", category: "public", description: "Subscription pricing" },
+  { path: "/subscriptions", label: "Subscriptions", category: "public", description: "Manage subscriptions" },
+  { path: "/features", label: "Features", category: "public", description: "Platform features overview" },
+  
+  // Tools (Admin)
+  { path: "/copy-trading", label: "Copy Trading", category: "admin", description: "Copy trading tool" },
+  { path: "/breadcrumbs", label: "BreadCrumbs", category: "admin", description: "Wallet tracking" },
   { path: "/helius-usage", label: "Helius Usage", category: "admin", description: "API usage stats" },
-  { path: "/competitive-analysis", label: "Competitive Analysis", category: "public", description: "Token competition analysis" },
-  { path: "/community-wallet", label: "Community Wallet", category: "public", description: "Community funding" },
+  { path: "/community-wallet", label: "Community Wallet", category: "admin", description: "Community funding" },
+  { path: "/oracle", label: "Oracle", category: "admin", description: "Developer reputation oracle" },
+  { path: "/banker-pool", label: "Banker Pool", category: "admin", description: "Fantasy trading pool" },
+  { path: "/socials", label: "Socials Manager", category: "admin", description: "Social media management" },
   
   // Admin
   { path: "/admin", label: "Admin (Index)", category: "admin", description: "Old admin page" },
   { path: "/super-admin", label: "Super Admin", category: "admin", description: "Main admin dashboard" },
   { path: "/developer/:walletAddress", label: "Developer Profile", category: "dynamic", description: "Dev wallet analysis" },
+  
+  // Telegram
+  { path: "/tgbot", label: "Telegram Bot", category: "public", description: "Telegram bot info" },
+  { path: "/testimonial-submit", label: "Testimonial Submit", category: "public", description: "Submit testimonials" },
   
   // Auth
   { path: "/reset-password", label: "Reset Password", category: "public", description: "Password reset" },
@@ -68,8 +92,8 @@ const ALL_ROUTES: RouteInfo[] = [
   { path: "/contact", label: "Contact Us", category: "legal", description: "Contact page" },
   { path: "/web3-manifesto", label: "Web3 Manifesto", category: "legal", description: "Web3 manifesto" },
   
-  // BumpBot
-  { path: "/bb", label: "BumpBot", category: "public", description: "Bump bot tool" },
+  // BumpBot Tool
+  { path: "/bb", label: "BumpBot", category: "admin", description: "Bump bot tool" },
 ];
 
 const CATEGORY_CONFIG = {
