@@ -44,6 +44,7 @@ interface TGTarget {
   last_tweet_scan_at?: string | null;
   tweet_scan_count?: number;
   token_mentions_found?: number;
+  account_status?: string;
 }
 
 interface TweetFinding {
@@ -138,17 +139,17 @@ export function TGHuntersTab() {
     },
   });
 
-  const scanBatchMutation = useMutation({
+  const scanAllMissingMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("twitter-tg-hunter", {
-        body: { action: "scan-batch" },
+        body: { action: "scan-all-missing" },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error);
       return data;
     },
     onSuccess: (data) => {
-      toast.success(`Batch scanned ${data.scanned} handles`);
+      toast.success(`Scanned ${data.scanned}/${data.total_eligible} targets for TG links`);
       queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
     },
     onError: (err: Error) => toast.error(err.message),
@@ -213,8 +214,10 @@ export function TGHuntersTab() {
 
   const totalTargets = targets?.length || 0;
   const withTG = targets?.filter((t) => (t.telegram_links as any)?.length > 0).length || 0;
+  const missingTG = totalTargets - withTG;
   const joinedGroups = targets?.filter((t) => t.tg_group_joined).length || 0;
   const totalMentions = targets?.reduce((acc, t) => acc + (t.token_mentions_found || 0), 0) || 0;
+  const deadAccounts = targets?.filter((t) => t.account_status === 'suspended' || t.account_status === 'deleted').length || 0;
   const highPriority = targets?.filter((t) => t.priority_score >= 70).length || 0;
 
   const handleImport = () => {
@@ -323,17 +326,17 @@ export function TGHuntersTab() {
             </DialogContent>
           </Dialog>
 
-          <Button
+           <Button
             variant="outline"
-            onClick={() => scanBatchMutation.mutate()}
-            disabled={scanBatchMutation.isPending || totalTargets === 0}
+            onClick={() => scanAllMissingMutation.mutate()}
+            disabled={scanAllMissingMutation.isPending || missingTG === 0}
           >
-            {scanBatchMutation.isPending ? (
+            {scanAllMissingMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Scan className="h-4 w-4 mr-2" />
             )}
-            Scan TG (5)
+            Scan All Missing TG ({missingTG})
           </Button>
 
           <Button
@@ -394,6 +397,11 @@ export function TGHuntersTab() {
                               @{target.handle}
                               <ExternalLink className="h-3 w-3" />
                             </a>
+                            {target.account_status && target.account_status !== 'active' && target.account_status !== 'unknown' && (
+                              <Badge variant="outline" className="text-[10px] text-red-400 border-red-500/30 bg-red-500/10">
+                                {target.account_status === 'suspended' ? '⚠️ Suspended' : '💀 Deleted'}
+                              </Badge>
+                            )}
                             {target.bio && (
                               <span className="text-xs text-muted-foreground line-clamp-1 max-w-[180px]">
                                 {target.bio}

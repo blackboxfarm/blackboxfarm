@@ -15198,6 +15198,7 @@ export type Database = {
       }
       twitter_tg_targets: {
         Row: {
+          account_status: string | null
           bio: string | null
           created_at: string | null
           display_name: string | null
@@ -15219,6 +15220,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          account_status?: string | null
           bio?: string | null
           created_at?: string | null
           display_name?: string | null
@@ -15240,6 +15242,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          account_status?: string | null
           bio?: string | null
           created_at?: string | null
           display_name?: string | null

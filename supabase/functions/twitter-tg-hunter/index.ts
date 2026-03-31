@@ -7,6 +7,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function detectAccountStatus(markdown: string, statusCode?: number): 'active' | 'suspended' | 'deleted' | 'unknown' {
+  const lower = markdown.toLowerCase();
+  if (lower.includes('account suspended') || lower.includes('this account has been suspended')) return 'suspended';
+  if (lower.includes("this account doesn't exist") || lower.includes('page not found') || lower.includes('hmm...this page doesn') || statusCode === 404) return 'deleted';
+  if (lower.includes('caution: this account is temporarily restricted') || lower.includes('withheld')) return 'suspended';
+  if (markdown.length < 50 && !lower.includes('follow')) return 'unknown';
+  return 'active';
+}
+
 function extractTelegramLinks(text: string): string[] {
   const patterns = [
     /https?:\/\/t\.me\/[a-zA-Z0-9_]+/gi,
@@ -122,15 +131,18 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       const markdown = scrapeData.data?.markdown || scrapeData.markdown || '';
       const links = scrapeData.data?.links || scrapeData.links || [];
 
+      // Detect account status
+      const accountStatus = detectAccountStatus(markdown, scrapeResponse.status === 404 ? 404 : undefined);
+
       // Extract telegram links from markdown content and discovered links
       const allText = markdown + '\n' + links.join('\n');
       const telegramLinks = extractTelegramLinks(allText);
 
       // Extract bio (rough heuristic from markdown)
       let bio = '';
-      const lines = markdown.split('\n').filter((l: string) => l.trim());
-      if (lines.length > 2) {
-        bio = lines.slice(1, 4).join(' ').slice(0, 500);
+      const mdLines = markdown.split('\n').filter((l: string) => l.trim());
+      if (mdLines.length > 2) {
+        bio = mdLines.slice(1, 4).join(' ').slice(0, 500);
       }
 
       // Extract follower count from markdown
@@ -155,8 +167,9 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
           bio: bio || null,
           followers,
           telegram_links: telegramLinks,
+          account_status: accountStatus,
           last_scanned_at: new Date().toISOString(),
-          scan_count: 1, // will be incremented via raw SQL below
+          scan_count: 1,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'handle' })
         .select()
@@ -179,19 +192,59 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
           handle: cleanHandle,
           telegram_links: telegramLinks,
           followers,
+          account_status: accountStatus,
           bio: bio?.slice(0, 200),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // ── Scan batch ──
-    if (action === 'scan-batch') {
+    // ── Scan all missing TG links ──
+    if (action === 'scan-all-missing') {
+      // Only scan active accounts that have no TG links and aren't dead
       const { data: targets, error: fetchErr } = await supabase
         .from('twitter_tg_targets')
-        .select('handle')
+        .select('handle, account_status')
         .eq('is_active', true)
-        .order('last_scanned_at', { ascending: true, nullsFirst: true })
+        .or('telegram_links.is.null,telegram_links.eq.[]')
+        .not('account_status', 'in', '("suspended","deleted")')
+        .order('last_scanned_at', { ascending: true, nullsFirst: true });
+
+      if (fetchErr) throw fetchErr;
+
+      const results = [];
+      for (const target of targets || []) {
+        const guard = checkFirecrawlBudget('twitter-tg-hunter-batch');
+        if (!guard.allowed) {
+          console.warn('Budget exhausted during batch, stopping');
+          break;
+        }
+
+        try {
+          const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/twitter-tg-hunter`;
+          const res = await fetch(selfUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'scan-handle', handle: target.handle }),
+          });
+          const result = await res.json();
+          results.push({ handle: target.handle, ...result });
+        } catch (e) {
+          results.push({ handle: target.handle, success: false, error: String(e) });
+        }
+
+        // Rate limit: 2s between scrapes
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, scanned: results.length, total_eligible: targets?.length || 0, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
         .limit(5);
 
       if (fetchErr) throw fetchErr;
