@@ -218,7 +218,12 @@ export function ImageGallery({ mode = 'manage', onSelect }: ImageGalleryProps) {
                       onClick={mode === 'pick' ? () => onSelect?.(img.file_url) : undefined}
                     >
                       <div className="aspect-square bg-muted">
-                        <img src={img.file_url} alt={img.display_name} className="w-full h-full object-cover" />
+                        <img
+                          src={`${img.file_url}?width=200&height=200&resize=cover`}
+                          alt={img.display_name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
                       </div>
                       <div className="p-2 space-y-1">
                         <p className="text-xs font-medium truncate">{img.display_name}</p>
