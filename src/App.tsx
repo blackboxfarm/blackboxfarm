@@ -72,6 +72,8 @@ const HoldersHowTo = lazy(() => import("./pages/HoldersHowTo"));
 const BubblesHowTo = lazy(() => import("./pages/BubblesHowTo"));
 const TestimonialSubmit = lazy(() => import("./pages/TestimonialSubmit"));
 const Feed = lazy(() => import("./pages/Feed"));
+const IntelBriefings = lazy(() => import("./pages/IntelBriefings"));
+const IntelBriefingArticle = lazy(() => import("./pages/IntelBriefingArticle"));
 
 const queryClient = new QueryClient();
 
