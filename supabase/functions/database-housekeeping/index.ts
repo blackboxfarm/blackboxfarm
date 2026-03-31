@@ -24,6 +24,9 @@ const DEFAULT_RETENTION: Record<string, number> = {
   'banner_impressions': 90,
   'banner_clicks': 90,
   'helius_api_usage': 30,
+  'holder_movements': 3,
+  'holder_snapshots': 7,
+  'token_rankings': 7,
 };
 
 // Snapshot helius usage data before pruning (aggregated by day + function)
@@ -204,6 +207,9 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
       'banner_impressions': 'created_at',
       'banner_clicks': 'created_at',
       'helius_api_usage': 'timestamp',
+      'holder_movements': 'detected_at',
+      'holder_snapshots': 'snapshot_date',
+      'token_rankings': 'captured_at',
     };
 
     for (const [table, days] of Object.entries(retention)) {
@@ -225,37 +231,34 @@ Deno.serve(withRunLog('database-housekeeping', async (req) => {
       let actualDeleted = 0;
 
       if (!dryRun && rowsToDelete > 0) {
-        // Batch delete to overcome PostgREST row limits (~1000 per call)
-        const BATCH_SIZE = 5000;
-        let remaining = rowsToDelete;
-        let iterations = 0;
-        const MAX_ITERATIONS = 200; // Safety cap: 200 * 5000 = 1M rows max
-        
-        while (remaining > 0 && iterations < MAX_ITERATIONS) {
-          const { data: batch } = await supabase
-            .from(table)
-            .select('id')
-            .lt(col, cutoff)
-            .limit(BATCH_SIZE);
+        // Use server-side RPC for fast bulk delete (no PostgREST URL limits)
+        try {
+          const { data: deletedCount, error: rpcError } = await supabase.rpc('bulk_prune_table', {
+            p_table: table,
+            p_column: col,
+            p_cutoff: cutoff,
+          });
           
-          if (!batch || batch.length === 0) break;
-          
-          const ids = batch.map((r: any) => r.id);
-          const { error: delError } = await supabase
-            .from(table)
-            .delete()
-            .in('id', ids);
-          
-          if (delError) {
-            console.error(`[housekeeping] Batch delete error on ${table}:`, delError.message);
-            break;
+          if (rpcError) {
+            console.error(`[housekeeping] RPC prune error on ${table}:`, rpcError.message);
+            // Fallback to small batch delete
+            const BATCH_SIZE = 200;
+            let iterations = 0;
+            while (iterations < 500) {
+              const { data: batch } = await supabase.from(table).select('id').lt(col, cutoff).limit(BATCH_SIZE);
+              if (!batch || batch.length === 0) break;
+              const ids = batch.map((r: any) => r.id);
+              const { error: delError } = await supabase.from(table).delete().in('id', ids);
+              if (delError) { console.error(`[housekeeping] Batch fallback error on ${table}:`, delError.message); break; }
+              actualDeleted += ids.length;
+              iterations++;
+            }
+          } else {
+            actualDeleted = Number(deletedCount) || 0;
           }
-          
-          actualDeleted += ids.length;
-          remaining -= ids.length;
-          iterations++;
-          
-          console.log(`[housekeeping] ${table}: deleted batch ${iterations} (${ids.length} rows, ${remaining} remaining)`);
+          console.log(`[housekeeping] ${table}: deleted ${actualDeleted} rows`);
+        } catch (e: any) {
+          console.error(`[housekeeping] Prune failed for ${table}:`, e.message);
         }
       }
 
