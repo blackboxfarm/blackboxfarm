@@ -4894,6 +4894,36 @@ export type Database = {
         }
         Relationships: []
       }
+      gallery_style_categories: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       helius_api_usage: {
         Row: {
           created_at: string
@@ -10882,6 +10912,75 @@ export type Database = {
           service_name?: string
           status?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      social_media_gallery: {
+        Row: {
+          ai_model: string | null
+          ai_prompt: string | null
+          created_at: string | null
+          display_name: string
+          file_name: string
+          file_size_bytes: number | null
+          file_url: string
+          height: number | null
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          mime_type: string | null
+          source_type: string
+          style_category_ids: string[] | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          updated_at: string | null
+          use_count: number | null
+          used_in_posts: string[] | null
+          width: number | null
+        }
+        Insert: {
+          ai_model?: string | null
+          ai_prompt?: string | null
+          created_at?: string | null
+          display_name: string
+          file_name: string
+          file_size_bytes?: number | null
+          file_url: string
+          height?: number | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          mime_type?: string | null
+          source_type?: string
+          style_category_ids?: string[] | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          use_count?: number | null
+          used_in_posts?: string[] | null
+          width?: number | null
+        }
+        Update: {
+          ai_model?: string | null
+          ai_prompt?: string | null
+          created_at?: string | null
+          display_name?: string
+          file_name?: string
+          file_size_bytes?: number | null
+          file_url?: string
+          height?: number | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          mime_type?: string | null
+          source_type?: string
+          style_category_ids?: string[] | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          use_count?: number | null
+          used_in_posts?: string[] | null
+          width?: number | null
         }
         Relationships: []
       }
