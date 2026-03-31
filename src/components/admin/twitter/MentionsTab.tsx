@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { ReplyDraftButton } from "./ReplyDraftButton";
 
 interface TwitterMention {
   id: string;
