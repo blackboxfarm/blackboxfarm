@@ -1,5 +1,8 @@
 # Dynamic OG proxy to Supabase Edge Functions (must come before SPA fallback)
 /og/*  https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/:splat  200!
 
+# Static demo page (serve as-is, not through SPA)
+/holders-demo  /holders-demo/index.html  200!
+
 # SPA fallback
 /*  /index.html  200
