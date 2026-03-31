@@ -5564,6 +5564,68 @@ export type Database = {
         }
         Relationships: []
       }
+      hunter_tweet_findings: {
+        Row: {
+          created_at: string | null
+          detected_tickers: Json | null
+          detected_tokens: Json | null
+          engagement_score: number | null
+          handle: string
+          id: string
+          notes: string | null
+          reply_drafted: boolean | null
+          reply_posted: boolean | null
+          target_id: string
+          tweet_date: string | null
+          tweet_id: string
+          tweet_text: string
+          tweet_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          detected_tickers?: Json | null
+          detected_tokens?: Json | null
+          engagement_score?: number | null
+          handle: string
+          id?: string
+          notes?: string | null
+          reply_drafted?: boolean | null
+          reply_posted?: boolean | null
+          target_id: string
+          tweet_date?: string | null
+          tweet_id: string
+          tweet_text: string
+          tweet_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          detected_tickers?: Json | null
+          detected_tokens?: Json | null
+          engagement_score?: number | null
+          handle?: string
+          id?: string
+          notes?: string | null
+          reply_drafted?: boolean | null
+          reply_posted?: boolean | null
+          target_id?: string
+          tweet_date?: string | null
+          tweet_id?: string
+          tweet_text?: string
+          tweet_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hunter_tweet_findings_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "twitter_tg_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       image_style_presets: {
         Row: {
           created_at: string | null
@@ -15144,11 +15206,16 @@ export type Database = {
           id: string
           is_active: boolean | null
           last_scanned_at: string | null
+          last_tweet_scan_at: string | null
           notes: string | null
           priority_score: number | null
           scan_count: number | null
           tags: string[] | null
           telegram_links: Json | null
+          tg_group_chat_id: string | null
+          tg_group_joined: boolean | null
+          token_mentions_found: number | null
+          tweet_scan_count: number | null
           updated_at: string | null
         }
         Insert: {
@@ -15160,11 +15227,16 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_scanned_at?: string | null
+          last_tweet_scan_at?: string | null
           notes?: string | null
           priority_score?: number | null
           scan_count?: number | null
           tags?: string[] | null
           telegram_links?: Json | null
+          tg_group_chat_id?: string | null
+          tg_group_joined?: boolean | null
+          token_mentions_found?: number | null
+          tweet_scan_count?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -15176,11 +15248,16 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_scanned_at?: string | null
+          last_tweet_scan_at?: string | null
           notes?: string | null
           priority_score?: number | null
           scan_count?: number | null
           tags?: string[] | null
           telegram_links?: Json | null
+          tg_group_chat_id?: string | null
+          tg_group_joined?: boolean | null
+          token_mentions_found?: number | null
+          tweet_scan_count?: number | null
           updated_at?: string | null
         }
         Relationships: []
