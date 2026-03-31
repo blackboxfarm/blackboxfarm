@@ -349,11 +349,16 @@ export function TGHuntersTab() {
             disabled={scanAllMissingMutation.isPending || missingTG === 0}
           >
             {scanAllMissingMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Scanning... {scanProgress ? `(${scanProgress.scanned} done)` : ''}
+              </>
             ) : (
-              <Scan className="h-4 w-4 mr-2" />
+              <>
+                <Scan className="h-4 w-4 mr-2" />
+                Scan All Missing TG ({missingTG})
+              </>
             )}
-            Scan All Missing TG ({missingTG})
           </Button>
 
           <Button
