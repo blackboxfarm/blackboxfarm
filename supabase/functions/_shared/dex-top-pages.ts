@@ -156,8 +156,8 @@ async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false)
   const testPairs = parseDexTopPageMarkdown(markdown);
   if (testPairs.length === 0 && configIndex + 1 < SCRAPE_CONFIGS.length) {
     console.warn(`[DexTop200] Attempt ${attempt}: markdown returned but 0 pairs parsed for ${url}. Retrying...`);
-    await new Promise(r => setTimeout(r, 2000));
-    return scrapePageMarkdown(url, configIndex + 1);
+    await new Promise(r => setTimeout(r, 3000));
+    return scrapePageMarkdown(url, configIndex + 1, isPage2);
   }
 
   return { markdown, retried: configIndex > 0 };
