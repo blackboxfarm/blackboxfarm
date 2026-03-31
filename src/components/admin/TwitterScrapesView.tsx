@@ -35,6 +35,10 @@ export function TwitterScrapesView() {
             <Bot className="h-4 w-4" />
             Comment Bots
           </TabsTrigger>
+          <TabsTrigger value="tg-hunters" className="flex items-center gap-2">
+            <Send className="h-4 w-4" />
+            TG Hunters
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="mentions">
