@@ -661,10 +661,22 @@ export function TGHuntersTab() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-7 w-7 text-amber-400 hover:text-amber-300"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                archiveMutation.mutate({ id: target.id, archive: !(target as any).is_archived });
+                              }}
+                              title={(target as any).is_archived ? "Restore from archive" : "Archive target"}
+                            >
+                              {(target as any).is_archived ? <ArchiveRestore className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-7 w-7 text-destructive hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (confirm(`Remove @${target.handle}?`)) {
+                                if (confirm(`Permanently delete @${target.handle}?`)) {
                                   deleteMutation.mutate(target.id);
                                 }
                               }}
