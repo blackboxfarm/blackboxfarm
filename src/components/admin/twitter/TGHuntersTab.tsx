@@ -69,6 +69,8 @@ export function TGHuntersTab() {
   const [importText, setImportText] = useState("");
   const [scanningHandle, setScanningHandle] = useState<string | null>(null);
   const [expandedTarget, setExpandedTarget] = useState<string | null>(null);
+  const [editingTgTarget, setEditingTgTarget] = useState<string | null>(null);
+  const [manualTgLink, setManualTgLink] = useState("");
 
   const { data: targets, isLoading } = useQuery({
     queryKey: ["tg-targets"],
