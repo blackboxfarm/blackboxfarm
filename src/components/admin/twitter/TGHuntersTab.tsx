@@ -44,6 +44,7 @@ interface TGTarget {
   last_tweet_scan_at?: string | null;
   tweet_scan_count?: number;
   token_mentions_found?: number;
+  account_status?: string;
 }
 
 interface TweetFinding {
