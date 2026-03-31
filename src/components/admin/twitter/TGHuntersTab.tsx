@@ -214,8 +214,10 @@ export function TGHuntersTab() {
 
   const totalTargets = targets?.length || 0;
   const withTG = targets?.filter((t) => (t.telegram_links as any)?.length > 0).length || 0;
+  const missingTG = totalTargets - withTG;
   const joinedGroups = targets?.filter((t) => t.tg_group_joined).length || 0;
   const totalMentions = targets?.reduce((acc, t) => acc + (t.token_mentions_found || 0), 0) || 0;
+  const deadAccounts = targets?.filter((t) => t.account_status === 'suspended' || t.account_status === 'deleted').length || 0;
   const highPriority = targets?.filter((t) => t.priority_score >= 70).length || 0;
 
   const handleImport = () => {
