@@ -596,7 +596,7 @@ export function TGHuntersTab() {
                                       <div className="flex items-center gap-1 flex-shrink-0">
                                         <ReplyDraftButton
                                           tweetText={finding.tweet_text}
-                                          tweetUrl={finding.tweet_url}
+                                          tweetAuthor={finding.handle}
                                           detectedTickers={finding.detected_tickers || []}
                                           detectedContracts={finding.detected_tokens || []}
                                         />
