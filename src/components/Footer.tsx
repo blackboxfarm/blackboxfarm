@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart, Instagram } from "lucide-react";
+import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart, Instagram, Newspaper } from "lucide-react";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
