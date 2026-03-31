@@ -176,6 +176,12 @@ export function Footer() {
                   White Paper
                 </Link>
               </li>
+              <li>
+                <Link to="/intel" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <Newspaper className="h-3 w-3" />
+                  Intel Briefings
+                </Link>
+              </li>
             </ul>
           </div>
 
