@@ -231,7 +231,7 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         .from('twitter_tg_targets')
         .select('handle, account_status')
         .eq('is_active', true)
-        .or('telegram_links.is.null,telegram_links.eq.{}')
+        .or('telegram_links.is.null,telegram_links.eq.[]')
         .not('account_status', 'in', '("suspended","deleted")')
         .order('last_scanned_at', { ascending: true, nullsFirst: true })
         .limit(batchSize);
