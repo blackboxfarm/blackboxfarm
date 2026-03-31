@@ -16758,6 +16758,10 @@ export type Database = {
         Returns: Json
       }
       archive_old_morning_reports: { Args: never; Returns: number }
+      bulk_prune_table: {
+        Args: { p_column: string; p_cutoff: string; p_table: string }
+        Returns: number
+      }
       check_api_service_alerts: {
         Args: never
         Returns: {
