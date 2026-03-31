@@ -40,7 +40,25 @@ async function uploadBase64Image(supabase: any, base64Url: string, prefix: strin
     .from('repurposed-images')
     .getPublicUrl(fileName);
 
-  return urlData?.publicUrl || null;
+  const publicUrl = urlData?.publicUrl || null;
+
+  // Auto-capture to social media gallery
+  if (publicUrl) {
+    try {
+      await supabase.from('social_media_gallery').insert({
+        file_name: fileName,
+        display_name: `AI ${prefix} ${new Date().toLocaleDateString()}`,
+        file_url: publicUrl,
+        source_type: 'ai_generated',
+        ai_prompt: prefix,
+        mime_type: `image/${format}`,
+      });
+    } catch (e) {
+      console.error('Gallery auto-capture failed:', e);
+    }
+  }
+
+  return publicUrl;
 }
 
 async function generateText(LOVABLE_API_KEY: string, originalText: string, username: string, customInstructions?: string) {
