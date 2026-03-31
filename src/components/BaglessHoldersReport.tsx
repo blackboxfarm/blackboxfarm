@@ -1016,7 +1016,9 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               bossWallets: report.bossWallets,
               largeWallets: report.largeWallets,
               mediumWallets: report.mediumWallets,
-              healthScore: report.healthScore
+              smallWallets: report.smallWallets,
+              healthScore: report.healthScore,
+              simpleTiers: report.simpleTiers,
             } : undefined}
           />
         </div>
