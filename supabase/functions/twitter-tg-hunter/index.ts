@@ -195,10 +195,11 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       const profiles = await scrapeProfilesViaApify([clean], APIFY_API_KEY);
       
       if (profiles.length === 0) {
-        // Account likely deleted/suspended
+        // Account likely deleted/suspended — auto-archive
         await supabase.from('twitter_tg_targets').upsert({
           handle: clean,
           account_status: 'deleted',
+          is_archived: true,
           last_scanned_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'handle' });
