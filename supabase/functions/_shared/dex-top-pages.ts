@@ -70,14 +70,21 @@ export function parseDexTopPageMarkdown(markdown: string): RankedDexPair[] {
   return pairs.sort((a, b) => a.rank - b.rank);
 }
 
-// Retry configs — if first attempt fails/returns 0 results, try alternate params
-const SCRAPE_CONFIGS = [
+// Retry configs — page 2 needs longer waits due to lazy-loaded JS content
+const SCRAPE_CONFIGS_PAGE1 = [
   { waitFor: 3000, onlyMainContent: true },
-  { waitFor: 5000, onlyMainContent: false },  // longer wait, full page
-  { waitFor: 8000, onlyMainContent: true },   // even longer wait
+  { waitFor: 5000, onlyMainContent: false },
+  { waitFor: 8000, onlyMainContent: true },
 ];
 
-async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markdown: string; retried: boolean }> {
+const SCRAPE_CONFIGS_PAGE2 = [
+  { waitFor: 8000, onlyMainContent: false },   // start high for page 2
+  { waitFor: 12000, onlyMainContent: true },    // longer wait
+  { waitFor: 18000, onlyMainContent: false },   // aggressive wait for lazy JS
+];
+
+async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false): Promise<{ markdown: string; retried: boolean }> {
+  const SCRAPE_CONFIGS = isPage2 ? SCRAPE_CONFIGS_PAGE2 : SCRAPE_CONFIGS_PAGE1;
   const apiKey = Deno.env.get("FIRECRAWL_API_KEY");
   if (!apiKey) {
     throw new Error("FIRECRAWL_API_KEY not configured");
@@ -128,8 +135,8 @@ async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markd
     // Retry with next config if available
     if (configIndex + 1 < SCRAPE_CONFIGS.length) {
       console.warn(`[DexTop200] Attempt ${attempt} failed for ${url}: ${errMsg}. Retrying...`);
-      await new Promise(r => setTimeout(r, 2000)); // brief cooldown
-      return scrapePageMarkdown(url, configIndex + 1);
+      await new Promise(r => setTimeout(r, 3000));
+      return scrapePageMarkdown(url, configIndex + 1, isPage2);
     }
     
     throw new Error(errMsg);
@@ -139,8 +146,8 @@ async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markd
   if (!markdown) {
     if (configIndex + 1 < SCRAPE_CONFIGS.length) {
       console.warn(`[DexTop200] Attempt ${attempt}: no markdown for ${url}. Retrying...`);
-      await new Promise(r => setTimeout(r, 2000));
-      return scrapePageMarkdown(url, configIndex + 1);
+      await new Promise(r => setTimeout(r, 3000));
+      return scrapePageMarkdown(url, configIndex + 1, isPage2);
     }
     throw new Error(`No markdown returned for ${url} after ${attempt} attempts`);
   }
@@ -149,8 +156,8 @@ async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markd
   const testPairs = parseDexTopPageMarkdown(markdown);
   if (testPairs.length === 0 && configIndex + 1 < SCRAPE_CONFIGS.length) {
     console.warn(`[DexTop200] Attempt ${attempt}: markdown returned but 0 pairs parsed for ${url}. Retrying...`);
-    await new Promise(r => setTimeout(r, 2000));
-    return scrapePageMarkdown(url, configIndex + 1);
+    await new Promise(r => setTimeout(r, 3000));
+    return scrapePageMarkdown(url, configIndex + 1, isPage2);
   }
 
   return { markdown, retried: configIndex > 0 };
@@ -167,10 +174,18 @@ export async function scrapeDexTopPages(): Promise<{ pairs: RankedDexPair[]; hea
   const results: { markdown: string; retried: boolean }[] = [];
 
   // Scrape both pages independently — one failing shouldn't kill the other
+  // Stagger: scrape page 1 first, then page 2 with a brief gap to avoid concurrent Firecrawl pressure
   for (let i = 0; i < DEX_TOP_PAGE_URLS.length; i++) {
     const pageKey = i === 0 ? 'page1' : 'page2';
+    const isPage2 = i === 1;
+
+    // Brief stagger between pages to avoid Firecrawl rate-limit collisions
+    if (isPage2) {
+      await new Promise(r => setTimeout(r, 5000));
+    }
+
     try {
-      const result = await scrapePageMarkdown(DEX_TOP_PAGE_URLS[i]);
+      const result = await scrapePageMarkdown(DEX_TOP_PAGE_URLS[i], 0, isPage2);
       results.push(result);
       if (result.retried) health.retry_used = true;
       health[`${pageKey}_ok` as keyof ScrapeHealthResult] = true as any;

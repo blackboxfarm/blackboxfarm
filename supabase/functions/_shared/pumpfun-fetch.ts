@@ -9,8 +9,9 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PUMPFUN_API_BASE, PUMPFUN_API_FALLBACK, PUMPFUN_HEADERS } from './pumpfun-api.ts';
 
-const PUMPFUN_API = 'https://frontend-api-v3.pump.fun';
+const PUMPFUN_API = PUMPFUN_API_BASE;
 
 // ── Global throttle: minimum 5 seconds between ANY pump.fun request ──
 // Plus random jitter (0-3s) so parallel edge function invocations don't collide
@@ -100,14 +101,21 @@ export async function pumpfunFetch(
 
       if (response.status === 403) {
         runFailedCalls++;
-        console.error(`[${callerName}] 🔒 403 FORBIDDEN on ${tokenMint} — pump.fun may be blocking us`);
+        console.error(`[${callerName}] 🔒 403 FORBIDDEN on ${tokenMint} — trying fallback mirror`);
+        
+        // Try fallback API mirror before giving up
+        const fallbackResult = await tryFallbackFetch(endpoint, options);
+        if (fallbackResult) {
+          runSuccessCalls++;
+          return { data: fallbackResult, rateLimited: false, status: 200 };
+        }
         
         if (!alertSent) {
           await sendBlockedAlert(callerName, tokenMint);
           alertSent = true;
         }
         
-        return { data: null, rateLimited: false, status: 403, error: 'Forbidden - possibly blocked' };
+        return { data: null, rateLimited: false, status: 403, error: 'Forbidden - blocked, fallback also failed' };
       }
 
       if (!response.ok) {
@@ -141,6 +149,76 @@ export async function pumpfunFetch(
   runFailedCalls++;
   console.error(`[${callerName}] 💀 All ${maxRetries} retries exhausted for ${tokenMint} (429 rate limited)`);
   return { data: null, rateLimited: true, status: lastStatus, error: 'Rate limit - all retries exhausted' };
+}
+
+/**
+ * Fallback: try the herokuapp mirror when main API returns 403.
+ * Only works for /coins endpoints.
+ */
+async function tryFallbackFetch(endpoint: string, options: PumpFunFetchOptions): Promise<any | null> {
+  const { callerName, tokenMint = 'unknown', timeoutMs = 10000 } = options;
+  
+  // Only attempt fallback for /coins/* endpoints (the most critical ones)
+  if (!endpoint.startsWith('/coins/')) {
+    console.warn(`[${callerName}] Fallback not available for endpoint: ${endpoint}`);
+    return null;
+  }
+
+  // Try 1: Herokuapp mirror
+  try {
+    const fallbackUrl = `${PUMPFUN_API_FALLBACK}${endpoint}`;
+    console.log(`[${callerName}] 🔄 Trying fallback mirror for ${tokenMint}...`);
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    
+    const response = await fetch(fallbackUrl, {
+      headers: PUMPFUN_HEADERS,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[${callerName}] ✅ Fallback mirror SUCCESS for ${tokenMint}`);
+      return data;
+    }
+    console.warn(`[${callerName}] Fallback mirror returned ${response.status} for ${tokenMint}`);
+  } catch (e) {
+    console.warn(`[${callerName}] Fallback mirror failed for ${tokenMint}:`, e instanceof Error ? e.message : e);
+  }
+
+  // Try 2: DexScreener as metadata-only fallback for /coins/{mint}
+  const mintMatch = endpoint.match(/^\/coins\/([A-Za-z0-9]+)$/);
+  if (mintMatch) {
+    try {
+      const mint = mintMatch[1];
+      console.log(`[${callerName}] 🔄 Trying DexScreener fallback for ${mint}...`);
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      if (dexRes.ok) {
+        const dexData = await dexRes.json();
+        const pair = dexData.pairs?.[0];
+        if (pair?.baseToken?.symbol) {
+          // Map DexScreener data to pump.fun-like shape for compatibility
+          const mapped = {
+            symbol: pair.baseToken.symbol,
+            name: pair.baseToken.name || pair.baseToken.symbol,
+            image_uri: pair.info?.imageUrl || null,
+            usd_market_cap: pair.marketCap || null,
+            twitter: pair.info?.socials?.find((s: any) => s.type === 'twitter')?.url || null,
+            website: pair.info?.websites?.[0]?.url || null,
+            _source: 'dexscreener_fallback',
+          };
+          console.log(`[${callerName}] ✅ DexScreener fallback SUCCESS for ${mint}: $${mapped.symbol}`);
+          return mapped;
+        }
+      }
+    } catch (e) {
+      console.warn(`[${callerName}] DexScreener fallback failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+
+  return null;
 }
 
 /**
