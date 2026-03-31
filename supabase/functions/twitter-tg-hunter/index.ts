@@ -7,6 +7,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function detectAccountStatus(markdown: string, statusCode?: number): 'active' | 'suspended' | 'deleted' | 'unknown' {
+  const lower = markdown.toLowerCase();
+  if (lower.includes('account suspended') || lower.includes('this account has been suspended')) return 'suspended';
+  if (lower.includes("this account doesn't exist") || lower.includes('page not found') || lower.includes('hmm...this page doesn') || statusCode === 404) return 'deleted';
+  if (lower.includes('caution: this account is temporarily restricted') || lower.includes('withheld')) return 'suspended';
+  if (markdown.length < 50 && !lower.includes('follow')) return 'unknown';
+  return 'active';
+}
+
 function extractTelegramLinks(text: string): string[] {
   const patterns = [
     /https?:\/\/t\.me\/[a-zA-Z0-9_]+/gi,
