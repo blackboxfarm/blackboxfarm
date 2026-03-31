@@ -87,6 +87,16 @@ serve(withRunLog('telegram-mtproto-auth', async (req) => {
     const body = await req.json().catch(() => ({}));
     const { action, code, channelUsername, chatId, limit } = body;
 
+    // Gracefully handle empty/missing action (e.g. cron health pings)
+    if (!action) {
+      return new Response(JSON.stringify({
+        ok: true,
+        message: 'telegram-mtproto-auth is alive. Provide an "action" to use.',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const apiIdRaw = Deno.env.get('TELEGRAM_API_ID');
     const apiHash = Deno.env.get('TELEGRAM_API_HASH');
     const phoneNumber = Deno.env.get('TELEGRAM_PHONE_NUMBER');
