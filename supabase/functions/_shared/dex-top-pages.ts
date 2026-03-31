@@ -83,7 +83,8 @@ const SCRAPE_CONFIGS_PAGE2 = [
   { waitFor: 18000, onlyMainContent: false },   // aggressive wait for lazy JS
 ];
 
-async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markdown: string; retried: boolean }> {
+async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false): Promise<{ markdown: string; retried: boolean }> {
+  const SCRAPE_CONFIGS = isPage2 ? SCRAPE_CONFIGS_PAGE2 : SCRAPE_CONFIGS_PAGE1;
   const apiKey = Deno.env.get("FIRECRAWL_API_KEY");
   if (!apiKey) {
     throw new Error("FIRECRAWL_API_KEY not configured");
