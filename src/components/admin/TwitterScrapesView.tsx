@@ -52,6 +52,10 @@ export function TwitterScrapesView() {
         <TabsContent value="comment-bots">
           <CommentBotScanner />
         </TabsContent>
+
+        <TabsContent value="tg-hunters">
+          <TGHuntersTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
