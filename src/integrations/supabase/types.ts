@@ -15206,6 +15206,7 @@ export type Database = {
           handle: string
           id: string
           is_active: boolean | null
+          is_archived: boolean
           last_scanned_at: string | null
           last_tweet_scan_at: string | null
           notes: string | null
@@ -15228,6 +15229,7 @@ export type Database = {
           handle: string
           id?: string
           is_active?: boolean | null
+          is_archived?: boolean
           last_scanned_at?: string | null
           last_tweet_scan_at?: string | null
           notes?: string | null
@@ -15250,6 +15252,7 @@ export type Database = {
           handle?: string
           id?: string
           is_active?: boolean | null
+          is_archived?: boolean
           last_scanned_at?: string | null
           last_tweet_scan_at?: string | null
           notes?: string | null
