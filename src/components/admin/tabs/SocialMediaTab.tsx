@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { Send, Image, Link, RefreshCw } from "lucide-react";
 import { ContentRepurposer } from "@/components/admin/social/ContentRepurposer";
 import { SocialConfigPanel } from "@/components/admin/social/SocialConfigPanel";
+import { ImageGallery } from "@/components/admin/social/ImageGallery";
+import { GalleryPickerButton } from "@/components/admin/social/GalleryPickerButton";
 
 export default function SocialMediaTab() {
   return (
@@ -32,6 +34,7 @@ export default function SocialMediaTab() {
       <Tabs defaultValue="repurpose" className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="repurpose">🔄 Repurposer</TabsTrigger>
+          <TabsTrigger value="gallery">🖼️ Image Gallery</TabsTrigger>
           <TabsTrigger value="threads">🧵 Threads</TabsTrigger>
           <TabsTrigger value="instagram">📸 Instagram</TabsTrigger>
           <TabsTrigger value="facebook">📘 Facebook</TabsTrigger>
@@ -43,6 +46,9 @@ export default function SocialMediaTab() {
 
         <TabsContent value="repurpose">
           <ContentRepurposer />
+        </TabsContent>
+        <TabsContent value="gallery">
+          <ImageGallery mode="manage" />
         </TabsContent>
         <TabsContent value="threads">
           <ThreadsPanel />
@@ -131,7 +137,11 @@ function ThreadsPanel() {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label className="flex items-center gap-1"><Image className="h-3 w-3" /> Image URL (optional)</Label>
-            <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+            <div className="flex gap-2">
+              <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://... or pick from gallery" className="flex-1" />
+              <GalleryPickerButton onSelect={setImageUrl} />
+            </div>
+            {imageUrl && <img src={imageUrl} alt="preview" className="h-16 w-16 object-cover rounded border" />}
           </div>
           <div className="space-y-2">
             <Label className="flex items-center gap-1"><Link className="h-3 w-3" /> Link (optional)</Label>
@@ -194,7 +204,11 @@ function InstagramPanel() {
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label className="flex items-center gap-1"><Image className="h-3 w-3" /> Image URL (required)</Label>
-          <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+          <div className="flex gap-2">
+            <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://... or pick from gallery" className="flex-1" />
+            <GalleryPickerButton onSelect={setImageUrl} />
+          </div>
+          {imageUrl && <img src={imageUrl} alt="preview" className="h-16 w-16 object-cover rounded border" />}
           <p className="text-xs text-muted-foreground">Must be a publicly accessible JPEG or PNG URL</p>
         </div>
         <div className="space-y-2">
@@ -264,7 +278,11 @@ function FacebookPanel() {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label className="flex items-center gap-1"><Image className="h-3 w-3" /> Image URL (optional)</Label>
-            <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+            <div className="flex gap-2">
+              <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://... or pick from gallery" className="flex-1" />
+              <GalleryPickerButton onSelect={setImageUrl} />
+            </div>
+            {imageUrl && <img src={imageUrl} alt="preview" className="h-16 w-16 object-cover rounded border" />}
           </div>
           <div className="space-y-2">
             <Label className="flex items-center gap-1"><Link className="h-3 w-3" /> Link (optional)</Label>
