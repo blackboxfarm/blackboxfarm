@@ -7,6 +7,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+/** Strip full URLs, @symbols, whitespace → bare lowercase handle */
+function cleanHandle(raw: string): string {
+  let h = raw.trim();
+  // Strip surrounding quotes (from ChatGPT copy-paste artifacts)
+  h = h.replace(/^["'"]+|["'"]+$/g, '');
+  // Strip full twitter/x URLs
+  h = h.replace(/^https?:\/\/(www\.)?(twitter\.com|x\.com)\//i, '');
+  // Strip trailing slashes or query params
+  h = h.replace(/[?/].*$/, '');
+  // Strip @ prefix
+  h = h.replace(/^@/, '');
+  return h.toLowerCase().trim();
+}
+
 function detectAccountStatus(markdown: string, statusCode?: number): 'active' | 'suspended' | 'deleted' | 'unknown' {
   const lower = markdown.toLowerCase();
   if (lower.includes('account suspended') || lower.includes('this account has been suspended')) return 'suspended';
@@ -28,7 +42,6 @@ function extractTelegramLinks(text: string): string[] {
     for (const match of matches) {
       let link = match;
       if (!link.startsWith('http')) link = `https://${link}`;
-      // Normalize
       link = link.replace('telegram.me', 't.me');
       links.add(link);
     }
@@ -49,6 +62,32 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    // ── Clean existing handles in DB ──
+    if (action === 'clean-handles') {
+      const { data: all, error: fetchErr } = await supabase
+        .from('twitter_tg_targets')
+        .select('id, handle');
+
+      if (fetchErr) throw fetchErr;
+
+      let cleaned = 0;
+      for (const row of all || []) {
+        const clean = cleanHandle(row.handle);
+        if (clean !== row.handle) {
+          const { error } = await supabase
+            .from('twitter_tg_targets')
+            .update({ handle: clean })
+            .eq('id', row.id);
+          if (!error) cleaned++;
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, cleaned, total: all?.length || 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // ── Import handles ──
     if (action === 'import-list') {
       if (!handles || !Array.isArray(handles) || handles.length === 0) {
@@ -59,7 +98,7 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       }
 
       const rows = handles.map((h: string) => ({
-        handle: h.replace('@', '').trim().toLowerCase(),
+        handle: cleanHandle(h),
         is_active: true,
       }));
 
@@ -85,7 +124,7 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         );
       }
 
-      const cleanHandle = handle.replace('@', '').trim().toLowerCase();
+      const clean = cleanHandle(handle);
 
       const guard = checkFirecrawlBudget('twitter-tg-hunter');
       if (!guard.allowed) {
@@ -103,7 +142,6 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         );
       }
 
-      // Scrape the Twitter profile page
       const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
         headers: {
@@ -111,7 +149,7 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          url: `https://x.com/${cleanHandle}`,
+          url: `https://x.com/${clean}`,
           formats: ['markdown', 'links'],
           onlyMainContent: false,
           storeInCache: false,
@@ -131,21 +169,17 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       const markdown = scrapeData.data?.markdown || scrapeData.markdown || '';
       const links = scrapeData.data?.links || scrapeData.links || [];
 
-      // Detect account status
       const accountStatus = detectAccountStatus(markdown, scrapeResponse.status === 404 ? 404 : undefined);
 
-      // Extract telegram links from markdown content and discovered links
       const allText = markdown + '\n' + links.join('\n');
       const telegramLinks = extractTelegramLinks(allText);
 
-      // Extract bio (rough heuristic from markdown)
       let bio = '';
       const mdLines = markdown.split('\n').filter((l: string) => l.trim());
       if (mdLines.length > 2) {
         bio = mdLines.slice(1, 4).join(' ').slice(0, 500);
       }
 
-      // Extract follower count from markdown
       let followers = 0;
       const followerMatch = markdown.match(/(\d[\d,.]*[KkMm]?)\s*(?:Followers|followers)/);
       if (followerMatch) {
@@ -159,11 +193,10 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         }
       }
 
-      // Update the record
       const { data: updated, error: updateErr } = await supabase
         .from('twitter_tg_targets')
         .upsert({
-          handle: cleanHandle,
+          handle: clean,
           bio: bio || null,
           followers,
           telegram_links: telegramLinks,
@@ -175,21 +208,12 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
         .select()
         .single();
 
-      // Increment scan_count
-      await supabase.rpc('increment_counter', { 
-        table_name: 'twitter_tg_targets',
-        column_name: 'scan_count',
-        row_id: updated?.id
-      }).catch(() => {
-        // If RPC doesn't exist, that's fine — we set scan_count above
-      });
-
       if (updateErr) throw updateErr;
 
       return new Response(
         JSON.stringify({
           success: true,
-          handle: cleanHandle,
+          handle: clean,
           telegram_links: telegramLinks,
           followers,
           account_status: accountStatus,
@@ -201,7 +225,6 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
 
     // ── Scan all missing TG links ──
     if (action === 'scan-all-missing') {
-      // Only scan active accounts that have no TG links and aren't dead
       const { data: targets, error: fetchErr } = await supabase
         .from('twitter_tg_targets')
         .select('handle, account_status')
@@ -242,44 +265,6 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, scanned: results.length, total_eligible: targets?.length || 0, results }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-        .limit(5);
-
-      if (fetchErr) throw fetchErr;
-
-      const results = [];
-      for (const target of targets || []) {
-        const guard = checkFirecrawlBudget('twitter-tg-hunter-batch');
-        if (!guard.allowed) {
-          console.warn('Budget exhausted during batch, stopping');
-          break;
-        }
-
-        try {
-          // Recursive call via fetch to self
-          const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/twitter-tg-hunter`;
-          const res = await fetch(selfUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ action: 'scan-handle', handle: target.handle }),
-          });
-          const result = await res.json();
-          results.push({ handle: target.handle, ...result });
-        } catch (e) {
-          results.push({ handle: target.handle, success: false, error: String(e) });
-        }
-
-        // Small delay between scrapes
-        await new Promise(r => setTimeout(r, 2000));
-      }
-
-      return new Response(
-        JSON.stringify({ success: true, scanned: results.length, results }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
