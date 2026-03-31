@@ -1,9 +1,10 @@
 import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Twitter, Users, Bot } from "lucide-react";
+import { Twitter, Users, Bot, Send } from "lucide-react";
 import { MentionsTab } from "./twitter/MentionsTab";
 import { KOLsTab } from "./twitter/KOLsTab";
 import { CommentBotScanner } from "./CommentBotScanner";
+import { TGHuntersTab } from "./twitter/TGHuntersTab";
 
 export function TwitterScrapesView() {
   return (
@@ -34,6 +35,10 @@ export function TwitterScrapesView() {
             <Bot className="h-4 w-4" />
             Comment Bots
           </TabsTrigger>
+          <TabsTrigger value="tg-hunters" className="flex items-center gap-2">
+            <Send className="h-4 w-4" />
+            TG Hunters
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="mentions">
@@ -46,6 +51,10 @@ export function TwitterScrapesView() {
 
         <TabsContent value="comment-bots">
           <CommentBotScanner />
+        </TabsContent>
+
+        <TabsContent value="tg-hunters">
+          <TGHuntersTab />
         </TabsContent>
       </Tabs>
     </div>

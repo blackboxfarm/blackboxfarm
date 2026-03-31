@@ -15134,6 +15134,57 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_tg_targets: {
+        Row: {
+          bio: string | null
+          created_at: string | null
+          display_name: string | null
+          followers: number | null
+          handle: string
+          id: string
+          is_active: boolean | null
+          last_scanned_at: string | null
+          notes: string | null
+          priority_score: number | null
+          scan_count: number | null
+          tags: string[] | null
+          telegram_links: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          followers?: number | null
+          handle: string
+          id?: string
+          is_active?: boolean | null
+          last_scanned_at?: string | null
+          notes?: string | null
+          priority_score?: number | null
+          scan_count?: number | null
+          tags?: string[] | null
+          telegram_links?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          followers?: number | null
+          handle?: string
+          id?: string
+          is_active?: boolean | null
+          last_scanned_at?: string | null
+          notes?: string | null
+          priority_score?: number | null
+          scan_count?: number | null
+          tags?: string[] | null
+          telegram_links?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       twitter_token_mentions: {
         Row: {
           author_followers: number | null

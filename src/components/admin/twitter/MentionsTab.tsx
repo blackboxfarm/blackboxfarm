@@ -2,11 +2,12 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, CheckCircle, Star, Users, Eye, Heart, Repeat, ExternalLink, Trophy, Copy, Clock, Zap, Play, Square, Loader2 } from "lucide-react";
+import { RefreshCw, CheckCircle, Star, Users, Eye, Heart, Repeat, ExternalLink, Trophy, Copy, Clock, Zap, Play, Square, Loader2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { ReplyDraftButton } from "./ReplyDraftButton";
 
 interface TwitterMention {
   id: string;
@@ -521,16 +522,23 @@ export function MentionsTab() {
                     </div>
                     
                     {mention.tweet_url && (
-                      <a
-                        href={mention.tweet_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0"
-                      >
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </a>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <ReplyDraftButton
+                          tweetText={mention.tweet_text}
+                          tweetAuthor={mention.author_username || undefined}
+                          detectedTickers={mention.detected_tickers}
+                          detectedContracts={mention.detected_contracts}
+                        />
+                        <a
+                          href={mention.tweet_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </a>
+                      </div>
                     )}
                   </div>
                 </div>
