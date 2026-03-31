@@ -131,15 +131,18 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
       const markdown = scrapeData.data?.markdown || scrapeData.markdown || '';
       const links = scrapeData.data?.links || scrapeData.links || [];
 
+      // Detect account status
+      const accountStatus = detectAccountStatus(markdown, scrapeResponse.status === 404 ? 404 : undefined);
+
       // Extract telegram links from markdown content and discovered links
       const allText = markdown + '\n' + links.join('\n');
       const telegramLinks = extractTelegramLinks(allText);
 
       // Extract bio (rough heuristic from markdown)
       let bio = '';
-      const lines = markdown.split('\n').filter((l: string) => l.trim());
-      if (lines.length > 2) {
-        bio = lines.slice(1, 4).join(' ').slice(0, 500);
+      const mdLines = markdown.split('\n').filter((l: string) => l.trim());
+      if (mdLines.length > 2) {
+        bio = mdLines.slice(1, 4).join(' ').slice(0, 500);
       }
 
       // Extract follower count from markdown
@@ -164,8 +167,9 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
           bio: bio || null,
           followers,
           telegram_links: telegramLinks,
+          account_status: accountStatus,
           last_scanned_at: new Date().toISOString(),
-          scan_count: 1, // will be incremented via raw SQL below
+          scan_count: 1,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'handle' })
         .select()
