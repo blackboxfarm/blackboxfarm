@@ -24,6 +24,9 @@ const DEFAULT_RETENTION: Record<string, number> = {
   'banner_impressions': 90,
   'banner_clicks': 90,
   'helius_api_usage': 30,
+  'holder_movements': 3,
+  'holder_snapshots': 7,
+  'token_rankings': 7,
 };
 
 // Snapshot helius usage data before pruning (aggregated by day + function)
