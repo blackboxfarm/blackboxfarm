@@ -10,6 +10,8 @@ const corsHeaders = {
 /** Strip full URLs, @symbols, whitespace → bare lowercase handle */
 function cleanHandle(raw: string): string {
   let h = raw.trim();
+  // Strip surrounding quotes (from ChatGPT copy-paste artifacts)
+  h = h.replace(/^["'"]+|["'"]+$/g, '');
   // Strip full twitter/x URLs
   h = h.replace(/^https?:\/\/(www\.)?(twitter\.com|x\.com)\//i, '');
   // Strip trailing slashes or query params
