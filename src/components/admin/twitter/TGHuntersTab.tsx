@@ -139,17 +139,17 @@ export function TGHuntersTab() {
     },
   });
 
-  const scanBatchMutation = useMutation({
+  const scanAllMissingMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("twitter-tg-hunter", {
-        body: { action: "scan-batch" },
+        body: { action: "scan-all-missing" },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error);
       return data;
     },
     onSuccess: (data) => {
-      toast.success(`Batch scanned ${data.scanned} handles`);
+      toast.success(`Scanned ${data.scanned}/${data.total_eligible} targets for TG links`);
       queryClient.invalidateQueries({ queryKey: ["tg-targets"] });
     },
     onError: (err: Error) => toast.error(err.message),
