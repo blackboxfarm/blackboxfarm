@@ -8,6 +8,7 @@
  * - Support for all endpoint types (/coins, /trades, /replies, /clips, /user-created-coins)
  */
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PUMPFUN_API_BASE, PUMPFUN_API_FALLBACK, PUMPFUN_HEADERS } from './pumpfun-api.ts';
 
 const PUMPFUN_API = PUMPFUN_API_BASE;
