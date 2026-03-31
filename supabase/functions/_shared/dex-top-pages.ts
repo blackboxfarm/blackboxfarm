@@ -174,10 +174,18 @@ export async function scrapeDexTopPages(): Promise<{ pairs: RankedDexPair[]; hea
   const results: { markdown: string; retried: boolean }[] = [];
 
   // Scrape both pages independently — one failing shouldn't kill the other
+  // Stagger: scrape page 1 first, then page 2 with a brief gap to avoid concurrent Firecrawl pressure
   for (let i = 0; i < DEX_TOP_PAGE_URLS.length; i++) {
     const pageKey = i === 0 ? 'page1' : 'page2';
+    const isPage2 = i === 1;
+
+    // Brief stagger between pages to avoid Firecrawl rate-limit collisions
+    if (isPage2) {
+      await new Promise(r => setTimeout(r, 5000));
+    }
+
     try {
-      const result = await scrapePageMarkdown(DEX_TOP_PAGE_URLS[i]);
+      const result = await scrapePageMarkdown(DEX_TOP_PAGE_URLS[i], 0, isPage2);
       results.push(result);
       if (result.retried) health.retry_used = true;
       health[`${pageKey}_ok` as keyof ScrapeHealthResult] = true as any;
