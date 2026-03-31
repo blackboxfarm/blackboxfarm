@@ -70,11 +70,17 @@ export function parseDexTopPageMarkdown(markdown: string): RankedDexPair[] {
   return pairs.sort((a, b) => a.rank - b.rank);
 }
 
-// Retry configs — if first attempt fails/returns 0 results, try alternate params
-const SCRAPE_CONFIGS = [
+// Retry configs — page 2 needs longer waits due to lazy-loaded JS content
+const SCRAPE_CONFIGS_PAGE1 = [
   { waitFor: 3000, onlyMainContent: true },
-  { waitFor: 5000, onlyMainContent: false },  // longer wait, full page
-  { waitFor: 8000, onlyMainContent: true },   // even longer wait
+  { waitFor: 5000, onlyMainContent: false },
+  { waitFor: 8000, onlyMainContent: true },
+];
+
+const SCRAPE_CONFIGS_PAGE2 = [
+  { waitFor: 8000, onlyMainContent: false },   // start high for page 2
+  { waitFor: 12000, onlyMainContent: true },    // longer wait
+  { waitFor: 18000, onlyMainContent: false },   // aggressive wait for lazy JS
 ];
 
 async function scrapePageMarkdown(url: string, configIndex = 0): Promise<{ markdown: string; retried: boolean }> {
