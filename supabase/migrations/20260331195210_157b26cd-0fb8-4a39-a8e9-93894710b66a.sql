@@ -1,0 +1,1 @@
+ALTER TABLE public.twitter_tg_targets ADD COLUMN IF NOT EXISTS account_status text DEFAULT 'unknown';
