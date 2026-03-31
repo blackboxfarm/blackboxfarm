@@ -5668,6 +5668,63 @@ export type Database = {
         }
         Relationships: []
       }
+      intel_briefings: {
+        Row: {
+          author: string
+          category: string
+          content_md: string
+          created_at: string
+          featured_image_url: string | null
+          id: string
+          is_published: boolean
+          published_at: string | null
+          related_slugs: string[] | null
+          seo_description: string | null
+          seo_title: string | null
+          slug: string
+          subtitle: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author?: string
+          category?: string
+          content_md: string
+          created_at?: string
+          featured_image_url?: string | null
+          id?: string
+          is_published?: boolean
+          published_at?: string | null
+          related_slugs?: string[] | null
+          seo_description?: string | null
+          seo_title?: string | null
+          slug: string
+          subtitle?: string | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author?: string
+          category?: string
+          content_md?: string
+          created_at?: string
+          featured_image_url?: string | null
+          id?: string
+          is_published?: boolean
+          published_at?: string | null
+          related_slugs?: string[] | null
+          seo_description?: string | null
+          seo_title?: string | null
+          slug?: string
+          subtitle?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       intelligence_feature_flags: {
         Row: {
           description: string | null

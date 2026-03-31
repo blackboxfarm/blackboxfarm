@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { label: 'Holder Analysis', path: '/holders' },
   { label: 'Bubble Map', path: '/bubblepromo' },
   { label: 'Telegram Bot', path: '/tgbot' },
+  { label: 'Intel Briefings', path: '/intel' },
 ];
 
 export function SiteLayout({ children }: { children: React.ReactNode }) {

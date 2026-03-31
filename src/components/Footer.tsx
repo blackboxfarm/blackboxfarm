@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart, Instagram } from "lucide-react";
+import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart, Instagram, Newspaper } from "lucide-react";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
@@ -174,6 +174,12 @@ export function Footer() {
                 <Link to="/whitepaper" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <FileText className="h-3 w-3" />
                   White Paper
+                </Link>
+              </li>
+              <li>
+                <Link to="/intel" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <Newspaper className="h-3 w-3" />
+                  Intel Briefings
                 </Link>
               </li>
             </ul>
