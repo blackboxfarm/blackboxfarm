@@ -192,19 +192,59 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
           handle: cleanHandle,
           telegram_links: telegramLinks,
           followers,
+          account_status: accountStatus,
           bio: bio?.slice(0, 200),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // ── Scan batch ──
-    if (action === 'scan-batch') {
+    // ── Scan all missing TG links ──
+    if (action === 'scan-all-missing') {
+      // Only scan active accounts that have no TG links and aren't dead
       const { data: targets, error: fetchErr } = await supabase
         .from('twitter_tg_targets')
-        .select('handle')
+        .select('handle, account_status')
         .eq('is_active', true)
-        .order('last_scanned_at', { ascending: true, nullsFirst: true })
+        .or('telegram_links.is.null,telegram_links.eq.[]')
+        .not('account_status', 'in', '("suspended","deleted")')
+        .order('last_scanned_at', { ascending: true, nullsFirst: true });
+
+      if (fetchErr) throw fetchErr;
+
+      const results = [];
+      for (const target of targets || []) {
+        const guard = checkFirecrawlBudget('twitter-tg-hunter-batch');
+        if (!guard.allowed) {
+          console.warn('Budget exhausted during batch, stopping');
+          break;
+        }
+
+        try {
+          const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/twitter-tg-hunter`;
+          const res = await fetch(selfUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'scan-handle', handle: target.handle }),
+          });
+          const result = await res.json();
+          results.push({ handle: target.handle, ...result });
+        } catch (e) {
+          results.push({ handle: target.handle, success: false, error: String(e) });
+        }
+
+        // Rate limit: 2s between scrapes
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, scanned: results.length, total_eligible: targets?.length || 0, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
         .limit(5);
 
       if (fetchErr) throw fetchErr;
