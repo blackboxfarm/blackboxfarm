@@ -397,6 +397,11 @@ export function TGHuntersTab() {
                               @{target.handle}
                               <ExternalLink className="h-3 w-3" />
                             </a>
+                            {target.account_status && target.account_status !== 'active' && target.account_status !== 'unknown' && (
+                              <Badge variant="outline" className="text-[10px] text-red-400 border-red-500/30 bg-red-500/10">
+                                {target.account_status === 'suspended' ? '⚠️ Suspended' : '💀 Deleted'}
+                              </Badge>
+                            )}
                             {target.bio && (
                               <span className="text-xs text-muted-foreground line-clamp-1 max-w-[180px]">
                                 {target.bio}
