@@ -519,6 +519,51 @@ export function TGHuntersTab() {
                                 <Radio className="h-3 w-3 mr-1" /> Monitored
                               </Badge>
                             )}
+                            {/* Manual TG link add */}
+                            {editingTgTarget === target.id ? (
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <Input
+                                  placeholder="t.me/group or @group"
+                                  value={manualTgLink}
+                                  onChange={(e) => setManualTgLink(e.target.value)}
+                                  className="h-6 text-xs w-36"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && manualTgLink.trim()) {
+                                      manualTgMutation.mutate({ id: target.id, link: manualTgLink });
+                                    }
+                                    if (e.key === 'Escape') { setEditingTgTarget(null); setManualTgLink(""); }
+                                  }}
+                                  autoFocus
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs text-green-400"
+                                  onClick={() => manualTgLink.trim() && manualTgMutation.mutate({ id: target.id, link: manualTgLink })}
+                                  disabled={manualTgMutation.isPending || !manualTgLink.trim()}
+                                >
+                                  {manualTgMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '✓'}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1 text-xs text-muted-foreground"
+                                  onClick={() => { setEditingTgTarget(null); setManualTgLink(""); }}
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 px-1 text-xs text-muted-foreground hover:text-sky-400"
+                                onClick={(e) => { e.stopPropagation(); setEditingTgTarget(target.id); setManualTgLink(""); }}
+                                title="Manually add TG link"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
 
                           {/* Token mentions */}
