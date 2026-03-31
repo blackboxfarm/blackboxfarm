@@ -548,6 +548,11 @@ serve(withRunLog('flipit-execute', async (req) => {
       return ok({ warm: true, ts: Date.now() });
     }
 
+    // Orchestrator/cron tick with no action — nothing to do, return 200 skip
+    if (!body.action || (body.source === 'orchestrator' && !['buy', 'sell', 'partial_sell'].includes(body.action))) {
+      return ok({ ok: true, skipped: 'no active flipit action requested' });
+    }
+
     const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
 
     // Default slippage 5% (500 bps), configurable
