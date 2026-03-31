@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import {
   RefreshCw, Plus, Search, Loader2, ExternalLink, Upload, Scan, MessageCircle, Send, Trash2,
-  ChevronDown, ChevronRight, Twitter, Radio, Zap, Pencil,
+  ChevronDown, ChevronRight, Twitter, Radio, Zap, Pencil, Archive, ArchiveRestore,
 } from "lucide-react";
 import { ReplyDraftButton } from "./ReplyDraftButton";
 
