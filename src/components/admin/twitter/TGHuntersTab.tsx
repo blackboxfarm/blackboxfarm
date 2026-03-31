@@ -326,17 +326,17 @@ export function TGHuntersTab() {
             </DialogContent>
           </Dialog>
 
-          <Button
+           <Button
             variant="outline"
-            onClick={() => scanBatchMutation.mutate()}
-            disabled={scanBatchMutation.isPending || totalTargets === 0}
+            onClick={() => scanAllMissingMutation.mutate()}
+            disabled={scanAllMissingMutation.isPending || missingTG === 0}
           >
-            {scanBatchMutation.isPending ? (
+            {scanAllMissingMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Scan className="h-4 w-4 mr-2" />
             )}
-            Scan TG (5)
+            Scan All Missing TG ({missingTG})
           </Button>
 
           <Button
