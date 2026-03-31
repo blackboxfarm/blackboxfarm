@@ -1,0 +1,1 @@
+UPDATE twitter_tg_targets SET handle = replace(replace(handle, 'https://twitter.com/', ''), 'https://x.com/', '') WHERE handle LIKE 'https://%';
