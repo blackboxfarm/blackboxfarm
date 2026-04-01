@@ -92,7 +92,7 @@ export default function IntelBriefingArticle() {
     );
   }
 
-  const articleUrl = `https://blackboxfarm.lovable.app/intel/briefing/${article.slug}`;
+  const articleUrl = `https://blackbox.farm/intel/briefing/${article.slug}`;
 
   return (
     <SiteLayout>
