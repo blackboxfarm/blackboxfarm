@@ -16,8 +16,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
-  Save, Clock, FileText, Image as ImageIcon, ChevronDown
+  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal
 } from 'lucide-react';
+import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { format } from 'date-fns';
 
 interface Briefing {
