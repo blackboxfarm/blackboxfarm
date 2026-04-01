@@ -733,6 +733,21 @@ export function IntelBriefingsManager() {
           </CardContent>
         </Card>
       )}
+
+      {/* Image Crop Dialog */}
+      {cropSrc && (
+        <ImageCropDialog
+          open={showCrop}
+          onOpenChange={(open) => {
+            setShowCrop(open);
+            if (!open) { URL.revokeObjectURL(cropSrc); setCropSrc(null); }
+          }}
+          imageSrc={cropSrc}
+          onCropComplete={handleGalleryCropComplete}
+          defaultAspect={cropMode === 'hero' ? 2 : 'free'}
+          title={cropMode === 'hero' ? 'Crop Hero Image' : 'Crop Inline Image'}
+        />
+      )}
     </div>
   );
 }
