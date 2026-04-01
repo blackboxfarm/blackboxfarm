@@ -627,6 +627,10 @@ export function IntelBriefingsManager() {
             <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-4 w-4 mr-2" /> Import .md
             </Button>
+            <GalleryPickerButton
+              onSelect={handleGalleryInsert}
+              label="Insert Gallery Image"
+            />
             <input ref={fileInputRef} type="file" accept=".md,.txt,.markdown" className="hidden" onChange={handleMdUpload} />
             {editingId && (
               <Button variant="outline" size="sm" onClick={() => setShowRevisions(!showRevisions)}>
