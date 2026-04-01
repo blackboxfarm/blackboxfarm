@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import ReactMarkdown from 'react-markdown';
+import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import remarkGfm from 'remark-gfm';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
