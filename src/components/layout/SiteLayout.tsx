@@ -11,15 +11,16 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
   { label: 'Join!', path: '/subscriptions' },
   { label: 'Live Feed', path: '/feed' },
   { label: 'Holder Analysis', path: '/holders' },
   { label: 'Bubble Map', path: '/bubblepromo' },
   { label: 'Telegram Bot', path: '/tgbot' },
-  // { label: 'Intel Briefings', path: '/intel' }, // Hidden during development
 ];
 
 export function SiteLayout({ children }: { children: React.ReactNode }) {
