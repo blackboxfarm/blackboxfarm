@@ -70,17 +70,50 @@ export function parseDexTopPageMarkdown(markdown: string): RankedDexPair[] {
   return pairs.sort((a, b) => a.rank - b.rank);
 }
 
-// Retry configs — page 2 needs longer waits due to lazy-loaded JS content
+// ─── Response validation ────────────────────────────────────────────────
+// Detects upstream error pages / CDN failures returned as 200 OK
+const GARBAGE_PATTERNS = [
+  /^bad gateway/i,
+  /^gateway timeout/i,
+  /^access denied/i,
+  /^error\b/i,
+  /^<!DOCTYPE\s+html[^>]*>\s*<html[^>]*>\s*<head[^>]*>[\s\S]{0,500}(502|503|504|403|error|blocked)/i,
+  /^{"error"/i,
+  /cloudflare/i,
+  /just a moment/i, // Cloudflare challenge page
+];
+
+function isUsableMarkdown(body: string | undefined | null): { usable: boolean; reason?: string } {
+  if (!body || body.trim().length === 0) {
+    return { usable: false, reason: 'empty_body' };
+  }
+  const trimmed = body.trim();
+  // Very short responses are almost certainly error pages, not 100+ token listings
+  if (trimmed.length < 200) {
+    return { usable: false, reason: `body_too_short (${trimmed.length} chars)` };
+  }
+  for (const pattern of GARBAGE_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      // Extract a preview for logging
+      const preview = trimmed.slice(0, 80).replace(/\n/g, ' ');
+      return { usable: false, reason: `upstream_error: "${preview}..."` };
+    }
+  }
+  return { usable: true };
+}
+
+// ─── Scrape configs ─────────────────────────────────────────────────────
+// Each config specifies waitFor AND a matching timeout (timeout must be ≥ 2× waitFor)
 const SCRAPE_CONFIGS_PAGE1 = [
-  { waitFor: 3000, onlyMainContent: true },
-  { waitFor: 5000, onlyMainContent: false },
-  { waitFor: 8000, onlyMainContent: true },
+  { waitFor: 3000, timeout: 30000, onlyMainContent: true },
+  { waitFor: 5000, timeout: 30000, onlyMainContent: false },
+  { waitFor: 8000, timeout: 30000, onlyMainContent: true },
 ];
 
 const SCRAPE_CONFIGS_PAGE2 = [
-  { waitFor: 8000, onlyMainContent: false },   // start high for page 2
-  { waitFor: 12000, onlyMainContent: true },    // longer wait
-  { waitFor: 18000, onlyMainContent: false },   // aggressive wait for lazy JS
+  { waitFor: 8000, timeout: 30000, onlyMainContent: false },
+  { waitFor: 12000, timeout: 35000, onlyMainContent: true },
+  { waitFor: 15000, timeout: 45000, onlyMainContent: false },
 ];
 
 async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false): Promise<{ markdown: string; retried: boolean }> {
@@ -91,7 +124,7 @@ async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false)
   }
 
   // Check centralized rate-limit budget
-  const { checkFirecrawlBudget, handleFirecrawlError } = await import('./firecrawl-guard.ts');
+  const { checkFirecrawlBudget } = await import('./firecrawl-guard.ts');
   const budget = checkFirecrawlBudget('dex-top-200');
   if (!budget.allowed) {
     throw new Error(`FIRECRAWL_SELF_THROTTLED: ${budget.reason}`);
@@ -99,7 +132,7 @@ async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false)
 
   const config = SCRAPE_CONFIGS[configIndex] || SCRAPE_CONFIGS[0];
   const attempt = configIndex + 1;
-  console.log(`[DexTop200] Scraping ${url} (attempt ${attempt}, waitFor=${config.waitFor})...`);
+  console.log(`[DexTop200] Scraping ${url} (attempt ${attempt}, waitFor=${config.waitFor}, timeout=${config.timeout})...`);
 
   const response = await fetch(FIRECRAWL_API_URL, {
     method: "POST",
@@ -112,16 +145,22 @@ async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false)
       formats: ["markdown"],
       onlyMainContent: config.onlyMainContent,
       waitFor: config.waitFor,
+      timeout: config.timeout,
       storeInCache: false,
     }),
   });
 
-  const data = await response.json();
-
+  // ─── HTTP-level error handling ──────────────────────────────────────
   if (!response.ok) {
-    const errMsg = data?.error || `Firecrawl scrape failed for ${url} (${response.status})`;
-    
-    // Detect rate limit / payment / block errors specifically
+    let errMsg: string;
+    try {
+      const data = await response.json();
+      errMsg = data?.error || `Firecrawl scrape failed for ${url} (${response.status})`;
+    } catch {
+      const text = await response.text().catch(() => '');
+      errMsg = `Firecrawl HTTP ${response.status}: ${text.slice(0, 120)}`;
+    }
+
     if (response.status === 402) {
       throw new Error(`FIRECRAWL_CREDITS_EXHAUSTED: ${errMsg}`);
     }
@@ -131,28 +170,50 @@ async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false)
     if (response.status === 403) {
       throw new Error(`FIRECRAWL_BLOCKED: Possible IP/fingerprint block (${response.status})`);
     }
-    
+
     // Retry with next config if available
     if (configIndex + 1 < SCRAPE_CONFIGS.length) {
       console.warn(`[DexTop200] Attempt ${attempt} failed for ${url}: ${errMsg}. Retrying...`);
       await new Promise(r => setTimeout(r, 3000));
       return scrapePageMarkdown(url, configIndex + 1, isPage2);
     }
-    
+
+    throw new Error(errMsg);
+  }
+
+  // ─── Parse JSON safely ──────────────────────────────────────────────
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    const rawText = await response.text().catch(() => '');
+    const preview = rawText.slice(0, 100).replace(/\n/g, ' ');
+    const errMsg = `Firecrawl returned non-JSON response: "${preview}"`;
+    console.error(`[DexTop200] ${errMsg}`);
+
+    if (configIndex + 1 < SCRAPE_CONFIGS.length) {
+      await new Promise(r => setTimeout(r, 3000));
+      return scrapePageMarkdown(url, configIndex + 1, isPage2);
+    }
     throw new Error(errMsg);
   }
 
   const markdown = data?.data?.markdown || data?.markdown;
-  if (!markdown) {
+
+  // ─── Content validation gate ────────────────────────────────────────
+  const validation = isUsableMarkdown(markdown);
+  if (!validation.usable) {
+    const errMsg = `Scrape returned unusable content for ${url}: ${validation.reason}`;
+    console.warn(`[DexTop200] Attempt ${attempt}: ${errMsg}`);
+
     if (configIndex + 1 < SCRAPE_CONFIGS.length) {
-      console.warn(`[DexTop200] Attempt ${attempt}: no markdown for ${url}. Retrying...`);
       await new Promise(r => setTimeout(r, 3000));
       return scrapePageMarkdown(url, configIndex + 1, isPage2);
     }
-    throw new Error(`No markdown returned for ${url} after ${attempt} attempts`);
+    throw new Error(errMsg);
   }
 
-  // Check if we actually got ranked entries — empty markdown with no pairs = possible block
+  // Check if we actually got ranked entries — content looks valid but no pairs = possible structure change
   const testPairs = parseDexTopPageMarkdown(markdown);
   if (testPairs.length === 0 && configIndex + 1 < SCRAPE_CONFIGS.length) {
     console.warn(`[DexTop200] Attempt ${attempt}: markdown returned but 0 pairs parsed for ${url}. Retrying...`);
