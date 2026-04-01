@@ -1,44 +1,45 @@
 
 
-# Intel Briefings — Auto-Metadata & Inline Gallery Images
+# Enhanced Article Rendering — Custom ReactMarkdown Components
 
-## Overview
+## The Problem
 
-Three enhancements to the Intel Briefings editor:
+Right now, `ReactMarkdown` renders the raw `.md` structure as-is with only Tailwind `prose` utility classes for basic typography. This produces a flat, blog-post-looking output. The user wants the articles to look like a **professionally designed publication page** — with styled section headings, visual dividers, proper spacing, pull-quote styling, and images that sit within the flow like a magazine layout.
 
-1. **Auto-fill metadata from pasted/uploaded markdown** — parse the article content to extract title, subtitle, category, and tags automatically so you can just paste and save.
-2. **Inline "flavour" images via Gallery picker** — add a button in the editor toolbar that opens the existing Social Media Gallery in pick mode, inserting the selected image as a markdown image tag at the cursor position.
-3. **Hero image sizing guidance** — display recommended dimensions (1200x630px, the standard OG/social share ratio) next to the upload button.
+## The Solution
 
-## How Auto-Fill Works
+Override ReactMarkdown's default element renderers with custom React components that apply rich, publication-grade styling. This applies to both the **public article page** (`IntelBriefingArticle.tsx`) and the **admin preview** (`IntelBriefingsManager.tsx`).
 
-When you paste markdown or import a `.md` file, the system will:
+### Custom Component Overrides
 
-- Extract the **first `# heading`** as the title
-- Extract the **first paragraph or second heading** as the subtitle
-- Scan for keyword patterns to suggest a **category** (e.g., "holder" → `holder-analysis`, "wallet" → `wallet-tracing`, "scam"/"rug" → `scam-detection`, "guide"/"how to" → `platform-guides`)
-- Pull any `**bold keywords**` or hashtags as **tags**
-- Auto-generate the **slug** from the extracted title
-- You can still override any field before saving
+| Element | Current | Enhanced |
+|---------|---------|----------|
+| `h1` | Basic bold text | Large display heading with accent underline bar, extra top margin |
+| `h2` | Basic bold text | Section heading with left cyan border accent, uppercase tracking, spacing |
+| `h3` | Basic bold text | Styled subheading with muted accent color |
+| `p` | Flat paragraph | Proper line-height (1.8), comfortable paragraph spacing, first-paragraph drop-cap or lead styling |
+| `blockquote` | Thin border-left | Styled pull-quote with background card, larger italic text, accent border |
+| `img` | Float left/right alternating | Wrapped in a styled figure with rounded corners, subtle border/shadow, caption support via alt text, alternating float with proper clearfix segments |
+| `hr` | Plain line | Decorative divider (centered dots or gradient line) |
+| `ul`/`ol` | Basic list | Styled list with custom bullet/number colors, comfortable spacing |
+| `strong` | Just bold | Bold + slightly brighter foreground color |
+| `a` | Primary color link | Underline-on-hover with subtle transition |
+| `table` | Basic table | Styled card-wrapped table with header highlights |
 
-## Inline Flavour Images
+### Implementation
 
-- Add an "Insert Gallery Image" button next to the "Import .md" button in the editor toolbar
-- Clicking it opens the existing `GalleryPickerButton` dialog (reusing the Social Media Gallery component in `pick` mode)
-- On selection, inserts `![image](url)` at the current cursor position in the markdown textarea
-- This means you get access to all Uploaded and AI Generated images from the gallery without re-uploading
+Create a shared component file `src/components/intel/ArticleMarkdownRenderer.tsx` that:
+1. Exports a `markdownComponents` object for ReactMarkdown's `components` prop
+2. Exports an `ArticleContent` wrapper component that applies the prose container styling
+3. Handles image float logic more intelligently — images get wrapped in `<figure>` with alt text as captions, float alternation uses a counter via React state
 
-## Hero Image
-
-- Recommended size: **1200 x 630px** (2:1 ratio, optimized for OG/social cards and article headers)
-- Add helper text below the upload button showing this recommendation
-- No hard enforcement — any image works, but this ratio renders best
-
-## Files to Edit
+### Files to Edit
 
 | Action | File | What |
 |--------|------|------|
-| Edit | `src/components/admin/IntelBriefingsManager.tsx` | Add auto-parse logic on md import/paste, add gallery picker button, add hero size hint |
+| Create | `src/components/intel/ArticleMarkdownRenderer.tsx` | Custom component overrides + wrapper |
+| Edit | `src/pages/IntelBriefingArticle.tsx` | Use `ArticleContent` component instead of raw ReactMarkdown |
+| Edit | `src/components/admin/IntelBriefingsManager.tsx` | Use same renderer in admin preview |
 
-No new database changes needed. Reuses the existing `GalleryPickerButton` and `ImageGallery` components.
+No database or dependency changes needed — `react-markdown` already supports the `components` prop.
 
