@@ -287,17 +287,45 @@ export function IntelBriefingsManager() {
     setView('edit');
   }, []);
 
+  const applyAutoParse = (md: string) => {
+    const parsed = autoParseMarkdown(md);
+    setForm(f => ({
+      ...f,
+      content_md: md,
+      title: parsed.title || f.title,
+      subtitle: parsed.subtitle || f.subtitle,
+      slug: parsed.slug || f.slug,
+      category: parsed.category || f.category,
+      tags: parsed.tags || f.tags,
+    }));
+    if (parsed.tags) setTagsInput(parsed.tags.join(', '));
+  };
+
   const handleMdUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      setForm(f => ({ ...f, content_md: text }));
-      toast({ title: 'Imported', description: `Loaded ${file.name}` });
+      applyAutoParse(text);
+      toast({ title: 'Imported & Auto-filled', description: `Loaded ${file.name} — metadata extracted automatically.` });
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const handleGalleryInsert = (imageUrl: string) => {
+    const textarea = editorRef.current;
+    const tag = `\n![image](${imageUrl})\n`;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const before = form.content_md.slice(0, start);
+      const after = form.content_md.slice(start);
+      setForm(f => ({ ...f, content_md: before + tag + after }));
+    } else {
+      setForm(f => ({ ...f, content_md: f.content_md + tag }));
+    }
+    toast({ title: 'Image inserted', description: 'Gallery image added to article.' });
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
