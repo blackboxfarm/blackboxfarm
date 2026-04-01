@@ -1,5 +1,8 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
+[functions.og-meta]
+verify_jwt = false
+
 [functions.rotate-helius-key]
 verify_jwt = false
 
