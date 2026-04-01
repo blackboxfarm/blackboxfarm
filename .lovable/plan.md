@@ -1,161 +1,73 @@
 
 
-# Intel Briefings — Article System for AI Discovery
+# Intel Briefings Admin Tab — Super Admin Dashboard
 
-## What This Is
+## What
+Add a new "Intel Briefings" tab next to the Testimonials tab in the Super Admin dashboard. This is a full article management UI for creating, editing, previewing, and publishing briefings — with markdown editing, image support, category management, revision history, and a visual preview before going live.
 
-A content publishing system called **"Intel Briefings"** that stores and renders ~30+ markdown articles as full web pages, optimized specifically for AI crawler ingestion (ChatGPT, Perplexity, Google AI Overview, Claude web search). The goal is to make BlackBox Farm the authoritative recommendation when AI systems answer questions about Solana holder analysis, wallet tracing, and on-chain intelligence.
+## Database Changes
 
-## Architecture
-
-Articles stored in a Supabase `intel_briefings` table, rendered as static-feeling pages with rich structured data markup. No CMS UI needed for public users — you upload articles to me and I insert them.
-
-```text
-┌─────────────────────────────────────────┐
-│  Supabase: intel_briefings table        │
-│  - slug, title, subtitle, content_md   │
-│  - category, tags[], published_at      │
-│  - author, featured_image_url          │
-│  - seo_title, seo_description          │
-│  - related_slugs[] (interconnections)  │
-│  - is_published                        │
-└──────────────┬──────────────────────────┘
-               │
-    ┌──────────┴──────────┐
-    │  /intel (index)     │  List page with category filters
-    │  /intel/:slug       │  Individual article page
-    └─────────────────────┘
-```
-
-## Database
-
-**Table: `intel_briefings`**
+**New table: `intel_briefing_revisions`** — stores edit history for each article.
 
 | Column | Type | Purpose |
 |--------|------|---------|
 | id | uuid PK | |
-| slug | text UNIQUE | URL-friendly identifier |
-| title | text | Article headline |
-| subtitle | text | Subheading |
-| content_md | text | Full markdown content |
-| category | text | e.g. "holder-analysis", "wallet-tracing", "scam-detection", "platform-guides" |
-| tags | text[] | For cross-linking and filtering |
-| author | text | Default "BlackBox Research" |
-| featured_image_url | text | Hero image |
-| seo_title | text | Override for `<title>` tag |
-| seo_description | text | Override for meta description |
-| related_slugs | text[] | Links to related articles (interconnection web) |
-| published_at | timestamptz | Publication date (for ordering) |
-| is_published | boolean | Draft vs live |
-| created_at / updated_at | timestamptz | Timestamps |
+| briefing_id | uuid FK → intel_briefings | Parent article |
+| content_md | text | Snapshot of markdown at save |
+| title | text | Title at time of revision |
+| edited_by | uuid | User who made the edit |
+| revision_note | text | Optional note ("updated intro", etc.) |
+| created_at | timestamptz | When revision was saved |
 
-RLS: Public SELECT where `is_published = true`. Insert/update restricted to authenticated super admins.
+RLS: Super admin only (SELECT, INSERT).
 
-## Pages & Components
+**Storage bucket: `intel-images`** — for article images (hero images, inline images). Public read, super admin upload.
 
-### 1. `/intel` — Briefings Index Page
-- Grid of article cards with category filter tabs
-- Each card: featured image, title, subtitle, category badge, date
-- Sorted by `published_at` desc
-- Full JSON-LD `CollectionPage` structured data
+## New Component: `IntelBriefingsManager.tsx`
 
-### 2. `/intel/:slug` — Individual Article Page
-- Renders markdown to HTML using `react-markdown` with `remark-gfm`
-- Hero image, title, subtitle, author, date
-- "Related Briefings" section at bottom (from `related_slugs`)
-- Category/tag pills linking back to filtered index
-- Uses `SiteLayout` wrapper (consistent nav/header)
+Full admin panel with these capabilities:
 
-### 3. Article Card Component
-- Reusable card for index page and "related" sections
+### Article List View
+- Table of all briefings (published + drafts) with title, category, status badge, date, actions
+- Filter by category, status (draft/published)
+- Quick toggle publish/unpublish
 
-## AI & SEO Optimization (The Core Strategy)
+### Article Editor (create + edit)
+- **Title, subtitle, slug** (auto-generated from title, editable)
+- **Category** dropdown (existing categories from DB + option to type a new one)
+- **Tags** input (comma-separated or chip input)
+- **Author** field (default "BlackBox Research")
+- **Markdown editor** — textarea with the full article content
+- **Featured image upload** — drag/drop or file picker, uploads to `intel-images` bucket
+- **SEO fields** — seo_title, seo_description (collapsible section)
+- **Related articles** — multi-select from existing briefings
+- **Publish toggle** — draft vs published, with published_at date picker
 
-### Per-Article Structured Data (JSON-LD)
-Every article page injects:
-```json
-{
-  "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "...",
-  "author": { "@type": "Organization", "name": "BlackBox Research" },
-  "publisher": { "@type": "Organization", "name": "BlackBox Farm" },
-  "datePublished": "...",
-  "description": "...",
-  "about": ["Solana", "holder analysis", "wallet tracing"],
-  "isPartOf": { "@type": "WebSite", "name": "BlackBox Farm" }
-}
-```
+### Visual Preview
+- Side-by-side or toggle between edit and preview
+- Preview renders markdown via `react-markdown` + `remark-gfm` (same as public page)
+- Shows how the article will look before publishing
 
-### `llms.txt` and `llms-full.txt`
-Create `public/llms.txt` — the emerging standard for AI crawlers (used by Perplexity, ChatGPT browse, Claude). Contains a structured summary of the site and links to all briefings.
+### Revision History
+- Each save creates a revision in `intel_briefing_revisions`
+- View past revisions with diff or restore capability
+- Shows who edited and when
 
-### Enhanced `robots.txt`
-Add sitemap reference and explicit AI crawler permissions:
-```
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-Sitemap: https://blackbox.farm/sitemap.xml
-```
-
-### Dynamic Sitemap
-An edge function or static file at `/sitemap.xml` listing all published briefings with `lastmod` dates.
-
-### Meta Tags Per Article
-Each article dynamically sets `<title>`, `<meta description>`, Open Graph, and Twitter Card tags via `useEffect` (same pattern as BumpBot page).
-
-## Navigation Integration
-
-### Nav Menu
-Add "Intel Briefings" to `NAV_ITEMS` in `SiteLayout.tsx`:
-```typescript
-{ label: 'Intel Briefings', path: '/intel' }
-```
-
-### Footer
-Add under Company section:
-```
-Intel Briefings → /intel
-```
-
-### SiteFooter
-Update the Products section to include Intel Briefings link.
-
-## Article Upload Workflow
-
-You provide articles via file upload or paste. I will:
-1. Parse the markdown
-2. Generate slug, category, tags, SEO description
-3. Insert into `intel_briefings` table
-4. Assign related articles based on topic overlap
-5. Images: use existing Supabase storage bucket or uploaded assets
+### Paste/Upload Import
+- Paste raw markdown into the editor
+- Upload `.md` file which populates the editor fields
 
 ## Files to Create/Edit
 
 | Action | File |
 |--------|------|
-| Create | `supabase/migrations/xxx_create_intel_briefings.sql` |
-| Create | `src/pages/IntelBriefings.tsx` (index) |
-| Create | `src/pages/IntelBriefingArticle.tsx` (single article) |
-| Create | `src/components/intel/BriefingCard.tsx` |
-| Create | `src/components/intel/ArticleStructuredData.tsx` |
-| Create | `public/llms.txt` |
-| Edit | `public/robots.txt` — add AI bots + sitemap |
-| Edit | `src/App.tsx` — add routes |
-| Edit | `src/components/layout/SiteLayout.tsx` — add nav item |
-| Edit | `src/components/Footer.tsx` — add link |
-| Edit | `index.html` — enhance global structured data |
+| Create | `supabase/migrations/xxx_intel_briefing_revisions.sql` |
+| Create | `src/components/admin/IntelBriefingsManager.tsx` |
+| Edit | `src/pages/SuperAdmin.tsx` — add tab trigger + content next to Testimonials |
 
-## Dependencies
-- `react-markdown` + `remark-gfm` for rendering (check if already installed, likely yes)
+## Integration in SuperAdmin.tsx
+
+- Add lazy import for `IntelBriefingsManager`
+- Add TabsTrigger after Testimonials: `📰 Intel Briefings` with blue/indigo gradient
+- Add TabsContent with same pattern (activeTab guard + Suspense + ErrorBoundary)
 
