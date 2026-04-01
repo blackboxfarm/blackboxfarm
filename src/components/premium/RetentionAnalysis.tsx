@@ -75,7 +75,7 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
               <CardDescription>Historical holder retention & loyalty metrics</CardDescription>
             </div>
             <div className="flex gap-2">
-              {['7d', '30d', '90d'].map((tf) => (
+              {['3d', '7d', '30d', '90d'].map((tf) => (
                 <Button
                   key={tf}
                   variant={timeframe === tf ? 'default' : 'outline'}
