@@ -94,7 +94,7 @@ export function IntelBriefingsManager() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data as Briefing[];
+      return (data ?? []) as unknown as Briefing[];
     },
   });
 
