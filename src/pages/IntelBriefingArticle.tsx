@@ -172,7 +172,7 @@ export default function IntelBriefingArticle() {
 
           {/* BOTTOM share bar — just above related/footer */}
           <div className="mt-12 border-t border-border pt-4">
-            <SocialShareBar url={articleUrl} title={article.title} description={article.subtitle || undefined} />
+            <SocialShareBar url={shareUrl} title={article.title} description={article.subtitle || undefined} />
           </div>
 
           {/* Related Briefings */}
