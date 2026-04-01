@@ -29,7 +29,7 @@ interface Briefing {
   category: string;
   tags: string[] | null;
   author: string;
-  hero_image_url: string | null;
+  featured_image_url: string | null;
   seo_title: string | null;
   seo_description: string | null;
   is_published: boolean;
@@ -57,7 +57,7 @@ const emptyBriefing = {
   category: 'intelligence',
   tags: [] as string[],
   author: 'BlackBox Research',
-  hero_image_url: '',
+  featured_image_url: '',
   seo_title: '',
   seo_description: '',
   is_published: false,
@@ -129,7 +129,7 @@ export function IntelBriefingsManager() {
         category: form.category,
         tags: form.tags.length > 0 ? form.tags : null,
         author: form.author,
-        hero_image_url: form.hero_image_url || null,
+        featured_image_url: form.featured_image_url || null,
         seo_title: form.seo_title || null,
         seo_description: form.seo_description || null,
         is_published: form.is_published,
@@ -211,7 +211,7 @@ export function IntelBriefingsManager() {
         category: briefing.category,
         tags: briefing.tags || [],
         author: briefing.author,
-        hero_image_url: briefing.hero_image_url || '',
+        featured_image_url: briefing.featured_image_url || '',
         seo_title: briefing.seo_title || '',
         seo_description: briefing.seo_description || '',
         is_published: briefing.is_published,
@@ -254,7 +254,7 @@ export function IntelBriefingsManager() {
       return;
     }
     const { data: urlData } = supabase.storage.from('intel-images').getPublicUrl(path);
-    setForm(f => ({ ...f, hero_image_url: urlData.publicUrl }));
+    setForm(f => ({ ...f, featured_image_url: urlData.publicUrl }));
     toast({ title: 'Uploaded', description: 'Hero image set.' });
     e.target.value = '';
   };
@@ -491,10 +491,10 @@ export function IntelBriefingsManager() {
           <ImageIcon className="h-4 w-4 mr-2" /> Upload Hero Image
         </Button>
         <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-        {form.hero_image_url && (
+        {form.featured_image_url && (
           <div className="flex items-center gap-2">
-            <img src={form.hero_image_url} alt="Hero" className="h-10 w-16 object-cover rounded" />
-            <Button variant="ghost" size="sm" onClick={() => setForm(f => ({ ...f, hero_image_url: '' }))}>
+            <img src={form.featured_image_url} alt="Hero" className="h-10 w-16 object-cover rounded" />
+            <Button variant="ghost" size="sm" onClick={() => setForm(f => ({ ...f, featured_image_url: '' }))}>
               <Trash2 className="h-3 w-3" />
             </Button>
           </div>
@@ -562,8 +562,8 @@ export function IntelBriefingsManager() {
         <TabsContent value="preview" className="mt-2">
           <Card>
             <CardContent className="prose prose-invert max-w-none pt-6">
-              {form.hero_image_url && (
-                <img src={form.hero_image_url} alt={form.title} className="w-full max-h-[300px] object-cover rounded-lg mb-4" />
+              {form.featured_image_url && (
+                <img src={form.featured_image_url} alt={form.title} className="w-full max-h-[300px] object-cover rounded-lg mb-4" />
               )}
               <h1>{form.title}</h1>
               {form.subtitle && <p className="lead text-muted-foreground text-lg">{form.subtitle}</p>}
