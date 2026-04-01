@@ -1,73 +1,44 @@
 
 
-# Intel Briefings Admin Tab — Super Admin Dashboard
+# Intel Briefings — Auto-Metadata & Inline Gallery Images
 
-## What
-Add a new "Intel Briefings" tab next to the Testimonials tab in the Super Admin dashboard. This is a full article management UI for creating, editing, previewing, and publishing briefings — with markdown editing, image support, category management, revision history, and a visual preview before going live.
+## Overview
 
-## Database Changes
+Three enhancements to the Intel Briefings editor:
 
-**New table: `intel_briefing_revisions`** — stores edit history for each article.
+1. **Auto-fill metadata from pasted/uploaded markdown** — parse the article content to extract title, subtitle, category, and tags automatically so you can just paste and save.
+2. **Inline "flavour" images via Gallery picker** — add a button in the editor toolbar that opens the existing Social Media Gallery in pick mode, inserting the selected image as a markdown image tag at the cursor position.
+3. **Hero image sizing guidance** — display recommended dimensions (1200x630px, the standard OG/social share ratio) next to the upload button.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid PK | |
-| briefing_id | uuid FK → intel_briefings | Parent article |
-| content_md | text | Snapshot of markdown at save |
-| title | text | Title at time of revision |
-| edited_by | uuid | User who made the edit |
-| revision_note | text | Optional note ("updated intro", etc.) |
-| created_at | timestamptz | When revision was saved |
+## How Auto-Fill Works
 
-RLS: Super admin only (SELECT, INSERT).
+When you paste markdown or import a `.md` file, the system will:
 
-**Storage bucket: `intel-images`** — for article images (hero images, inline images). Public read, super admin upload.
+- Extract the **first `# heading`** as the title
+- Extract the **first paragraph or second heading** as the subtitle
+- Scan for keyword patterns to suggest a **category** (e.g., "holder" → `holder-analysis`, "wallet" → `wallet-tracing`, "scam"/"rug" → `scam-detection`, "guide"/"how to" → `platform-guides`)
+- Pull any `**bold keywords**` or hashtags as **tags**
+- Auto-generate the **slug** from the extracted title
+- You can still override any field before saving
 
-## New Component: `IntelBriefingsManager.tsx`
+## Inline Flavour Images
 
-Full admin panel with these capabilities:
+- Add an "Insert Gallery Image" button next to the "Import .md" button in the editor toolbar
+- Clicking it opens the existing `GalleryPickerButton` dialog (reusing the Social Media Gallery component in `pick` mode)
+- On selection, inserts `![image](url)` at the current cursor position in the markdown textarea
+- This means you get access to all Uploaded and AI Generated images from the gallery without re-uploading
 
-### Article List View
-- Table of all briefings (published + drafts) with title, category, status badge, date, actions
-- Filter by category, status (draft/published)
-- Quick toggle publish/unpublish
+## Hero Image
 
-### Article Editor (create + edit)
-- **Title, subtitle, slug** (auto-generated from title, editable)
-- **Category** dropdown (existing categories from DB + option to type a new one)
-- **Tags** input (comma-separated or chip input)
-- **Author** field (default "BlackBox Research")
-- **Markdown editor** — textarea with the full article content
-- **Featured image upload** — drag/drop or file picker, uploads to `intel-images` bucket
-- **SEO fields** — seo_title, seo_description (collapsible section)
-- **Related articles** — multi-select from existing briefings
-- **Publish toggle** — draft vs published, with published_at date picker
+- Recommended size: **1200 x 630px** (2:1 ratio, optimized for OG/social cards and article headers)
+- Add helper text below the upload button showing this recommendation
+- No hard enforcement — any image works, but this ratio renders best
 
-### Visual Preview
-- Side-by-side or toggle between edit and preview
-- Preview renders markdown via `react-markdown` + `remark-gfm` (same as public page)
-- Shows how the article will look before publishing
+## Files to Edit
 
-### Revision History
-- Each save creates a revision in `intel_briefing_revisions`
-- View past revisions with diff or restore capability
-- Shows who edited and when
+| Action | File | What |
+|--------|------|------|
+| Edit | `src/components/admin/IntelBriefingsManager.tsx` | Add auto-parse logic on md import/paste, add gallery picker button, add hero size hint |
 
-### Paste/Upload Import
-- Paste raw markdown into the editor
-- Upload `.md` file which populates the editor fields
-
-## Files to Create/Edit
-
-| Action | File |
-|--------|------|
-| Create | `supabase/migrations/xxx_intel_briefing_revisions.sql` |
-| Create | `src/components/admin/IntelBriefingsManager.tsx` |
-| Edit | `src/pages/SuperAdmin.tsx` — add tab trigger + content next to Testimonials |
-
-## Integration in SuperAdmin.tsx
-
-- Add lazy import for `IntelBriefingsManager`
-- Add TabsTrigger after Testimonials: `📰 Intel Briefings` with blue/indigo gradient
-- Add TabsContent with same pattern (activeTab guard + Suspense + ErrorBoundary)
+No new database changes needed. Reuses the existing `GalleryPickerButton` and `ImageGallery` components.
 
