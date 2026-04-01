@@ -7,8 +7,7 @@ import { BriefingCard } from '@/components/intel/BriefingCard';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
