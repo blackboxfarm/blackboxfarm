@@ -16,7 +16,7 @@ import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
-  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal
+  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe
 } from 'lucide-react';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
