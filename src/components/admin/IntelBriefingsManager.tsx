@@ -404,9 +404,12 @@ export function IntelBriefingsManager() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Intel Briefings</h2>
-          <Button onClick={() => openEditor()}>
-            <Plus className="h-4 w-4 mr-2" /> New Briefing
-          </Button>
+          <div className="flex items-center gap-4">
+            <PublicAccessToggle />
+            <Button onClick={() => openEditor()}>
+              <Plus className="h-4 w-4 mr-2" /> New Briefing
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
