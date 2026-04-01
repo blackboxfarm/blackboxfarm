@@ -20,8 +20,8 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
   const [loading, setLoading] = useState(true);
   const { trackView } = useFeatureTracking('retention_analysis', tokenMint);
 
-  // Hide if token is too young (less than 6 hours)
-  const isTooYoung = tokenAge !== undefined && tokenAge < 6;
+  // Hide if token is too young (less than 73 hours / ~3 days)
+  const isTooYoung = tokenAge !== undefined && tokenAge < 73;
 
   useEffect(() => {
     trackView();
@@ -57,26 +57,9 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
     return 'text-red-500';
   };
 
-  // Show "too young" message for very new tokens
+  // Don't render anything if token is too young
   if (isTooYoung) {
-    return (
-      <Card className="tech-border border-blue-500/30 bg-blue-500/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Diamond className="w-5 h-5 text-primary" />
-            Diamond Hands Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-6">
-          <p className="text-sm text-muted-foreground">
-            📊 <strong>New Token</strong> - Trend data will be available after 6 hours
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Historical snapshots are needed for accurate retention analysis
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
@@ -92,7 +75,7 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
               <CardDescription>Historical holder retention & loyalty metrics</CardDescription>
             </div>
             <div className="flex gap-2">
-              {['7d', '30d', '90d'].map((tf) => (
+              {['3d', '7d', '30d', '90d'].map((tf) => (
                 <Button
                   key={tf}
                   variant={timeframe === tf ? 'default' : 'outline'}
