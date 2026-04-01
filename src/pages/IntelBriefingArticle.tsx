@@ -24,6 +24,7 @@ export default function IntelBriefingArticle() {
     },
   });
 
+  const { data: article, isLoading, error } = useQuery({
     queryKey: ['intel-briefing', slug],
     queryFn: async () => {
       const { data, error } = await supabase
