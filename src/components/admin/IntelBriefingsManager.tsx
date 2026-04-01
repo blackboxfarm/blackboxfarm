@@ -143,6 +143,11 @@ export function IntelBriefingsManager() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
+  // Crop dialog state
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropMode, setCropMode] = useState<'hero' | 'inline'>('hero');
+  const [showCrop, setShowCrop] = useState(false);
+
   // Fetch all briefings
   const { data: briefings = [], isLoading } = useQuery({
     queryKey: ['admin-intel-briefings'],
