@@ -32,18 +32,6 @@ export default function IntelBriefings() {
     },
   });
 
-  if (!accessLoading && !isPublic) {
-    return (
-      <SiteLayout>
-        <div className="container mx-auto px-4 py-20 text-center">
-          <Newspaper className="h-12 w-12 mx-auto mb-4 text-muted-foreground/40" />
-          <h1 className="text-2xl font-bold mb-2">Coming Soon</h1>
-          <p className="text-muted-foreground">Intel Briefings are currently being prepared. Check back soon.</p>
-        </div>
-      </SiteLayout>
-    );
-  }
-
   useEffect(() => {
     document.title = 'Intel Briefings | BlackBox Farm — On-Chain Intelligence Reports';
     const script = document.createElement('script');
@@ -79,6 +67,18 @@ export default function IntelBriefings() {
       return data;
     },
   });
+
+  if (!accessLoading && !isPublic) {
+    return (
+      <SiteLayout>
+        <div className="container mx-auto px-4 py-20 text-center">
+          <Newspaper className="h-12 w-12 mx-auto mb-4 text-muted-foreground/40" />
+          <h1 className="text-2xl font-bold mb-2">Coming Soon</h1>
+          <p className="text-muted-foreground">Intel Briefings are currently being prepared. Check back soon.</p>
+        </div>
+      </SiteLayout>
+    );
+  }
 
   return (
     <SiteLayout>
