@@ -12,7 +12,18 @@ import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
 
-  const { data: article, isLoading, error } = useQuery({
+  const { data: isPublic, isLoading: accessLoading } = useQuery({
+    queryKey: ['intel-public-access'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'intel_briefings_public')
+        .maybeSingle();
+      return data?.value === 'true';
+    },
+  });
+
     queryKey: ['intel-briefing', slug],
     queryFn: async () => {
       const { data, error } = await supabase
