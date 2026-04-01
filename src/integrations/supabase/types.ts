@@ -5668,6 +5668,44 @@ export type Database = {
         }
         Relationships: []
       }
+      intel_briefing_revisions: {
+        Row: {
+          briefing_id: string
+          content_md: string
+          created_at: string
+          edited_by: string | null
+          id: string
+          revision_note: string | null
+          title: string
+        }
+        Insert: {
+          briefing_id: string
+          content_md: string
+          created_at?: string
+          edited_by?: string | null
+          id?: string
+          revision_note?: string | null
+          title: string
+        }
+        Update: {
+          briefing_id?: string
+          content_md?: string
+          created_at?: string
+          edited_by?: string | null
+          id?: string
+          revision_note?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_briefing_revisions_briefing_id_fkey"
+            columns: ["briefing_id"]
+            isOneToOne: false
+            referencedRelation: "intel_briefings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intel_briefings: {
         Row: {
           author: string
