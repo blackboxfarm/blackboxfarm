@@ -12,6 +12,18 @@ import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
 
+  const { data: isPublic, isLoading: accessLoading } = useQuery({
+    queryKey: ['intel-public-access'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'intel_briefings_public')
+        .maybeSingle();
+      return data?.value === 'true';
+    },
+  });
+
   const { data: article, isLoading, error } = useQuery({
     queryKey: ['intel-briefing', slug],
     queryFn: async () => {
@@ -42,7 +54,18 @@ export default function IntelBriefingArticle() {
     enabled: !!article?.related_slugs && article.related_slugs.length > 0,
   });
 
-  if (isLoading) {
+  if (!accessLoading && !isPublic) {
+    return (
+      <SiteLayout>
+        <div className="container mx-auto px-4 py-20 text-center">
+          <h1 className="text-2xl font-bold mb-2">Coming Soon</h1>
+          <p className="text-muted-foreground">This content is not yet available.</p>
+        </div>
+      </SiteLayout>
+    );
+  }
+
+  if (isLoading || accessLoading) {
     return (
       <SiteLayout>
         <div className="container mx-auto px-4 py-12">
