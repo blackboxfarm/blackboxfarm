@@ -67,7 +67,47 @@ const emptyBriefing = {
   related_slugs: [] as string[],
 };
 
-function slugify(text: string): string {
+function PublicAccessToggle() {
+  const { data: isPublic, refetch } = useQuery({
+    queryKey: ['intel-public-access'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'intel_briefings_public')
+        .maybeSingle();
+      return data?.value === 'true';
+    },
+  });
+
+  const toggle = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      await supabase.from('system_settings').upsert({
+        key: 'intel_briefings_public',
+        value: String(enabled),
+        updated_at: new Date().toISOString(),
+        updated_by: 'super_admin',
+      });
+    },
+    onSuccess: () => refetch(),
+  });
+
+  return (
+    <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-1.5">
+      <Globe className="h-4 w-4 text-muted-foreground" />
+      <Label className="text-xs text-muted-foreground whitespace-nowrap">Public Access</Label>
+      <Switch
+        checked={!!isPublic}
+        onCheckedChange={(v) => toggle.mutate(v)}
+      />
+      <span className={`text-xs font-medium ${isPublic ? 'text-green-400' : 'text-red-400'}`}>
+        {isPublic ? 'ON' : 'OFF'}
+      </span>
+    </div>
+  );
+}
+
+
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
