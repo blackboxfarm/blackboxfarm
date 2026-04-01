@@ -57,26 +57,9 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
     return 'text-red-500';
   };
 
-  // Show "too young" message for very new tokens
+  // Don't render anything if token is too young
   if (isTooYoung) {
-    return (
-      <Card className="tech-border border-blue-500/30 bg-blue-500/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Diamond className="w-5 h-5 text-primary" />
-            Diamond Hands Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-6">
-          <p className="text-sm text-muted-foreground">
-            📊 <strong>New Token</strong> - Trend data will be available after 6 hours
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Historical snapshots are needed for accurate retention analysis
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
