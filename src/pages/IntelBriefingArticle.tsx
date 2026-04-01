@@ -93,6 +93,8 @@ export default function IntelBriefingArticle() {
   }
 
   const articleUrl = `https://blackbox.farm/intel/briefing/${article.slug}`;
+  // Share URL routes through og.blackbox.farm so social crawlers get proper OG meta tags
+  const shareUrl = `https://og.blackbox.farm/og-meta?slug=${encodeURIComponent(article.slug)}`;
 
   return (
     <SiteLayout>
@@ -150,7 +152,7 @@ export default function IntelBriefingArticle() {
                 Published by <strong className="text-foreground">BlackBox Farm</strong> | <strong className="text-foreground">HoldersIntel</strong>{' '}
                 Category: {(article.category || 'General').replace(/-/g, ' ')} | Solana Token Intelligence
               </p>
-              <SocialShareBar url={articleUrl} title={article.title} description={article.subtitle || undefined} />
+              <SocialShareBar url={shareUrl} title={article.title} description={article.subtitle || undefined} />
             </div>
           </header>
 
@@ -170,7 +172,7 @@ export default function IntelBriefingArticle() {
 
           {/* BOTTOM share bar — just above related/footer */}
           <div className="mt-12 border-t border-border pt-4">
-            <SocialShareBar url={articleUrl} title={article.title} description={article.subtitle || undefined} />
+            <SocialShareBar url={shareUrl} title={article.title} description={article.subtitle || undefined} />
           </div>
 
           {/* Related Briefings */}
