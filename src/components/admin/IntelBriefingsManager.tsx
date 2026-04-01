@@ -19,6 +19,7 @@ import {
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal
 } from 'lucide-react';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
+import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { format } from 'date-fns';
 
 interface Briefing {
