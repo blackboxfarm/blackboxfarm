@@ -70,6 +70,61 @@ function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  'holder-analysis': ['holder', 'holders', 'whale', 'whales', 'distribution', 'top 25', 'wallet concentration'],
+  'wallet-tracing': ['wallet', 'tracing', 'tracking', 'transaction', 'on-chain', 'onchain'],
+  'scam-detection': ['scam', 'rug', 'rugpull', 'fraud', 'honeypot', 'exploit'],
+  'platform-guides': ['guide', 'how to', 'tutorial', 'getting started', 'walkthrough'],
+  'market-intel': ['market', 'price', 'trading', 'volume', 'liquidity', 'mcap'],
+  'developer-intel': ['developer', 'dev', 'creator', 'deployer', 'contract', 'mint'],
+  'community': ['community', 'social', 'telegram', 'twitter', 'discord'],
+};
+
+function autoParseMarkdown(md: string): Partial<typeof emptyBriefing> {
+  const result: Partial<typeof emptyBriefing> = {};
+  
+  // Title: first # heading
+  const titleMatch = md.match(/^#\s+(.+)$/m);
+  if (titleMatch) {
+    result.title = titleMatch[1].trim();
+    result.slug = slugify(result.title);
+  }
+
+  // Subtitle: first non-heading, non-empty paragraph after title
+  const lines = md.split('\n');
+  let foundTitle = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!foundTitle && /^#\s+/.test(trimmed)) { foundTitle = true; continue; }
+    if (foundTitle && trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('!') && !trimmed.startsWith('---')) {
+      result.subtitle = trimmed.replace(/^\*+|\*+$/g, '').trim();
+      break;
+    }
+  }
+
+  // Category: keyword scan
+  const lower = md.toLowerCase();
+  let bestCategory = 'intelligence';
+  let bestScore = 0;
+  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    const score = keywords.filter(kw => lower.includes(kw)).length;
+    if (score > bestScore) { bestScore = score; bestCategory = cat; }
+  }
+  if (bestScore > 0) result.category = bestCategory;
+
+  // Tags: extract **bold keywords** and #hashtags
+  const boldMatches = md.match(/\*\*([^*]{2,30})\*\*/g) || [];
+  const hashMatches = md.match(/#(\w{3,20})/g) || [];
+  const tags = [
+    ...boldMatches.slice(0, 5).map(b => b.replace(/\*\*/g, '').trim().toLowerCase()),
+    ...hashMatches.slice(0, 3).map(h => h.replace('#', '').toLowerCase()),
+  ];
+  const unique = [...new Set(tags)].slice(0, 8);
+  if (unique.length > 0) result.tags = unique;
+
+  return result;
+}
+
 export function IntelBriefingsManager() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<'list' | 'edit'>('list');
