@@ -141,7 +141,7 @@ const App = () => {
                       <Route path="/socials" element={<SuperAdminRoute><Socials /></SuperAdminRoute>} />
                       <Route path="/oracle" element={<SuperAdminRoute><Oracle /></SuperAdminRoute>} />
                       <Route path="/banker-pool" element={<SuperAdminRoute><BankerPool /></SuperAdminRoute>} />
-                      <Route path="/intel/:address" element={<IntelReport />} />
+                      <Route path="/intel/report/:address" element={<IntelReport />} />
                       <Route path="/pricing" element={<Pricing />} />
                       <Route path="/subscriptions" element={<Subscriptions />} />
                       <Route path="/tgbot" element={<TelegramBot />} />
