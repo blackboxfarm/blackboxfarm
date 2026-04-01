@@ -642,9 +642,18 @@ export function IntelBriefingsManager() {
 
         <TabsContent value="edit" className="mt-2">
           <Textarea
+            ref={editorRef}
             value={form.content_md}
             onChange={e => setForm(f => ({ ...f, content_md: e.target.value }))}
-            placeholder="Write your markdown content here..."
+            onPaste={e => {
+              const pasted = e.clipboardData.getData('text');
+              if (pasted.length > 200 && !form.title && /^#\s+/.test(pasted)) {
+                e.preventDefault();
+                applyAutoParse(pasted);
+                toast({ title: 'Auto-filled', description: 'Metadata extracted from pasted markdown.' });
+              }
+            }}
+            placeholder="Write or paste your markdown content here..."
             className="min-h-[500px] font-mono text-sm"
           />
         </TabsContent>
