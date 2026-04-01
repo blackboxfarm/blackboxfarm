@@ -40,7 +40,7 @@ export function ArticleStructuredData({
     setMeta('og:title', title, 'property');
     setMeta('og:description', description, 'property');
     setMeta('og:type', 'article', 'property');
-    setMeta('og:url', `https://blackbox.farm/intel/${slug}`, 'property');
+    setMeta('og:url', `https://blackbox.farm/intel/briefing/${slug}`, 'property');
     if (imageUrl) setMeta('og:image', imageUrl, 'property');
     setMeta('twitter:title', title);
     setMeta('twitter:description', description);
