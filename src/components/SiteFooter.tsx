@@ -4,6 +4,19 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export function SiteFooter() {
+  const { data: intelPublic } = useQuery({
+    queryKey: ['intel-public-access'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'intel_briefings_public')
+        .maybeSingle();
+      return data?.value === 'true';
+    },
+    staleTime: 60_000,
+  });
+
   return (
     <footer className="border-t border-border/40 bg-muted/30 mt-8">
       <div className="container mx-auto px-4 py-8">
