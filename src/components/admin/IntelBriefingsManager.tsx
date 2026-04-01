@@ -236,7 +236,7 @@ export function IntelBriefingsManager() {
         seo_title: form.seo_title || null,
         seo_description: form.seo_description || null,
         is_published: form.is_published,
-        published_at: form.is_published ? (form.published_at || new Date().toISOString()) : null,
+        published_at: form.is_published ? (form.published_at || new Date().toISOString()) : form.published_at,
         related_slugs: form.related_slugs.length > 0 ? form.related_slugs : null,
       };
 
@@ -566,6 +566,18 @@ export function IntelBriefingsManager() {
               onCheckedChange={(v) => setForm(f => ({ ...f, is_published: v }))}
             />
             <Label className="text-sm">{form.is_published ? 'Published' : 'Draft'}</Label>
+          </div>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs text-muted-foreground">Date:</Label>
+            <Input
+              type="date"
+              className="w-[150px]"
+              value={form.published_at ? new Date(form.published_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+              onChange={e => {
+                const d = new Date(e.target.value + 'T12:00:00Z');
+                setForm(f => ({ ...f, published_at: d.toISOString() }));
+              }}
+            />
           </div>
           <Input
             placeholder="Revision note (optional)"
