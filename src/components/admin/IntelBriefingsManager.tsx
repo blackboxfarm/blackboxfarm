@@ -567,6 +567,18 @@ export function IntelBriefingsManager() {
             />
             <Label className="text-sm">{form.is_published ? 'Published' : 'Draft'}</Label>
           </div>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs text-muted-foreground">Date:</Label>
+            <Input
+              type="date"
+              className="w-[150px]"
+              value={form.published_at ? new Date(form.published_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+              onChange={e => {
+                const d = new Date(e.target.value + 'T12:00:00Z');
+                setForm(f => ({ ...f, published_at: d.toISOString() }));
+              }}
+            />
+          </div>
           <Input
             placeholder="Revision note (optional)"
             className="w-[200px]"
