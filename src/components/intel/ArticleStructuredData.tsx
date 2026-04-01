@@ -65,7 +65,7 @@ export function ArticleStructuredData({
         url: 'https://blackbox.farm',
         logo: { '@type': 'ImageObject', url: 'https://blackbox.farm/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png' },
       },
-      mainEntityOfPage: `https://blackbox.farm/intel/${slug}`,
+      mainEntityOfPage: `https://blackbox.farm/intel/briefing/${slug}`,
       image: imageUrl || undefined,
       about: ['Solana', 'holder analysis', 'wallet tracing', 'on-chain intelligence', ...(tags || [])],
       keywords: tags?.join(', '),

@@ -26,7 +26,7 @@ export function BriefingCard({ slug, title, subtitle, category, featured_image_u
 
   return (
     <Link
-      to={`/intel/${slug}`}
+      to={`/intel/briefing/${slug}`}
       className="group block rounded-xl border border-border bg-card hover:border-primary/40 transition-all duration-300 overflow-hidden hover:shadow-lg hover:shadow-primary/5"
     >
       {featured_image_url && (
