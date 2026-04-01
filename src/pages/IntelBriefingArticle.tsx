@@ -92,6 +92,8 @@ export default function IntelBriefingArticle() {
     );
   }
 
+  const articleUrl = `https://blackboxfarm.lovable.app/intel/briefing/${article.slug}`;
+
   return (
     <SiteLayout>
       <ArticleStructuredData
@@ -141,6 +143,15 @@ export default function IntelBriefingArticle() {
                 {format(new Date(article.published_at || article.created_at), 'MMMM d, yyyy')}
               </span>
             </div>
+
+            {/* Published by line + TOP share bar */}
+            <div className="text-xs text-muted-foreground border-t border-b border-border py-3 mt-2 space-y-2">
+              <p>
+                Published by <strong className="text-foreground">BlackBox Farm</strong> | <strong className="text-foreground">HoldersIntel</strong>{' '}
+                Category: {(article.category || 'General').replace(/-/g, ' ')} | Solana Token Intelligence
+              </p>
+              <SocialShareBar url={articleUrl} title={article.title} description={article.subtitle || undefined} />
+            </div>
           </header>
 
           {/* Hero image */}
@@ -157,9 +168,14 @@ export default function IntelBriefingArticle() {
           {/* Article content with publication-grade rendering */}
           <ArticleContent content={article.content_md} />
 
+          {/* BOTTOM share bar — just above related/footer */}
+          <div className="mt-12 border-t border-border pt-4">
+            <SocialShareBar url={articleUrl} title={article.title} description={article.subtitle || undefined} />
+          </div>
+
           {/* Related Briefings */}
           {related && related.length > 0 && (
-            <div className="mt-16 pt-8 border-t border-border">
+            <div className="mt-8 pt-8 border-t border-border">
               <h2 className="text-xl font-semibold mb-6">Related Briefings</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {related.map((r) => (
