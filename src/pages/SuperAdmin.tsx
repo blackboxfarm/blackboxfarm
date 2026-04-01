@@ -30,6 +30,7 @@ const TicketsTab = lazy(() => import("@/components/admin/tabs/TicketsTab"));
 const Top200Tab = lazy(() => import("@/components/admin/tabs/Top200Tab"));
 const SocialMediaTab = lazy(() => import("@/components/admin/tabs/SocialMediaTab"));
 const TestimonialsManager = lazy(() => import("@/components/admin/TestimonialsManager").then(m => ({ default: m.TestimonialsManager })));
+const IntelBriefingsManager = lazy(() => import("@/components/admin/IntelBriefingsManager").then(m => ({ default: m.IntelBriefingsManager })));
 
 // Simple loading fallback
 const TabLoader = memo(() => (
