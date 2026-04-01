@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
-import remarkGfm from 'remark-gfm';
+
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal
