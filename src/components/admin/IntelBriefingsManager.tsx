@@ -16,8 +16,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
-  Save, Clock, FileText, Image as ImageIcon, ChevronDown
+  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal
 } from 'lucide-react';
+import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { format } from 'date-fns';
 
 interface Briefing {
@@ -69,6 +70,61 @@ function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  'holder-analysis': ['holder', 'holders', 'whale', 'whales', 'distribution', 'top 25', 'wallet concentration'],
+  'wallet-tracing': ['wallet', 'tracing', 'tracking', 'transaction', 'on-chain', 'onchain'],
+  'scam-detection': ['scam', 'rug', 'rugpull', 'fraud', 'honeypot', 'exploit'],
+  'platform-guides': ['guide', 'how to', 'tutorial', 'getting started', 'walkthrough'],
+  'market-intel': ['market', 'price', 'trading', 'volume', 'liquidity', 'mcap'],
+  'developer-intel': ['developer', 'dev', 'creator', 'deployer', 'contract', 'mint'],
+  'community': ['community', 'social', 'telegram', 'twitter', 'discord'],
+};
+
+function autoParseMarkdown(md: string): Partial<typeof emptyBriefing> {
+  const result: Partial<typeof emptyBriefing> = {};
+  
+  // Title: first # heading
+  const titleMatch = md.match(/^#\s+(.+)$/m);
+  if (titleMatch) {
+    result.title = titleMatch[1].trim();
+    result.slug = slugify(result.title);
+  }
+
+  // Subtitle: first non-heading, non-empty paragraph after title
+  const lines = md.split('\n');
+  let foundTitle = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!foundTitle && /^#\s+/.test(trimmed)) { foundTitle = true; continue; }
+    if (foundTitle && trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('!') && !trimmed.startsWith('---')) {
+      result.subtitle = trimmed.replace(/^\*+|\*+$/g, '').trim();
+      break;
+    }
+  }
+
+  // Category: keyword scan
+  const lower = md.toLowerCase();
+  let bestCategory = 'intelligence';
+  let bestScore = 0;
+  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    const score = keywords.filter(kw => lower.includes(kw)).length;
+    if (score > bestScore) { bestScore = score; bestCategory = cat; }
+  }
+  if (bestScore > 0) result.category = bestCategory;
+
+  // Tags: extract **bold keywords** and #hashtags
+  const boldMatches = md.match(/\*\*([^*]{2,30})\*\*/g) || [];
+  const hashMatches = md.match(/#(\w{3,20})/g) || [];
+  const tags = [
+    ...boldMatches.slice(0, 5).map(b => b.replace(/\*\*/g, '').trim().toLowerCase()),
+    ...hashMatches.slice(0, 3).map(h => h.replace('#', '').toLowerCase()),
+  ];
+  const unique = [...new Set(tags)].slice(0, 8);
+  if (unique.length > 0) result.tags = unique;
+
+  return result;
+}
+
 export function IntelBriefingsManager() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<'list' | 'edit'>('list');
@@ -84,6 +140,7 @@ export function IntelBriefingsManager() {
   const [revisionNote, setRevisionNote] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
 
   // Fetch all briefings
   const { data: briefings = [], isLoading } = useQuery({
@@ -230,17 +287,45 @@ export function IntelBriefingsManager() {
     setView('edit');
   }, []);
 
+  const applyAutoParse = (md: string) => {
+    const parsed = autoParseMarkdown(md);
+    setForm(f => ({
+      ...f,
+      content_md: md,
+      title: parsed.title || f.title,
+      subtitle: parsed.subtitle || f.subtitle,
+      slug: parsed.slug || f.slug,
+      category: parsed.category || f.category,
+      tags: parsed.tags || f.tags,
+    }));
+    if (parsed.tags) setTagsInput(parsed.tags.join(', '));
+  };
+
   const handleMdUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      setForm(f => ({ ...f, content_md: text }));
-      toast({ title: 'Imported', description: `Loaded ${file.name}` });
+      applyAutoParse(text);
+      toast({ title: 'Imported & Auto-filled', description: `Loaded ${file.name} — metadata extracted automatically.` });
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const handleGalleryInsert = (imageUrl: string) => {
+    const textarea = editorRef.current;
+    const tag = `\n![image](${imageUrl})\n`;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const before = form.content_md.slice(0, start);
+      const after = form.content_md.slice(start);
+      setForm(f => ({ ...f, content_md: before + tag + after }));
+    } else {
+      setForm(f => ({ ...f, content_md: f.content_md + tag }));
+    }
+    toast({ title: 'Image inserted', description: 'Gallery image added to article.' });
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -491,6 +576,7 @@ export function IntelBriefingsManager() {
           <ImageIcon className="h-4 w-4 mr-2" /> Upload Hero Image
         </Button>
         <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+        <span className="text-xs text-muted-foreground">Recommended: 1200 × 630px (2:1 ratio)</span>
         {form.featured_image_url && (
           <div className="flex items-center gap-2">
             <img src={form.featured_image_url} alt="Hero" className="h-10 w-16 object-cover rounded" />
@@ -541,6 +627,10 @@ export function IntelBriefingsManager() {
             <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-4 w-4 mr-2" /> Import .md
             </Button>
+            <GalleryPickerButton
+              onSelect={handleGalleryInsert}
+              label="Insert Gallery Image"
+            />
             <input ref={fileInputRef} type="file" accept=".md,.txt,.markdown" className="hidden" onChange={handleMdUpload} />
             {editingId && (
               <Button variant="outline" size="sm" onClick={() => setShowRevisions(!showRevisions)}>
@@ -552,9 +642,18 @@ export function IntelBriefingsManager() {
 
         <TabsContent value="edit" className="mt-2">
           <Textarea
+            ref={editorRef}
             value={form.content_md}
             onChange={e => setForm(f => ({ ...f, content_md: e.target.value }))}
-            placeholder="Write your markdown content here..."
+            onPaste={e => {
+              const pasted = e.clipboardData.getData('text');
+              if (pasted.length > 200 && !form.title && /^#\s+/.test(pasted)) {
+                e.preventDefault();
+                applyAutoParse(pasted);
+                toast({ title: 'Auto-filled', description: 'Metadata extracted from pasted markdown.' });
+              }
+            }}
+            placeholder="Write or paste your markdown content here..."
             className="min-h-[500px] font-mono text-sm"
           />
         </TabsContent>
