@@ -111,7 +111,7 @@ function buildHtmlResponse(params: OgParams): Response {
   <meta property="og:image:secure_url" content="${image}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:type" content="${image.endsWith('.jpg') || image.endsWith('.jpeg') ? 'image/jpeg' : 'image/png'}" />
   <meta property="og:site_name" content="${siteName || "BlackBox Farm"}" />
   ${articleMeta}
 
@@ -123,8 +123,8 @@ function buildHtmlResponse(params: OgParams): Response {
   <meta name="twitter:description" content="${escapeHtml(description)}" />
   <meta name="twitter:image" content="${image}" />
 
-  <!-- Redirect real users to the actual page -->
-  <meta http-equiv="refresh" content="0;url=${url}" />
+  <!-- Redirect real users (crawlers don't execute JS) -->
+  <script>window.location.replace("${url}");</script>
   <link rel="canonical" href="${url}" />
 </head>
 <body>
