@@ -20,8 +20,8 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
   const [loading, setLoading] = useState(true);
   const { trackView } = useFeatureTracking('retention_analysis', tokenMint);
 
-  // Hide if token is too young (less than 6 hours)
-  const isTooYoung = tokenAge !== undefined && tokenAge < 6;
+  // Hide if token is too young (less than 73 hours / ~3 days)
+  const isTooYoung = tokenAge !== undefined && tokenAge < 73;
 
   useEffect(() => {
     trackView();

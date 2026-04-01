@@ -1626,18 +1626,29 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
               })()}
 
               {/* Action Buttons Row */}
-              <div className="mb-4 grid grid-cols-2 gap-2">
-                <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2 whitespace-normal">
-                  <Link to="/holders-marketing" className="text-center leading-tight">
-                    <span className="hidden md:inline">Why You Need This Before Every Buy</span>
-                    <span className="md:hidden whitespace-pre-wrap">Why You Need This{'\n'}Before Every Buy</span>
-                  </Link>
-                </Button>
+              <div className={`mb-4 grid ${isPro ? 'grid-cols-1 max-w-lg mx-auto' : 'grid-cols-2'} gap-2`}>
+                {!isPro && (
+                  <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2 whitespace-normal">
+                    <Link to="/holders-marketing" className="text-center leading-tight">
+                      <span className="hidden md:inline">Why You Need This Before Every Buy</span>
+                      <span className="md:hidden whitespace-pre-wrap">Why You Need This{'\n'}Before Every Buy</span>
+                    </Link>
+                  </Button>
+                )}
 
                 <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2 whitespace-normal">
                   <Link to="/adverts" className="text-center leading-tight">
-                    <span className="hidden md:inline">Get Seen! 👀 Eyes Here!</span>
-                    <span className="md:hidden whitespace-pre-wrap">Get Seen!{'\n'}👀 Eyes Here!</span>
+                    {isPro ? (
+                      <>
+                        <span className="hidden md:inline">Get Seen! Advertise with us! 👀 Look Here!</span>
+                        <span className="md:hidden whitespace-pre-wrap">Get Seen! Advertise with us!{'\n'}👀 Look Here!</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="hidden md:inline">Get Seen! 👀 Eyes Here!</span>
+                        <span className="md:hidden whitespace-pre-wrap">Get Seen!{'\n'}👀 Eyes Here!</span>
+                      </>
+                    )}
                   </Link>
                 </Button>
               </div>
