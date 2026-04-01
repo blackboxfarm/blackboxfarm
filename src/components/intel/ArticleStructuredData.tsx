@@ -36,13 +36,21 @@ export function ArticleStructuredData({
       el.content = content;
     };
 
+    const ogTitle = title.length > 60 ? title.slice(0, 57) + '...' : title;
+
     setMeta('description', description);
-    setMeta('og:title', title, 'property');
+    setMeta('og:title', ogTitle, 'property');
     setMeta('og:description', description, 'property');
     setMeta('og:type', 'article', 'property');
     setMeta('og:url', `https://blackbox.farm/intel/briefing/${slug}`, 'property');
-    if (imageUrl) setMeta('og:image', imageUrl, 'property');
-    setMeta('twitter:title', title);
+    if (imageUrl) {
+      setMeta('og:image', imageUrl, 'property');
+      setMeta('og:image:width', '1200', 'property');
+      setMeta('og:image:height', '630', 'property');
+    }
+    setMeta('twitter:card', imageUrl ? 'summary_large_image' : 'summary');
+    setMeta('twitter:site', '@HoldersIntel');
+    setMeta('twitter:title', ogTitle);
     setMeta('twitter:description', description);
     if (imageUrl) setMeta('twitter:image', imageUrl);
     setMeta('article:published_time', datePublished, 'property');
