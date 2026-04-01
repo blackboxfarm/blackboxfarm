@@ -36,7 +36,7 @@ export function SiteFooter() {
               <li><Link to="/about" className="hover:text-primary transition-colors">About Us</Link></li>
               <li><Link to="/contact" className="hover:text-primary transition-colors">Contact</Link></li>
               <li><Link to="/whitepaper" className="hover:text-primary transition-colors">Whitepaper</Link></li>
-              <li><Link to="/intel" className="hover:text-primary transition-colors">Intel Briefings</Link></li>
+              {intelPublic && <li><Link to="/intel" className="hover:text-primary transition-colors">Intel Briefings</Link></li>}
               <li><Link to="/api-docs" className="hover:text-primary transition-colors">API Docs</Link></li>
             </ul>
           </div>
