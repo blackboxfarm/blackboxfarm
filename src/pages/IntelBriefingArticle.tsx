@@ -152,7 +152,7 @@ export default function IntelBriefingArticle() {
                 Published by <strong className="text-foreground">BlackBox Farm</strong> | <strong className="text-foreground">HoldersIntel</strong>{' '}
                 Category: {(article.category || 'General').replace(/-/g, ' ')} | Solana Token Intelligence
               </p>
-              <SocialShareBar url={articleUrl} title={article.title} description={article.subtitle || undefined} />
+              <SocialShareBar url={shareUrl} title={article.title} description={article.subtitle || undefined} />
             </div>
           </header>
 
