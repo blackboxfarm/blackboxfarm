@@ -29,6 +29,23 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const { data: intelPublic } = useQuery({
+    queryKey: ['intel-public-access'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'intel_briefings_public')
+        .maybeSingle();
+      return data?.value === 'true';
+    },
+    staleTime: 60_000,
+  });
+
+  const NAV_ITEMS = intelPublic
+    ? [...BASE_NAV_ITEMS, { label: 'Intel Briefings', path: '/intel' }]
+    : BASE_NAV_ITEMS;
   const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
 
   return (
