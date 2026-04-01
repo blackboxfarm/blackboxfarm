@@ -236,7 +236,7 @@ export function IntelBriefingsManager() {
         seo_title: form.seo_title || null,
         seo_description: form.seo_description || null,
         is_published: form.is_published,
-        published_at: form.is_published ? (form.published_at || new Date().toISOString()) : null,
+        published_at: form.is_published ? (form.published_at || new Date().toISOString()) : form.published_at,
         related_slugs: form.related_slugs.length > 0 ? form.related_slugs : null,
       };
 
