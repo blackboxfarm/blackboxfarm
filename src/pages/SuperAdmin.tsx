@@ -285,6 +285,13 @@ export default function SuperAdmin() {
               </TabErrorBoundary>
             )}
           </TabsContent>
+          <TabsContent value="intel-briefings">
+            {activeTab === "intel-briefings" && (
+              <TabErrorBoundary tabName="Intel Briefings">
+                <Suspense fallback={<TabLoader />}><IntelBriefingsManager /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
