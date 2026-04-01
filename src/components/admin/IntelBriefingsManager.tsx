@@ -693,17 +693,32 @@ export function IntelBriefingsManager() {
 
         <TabsContent value="preview" className="mt-2">
           <Card>
-            <CardContent className="prose prose-invert max-w-none pt-6">
+            <CardContent className="pt-6">
+              {/* Hero image with proper aspect ratio */}
               {form.featured_image_url && (
-                <img src={form.featured_image_url} alt={form.title} className="w-full max-h-[300px] object-cover rounded-lg mb-4" />
+                <div className="rounded-xl overflow-hidden mb-6">
+                  <img src={form.featured_image_url} alt={form.title} className="w-full aspect-[1200/630] object-cover" />
+                </div>
               )}
-              <h1>{form.title}</h1>
-              {form.subtitle && <p className="lead text-muted-foreground text-lg">{form.subtitle}</p>}
-              <div className="flex gap-2 mb-4">
+              <h1 className="text-2xl font-bold mb-1">{form.title}</h1>
+              {form.subtitle && <p className="text-muted-foreground text-lg mb-3">{form.subtitle}</p>}
+              <div className="flex gap-2 mb-6">
                 <Badge variant="secondary">{form.category}</Badge>
                 {form.tags.map(t => <Badge key={t} variant="outline">{t}</Badge>)}
               </div>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{form.content_md}</ReactMarkdown>
+              <div className="prose prose-invert prose-lg max-w-none
+                prose-headings:text-foreground prose-p:text-muted-foreground
+                prose-a:text-primary prose-strong:text-foreground
+                prose-blockquote:border-primary/40 prose-blockquote:text-muted-foreground
+                prose-li:text-muted-foreground prose-hr:border-border
+                prose-img:rounded-lg prose-img:my-6
+                [&_img]:max-w-[60%] [&_img:nth-of-type(odd)]:float-left [&_img:nth-of-type(odd)]:mr-6 [&_img:nth-of-type(odd)]:mb-4
+                [&_img:nth-of-type(even)]:float-right [&_img:nth-of-type(even)]:ml-6 [&_img:nth-of-type(even)]:mb-4
+                after:content-[''] after:clear-both after:table
+              ">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{form.content_md}</ReactMarkdown>
+                <div className="clear-both" />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
