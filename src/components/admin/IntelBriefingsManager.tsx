@@ -321,32 +321,59 @@ export function IntelBriefingsManager() {
   };
 
   const handleGalleryInsert = (imageUrl: string) => {
-    const textarea = editorRef.current;
-    const tag = `\n![image](${imageUrl})\n`;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const before = form.content_md.slice(0, start);
-      const after = form.content_md.slice(start);
-      setForm(f => ({ ...f, content_md: before + tag + after }));
+    // Open cropper for inline gallery images
+    setCropSrc(imageUrl);
+    setCropMode('inline');
+    setShowCrop(true);
+  };
+
+  const handleGalleryCropComplete = async (blobUrl: string, blob: Blob) => {
+    if (cropMode === 'hero') {
+      // Upload cropped blob to storage
+      const path = `${Date.now()}-${slugify(form.title || 'hero')}-cropped.jpg`;
+      const { error } = await supabase.storage.from('intel-images').upload(path, blob, { contentType: 'image/jpeg' });
+      if (error) {
+        toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+        URL.revokeObjectURL(blobUrl);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from('intel-images').getPublicUrl(path);
+      setForm(f => ({ ...f, featured_image_url: urlData.publicUrl }));
+      toast({ title: 'Hero image set', description: 'Cropped image uploaded.' });
+      URL.revokeObjectURL(blobUrl);
     } else {
-      setForm(f => ({ ...f, content_md: f.content_md + tag }));
+      // Inline: upload cropped blob, insert markdown tag
+      const path = `${Date.now()}-inline-cropped.jpg`;
+      const { error } = await supabase.storage.from('intel-images').upload(path, blob, { contentType: 'image/jpeg' });
+      if (error) {
+        toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+        URL.revokeObjectURL(blobUrl);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from('intel-images').getPublicUrl(path);
+      const tag = `\n![image](${urlData.publicUrl})\n`;
+      const textarea = editorRef.current;
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const before = form.content_md.slice(0, start);
+        const after = form.content_md.slice(start);
+        setForm(f => ({ ...f, content_md: before + tag + after }));
+      } else {
+        setForm(f => ({ ...f, content_md: f.content_md + tag }));
+      }
+      toast({ title: 'Image inserted', description: 'Cropped gallery image added to article.' });
+      URL.revokeObjectURL(blobUrl);
     }
-    toast({ title: 'Image inserted', description: 'Gallery image added to article.' });
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const ext = file.name.split('.').pop();
-    const path = `${Date.now()}-${slugify(form.title || 'image')}.${ext}`;
-    const { error } = await supabase.storage.from('intel-images').upload(path, file);
-    if (error) {
-      toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
-      return;
-    }
-    const { data: urlData } = supabase.storage.from('intel-images').getPublicUrl(path);
-    setForm(f => ({ ...f, featured_image_url: urlData.publicUrl }));
-    toast({ title: 'Uploaded', description: 'Hero image set.' });
+    // Open cropper instead of direct upload
+    const url = URL.createObjectURL(file);
+    setCropSrc(url);
+    setCropMode('hero');
+    setShowCrop(true);
     e.target.value = '';
   };
 
