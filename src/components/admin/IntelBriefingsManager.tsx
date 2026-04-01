@@ -140,6 +140,7 @@ export function IntelBriefingsManager() {
   const [revisionNote, setRevisionNote] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
 
   // Fetch all briefings
   const { data: briefings = [], isLoading } = useQuery({
