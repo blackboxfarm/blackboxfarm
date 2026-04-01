@@ -1,7 +1,22 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 export function SiteFooter() {
+  const { data: intelPublic } = useQuery({
+    queryKey: ['intel-public-access'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'intel_briefings_public')
+        .maybeSingle();
+      return data?.value === 'true';
+    },
+    staleTime: 60_000,
+  });
+
   return (
     <footer className="border-t border-border/40 bg-muted/30 mt-8">
       <div className="container mx-auto px-4 py-8">
@@ -21,7 +36,7 @@ export function SiteFooter() {
               <li><Link to="/about" className="hover:text-primary transition-colors">About Us</Link></li>
               <li><Link to="/contact" className="hover:text-primary transition-colors">Contact</Link></li>
               <li><Link to="/whitepaper" className="hover:text-primary transition-colors">Whitepaper</Link></li>
-              <li><Link to="/intel" className="hover:text-primary transition-colors">Intel Briefings</Link></li>
+              {intelPublic && <li><Link to="/intel" className="hover:text-primary transition-colors">Intel Briefings</Link></li>}
               <li><Link to="/api-docs" className="hover:text-primary transition-colors">API Docs</Link></li>
             </ul>
           </div>

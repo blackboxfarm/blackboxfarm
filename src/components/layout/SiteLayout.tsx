@@ -11,15 +11,16 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
   { label: 'Join!', path: '/subscriptions' },
   { label: 'Live Feed', path: '/feed' },
   { label: 'Holder Analysis', path: '/holders' },
   { label: 'Bubble Map', path: '/bubblepromo' },
   { label: 'Telegram Bot', path: '/tgbot' },
-  // { label: 'Intel Briefings', path: '/intel' }, // Hidden during development
 ];
 
 export function SiteLayout({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,23 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const { data: intelPublic } = useQuery({
+    queryKey: ['intel-public-access'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'intel_briefings_public')
+        .maybeSingle();
+      return data?.value === 'true';
+    },
+    staleTime: 60_000,
+  });
+
+  const NAV_ITEMS = intelPublic
+    ? [...BASE_NAV_ITEMS, { label: 'Intel Briefings', path: '/intel' }]
+    : BASE_NAV_ITEMS;
   const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
 
   return (
