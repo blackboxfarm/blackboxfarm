@@ -7,8 +7,7 @@ import { BriefingCard } from '@/components/intel/BriefingCard';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -131,24 +130,8 @@ export default function IntelBriefingArticle() {
             </div>
           )}
 
-          {/* Markdown content — inline images float left/right alternately */}
-          <div className="prose prose-invert prose-lg max-w-none
-            prose-headings:text-foreground prose-p:text-muted-foreground
-            prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-            prose-strong:text-foreground prose-code:text-primary
-            prose-blockquote:border-primary/40 prose-blockquote:text-muted-foreground
-            prose-li:text-muted-foreground prose-hr:border-border
-            prose-img:rounded-lg prose-img:my-6 prose-table:text-sm
-            prose-th:text-foreground prose-td:text-muted-foreground
-            [&_img]:max-w-[50%] [&_img:nth-of-type(odd)]:float-left [&_img:nth-of-type(odd)]:mr-6 [&_img:nth-of-type(odd)]:mb-4
-            [&_img:nth-of-type(even)]:float-right [&_img:nth-of-type(even)]:ml-6 [&_img:nth-of-type(even)]:mb-4
-            after:content-[''] after:clear-both after:table
-          ">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {article.content_md}
-            </ReactMarkdown>
-            <div className="clear-both" />
-          </div>
+          {/* Article content with publication-grade rendering */}
+          <ArticleContent content={article.content_md} />
 
           {/* Related Briefings */}
           {related && related.length > 0 && (

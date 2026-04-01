@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
+
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal
@@ -706,19 +706,7 @@ export function IntelBriefingsManager() {
                 <Badge variant="secondary">{form.category}</Badge>
                 {form.tags.map(t => <Badge key={t} variant="outline">{t}</Badge>)}
               </div>
-              <div className="prose prose-invert prose-lg max-w-none
-                prose-headings:text-foreground prose-p:text-muted-foreground
-                prose-a:text-primary prose-strong:text-foreground
-                prose-blockquote:border-primary/40 prose-blockquote:text-muted-foreground
-                prose-li:text-muted-foreground prose-hr:border-border
-                prose-img:rounded-lg prose-img:my-6
-                [&_img]:max-w-[60%] [&_img:nth-of-type(odd)]:float-left [&_img:nth-of-type(odd)]:mr-6 [&_img:nth-of-type(odd)]:mb-4
-                [&_img:nth-of-type(even)]:float-right [&_img:nth-of-type(even)]:ml-6 [&_img:nth-of-type(even)]:mb-4
-                after:content-[''] after:clear-both after:table
-              ">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{form.content_md}</ReactMarkdown>
-                <div className="clear-both" />
-              </div>
+              <ArticleContent content={form.content_md} />
             </CardContent>
           </Card>
         </TabsContent>
