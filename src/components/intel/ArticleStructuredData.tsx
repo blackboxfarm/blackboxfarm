@@ -1,5 +1,14 @@
 import { useEffect } from 'react';
 
+const SITE_URL = 'https://blackbox.farm';
+
+function normalizeImageUrl(imageUrl?: string | null): string | undefined {
+  if (!imageUrl) return undefined;
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
+  if (imageUrl.startsWith('/')) return `${SITE_URL}${imageUrl}`;
+  return `${SITE_URL}/${imageUrl.replace(/^\/+/, '')}`;
+}
+
 interface ArticleStructuredDataProps {
   title: string;
   description: string;
@@ -22,9 +31,10 @@ export function ArticleStructuredData({
   tags = [],
 }: ArticleStructuredDataProps) {
   useEffect(() => {
-    // Set page title and meta
     const prev = document.title;
     document.title = `${title} | Intel Briefings | BlackBox Farm`;
+
+    const normalizedImageUrl = normalizeImageUrl(imageUrl);
 
     const setMeta = (name: string, content: string, prop = 'name') => {
       let el = document.querySelector(`meta[${prop}="${name}"]`) as HTMLMetaElement;
@@ -43,20 +53,21 @@ export function ArticleStructuredData({
     setMeta('og:description', description, 'property');
     setMeta('og:type', 'article', 'property');
     setMeta('og:url', `https://blackbox.farm/intel/briefing/${slug}`, 'property');
-    if (imageUrl) {
-      setMeta('og:image', imageUrl, 'property');
+    if (normalizedImageUrl) {
+      setMeta('og:image', normalizedImageUrl, 'property');
+      setMeta('og:image:secure_url', normalizedImageUrl, 'property');
       setMeta('og:image:width', '1200', 'property');
       setMeta('og:image:height', '630', 'property');
+      setMeta('twitter:image', normalizedImageUrl);
+      setMeta('image', normalizedImageUrl, 'itemprop');
     }
-    setMeta('twitter:card', imageUrl ? 'summary_large_image' : 'summary');
+    setMeta('twitter:card', normalizedImageUrl ? 'summary_large_image' : 'summary');
     setMeta('twitter:site', '@HoldersIntel');
     setMeta('twitter:title', ogTitle);
     setMeta('twitter:description', description);
-    if (imageUrl) setMeta('twitter:image', imageUrl);
     setMeta('article:published_time', datePublished, 'property');
     if (category) setMeta('article:section', category, 'property');
 
-    // JSON-LD
     const script = document.createElement('script');
     script.type = 'application/ld+json';
     script.id = 'intel-briefing-jsonld';
@@ -74,7 +85,7 @@ export function ArticleStructuredData({
         logo: { '@type': 'ImageObject', url: 'https://blackbox.farm/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png' },
       },
       mainEntityOfPage: `https://blackbox.farm/intel/briefing/${slug}`,
-      image: imageUrl || undefined,
+      image: normalizedImageUrl || undefined,
       about: ['Solana', 'holder analysis', 'wallet tracing', 'on-chain intelligence', ...(tags || [])],
       keywords: tags?.join(', '),
       isPartOf: { '@type': 'WebSite', name: 'BlackBox Farm', url: 'https://blackbox.farm' },

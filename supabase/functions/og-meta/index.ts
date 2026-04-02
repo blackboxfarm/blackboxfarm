@@ -7,9 +7,6 @@ const corsHeaders = {
 
 const SITE_URL = "https://blackbox.farm";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/blackbox-og-image.png`;
-const ARTICLE_OG_IMAGE_OVERRIDES: Record<string, string> = {
-  "who-really-holds-that-token-questions-every-solana-trader-should-ask-first": `${SITE_URL}/assets/intel-hero-who-really-holds.jpg`,
-};
 const responseHeaders = {
   ...corsHeaders,
   "X-OG-Meta": "ok",
@@ -53,7 +50,7 @@ Deno.serve(async (req) => {
 
     const ogTitle = (article.seo_title || article.title || "").slice(0, 60);
     const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 160);
-    const ogImage = resolveOgImage(article.slug, article.featured_image_url);
+    const ogImage = resolveOgImage(article.featured_image_url);
     const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
@@ -167,7 +164,6 @@ function normalizeImageUrl(imageUrl?: string | null): string | null {
   return `${SITE_URL}/${imageUrl.replace(/^\/+/, "")}`;
 }
 
-function resolveOgImage(slug?: string | null, featuredImageUrl?: string | null): string {
-  const override = slug ? ARTICLE_OG_IMAGE_OVERRIDES[slug] : null;
-  return override || normalizeImageUrl(featuredImageUrl) || DEFAULT_OG_IMAGE;
+function resolveOgImage(featuredImageUrl?: string | null): string {
+  return normalizeImageUrl(featuredImageUrl) || DEFAULT_OG_IMAGE;
 }
