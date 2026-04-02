@@ -1294,6 +1294,17 @@ export function FlipItDashboard() {
           }
         } catch (metaErr) {
           console.warn('Background metadata fetch failed:', metaErr);
+          setBlacklistWarning((prev) => {
+            if (prev.level) return prev;
+            return {
+              level: 'low',
+              reason: '⚠️ Blacklist mesh lookup incomplete — price loaded, but creator verification is unavailable right now',
+              source: 'creator_wallet',
+              entryType: 'unresolved_creator'
+            };
+          });
+          setIsCheckingBlacklist(false);
+          setBlacklistCheckDone(true);
         }
       })();
 
