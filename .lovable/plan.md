@@ -1,45 +1,45 @@
 
 
-# Enhanced Article Rendering — Custom ReactMarkdown Components
+## Plan: Switch share URLs and OG image references to og.blackbox.farm
 
-## The Problem
+### What changes
 
-Right now, `ReactMarkdown` renders the raw `.md` structure as-is with only Tailwind `prose` utility classes for basic typography. This produces a flat, blog-post-looking output. The user wants the articles to look like a **professionally designed publication page** — with styled section headings, visual dividers, proper spacing, pull-quote styling, and images that sit within the flow like a magazine layout.
+**1. Edge function `og-meta/index.ts` — rewrite image URLs to use og.blackbox.farm proxy**
 
-## The Solution
+The `og:image` and `twitter:image` tags currently point to raw Supabase storage URLs. Since your Cloudflare Worker on `og.blackbox.farm` can proxy these, we don't need to change the image URLs themselves (they're Supabase storage URLs, not og.blackbox.farm). However, looking at your screenshot, the images are already served fine from Supabase storage — the issue is the **share link URL** being ugly.
 
-Override ReactMarkdown's default element renderers with custom React components that apply rich, publication-grade styling. This applies to both the **public article page** (`IntelBriefingArticle.tsx`) and the **admin preview** (`IntelBriefingsManager.tsx`).
+No changes needed in the edge function for images — they already resolve correctly.
 
-### Custom Component Overrides
+**2. `src/pages/IntelBriefingArticle.tsx` — change shareUrl to og.blackbox.farm**
 
-| Element | Current | Enhanced |
-|---------|---------|----------|
-| `h1` | Basic bold text | Large display heading with accent underline bar, extra top margin |
-| `h2` | Basic bold text | Section heading with left cyan border accent, uppercase tracking, spacing |
-| `h3` | Basic bold text | Styled subheading with muted accent color |
-| `p` | Flat paragraph | Proper line-height (1.8), comfortable paragraph spacing, first-paragraph drop-cap or lead styling |
-| `blockquote` | Thin border-left | Styled pull-quote with background card, larger italic text, accent border |
-| `img` | Float left/right alternating | Wrapped in a styled figure with rounded corners, subtle border/shadow, caption support via alt text, alternating float with proper clearfix segments |
-| `hr` | Plain line | Decorative divider (centered dots or gradient line) |
-| `ul`/`ol` | Basic list | Styled list with custom bullet/number colors, comfortable spacing |
-| `strong` | Just bold | Bold + slightly brighter foreground color |
-| `a` | Primary color link | Underline-on-hover with subtle transition |
-| `table` | Basic table | Styled card-wrapped table with header highlights |
+Change line 97 from:
+```
+const shareUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/og-meta?slug=${encodeURIComponent(article.slug)}`;
+```
+to:
+```
+const shareUrl = `https://og.blackbox.farm/intel/briefing/${article.slug}`;
+```
 
-### Implementation
+This uses the clean URL format that your Cloudflare Worker already supports (it matches `/intel/briefing/{slug}` and proxies to the Supabase function).
 
-Create a shared component file `src/components/intel/ArticleMarkdownRenderer.tsx` that:
-1. Exports a `markdownComponents` object for ReactMarkdown's `components` prop
-2. Exports an `ArticleContent` wrapper component that applies the prose container styling
-3. Handles image float logic more intelligently — images get wrapped in `<figure>` with alt text as captions, float alternation uses a counter via React state
+**3. `src/components/admin/TokenXDashboard.tsx` — change holdersUrl to og.blackbox.farm**
 
-### Files to Edit
+Change line 222 from:
+```
+const holdersUrl = new URL(`https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/holders-og`);
+```
+to:
+```
+const holdersUrl = new URL(`https://og.blackbox.farm/og-meta`);
+```
+(Or whatever route your Worker supports for holders-og — need to confirm if your Worker handles that path too.)
 
-| Action | File | What |
-|--------|------|------|
-| Create | `src/components/intel/ArticleMarkdownRenderer.tsx` | Custom component overrides + wrapper |
-| Edit | `src/pages/IntelBriefingArticle.tsx` | Use `ArticleContent` component instead of raw ReactMarkdown |
-| Edit | `src/components/admin/IntelBriefingsManager.tsx` | Use same renderer in admin preview |
+### Risk note
 
-No database or dependency changes needed — `react-markdown` already supports the `components` prop.
+We tried `og.blackbox.farm` before and got 403s from Cloudflare. If the WAF skip rule is now working (your screenshot shows it serving correct HTML), this should work. If Facebook still gets 403s, we'd need to revert.
+
+### Summary of files changed
+- `src/pages/IntelBriefingArticle.tsx` — shareUrl → `og.blackbox.farm/intel/briefing/{slug}`
+- `src/components/admin/TokenXDashboard.tsx` — holdersUrl → `og.blackbox.farm` equivalent
 
