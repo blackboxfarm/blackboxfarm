@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
 
     const ogTitle = (article.seo_title || article.title || "").slice(0, 60);
     const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 160);
-    const ogImage = DEFAULT_OG_IMAGE;
+    const ogImage = normalizeImageUrl(article.featured_image_url) || DEFAULT_OG_IMAGE;
     const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
@@ -155,4 +155,11 @@ function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function normalizeImageUrl(imageUrl?: string | null): string | null {
+  if (!imageUrl) return null;
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return imageUrl;
+  if (imageUrl.startsWith("/")) return `${SITE_URL}${imageUrl}`;
+  return `${SITE_URL}/${imageUrl.replace(/^\/+/, "")}`;
 }
