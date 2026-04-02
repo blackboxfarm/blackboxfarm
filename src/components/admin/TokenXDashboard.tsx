@@ -218,8 +218,8 @@ export function TokenXDashboard() {
   };
 
   const generatePostText = (token: PostedToken) => {
-    // Point directly to Supabase edge function to bypass Cloudflare bot blocking
-    const holdersUrl = new URL(`https://og.blackbox.farm/og-meta`);
+    // Cloudflare Worker on blackbox.farm intercepts crawlers and proxies to og-meta
+    const holdersUrl = new URL(`https://blackbox.farm/holders`);
     holdersUrl.searchParams.set('token', token.token_mint);
 
     if (token.paid_composite_url) {
