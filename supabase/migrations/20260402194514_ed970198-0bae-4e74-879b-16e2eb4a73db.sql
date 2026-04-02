@@ -1,0 +1,1 @@
+UPDATE intel_briefings SET featured_image_url = '/assets/intel-hero-who-really-holds.jpg' WHERE slug = 'who-really-holds-that-token-the-question-every-solana-trader-should-ask-first';
