@@ -219,7 +219,7 @@ export function TokenXDashboard() {
 
   const generatePostText = (token: PostedToken) => {
     // Point directly to Supabase edge function to bypass Cloudflare bot blocking
-    const holdersUrl = new URL(`https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/holders-og`);
+    const holdersUrl = new URL(`https://og.blackbox.farm/og-meta`);
     holdersUrl.searchParams.set('token', token.token_mint);
 
     if (token.paid_composite_url) {

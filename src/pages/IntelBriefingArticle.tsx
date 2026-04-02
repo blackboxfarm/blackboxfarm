@@ -94,7 +94,7 @@ export default function IntelBriefingArticle() {
 
   const articleUrl = `https://blackbox.farm/intel/briefing/${article.slug}`;
   // Share URL routes directly to Supabase edge function to bypass Cloudflare bot blocking
-  const shareUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/og-meta?slug=${encodeURIComponent(article.slug)}`;
+  const shareUrl = `https://og.blackbox.farm/intel/briefing/${article.slug}`;
 
   return (
     <SiteLayout>
