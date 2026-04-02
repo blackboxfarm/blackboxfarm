@@ -143,10 +143,8 @@ Deno.serve(withRunLog('holders-og', async (req) => {
     // This is much more reliable for X/Twitter.
     const ogImageUpstream = ogImage;
 
-    // Route through the Cloudflare Worker at og.blackbox.farm for the image proxy too.
-    // This avoids Twitter blocking Supabase edge function URLs directly.
-    // The CF worker will forward /holders-og-image to the Supabase function.
-    const proxyUrl = new URL("https://og.blackbox.farm/holders-og-image");
+    // Point directly to Supabase edge function to bypass Cloudflare bot blocking
+    const proxyUrl = new URL("https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/holders-og-image");
     if (tokenParam) proxyUrl.searchParams.set("token", tokenParam);
     if (versionParam) proxyUrl.searchParams.set("v", versionParam);
     if (communityParam) proxyUrl.searchParams.set("utm_community", communityParam);
