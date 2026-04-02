@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const SITE_URL = "https://blackbox.farm";
-const DEFAULT_OG_IMAGE = `${SITE_URL}/og/blackbox-og-image.png`;
+const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/blackbox-og-image.png`;
 const responseHeaders = {
   ...corsHeaders,
   "X-OG-Meta": "ok",
