@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
 
     const ogTitle = (article.seo_title || article.title || "").slice(0, 60);
     const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 160);
-    const ogImage = article.featured_image_url || DEFAULT_OG_IMAGE;
+    const ogImage = proxyImageUrl(article.featured_image_url || DEFAULT_OG_IMAGE);
     const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
