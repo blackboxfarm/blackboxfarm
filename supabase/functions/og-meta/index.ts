@@ -6,7 +6,18 @@ const corsHeaders = {
 };
 
 const SITE_URL = "https://blackbox.farm";
-const DEFAULT_OG_IMAGE = "https://apxauapuusmgwbbzjgfl.supabase.co/storage/v1/object/public/OG/holders_og.png";
+const SUPABASE_STORAGE_BASE = "https://apxauapuusmgwbbzjgfl.supabase.co/storage/v1/object/public";
+const OG_PROXY_BASE = "https://og.blackbox.farm/storage";
+const DEFAULT_OG_IMAGE = `${OG_PROXY_BASE}/OG/holders_og.png`;
+
+// Rewrite raw Supabase storage URLs to go through og.blackbox.farm proxy
+function proxyImageUrl(url: string): string {
+  if (!url) return DEFAULT_OG_IMAGE;
+  if (url.startsWith(SUPABASE_STORAGE_BASE)) {
+    return url.replace(SUPABASE_STORAGE_BASE, OG_PROXY_BASE);
+  }
+  return url;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -46,7 +57,7 @@ Deno.serve(async (req) => {
 
     const ogTitle = (article.seo_title || article.title || "").slice(0, 60);
     const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 160);
-    const ogImage = article.featured_image_url || DEFAULT_OG_IMAGE;
+    const ogImage = proxyImageUrl(article.featured_image_url || DEFAULT_OG_IMAGE);
     const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
