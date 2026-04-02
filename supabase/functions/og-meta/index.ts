@@ -164,7 +164,6 @@ function normalizeImageUrl(imageUrl?: string | null): string | null {
   return `${SITE_URL}/${imageUrl.replace(/^\/+/, "")}`;
 }
 
-function resolveOgImage(slug?: string | null, featuredImageUrl?: string | null): string {
-  const override = slug ? ARTICLE_OG_IMAGE_OVERRIDES[slug] : null;
-  return override || normalizeImageUrl(featuredImageUrl) || DEFAULT_OG_IMAGE;
+function resolveOgImage(featuredImageUrl?: string | null): string {
+  return normalizeImageUrl(featuredImageUrl) || DEFAULT_OG_IMAGE;
 }
