@@ -104,11 +104,11 @@ export async function runMeshGuard(
       creatorSource = resolved.source;
     }
 
-    // 3. Fail-closed for pump tokens with unresolved creator
+    // 3. Fail-open for pump tokens with unresolved creator
     if (!creatorWallet && tokenMint.endsWith('pump')) {
       return {
-        blocked: true,
-        reason: 'Creator wallet unresolved for pump.fun token — blocked for safety',
+        blocked: false,
+        reason: 'Creator wallet unresolved for pump.fun token — warning only',
         level: 'high',
         source: 'unresolved_creator',
         creatorWallet: null,
