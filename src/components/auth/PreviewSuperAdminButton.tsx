@@ -43,11 +43,7 @@ export const PreviewSuperAdminButton = () => {
           description: 'You now have Super Admin access'
         });
         
-        // Refresh user roles
         await refreshRoles();
-        
-        // Refresh the page to update UI
-        window.location.reload();
       } else {
         throw new Error(data.error || 'Failed to grant super admin access');
       }
