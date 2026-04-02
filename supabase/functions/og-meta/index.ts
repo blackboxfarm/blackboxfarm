@@ -38,13 +38,13 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (error || !article) {
-      // Fallback: return default site OG tags
-      return buildHtmlResponse({
+      return buildFullPageResponse({
         title: "Intel Briefings | BlackBox Farm",
         description: "Solana token intelligence, holder analysis, and on-chain research.",
         image: DEFAULT_OG_IMAGE,
         url: `${SITE_URL}/intel`,
         type: "website",
+        slug,
       });
     }
 
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     const category = (article.category || "general").replace(/-/g, " ");
     const tags = article.tags || [];
 
-    return buildHtmlResponse({
+    return buildFullPageResponse({
       title: ogTitle,
       description: ogDescription,
       image: ogImage,
@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
       category,
       tags,
       siteName: "BlackBox Farm | HoldersIntel",
+      slug,
     });
   } catch (err) {
     console.error("og-meta error:", err);
@@ -86,56 +87,111 @@ interface OgParams {
   category?: string;
   tags?: string[];
   siteName?: string;
+  slug: string;
 }
 
-function buildHtmlResponse(params: OgParams): Response {
-  const { title, description, image, url, type, publishedAt, author, category, tags, siteName } = params;
+/**
+ * Returns a FULL HTML page with:
+ * 1. Pre-filled OG/Twitter meta tags (crawlers see them immediately)
+ * 2. The SPA entry point so the React app boots normally for humans
+ */
+function buildFullPageResponse(params: OgParams): Response {
+  const { title, description, image, url, type, publishedAt, author, category, tags, siteName, slug } = params;
 
   const articleMeta = type === "article"
     ? `
     <meta property="article:published_time" content="${publishedAt || ""}" />
     <meta property="article:author" content="${author || ""}" />
     <meta property="article:section" content="${category || ""}" />
-    ${(tags || []).map((t) => `<meta property="article:tag" content="${t}" />`).join("\n    ")}`
+    ${(tags || []).map((t) => `<meta property="article:tag" content="${escapeHtml(t)}" />`).join("\n    ")}`
     : "";
+
+  const jsonLd = type === "article" ? `
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": "${escapeHtml(title)}",
+      "description": "${escapeHtml(description)}",
+      "datePublished": "${publishedAt || ""}",
+      "author": { "@type": "Organization", "name": "${escapeHtml(author || "BlackBox Research")}" },
+      "publisher": {
+        "@type": "Organization",
+        "name": "BlackBox Farm",
+        "url": "https://blackbox.farm",
+        "logo": { "@type": "ImageObject", "url": "https://blackbox.farm/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" }
+      },
+      "mainEntityOfPage": "${url}",
+      "image": "${image}"
+    }
+    </script>` : `
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "BlackBox Farm",
+      "description": "Advanced DeFi trading platform with automated bots and community campaigns",
+      "url": "https://blackbox.farm",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web Browser",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    }
+    </script>`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(title)}</title>
-  <meta name="description" content="${escapeHtml(description)}" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>${escapeHtml(title)} | BlackBox Farm</title>
+    <link rel="icon" href="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" type="image/png">
+    <link rel="apple-touch-icon" href="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png">
+    <meta name="description" content="${escapeHtml(description)}" />
+    <meta name="author" content="${escapeHtml(author || "BlackBox Farm")}" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="${url}" />
 
-  <!-- Open Graph -->
-  <meta property="og:type" content="${type}" />
-  <meta property="og:url" content="${url}" />
-  <meta property="og:title" content="${escapeHtml(title)}" />
-  <meta property="og:description" content="${escapeHtml(description)}" />
-  <meta property="og:image" content="${image}" />
-  <meta property="og:image:secure_url" content="${image}" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta property="og:image:type" content="${image.endsWith('.jpg') || image.endsWith('.jpeg') ? 'image/jpeg' : 'image/png'}" />
-  <meta property="og:site_name" content="${siteName || "BlackBox Farm"}" />
-  ${articleMeta}
+    <!-- Open Graph (Facebook, Discord, LinkedIn, etc.) -->
+    <meta property="og:type" content="${type}" />
+    <meta property="og:url" content="${url}" />
+    <meta property="og:title" content="${escapeHtml(title)}" />
+    <meta property="og:description" content="${escapeHtml(description)}" />
+    <meta property="og:image" content="${image}" />
+    <meta property="og:image:secure_url" content="${image}" />
+    <meta property="og:image:type" content="${image.endsWith('.jpg') || image.endsWith('.jpeg') ? 'image/jpeg' : 'image/png'}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="${escapeHtml(title)}" />
+    <meta property="og:site_name" content="${siteName || "BlackBox Farm"}" />
+    <meta property="og:locale" content="en_US" />
+    ${articleMeta}
 
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:site" content="@HoldersIntel" />
-  <meta name="twitter:creator" content="@blackbox_farm" />
-  <meta name="twitter:title" content="${escapeHtml(title)}" />
-  <meta name="twitter:description" content="${escapeHtml(description)}" />
-  <meta name="twitter:image" content="${image}" />
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@HoldersIntel" />
+    <meta name="twitter:creator" content="@blackbox_farm" />
+    <meta name="twitter:title" content="${escapeHtml(title)}" />
+    <meta name="twitter:description" content="${escapeHtml(description)}" />
+    <meta name="twitter:image" content="${image}" />
 
-  <!-- Redirect real users (crawlers don't execute JS) -->
-  <script>window.location.replace("${url}");</script>
-  <link rel="canonical" href="${url}" />
-</head>
-<body>
-  <h1>${escapeHtml(title)}</h1>
-  <p>${escapeHtml(description)}</p>
-  <p><a href="${url}">Read the full article on BlackBox Farm</a></p>
-</body>
+    <!-- WhatsApp / iMessage / General Messaging Apps -->
+    <meta itemprop="name" content="${escapeHtml(title)}" />
+    <meta itemprop="description" content="${escapeHtml(description)}" />
+    <meta itemprop="image" content="${image}" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BlackBox Farm" />
+
+    ${jsonLd}
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>`;
 
   return new Response(html, {
@@ -143,7 +199,7 @@ function buildHtmlResponse(params: OgParams): Response {
     headers: {
       ...responseHeaders,
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=86400",
+      "Cache-Control": "public, max-age=300, s-maxage=3600",
     },
   });
 }
