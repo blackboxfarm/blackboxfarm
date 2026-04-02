@@ -218,8 +218,8 @@ export function TokenXDashboard() {
   };
 
   const generatePostText = (token: PostedToken) => {
-    // Use Cloudflare Worker on og.blackbox.farm for dynamic OG meta tags
-    const holdersUrl = new URL(`https://og.blackbox.farm/holders-og`);
+    // Point directly to Supabase edge function to bypass Cloudflare bot blocking
+    const holdersUrl = new URL(`https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/holders-og`);
     holdersUrl.searchParams.set('token', token.token_mint);
 
     if (token.paid_composite_url) {

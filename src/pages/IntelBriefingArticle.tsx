@@ -93,8 +93,8 @@ export default function IntelBriefingArticle() {
   }
 
   const articleUrl = `https://blackbox.farm/intel/briefing/${article.slug}`;
-  // Share URL routes through og.blackbox.farm so social crawlers get proper OG meta tags
-  const shareUrl = `https://og.blackbox.farm/og-meta?slug=${encodeURIComponent(article.slug)}`;
+  // Share URL routes directly to Supabase edge function to bypass Cloudflare bot blocking
+  const shareUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/og-meta?slug=${encodeURIComponent(article.slug)}`;
 
   return (
     <SiteLayout>
