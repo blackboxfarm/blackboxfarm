@@ -6,18 +6,11 @@ const corsHeaders = {
 };
 
 const SITE_URL = "https://blackbox.farm";
-const SUPABASE_STORAGE_BASE = "https://apxauapuusmgwbbzjgfl.supabase.co/storage/v1/object/public";
-const OG_PROXY_BASE = "https://og.blackbox.farm/storage";
-const DEFAULT_OG_IMAGE = `${OG_PROXY_BASE}/OG/holders_og.png`;
-
-// Rewrite raw Supabase storage URLs to go through og.blackbox.farm proxy
-function proxyImageUrl(url: string): string {
-  if (!url) return DEFAULT_OG_IMAGE;
-  if (url.startsWith(SUPABASE_STORAGE_BASE)) {
-    return url.replace(SUPABASE_STORAGE_BASE, OG_PROXY_BASE);
-  }
-  return url;
-}
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og/blackbox-og-image.png`;
+const responseHeaders = {
+  ...corsHeaders,
+  "X-OG-Meta": "ok",
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -29,7 +22,7 @@ Deno.serve(async (req) => {
     const slug = url.searchParams.get("slug");
 
     if (!slug) {
-      return new Response("Missing slug parameter", { status: 400, headers: corsHeaders });
+      return new Response("Missing slug parameter", { status: 400, headers: responseHeaders });
     }
 
     const supabase = createClient(
@@ -57,7 +50,7 @@ Deno.serve(async (req) => {
 
     const ogTitle = (article.seo_title || article.title || "").slice(0, 60);
     const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 160);
-    const ogImage = proxyImageUrl(article.featured_image_url || DEFAULT_OG_IMAGE);
+    const ogImage = DEFAULT_OG_IMAGE;
     const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
@@ -78,7 +71,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("og-meta error:", err);
-    return new Response("Internal error", { status: 500, headers: corsHeaders });
+    return new Response("Internal error", { status: 500, headers: responseHeaders });
   }
 });
 
@@ -148,7 +141,7 @@ function buildHtmlResponse(params: OgParams): Response {
   return new Response(html, {
     status: 200,
     headers: {
-      ...corsHeaders,
+      ...responseHeaders,
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "public, max-age=3600, s-maxage=86400",
     },
