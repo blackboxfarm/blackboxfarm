@@ -7,9 +7,6 @@ const corsHeaders = {
 
 const SITE_URL = "https://blackbox.farm";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/blackbox-og-image.png`;
-const ARTICLE_OG_IMAGE_OVERRIDES: Record<string, string> = {
-  "who-really-holds-that-token-questions-every-solana-trader-should-ask-first": `${SITE_URL}/assets/intel-hero-who-really-holds.jpg`,
-};
 const responseHeaders = {
   ...corsHeaders,
   "X-OG-Meta": "ok",
