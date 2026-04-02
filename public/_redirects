@@ -1,6 +1,9 @@
 # Dynamic OG proxy to Supabase Edge Functions (must come before SPA fallback)
 /og/*  https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/:splat  200!
 
+# Article pages → og-meta function for pre-filled meta tags (crawlers + humans)
+/intel/briefing/:slug  https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/og-meta?slug=:slug  200!
+
 # Static demo page (serve as-is, not through SPA)
 /holders-demo  /holders-demo/index.html  200!
 
