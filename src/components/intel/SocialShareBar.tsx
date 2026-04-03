@@ -19,7 +19,7 @@ interface SocialShareBarProps {
  * Includes a cache-bust param so FB/LinkedIn re-scrape after edits.
  */
 export function buildIntelShareUrl(slug: string, updatedAt?: string | null): string {
-  const base = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/intel-share?slug=${encodeURIComponent(slug)}`;
+  const base = `https://blackbox.farm/og/intel-share?slug=${encodeURIComponent(slug)}`;
   if (updatedAt) {
     return `${base}&v=${new Date(updatedAt).getTime()}`;
   }
