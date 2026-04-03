@@ -116,7 +116,8 @@ Deno.serve(withRunLog('token-creator-linker', async (req) => {
     const heliusKey = getHeliusApiKey();
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { tokenMints } = await req.json();
+    const body = await req.json();
+    const tokenMints = body.tokenMints || body.tokens;
 
     if (!tokenMints || !Array.isArray(tokenMints)) {
       throw new Error('tokenMints array required');
