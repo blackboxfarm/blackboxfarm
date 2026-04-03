@@ -111,9 +111,9 @@ const SCRAPE_CONFIGS_PAGE1 = [
 ];
 
 const SCRAPE_CONFIGS_PAGE2 = [
-  { waitFor: 8000, timeout: 30000, onlyMainContent: false },
-  { waitFor: 12000, timeout: 35000, onlyMainContent: true },
-  { waitFor: 15000, timeout: 45000, onlyMainContent: false },
+  { waitFor: 10000, timeout: 45000, onlyMainContent: false },
+  { waitFor: 15000, timeout: 55000, onlyMainContent: true },
+  { waitFor: 20000, timeout: 60000, onlyMainContent: false },
 ];
 
 async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false): Promise<{ markdown: string; retried: boolean }> {
