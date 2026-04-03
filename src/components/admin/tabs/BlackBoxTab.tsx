@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LazyLoader } from '@/components/ui/lazy-loader';
 
 // Lazy load each component
-const MasterWalletsDashboard = lazy(() => import("@/components/admin/MasterWalletsDashboard").then(m => ({ default: m.MasterWalletsDashboard })));
 const SecurityDashboard = lazy(() => import("@/components/security/SecurityDashboard").then(m => ({ default: m.SecurityDashboard })));
 const AccountViewer = lazy(() => import("@/components/AccountViewer").then(m => ({ default: m.AccountViewer })));
 const AllWalletsTokenView = lazy(() => import("@/components/AllWalletsTokenView").then(m => ({ default: m.AllWalletsTokenView })));
@@ -15,12 +14,11 @@ const SurveyManagement = lazy(() => import("@/components/admin/SurveyManagement"
 const WalletBundleReport = lazy(() => import("@/components/admin/WalletBundleReport").then(m => ({ default: m.WalletBundleReport })));
 
 export default function BlackBoxTab() {
-  const [activeSubTab, setActiveSubTab] = useState("master-wallets");
+  const [activeSubTab, setActiveSubTab] = useState("bundle-analysis");
 
   return (
     <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
-        <TabsTrigger value="master-wallets">👑 Master Wallets</TabsTrigger>
         <TabsTrigger value="bundle-analysis">🕵️ Bundle Analysis</TabsTrigger>
         <TabsTrigger value="security">🛡️ Security Dashboard</TabsTrigger>
         <TabsTrigger value="accounts">📁 Account Directory</TabsTrigger>
@@ -32,9 +30,6 @@ export default function BlackBoxTab() {
         <TabsTrigger value="surveys">📋 Surveys</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="master-wallets">
-        {activeSubTab === "master-wallets" && <Suspense fallback={<LazyLoader />}><MasterWalletsDashboard /></Suspense>}
-      </TabsContent>
       <TabsContent value="bundle-analysis">
         {activeSubTab === "bundle-analysis" && <Suspense fallback={<LazyLoader />}><WalletBundleReport /></Suspense>}
       </TabsContent>
