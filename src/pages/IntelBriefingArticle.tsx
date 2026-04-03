@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { ArticleStructuredData } from '@/components/intel/ArticleStructuredData';
 import { BriefingCard } from '@/components/intel/BriefingCard';
-import { SocialShareBar } from '@/components/intel/SocialShareBar';
+import { SocialShareBar, buildIntelShareUrl } from '@/components/intel/SocialShareBar';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
@@ -93,14 +93,16 @@ export default function IntelBriefingArticle() {
   }
 
   const articleUrl = `https://blackbox.farm/intel/briefing/${article.slug}`;
-  // Share URL = canonical URL; Cloudflare Worker on blackbox.farm intercepts crawlers
   const shareUrl = articleUrl;
+  const ogShareUrl = buildIntelShareUrl(article.slug, article.updated_at || article.published_at);
+  const resolvedTitle = article.seo_title || article.title;
+  const resolvedDescription = article.seo_description || article.subtitle || undefined;
 
   return (
     <SiteLayout>
       <ArticleStructuredData
-        title={article.seo_title || article.title}
-        description={article.seo_description || article.subtitle || ''}
+        title={resolvedTitle}
+        description={resolvedDescription || ''}
         datePublished={article.published_at || article.created_at}
         author={article.author || undefined}
         imageUrl={article.featured_image_url || undefined}
@@ -152,7 +154,7 @@ export default function IntelBriefingArticle() {
                 Published by <strong className="text-foreground">BlackBox Farm</strong> | <strong className="text-foreground">HoldersIntel</strong>{' '}
                 Category: {(article.category || 'General').replace(/-/g, ' ')} | Solana Token Intelligence
               </p>
-              <SocialShareBar url={shareUrl} title={article.title} description={article.subtitle || undefined} />
+              <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} ogShareUrl={ogShareUrl} />
             </div>
           </header>
 
@@ -172,7 +174,7 @@ export default function IntelBriefingArticle() {
 
           {/* BOTTOM share bar — just above related/footer */}
           <div className="mt-12 border-t border-border pt-4">
-            <SocialShareBar url={shareUrl} title={article.title} description={article.subtitle || undefined} />
+            <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} ogShareUrl={ogShareUrl} />
           </div>
 
           {/* Related Briefings */}
