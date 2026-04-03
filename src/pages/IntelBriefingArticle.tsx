@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { ArticleStructuredData } from '@/components/intel/ArticleStructuredData';
 import { BriefingCard } from '@/components/intel/BriefingCard';
-import { SocialShareBar } from '@/components/intel/SocialShareBar';
+import { SocialShareBar, buildIntelShareUrl } from '@/components/intel/SocialShareBar';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
