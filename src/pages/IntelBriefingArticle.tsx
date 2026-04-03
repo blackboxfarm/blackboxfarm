@@ -101,8 +101,8 @@ export default function IntelBriefingArticle() {
   return (
     <SiteLayout>
       <ArticleStructuredData
-        title={article.seo_title || article.title}
-        description={article.seo_description || article.subtitle || ''}
+        title={resolvedTitle}
+        description={resolvedDescription || ''}
         datePublished={article.published_at || article.created_at}
         author={article.author || undefined}
         imageUrl={article.featured_image_url || undefined}
