@@ -93,8 +93,10 @@ export default function IntelBriefingArticle() {
   }
 
   const articleUrl = `https://blackbox.farm/intel/briefing/${article.slug}`;
-  // Share URL = canonical URL; Cloudflare Worker on blackbox.farm intercepts crawlers
   const shareUrl = articleUrl;
+  const ogShareUrl = buildIntelShareUrl(article.slug, article.updated_at || article.published_at);
+  const resolvedTitle = article.seo_title || article.title;
+  const resolvedDescription = article.seo_description || article.subtitle || undefined;
 
   return (
     <SiteLayout>
