@@ -1,38 +1,46 @@
 
 
-## DexScreener Page 2 Timeout Fix
+## Root Cause: Field Name Mismatch
 
-### Problem
-Page 2 of DexScreener (`/solana/page-2`) consistently times out because it relies on heavy lazy-loaded JavaScript. The current max timeout is 45 seconds with a 15-second `waitFor`, which is not enough for this page to fully render.
+The `token-creator-linker` function expects `{ tokenMints: [...] }` in the request body (line 119), but the **primary caller** — `dexscreener-top-200-scraper` — sends `{ tokens: [...] }` (line 596).
 
-### Root Cause
-DexScreener Page 2 content loads via JavaScript after initial page render. The Firecrawl scraper times out waiting for the DOM to populate. Page 1 works fine because its content renders faster.
+This means every time the scraper discovers new tokens and triggers the linker, the linker throws `"tokenMints array required"` → HTTP 500.
 
-### Fix: Increase Page 2 timeout and waitFor values
+### Where token-creator-linker is used
 
-**File**: `supabase/functions/_shared/dex-top-pages.ts`
+| Caller | File | Sends | Works? |
+|--------|------|-------|--------|
+| **dexscreener-top-200-scraper** | `supabase/functions/dexscreener-top-200-scraper/index.ts:594-598` | `{ tokens: [...] }` | **No — this is the bug** |
+| oracle-unified-lookup | `supabase/functions/oracle-unified-lookup/index.ts:533` | `{ tokenMints: [...] }` | Yes |
+| oracle-historical-backfill | `supabase/functions/oracle-historical-backfill/index.ts:223` | `{ tokenMints: [...] }` | Yes |
+| holdersintel-bot-webhook | `supabase/functions/holdersintel-bot-webhook/index.ts:1686` | `{ tokenMints: [...] }` | Yes |
+| IntelReport.tsx (client) | `src/pages/IntelReport.tsx:193` | `{ tokenMints: [...] }` | Yes |
+| DevIntelReport.tsx (client) | `src/components/admin/oracle/DevIntelReport.tsx:185` | `{ tokenMints: [...] }` | Yes |
 
-Update `SCRAPE_CONFIGS_PAGE2` (lines 113-117) from:
-```text
-waitFor: 8000,  timeout: 30000
-waitFor: 12000, timeout: 35000
-waitFor: 15000, timeout: 45000
+The scraper is the only caller using the wrong field name, and it runs on every 5-minute cron tick — hence the 100% failure rate.
+
+### Fix
+
+**File**: `supabase/functions/dexscreener-top-200-scraper/index.ts` (line 596)
+
+Change `tokens` to `tokenMints`:
 ```
-To:
-```text
-waitFor: 10000, timeout: 45000
-waitFor: 15000, timeout: 55000
-waitFor: 20000, timeout: 60000
+tokens: newTokens.map(t => t.address)
+```
+→
+```
+tokenMints: newTokens.map(t => t.address)
 ```
 
-Also increase the inter-page stagger delay (line 245) from 5 seconds to 8 seconds to give Firecrawl more breathing room between requests.
+One line fix. Redeploy `dexscreener-top-200-scraper`.
 
-### Why these values
-- Firecrawl's max timeout is 60 seconds -- we push the final retry to that ceiling
-- `waitFor` of 20s on the last attempt gives DexScreener's lazy JS ample time to hydrate
-- The 8s stagger reduces concurrent pressure on Firecrawl's infrastructure
-- Page 1 configs remain unchanged (working fine)
+### Additionally (defensive)
 
-### Risk
-Minimal. Longer timeouts only affect Page 2 and only when earlier attempts fail. Successful scrapes still return as fast as before.
+Make `token-creator-linker` accept both field names so future callers don't hit the same trap:
+```typescript
+const body = await req.json();
+const tokenMints = body.tokenMints || body.tokens;
+```
+
+Two files changed, one line each. Redeploy both functions.
 
