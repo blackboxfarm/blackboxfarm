@@ -2244,12 +2244,22 @@ export function FlipItDashboard() {
     }
   };
 
-  // Sync with Chain - reconcile positions with actual on-chain balances
+  // Sync with Chain - reconcile positions with actual on-chain balances for the selected FlipIt wallet only
   const handleSyncWithChain = async (dryRun = false) => {
+    const activeWallet = wallets.find(w => w.id === selectedWallet);
+
+    if (!activeWallet) {
+      toast.error('No FlipIt wallet selected');
+      return;
+    }
+
     setIsSyncingWithChain(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-cleanup-phantom-positions', {
-        body: { dryRun }
+        body: {
+          dryRun,
+          walletId: activeWallet.id,
+        }
       });
 
       if (error) throw error;
@@ -2264,20 +2274,20 @@ export function FlipItDashboard() {
       if (dryRun) {
         if (data?.phantomCount > 0) {
           toast.info(
-            `Found ${data.phantomCount} phantom position(s) with no on-chain tokens. Click "Sync & Clean" to mark them as sold.`,
+            `Found ${data.phantomCount} phantom position(s) in ${activeWallet.label} with no on-chain tokens. Click "Sync & Clean" to mark them as sold.`,
             { duration: 8000 }
           );
         } else {
-          toast.success('All positions are in sync with on-chain data!');
+          toast.success(`${activeWallet.label} is fully in sync with on-chain data!`);
         }
       } else {
         if (data?.cleanedCount > 0) {
-          toast.success(`Cleaned ${data.cleanedCount} phantom position(s). Reloading...`);
+          toast.success(`Cleaned ${data.cleanedCount} phantom position(s) in ${activeWallet.label}. Reloading...`);
           await loadPositions({ silent: false });
         } else if (data?.phantomCount > 0) {
-          toast.info(`Found ${data.phantomCount} phantom positions but none were cleaned (check logs)`);
+          toast.info(`Found ${data.phantomCount} phantom positions in ${activeWallet.label} but none were cleaned (check logs)`);
         } else {
-          toast.success('All positions in sync - nothing to clean');
+          toast.success(`${activeWallet.label} is in sync - nothing to clean`);
         }
       }
     } catch (err: any) {
