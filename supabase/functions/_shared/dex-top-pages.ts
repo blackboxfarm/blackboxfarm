@@ -242,7 +242,7 @@ export async function scrapeDexTopPages(): Promise<{ pairs: RankedDexPair[]; hea
 
     // Brief stagger between pages to avoid Firecrawl rate-limit collisions
     if (isPage2) {
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise(r => setTimeout(r, 8000));
     }
 
     try {
