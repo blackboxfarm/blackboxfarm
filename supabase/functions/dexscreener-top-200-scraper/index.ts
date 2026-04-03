@@ -593,7 +593,7 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
       try {
         const { error: funcError } = await supabase.functions.invoke('token-creator-linker', {
           body: { 
-            tokens: newTokens.map(t => t.address),
+            tokenMints: newTokens.map(t => t.address),
             source: 'dexscreener-compiler'
           }
         });
