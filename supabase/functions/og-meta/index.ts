@@ -37,7 +37,17 @@ Deno.serve(async (req) => {
       .eq("is_published", true)
       .maybeSingle();
 
+    console.log(`[og-meta] slug="${slug}" found=${!!article} error=${error?.message || 'none'}`);
+
     if (error || !article) {
+      // Debug: check if article exists at all (without is_published filter)
+      const { data: anyArticle } = await supabase
+        .from("intel_briefings")
+        .select("slug, is_published")
+        .eq("slug", slug)
+        .maybeSingle();
+      console.log(`[og-meta] debug: article without filter=${JSON.stringify(anyArticle)}`);
+
       return buildFullPageResponse({
         title: "Intel Briefings | BlackBox Farm",
         description: "Solana token intelligence, holder analysis, and on-chain research.",
