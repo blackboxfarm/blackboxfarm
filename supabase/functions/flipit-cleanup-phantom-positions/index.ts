@@ -24,6 +24,7 @@ function bad(message: string, status = 400) {
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+const DUST_THRESHOLD = 1;
 
 serve(withRunLog('flipit-cleanup-phantom-positions', async (req) => {
   if (req.method === "OPTIONS") {
@@ -36,210 +37,178 @@ serve(withRunLog('flipit-cleanup-phantom-positions', async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json().catch(() => ({}));
-    const dryRun = body.dryRun !== false; // Default to dry run for safety
+    const dryRun = body.dryRun !== false;
+    const walletId = typeof body.walletId === 'string' ? body.walletId.trim() : '';
 
-    console.log("FlipIt Phantom Position Cleanup - dryRun:", dryRun);
+    if (!walletId) {
+      return bad('walletId is required');
+    }
 
-    // Get all holding positions
+    console.log('FlipIt Phantom Position Cleanup', { dryRun, walletId });
+
+    const { data: wallet, error: walletErr } = await supabase
+      .from("super_admin_wallets")
+      .select("id, pubkey, label")
+      .eq("id", walletId)
+      .single();
+
+    if (walletErr || !wallet) {
+      return bad("Failed to load FlipIt wallet: " + (walletErr?.message || 'Wallet not found'), 404);
+    }
+
     const { data: holdingPositions, error: posErr } = await supabase
       .from("flip_positions")
       .select("id, wallet_id, token_mint, token_symbol, status, buy_signature, buy_executed_at, created_at, quantity_tokens, buy_amount_usd, buy_price_usd")
       .eq("status", "holding")
+      .eq("wallet_id", walletId)
       .order("created_at", { ascending: false });
 
     if (posErr) {
       return bad("Failed to fetch positions: " + posErr.message);
     }
 
-    console.log(`Found ${holdingPositions?.length || 0} holding positions`);
+    console.log(`Found ${holdingPositions?.length || 0} holding positions for wallet ${wallet.pubkey}`);
 
     if (!holdingPositions || holdingPositions.length === 0) {
-      return ok({ message: "No holding positions found", cleaned: 0 });
+      return ok({
+        walletId,
+        walletPubkey: wallet.pubkey,
+        walletLabel: wallet.label,
+        message: "No holding positions found for selected wallet",
+        totalHolding: 0,
+        phantomCount: 0,
+        validCount: 0,
+        cleanedCount: 0,
+        backfilledCount: 0,
+        dryRun,
+        results: [],
+        phantomPositionIds: [],
+      });
     }
 
-    // Get unique wallet IDs
-    const walletIds = [...new Set(holdingPositions.map(p => p.wallet_id))];
-    
-    // Fetch wallets
-    const { data: wallets, error: walletErr } = await supabase
-      .from("super_admin_wallets")
-      .select("id, pubkey")
-      .in("id", walletIds);
-
-    if (walletErr || !wallets) {
-      return bad("Failed to fetch wallets: " + walletErr?.message);
-    }
-
-    const walletMap = new Map(wallets.map(w => [w.id, w.pubkey]));
-
-    // Setup RPC connection
-    const rpcUrl = getHeliusApiKey() 
+    const rpcUrl = getHeliusApiKey()
       ? getHeliusRpcUrl()
       : "https://api.mainnet-beta.solana.com";
-    
-    const connection = new Connection(rpcUrl, "confirmed");
 
-    // Group positions by wallet
-    const positionsByWallet = new Map<string, typeof holdingPositions>();
-    for (const pos of holdingPositions) {
-      const pubkey = walletMap.get(pos.wallet_id);
-      if (!pubkey) continue;
-      if (!positionsByWallet.has(pubkey)) {
-        positionsByWallet.set(pubkey, []);
+    const connection = new Connection(rpcUrl, "confirmed");
+    const walletPk = new PublicKey(wallet.pubkey);
+
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(walletPk, {
+      programId: TOKEN_PROGRAM_ID,
+    });
+
+    const token2022Accounts = await connection.getParsedTokenAccountsByOwner(walletPk, {
+      programId: TOKEN_2022_PROGRAM_ID,
+    }).catch(() => ({ value: [] }));
+
+    const actualHoldings = new Map<string, number>();
+    for (const account of [...tokenAccounts.value, ...token2022Accounts.value]) {
+      const info = account.account.data.parsed?.info;
+      if (info?.mint && info?.tokenAmount?.uiAmount >= DUST_THRESHOLD) {
+        actualHoldings.set(info.mint, info.tokenAmount.uiAmount);
       }
-      positionsByWallet.get(pubkey)!.push(pos);
+    }
+
+    console.log(`Wallet ${wallet.pubkey} has ${actualHoldings.size} on-chain tokens (excluding dust < ${DUST_THRESHOLD})`);
+
+    const positionsByToken = new Map<string, typeof holdingPositions>();
+    for (const pos of holdingPositions) {
+      if (!positionsByToken.has(pos.token_mint)) {
+        positionsByToken.set(pos.token_mint, []);
+      }
+      positionsByToken.get(pos.token_mint)!.push(pos);
     }
 
     const results: any[] = [];
     const phantomPositions: string[] = [];
 
-    // Check each wallet's actual token holdings
-    for (const [pubkey, positions] of positionsByWallet) {
-      console.log(`Checking wallet ${pubkey} with ${positions.length} positions`);
-      
-      try {
-        const walletPk = new PublicKey(pubkey);
-        
-        // Get all token accounts for this wallet
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(walletPk, {
-          programId: TOKEN_PROGRAM_ID,
+    for (const [tokenMint, tokenPositions] of positionsByToken) {
+      const actualBalance = actualHoldings.get(tokenMint) || 0;
+      const hasOnChain = actualBalance > 0;
+      const totalInvested = tokenPositions.reduce((sum, pos) => sum + (pos.buy_amount_usd || 0), 0);
+
+      for (const pos of tokenPositions) {
+        results.push({
+          positionId: pos.id,
+          tokenMint: pos.token_mint,
+          tokenSymbol: pos.token_symbol,
+          buySignature: pos.buy_signature,
+          hasOnChainBalance: hasOnChain,
+          actualBalance,
+          isPhantom: !hasOnChain,
+          totalPositionsForToken: tokenPositions.length,
+          createdAt: pos.created_at,
         });
-        
-        // Also check Token-2022 accounts
-        const token2022Accounts = await connection.getParsedTokenAccountsByOwner(walletPk, {
-          programId: TOKEN_2022_PROGRAM_ID,
-        }).catch(() => ({ value: [] }));
 
-        // Build map of actual token holdings
-        // IMPORTANT: Ignore dust amounts (< 1 token) as these are artifacts from failed sells
-        const actualHoldings = new Map<string, number>();
-        const DUST_THRESHOLD = 1; // Ignore balances less than 1 token
-        
-        for (const account of [...tokenAccounts.value, ...token2022Accounts.value]) {
-          const info = account.account.data.parsed?.info;
-          if (info?.mint && info?.tokenAmount?.uiAmount >= DUST_THRESHOLD) {
-            actualHoldings.set(info.mint, info.tokenAmount.uiAmount);
-          }
-        }
-        
-        console.log(`Wallet ${pubkey} has ${actualHoldings.size} tokens on-chain (excluding dust < ${DUST_THRESHOLD})`);
-
-        console.log("On-chain tokens (excluding dust):", Array.from(actualHoldings.keys()));
-
-        // IMPORTANT: User can have multiple positions for the same token
-        // We should NOT mark positions as phantom if there's ANY balance for that token
-        // Group positions by token_mint to compare aggregate positions vs on-chain balance
-        const positionsByToken = new Map<string, typeof positions>();
-        for (const pos of positions) {
-          if (!positionsByToken.has(pos.token_mint)) {
-            positionsByToken.set(pos.token_mint, []);
-          }
-          positionsByToken.get(pos.token_mint)!.push(pos);
+        if (!hasOnChain) {
+          phantomPositions.push(pos.id);
+          console.log(`PHANTOM: ${pos.token_symbol} (${tokenMint}) - no on-chain balance found in selected wallet`);
+          continue;
         }
 
-        // Check each token's positions
-        for (const [tokenMint, tokenPositions] of positionsByToken) {
-          const actualBalance = actualHoldings.get(tokenMint) || 0;
-          const hasOnChain = actualBalance > 0;
-          
-          // If there's NO on-chain balance for this token, ALL positions for it are phantom
-          // If there IS balance, none of them are phantom (user may have accumulated multiple buys)
-          for (const pos of tokenPositions) {
-            results.push({
-              positionId: pos.id,
-              tokenMint: pos.token_mint,
-              tokenSymbol: pos.token_symbol,
-              buySignature: pos.buy_signature,
-              hasOnChainBalance: hasOnChain,
-              actualBalance,
-              isPhantom: !hasOnChain,
-              totalPositionsForToken: tokenPositions.length,
-              createdAt: pos.created_at,
-            });
+        const posShare = totalInvested > 0 && tokenPositions.length > 1
+          ? (pos.buy_amount_usd || 0) / totalInvested
+          : 1;
+        const expectedQuantity = actualBalance * posShare;
+        const currentQty = pos.quantity_tokens;
+        const needsBackfill = !currentQty ||
+          (currentQty > 0 && expectedQuantity > 0 && (currentQty / expectedQuantity < 0.01 || currentQty / expectedQuantity > 100));
 
-            if (!hasOnChain) {
-              phantomPositions.push(pos.id);
-              console.log(`PHANTOM: ${pos.token_symbol} (${tokenMint}) - no on-chain balance at all`);
-            } else {
-              console.log(`VALID: ${pos.token_symbol} (${tokenMint}) - balance: ${actualBalance} (${tokenPositions.length} positions)`);
-              
-              // Backfill quantity_tokens from on-chain data if missing or significantly wrong
-              // For multiple positions of same token, split proportionally by buy_amount_usd
-              const totalInvested = tokenPositions.reduce((s, p) => s + (p.buy_amount_usd || 0), 0);
-              const posShare = totalInvested > 0 && tokenPositions.length > 1
-                ? (pos.buy_amount_usd || 0) / totalInvested
-                : 1;
-              const expectedQuantity = actualBalance * posShare;
-              
-              const currentQty = pos.quantity_tokens;
-              const needsBackfill = !currentQty || 
-                (currentQty > 0 && expectedQuantity > 0 && (currentQty / expectedQuantity < 0.01 || currentQty / expectedQuantity > 100));
-              
-              if (needsBackfill && !dryRun && expectedQuantity > 0) {
-                const correctedBuyPrice = (pos.buy_amount_usd && pos.buy_amount_usd > 0)
-                  ? pos.buy_amount_usd / expectedQuantity
-                  : null;
-                
-                const updateFields: Record<string, any> = { quantity_tokens: expectedQuantity };
-                if (correctedBuyPrice !== null) {
-                  updateFields.buy_price_usd = correctedBuyPrice;
-                }
-                
-                const { error: backfillErr } = await supabase
-                  .from("flip_positions")
-                  .update(updateFields)
-                  .eq("id", pos.id);
-                
-                if (!backfillErr) {
-                  console.log(`BACKFILLED: ${pos.token_symbol} quantity_tokens=${expectedQuantity}, buy_price_usd=${correctedBuyPrice}`);
-                } else {
-                  console.error(`Failed to backfill ${pos.id}:`, backfillErr);
-                }
-              } else if (needsBackfill && dryRun) {
-                console.log(`WOULD BACKFILL: ${pos.token_symbol} from ${currentQty} → ${expectedQuantity} tokens`);
-              }
-            }
+        if (needsBackfill && !dryRun && expectedQuantity > 0) {
+          const correctedBuyPrice = (pos.buy_amount_usd && pos.buy_amount_usd > 0)
+            ? pos.buy_amount_usd / expectedQuantity
+            : null;
+
+          const updateFields: Record<string, any> = { quantity_tokens: expectedQuantity };
+          if (correctedBuyPrice !== null) {
+            updateFields.buy_price_usd = correctedBuyPrice;
           }
-        }
-      } catch (err: any) {
-        console.error(`Error checking wallet ${pubkey}:`, err);
-        for (const pos of positions) {
-          results.push({
-            positionId: pos.id,
-            tokenMint: pos.token_mint,
-            tokenSymbol: pos.token_symbol,
-            error: err.message,
-          });
+
+          const { error: backfillErr } = await supabase
+            .from("flip_positions")
+            .update(updateFields)
+            .eq("id", pos.id);
+
+          if (backfillErr) {
+            console.error(`Failed to backfill ${pos.id}:`, backfillErr);
+          } else {
+            console.log(`BACKFILLED: ${pos.token_symbol} quantity_tokens=${expectedQuantity}, buy_price_usd=${correctedBuyPrice}`);
+          }
+        } else if (needsBackfill && dryRun) {
+          console.log(`WOULD BACKFILL: ${pos.token_symbol} from ${currentQty} → ${expectedQuantity} tokens`);
         }
       }
     }
 
-    // Clean up phantom positions
     let cleanedCount = 0;
     if (!dryRun && phantomPositions.length > 0) {
-      console.log(`Cleaning up ${phantomPositions.length} phantom positions...`);
-      
+      console.log(`Cleaning up ${phantomPositions.length} phantom positions for selected wallet...`);
+
       for (const posId of phantomPositions) {
         const { error: updateErr } = await supabase
           .from("flip_positions")
-          .update({ 
+          .update({
             status: "sold",
-            error_message: "Cleaned up: no on-chain balance found",
+            error_message: "Cleaned up: no on-chain balance found in selected wallet",
             sell_executed_at: new Date().toISOString(),
           })
-          .eq("id", posId);
-        
-        if (!updateErr) {
-          cleanedCount++;
-        } else {
+          .eq("id", posId)
+          .eq("wallet_id", walletId);
+
+        if (updateErr) {
           console.error(`Failed to clean position ${posId}:`, updateErr);
+        } else {
+          cleanedCount++;
         }
       }
     }
 
-    const backfilledCount = results.filter(r => !r.isPhantom && r.hasOnChainBalance).length;
-    
+    const backfilledCount = results.filter((result) => !result.isPhantom && result.hasOnChainBalance).length;
+
     return ok({
+      walletId,
+      walletPubkey: wallet.pubkey,
+      walletLabel: wallet.label,
       totalHolding: holdingPositions.length,
       phantomCount: phantomPositions.length,
       validCount: holdingPositions.length - phantomPositions.length,
@@ -249,10 +218,8 @@ serve(withRunLog('flipit-cleanup-phantom-positions', async (req) => {
       results,
       phantomPositionIds: phantomPositions,
     });
-
   } catch (err: any) {
     console.error("Cleanup error:", err);
     return bad(err.message || "Unknown error", 500);
   }
 }));
-
