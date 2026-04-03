@@ -32,6 +32,28 @@ const SocialMediaTab = lazy(() => import("@/components/admin/tabs/SocialMediaTab
 const TestimonialsManager = lazy(() => import("@/components/admin/TestimonialsManager").then(m => ({ default: m.TestimonialsManager })));
 const IntelBriefingsManager = lazy(() => import("@/components/admin/IntelBriefingsManager").then(m => ({ default: m.IntelBriefingsManager })));
 
+const DEFAULT_ADMIN_TAB = "utilities";
+const ALLOWED_ADMIN_TABS = new Set([
+  "utilities",
+  "oracle",
+  "holders-intel",
+  "whales-mints",
+  "flipit",
+  "telegram",
+  "twitter-accounts",
+  "pumpfun-monitor",
+  "master-db",
+  "morning-report",
+  "allstar",
+  "funnel-feeds",
+  "monitoring",
+  "tickets",
+  "top-200",
+  "social-media",
+  "testimonials",
+  "intel-briefings",
+]);
+
 // Simple loading fallback
 const TabLoader = memo(() => (
   <div className="flex items-center justify-center py-12">
@@ -44,7 +66,7 @@ const TabLoader = memo(() => (
 TabLoader.displayName = 'TabLoader';
 
 export default function SuperAdmin() {
-  const [activeTab, setActiveTab] = useState("utilities");
+  const [activeTab, setActiveTab] = useState(DEFAULT_ADMIN_TAB);
   const [hydrated, setHydrated] = useState(false);
   const { isSuperAdmin, isLoading } = useUserRoles();
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -60,7 +82,7 @@ export default function SuperAdmin() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
-    if (tabParam) {
+    if (tabParam && ALLOWED_ADMIN_TABS.has(tabParam)) {
       setActiveTab(tabParam);
     }
     const subtab = urlParams.get('subtab');
