@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { EmergencyStopButton } from "@/components/EmergencyStopButton";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Footer } from "@/components/Footer";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { PageLoader } from "@/components/ui/lazy-loader";
@@ -99,7 +99,7 @@ const App = () => {
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/onboarding" element={<Onboarding />} />
                       <Route path="/auth" element={<Auth />} />
-                      <Route path="/admin" element={<SuperAdminRoute><Index /></SuperAdminRoute>} />
+                      <Route path="/admin" element={<SuperAdminRoute><Navigate to="/super-admin" replace /></SuperAdminRoute>} />
                       <Route path="/bb" element={<SuperAdminRoute><BumpBot /></SuperAdminRoute>} />
                       <Route path="/blackbox" element={<BlackBox />} />
                       <Route path="/competitive-analysis" element={<CompetitiveAnalysis />} />
