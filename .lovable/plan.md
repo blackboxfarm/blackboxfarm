@@ -1,94 +1,86 @@
 
+Goal: make each Intel Briefing share use that article’s own hero image, title, and subtitle instead of falling back to the sitewide “You Don’t Grow on Dust.” metadata.
 
-## Plan: Simplify OG sharing — single Cloudflare Worker on blackbox.farm
+What I found
+- The article page itself is wired correctly on the client:
+  - `src/pages/IntelBriefingArticle.tsx` shares the article URL.
+  - `src/components/intel/ArticleStructuredData.tsx` updates the browser head for humans.
+- Server-side article OG is also present:
+  - `supabase/functions/og-meta/index.ts` already builds article-specific HTML with title, description, image, canonical URL.
+- The dangerous fallback is still in `index.html`:
+  - sitewide OG tags are hardcoded there with the slogan and default image.
+- Your screenshot matches exactly what happens when Facebook misses the article-specific server response and instead sees the default SPA HTML.
 
-### The core problem
-Your SPA can't serve OG tags to crawlers. The og-meta edge function solves this perfectly. The complexity is all in the routing layer (og.blackbox.farm subdomain, separate WAF rules, bot fight mode conflicts).
+Diagnosis
+- This is not a “tab reload” problem.
+- It is a server/share-routing problem:
+  1. Facebook’s share fetch is not consistently reaching the article-specific OG response.
+  2. When it misses, it falls back to `index.html`, which still has the global slogan + global image.
+- There is also a consistency gap:
+  - the share UI uses `article.title` / `article.subtitle`
+  - the OG function prefers `seo_title` / `seo_description`
+  - so preview text and share text can diverge.
 
-### The solution
-One Cloudflare Worker route on **blackbox.farm itself** that intercepts crawler requests and proxies them to the Supabase og-meta function. Non-crawler requests pass through normally to your SPA.
+Implementation plan
+1. Add a dedicated Intel article share endpoint
+- Create a new edge-function-based share page for Intel briefings, similar in spirit to `share-card-page` / `holders-og`.
+- Input: `slug`
+- Output:
+  - full HTML with article-specific `og:*`, `twitter:*`, and `itemprop` tags
+  - canonical points to the real article URL
+  - human visitors get redirected to the real article
+- This gives Facebook a stable server-rendered page built only for sharing, instead of relying on crawler detection on the normal SPA route.
 
-### What changes
+2. Point the article share buttons at the dedicated share URL for OG-based networks
+- Update `src/components/intel/SocialShareBar.tsx` so Facebook, LinkedIn, Discord/Pinterest-style OG scrapers use the dedicated share URL.
+- Keep the real article URL as the actual destination via canonical/redirect.
+- X, Telegram, WhatsApp, email can continue using the canonical article URL where appropriate.
 
-**1. Cloudflare Worker (on blackbox.farm, not og.blackbox.farm)**
+3. Unify the metadata source
+- In `src/pages/IntelBriefingArticle.tsx`, pass the same resolved values everywhere:
+  - title: `seo_title || title`
+  - description: `seo_description || subtitle`
+  - image: `featured_image_url`
+- Ensure the share bar and OG endpoint both use the same resolved values so the dashboard edits map naturally to what gets shared.
 
-The Worker checks the User-Agent. If it's a known crawler (Facebook, Twitter, Discord, Telegram, Google, etc.), it proxies the request to your Supabase og-meta function. Everyone else gets the normal SPA.
+4. Add cache-busting for article share previews
+- Include an article version marker in the share URL, based on publish/update timestamp or article revision state.
+- This reduces the chance that Facebook keeps showing old article metadata after you edit title/subtitle/hero image.
 
+5. Harden crawler coverage
+- Expand bot handling lists to include newer Meta/Facebook agents, not just `facebookexternalhit`.
+- Apply this to the repo’s OG-related edge functions for consistency.
+- Separately, mirror that same broader UA list in the Cloudflare Worker / WAF skip rule, since that routing is outside this repo and must match.
+
+Files likely affected
+- `src/components/intel/SocialShareBar.tsx`
+- `src/pages/IntelBriefingArticle.tsx`
+- `supabase/functions/og-meta/index.ts` or a new dedicated Intel share function
+- possibly `public/_redirects` if we expose the new share endpoint under `/og/*`
+
+Technical shape
 ```text
-User visits blackbox.farm/intel/briefing/some-slug
-  ├── Crawler (facebookexternalhit, Twitterbot, etc.)
-  │   → Worker fetches Supabase og-meta?slug=some-slug
-  │   → Returns HTML with og:image, og:title, etc.
-  │   → Crawler reads tags, shows preview
-  │
-  └── Real user
-      → Worker passes through to origin (your SPA)
-      → React app loads normally
+Article page
+  -> canonical URL: /intel/briefing/:slug
+
+Facebook share button
+  -> share URL: /og/intel-briefing?slug=:slug&v=:version
+
+Dedicated share endpoint
+  -> query article from Supabase
+  -> emit article-specific OG/Twitter tags
+  -> canonical = real article URL
+  -> redirect humans to canonical
 ```
 
-This is literally what every WordPress SEO plugin does, and what prerender.io / rendertron do for SPAs. No subdomain needed. No separate WAF rules. The Worker runs on the same domain, so Bot Fight Mode doesn't interfere — it's YOUR Worker responding, not an external bot trying to access your site.
+Why this is the safest fix
+- It removes dependence on Facebook perfectly hitting the main SPA/article route every time.
+- It avoids sitewide fallback contamination from `index.html`.
+- It makes article #1 and article #2 previews independently resolvable and cacheable.
 
-**2. Update share URLs in codebase**
-
-- `src/pages/IntelBriefingArticle.tsx` — change `shareUrl` from `og.blackbox.farm/intel/briefing/{slug}` to just `blackbox.farm/intel/briefing/{slug}` (same as `articleUrl`)
-- `src/components/admin/TokenXDashboard.tsx` — change holders share URL similarly
-- Clean URLs, no ugly Supabase domains, no subdomain
-
-**3. No changes to og-meta edge function**
-
-It already works perfectly. The Worker just proxies to it.
-
-**4. Cloudflare Worker code (for your reference — you'd deploy this on Cloudflare)**
-
-```javascript
-const CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Discordbot|TelegramBot|Slackbot|WhatsApp|Googlebot|bingbot|Applebot/i;
-const SUPABASE_FN = "https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/og-meta";
-
-export default {
-  async fetch(request, env) {
-    const ua = request.headers.get("User-Agent") || "";
-    const url = new URL(request.url);
-
-    // Only intercept crawler requests on matching paths
-    if (CRAWLER_UA.test(ua)) {
-      // Intel briefing articles
-      const briefingMatch = url.pathname.match(/^\/intel\/briefing\/([^\/]+)\/?$/);
-      if (briefingMatch) {
-        const resp = await fetch(`${SUPABASE_FN}?slug=${briefingMatch[1]}`);
-        return new Response(resp.body, {
-          status: resp.status,
-          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=3600" }
-        });
-      }
-
-      // Holders page with token param
-      if (url.pathname === "/holders" || url.pathname === "/og-meta") {
-        const token = url.searchParams.get("token") || url.searchParams.get("v");
-        if (token) {
-          const resp = await fetch(`${SUPABASE_FN}?token=${token}`);
-          return new Response(resp.body, { status: resp.status, headers: { "Content-Type": "text/html; charset=utf-8" } });
-        }
-      }
-    }
-
-    // Everyone else: pass through to origin
-    return fetch(request);
-  }
-};
-```
-
-Worker route: `blackbox.farm/*` (replaces the og.blackbox.farm worker)
-
-### What you can retire
-- The `og.blackbox.farm` subdomain Worker
-- The WAF skip rule for og.blackbox.farm
-- All the headache
-
-### Risk
-- Minimal — if the Worker fails, it falls through to origin (your SPA loads normally)
-- No Bot Fight Mode conflict since the Worker IS the first responder on your domain
-
-### Files changed in this codebase
-1. **`src/pages/IntelBriefingArticle.tsx`** — `shareUrl` becomes same as `articleUrl` (`blackbox.farm/intel/briefing/{slug}`)
-2. **`src/components/admin/TokenXDashboard.tsx`** — holders share URL uses `blackbox.farm` directly
-
+Validation after implementation
+- Test both article URLs in Facebook Sharing Debugger.
+- Test real Facebook composer paste/share for both articles.
+- Confirm article #2 shows article #2 hero, title, and subtitle.
+- Confirm article #1 no longer bleeds into article #2 preview.
+- Confirm updated subtitle/SEO edits in the dashboard change the next generated share preview.
