@@ -155,7 +155,7 @@ export function SocialShareBar({ url, title, description, ogShareUrl }: SocialSh
       <div className="flex items-center gap-1 flex-wrap justify-center">
         {platforms.map((p) => {
           const Icon = p.icon;
-          const shareUrl = (p.useOgUrl && ogShareUrl) ? ogShareUrl : url;
+          const shareUrl = url;
 
           // Discord: copy formatted message to clipboard
           if ((p as any).isClipboard) {
