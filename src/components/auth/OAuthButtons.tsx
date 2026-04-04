@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
+import { getOAuthRedirectUrl } from '@/lib/auth/getOAuthRedirect';
 
 type OAuthProvider = 'google' | 'twitter' | 'github';
 
@@ -20,7 +21,7 @@ export const OAuthButtons = ({ disabled = false }: OAuthButtonsProps) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `https://blackbox.farm/`,
+          redirectTo: getOAuthRedirectUrl(),
         }
       });
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface AuthContextValue {
   user: User | null;
@@ -46,6 +47,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
+
+    // Detect OAuth error params in URL (from failed provider callbacks)
+    const detectOAuthErrors = () => {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      const params = new URLSearchParams(hash.startsWith('#') ? hash.substring(1) : '');
+      const searchParams = new URLSearchParams(search);
+
+      // Check both hash and search params
+      const error = params.get('error') || searchParams.get('error');
+      const errorDescription = params.get('error_description') || searchParams.get('error_description');
+      const errorCode = params.get('error_code') || searchParams.get('error_code');
+
+      if (error) {
+        const description = errorDescription
+          ? decodeURIComponent(errorDescription.replace(/\+/g, ' '))
+          : `Error code: ${errorCode || 'unknown'}`;
+
+        toast.error(`Login failed: ${error}`, {
+          description,
+          duration: 10000,
+        });
+
+        // Clear error params from URL without reload
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    };
+
+    detectOAuthErrors();
 
     return () => subscription.unsubscribe();
   }, []);

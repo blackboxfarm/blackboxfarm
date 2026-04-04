@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
+import { getOAuthRedirectUrl } from '@/lib/auth/getOAuthRedirect';
 
 export const GoogleAuthButton = () => {
   const [loading, setLoading] = useState(false);
@@ -15,7 +16,7 @@ export const GoogleAuthButton = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `https://blackbox.farm/`,
+          redirectTo: getOAuthRedirectUrl(),
         }
       });
 
