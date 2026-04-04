@@ -189,6 +189,7 @@ export function MetaTagsManager() {
   };
 
   const handleReset = () => {
+    const DEFAULTS = getSavedDefaults();
     if (activeScope === 'sitewide') {
       setCurrentEntry({ ...emptyEntry('sitewide'), ...DEFAULTS, scope: 'sitewide', id: currentEntry.id });
     } else if (activeScope === 'page') {
@@ -197,6 +198,12 @@ export function MetaTagsManager() {
       setCurrentEntry({ ...emptyEntry('article'), article_slug: selectedArticle, id: currentEntry.id });
     }
     toast({ title: 'Reset', description: 'Fields reset to defaults. Click Save to apply.' });
+  };
+
+  const handleSetAsDefault = () => {
+    const { id, scope, route_path, article_slug, ...fields } = currentEntry as any;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(fields));
+    toast({ title: 'Defaults Updated', description: 'Current settings are now the new defaults for "Reset to Defaults".' });
   };
 
   const handleDelete = async () => {
