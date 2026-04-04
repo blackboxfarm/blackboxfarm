@@ -68,9 +68,9 @@ Deno.serve(async (req) => {
       articleSlug: slug,
     });
 
-    const ogTitle = (meta.og_title || article.seo_title || article.title || "").slice(0, 120);
-    const ogDescription = (meta.og_description || article.seo_description || article.subtitle || "").slice(0, 200);
-    const ogImage = meta.og_image_url || resolveOgImage(article.featured_image_url);
+    const ogTitle = (article.seo_title || article.title || meta.og_title || "").slice(0, 120);
+    const ogDescription = (article.seo_description || article.subtitle || meta.og_description || "").slice(0, 200);
+    const ogImage = resolveOgImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
     const articleUrl = meta.canonical_url || `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";

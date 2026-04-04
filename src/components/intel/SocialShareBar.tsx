@@ -10,20 +10,8 @@ interface SocialShareBarProps {
   url: string;
   title: string;
   description?: string;
-  /** Dedicated share endpoint URL for OG-dependent platforms */
+  /** @deprecated No longer used — all platforms share the direct article URL */
   ogShareUrl?: string;
-}
-
-/**
- * Build the intel-share edge function URL for a given article slug.
- * Includes a cache-bust param so FB/LinkedIn re-scrape after edits.
- */
-export function buildIntelShareUrl(slug: string, updatedAt?: string | null): string {
-  const base = `https://blackbox.farm/og/intel-share?slug=${encodeURIComponent(slug)}`;
-  if (updatedAt) {
-    return `${base}&v=${new Date(updatedAt).getTime()}`;
-  }
-  return base;
 }
 
 const platforms = [
