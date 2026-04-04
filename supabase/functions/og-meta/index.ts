@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolveMetaTags } from "../_shared/meta-tags-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,7 +41,6 @@ Deno.serve(async (req) => {
     console.log(`[og-meta] slug="${slug}" found=${!!article} error=${error?.message || 'none'}`);
 
     if (error || !article) {
-      // Debug: check if article exists at all (without is_published filter)
       const { data: anyArticle } = await supabase
         .from("intel_briefings")
         .select("slug, is_published")
@@ -48,37 +48,51 @@ Deno.serve(async (req) => {
         .maybeSingle();
       console.log(`[og-meta] debug: article without filter=${JSON.stringify(anyArticle)}`);
 
+      // Resolve sitewide meta for fallback
+      const meta = await resolveMetaTags({ scope: 'sitewide' });
+
       return buildFullPageResponse({
-        title: "Intel Briefings | BlackBox Farm",
-        description: "Solana token intelligence, holder analysis, and on-chain research.",
-        image: DEFAULT_OG_IMAGE,
+        title: meta.og_title || "Intel Briefings | BlackBox Farm",
+        description: meta.og_description || "Solana token intelligence, holder analysis, and on-chain research.",
+        image: meta.og_image_url || DEFAULT_OG_IMAGE,
         url: `${SITE_URL}/intel`,
         type: "website",
         slug,
       });
     }
 
-    const ogTitle = (article.seo_title || article.title || "").slice(0, 60);
-    const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 160);
-    const ogImage = resolveOgImage(article.featured_image_url);
-    const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
+    // Resolve meta overrides: sitewide → /intel page → article-specific
+    const meta = await resolveMetaTags({
+      scope: 'article',
+      routePath: '/intel',
+      articleSlug: slug,
+    });
+
+    const ogTitle = (meta.og_title || article.seo_title || article.title || "").slice(0, 120);
+    const ogDescription = (meta.og_description || article.seo_description || article.subtitle || "").slice(0, 200);
+    const ogImage = meta.og_image_url || resolveOgImage(article.featured_image_url);
+    const articleUrl = meta.canonical_url || `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
     const category = (article.category || "general").replace(/-/g, " ");
     const tags = article.tags || [];
+    const twitterCard = meta.twitter_card || "summary_large_image";
+    const twitterImage = meta.twitter_image || ogImage;
 
     return buildFullPageResponse({
       title: ogTitle,
       description: ogDescription,
       image: ogImage,
       url: articleUrl,
-      type: "article",
+      type: meta.og_type || "article",
       publishedAt,
       author,
       category,
       tags,
       siteName: "BlackBox Farm | HoldersIntel",
       slug,
+      twitterCard,
+      twitterImage,
     });
   } catch (err) {
     console.error("og-meta error:", err);
@@ -98,15 +112,12 @@ interface OgParams {
   tags?: string[];
   siteName?: string;
   slug: string;
+  twitterCard?: string;
+  twitterImage?: string;
 }
 
-/**
- * Returns a FULL HTML page with:
- * 1. Pre-filled OG/Twitter meta tags (crawlers see them immediately)
- * 2. The SPA entry point so the React app boots normally for humans
- */
 function buildFullPageResponse(params: OgParams): Response {
-  const { title, description, image, url, type, publishedAt, author, category, tags, siteName, slug } = params;
+  const { title, description, image, url, type, publishedAt, author, category, tags, siteName, slug, twitterCard, twitterImage } = params;
 
   const articleMeta = type === "article"
     ? `
@@ -161,7 +172,7 @@ function buildFullPageResponse(params: OgParams): Response {
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${url}" />
 
-    <!-- Open Graph (Facebook, Discord, LinkedIn, etc.) -->
+    <!-- Open Graph -->
     <meta property="og:type" content="${type}" />
     <meta property="og:url" content="${url}" />
     <meta property="og:title" content="${escapeHtml(title)}" />
@@ -177,12 +188,12 @@ function buildFullPageResponse(params: OgParams): Response {
     ${articleMeta}
 
     <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:card" content="${twitterCard || 'summary_large_image'}" />
     <meta name="twitter:site" content="@HoldersIntel" />
     <meta name="twitter:creator" content="@blackbox_farm" />
     <meta name="twitter:title" content="${escapeHtml(title)}" />
     <meta name="twitter:description" content="${escapeHtml(description)}" />
-    <meta name="twitter:image" content="${image}" />
+    <meta name="twitter:image" content="${twitterImage || image}" />
 
     <!-- WhatsApp / iMessage / General Messaging Apps -->
     <meta itemprop="name" content="${escapeHtml(title)}" />

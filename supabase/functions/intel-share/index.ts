@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolveMetaTags } from "../_shared/meta-tags-resolver.ts";
 
 const SITE_URL = "https://blackbox.farm";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/blackbox-og-image.png`;
@@ -35,23 +36,31 @@ Deno.serve(async (req) => {
     console.log(`[intel-share] slug="${slug}" found=${!!article} error=${error?.message || "none"}`);
 
     if (error || !article) {
-      // Fallback: redirect to intel index
       return new Response(null, {
         status: 302,
         headers: { ...corsHeaders, Location: `${SITE_URL}/intel` },
       });
     }
 
-    const fullTitle = article.seo_title || article.title || "";
-    const ogTitle = fullTitle.slice(0, 120); // OG title supports longer text
-    const pageTitle = fullTitle.slice(0, 60); // Browser tab title stays short
-    const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 200);
-    const ogImage = resolveImage(article.featured_image_url);
-    const canonicalUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
+    // Resolve meta overrides: sitewide → /intel page → article-specific
+    const meta = await resolveMetaTags({
+      scope: 'article',
+      routePath: '/intel',
+      articleSlug: slug,
+    });
+
+    const fullTitle = meta.og_title || article.seo_title || article.title || "";
+    const ogTitle = fullTitle.slice(0, 120);
+    const pageTitle = fullTitle.slice(0, 60);
+    const ogDescription = (meta.og_description || article.seo_description || article.subtitle || "").slice(0, 200);
+    const ogImage = meta.og_image_url || resolveImage(article.featured_image_url);
+    const canonicalUrl = meta.canonical_url || `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
     const category = (article.category || "general").replace(/-/g, " ");
     const tags = article.tags || [];
+    const twitterCard = meta.twitter_card || "summary_large_image";
+    const twitterImage = meta.twitter_image || ogImage;
 
     const ua = (req.headers.get("user-agent") || "").toLowerCase();
     const isCrawler = /facebookexternalhit|facebot|twitterbot|linkedinbot|discordbot|slackbot|telegrambot|whatsapp|googlebot|bingbot|applebot|pinterestbot|meta-externalagent|ia_archiver/.test(ua);
@@ -98,7 +107,7 @@ Deno.serve(async (req) => {
   <meta name="robots" content="noindex, follow" />
 
   <!-- Open Graph -->
-  <meta property="og:type" content="article" />
+  <meta property="og:type" content="${meta.og_type || 'article'}" />
   <meta property="og:url" content="${canonicalUrl}" />
   <meta property="og:title" content="${esc(ogTitle)}" />
   <meta property="og:description" content="${esc(ogDescription)}" />
@@ -112,12 +121,12 @@ Deno.serve(async (req) => {
   ${articleMeta}
 
   <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:card" content="${twitterCard}" />
   <meta name="twitter:site" content="@HoldersIntel" />
   <meta name="twitter:creator" content="@blackbox_farm" />
   <meta name="twitter:title" content="${esc(ogTitle)}" />
   <meta name="twitter:description" content="${esc(ogDescription)}" />
-  <meta name="twitter:image" content="${ogImage}" />
+  <meta name="twitter:image" content="${twitterImage}" />
 
   <!-- Messaging Apps -->
   <meta itemprop="name" content="${esc(ogTitle)}" />

@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { resolveMetaTags } from "../_shared/meta-tags-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -157,14 +158,22 @@ Deno.serve(withRunLog('holders-og', async (req) => {
 
     console.log(`[holders-og] Serving: ${cleanSymbol || 'default'}, source=${ogSource}, upstream=${ogImageUpstream.slice(-60)}, proxy=${ogImageForMeta.slice(-60)}`);
 
+    // Resolve meta overrides from meta_tags_config (sitewide → /holders page)
+    const meta = await resolveMetaTags({ scope: 'page', routePath: '/holders' });
+
     // Dynamic OG metadata
     const title = isTokenSpecific && cleanSymbol 
       ? `$${cleanSymbol} Holder Analysis — BlackBox Farm`
-      : "You Don't Grow on Dust.";
+      : (meta.og_title || "You Don't Grow on Dust.");
     
     const description = isTokenSpecific && cleanSymbol
       ? `Detailed holder distribution and wallet analysis for $${cleanSymbol}${cleanName ? ` (${cleanName})` : ''}. Discover diamond hands vs dust wallets.`
-      : `Markets are fields. Some roots hold. Some inflate the count. BlackBox.farm shows what actually grows — and what gets culled.`;
+      : (meta.og_description || `Markets are fields. Some roots hold. Some inflate the count. BlackBox.farm shows what actually grows — and what gets culled.`);
+    
+    // If meta_tags_config has an image override for /holders and we're not token-specific, use it
+    if (!isTokenSpecific && meta.og_image_url) {
+      ogImage = meta.og_image_url;
+    }
 
     const html = `<!doctype html>
 <html lang="en">
