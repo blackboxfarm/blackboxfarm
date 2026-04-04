@@ -136,6 +136,21 @@ export default function IntelBriefings() {
             <p className="text-sm">Check back soon for on-chain intelligence reports.</p>
           </div>
         )}
+
+        {/* Floating Cache Bust Tools Tab */}
+        <button
+          onClick={() => setShowTools(!showTools)}
+          className="fixed bottom-6 right-6 z-50 bg-primary text-primary-foreground rounded-full p-3 shadow-lg hover:scale-105 transition-transform"
+          title="Social Cache Debuggers"
+        >
+          {showTools ? <X className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
+        </button>
+
+        {showTools && (
+          <div className="fixed bottom-20 right-6 z-50 w-96 max-w-[calc(100vw-2rem)] bg-card border border-border rounded-xl shadow-2xl p-4 animate-in slide-in-from-bottom-4">
+            <CacheBustingTools />
+          </div>
+        )}
       </div>
     </SiteLayout>
   );
