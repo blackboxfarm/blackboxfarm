@@ -310,7 +310,12 @@ export default function SuperAdmin() {
           <TabsContent value="intel-briefings">
             {activeTab === "intel-briefings" && (
               <TabErrorBoundary tabName="Intel Briefings">
-                <Suspense fallback={<TabLoader />}><IntelBriefingsManager /></Suspense>
+                <Suspense fallback={<TabLoader />}>
+                  <IntelBriefingsManager />
+                  <div className="mt-8">
+                    <CacheBustingTools />
+                  </div>
+                </Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
