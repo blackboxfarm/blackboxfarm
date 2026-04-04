@@ -104,8 +104,8 @@ const platforms = [
       </svg>
     ),
     useOgUrl: true,
-    getUrl: (url: string, title: string) =>
-      `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(url)}&description=${encodeURIComponent(title)}`,
+    getUrl: (url: string, title: string, desc?: string) =>
+      `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(url)}&description=${encodeURIComponent(title + (desc ? ' — ' + desc : ''))}`,
     color: 'hover:text-red-500',
   },
   {
