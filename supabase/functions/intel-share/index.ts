@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>${esc(ogTitle)} | BlackBox Farm</title>
+  <title>${esc(pageTitle)} | BlackBox Farm</title>
   <link rel="canonical" href="${canonicalUrl}" />
   <meta name="description" content="${esc(ogDescription)}" />
   <meta name="robots" content="noindex, follow" />
