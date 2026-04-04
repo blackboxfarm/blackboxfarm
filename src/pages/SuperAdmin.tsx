@@ -32,6 +32,7 @@ const SocialMediaTab = lazy(() => import("@/components/admin/tabs/SocialMediaTab
 const TestimonialsManager = lazy(() => import("@/components/admin/TestimonialsManager").then(m => ({ default: m.TestimonialsManager })));
 const IntelBriefingsManager = lazy(() => import("@/components/admin/IntelBriefingsManager").then(m => ({ default: m.IntelBriefingsManager })));
 const CacheBustingTools = lazy(() => import("@/components/intel/CacheBustingTools").then(m => ({ default: m.CacheBustingTools })));
+const MetaTagsManager = lazy(() => import("@/components/admin/MetaTagsManager").then(m => ({ default: m.MetaTagsManager })));
 
 const DEFAULT_ADMIN_TAB = "utilities";
 const ALLOWED_ADMIN_TABS = new Set([
@@ -313,9 +314,12 @@ export default function SuperAdmin() {
               <TabErrorBoundary tabName="Intel Briefings">
                 <Suspense fallback={<TabLoader />}>
                   <IntelBriefingsManager />
-                  <div className="mt-8">
-                    <CacheBustingTools />
-                  </div>
+                   <div className="mt-8">
+                     <MetaTagsManager />
+                   </div>
+                   <div className="mt-8">
+                     <CacheBustingTools />
+                   </div>
                 </Suspense>
               </TabErrorBoundary>
             )}

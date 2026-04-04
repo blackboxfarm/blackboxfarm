@@ -6981,6 +6981,69 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_tags_config: {
+        Row: {
+          article_slug: string | null
+          canonical_url: string | null
+          created_at: string
+          extra_meta: Json | null
+          id: string
+          is_active: boolean
+          og_description: string | null
+          og_image_url: string | null
+          og_title: string | null
+          og_type: string | null
+          og_url: string | null
+          route_path: string | null
+          scope: string
+          twitter_card: string | null
+          twitter_description: string | null
+          twitter_image: string | null
+          twitter_title: string | null
+          updated_at: string
+        }
+        Insert: {
+          article_slug?: string | null
+          canonical_url?: string | null
+          created_at?: string
+          extra_meta?: Json | null
+          id?: string
+          is_active?: boolean
+          og_description?: string | null
+          og_image_url?: string | null
+          og_title?: string | null
+          og_type?: string | null
+          og_url?: string | null
+          route_path?: string | null
+          scope?: string
+          twitter_card?: string | null
+          twitter_description?: string | null
+          twitter_image?: string | null
+          twitter_title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          article_slug?: string | null
+          canonical_url?: string | null
+          created_at?: string
+          extra_meta?: Json | null
+          id?: string
+          is_active?: boolean
+          og_description?: string | null
+          og_image_url?: string | null
+          og_title?: string | null
+          og_type?: string | null
+          og_url?: string | null
+          route_path?: string | null
+          scope?: string
+          twitter_card?: string | null
+          twitter_description?: string | null
+          twitter_image?: string | null
+          twitter_title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mint_monitor_detections: {
         Row: {
           created_at: string
