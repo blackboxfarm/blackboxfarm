@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { resolveMetaTags } from "../_shared/meta-tags-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
