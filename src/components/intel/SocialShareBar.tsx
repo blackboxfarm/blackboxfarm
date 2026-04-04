@@ -48,7 +48,7 @@ const platforms = [
     name: 'LinkedIn',
     icon: Linkedin,
     useOgUrl: true,
-    getUrl: (url: string, title: string) =>
+    getUrl: (url: string, title: string, desc?: string) =>
       `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
     color: 'hover:text-blue-600',
   },
