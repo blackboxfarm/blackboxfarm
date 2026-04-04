@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Globe, FileText, BookOpen, Upload, RotateCcw, Save, Trash2, Plus, ExternalLink } from 'lucide-react';
+import { Globe, FileText, BookOpen, Upload, RotateCcw, Save, Trash2, Plus, ExternalLink, Shield } from 'lucide-react';
 
 interface MetaTagEntry {
   id?: string;
@@ -49,7 +49,7 @@ const KNOWN_ROUTES = [
   { path: '/tgbot', label: 'Telegram Bot' },
 ];
 
-const DEFAULTS: Omit<MetaTagEntry, 'scope'> = {
+const HARDCODED_DEFAULTS: Omit<MetaTagEntry, 'scope'> = {
   og_title: 'BlackBox Farm',
   og_description: 'Advanced DeFi trading tools, automated bots, and community-driven campaigns on Solana blockchain',
   og_image_url: 'https://blackbox.farm/assets/blackbox-og-image.png',
@@ -62,6 +62,16 @@ const DEFAULTS: Omit<MetaTagEntry, 'scope'> = {
   canonical_url: 'https://blackbox.farm',
   is_active: true,
 };
+
+const STORAGE_KEY = 'meta_tags_saved_defaults';
+
+function getSavedDefaults(): Omit<MetaTagEntry, 'scope'> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return HARDCODED_DEFAULTS;
+}
 
 const emptyEntry = (scope: 'sitewide' | 'page' | 'article'): MetaTagEntry => ({
   scope,
@@ -179,6 +189,7 @@ export function MetaTagsManager() {
   };
 
   const handleReset = () => {
+    const DEFAULTS = getSavedDefaults();
     if (activeScope === 'sitewide') {
       setCurrentEntry({ ...emptyEntry('sitewide'), ...DEFAULTS, scope: 'sitewide', id: currentEntry.id });
     } else if (activeScope === 'page') {
@@ -187,6 +198,12 @@ export function MetaTagsManager() {
       setCurrentEntry({ ...emptyEntry('article'), article_slug: selectedArticle, id: currentEntry.id });
     }
     toast({ title: 'Reset', description: 'Fields reset to defaults. Click Save to apply.' });
+  };
+
+  const handleSetAsDefault = () => {
+    const { id, scope, route_path, article_slug, ...fields } = currentEntry as any;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(fields));
+    toast({ title: 'Defaults Updated', description: 'Current settings are now the new defaults for "Reset to Defaults".' });
   };
 
   const handleDelete = async () => {
@@ -295,13 +312,18 @@ export function MetaTagsManager() {
         </Tabs>
 
         {/* Action buttons */}
-        <div className="flex gap-2 mt-6 pt-4 border-t border-border/50">
+        <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-border/50">
           <Button onClick={handleSave} disabled={saving} className="gap-1">
             <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save'}
           </Button>
           <Button variant="outline" onClick={handleReset} className="gap-1">
             <RotateCcw className="h-4 w-4" /> Reset to Defaults
           </Button>
+          {activeScope === 'sitewide' && (
+            <Button variant="secondary" onClick={handleSetAsDefault} className="gap-1">
+              <Shield className="h-4 w-4" /> Set as New Default
+            </Button>
+          )}
           {currentEntry.id && (
             <Button variant="destructive" onClick={handleDelete} className="gap-1 ml-auto">
               <Trash2 className="h-4 w-4" /> Remove Override
