@@ -94,7 +94,6 @@ export default function IntelBriefingArticle() {
 
   const articleUrl = `https://blackbox.farm/intel/briefing/${article.slug}`;
   const shareUrl = articleUrl;
-  const ogShareUrl = buildIntelShareUrl(article.slug, article.updated_at || article.published_at);
   const resolvedTitle = article.seo_title || article.title;
   const resolvedDescription = article.seo_description || article.subtitle || undefined;
 
