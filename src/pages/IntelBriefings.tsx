@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { BriefingCard } from '@/components/intel/BriefingCard';
+import { CacheBustingTools } from '@/components/intel/CacheBustingTools';
 import { cn } from '@/lib/utils';
-import { Newspaper } from 'lucide-react';
+import { Newspaper, Wrench, X } from 'lucide-react';
 
 const CATEGORIES = [
   { value: 'all', label: 'All' },
