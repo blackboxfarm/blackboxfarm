@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { BriefingCard } from '@/components/intel/BriefingCard';
+import { CacheBustingTools } from '@/components/intel/CacheBustingTools';
 import { cn } from '@/lib/utils';
-import { Newspaper } from 'lucide-react';
+import { Newspaper, Wrench, X } from 'lucide-react';
 
 const CATEGORIES = [
   { value: 'all', label: 'All' },
@@ -18,7 +19,7 @@ const CATEGORIES = [
 
 export default function IntelBriefings() {
   const [activeCategory, setActiveCategory] = useState('all');
-
+  const [showTools, setShowTools] = useState(false);
   // Check if public access is enabled
   const { data: isPublic, isLoading: accessLoading } = useQuery({
     queryKey: ['intel-public-access'],
@@ -133,6 +134,21 @@ export default function IntelBriefings() {
             <Newspaper className="h-12 w-12 mx-auto mb-4 opacity-30" />
             <p className="text-lg">No briefings published yet.</p>
             <p className="text-sm">Check back soon for on-chain intelligence reports.</p>
+          </div>
+        )}
+
+        {/* Floating Cache Bust Tools Tab */}
+        <button
+          onClick={() => setShowTools(!showTools)}
+          className="fixed bottom-6 right-6 z-50 bg-primary text-primary-foreground rounded-full p-3 shadow-lg hover:scale-105 transition-transform"
+          title="Social Cache Debuggers"
+        >
+          {showTools ? <X className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
+        </button>
+
+        {showTools && (
+          <div className="fixed bottom-20 right-6 z-50 w-96 max-w-[calc(100vw-2rem)] bg-card border border-border rounded-xl shadow-2xl p-4 animate-in slide-in-from-bottom-4">
+            <CacheBustingTools />
           </div>
         )}
       </div>
