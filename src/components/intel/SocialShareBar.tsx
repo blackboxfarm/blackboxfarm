@@ -167,8 +167,28 @@ export function SocialShareBar({ url, title, description, ogShareUrl }: SocialSh
       <div className="flex items-center gap-1 flex-wrap justify-center">
         {platforms.map((p) => {
           const Icon = p.icon;
-          // OG-dependent platforms use the dedicated share URL when available
           const shareUrl = (p.useOgUrl && ogShareUrl) ? ogShareUrl : url;
+
+          // Discord: copy formatted message to clipboard
+          if ((p as any).isClipboard) {
+            return (
+              <Button
+                key={p.name}
+                variant="ghost"
+                size="icon"
+                className={`h-9 w-9 rounded-full text-muted-foreground transition-colors ${p.color}`}
+                title={`Copy for ${p.name}`}
+                onClick={async () => {
+                  const text = (p as any).getClipboardText(shareUrl, title, description);
+                  await navigator.clipboard.writeText(text);
+                  toast.success('Copied for Discord — paste into any channel!');
+                }}
+              >
+                <Icon className="h-4 w-4" />
+              </Button>
+            );
+          }
+
           return (
             <Button
               key={p.name}
