@@ -78,8 +78,10 @@ const platforms = [
     name: 'WhatsApp',
     icon: MessageCircle,
     useOgUrl: false,
-    getUrl: (url: string, title: string) =>
-      `https://wa.me/?text=${encodeURIComponent(title + ' ' + url)}`,
+    getUrl: (url: string, title: string, desc?: string) => {
+      const text = `📰 *${title}*${desc ? `\n\n_${desc}_` : ''}\n\n🔗 ${url}`;
+      return `https://wa.me/?text=${encodeURIComponent(text)}`;
+    },
     color: 'hover:text-green-500',
   },
   {
