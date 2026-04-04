@@ -78,8 +78,10 @@ const platforms = [
     name: 'WhatsApp',
     icon: MessageCircle,
     useOgUrl: false,
-    getUrl: (url: string, title: string) =>
-      `https://wa.me/?text=${encodeURIComponent(title + ' ' + url)}`,
+    getUrl: (url: string, title: string, desc?: string) => {
+      const text = `📰 *${title}*${desc ? `\n\n_${desc}_` : ''}\n\n🔗 ${url}`;
+      return `https://wa.me/?text=${encodeURIComponent(text)}`;
+    },
     color: 'hover:text-green-500',
   },
   {
@@ -90,8 +92,8 @@ const platforms = [
       </svg>
     ),
     useOgUrl: true,
-    getUrl: (url: string, title: string) =>
-      `https://reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`,
+    getUrl: (url: string, title: string, desc?: string) =>
+      `https://reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}${desc ? `&text=${encodeURIComponent(desc)}` : ''}`,
     color: 'hover:text-orange-500',
   },
   {
@@ -102,8 +104,8 @@ const platforms = [
       </svg>
     ),
     useOgUrl: true,
-    getUrl: (url: string, title: string) =>
-      `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(url)}&description=${encodeURIComponent(title)}`,
+    getUrl: (url: string, title: string, desc?: string) =>
+      `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(url)}&description=${encodeURIComponent(title + (desc ? ' — ' + desc : ''))}`,
     color: 'hover:text-red-500',
   },
   {
