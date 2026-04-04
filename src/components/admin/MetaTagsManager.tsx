@@ -312,13 +312,18 @@ export function MetaTagsManager() {
         </Tabs>
 
         {/* Action buttons */}
-        <div className="flex gap-2 mt-6 pt-4 border-t border-border/50">
+        <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-border/50">
           <Button onClick={handleSave} disabled={saving} className="gap-1">
             <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save'}
           </Button>
           <Button variant="outline" onClick={handleReset} className="gap-1">
             <RotateCcw className="h-4 w-4" /> Reset to Defaults
           </Button>
+          {activeScope === 'sitewide' && (
+            <Button variant="secondary" onClick={handleSetAsDefault} className="gap-1">
+              <Shield className="h-4 w-4" /> Set as New Default
+            </Button>
+          )}
           {currentEntry.id && (
             <Button variant="destructive" onClick={handleDelete} className="gap-1 ml-auto">
               <Trash2 className="h-4 w-4" /> Remove Override
