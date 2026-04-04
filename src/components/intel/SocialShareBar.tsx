@@ -92,8 +92,8 @@ const platforms = [
       </svg>
     ),
     useOgUrl: true,
-    getUrl: (url: string, title: string) =>
-      `https://reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`,
+    getUrl: (url: string, title: string, desc?: string) =>
+      `https://reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}${desc ? `&text=${encodeURIComponent(desc)}` : ''}`,
     color: 'hover:text-orange-500',
   },
   {
