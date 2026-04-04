@@ -18,7 +18,7 @@ const CATEGORIES = [
 
 export default function IntelBriefings() {
   const [activeCategory, setActiveCategory] = useState('all');
-  const [showTools, setShowTools] = useState(false);
+  
   // Check if public access is enabled
   const { data: isPublic, isLoading: accessLoading } = useQuery({
     queryKey: ['intel-public-access'],
