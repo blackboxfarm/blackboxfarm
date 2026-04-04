@@ -49,7 +49,7 @@ const KNOWN_ROUTES = [
   { path: '/tgbot', label: 'Telegram Bot' },
 ];
 
-const DEFAULTS: Omit<MetaTagEntry, 'scope'> = {
+const HARDCODED_DEFAULTS: Omit<MetaTagEntry, 'scope'> = {
   og_title: 'BlackBox Farm',
   og_description: 'Advanced DeFi trading tools, automated bots, and community-driven campaigns on Solana blockchain',
   og_image_url: 'https://blackbox.farm/assets/blackbox-og-image.png',
@@ -62,6 +62,16 @@ const DEFAULTS: Omit<MetaTagEntry, 'scope'> = {
   canonical_url: 'https://blackbox.farm',
   is_active: true,
 };
+
+const STORAGE_KEY = 'meta_tags_saved_defaults';
+
+function getSavedDefaults(): Omit<MetaTagEntry, 'scope'> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return HARDCODED_DEFAULTS;
+}
 
 const emptyEntry = (scope: 'sitewide' | 'page' | 'article'): MetaTagEntry => ({
   scope,
