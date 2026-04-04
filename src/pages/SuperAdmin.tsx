@@ -314,9 +314,12 @@ export default function SuperAdmin() {
               <TabErrorBoundary tabName="Intel Briefings">
                 <Suspense fallback={<TabLoader />}>
                   <IntelBriefingsManager />
-                  <div className="mt-8">
-                    <CacheBustingTools />
-                  </div>
+                   <div className="mt-8">
+                     <MetaTagsManager />
+                   </div>
+                   <div className="mt-8">
+                     <CacheBustingTools />
+                   </div>
                 </Suspense>
               </TabErrorBoundary>
             )}
