@@ -21,7 +21,7 @@ export const OAuthButtons = ({ disabled = false }: OAuthButtonsProps) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `https://blackbox.farm/`,
+          redirectTo: getOAuthRedirectUrl(),
         }
       });
 
