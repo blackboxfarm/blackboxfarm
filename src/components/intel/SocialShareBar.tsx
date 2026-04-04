@@ -82,10 +82,11 @@ const platforms = [
       </svg>
     ),
     useOgUrl: false,
-    getUrl: (url: string, title: string, desc?: string) => {
-      const text = `📰 **${title}**${desc ? `\n${desc}` : ''}\n${url}`;
-      return `https://discord.com/channels/@me?content=${encodeURIComponent(text)}`;
-    },
+    // Discord has no share URL — handled as clipboard copy in the component
+    isClipboard: true,
+    getClipboardText: (url: string, title: string, desc?: string) =>
+      `📰 **${title}**${desc ? `\n> ${desc}` : ''}\n${url}`,
+    getUrl: () => '',
     color: 'hover:text-indigo-400',
   },
   {
