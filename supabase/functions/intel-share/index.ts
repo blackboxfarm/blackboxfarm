@@ -42,8 +42,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const ogTitle = (article.seo_title || article.title || "").slice(0, 60);
-    const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 160);
+    const fullTitle = article.seo_title || article.title || "";
+    const ogTitle = fullTitle.slice(0, 120); // OG title supports longer text
+    const pageTitle = fullTitle.slice(0, 60); // Browser tab title stays short
+    const ogDescription = (article.seo_description || article.subtitle || "").slice(0, 200);
     const ogImage = resolveImage(article.featured_image_url);
     const canonicalUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
