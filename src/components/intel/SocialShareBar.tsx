@@ -68,8 +68,10 @@ const platforms = [
     name: 'Telegram',
     icon: Send,
     useOgUrl: false,
-    getUrl: (url: string, title: string) =>
-      `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`,
+    getUrl: (url: string, title: string, desc?: string) => {
+      const text = `📰 ${title}${desc ? `\n\n${desc}` : ''}\n\n🔗 Read the full briefing:`;
+      return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    },
     color: 'hover:text-sky-500',
   },
   {
@@ -108,8 +110,20 @@ const platforms = [
     name: 'Email',
     icon: Mail,
     useOgUrl: false,
-    getUrl: (url: string, title: string, desc?: string) =>
-      `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent((desc ? desc + '\n\n' : '') + url)}`,
+    getUrl: (url: string, title: string, desc?: string) => {
+      const body = [
+        `I thought you'd find this interesting:`,
+        '',
+        `📰 ${title}`,
+        desc ? `\n${desc}` : '',
+        '',
+        `Read the full article:`,
+        url,
+        '',
+        `— Shared from Blackbox.farm Intel Briefings`,
+      ].filter(Boolean).join('\n');
+      return `mailto:?subject=${encodeURIComponent(`Worth a read: ${title}`)}&body=${encodeURIComponent(body)}`;
+    },
     color: 'hover:text-amber-500',
   },
 ];
