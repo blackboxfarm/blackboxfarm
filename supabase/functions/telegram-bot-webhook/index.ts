@@ -63,6 +63,9 @@ Deno.serve(withRunLog('telegram-bot-webhook', async (req) => {
       }));
     }
 
+    // Backward-compat: parts[0]=command, parts[1..]=args (used throughout)
+    const parts = [command, ...sanitized.argTokens];
+
     // === RESOLVE USER TIER ===
     const { tier, userId, linkData } = await resolveUserTier(supabase, telegramUserId);
 
