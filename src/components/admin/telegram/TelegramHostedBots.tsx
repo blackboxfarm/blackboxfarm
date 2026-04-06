@@ -4,8 +4,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { RefreshCw, Loader2, Users, Calendar, MessageSquare, ExternalLink, Lock, Globe, User, Mail } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 
 interface HostedGroup {
   chat_id: string;
@@ -37,10 +39,21 @@ interface HostedGroup {
   last_seen: string;
 }
 
+interface ChatMessage {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  message_text: string | null;
+  created_at: string;
+}
+
 export function TelegramHostedBots() {
   const [groups, setGroups] = useState<HostedGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
+  const [chatModal, setChatModal] = useState<{ chatId: string; title: string } | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -63,12 +76,31 @@ export function TelegramHostedBots() {
       const { data, error } = await supabase.functions.invoke('scrape-installer-x-profiles');
       if (error) throw error;
       console.log('X profile scan results:', data);
-      // Reload data to show new X profiles
       await loadData();
     } catch (err) {
       console.error('Error scanning X profiles:', err);
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const openChatModal = async (chatId: string, title: string) => {
+    setChatModal({ chatId, title });
+    setChatLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('telegram_group_messages')
+        .select('id, username, display_name, message_text, created_at')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      setChatMessages((data || []).reverse());
+    } catch (err) {
+      console.error('Error loading chat messages:', err);
+      setChatMessages([]);
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -78,11 +110,6 @@ export function TelegramHostedBots() {
   const totalMembers = groups.reduce((s, g) => s + (g.member_count || 0), 0);
   const totalInteractions = groups.reduce((s, g) => s + g.total_interactions, 0);
   const activeToday = groups.filter(g => new Date(g.last_seen) > new Date(Date.now() - 86400000)).length;
-
-  const getTopCommand = (cmds: Record<string, number>) => {
-    const entries = Object.entries(cmds).sort((a, b) => b[1] - a[1]);
-    return entries.length > 0 ? `/${entries[0][0]} (${entries[0][1]})` : '—';
-  };
 
   return (
     <div className="space-y-4">
@@ -156,7 +183,7 @@ export function TelegramHostedBots() {
                   <TableHead className="text-center">Members</TableHead>
                   <TableHead className="text-center">Bot Users</TableHead>
                   <TableHead className="text-center">Lookups</TableHead>
-                  <TableHead>Top Command</TableHead>
+                  <TableHead>Recent Chat</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Installed</TableHead>
                   <TableHead>Last Active</TableHead>
@@ -281,12 +308,17 @@ export function TelegramHostedBots() {
                       {/* Lookups */}
                       <TableCell className="text-center font-medium">{g.total_interactions}</TableCell>
 
-                      {/* Top Command */}
-                      <TableCell className="text-xs">
-                        <div className="flex items-center gap-1">
-                          <MessageSquare className="w-3 h-3 text-muted-foreground" />
-                          {getTopCommand(g.top_commands)}
-                        </div>
+                      {/* Recent Chat */}
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs h-7 px-2"
+                          onClick={() => openChatModal(g.chat_id, g.chat_title)}
+                        >
+                          <MessageSquare className="w-3 h-3 mr-1" />
+                          View Chat
+                        </Button>
                       </TableCell>
 
                       {/* Status */}
@@ -320,6 +352,47 @@ export function TelegramHostedBots() {
           )}
         </CardContent>
       </Card>
+
+      {/* Chat History Modal */}
+      <Dialog open={!!chatModal} onOpenChange={(open) => !open && setChatModal(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5" />
+              Chat History — {chatModal?.title}
+            </DialogTitle>
+          </DialogHeader>
+          {chatLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : chatMessages.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" />
+              <p>No messages captured yet</p>
+              <p className="text-xs mt-1">Messages will appear here as the bot receives them from this group</p>
+            </div>
+          ) : (
+            <ScrollArea className="h-[500px] pr-4">
+              <div className="space-y-2">
+                {chatMessages.map((msg) => (
+                  <div key={msg.id} className="flex gap-2 text-sm">
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">
+                      {format(new Date(msg.created_at), 'MMM d HH:mm')}
+                    </span>
+                    <div>
+                      <span className="font-medium text-xs text-blue-400">
+                        {msg.username ? `@${msg.username}` : msg.display_name || 'Unknown'}
+                      </span>
+                      <p className="text-xs text-foreground/80 break-words">{msg.message_text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
