@@ -48,7 +48,7 @@ export function useJourneyTracker() {
 
   // Auto-track page views
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || isSuperAdmin) return;
     const currentPath = location.pathname;
 
     // Log duration for previous page
