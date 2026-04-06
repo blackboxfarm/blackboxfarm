@@ -1,7 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
-import { getHeliusApiKey } from '../_shared/helius-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,29 +10,28 @@ const corsHeaders = {
 /**
  * Allstar Promotion Engine
  * 
- * Continuously scans master_token_directory / token_lifecycle for high-ATH tokens,
- * resolves their creators, evaluates launch history, and auto-promotes qualifying
- * "good actor" developers into allstar_dev_registry.
+ * Scans token_lifecycle for high market-cap tokens, resolves creators,
+ * and auto-promotes qualifying developers into allstar_dev_registry.
  * 
+ * Uses market_cap (USD) as the primary qualification metric.
  * Runs on cron every 30 min.
  */
 
-// Minimum ATH thresholds for promotion consideration
-const MIN_ATH_USD = 100_000;       // $100K ATH minimum
-const MIN_ATH_TIER_2 = 250_000;    // $250K → Tier 2
-const MIN_ATH_TIER_3 = 500_000;    // $500K → Tier 3  
-const MIN_ATH_TIER_4 = 1_000_000;  // $1M → Tier 4
-const MIN_ATH_TIER_5 = 5_000_000;  // $5M → Tier 5
-const MIN_ATH_TIER_6 = 10_000_000; // $10M → Tier 6
+const MIN_MCAP_USD = 100_000;
+const MIN_MCAP_TIER_2 = 250_000;
+const MIN_MCAP_TIER_3 = 500_000;
+const MIN_MCAP_TIER_4 = 1_000_000;
+const MIN_MCAP_TIER_5 = 5_000_000;
+const MIN_MCAP_TIER_6 = 10_000_000;
 
 const MAX_PROMOTIONS_PER_RUN = 15;
 
-function athToTier(ath: number): number {
-  if (ath >= MIN_ATH_TIER_6) return 6;
-  if (ath >= MIN_ATH_TIER_5) return 5;
-  if (ath >= MIN_ATH_TIER_4) return 4;
-  if (ath >= MIN_ATH_TIER_3) return 3;
-  if (ath >= MIN_ATH_TIER_2) return 2;
+function mcapToTier(mcap: number): number {
+  if (mcap >= MIN_MCAP_TIER_6) return 6;
+  if (mcap >= MIN_MCAP_TIER_5) return 5;
+  if (mcap >= MIN_MCAP_TIER_4) return 4;
+  if (mcap >= MIN_MCAP_TIER_3) return 3;
+  if (mcap >= MIN_MCAP_TIER_2) return 2;
   return 1;
 }
 
@@ -49,56 +47,52 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const minAth = body.min_ath_usd || MIN_ATH_USD;
+    const minMcap = body.min_ath_usd || MIN_MCAP_USD;
     const maxPromotions = body.max_promotions || MAX_PROMOTIONS_PER_RUN;
 
-    console.log(`[AllstarPromotion] Starting scan (min ATH: $${minAth.toLocaleString()}, max: ${maxPromotions})`);
+    console.log(`[AllstarPromotion] Starting scan (min mcap: $${minMcap.toLocaleString()}, max: ${maxPromotions})`);
 
-    // ═══ Step 1: Find high-ATH tokens not yet linked to an allstar ═══
-    // Query token_lifecycle for tokens with strong ATH that have a creator_wallet
-    // but whose creator is NOT yet in allstar_dev_registry
+    // ═══ Step 1: Find high-mcap tokens with known creators ═══
     const { data: candidates, error: candidateErr } = await supabase
       .from('token_lifecycle')
-      .select('token_mint, token_name, token_symbol, creator_wallet, ath_usd_24h, market_cap_usd, launchpad')
-      .gte('ath_usd_24h', minAth)
+      .select('token_mint, name, symbol, creator_wallet, market_cap, launchpad')
+      .gte('market_cap', minMcap)
       .not('creator_wallet', 'is', null)
-      .order('ath_usd_24h', { ascending: false })
-      .limit(200);
+      .order('market_cap', { ascending: false })
+      .limit(500);
 
     if (candidateErr) {
       throw new Error(`Failed to query token_lifecycle: ${candidateErr.message}`);
     }
 
     if (!candidates || candidates.length === 0) {
-      console.log('[AllstarPromotion] No high-ATH candidates found');
+      console.log('[AllstarPromotion] No high-mcap candidates found');
       return new Response(JSON.stringify({ 
         success: true, promoted: 0, scanned: 0, 
-        message: 'No candidates met ATH threshold' 
+        message: 'No candidates met mcap threshold' 
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`[AllstarPromotion] Found ${candidates.length} high-ATH token candidates`);
+    console.log(`[AllstarPromotion] Found ${candidates.length} high-mcap token candidates`);
 
-    // ═══ Step 2: Also check tokens WITHOUT creator_wallet that need resolution ═══
+    // ═══ Step 2: Resolve creators for unresolved high-mcap tokens ═══
     const { data: unresolvedCandidates } = await supabase
       .from('token_lifecycle')
-      .select('token_mint, token_name, token_symbol, ath_usd_24h, launchpad')
-      .gte('ath_usd_24h', minAth)
+      .select('token_mint, name, symbol, market_cap, launchpad')
+      .gte('market_cap', minMcap)
       .is('creator_wallet', null)
-      .order('ath_usd_24h', { ascending: false })
+      .order('market_cap', { ascending: false })
       .limit(30);
 
-    // Resolve creators for unresolved high-ATH tokens
     const resolvedFromUnresolved: typeof candidates = [];
     if (unresolvedCandidates && unresolvedCandidates.length > 0) {
-      console.log(`[AllstarPromotion] Resolving creators for ${unresolvedCandidates.length} unresolved high-ATH tokens`);
+      console.log(`[AllstarPromotion] Resolving creators for ${unresolvedCandidates.length} unresolved high-mcap tokens`);
       
       for (const token of unresolvedCandidates.slice(0, 10)) {
         const apiErrors: string[] = [];
         const resolution = await resolveTokenCreator(token.token_mint, supabase, apiErrors);
         
         if (resolution.creatorWallet) {
-          // Update token_lifecycle with resolved creator
           await supabase.from('token_lifecycle').update({
             creator_wallet: resolution.creatorWallet,
           }).eq('token_mint', token.token_mint);
@@ -106,12 +100,10 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
           resolvedFromUnresolved.push({
             ...token,
             creator_wallet: resolution.creatorWallet,
-            market_cap_usd: null,
           });
-          console.log(`[AllstarPromotion] Resolved creator for $${token.token_symbol}: ${resolution.creatorWallet.slice(0, 8)}... (${resolution.source})`);
+          console.log(`[AllstarPromotion] Resolved creator for $${token.symbol}: ${resolution.creatorWallet.slice(0, 8)}... (${resolution.source})`);
         }
 
-        // Rate limit
         await new Promise(r => setTimeout(r, 500));
       }
     }
@@ -119,12 +111,12 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
     // Merge all candidates
     const allCandidates = [...candidates, ...resolvedFromUnresolved];
 
-    // ═══ Step 3: Deduplicate by creator wallet and filter out existing allstars ═══
+    // ═══ Step 3: Deduplicate by creator wallet, keep best mcap ═══
     const creatorMap = new Map<string, typeof allCandidates[0]>();
     for (const c of allCandidates) {
       if (!c.creator_wallet) continue;
       const existing = creatorMap.get(c.creator_wallet);
-      if (!existing || (c.ath_usd_24h || 0) > (existing.ath_usd_24h || 0)) {
+      if (!existing || (c.market_cap || 0) > (existing.market_cap || 0)) {
         creatorMap.set(c.creator_wallet, c);
       }
     }
@@ -133,14 +125,20 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
     console.log(`[AllstarPromotion] ${uniqueCreators.length} unique creator wallets to check`);
 
     // Check which creators are already in allstar_dev_registry
-    const { data: existingAllstars } = await supabase
-      .from('allstar_dev_registry')
-      .select('master_wallet')
-      .in('master_wallet', uniqueCreators);
+    // Query in batches to avoid URL length limits
+    const existingWallets = new Set<string>();
+    for (let i = 0; i < uniqueCreators.length; i += 50) {
+      const batch = uniqueCreators.slice(i, i + 50);
+      const { data: existingAllstars } = await supabase
+        .from('allstar_dev_registry')
+        .select('master_wallet')
+        .in('master_wallet', batch);
+      for (const a of existingAllstars || []) {
+        existingWallets.add(a.master_wallet);
+      }
+    }
 
-    const existingWallets = new Set((existingAllstars || []).map(a => a.master_wallet));
     const newCreators = uniqueCreators.filter(w => !existingWallets.has(w));
-
     console.log(`[AllstarPromotion] ${newCreators.length} new creators eligible (${existingWallets.size} already registered)`);
 
     // ═══ Step 4: Promote qualifying creators ═══
@@ -154,8 +152,8 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
     for (const creatorWallet of newCreators.slice(0, maxPromotions)) {
       try {
         const bestToken = creatorMap.get(creatorWallet)!;
-        const ath = bestToken.ath_usd_24h || 0;
-        const tier = athToTier(ath);
+        const mcap = bestToken.market_cap || 0;
+        const tier = mcapToTier(mcap);
 
         // Get developer profile if exists
         const { data: devProfile } = await supabase
@@ -215,13 +213,13 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
             kyc_root_wallet: kycRoot,
             best_tier: tier,
             best_token_mint: bestToken.token_mint,
-            best_token_symbol: bestToken.token_symbol || 'UNKNOWN',
-            best_mcap_achieved: ath,
+            best_token_symbol: bestToken.symbol || 'UNKNOWN',
+            best_mcap_achieved: mcap,
             total_proven_tokens: provenCount || 1,
             total_wallet_family_size: familyWallets.length,
             family_wallets: familyWallets,
             status: 'active',
-            notes: `Auto-promoted: $${bestToken.token_symbol} ATH $${Math.round(ath).toLocaleString()} (T${tier})`,
+            notes: `Auto-promoted: $${bestToken.symbol} MCap $${Math.round(mcap).toLocaleString()} (T${tier})`,
           });
 
         if (insertErr) {
@@ -234,9 +232,9 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
         }
 
         results.promoted++;
-        console.log(`[AllstarPromotion] ⭐ Promoted ${creatorWallet.slice(0, 8)}... → T${tier} via $${bestToken.token_symbol} (ATH $${Math.round(ath).toLocaleString()})`);
+        console.log(`[AllstarPromotion] ⭐ Promoted ${creatorWallet.slice(0, 8)}... → T${tier} via $${bestToken.symbol} (MCap $${Math.round(mcap).toLocaleString()})`);
 
-        // ═══ Cross-feed: Also seed into wallet_families if not already there ═══
+        // ═══ Cross-feed: Seed into wallet_families ═══
         const { data: existingFamily } = await supabase
           .from('wallet_families')
           .select('id')
@@ -257,7 +255,6 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
             .single();
 
           if (newFamily) {
-            // Add seed wallet to family members + poll queue
             await supabase.from('wallet_family_members').insert({
               family_id: newFamily.id,
               wallet_address: creatorWallet,
@@ -276,7 +273,6 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
               next_poll_at: new Date().toISOString(),
             });
 
-            // Add family wallets as siblings
             for (const fw of familyWallets.slice(1)) {
               await supabase.from('wallet_family_members').insert({
                 family_id: newFamily.id,
@@ -286,7 +282,7 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
                 confidence_score: 60,
                 status: 'active',
                 first_seen_at: new Date().toISOString(),
-              }).catch(() => {}); // ignore dupes
+              }).catch(() => {});
 
               await supabase.from('wallet_family_poll_queue').insert({
                 wallet_address: fw,
@@ -301,20 +297,19 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
           }
         }
 
-        // Rate limit between promotions
         await new Promise(r => setTimeout(r, 300));
       } catch (e) {
         results.errors.push(`${creatorWallet.slice(0, 8)}: ${e instanceof Error ? e.message : 'unknown'}`);
       }
     }
 
-    // ═══ Step 5: Also upgrade existing allstars if their ATH improved ═══
+    // ═══ Step 5: Upgrade existing allstars if mcap improved ═══
     for (const wallet of Array.from(existingWallets).slice(0, 50)) {
       const bestToken = creatorMap.get(wallet);
       if (!bestToken) continue;
       
-      const newAth = bestToken.ath_usd_24h || 0;
-      const newTier = athToTier(newAth);
+      const newMcap = bestToken.market_cap || 0;
+      const newTier = mcapToTier(newMcap);
 
       const { data: current } = await supabase
         .from('allstar_dev_registry')
@@ -322,14 +317,14 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
         .eq('master_wallet', wallet)
         .maybeSingle();
 
-      if (current && (newTier > current.best_tier || newAth > (current.best_mcap_achieved || 0))) {
+      if (current && (newTier > current.best_tier || newMcap > (current.best_mcap_achieved || 0))) {
         await supabase.from('allstar_dev_registry').update({
           best_tier: Math.max(newTier, current.best_tier),
-          best_mcap_achieved: Math.max(newAth, current.best_mcap_achieved || 0),
+          best_mcap_achieved: Math.max(newMcap, current.best_mcap_achieved || 0),
           best_token_mint: bestToken.token_mint,
-          best_token_symbol: bestToken.token_symbol,
+          best_token_symbol: bestToken.symbol,
           updated_at: new Date().toISOString(),
-          notes: `Auto-upgraded: ATH $${Math.round(newAth).toLocaleString()} → T${newTier}`,
+          notes: `Auto-upgraded: MCap $${Math.round(newMcap).toLocaleString()} → T${newTier}`,
         }).eq('id', current.id);
 
         results.upgraded++;
@@ -337,7 +332,7 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
       }
     }
 
-    // ═══ Step 6: Send TG alert if promotions happened ═══
+    // ═══ Step 6: TG alert if promotions happened ═══
     if (results.promoted > 0) {
       try {
         const { data: tgTargets } = await supabase
@@ -356,10 +351,9 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
             ``,
           ];
 
-          // Show top 5 promotions
           const topPromoted = newCreators.slice(0, 5).map(w => {
             const t = creatorMap.get(w)!;
-            return `  • <code>${w.slice(0, 8)}...</code> → T${athToTier(t.ath_usd_24h || 0)} via $${t.token_symbol} (ATH $${Math.round(t.ath_usd_24h || 0).toLocaleString()})`;
+            return `  • <code>${w.slice(0, 8)}...</code> → T${mcapToTier(t.market_cap || 0)} via $${t.symbol} (MCap $${Math.round(t.market_cap || 0).toLocaleString()})`;
           });
           lines.push(...topPromoted);
 
@@ -401,4 +395,3 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
     }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 }));
-
