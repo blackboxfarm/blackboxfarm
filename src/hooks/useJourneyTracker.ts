@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRoles } from '@/hooks/useUserRoles';
 
 // Persistent session ID per browser tab
 const SESSION_ID = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -14,13 +15,14 @@ interface TrackEventOptions {
 
 export function useJourneyTracker() {
   const { user } = useAuth();
+  const { isSuperAdmin } = useUserRoles();
   const location = useLocation();
   const pageEnteredAt = useRef<number>(Date.now());
   const lastPath = useRef<string>('');
 
   const trackEvent = useCallback(
     async (eventName: string, options: TrackEventOptions = {}) => {
-      if (!user?.id) return;
+      if (!user?.id || isSuperAdmin) return;
 
       const {
         eventType = 'action',
@@ -46,7 +48,7 @@ export function useJourneyTracker() {
 
   // Auto-track page views
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || isSuperAdmin) return;
     const currentPath = location.pathname;
 
     // Log duration for previous page
