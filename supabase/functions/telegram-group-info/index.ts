@@ -202,6 +202,10 @@ Deno.serve(async (req) => {
         installer_telegram_id: tgInfo?.telegram_id || null,
         installer_oauth_provider: profile?.oauth_provider || null,
         installer_oauth_username: profile?.oauth_username || null,
+        // X profile from scraping
+        installer_x_username: xProfile?.x_username || (profile?.oauth_provider === 'twitter' ? profile?.oauth_username : null) || null,
+        installer_x_url: xProfile?.x_url || (profile?.oauth_provider === 'twitter' && profile?.oauth_username ? `https://x.com/${profile.oauth_username}` : null) || null,
+        installer_x_followers: xProfile?.x_followers || null,
         // Stats
         total_interactions: stats?.total || 0,
         unique_users: stats?.users.size || 0,
