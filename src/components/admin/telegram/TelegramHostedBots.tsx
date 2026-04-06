@@ -25,56 +25,46 @@ export function TelegramHostedBots() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Get all group/supergroup interactions aggregated by chat_id
-      const { data, error } = await supabase.rpc('get_telegram_hosted_groups');
-      
-      if (error) {
-        // Fallback: manual query if RPC doesn't exist
-        console.warn('RPC not available, using fallback query');
-        const { data: raw } = await supabase
-          .from('telegram_bot_interactions')
-          .select('chat_id, chat_type, telegram_username, token_mint, created_at')
-          .in('chat_type', ['group', 'supergroup'])
-          .order('created_at', { ascending: false })
-          .limit(1000);
+      const { data: raw } = await supabase
+        .from('telegram_bot_interactions')
+        .select('chat_id, chat_type, telegram_username, token_mint, created_at')
+        .in('chat_type', ['group', 'supergroup'])
+        .order('created_at', { ascending: false })
+        .limit(1000);
 
-        if (raw) {
-          const grouped = new Map<string, HostedGroup>();
-          for (const row of raw) {
-            const key = String(row.chat_id);
-            if (!grouped.has(key)) {
-              grouped.set(key, {
-                chat_id: key,
-                chat_type: row.chat_type || 'group',
-                total_interactions: 0,
-                unique_users: 0,
-                unique_tokens: 0,
-                first_seen: row.created_at,
-                last_seen: row.created_at,
-                recent_users: [],
-              });
-            }
-            const g = grouped.get(key)!;
-            g.total_interactions++;
-            if (row.created_at < g.first_seen) g.first_seen = row.created_at;
-            if (row.created_at > g.last_seen) g.last_seen = row.created_at;
-            if (row.telegram_username && !g.recent_users.includes(row.telegram_username)) {
-              g.recent_users.push(row.telegram_username);
-            }
+      if (raw) {
+        const grouped = new Map<string, HostedGroup>();
+        for (const row of raw) {
+          const key = String(row.chat_id);
+          if (!grouped.has(key)) {
+            grouped.set(key, {
+              chat_id: key,
+              chat_type: row.chat_type || 'group',
+              total_interactions: 0,
+              unique_users: 0,
+              unique_tokens: 0,
+              first_seen: row.created_at,
+              last_seen: row.created_at,
+              recent_users: [],
+            });
           }
-
-          // Count unique users and tokens per group
-          for (const [key, g] of grouped) {
-            const userSet = new Set(raw.filter(r => String(r.chat_id) === key).map(r => r.telegram_username).filter(Boolean));
-            const tokenSet = new Set(raw.filter(r => String(r.chat_id) === key).map(r => r.token_mint).filter(Boolean));
-            g.unique_users = userSet.size;
-            g.unique_tokens = tokenSet.size;
+          const g = grouped.get(key)!;
+          g.total_interactions++;
+          if (row.created_at < g.first_seen) g.first_seen = row.created_at;
+          if (row.created_at > g.last_seen) g.last_seen = row.created_at;
+          if (row.telegram_username && !g.recent_users.includes(row.telegram_username)) {
+            g.recent_users.push(row.telegram_username);
           }
-
-          setGroups(Array.from(grouped.values()).sort((a, b) => b.total_interactions - a.total_interactions));
         }
-      } else {
-        setGroups(data || []);
+
+        for (const [key, g] of grouped) {
+          const userSet = new Set(raw.filter(r => String(r.chat_id) === key).map(r => r.telegram_username).filter(Boolean));
+          const tokenSet = new Set(raw.filter(r => String(r.chat_id) === key).map(r => r.token_mint).filter(Boolean));
+          g.unique_users = userSet.size;
+          g.unique_tokens = tokenSet.size;
+        }
+
+        setGroups(Array.from(grouped.values()).sort((a, b) => b.total_interactions - a.total_interactions));
       }
     } catch (err) {
       console.error('Error loading hosted groups:', err);
