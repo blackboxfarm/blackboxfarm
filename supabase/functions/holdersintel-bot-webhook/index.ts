@@ -3081,6 +3081,21 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           break;
       }
 
+      // === PASSIVE GROUP MESSAGE CAPTURE ===
+      if (isGroupChat && message.text) {
+        const displayName = [message.from.first_name, message.from.last_name].filter(Boolean).join(' ') || null;
+        supabase.from('telegram_group_messages').insert({
+          chat_id: chatId,
+          telegram_user_id: telegramUserId,
+          username: username,
+          display_name: displayName,
+          message_text: message.text.slice(0, 2000),
+          message_id: messageId,
+        }).then(({ error: msgErr }) => {
+          if (msgErr) console.error('[bot] group message capture failed:', msgErr);
+        });
+      }
+
       // Log the interaction asynchronously (fire-and-forget)
       const tokenFromArgs = args?.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/)?.[0] || null;
       const chatTitle = message.chat.title || null;
