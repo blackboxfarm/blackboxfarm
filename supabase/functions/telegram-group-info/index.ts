@@ -138,23 +138,24 @@ Deno.serve(async (req) => {
 
         clearTimeout(timeout);
 
-        if (chatRes.ok) {
-          const chatData = await chatRes.json();
-          if (chatData.ok && chatData.result) {
-            const r = chatData.result;
-            base.chat_title = r.title || base.chat_title;
-            base.chat_type = r.type || base.chat_type;
-            base.username = r.username || null;
-            base.description = r.description || null;
-            base.invite_link = r.invite_link || null;
-          }
+        const chatData = await chatRes.json();
+        console.log(`[telegram-group-info] getChat ${chatId}: ok=${chatData.ok}, status=${chatRes.status}`);
+        if (chatData.ok && chatData.result) {
+          const r = chatData.result;
+          base.chat_title = r.title || base.chat_title;
+          base.chat_type = r.type || base.chat_type;
+          base.username = r.username || null;
+          base.description = r.description || null;
+          base.invite_link = r.invite_link || null;
+        } else {
+          console.warn(`[telegram-group-info] getChat failed for ${chatId}:`, JSON.stringify(chatData));
         }
 
-        if (countRes.ok) {
-          const countData = await countRes.json();
-          if (countData.ok) {
-            base.member_count = countData.result;
-          }
+        const countData = await countRes.json();
+        if (countData.ok) {
+          base.member_count = countData.result;
+        } else {
+          console.warn(`[telegram-group-info] getMemberCount failed for ${chatId}:`, JSON.stringify(countData));
         }
       } catch (err) {
         console.warn(`[telegram-group-info] Failed to fetch info for ${chatId}:`, err);
