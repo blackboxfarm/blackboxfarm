@@ -4,13 +4,21 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Loader2, Users, Calendar, Hash, MessageSquare } from 'lucide-react';
+import { RefreshCw, Loader2, Users, Calendar, Hash, MessageSquare, ExternalLink, Crown, Shield } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface HostedGroup {
   chat_id: string;
   chat_title: string;
   chat_type: string;
+  username: string | null;
+  description: string | null;
+  member_count: number | null;
+  invite_link: string | null;
+  is_active: boolean;
+  is_paid: boolean;
+  kicked: boolean;
+  installed_at: string;
   total_interactions: number;
   unique_users: number;
   unique_tokens: number;
@@ -26,79 +34,10 @@ export function TelegramHostedBots() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Fetch from channel_installations for official install data
-      const { data: installations } = await supabase
-        .from('channel_installations')
-        .select('chat_id, chat_title, chat_type, is_active, is_paid, installed_at, kicked');
-
-      // Fetch interaction stats per group
-      const { data: raw } = await supabase
-        .from('telegram_bot_interactions')
-        .select('chat_id, chat_type, chat_title, telegram_username, token_mint, command, created_at')
-        .in('chat_type', ['group', 'supergroup'])
-        .order('created_at', { ascending: false })
-        .limit(2000);
-
-      if (raw) {
-        const grouped = new Map<string, HostedGroup>();
-
-        // Seed from installations first (they have titles)
-        if (installations) {
-          for (const inst of installations) {
-            const key = String(inst.chat_id);
-            if (!grouped.has(key)) {
-              grouped.set(key, {
-                chat_id: key,
-                chat_title: inst.chat_title || `Group ${key}`,
-                chat_type: inst.chat_type || 'supergroup',
-                total_interactions: 0,
-                unique_users: 0,
-                unique_tokens: 0,
-                top_commands: {},
-                first_seen: inst.installed_at || new Date().toISOString(),
-                last_seen: inst.installed_at || new Date().toISOString(),
-              });
-            }
-          }
-        }
-
-        // Enrich with interaction data
-        for (const row of raw) {
-          const key = String(row.chat_id);
-          if (!grouped.has(key)) {
-            grouped.set(key, {
-              chat_id: key,
-              chat_title: (row as any).chat_title || `Group ${key}`,
-              chat_type: row.chat_type || 'group',
-              total_interactions: 0,
-              unique_users: 0,
-              unique_tokens: 0,
-              top_commands: {},
-              first_seen: row.created_at,
-              last_seen: row.created_at,
-            });
-          }
-          const g = grouped.get(key)!;
-          g.total_interactions++;
-          // Update title if we got a better one from interactions
-          if ((row as any).chat_title && g.chat_title.startsWith('Group ')) {
-            g.chat_title = (row as any).chat_title;
-          }
-          if (row.created_at < g.first_seen) g.first_seen = row.created_at;
-          if (row.created_at > g.last_seen) g.last_seen = row.created_at;
-          if (row.command) {
-            g.top_commands[row.command] = (g.top_commands[row.command] || 0) + 1;
-          }
-        }
-
-        // Calculate unique users and tokens per group
-        for (const [key, g] of grouped) {
-          const rows = raw.filter(r => String(r.chat_id) === key);
-          g.unique_users = new Set(rows.map(r => r.telegram_username).filter(Boolean)).size;
-          g.unique_tokens = new Set(rows.map(r => r.token_mint).filter(Boolean)).size;
-        }
-
-        setGroups(Array.from(grouped.values()).sort((a, b) => b.total_interactions - a.total_interactions));
+      const { data, error } = await supabase.functions.invoke('telegram-group-info');
+      if (error) throw error;
+      if (data?.groups) {
+        setGroups(data.groups);
       }
     } catch (err) {
       console.error('Error loading hosted groups:', err);
@@ -110,8 +49,10 @@ export function TelegramHostedBots() {
   useEffect(() => { loadData(); }, []);
 
   const totalGroups = groups.length;
+  const totalMembers = groups.reduce((s, g) => s + (g.member_count || 0), 0);
   const totalInteractions = groups.reduce((s, g) => s + g.total_interactions, 0);
   const activeToday = groups.filter(g => new Date(g.last_seen) > new Date(Date.now() - 86400000)).length;
+  const paidGroups = groups.filter(g => g.is_paid).length;
 
   const getTopCommand = (cmds: Record<string, number>) => {
     const entries = Object.entries(cmds).sort((a, b) => b[1] - a[1]);
@@ -127,7 +68,7 @@ export function TelegramHostedBots() {
             Hosted Bot Installations
           </h3>
           <p className="text-sm text-muted-foreground">
-            Groups & channels that have installed @holdersintel_bot
+            Live data from Telegram API for all groups/channels with @holdersintel_bot
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading}>
@@ -136,23 +77,35 @@ export function TelegramHostedBots() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card>
           <CardContent className="pt-4 pb-3">
-            <p className="text-sm text-muted-foreground">Total Groups</p>
+            <p className="text-xs text-muted-foreground">Total Groups</p>
             <p className="text-2xl font-bold">{totalGroups}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3">
-            <p className="text-sm text-muted-foreground">Active (24h)</p>
+            <p className="text-xs text-muted-foreground">Total Members</p>
+            <p className="text-2xl font-bold">{totalMembers.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs text-muted-foreground">Active (24h)</p>
             <p className="text-2xl font-bold text-green-500">{activeToday}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3">
-            <p className="text-sm text-muted-foreground">Total Lookups</p>
+            <p className="text-xs text-muted-foreground">Total Lookups</p>
             <p className="text-2xl font-bold">{totalInteractions.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs text-muted-foreground">Paid Groups</p>
+            <p className="text-2xl font-bold text-primary">{paidGroups}</p>
           </CardContent>
         </Card>
       </div>
@@ -172,10 +125,12 @@ export function TelegramHostedBots() {
                 <TableRow>
                   <TableHead>Group / Channel</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead className="text-center">Users</TableHead>
+                  <TableHead className="text-center">Members</TableHead>
+                  <TableHead className="text-center">Bot Users</TableHead>
                   <TableHead className="text-center">Lookups</TableHead>
                   <TableHead className="text-center">Tokens</TableHead>
                   <TableHead>Top Command</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Installed</TableHead>
                   <TableHead>Last Active</TableHead>
                 </TableRow>
@@ -184,13 +139,38 @@ export function TelegramHostedBots() {
                 {groups.map((g) => {
                   const isActive = new Date(g.last_seen) > new Date(Date.now() - 86400000);
                   return (
-                    <TableRow key={g.chat_id}>
+                    <TableRow key={g.chat_id} className={g.kicked ? 'opacity-50' : ''}>
                       <TableCell>
-                        <div className="font-medium text-sm">{g.chat_title}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{g.chat_id}</div>
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="font-medium text-sm flex items-center gap-1">
+                              {g.chat_title}
+                              {g.is_paid && <Crown className="w-3 h-3 text-yellow-500" />}
+                              {g.kicked && <span className="text-red-500 text-xs">(kicked)</span>}
+                            </div>
+                            {g.username && (
+                              <a
+                                href={`https://t.me/${g.username}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5"
+                              >
+                                @{g.username} <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                            {g.description && (
+                              <p className="text-[10px] text-muted-foreground max-w-[200px] truncate">
+                                {g.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">{g.chat_type}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center font-medium">
+                        {g.member_count !== null ? g.member_count.toLocaleString() : '—'}
                       </TableCell>
                       <TableCell className="text-center font-medium">{g.unique_users}</TableCell>
                       <TableCell className="text-center font-medium">{g.total_interactions}</TableCell>
@@ -201,10 +181,19 @@ export function TelegramHostedBots() {
                           {getTopCommand(g.top_commands)}
                         </div>
                       </TableCell>
+                      <TableCell>
+                        {g.kicked ? (
+                          <Badge variant="destructive" className="text-xs">Kicked</Badge>
+                        ) : g.is_paid ? (
+                          <Badge className="text-xs bg-green-600">Paid</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">Free</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {new Date(g.first_seen).toLocaleDateString()}
+                          {new Date(g.installed_at).toLocaleDateString()}
                         </div>
                       </TableCell>
                       <TableCell>
