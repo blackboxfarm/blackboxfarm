@@ -144,19 +144,31 @@ export function TelegramHostedBots() {
                         <div className="flex items-center gap-2">
                           <div>
                             <div className="font-medium text-sm flex items-center gap-1">
-                              {g.chat_title}
-                              {g.is_paid && <Crown className="w-3 h-3 text-yellow-500" />}
+                              {g.username ? (
+                                <a
+                                  href={`https://t.me/${g.username}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:underline flex items-center gap-1"
+                                >
+                                  {g.chat_title} <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : g.invite_link ? (
+                                <a
+                                  href={g.invite_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:underline flex items-center gap-1"
+                                >
+                                  {g.chat_title} <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                g.chat_title
+                              )}
                               {g.kicked && <span className="text-red-500 text-xs">(kicked)</span>}
                             </div>
                             {g.username && (
-                              <a
-                                href={`https://t.me/${g.username}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5"
-                              >
-                                @{g.username} <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
+                              <span className="text-[10px] text-muted-foreground">@{g.username}</span>
                             )}
                             {g.description && (
                               <p className="text-[10px] text-muted-foreground max-w-[200px] truncate">
@@ -184,10 +196,8 @@ export function TelegramHostedBots() {
                       <TableCell>
                         {g.kicked ? (
                           <Badge variant="destructive" className="text-xs">Kicked</Badge>
-                        ) : g.is_paid ? (
-                          <Badge className="text-xs bg-green-600">Paid</Badge>
                         ) : (
-                          <Badge variant="secondary" className="text-xs">Free</Badge>
+                          <Badge className="text-xs bg-green-600">Active</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
