@@ -75,6 +75,7 @@ const TestimonialSubmit = lazy(() => import("./pages/TestimonialSubmit"));
 const Feed = lazy(() => import("./pages/Feed"));
 const IntelBriefings = lazy(() => import("./pages/IntelBriefings"));
 const IntelBriefingArticle = lazy(() => import("./pages/IntelBriefingArticle"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 
 const queryClient = new QueryClient();
 
@@ -107,6 +108,7 @@ const App = () => {
                       <Route path="/competitive-analysis" element={<CompetitiveAnalysis />} />
                       <Route path="/community-wallet" element={<SuperAdminRoute><CommunityWallet /></SuperAdminRoute>} />
                       <Route path="/reset-password" element={<ResetPassword />} />
+                      <Route path="/verify-email" element={<VerifyEmail />} />
                       <Route path="/terms" element={<TermsOfService />} />
                       <Route path="/tos" element={<TOS />} />
                       <Route path="/privacy" element={<PrivacyPolicy />} />
