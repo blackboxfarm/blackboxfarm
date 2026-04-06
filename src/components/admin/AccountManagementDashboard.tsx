@@ -472,6 +472,18 @@ export function AccountManagementDashboard() {
     }
   });
 
+  const getProviderBadges = (account: UserAccount) => {
+    const providers = account.raw_app_meta_data?.providers || [];
+    return providers.map(provider => (
+      <Badge key={provider} variant="outline" className="text-xs">
+        {provider === 'google' && <Globe className="h-3 w-3 mr-1" />}
+        {provider === 'twitter' && <Twitter className="h-3 w-3 mr-1" />}
+        {provider === 'email' && <Mail className="h-3 w-3 mr-1" />}
+        {provider}
+      </Badge>
+    ));
+  };
+
   const stats = {
     total: accounts.length,
     advertisers: accounts.filter(a => a.advertiser).length,
