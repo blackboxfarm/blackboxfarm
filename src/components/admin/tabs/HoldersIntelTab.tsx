@@ -20,6 +20,7 @@ const SubscribersDashboard = lazy(() => import("@/components/admin/SubscribersDa
 const TelegramCommandsPlanner = lazy(() => import("@/components/admin/TelegramCommandsPlanner"));
 const BoostsDashboard = lazy(() => import("@/components/admin/BoostsDashboard").then(m => ({ default: m.BoostsDashboard })));
 const UserJourneyDashboard = lazy(() => import("@/components/admin/UserJourneyDashboard").then(m => ({ default: m.UserJourneyDashboard })));
+const EmailTrackingDashboard = lazy(() => import("@/components/admin/EmailTrackingDashboard").then(m => ({ default: m.EmailTrackingDashboard })));
 
 export default function HoldersIntelTab() {
   const [activeSubTab, setActiveSubTab] = useState("subscribers");
