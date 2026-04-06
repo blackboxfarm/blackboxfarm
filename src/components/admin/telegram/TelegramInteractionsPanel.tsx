@@ -69,7 +69,25 @@ export function TelegramInteractionsPanel() {
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "left"),
     ]);
 
-    if (intRes.data) setInteractions(intRes.data as BotInteraction[]);
+    if (intRes.data) {
+      setInteractions(intRes.data as BotInteraction[]);
+      
+      // Fetch linked profiles for users with linked_user_id
+      const linkedIds = [...new Set(intRes.data.filter(i => i.linked_user_id).map(i => i.linked_user_id))];
+      if (linkedIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, display_name, oauth_provider, oauth_username")
+          .in("id", linkedIds);
+        const map = new Map<string, LinkedProfile>();
+        if (profiles) {
+          for (const p of profiles) {
+            map.set(p.id, p as LinkedProfile);
+          }
+        }
+        setLinkedProfiles(map);
+      }
+    }
     if (memRes.data) setMembers(memRes.data as ChannelMember[]);
 
     setStats({
