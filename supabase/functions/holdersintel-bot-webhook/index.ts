@@ -2104,10 +2104,10 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
 
   const tokenLabel = symbol ? `$ ${symbol}` : ca.slice(0, 8) + '...';
 
-  // Build distribution bars from simpleTiers
+  // Build distribution bars from simpleTiers (verbose mode only)
   const tiers = holdersData?.simpleTiers;
   let distBlock = '';
-  if (tiers) {
+  if (cfg.verbose && tiers) {
     const bar = (pct: number) => {
       const filled = Math.round(pct / 10);
       return '█'.repeat(filled) + '░'.repeat(10 - filled);
@@ -2131,8 +2131,9 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
       (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
     );
     
-    // Show top 3 most severe warnings
-    const topWarnings = sorted.slice(0, 3);
+    // In terse mode, show only top 1 warning; verbose shows top 3
+    const maxWarnings = cfg.verbose ? 3 : 1;
+    const topWarnings = sorted.slice(0, maxWarnings);
     const warningLines = topWarnings.map(w => {
       const seenNote = w.scan_count > 1 ? ` _(seen ${w.scan_count}x)_` : '';
       return `${w.plain_text}${seenNote}`;
