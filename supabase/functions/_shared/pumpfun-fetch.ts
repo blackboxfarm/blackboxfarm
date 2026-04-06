@@ -9,7 +9,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PUMPFUN_API_BASE, PUMPFUN_API_FALLBACK, PUMPFUN_HEADERS } from './pumpfun-api.ts';
+import { PUMPFUN_API_BASE } from './pumpfun-api.ts';
 
 const PUMPFUN_API = PUMPFUN_API_BASE;
 
@@ -152,54 +152,25 @@ export async function pumpfunFetch(
 }
 
 /**
- * Fallback: try the herokuapp mirror when main API returns 403.
- * Only works for /coins endpoints.
+ * Fallback: try DexScreener as metadata-only fallback when main API returns 403.
+ * The Herokuapp mirror has been removed (dead/unreliable).
  */
 async function tryFallbackFetch(endpoint: string, options: PumpFunFetchOptions): Promise<any | null> {
-  const { callerName, tokenMint = 'unknown', timeoutMs = 10000 } = options;
+  const { callerName, tokenMint = 'unknown' } = options;
   
-  // Only attempt fallback for /coins/* endpoints (the most critical ones)
-  if (!endpoint.startsWith('/coins/')) {
-    console.warn(`[${callerName}] Fallback not available for endpoint: ${endpoint}`);
-    return null;
-  }
-
-  // Try 1: Herokuapp mirror
-  try {
-    const fallbackUrl = `${PUMPFUN_API_FALLBACK}${endpoint}`;
-    console.log(`[${callerName}] 🔄 Trying fallback mirror for ${tokenMint}...`);
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    
-    const response = await fetch(fallbackUrl, {
-      headers: PUMPFUN_HEADERS,
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`[${callerName}] ✅ Fallback mirror SUCCESS for ${tokenMint}`);
-      return data;
-    }
-    console.warn(`[${callerName}] Fallback mirror returned ${response.status} for ${tokenMint}`);
-  } catch (e) {
-    console.warn(`[${callerName}] Fallback mirror failed for ${tokenMint}:`, e instanceof Error ? e.message : e);
-  }
-
-  // Try 2: DexScreener as metadata-only fallback for /coins/{mint}
+  // DexScreener fallback for /coins/{mint} endpoints
   const mintMatch = endpoint.match(/^\/coins\/([A-Za-z0-9]+)$/);
   if (mintMatch) {
     try {
       const mint = mintMatch[1];
       console.log(`[${callerName}] 🔄 Trying DexScreener fallback for ${mint}...`);
-      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+        signal: AbortSignal.timeout(8000)
+      });
       if (dexRes.ok) {
         const dexData = await dexRes.json();
         const pair = dexData.pairs?.[0];
         if (pair?.baseToken?.symbol) {
-          // Map DexScreener data to pump.fun-like shape for compatibility
           const mapped = {
             symbol: pair.baseToken.symbol,
             name: pair.baseToken.name || pair.baseToken.symbol,
@@ -218,6 +189,7 @@ async function tryFallbackFetch(endpoint: string, options: PumpFunFetchOptions):
     }
   }
 
+  console.warn(`[${callerName}] No fallback available for endpoint: ${endpoint}`);
   return null;
 }
 
@@ -328,12 +300,12 @@ async function sendRateLimitAlert(callerName: string, hitCount: number, totalCal
     if (!supabase) return;
 
     // Check cooldown — don't spam alerts (10 min cooldown)
-    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { data: recent } = await supabase
       .from('admin_notifications')
       .select('id')
       .eq('notification_type', 'pumpfun_rate_limit')
-      .gte('created_at', tenMinAgo)
+      .gte('created_at', oneHourAgo)
       .limit(1);
 
     if (recent && recent.length > 0) return; // Already alerted recently
@@ -356,12 +328,12 @@ async function sendBlockedAlert(callerName: string, tokenMint: string) {
     const supabase = await getSupabaseAdmin();
     if (!supabase) return;
 
-    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { data: recent } = await supabase
       .from('admin_notifications')
       .select('id')
       .eq('notification_type', 'pumpfun_blocked')
-      .gte('created_at', tenMinAgo)
+      .gte('created_at', oneHourAgo)
       .limit(1);
 
     if (recent && recent.length > 0) return;
