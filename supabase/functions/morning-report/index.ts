@@ -1147,10 +1147,17 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         .from('telegram_bot_interactions')
         .select('telegram_user_id', { count: 'exact', head: true });
 
-      // Distinct all-time users (approximate via recent)
-      const { data: distinctUsers } = await supabase
-        .rpc('count_distinct_telegram_users' as any)
-        .single();
+      // Distinct all-time users (approximate)
+      let distinctUserCount = 0;
+      try {
+        const { data: distinctUsers } = await supabase
+          .rpc('count_distinct_telegram_users' as any)
+          .single();
+        distinctUserCount = (distinctUsers as any)?.count || 0;
+      } catch (_) {
+        // RPC may not exist, use total as fallback
+        distinctUserCount = totalBotUsers || 0;
+      }
 
       telegramBotStats = {
         overnight_interactions: totalInteractions,
