@@ -2069,8 +2069,8 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   const activated = await isGroupActivated(chatId);
   if (!activated) return; // silently ignore unactivated groups
 
-  // Dynamic delay from admin config — let other bots reply first
-  let delayMs = 3000; // fallback default
+  // Read full admin config from DB
+  let cfg = { ...DEFAULT_ADMIN_CONFIG };
   try {
     const { data: instConfig } = await supabase
       .from("channel_installations")
@@ -2078,15 +2078,12 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
       .eq("chat_id", chatId)
       .eq("is_active", true)
       .maybeSingle();
-    if (instConfig?.admin_config) {
-      const cfg = instConfig.admin_config as any;
-      delayMs = typeof cfg.delay_ms === 'number' ? cfg.delay_ms : 3000;
-    }
+    cfg = resolveAdminConfig(instConfig?.admin_config);
   } catch (e) {
-    console.log("[bot] Could not read delay config, using default 3000ms");
+    console.log("[bot] Could not read admin config, using defaults");
   }
-  if (delayMs > 0) {
-    await new Promise(resolve => setTimeout(resolve, delayMs));
+  if (cfg.delay_ms > 0) {
+    await new Promise(resolve => setTimeout(resolve, cfg.delay_ms));
   }
 
   // Fire a minimalist risk snippet (no gate check — this is a passive feature for activated groups)
@@ -2273,9 +2270,9 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
         .maybeSingle();
       
       if (inst) {
-        const cfg = inst.admin_config as any || {};
+        const cfg = resolveAdminConfig(inst.admin_config);
         currentConfig = `\n📋 *Current Config — ${inst.chat_title || selectedChatId}:*\n` +
-          `⏱ Delay: *${cfg.delay_ms || 0}ms*\n` +
+          `⏱ Delay: *${cfg.delay_ms}ms*\n` +
           `📝 Verbose: *${cfg.verbose ? 'ON' : 'OFF'}*\n` +
           `🔒 Admin-Only: *${cfg.admin_only_commands ? 'ON' : 'OFF'}*\n` +
           `🚨 Dev Alerts: *${cfg.dev_wallet_alerts ? 'ON' : 'OFF'}*\n`;
@@ -2357,7 +2354,7 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
     return;
   }
 
-  const config = (inst.admin_config as any) || { delay_ms: 3000, verbose: false, admin_only_commands: false, dev_wallet_alerts: false, enabled_tiers: [] };
+  const config = resolveAdminConfig(inst.admin_config);
   const channelName = inst.chat_title || selectedChatId;
 
   switch (setting) {
@@ -2825,7 +2822,7 @@ async function handleMyChatMember(update: any) {
         chat_type: chatType,
         user_id: linked.user_id,
         kicked: false,
-        admin_config: { delay_ms: 3000, verbose: false, admin_only_commands: false, enabled_tiers: [], dev_wallet_alerts: false },
+        admin_config: { ...DEFAULT_ADMIN_CONFIG },
         updated_at: new Date().toISOString(),
       }, { onConflict: 'chat_id' });
 
