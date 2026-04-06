@@ -132,6 +132,17 @@ export function AccountManagementDashboard() {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isBackfilling, setIsBackfilling] = useState(false);
+  const [sortField, setSortField] = useState<'name' | 'email' | 'status' | 'created_at'>('created_at');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
   const { toast } = useToast();
 
   const fetchAccounts = async () => {
