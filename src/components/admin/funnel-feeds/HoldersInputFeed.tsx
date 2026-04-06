@@ -33,7 +33,7 @@ export function HoldersInputFeed() {
     const { data } = await supabase
       .from('holders_intel_post_queue')
       .select('id, token_mint, symbol, name, status, trigger_source, trigger_comment, scheduled_at, posted_at')
-      .or('trigger_source.ilike.%holders%,trigger_source.eq.holders_query,trigger_source.eq./holders,trigger_source.ilike.%holder_input%')
+      .or('trigger_source.eq.holders_input,trigger_source.eq.public_query,trigger_comment.ilike.%/holders%')
       .order('scheduled_at', { ascending: false })
       .limit(200);
 

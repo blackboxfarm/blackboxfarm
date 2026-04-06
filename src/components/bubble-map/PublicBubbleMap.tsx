@@ -219,7 +219,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
 
     // Silently queue token mint lookups to the post pipeline
     if (type !== 'x_account' && rawInput.length >= 30) {
-      queueTokenFromFrontend(rawInput, mode === 'promo' ? 'public_query' : 'subscriber_query', {
+      queueTokenFromFrontend(rawInput, 'bubblemap_input', {
         comment: `Bubblemap ${mode} lookup`,
       });
     }

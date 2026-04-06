@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export async function queueTokenFromFrontend(
   tokenMint: string,
-  triggerSource: 'bubblemap_query' | 'public_query' | 'subscriber_query',
+  triggerSource: 'bubblemap_query' | 'public_query' | 'subscriber_query' | 'holders_input' | 'bubblemap_input',
   extra?: { symbol?: string; name?: string; marketCap?: number; comment?: string }
 ) {
   if (!tokenMint || tokenMint.length < 30) return;
