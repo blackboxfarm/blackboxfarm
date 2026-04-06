@@ -36,6 +36,13 @@ interface HostedGroup {
   unique_users: number;
   unique_tokens: number;
   top_commands: Record<string, number>;
+  admin_config: {
+    delay_ms: number;
+    verbose: boolean;
+    admin_only_commands: boolean;
+    enabled_tiers: string[];
+    dev_wallet_alerts: boolean;
+  } | null;
   first_seen: string;
   last_seen: string;
 }
