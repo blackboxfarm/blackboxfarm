@@ -102,6 +102,20 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Bot detection: honeypot field filled
+    if (isBot()) {
+      // Silently pretend success to not alert the bot
+      toast({ title: "Account Created!", description: "Please check your email to verify your account." });
+      return;
+    }
+    
+    // Bot detection: form completed too fast (< 3 seconds)
+    if (isTooFast()) {
+      toast({ title: "Please slow down", description: "Please take a moment to fill out the form carefully.", variant: "destructive" });
+      return;
+    }
+    
     if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
         title: "Sign Up Failed",

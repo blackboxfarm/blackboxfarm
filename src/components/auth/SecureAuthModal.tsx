@@ -65,6 +65,19 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Bot detection: honeypot field filled
+    if (isBot()) {
+      toast({ title: "Account Created!", description: "Please check your email to verify your account." });
+      return;
+    }
+    
+    // Bot detection: form completed too fast (< 3 seconds)
+    if (isTooFast()) {
+      toast({ title: "Please slow down", description: "Please take a moment to fill out the form carefully.", variant: "destructive" });
+      return;
+    }
+    
     if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
         title: "Sign Up Failed",
