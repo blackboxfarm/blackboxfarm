@@ -796,21 +796,60 @@ export async function resolvePrice(
   // 'bonk_fun' → skip pump.fun + bags.fm, go to step 4
   // undefined → full cascade (backward compatible)
 
-  // STEP 1: Try pump.fun API (skip if hint says bags_fm or bonk_fun)
+  // STEP 1: Try on-chain bonding curve FIRST (fastest, no API dependency)
+  // This avoids pump.fun API 403 blocks entirely for pre-graduation tokens
+  if (heliusApiKey && (!venueHint || venueHint === 'pumpfun_curve')) {
+    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun on-chain curve (priority path)`);
+    const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
+    
+    if (curveState) {
+      if (curveState.isOnCurve) {
+        // Token IS on pump.fun curve - use curve price (authoritative)
+        const price = computeBondingCurvePrice(curveState, solPrice);
+        const result: PriceResult = {
+          price,
+          source: 'pumpfun_curve',
+          fetchedAt: new Date().toISOString(),
+          latencyMs: 0,
+          isOnCurve: true,
+          bondingCurveProgress: curveState.progress,
+          confidence: 'high',
+          virtualSolReserves: Number(curveState.virtualSolReserves),
+          virtualTokenReserves: Number(curveState.virtualTokenReserves)
+        };
+        
+        console.log(`[${tokenMint.slice(0, 8)}] pump.fun curve: $${price.toFixed(10)}, progress=${curveState.progress.toFixed(1)}%`);
+        priceCache.set(tokenMint, { result, timestamp: Date.now() });
+        return result;
+      }
+      
+      // Token graduated — skip to DexScreener/Jupiter fast path
+      console.log(`[${tokenMint.slice(0, 8)}] On-chain says graduated, running parallel DexScreener + Jupiter`);
+      const [dexResult, jupResult] = await Promise.all([
+        fetchDexScreenerPrice(tokenMint),
+        fetchJupiterPrice(tokenMint)
+      ]);
+      const graduatedResult = dexResult || jupResult;
+      if (graduatedResult) {
+        priceCache.set(tokenMint, { result: graduatedResult, timestamp: Date.now() });
+        return graduatedResult;
+      }
+    }
+  }
+
+  // STEP 2: Fallback to pump.fun HTTP API (skip if hint says bags_fm or bonk_fun)
   if (!venueHint || venueHint === 'pumpfun_curve') {
-    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API`);
+    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API (fallback)`);
     const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
     
     if (pumpResult) {
       console.log(`[${tokenMint.slice(0, 8)}] pump.fun API: $${pumpResult.price.toFixed(10)}, onCurve=${pumpResult.isOnCurve}`);
       
-      // If token is still on curve, this is authoritative - use it
       if (pumpResult.isOnCurve) {
         priceCache.set(tokenMint, { result: pumpResult, timestamp: Date.now() });
         return pumpResult;
       }
       
-      // Token graduated according to pump.fun - skip to DexScreener/Jupiter fast path
       console.log(`[${tokenMint.slice(0, 8)}] pump.fun says graduated, running parallel DexScreener + Jupiter`);
       const [dexResult, jupResult] = await Promise.all([
         fetchDexScreenerPrice(tokenMint),
