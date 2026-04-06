@@ -11,6 +11,7 @@ import { PasswordResetModal } from './PasswordResetModal';
 import { OAuthButtons } from './OAuthButtons';
 import { OTPVerification } from './OTPVerification';
 import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSelect';
+import { useSignupProtection } from '@/hooks/useSignupProtection';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AuthModalProps {

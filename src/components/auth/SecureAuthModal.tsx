@@ -12,6 +12,7 @@ import { EmailVerificationModal } from './EmailVerificationModal';
 import { InputValidator, ValidationRules } from '@/components/security/InputValidator';
 import { OAuthButtons } from './OAuthButtons';
 import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSelect';
+import { useSignupProtection } from '@/hooks/useSignupProtection';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 
