@@ -116,7 +116,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 5. Fetch interaction stats in bulk
+    // 5. Get X profiles for installers
+    const xProfileMap = new Map<string, { x_username: string | null; x_url: string | null; x_followers: number | null }>();
+    if (userIds.length > 0) {
+      const { data: xProfiles } = await supabase
+        .from("installer_x_profiles")
+        .select("user_id, x_username, x_url, x_followers")
+        .in("user_id", userIds);
+      if (xProfiles) {
+        for (const xp of xProfiles) {
+          xProfileMap.set(xp.user_id, { x_username: xp.x_username, x_url: xp.x_url, x_followers: xp.x_followers });
+        }
+      }
+    }
+
+    // 6. Fetch interaction stats in bulk
     const { data: interactions } = await supabase
       .from("telegram_bot_interactions")
       .select("chat_id, chat_type, chat_title, telegram_username, token_mint, command, created_at")
@@ -157,7 +171,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 6. Query Telegram API for live info on each group
+    // 7. Query Telegram API for live info on each group
     const groups: GroupInfo[] = [];
 
     const fetchGroupInfo = async (inst: typeof installations[0]): Promise<GroupInfo> => {
@@ -166,6 +180,7 @@ Deno.serve(async (req) => {
       const userId = inst.user_id;
       const profile = userId ? profileMap.get(userId) : null;
       const tgInfo = userId ? tgMap.get(userId) : null;
+      const xProfile = userId ? xProfileMap.get(userId) : null;
 
       const base: GroupInfo = {
         chat_id: chatId,
