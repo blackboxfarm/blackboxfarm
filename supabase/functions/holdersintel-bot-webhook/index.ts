@@ -30,6 +30,19 @@ const RATE_LIMITS: Record<string, number> = {
 // ─── Tagline appended to every analytical reply ───
 const TAGLINE = `\n\n🌐 [blackbox.farm/tgbot](https://blackbox.farm/tgbot)`;
 
+// ─── Default admin config — single source of truth for all installations ───
+const DEFAULT_ADMIN_CONFIG = {
+  delay_ms: 3000,
+  verbose: false,
+  admin_only_commands: false,
+  enabled_tiers: [] as string[],
+  dev_wallet_alerts: false,
+};
+
+// Helper: merge DB config with defaults so missing fields always have a value
+function resolveAdminConfig(raw: any): typeof DEFAULT_ADMIN_CONFIG {
+  return { ...DEFAULT_ADMIN_CONFIG, ...(raw || {}) };
+}
 // ─── AI Verdict System (retained internally, removed from UI) ───
 
 const VERDICT_SYSTEM_PROMPT = `You are a crypto trading analyst for Solana memecoins. Given token metrics, produce a single actionable trading verdict.
@@ -2056,8 +2069,8 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   const activated = await isGroupActivated(chatId);
   if (!activated) return; // silently ignore unactivated groups
 
-  // Dynamic delay from admin config — let other bots reply first
-  let delayMs = 3000; // fallback default
+  // Read full admin config from DB
+  let cfg = { ...DEFAULT_ADMIN_CONFIG };
   try {
     const { data: instConfig } = await supabase
       .from("channel_installations")
@@ -2065,15 +2078,12 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
       .eq("chat_id", chatId)
       .eq("is_active", true)
       .maybeSingle();
-    if (instConfig?.admin_config) {
-      const cfg = instConfig.admin_config as any;
-      delayMs = typeof cfg.delay_ms === 'number' ? cfg.delay_ms : 3000;
-    }
+    cfg = resolveAdminConfig(instConfig?.admin_config);
   } catch (e) {
-    console.log("[bot] Could not read delay config, using default 3000ms");
+    console.log("[bot] Could not read admin config, using defaults");
   }
-  if (delayMs > 0) {
-    await new Promise(resolve => setTimeout(resolve, delayMs));
+  if (cfg.delay_ms > 0) {
+    await new Promise(resolve => setTimeout(resolve, cfg.delay_ms));
   }
 
   // Fire a minimalist risk snippet (no gate check — this is a passive feature for activated groups)
@@ -2094,10 +2104,10 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
 
   const tokenLabel = symbol ? `$ ${symbol}` : ca.slice(0, 8) + '...';
 
-  // Build distribution bars from simpleTiers
+  // Build distribution bars from simpleTiers (verbose mode only)
   const tiers = holdersData?.simpleTiers;
   let distBlock = '';
-  if (tiers) {
+  if (cfg.verbose && tiers) {
     const bar = (pct: number) => {
       const filled = Math.round(pct / 10);
       return '█'.repeat(filled) + '░'.repeat(10 - filled);
@@ -2121,8 +2131,9 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
       (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
     );
     
-    // Show top 3 most severe warnings
-    const topWarnings = sorted.slice(0, 3);
+    // In terse mode, show only top 1 warning; verbose shows top 3
+    const maxWarnings = cfg.verbose ? 3 : 1;
+    const topWarnings = sorted.slice(0, maxWarnings);
     const warningLines = topWarnings.map(w => {
       const seenNote = w.scan_count > 1 ? ` _(seen ${w.scan_count}x)_` : '';
       return `${w.plain_text}${seenNote}`;
@@ -2260,9 +2271,9 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
         .maybeSingle();
       
       if (inst) {
-        const cfg = inst.admin_config as any || {};
+        const cfg = resolveAdminConfig(inst.admin_config);
         currentConfig = `\n📋 *Current Config — ${inst.chat_title || selectedChatId}:*\n` +
-          `⏱ Delay: *${cfg.delay_ms || 0}ms*\n` +
+          `⏱ Delay: *${cfg.delay_ms}ms*\n` +
           `📝 Verbose: *${cfg.verbose ? 'ON' : 'OFF'}*\n` +
           `🔒 Admin-Only: *${cfg.admin_only_commands ? 'ON' : 'OFF'}*\n` +
           `🚨 Dev Alerts: *${cfg.dev_wallet_alerts ? 'ON' : 'OFF'}*\n`;
@@ -2344,7 +2355,7 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
     return;
   }
 
-  const config = (inst.admin_config as any) || { delay_ms: 3000, verbose: false, admin_only_commands: false, dev_wallet_alerts: false, enabled_tiers: [] };
+  const config = resolveAdminConfig(inst.admin_config);
   const channelName = inst.chat_title || selectedChatId;
 
   switch (setting) {
@@ -2812,7 +2823,7 @@ async function handleMyChatMember(update: any) {
         chat_type: chatType,
         user_id: linked.user_id,
         kicked: false,
-        admin_config: { delay_ms: 3000, verbose: false, admin_only_commands: false, enabled_tiers: [], dev_wallet_alerts: false },
+        admin_config: { ...DEFAULT_ADMIN_CONFIG },
         updated_at: new Date().toISOString(),
       }, { onConflict: 'chat_id' });
 
@@ -2945,8 +2956,25 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts'];
 
-    // If in a group chat and command is NOT in the public list, redirect to DM
+    // If in a group chat, check admin_only_commands config and redirect non-public commands to DM
     if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
+      // Check if admin_only_commands is enabled — if so, only group admins can use commands
+      try {
+        const { data: groupInst } = await supabase
+          .from("channel_installations")
+          .select("admin_config")
+          .eq("chat_id", chatId)
+          .eq("is_active", true)
+          .maybeSingle();
+        const groupCfg = resolveAdminConfig(groupInst?.admin_config);
+        if (groupCfg.admin_only_commands) {
+          const isGroupAdmin = await isTelegramGroupAdmin(chatId, telegramUserId);
+          if (!isGroupAdmin) {
+            await sendMessage(chatId, `🔒 Commands are restricted to admins in this group.`);
+            return new Response("OK");
+          }
+        }
+      } catch (_) { /* proceed if config check fails */ }
       // Send "check your DMs" in the group
       const cmdLabel = command.replace('/', '').toUpperCase();
       await groupDMRedirect(chatId, telegramUserId, cmdLabel, messageId);
