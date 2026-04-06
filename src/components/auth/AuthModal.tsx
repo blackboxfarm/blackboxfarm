@@ -352,6 +352,14 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
                 </div>
               </div>
 
+              <ReferralSourceSelect
+                value={referralSource}
+                otherValue={referralSourceOther}
+                onChange={setReferralSource}
+                onOtherChange={setReferralSourceOther}
+                disabled={loading}
+              />
+
               <Button 
                 type="submit" 
                 className="w-full tech-button"
