@@ -26,6 +26,9 @@ interface HostedGroup {
   installer_telegram_id: string | null;
   installer_oauth_provider: string | null;
   installer_oauth_username: string | null;
+  installer_x_username: string | null;
+  installer_x_url: string | null;
+  installer_x_followers: number | null;
   total_interactions: number;
   unique_users: number;
   unique_tokens: number;
@@ -37,6 +40,7 @@ interface HostedGroup {
 export function TelegramHostedBots() {
   const [groups, setGroups] = useState<HostedGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -50,6 +54,21 @@ export function TelegramHostedBots() {
       console.error('Error loading hosted groups:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const scanXProfiles = async () => {
+    setIsScanning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-installer-x-profiles');
+      if (error) throw error;
+      console.log('X profile scan results:', data);
+      // Reload data to show new X profiles
+      await loadData();
+    } catch (err) {
+      console.error('Error scanning X profiles:', err);
+    } finally {
+      setIsScanning(false);
     }
   };
 
@@ -77,9 +96,15 @@ export function TelegramHostedBots() {
             Live data from Telegram API — who installed the bot, where, and usage stats
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading}>
-          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={scanXProfiles} disabled={isScanning}>
+            {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <span className="mr-1">𝕏</span>}
+            {isScanning ? 'Scanning...' : 'Scan X Profiles'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading}>
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -206,7 +231,13 @@ export function TelegramHostedBots() {
 
                       {/* X Profile */}
                       <TableCell>
-                        {g.installer_oauth_provider === 'twitter' && g.installer_oauth_username ? (
+                        {g.installer_x_username ? (
+                          <a href={g.installer_x_url || `https://x.com/${g.installer_x_username}`} target="_blank" rel="noopener noreferrer"
+                            className="text-blue-400 hover:underline text-xs flex items-center gap-1">
+                            𝕏 @{g.installer_x_username}
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        ) : g.installer_oauth_provider === 'twitter' && g.installer_oauth_username ? (
                           <a href={`https://x.com/${g.installer_oauth_username}`} target="_blank" rel="noopener noreferrer"
                             className="text-blue-400 hover:underline text-xs flex items-center gap-1">
                             𝕏 @{g.installer_oauth_username}

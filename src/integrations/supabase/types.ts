@@ -5749,6 +5749,45 @@ export type Database = {
         }
         Relationships: []
       }
+      installer_x_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          scraped_at: string
+          telegram_username: string | null
+          user_id: string
+          x_bio: string | null
+          x_display_name: string | null
+          x_followers: number | null
+          x_url: string | null
+          x_username: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          scraped_at?: string
+          telegram_username?: string | null
+          user_id: string
+          x_bio?: string | null
+          x_display_name?: string | null
+          x_followers?: number | null
+          x_url?: string | null
+          x_username?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          scraped_at?: string
+          telegram_username?: string | null
+          user_id?: string
+          x_bio?: string | null
+          x_display_name?: string | null
+          x_followers?: number | null
+          x_url?: string | null
+          x_username?: string | null
+        }
+        Relationships: []
+      }
       intel_briefing_revisions: {
         Row: {
           briefing_id: string
