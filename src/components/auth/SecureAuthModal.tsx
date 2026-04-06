@@ -337,10 +337,18 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
                 </InputValidator>
               </div>
 
+              <ReferralSourceSelect
+                value={referralSource}
+                otherValue={referralSourceOther}
+                onChange={setReferralSource}
+                onOtherChange={setReferralSourceOther}
+                disabled={loading || isRateLimited}
+              />
+
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited}
+                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || !referralSource || (referralSource === 'other' && !referralSourceOther.trim())}
               >
                 {loading ? (
                   <>
