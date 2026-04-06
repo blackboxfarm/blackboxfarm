@@ -218,9 +218,10 @@ export function TelegramHostedBots() {
                             </span>
                           )}
                           {g.installer_user_id && (
-                            <a href={`/admin?tab=accounts&user=${g.installer_user_id}`}
-                              className="text-[10px] text-blue-400 hover:underline">
-                              View Profile →
+                            <a href={`https://blackbox.farm/super-admin?tab=accounts&user=${g.installer_user_id}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-400 hover:underline flex items-center gap-1">
+                              View Profile → <ExternalLink className="w-2 h-2" />
                             </a>
                           )}
                           {!g.installer_email && !g.installer_user_id && (

@@ -208,7 +208,8 @@ export function TelegramInteractionsPanel() {
                                 {profile.oauth_provider === 'twitter' ? '𝕏' : profile.oauth_provider}: @{profile.oauth_username}
                               </span>
                             )}
-                            <a href={`/super-admin?tab=accounts&user=${i.linked_user_id}`}
+                            <a href={`https://blackbox.farm/super-admin?tab=accounts&user=${i.linked_user_id}`}
+                              target="_blank" rel="noopener noreferrer"
                               className="text-[10px] text-blue-400 hover:underline flex items-center gap-1">
                               View Profile → <ExternalLink className="w-2 h-2" />
                             </a>
