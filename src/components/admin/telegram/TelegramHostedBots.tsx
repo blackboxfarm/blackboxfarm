@@ -193,6 +193,7 @@ export function TelegramHostedBots() {
                   <TableHead className="text-center">Bot Users</TableHead>
                   <TableHead className="text-center">Lookups</TableHead>
                   <TableHead>Recent Chat</TableHead>
+                  <TableHead>Config</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Installed</TableHead>
                   <TableHead>Last Active</TableHead>
