@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const botToken = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
 
 interface GroupInfo {
   chat_id: string;
