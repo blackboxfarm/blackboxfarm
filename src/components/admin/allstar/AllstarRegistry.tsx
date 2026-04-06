@@ -57,7 +57,7 @@ export function AllstarRegistry() {
         .select('*')
         .order('best_tier', { ascending: false })
         .order('best_mcap_achieved', { ascending: false })
-        .limit(100);
+        .limit(1000);
       if (error) throw error;
       return data || [];
     },
