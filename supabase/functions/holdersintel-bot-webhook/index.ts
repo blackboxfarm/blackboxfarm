@@ -2712,6 +2712,7 @@ async function logBotInteraction(
       last_name: from?.last_name || null,
       chat_id: chatId,
       chat_type: chatType,
+      chat_title: chatTitle,
       command: command || null,
       args_preview: args ? args.substring(0, 100) : null,
       token_mint: tokenMint || null,
