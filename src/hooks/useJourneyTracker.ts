@@ -22,7 +22,7 @@ export function useJourneyTracker() {
 
   const trackEvent = useCallback(
     async (eventName: string, options: TrackEventOptions = {}) => {
-      if (!user?.id) return;
+      if (!user?.id || isSuperAdmin) return;
 
       const {
         eventType = 'action',
