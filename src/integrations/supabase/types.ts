@@ -12329,6 +12329,7 @@ export type Database = {
           first_name: string | null
           id: string
           invited_by_user_id: string | null
+          is_bot_account: boolean
           last_name: string | null
           new_status: string | null
           old_status: string | null
@@ -12343,6 +12344,7 @@ export type Database = {
           first_name?: string | null
           id?: string
           invited_by_user_id?: string | null
+          is_bot_account?: boolean
           last_name?: string | null
           new_status?: string | null
           old_status?: string | null
@@ -12357,6 +12359,7 @@ export type Database = {
           first_name?: string | null
           id?: string
           invited_by_user_id?: string | null
+          is_bot_account?: boolean
           last_name?: string | null
           new_status?: string | null
           old_status?: string | null
@@ -12395,6 +12398,39 @@ export type Database = {
           linked_token_count?: number | null
           title_history?: Json | null
           username_history?: Json | null
+        }
+        Relationships: []
+      }
+      telegram_channel_welcome_config: {
+        Row: {
+          chat_id: number
+          chat_title: string | null
+          created_at: string
+          id: string
+          is_enabled: boolean
+          suspend_until: string | null
+          updated_at: string
+          welcome_message: string
+        }
+        Insert: {
+          chat_id: number
+          chat_title?: string | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          suspend_until?: string | null
+          updated_at?: string
+          welcome_message?: string
+        }
+        Update: {
+          chat_id?: number
+          chat_title?: string | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          suspend_until?: string | null
+          updated_at?: string
+          welcome_message?: string
         }
         Relationships: []
       }
