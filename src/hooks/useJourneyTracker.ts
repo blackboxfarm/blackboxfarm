@@ -15,6 +15,7 @@ interface TrackEventOptions {
 
 export function useJourneyTracker() {
   const { user } = useAuth();
+  const { isSuperAdmin } = useUserRoles();
   const location = useLocation();
   const pageEnteredAt = useRef<number>(Date.now());
   const lastPath = useRef<string>('');
