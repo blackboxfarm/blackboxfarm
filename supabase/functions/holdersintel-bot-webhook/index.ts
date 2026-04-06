@@ -2955,7 +2955,26 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts'];
 
-    // If in a group chat and command is NOT in the public list, redirect to DM
+    // If in a group chat, check admin_only_commands config
+    if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
+      // Check if admin_only_commands is enabled — if so, only group admins can use commands
+      try {
+        const { data: groupInst } = await supabase
+          .from("channel_installations")
+          .select("admin_config")
+          .eq("chat_id", chatId)
+          .eq("is_active", true)
+          .maybeSingle();
+        const groupCfg = resolveAdminConfig(groupInst?.admin_config);
+        if (groupCfg.admin_only_commands) {
+          const isGroupAdmin = await isTelegramGroupAdmin(chatId, telegramUserId);
+          if (!isGroupAdmin) {
+            await sendMessage(chatId, `🔒 Commands are restricted to admins in this group.`);
+            return new Response("OK");
+          }
+        }
+      } catch (_) { /* proceed if config check fails */ }
+
     if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
       // Send "check your DMs" in the group
       const cmdLabel = command.replace('/', '').toUpperCase();
