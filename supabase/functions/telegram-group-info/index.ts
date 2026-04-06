@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     // 1. Get all installations
     const { data: installations, error: instErr } = await supabase
       .from("channel_installations")
-      .select("chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at, user_id")
+      .select("chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at, user_id, admin_config")
       .order("installed_at", { ascending: false });
 
     if (instErr) throw instErr;
