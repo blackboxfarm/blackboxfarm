@@ -305,6 +305,8 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
 
           <TabsContent value="signup" className="space-y-4">
             <form onSubmit={handleSignUp} className="space-y-4">
+              {/* Honeypot field - invisible to humans, bots fill it */}
+              <input {...honeypotProps} type="text" aria-hidden="true" />
               <div className="space-y-2">
                 <Label htmlFor="signup-email" className="text-foreground">Email</Label>
                 <div className="relative">
