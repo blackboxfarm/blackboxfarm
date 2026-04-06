@@ -3803,6 +3803,87 @@ export type Database = {
         }
         Relationships: []
       }
+      email_tracking_events: {
+        Row: {
+          click_count: number
+          clicked_at: string | null
+          created_at: string
+          email_type: string
+          id: string
+          metadata: Json | null
+          open_count: number
+          opened_at: string | null
+          recipient_email: string
+          sent_at: string
+          subject_line: string | null
+          tracking_id: string
+          user_id: string | null
+        }
+        Insert: {
+          click_count?: number
+          clicked_at?: string | null
+          created_at?: string
+          email_type: string
+          id?: string
+          metadata?: Json | null
+          open_count?: number
+          opened_at?: string | null
+          recipient_email: string
+          sent_at?: string
+          subject_line?: string | null
+          tracking_id: string
+          user_id?: string | null
+        }
+        Update: {
+          click_count?: number
+          clicked_at?: string | null
+          created_at?: string
+          email_type?: string
+          id?: string
+          metadata?: Json | null
+          open_count?: number
+          opened_at?: string | null
+          recipient_email?: string
+          sent_at?: string
+          subject_line?: string | null
+          tracking_id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      email_verifications: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          sent_at: string
+          user_id: string
+          verification_token: string
+          verification_type: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          sent_at?: string
+          user_id: string
+          verification_token: string
+          verification_type?: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          sent_at?: string
+          user_id?: string
+          verification_token?: string
+          verification_type?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       emergency_sells: {
         Row: {
           created_at: string | null
@@ -17185,6 +17266,7 @@ export type Database = {
         Returns: Json
       }
       archive_old_morning_reports: { Args: never; Returns: number }
+      auto_suspend_unverified_users: { Args: never; Returns: undefined }
       ban_user: {
         Args: { ban_until?: string; target_user_id: string }
         Returns: undefined
