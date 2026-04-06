@@ -2309,11 +2309,25 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
     return;
   }
 
-  // Must have a channel selected
-  const selectedChatId = userSelectedChannel.get(telegramUserId);
+  // Must have a channel selected — read from DB (persistent)
+  let selectedChatId = await getSelectedChannelId(telegramUserId);
+  
+  // Auto-select if user has exactly one channel
   if (!selectedChatId) {
-    await sendMessage(chatId, `❌ No channel selected.\n\nUse \`/config select <chat_id>\` first.\nSee /channels for your chat IDs.`);
-    return;
+    const { data: userChannels } = await supabase
+      .from("channel_installations")
+      .select("chat_id, chat_title")
+      .eq("user_id", linked.user_id)
+      .eq("kicked", false);
+    
+    if (userChannels && userChannels.length === 1) {
+      selectedChatId = userChannels[0].chat_id;
+      await setSelectedChannelId(telegramUserId, selectedChatId);
+      await sendMessage(chatId, `🔄 Auto-selected: *${userChannels[0].chat_title || selectedChatId}*`);
+    } else {
+      await sendMessage(chatId, `❌ No channel selected.\n\nUse \`/config select <chat_id>\` first.\nSee /channels for your chat IDs.`);
+      return;
+    }
   }
 
   // Fetch current config
@@ -2326,11 +2340,11 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
 
   if (!inst) {
     await sendMessage(chatId, `❌ Channel no longer found.`);
-    userSelectedChannel.delete(telegramUserId);
+    await setSelectedChannelId(telegramUserId, 0);
     return;
   }
 
-  const config = (inst.admin_config as any) || { delay_ms: 0, verbose: false, admin_only_commands: false, dev_wallet_alerts: false, enabled_tiers: [] };
+  const config = (inst.admin_config as any) || { delay_ms: 3000, verbose: false, admin_only_commands: false, dev_wallet_alerts: false, enabled_tiers: [] };
   const channelName = inst.chat_title || selectedChatId;
 
   switch (setting) {
@@ -2798,6 +2812,7 @@ async function handleMyChatMember(update: any) {
         chat_type: chatType,
         user_id: linked.user_id,
         kicked: false,
+        admin_config: { delay_ms: 3000, verbose: false, admin_only_commands: false, enabled_tiers: [], dev_wallet_alerts: false },
         updated_at: new Date().toISOString(),
       }, { onConflict: 'chat_id' });
 
