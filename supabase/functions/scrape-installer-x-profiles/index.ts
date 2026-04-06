@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       const batchPromises = batch.map(async ({ userId, tgUsername }) => {
         try {
           // Search Twitter for this TG username — people often use the same handle
-          const actorId = 'apidojo/twitter-user-scraper';
+          const actorId = 'apidojo~twitter-user-scraper';
           const logger = createApiLogger({
             serviceName: 'apify',
             endpoint: `${actorId}/twitter-user-search`,
