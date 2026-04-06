@@ -1221,17 +1221,8 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
                     }
                   }
 
-                  // Also send to BlackBox admin group via admin-notify
-                  try {
-                    await supabase.functions.invoke('admin-notify', {
-                      body: {
-                        type: 'intel_xbot_post',
-                        title: `📣 TG Advert: ${nextTgAdvert.template_name}`,
-                        message: nextTgAdvert.template_text,
-                        channels: ['telegram'],
-                      },
-                    });
-                  } catch (_) {}
+                  // TG adverts go ONLY to INTEL_PUBLIC — no admin-notify broadcast
+                  console.log(`[poster] TG advert ${nextTgAdvert.template_name} sent to INTEL_PUBLIC only`);
 
                   // Update last used TG template
                   await supabase.from('holders_intel_config')
