@@ -2955,7 +2955,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts'];
 
-    // If in a group chat, check admin_only_commands config
+    // If in a group chat, check admin_only_commands config and redirect non-public commands to DM
     if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
       // Check if admin_only_commands is enabled — if so, only group admins can use commands
       try {
@@ -2974,8 +2974,6 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           }
         }
       } catch (_) { /* proceed if config check fails */ }
-
-    if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
       // Send "check your DMs" in the group
       const cmdLabel = command.replace('/', '').toUpperCase();
       await groupDMRedirect(chatId, telegramUserId, cmdLabel, messageId);
