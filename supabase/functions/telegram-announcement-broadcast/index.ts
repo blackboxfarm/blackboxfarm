@@ -43,15 +43,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get all hosted admin telegram IDs (users who installed bot in groups/channels)
+    // Get all hosted admin telegram IDs
     const { data: installations } = await supabase
       .from("channel_installations")
       .select("user_id")
       .eq("is_active", true);
-
     const hostedUserIds = new Set((installations || []).map((i: any) => i.user_id).filter(Boolean));
 
-    // Get all unique registered DM users (chat_type = 'private')
+    // Get all unique DM users (chat_type = 'private')
     const { data: interactions } = await supabase
       .from("telegram_bot_interactions")
       .select("telegram_user_id, linked_user_id, chat_type")
@@ -61,23 +60,57 @@ Deno.serve(async (req) => {
     // Deduplicate by telegram_user_id
     const userMap = new Map<string, { tgId: string; linkedUserId: string | null }>();
     for (const row of interactions || []) {
-      if (!userMap.has(row.telegram_user_id)) {
+      const existing = userMap.get(row.telegram_user_id);
+      if (!existing) {
         userMap.set(row.telegram_user_id, {
           tgId: row.telegram_user_id,
           linkedUserId: row.linked_user_id,
         });
+      } else if (row.linked_user_id && !existing.linkedUserId) {
+        existing.linkedUserId = row.linked_user_id;
       }
+    }
+
+    // Get subscriber info if needed
+    let subscriberUserIds = new Set<string>();
+    if (["subscribers_only", "free_only", "all_registered"].includes(audience)) {
+      const { data: subs } = await supabase
+        .from("stripe_customers")
+        .select("user_id, subscription_status")
+        .in("subscription_status", ["active", "trialing"]);
+      subscriberUserIds = new Set((subs || []).map((s: any) => s.user_id).filter(Boolean));
     }
 
     // Filter based on audience
     const targets: string[] = [];
     for (const [tgId, info] of userMap) {
       const isHostedAdmin = info.linkedUserId && hostedUserIds.has(info.linkedUserId);
+      const isRegistered = !!info.linkedUserId;
+      const isSubscriber = info.linkedUserId ? subscriberUserIds.has(info.linkedUserId) : false;
 
-      if (audience === "accounts" && !isHostedAdmin) {
-        targets.push(tgId);
-      } else if (audience === "hosted" && isHostedAdmin) {
-        targets.push(tgId);
+      switch (audience) {
+        case "hosted":
+          if (isHostedAdmin) targets.push(tgId);
+          break;
+        case "accounts":
+        case "all_registered":
+          // All registered users who are NOT hosted admins
+          if (isRegistered && !isHostedAdmin) targets.push(tgId);
+          break;
+        case "subscribers_only":
+          // Subscribed users who are NOT hosted admins
+          if (isRegistered && isSubscriber && !isHostedAdmin) targets.push(tgId);
+          break;
+        case "free_only":
+          // Registered but NOT subscribed, NOT hosted admins
+          if (isRegistered && !isSubscriber && !isHostedAdmin) targets.push(tgId);
+          break;
+        case "unregistered":
+          // TG users with no linked web account, NOT hosted admins
+          if (!isRegistered && !isHostedAdmin) targets.push(tgId);
+          break;
+        default:
+          break;
       }
     }
 
@@ -85,15 +118,10 @@ Deno.serve(async (req) => {
 
     let sent = 0;
     let failed = 0;
-    let skipped = 0;
+    const skipped = 0;
 
-    // Rate limit: 1 message per 50ms (20/sec, well under TG's 30/sec limit)
+    // Rate limit: 1 message per 50ms (20/sec)
     for (const tgId of targets) {
-      // Skip sending to ourselves in bulk
-      if (tgId === SYSTEM_RESET_TG_ID && targets.length > 1) {
-        // Still send to system_reset, just at the end
-      }
-
       try {
         const ok = await sendTgMessage(botToken, tgId, message);
         if (ok) sent++;
@@ -101,8 +129,6 @@ Deno.serve(async (req) => {
       } catch {
         failed++;
       }
-
-      // Rate limit delay
       await new Promise((r) => setTimeout(r, 50));
     }
 
@@ -132,7 +158,6 @@ async function sendTgMessage(botToken: string, chatId: string, text: string): Pr
     });
 
     if (!res.ok) {
-      // Fallback to plain text if Markdown fails
       const retry = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
