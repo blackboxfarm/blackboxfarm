@@ -103,7 +103,8 @@ export function TelegramHostedBots() {
           </Button>
           <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading}>
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-        </Button>
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
