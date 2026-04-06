@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap, Twitter, Archive, CalendarDays, CreditCard, Search, CheckCheck, HardDrive } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap, Twitter, Archive, CalendarDays, CreditCard, Search, CheckCheck, HardDrive, Mail, Bot } from "lucide-react";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
 interface MorningReport {
@@ -56,6 +56,9 @@ interface MorningReport {
   telegram_sent: boolean;
   telegram_sent_at: string | null;
   created_at: string;
+  email_verification_stats?: any;
+  telegram_bot_stats?: any;
+  user_auth_stats?: any;
 }
 
 const alertFeatureLabels: Record<string, string> = {
@@ -283,6 +286,107 @@ function ReportView({ report }: { report: MorningReport }) {
               <p className="text-xs text-muted-foreground">No new subscriptions overnight</p>
             )}
           </Section>
+
+          {/* Email Verification & Tracking */}
+          {report.email_verification_stats && (report.email_verification_stats.total_verifications > 0 || report.email_verification_stats.overnight_sent > 0) && (
+            <Section title="Email Verification & Tracking" icon={<Mail className="w-4 h-4 text-cyan-400" />}>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Total Sent:</span>{' '}
+                    <span className="font-medium">{report.email_verification_stats.total_verifications}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Verified:</span>{' '}
+                    <span className="font-medium text-green-500">{report.email_verification_stats.verified}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Pending:</span>{' '}
+                    <span className="font-medium text-yellow-500">{report.email_verification_stats.pending}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Auto-Suspended:</span>{' '}
+                    <span className="font-medium text-destructive">{report.email_verification_stats.auto_suspended}</span>
+                  </div>
+                </div>
+                {(report.email_verification_stats.overnight_sent > 0 || report.email_verification_stats.overnight_verified > 0) && (
+                  <div className="text-xs text-muted-foreground">
+                    Overnight: {report.email_verification_stats.overnight_sent} sent, {report.email_verification_stats.overnight_verified} verified
+                  </div>
+                )}
+                {report.email_verification_stats.tracking?.overnight_emails_sent > 0 && (
+                  <div className="border-t border-border/50 pt-2">
+                    <div className="text-xs font-medium mb-1">Pixel Tracking (overnight)</div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Emails:</span>{' '}
+                        <span className="font-medium">{report.email_verification_stats.tracking.overnight_emails_sent}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Open Rate:</span>{' '}
+                        <span className="font-medium">{report.email_verification_stats.tracking.open_rate_pct}%</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Click Rate:</span>{' '}
+                        <span className="font-medium">{report.email_verification_stats.tracking.click_rate_pct}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Section>
+          )}
+
+          {/* Telegram Bot Activity */}
+          {report.telegram_bot_stats && (report.telegram_bot_stats.overnight_interactions > 0 || report.telegram_bot_stats.overnight_new_users > 0) && (
+            <Section title={`Telegram Bot (${report.telegram_bot_stats.overnight_interactions} interactions)`} icon={<Bot className="w-4 h-4 text-blue-400" />}>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Active Users:</span>{' '}
+                    <span className="font-medium">{report.telegram_bot_stats.overnight_active_users}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">New Users:</span>{' '}
+                    <span className="font-medium text-green-500">{report.telegram_bot_stats.overnight_new_users}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Interactions:</span>{' '}
+                    <span className="font-medium">{report.telegram_bot_stats.overnight_interactions}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Errors:</span>{' '}
+                    <span className={`font-medium ${report.telegram_bot_stats.error_count > 0 ? 'text-destructive' : ''}`}>{report.telegram_bot_stats.error_count}</span>
+                  </div>
+                </div>
+                {report.telegram_bot_stats.overnight_new_users > 0 && report.telegram_bot_stats.overnight_new_user_details?.length > 0 && (
+                  <div>
+                    <div className="text-xs font-medium mb-1">New Bot Users</div>
+                    <div className="space-y-0.5">
+                      {report.telegram_bot_stats.overnight_new_user_details.slice(0, 10).map((u: any, i: number) => (
+                        <div key={i} className="text-xs flex items-center gap-2">
+                          <span className="text-green-500">→</span>
+                          <span className="font-mono">{u.username ? `@${u.username}` : u.telegram_user_id}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {report.telegram_bot_stats.top_commands?.length > 0 && (
+                  <div className="border-t border-border/50 pt-2">
+                    <div className="text-xs font-medium mb-1">Top Commands</div>
+                    <div className="flex flex-wrap gap-1">
+                      {report.telegram_bot_stats.top_commands.slice(0, 8).map((c: any, i: number) => (
+                        <Badge key={i} variant="outline" className="text-[10px]">
+                          {c.command}: {c.count}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Section>
+          )}
 
           {/* API Usage Per Service */}
           <Section title="API Usage by Service" icon={<Activity className="w-4 h-4 text-green-400" />}>

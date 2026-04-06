@@ -1003,6 +1003,201 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // EMAIL VERIFICATION & TRACKING STATS
+    // ═══════════════════════════════════════════════════════════════
+    let emailVerificationStats: any = {};
+    try {
+      // Verification stats
+      const { count: totalVerifications } = await supabase
+        .from('email_verifications')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: verifiedCount } = await supabase
+        .from('email_verifications')
+        .select('*', { count: 'exact', head: true })
+        .not('verified_at', 'is', null);
+
+      const { count: pendingCount } = await supabase
+        .from('email_verifications')
+        .select('*', { count: 'exact', head: true })
+        .is('verified_at', null)
+        .eq('verification_type', 'signup');
+
+      // Overnight verifications
+      const { count: overnightVerified } = await supabase
+        .from('email_verifications')
+        .select('*', { count: 'exact', head: true })
+        .not('verified_at', 'is', null)
+        .gte('verified_at', periodStart.toISOString())
+        .lte('verified_at', periodEnd.toISOString());
+
+      // Overnight sent
+      const { count: overnightSent } = await supabase
+        .from('email_verifications')
+        .select('*', { count: 'exact', head: true })
+        .gte('sent_at', periodStart.toISOString())
+        .lte('sent_at', periodEnd.toISOString());
+
+      // Auto-suspended (reactivation tokens created = users who got suspended)
+      const { count: autoSuspended } = await supabase
+        .from('email_verifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('verification_type', 'reactivation');
+
+      // Email tracking stats (opens/clicks)
+      const { data: trackingStats } = await supabase
+        .from('email_tracking_events')
+        .select('email_type, opened_at, clicked_at, open_count, click_count')
+        .gte('sent_at', periodStart.toISOString())
+        .lte('sent_at', periodEnd.toISOString());
+
+      const totalEmailsSent = trackingStats?.length || 0;
+      const totalOpened = trackingStats?.filter(e => e.opened_at)?.length || 0;
+      const totalClicked = trackingStats?.filter(e => e.clicked_at)?.length || 0;
+      const openRate = totalEmailsSent > 0 ? Math.round((totalOpened / totalEmailsSent) * 1000) / 10 : 0;
+      const clickRate = totalEmailsSent > 0 ? Math.round((totalClicked / totalEmailsSent) * 1000) / 10 : 0;
+
+      // By email type
+      const byType: Record<string, { sent: number; opened: number; clicked: number }> = {};
+      for (const e of trackingStats || []) {
+        const t = e.email_type || 'unknown';
+        if (!byType[t]) byType[t] = { sent: 0, opened: 0, clicked: 0 };
+        byType[t].sent++;
+        if (e.opened_at) byType[t].opened++;
+        if (e.clicked_at) byType[t].clicked++;
+      }
+
+      emailVerificationStats = {
+        total_verifications: totalVerifications || 0,
+        verified: verifiedCount || 0,
+        pending: pendingCount || 0,
+        auto_suspended: autoSuspended || 0,
+        overnight_verified: overnightVerified || 0,
+        overnight_sent: overnightSent || 0,
+        tracking: {
+          overnight_emails_sent: totalEmailsSent,
+          opened: totalOpened,
+          clicked: totalClicked,
+          open_rate_pct: openRate,
+          click_rate_pct: clickRate,
+          by_type: byType,
+        },
+      };
+
+      // Alert if verification rate is low
+      if ((totalVerifications || 0) > 10 && (verifiedCount || 0) / (totalVerifications || 1) < 0.3) {
+        alerts.push({
+          level: 'warning',
+          category: 'email_verification',
+          title: `Low email verification rate: ${Math.round(((verifiedCount || 0) / (totalVerifications || 1)) * 100)}%`,
+          detail: `${verifiedCount}/${totalVerifications} verified. ${pendingCount} pending, ${autoSuspended} auto-suspended.`,
+        });
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch email verification stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TELEGRAM BOT ACTIVITY STATS
+    // ═══════════════════════════════════════════════════════════════
+    let telegramBotStats: any = {};
+    try {
+      // Overnight interactions
+      const { data: overnightInteractions } = await supabase
+        .from('telegram_bot_interactions')
+        .select('telegram_user_id, telegram_username, command, is_new_user, chat_type, response_status, created_at')
+        .gte('created_at', periodStart.toISOString())
+        .lte('created_at', periodEnd.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(5000);
+
+      const interactions = overnightInteractions || [];
+      const totalInteractions = interactions.length;
+
+      // New bot users (is_new_user = true or /start commands)
+      const newBotUsers = interactions.filter(i => i.is_new_user || i.command === '/start');
+      const uniqueNewUsers = [...new Set(newBotUsers.map(i => i.telegram_user_id))];
+
+      // Unique active users overnight
+      const uniqueActiveUsers = [...new Set(interactions.map(i => i.telegram_user_id))];
+
+      // Command breakdown
+      const commandCounts: Record<string, number> = {};
+      for (const i of interactions) {
+        const cmd = i.command || 'unknown';
+        commandCounts[cmd] = (commandCounts[cmd] || 0) + 1;
+      }
+      const topCommands = Object.entries(commandCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([cmd, count]) => ({ command: cmd, count }));
+
+      // Chat type breakdown (private vs group)
+      const chatTypeCounts: Record<string, number> = {};
+      for (const i of interactions) {
+        const ct = i.chat_type || 'unknown';
+        chatTypeCounts[ct] = (chatTypeCounts[ct] || 0) + 1;
+      }
+
+      // Error rate
+      const errorInteractions = interactions.filter(i => i.response_status === 'error');
+
+      // Total all-time bot users
+      const { count: totalBotUsers } = await supabase
+        .from('telegram_bot_interactions')
+        .select('telegram_user_id', { count: 'exact', head: true });
+
+      // Distinct all-time users (approximate)
+      let distinctUserCount = 0;
+      try {
+        const { data: distinctUsers } = await supabase
+          .rpc('count_distinct_telegram_users' as any)
+          .single();
+        distinctUserCount = (distinctUsers as any)?.count || 0;
+      } catch (_) {
+        // RPC may not exist, use total as fallback
+        distinctUserCount = totalBotUsers || 0;
+      }
+
+      telegramBotStats = {
+        overnight_interactions: totalInteractions,
+        overnight_new_users: uniqueNewUsers.length,
+        overnight_new_user_details: uniqueNewUsers.slice(0, 10).map(uid => {
+          const u = newBotUsers.find(i => i.telegram_user_id === uid);
+          return { telegram_user_id: uid, username: u?.telegram_username || null };
+        }),
+        overnight_active_users: uniqueActiveUsers.length,
+        top_commands: topCommands,
+        chat_type_breakdown: chatTypeCounts,
+        error_count: errorInteractions.length,
+        total_bot_interactions_alltime: totalBotUsers || 0,
+      };
+
+      if (uniqueNewUsers.length > 0) {
+        alerts.push({
+          level: 'info',
+          category: 'telegram_bot',
+          title: `${uniqueNewUsers.length} new TG bot user${uniqueNewUsers.length > 1 ? 's' : ''} overnight`,
+          detail: uniqueNewUsers.slice(0, 5).map(uid => {
+            const u = newBotUsers.find(i => i.telegram_user_id === uid);
+            return u?.telegram_username ? `@${u.telegram_username}` : uid;
+          }).join(', '),
+        });
+      }
+
+      if (errorInteractions.length > 5) {
+        alerts.push({
+          level: 'warning',
+          category: 'telegram_bot',
+          title: `${errorInteractions.length} TG bot errors overnight`,
+          detail: `${errorInteractions.length}/${totalInteractions} interactions failed`,
+        });
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch telegram bot stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DETERMINE OVERALL STATUS
     // ═══════════════════════════════════════════════════════════════
     const criticalAlerts = alerts.filter(a => a.level === 'critical').length;
@@ -1043,6 +1238,8 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         funnel_feed_throughput: funnelFeedThroughput,
         db_size_info: dbSizeInfo,
         intelligence_stats: intelligenceStats,
+        email_verification_stats: emailVerificationStats,
+        telegram_bot_stats: telegramBotStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -1087,6 +1284,43 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       tgMessage += `• Banner Purchases: ${bannerPurchaseCount}\n`;
     }
     tgMessage += `• Total Active Subs: ${totalActiveSubscribers || 0} (${totalLinkedAccounts || 0} linked)\n\n`;
+
+    // Email Verification section
+    if (emailVerificationStats.total_verifications > 0 || emailVerificationStats.overnight_sent > 0) {
+      tgMessage += `📧 **Email Verification**\n`;
+      tgMessage += `• Total: ${emailVerificationStats.total_verifications} sent | ${emailVerificationStats.verified} verified | ${emailVerificationStats.pending} pending\n`;
+      if (emailVerificationStats.auto_suspended > 0) {
+        tgMessage += `• ⚠️ Auto-suspended (48h): ${emailVerificationStats.auto_suspended}\n`;
+      }
+      if (emailVerificationStats.overnight_sent > 0 || emailVerificationStats.overnight_verified > 0) {
+        tgMessage += `• Overnight: ${emailVerificationStats.overnight_sent} sent, ${emailVerificationStats.overnight_verified} verified\n`;
+      }
+      const tr = emailVerificationStats.tracking;
+      if (tr && tr.overnight_emails_sent > 0) {
+        tgMessage += `• Tracking: ${tr.overnight_emails_sent} emails → ${tr.open_rate_pct}% opened, ${tr.click_rate_pct}% clicked\n`;
+      }
+      tgMessage += `\n`;
+    }
+
+    // Telegram Bot section
+    if (telegramBotStats.overnight_interactions > 0 || telegramBotStats.overnight_new_users > 0) {
+      tgMessage += `🤖 **Telegram Bot**\n`;
+      tgMessage += `• Overnight: ${telegramBotStats.overnight_interactions} interactions | ${telegramBotStats.overnight_active_users} active users\n`;
+      if (telegramBotStats.overnight_new_users > 0) {
+        tgMessage += `• 🆕 New bot users: ${telegramBotStats.overnight_new_users}\n`;
+        for (const u of (telegramBotStats.overnight_new_user_details || []).slice(0, 5)) {
+          tgMessage += `  → ${u.username ? '@' + u.username : u.telegram_user_id}\n`;
+        }
+      }
+      if (telegramBotStats.top_commands?.length > 0) {
+        const topCmds = telegramBotStats.top_commands.slice(0, 5).map((c: any) => `${c.command}:${c.count}`).join(', ');
+        tgMessage += `• Top commands: ${topCmds}\n`;
+      }
+      if (telegramBotStats.error_count > 0) {
+        tgMessage += `• ⚠️ Errors: ${telegramBotStats.error_count}\n`;
+      }
+      tgMessage += `\n`;
+    }
 
     // API Overview
     tgMessage += `📊 **API Overview** (${totalApiCalls} total calls)\n`;
