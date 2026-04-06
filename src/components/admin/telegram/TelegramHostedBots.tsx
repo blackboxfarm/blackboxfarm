@@ -126,6 +126,7 @@ export function TelegramHostedBots() {
                   <TableHead>Group / Channel</TableHead>
                   <TableHead>Visibility</TableHead>
                   <TableHead>Installed By</TableHead>
+                  <TableHead>X Profile</TableHead>
                   <TableHead>Web Account</TableHead>
                   <TableHead className="text-center">Members</TableHead>
                   <TableHead className="text-center">Bot Users</TableHead>
