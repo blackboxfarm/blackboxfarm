@@ -45,6 +45,7 @@ export default function HoldersIntelTab() {
         <TabsTrigger value="tg-commands">🤖 TG Commands</TabsTrigger>
         <TabsTrigger value="boosts">🚀 Boosts</TabsTrigger>
         <TabsTrigger value="journeys">🗺️ User Journeys</TabsTrigger>
+        <TabsTrigger value="email-tracking">📧 Email Tracking</TabsTrigger>
       </TabsList>
 
       <TabsContent value="subscribers">
@@ -97,6 +98,9 @@ export default function HoldersIntelTab() {
       </TabsContent>
       <TabsContent value="journeys">
         {activeSubTab === "journeys" && <Suspense fallback={<LazyLoader />}><UserJourneyDashboard /></Suspense>}
+      </TabsContent>
+      <TabsContent value="email-tracking">
+        {activeSubTab === "email-tracking" && <Suspense fallback={<LazyLoader />}><EmailTrackingDashboard /></Suspense>}
       </TabsContent>
     </Tabs>
   );
