@@ -12753,6 +12753,39 @@ export type Database = {
           },
         ]
       }
+      telegram_group_messages: {
+        Row: {
+          chat_id: number
+          created_at: string
+          display_name: string | null
+          id: string
+          message_id: number | null
+          message_text: string | null
+          telegram_user_id: string
+          username: string | null
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          message_id?: number | null
+          message_text?: string | null
+          telegram_user_id: string
+          username?: string | null
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          message_id?: number | null
+          message_text?: string | null
+          telegram_user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       telegram_link_codes: {
         Row: {
           created_at: string
