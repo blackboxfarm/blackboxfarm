@@ -44,6 +44,7 @@ interface GroupInfo {
   unique_users: number;
   unique_tokens: number;
   top_commands: Record<string, number>;
+  admin_config: AdminConfig | null;
   first_seen: string;
   last_seen: string;
 }
