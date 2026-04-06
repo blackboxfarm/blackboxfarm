@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatDistanceToNow } from 'date-fns';
 import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard, WhaleLeaderboard, TelegramBotApiStatusCard, TelegramInteractionsPanel, ChannelMembersDashboard, TelegramHostedBots } from './telegram';
+import { TelegramAnnouncementBox } from './telegram/TelegramAnnouncementBox';
 import type { TelegramTarget } from './telegram';
 import { TelegramBroadcastToggle } from './TelegramBroadcastToggle';
 
@@ -1442,11 +1443,13 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
         </TabsContent>
         {/* Accounts Tab */}
         <TabsContent value="accounts" className="space-y-4">
+          <TelegramAnnouncementBox audience="accounts" />
           <TelegramInteractionsPanel />
           <ChannelMembersDashboard />
         </TabsContent>
         {/* Hosted Tab */}
         <TabsContent value="hosted" className="space-y-4">
+          <TelegramAnnouncementBox audience="hosted" />
           <TelegramHostedBots />
         </TabsContent>
       </Tabs>
