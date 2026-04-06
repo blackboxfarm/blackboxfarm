@@ -30,6 +30,19 @@ const RATE_LIMITS: Record<string, number> = {
 // ─── Tagline appended to every analytical reply ───
 const TAGLINE = `\n\n🌐 [blackbox.farm/tgbot](https://blackbox.farm/tgbot)`;
 
+// ─── Default admin config — single source of truth for all installations ───
+const DEFAULT_ADMIN_CONFIG = {
+  delay_ms: 3000,
+  verbose: false,
+  admin_only_commands: false,
+  enabled_tiers: [] as string[],
+  dev_wallet_alerts: false,
+};
+
+// Helper: merge DB config with defaults so missing fields always have a value
+function resolveAdminConfig(raw: any): typeof DEFAULT_ADMIN_CONFIG {
+  return { ...DEFAULT_ADMIN_CONFIG, ...(raw || {}) };
+}
 // ─── AI Verdict System (retained internally, removed from UI) ───
 
 const VERDICT_SYSTEM_PROMPT = `You are a crypto trading analyst for Solana memecoins. Given token metrics, produce a single actionable trading verdict.
