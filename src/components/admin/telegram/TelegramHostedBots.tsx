@@ -88,10 +88,13 @@ export function TelegramHostedBots() {
     setChatModal({ chatId, title });
     setChatLoading(true);
     try {
+      const numericChatId = Number(chatId);
       const { data, error } = await supabase
         .from('telegram_group_messages')
         .select('id, username, display_name, message_text, created_at')
-        .eq('chat_id', chatId)
+        .eq('chat_id', numericChatId)
+        .order('created_at', { ascending: false })
+        .limit(200);
         .order('created_at', { ascending: false })
         .limit(200);
       if (error) throw error;
