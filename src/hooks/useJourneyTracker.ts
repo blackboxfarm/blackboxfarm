@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRoles } from '@/hooks/useUserRoles';
 
 // Persistent session ID per browser tab
 const SESSION_ID = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
