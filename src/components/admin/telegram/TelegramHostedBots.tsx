@@ -40,6 +40,7 @@ interface HostedGroup {
 export function TelegramHostedBots() {
   const [groups, setGroups] = useState<HostedGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -53,6 +54,21 @@ export function TelegramHostedBots() {
       console.error('Error loading hosted groups:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const scanXProfiles = async () => {
+    setIsScanning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-installer-x-profiles');
+      if (error) throw error;
+      console.log('X profile scan results:', data);
+      // Reload data to show new X profiles
+      await loadData();
+    } catch (err) {
+      console.error('Error scanning X profiles:', err);
+    } finally {
+      setIsScanning(false);
     }
   };
 
@@ -80,8 +96,13 @@ export function TelegramHostedBots() {
             Live data from Telegram API — who installed the bot, where, and usage stats
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading}>
-          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={scanXProfiles} disabled={isScanning}>
+            {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <span className="mr-1">𝕏</span>}
+            {isScanning ? 'Scanning...' : 'Scan X Profiles'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading}>
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
         </Button>
       </div>
 
