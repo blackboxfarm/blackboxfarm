@@ -2856,14 +2856,28 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     const chatType = message.chat.type;
     const isGroupChat = chatType === 'group' || chatType === 'supergroup';
     const telegramUserId = String(message.from.id);
-    const dmChatId = Number(telegramUserId); // user's DM chat ID = their telegram user ID
+    const dmChatId = Number(telegramUserId);
     const username = message.from.username || null;
-    const text = message.text.trim();
     const messageId = message.message_id;
 
-    const [rawCommand, ...argParts] = text.split(/\s+/);
-    const command = rawCommand.toLowerCase().replace(/@\w+$/, "");
-    const args = argParts.join(" ");
+    // === SECOND-LAYER INPUT SANITIZATION ===
+    const sanitized = sanitizeTelegramInput(message.text);
+    const command = sanitized.command;
+    const args = sanitized.args;
+
+    if (!isInputSafeToProcess(sanitized)) {
+      console.warn("[bot] BLOCKED suspicious input", JSON.stringify({
+        chatId, telegramUserId, flags: sanitized.flags,
+        rawPreview: sanitized.rawTruncated.slice(0, 80),
+      }));
+      return new Response("OK");
+    }
+
+    if (sanitized.suspicious) {
+      console.warn("[bot] ⚠️ suspicious input (processing with caution)", JSON.stringify({
+        chatId, telegramUserId, flags: sanitized.flags,
+      }));
+    }
 
     fallbackChatId = chatId;
     fallbackMessageId = messageId;
@@ -2877,6 +2891,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
       command,
       argsLength: args.length,
       isGroupChat,
+      sanitizerFlags: sanitized.flags.length > 0 ? sanitized.flags : undefined,
     }));
 
     // Commands that are allowed to reply publicly in groups

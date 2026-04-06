@@ -42,10 +42,25 @@ Deno.serve(withRunLog('telegram-bot-webhook', async (req) => {
     const chatId = message.chat.id;
     const telegramUserId = message.from.id.toString();
     const username = message.from.username || message.from.first_name || 'Unknown';
-    const text = message.text.trim();
-    const lowerText = text.toLowerCase();
-    const parts = lowerText.split(' ');
-    const command = parts[0];
+
+    // === SECOND-LAYER INPUT SANITIZATION ===
+    const sanitized = sanitizeTelegramInput(message.text);
+    const command = sanitized.command;
+    const args = sanitized.args;
+
+    if (!isInputSafeToProcess(sanitized)) {
+      console.warn("[TELEGRAM-BOT] BLOCKED suspicious input", JSON.stringify({
+        chatId, telegramUserId, flags: sanitized.flags,
+        rawPreview: sanitized.rawTruncated.slice(0, 80),
+      }));
+      return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
+    }
+
+    if (sanitized.suspicious) {
+      console.warn("[TELEGRAM-BOT] ⚠️ suspicious input detected", JSON.stringify({
+        chatId, telegramUserId, flags: sanitized.flags,
+      }));
+    }
 
     // === RESOLVE USER TIER ===
     const { tier, userId, linkData } = await resolveUserTier(supabase, telegramUserId);
