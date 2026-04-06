@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Globe, FileText, BookOpen, Upload, RotateCcw, Save, Trash2, Plus, ExternalLink, Shield } from 'lucide-react';
+import { Globe, FileText, BookOpen, Upload, RotateCcw, Save, Trash2, Plus, ExternalLink, Shield, GalleryHorizontal, Crop } from 'lucide-react';
+import { GalleryPickerButton } from './social/GalleryPickerButton';
+import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 
 interface MetaTagEntry {
   id?: string;
@@ -481,6 +483,58 @@ function MetaTagForm({
   onImageUpload: (e: React.ChangeEvent<HTMLInputElement>, field: 'og_image_url' | 'twitter_image') => void;
   uploading: boolean;
 }) {
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [showCrop, setShowCrop] = useState(false);
+  const [cropTarget, setCropTarget] = useState<'og_image_url' | 'twitter_image'>('og_image_url');
+  const ogFileRef = useRef<HTMLInputElement>(null);
+  const twFileRef = useRef<HTMLInputElement>(null);
+
+  const handleFileWithCrop = (e: React.ChangeEvent<HTMLInputElement>, target: 'og_image_url' | 'twitter_image') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCropTarget(target);
+    setCropSrc(URL.createObjectURL(file));
+    setShowCrop(true);
+    e.target.value = '';
+  };
+
+  const handleCropComplete = async (blobUrl: string, blob: Blob) => {
+    URL.revokeObjectURL(blobUrl);
+    try {
+      const ext = 'jpg';
+      const fileName = `meta-tags/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from('social-gallery').upload(fileName, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('social-gallery').getPublicUrl(fileName);
+      onChange(cropTarget, urlData.publicUrl);
+    } catch (err: any) {
+      console.error('Crop upload failed:', err);
+    }
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
+  };
+
+  const handleGallerySelect = (url: string, target: 'og_image_url' | 'twitter_image') => {
+    onChange(target, url);
+  };
+
+  const ImageField = ({ field, label, sublabel }: { field: 'og_image_url' | 'twitter_image'; label: string; sublabel?: string }) => (
+    <div>
+      <label className="text-xs text-muted-foreground">{label} {sublabel && <span className="text-muted-foreground/60">{sublabel}</span>}</label>
+      <div className="flex gap-2 items-center">
+        <Input value={entry[field] || ''} onChange={e => onChange(field, e.target.value)} placeholder="https://..." className="flex-1" />
+        <input ref={field === 'og_image_url' ? ogFileRef : twFileRef} type="file" accept="image/*" className="hidden" onChange={e => handleFileWithCrop(e, field)} />
+        <Button variant="outline" size="sm" onClick={() => (field === 'og_image_url' ? ogFileRef : twFileRef).current?.click()} disabled={uploading}>
+          <Upload className="h-3.5 w-3.5 mr-1" />{uploading ? '...' : 'Upload'}
+        </Button>
+        <GalleryPickerButton onSelect={(url) => handleGallerySelect(url, field)} label="Gallery" />
+      </div>
+      {entry[field] && (
+        <img src={entry[field]!} alt={label} className="mt-2 h-16 w-28 rounded border border-border/30 object-cover" />
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* OG Tags */}
@@ -502,21 +556,7 @@ function MetaTagForm({
           <label className="text-xs text-muted-foreground">OG Description</label>
           <Textarea value={entry.og_description || ''} onChange={e => onChange('og_description', e.target.value)} placeholder="Description for social shares (max 200 chars)" className="min-h-[60px]" />
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">OG Image</label>
-          <div className="flex gap-2 items-center">
-            <Input value={entry.og_image_url || ''} onChange={e => onChange('og_image_url', e.target.value)} placeholder="https://..." className="flex-1" />
-            <label className="cursor-pointer">
-              <input type="file" accept="image/*" className="hidden" onChange={e => onImageUpload(e, 'og_image_url')} />
-              <Button variant="outline" size="sm" asChild disabled={uploading}>
-                <span><Upload className="h-3.5 w-3.5 mr-1" />{uploading ? '...' : 'Upload'}</span>
-              </Button>
-            </label>
-          </div>
-          {entry.og_image_url && (
-            <img src={entry.og_image_url} alt="OG" className="mt-2 h-16 w-28 rounded border border-border/30 object-cover" />
-          )}
-        </div>
+        <ImageField field="og_image_url" label="OG Image" />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-muted-foreground">OG Type</label>
@@ -559,22 +599,20 @@ function MetaTagForm({
           <label className="text-xs text-muted-foreground">Twitter Description <span className="text-muted-foreground/60">(blank = uses OG description)</span></label>
           <Textarea value={entry.twitter_description || ''} onChange={e => onChange('twitter_description', e.target.value)} placeholder="Leave blank to use OG description" className="min-h-[60px]" />
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Twitter Image <span className="text-muted-foreground/60">(blank = uses OG image)</span></label>
-          <div className="flex gap-2 items-center">
-            <Input value={entry.twitter_image || ''} onChange={e => onChange('twitter_image', e.target.value)} placeholder="Leave blank to use OG image" className="flex-1" />
-            <label className="cursor-pointer">
-              <input type="file" accept="image/*" className="hidden" onChange={e => onImageUpload(e, 'twitter_image')} />
-              <Button variant="outline" size="sm" asChild disabled={uploading}>
-                <span><Upload className="h-3.5 w-3.5 mr-1" />{uploading ? '...' : 'Upload'}</span>
-              </Button>
-            </label>
-          </div>
-          {entry.twitter_image && (
-            <img src={entry.twitter_image} alt="Twitter" className="mt-2 h-16 w-28 rounded border border-border/30 object-cover" />
-          )}
-        </div>
+        <ImageField field="twitter_image" label="Twitter Image" sublabel="(blank = uses OG image)" />
       </div>
+
+      {/* Crop Dialog */}
+      {cropSrc && (
+        <ImageCropDialog
+          open={showCrop}
+          onOpenChange={(open) => { setShowCrop(open); if (!open) { URL.revokeObjectURL(cropSrc); setCropSrc(null); } }}
+          imageSrc={cropSrc}
+          onCropComplete={handleCropComplete}
+          defaultAspect={2}
+          title="Crop Image for Meta Tags"
+        />
+      )}
     </div>
   );
 }
