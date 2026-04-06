@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RefreshCw, Loader2, Users, Calendar, MessageSquare, ExternalLink, Lock, Globe, User, Mail } from 'lucide-react';
+import { RefreshCw, Loader2, Users, Calendar, MessageSquare, ExternalLink, Lock, Globe, User, Mail, Timer, MessageCircle, Shield, AlertTriangle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDistanceToNow, format } from 'date-fns';
 
 interface HostedGroup {
