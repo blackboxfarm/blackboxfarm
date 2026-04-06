@@ -12792,6 +12792,7 @@ export type Database = {
           id: string
           link_code: string
           linked_at: string | null
+          selected_channel_id: number | null
           telegram_user_id: string | null
           telegram_username: string | null
           tier_at_link: string | null
@@ -12803,6 +12804,7 @@ export type Database = {
           id?: string
           link_code: string
           linked_at?: string | null
+          selected_channel_id?: number | null
           telegram_user_id?: string | null
           telegram_username?: string | null
           tier_at_link?: string | null
@@ -12814,6 +12816,7 @@ export type Database = {
           id?: string
           link_code?: string
           linked_at?: string | null
+          selected_channel_id?: number | null
           telegram_user_id?: string | null
           telegram_username?: string | null
           tier_at_link?: string | null
