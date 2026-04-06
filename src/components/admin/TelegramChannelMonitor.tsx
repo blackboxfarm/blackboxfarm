@@ -1445,12 +1445,12 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
         <TabsContent value="accounts" className="space-y-4">
           <TelegramAnnouncementBox audience="accounts" />
           <TelegramInteractionsPanel />
-          <ChannelMembersDashboard />
         </TabsContent>
         {/* Hosted Tab */}
         <TabsContent value="hosted" className="space-y-4">
           <TelegramAnnouncementBox audience="hosted" />
           <TelegramHostedBots />
+          <ChannelMembersDashboard />
         </TabsContent>
       </Tabs>
     </div>
