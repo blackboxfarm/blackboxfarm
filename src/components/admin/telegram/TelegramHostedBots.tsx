@@ -331,6 +331,45 @@ export function TelegramHostedBots() {
                         </Button>
                       </TableCell>
 
+                      {/* Admin Config Icons */}
+                      <TableCell>
+                        {g.admin_config ? (
+                          <TooltipProvider delayDuration={200}>
+                            <div className="flex items-center gap-1.5">
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                    <Timer className="w-3 h-3" />
+                                    <span>{(g.admin_config.delay_ms / 1000).toFixed(1)}s</span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Response delay: {g.admin_config.delay_ms}ms</p></TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <MessageCircle className={`w-3 h-3 ${g.admin_config.verbose ? 'text-green-500' : 'text-muted-foreground/50'}`} />
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>{g.admin_config.verbose ? 'Verbose (long-form)' : 'Terse (short-form)'}</p></TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Shield className={`w-3 h-3 ${g.admin_config.admin_only_commands ? 'text-yellow-500' : 'text-muted-foreground/50'}`} />
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>{g.admin_config.admin_only_commands ? 'Admin-only commands' : 'All members can use commands'}</p></TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <AlertTriangle className={`w-3 h-3 ${g.admin_config.dev_wallet_alerts ? 'text-red-500' : 'text-muted-foreground/50'}`} />
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Dev wallet alerts: {g.admin_config.dev_wallet_alerts ? 'ON' : 'OFF'}</p></TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TooltipProvider>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Default</span>
+                        )}
+                      </TableCell>
+
                       {/* Status */}
                       <TableCell>
                         {g.kicked ? (
