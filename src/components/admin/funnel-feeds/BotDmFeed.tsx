@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, MessageSquare, Users } from "lucide-react";
 
 interface BotInteraction {
@@ -14,10 +14,11 @@ interface BotInteraction {
   chat_title: string | null;
   chat_id: number | null;
   command: string | null;
-  args_preview: string | null;
   response_status: string | null;
   created_at: string;
-  // joined from post queue
+  // resolved
+  symbol?: string | null;
+  name?: string | null;
   queue_status?: string | null;
 }
 
@@ -28,6 +29,7 @@ const statusColors: Record<string, string> = {
   failed: 'bg-red-500/20 text-red-400',
   skipped: 'bg-muted text-muted-foreground',
   success: 'bg-green-500/20 text-green-400',
+  expired: 'bg-orange-500/20 text-orange-400',
   error: 'bg-red-500/20 text-red-400',
 };
 
@@ -39,14 +41,15 @@ export function BotDmFeed() {
   const fetchEntries = async () => {
     setLoading(true);
 
-    // Fetch token interactions from telegram_bot_interactions
+    // Fetch token interactions, excluding system_reset
     const { data: interactions } = await supabase
       .from('telegram_bot_interactions')
-      .select('id, token_mint, telegram_username, chat_type, chat_title, chat_id, command, args_preview, response_status, created_at')
+      .select('id, token_mint, telegram_username, chat_type, chat_title, chat_id, command, response_status, created_at')
       .not('token_mint', 'is', null)
       .neq('token_mint', '')
+      .neq('telegram_username', 'system_reset')
       .order('created_at', { ascending: false })
-      .limit(500);
+      .limit(1000);
 
     if (!interactions || interactions.length === 0) {
       setAllEntries([]);
@@ -54,12 +57,30 @@ export function BotDmFeed() {
       return;
     }
 
-    // Get unique mints to check post queue status
-    const mints = [...new Set(interactions.map(i => i.token_mint))];
+    // Deduplicate by token_mint — keep earliest occurrence per mint
+    const seenMints = new Map<string, typeof interactions[0]>();
+    for (const i of interactions) {
+      if (!seenMints.has(i.token_mint)) {
+        seenMints.set(i.token_mint, i);
+      }
+    }
+    const unique = Array.from(seenMints.values());
+
+    // Resolve symbols from token_lifecycle
+    const mints = unique.map(u => u.token_mint);
+    const { data: tokenData } = await supabase
+      .from('token_lifecycle')
+      .select('token_mint, symbol, name')
+      .in('token_mint', mints.slice(0, 500));
+
+    const tokenMap = new Map<string, { symbol: string | null; name: string | null }>();
+    tokenData?.forEach(t => tokenMap.set(t.token_mint, { symbol: t.symbol, name: t.name }));
+
+    // Check post queue status
     const { data: queueEntries } = await supabase
       .from('holders_intel_post_queue')
       .select('token_mint, status')
-      .in('token_mint', mints.slice(0, 200));
+      .in('token_mint', mints.slice(0, 500));
 
     const queueMap = new Map<string, string>();
     queueEntries?.forEach(q => {
@@ -69,10 +90,15 @@ export function BotDmFeed() {
       }
     });
 
-    const merged: BotInteraction[] = interactions.map(i => ({
-      ...i,
-      queue_status: queueMap.get(i.token_mint) || null,
-    }));
+    const merged: BotInteraction[] = unique.map(i => {
+      const resolved = tokenMap.get(i.token_mint);
+      return {
+        ...i,
+        symbol: resolved?.symbol || null,
+        name: resolved?.name || null,
+        queue_status: queueMap.get(i.token_mint) || null,
+      };
+    });
 
     setAllEntries(merged);
     setLoading(false);
@@ -82,7 +108,6 @@ export function BotDmFeed() {
 
   const dmEntries = allEntries.filter(e => e.chat_type === 'private');
   const groupEntries = allEntries.filter(e => e.chat_type !== 'private');
-
   const filtered = subTab === 'dm' ? dmEntries : subTab === 'groups' ? groupEntries : allEntries;
 
   const shortMint = (m: string) => `${m.slice(0, 6)}…${m.slice(-4)}`;
@@ -95,28 +120,23 @@ export function BotDmFeed() {
     return `${Math.floor(mins / 1440)}d`;
   };
 
+  const formatSymbol = (e: BotInteraction) => {
+    if (e.symbol && e.symbol !== '-' && e.symbol !== 'No Symbol') {
+      return e.symbol.startsWith('$') ? e.symbol : `$${e.symbol}`;
+    }
+    return '—';
+  };
+
   const getSourceLabel = (e: BotInteraction) => {
     if (e.chat_type === 'private') return 'DM';
     return e.chat_title || `Group ${e.chat_id}`;
-  };
-
-  const getSourceIcon = (e: BotInteraction) => {
-    if (e.chat_type === 'private') return <MessageSquare className="h-3 w-3" />;
-    return <Users className="h-3 w-3" />;
-  };
-
-  // Extract symbol from args_preview if possible
-  const extractSymbol = (e: BotInteraction) => {
-    if (!e.args_preview) return null;
-    const match = e.args_preview.match(/\$([A-Za-z0-9]+)/);
-    return match ? `$${match[1]}` : null;
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {allEntries.length} token interactions — {dmEntries.length} DMs, {groupEntries.length} group/channel
+          {allEntries.length} unique tokens — {dmEntries.length} via DM, {groupEntries.length} via groups/channels
         </p>
         <Button onClick={fetchEntries} size="sm" variant="outline" disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
@@ -154,7 +174,8 @@ export function BotDmFeed() {
               {filtered.map(e => (
                 <TableRow key={e.id}>
                   <TableCell compact className="font-medium text-sm">
-                    {extractSymbol(e) || '—'}
+                    {formatSymbol(e)}
+                    {e.name && <span className="text-muted-foreground ml-1 text-xs">{e.name}</span>}
                   </TableCell>
                   <TableCell compact>
                     <a href={`https://dexscreener.com/solana/${e.token_mint}`} target="_blank" rel="noopener noreferrer"
@@ -164,7 +185,7 @@ export function BotDmFeed() {
                   </TableCell>
                   <TableCell compact>
                     <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
-                      {getSourceIcon(e)}
+                      {e.chat_type === 'private' ? <MessageSquare className="h-3 w-3" /> : <Users className="h-3 w-3" />}
                       {e.chat_type === 'private' ? 'DM' : (
                         <span className="max-w-[120px] truncate" title={getSourceLabel(e)}>
                           {getSourceLabel(e)}
