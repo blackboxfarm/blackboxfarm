@@ -11,6 +11,7 @@ import { PasswordResetModal } from './PasswordResetModal';
 import { OAuthButtons } from './OAuthButtons';
 import { OTPVerification } from './OTPVerification';
 import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSelect';
+import { useSignupProtection } from '@/hooks/useSignupProtection';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AuthModalProps {
@@ -39,6 +40,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [referralSource, setReferralSource] = useState('');
   const [referralSourceOther, setReferralSourceOther] = useState('');
+  const { honeypotProps, isBot, isTooFast, formRenderedAt } = useSignupProtection();
   
   const { signIn, signUp } = useAuth();
   const { toast } = useToast();
@@ -100,6 +102,20 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Bot detection: honeypot field filled
+    if (isBot()) {
+      // Silently pretend success to not alert the bot
+      toast({ title: "Account Created!", description: "Please check your email to verify your account." });
+      return;
+    }
+    
+    // Bot detection: form completed too fast (< 3 seconds)
+    if (isTooFast()) {
+      toast({ title: "Please slow down", description: "Please take a moment to fill out the form carefully.", variant: "destructive" });
+      return;
+    }
+    
     if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
         title: "Sign Up Failed",
@@ -289,6 +305,8 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
 
           <TabsContent value="signup" className="space-y-4">
             <form onSubmit={handleSignUp} className="space-y-4">
+              {/* Honeypot field - invisible to humans, bots fill it */}
+              <input {...honeypotProps} type="text" aria-hidden="true" />
               <div className="space-y-2">
                 <Label htmlFor="signup-email" className="text-foreground">Email</Label>
                 <div className="relative">

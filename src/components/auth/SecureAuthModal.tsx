@@ -12,6 +12,7 @@ import { EmailVerificationModal } from './EmailVerificationModal';
 import { InputValidator, ValidationRules } from '@/components/security/InputValidator';
 import { OAuthButtons } from './OAuthButtons';
 import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSelect';
+import { useSignupProtection } from '@/hooks/useSignupProtection';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -34,6 +35,7 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [referralSource, setReferralSource] = useState('');
   const [referralSourceOther, setReferralSourceOther] = useState('');
+  const { honeypotProps, isBot, isTooFast, formRenderedAt } = useSignupProtection();
   
   const { signIn, signUp, isRateLimited, rateLimitState } = useSecureAuth();
   const { toast } = useToast();
@@ -63,6 +65,19 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Bot detection: honeypot field filled
+    if (isBot()) {
+      toast({ title: "Account Created!", description: "Please check your email to verify your account." });
+      return;
+    }
+    
+    // Bot detection: form completed too fast (< 3 seconds)
+    if (isTooFast()) {
+      toast({ title: "Please slow down", description: "Please take a moment to fill out the form carefully.", variant: "destructive" });
+      return;
+    }
+    
     if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
         title: "Sign Up Failed",
@@ -246,6 +261,8 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
 
           <TabsContent value="signup" className="space-y-4">
             <form onSubmit={handleSignUp} className="space-y-4">
+              {/* Honeypot field - invisible to humans, bots fill it */}
+              <input {...honeypotProps} type="text" aria-hidden="true" />
               <div className="space-y-2">
                 <Label htmlFor="signup-email" className="text-foreground">Email</Label>
                 <InputValidator

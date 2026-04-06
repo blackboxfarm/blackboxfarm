@@ -17185,6 +17185,10 @@ export type Database = {
         Returns: Json
       }
       archive_old_morning_reports: { Args: never; Returns: number }
+      ban_user: {
+        Args: { ban_until?: string; target_user_id: string }
+        Returns: undefined
+      }
       bulk_prune_table: {
         Args: { p_column: string; p_cutoff: string; p_table: string }
         Returns: number
@@ -17567,6 +17571,7 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_user_banned: { Args: { target_user_id: string }; Returns: boolean }
       log_auth_failure: {
         Args: { client_info?: Json; failure_reason: string; user_email: string }
         Returns: undefined
@@ -17621,6 +17626,7 @@ export type Database = {
         Returns: Json
       }
       track_user_login: { Args: { p_user_id: string }; Returns: undefined }
+      unban_user: { Args: { target_user_id: string }; Returns: undefined }
       validate_profile_access: {
         Args: { target_user_id: string }
         Returns: boolean
