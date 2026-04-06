@@ -5,8 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, UserPlus, UserMinus, Bot, Users } from "lucide-react";
+import { Loader2, RefreshCw, UserPlus, UserMinus, Bot, Users, ExternalLink, Mail } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+
+interface LinkedProfile {
+  id: string;
+  display_name: string | null;
+  oauth_provider: string | null;
+  oauth_username: string | null;
+  email?: string;
+}
 
 interface BotInteraction {
   id: string;
