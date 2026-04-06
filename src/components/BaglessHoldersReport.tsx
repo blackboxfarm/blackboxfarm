@@ -638,7 +638,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         onReportGenerated(tokenMint.trim());
       }
       // Silently queue token to post pipeline from /holders
-      queueTokenFromFrontend(tokenMint.trim(), 'public_query', {
+      queueTokenFromFrontend(tokenMint.trim(), 'holders_input', {
         comment: '/holders report generated',
       });
       
