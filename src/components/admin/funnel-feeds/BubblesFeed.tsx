@@ -34,7 +34,7 @@ export function BubblesFeed() {
     const { data } = await supabase
       .from('holders_intel_post_queue')
       .select('id, token_mint, symbol, name, status, trigger_source, trigger_comment, scheduled_at, posted_at')
-      .or('trigger_source.ilike.%bubble%,trigger_source.ilike.%holder%,trigger_source.eq.public_query,trigger_source.eq.subscriber_query,trigger_source.eq.bubblemap_query')
+      .or('trigger_source.eq.bubblemap_input,trigger_source.eq.bubblemap_query,trigger_source.eq.subscriber_query,trigger_comment.ilike.%bubblemap%')
       .order('scheduled_at', { ascending: false })
       .limit(200);
 
