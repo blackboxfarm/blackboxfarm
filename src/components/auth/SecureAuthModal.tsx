@@ -11,7 +11,9 @@ import { PasswordResetModal } from './PasswordResetModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
 import { InputValidator, ValidationRules } from '@/components/security/InputValidator';
 import { OAuthButtons } from './OAuthButtons';
+import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSelect';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SecureAuthModalProps {
   isOpen: boolean;
@@ -30,6 +32,8 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const [verificationEmail, setVerificationEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [referralSource, setReferralSource] = useState('');
+  const [referralSourceOther, setReferralSourceOther] = useState('');
   
   const { signIn, signUp, isRateLimited, rateLimitState } = useSecureAuth();
   const { toast } = useToast();
@@ -59,7 +63,7 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || password !== confirmPassword) {
+    if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
         title: "Sign Up Failed",
         description: "Please check your email and password fields",
@@ -69,6 +73,7 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
     }
 
     setLoading(true);
+    const refValue = getReferralSourceValue(referralSource, referralSourceOther);
     const { error } = await signUp(email, password);
     
     if (error) {
@@ -78,6 +83,13 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
         variant: "destructive"
       });
     } else {
+      // Save referral source
+      if (refValue) {
+        const { data: { user: newUser } } = await supabase.auth.getUser();
+        if (newUser) {
+          await supabase.from('profiles').update({ referral_source: refValue } as any).eq('id', newUser.id);
+        }
+      }
       setVerificationEmail(email);
       setShowEmailVerification(true);
       toast({
@@ -325,10 +337,18 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
                 </InputValidator>
               </div>
 
+              <ReferralSourceSelect
+                value={referralSource}
+                otherValue={referralSourceOther}
+                onChange={setReferralSource}
+                onOtherChange={setReferralSourceOther}
+                disabled={loading || isRateLimited}
+              />
+
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited}
+                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || !referralSource || (referralSource === 'other' && !referralSourceOther.trim())}
               >
                 {loading ? (
                   <>

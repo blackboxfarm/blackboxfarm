@@ -13,6 +13,7 @@ import { UserRolesProvider } from "@/contexts/UserRolesContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { useDomainRedirect } from "@/hooks/useDomainRedirect";
 import { SuperAdminRoute } from "@/components/guards/SuperAdminRoute";
+import { JourneyTrackerProvider } from "@/components/JourneyTrackerProvider";
 
 // Lazy load all pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
@@ -91,6 +92,7 @@ const App = () => {
               <Toaster />
               <Sonner />
               <BrowserRouter>
+                <JourneyTrackerProvider />
                 <ScrollToTop />
                 <div className="flex-1">
                   <Suspense fallback={<PageLoader />}>

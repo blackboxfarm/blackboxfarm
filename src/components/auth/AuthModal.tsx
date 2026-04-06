@@ -10,6 +10,7 @@ import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
 import { OAuthButtons } from './OAuthButtons';
 import { OTPVerification } from './OTPVerification';
+import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSelect';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AuthModalProps {
@@ -36,6 +37,8 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
   const [otpEmail, setOtpEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [referralSource, setReferralSource] = useState('');
+  const [referralSourceOther, setReferralSourceOther] = useState('');
   
   const { signIn, signUp } = useAuth();
   const { toast } = useToast();
@@ -97,7 +100,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || password !== confirmPassword) {
+    if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
         title: "Sign Up Failed",
         description: "Please check your email and password fields",
@@ -107,6 +110,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
     }
 
     setLoading(true);
+    const refValue = getReferralSourceValue(referralSource, referralSourceOther);
     const { error } = await signUp(email, password);
     
     if (error) {
@@ -127,6 +131,13 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
         });
       }
     } else {
+      // Save referral source to profile
+      if (refValue) {
+        const { data: { user: newUser } } = await supabase.auth.getUser();
+        if (newUser) {
+          await supabase.from('profiles').update({ referral_source: refValue } as any).eq('id', newUser.id);
+        }
+      }
       toast({
         title: "Account Created!",
         description: "You're signed in and can continue. You can verify your email later."
@@ -341,10 +352,18 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
                 </div>
               </div>
 
+              <ReferralSourceSelect
+                value={referralSource}
+                otherValue={referralSourceOther}
+                onChange={setReferralSource}
+                onOtherChange={setReferralSourceOther}
+                disabled={loading}
+              />
+
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || password !== confirmPassword}
+                disabled={loading || !email || !password || password !== confirmPassword || !referralSource || (referralSource === 'other' && !referralSourceOther.trim())}
               >
                 {loading ? (
                   <>
