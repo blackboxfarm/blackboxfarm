@@ -27,6 +27,10 @@ interface GroupInfo {
   installer_telegram_id: string | null;
   installer_oauth_provider: string | null;
   installer_oauth_username: string | null;
+  // X profile from scraping
+  installer_x_username: string | null;
+  installer_x_url: string | null;
+  installer_x_followers: number | null;
   // Stats from interactions
   total_interactions: number;
   unique_users: number;
