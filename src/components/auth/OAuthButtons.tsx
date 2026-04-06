@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { getOAuthRedirectUrl } from '@/lib/auth/getOAuthRedirect';
 
-type OAuthProvider = 'google' | 'twitter' | 'github';
+type OAuthProvider = 'google' | 'x' | 'github';
 
 interface OAuthButtonsProps {
   disabled?: boolean;
@@ -46,7 +46,7 @@ export const OAuthButtons = ({ disabled = false }: OAuthButtonsProps) => {
   const getProviderName = (provider: OAuthProvider) => {
     switch (provider) {
       case 'google': return 'Google';
-      case 'twitter': return 'X';
+      case 'x': return 'X';
       case 'github': return 'GitHub';
     }
   };
@@ -87,15 +87,15 @@ export const OAuthButtons = ({ disabled = false }: OAuthButtonsProps) => {
         )}
       </Button>
 
-      {/* X (Twitter) */}
+      {/* X */}
       <Button
         type="button"
         variant="outline"
         className="w-full"
-        onClick={() => handleOAuthSignIn('twitter')}
+        onClick={() => handleOAuthSignIn('x')}
         disabled={disabled || isLoading}
       >
-        {loadingProvider === 'twitter' ? (
+        {loadingProvider === 'x' ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
