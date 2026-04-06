@@ -3068,12 +3068,12 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           break;
         default:
           // Auto-detect registration codes
-          if (/^BF-[A-Z0-9]{6}$/i.test(text)) {
-            await handleRegister(chatId, telegramUserId, username, text);
+          if (/^BF-[A-Z0-9]{6}$/i.test(sanitized.rawTruncated)) {
+            await handleRegister(chatId, telegramUserId, username, sanitized.rawTruncated);
           }
           // Auto-detect Solana CAs in group chats (passive scan with 3s delay)
           else if (isGroupChat) {
-            const detectedCA = looksLikeSolanaCA(text);
+            const detectedCA = looksLikeSolanaCA(sanitized.rawTruncated);
             if (detectedCA) {
               await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
             }
