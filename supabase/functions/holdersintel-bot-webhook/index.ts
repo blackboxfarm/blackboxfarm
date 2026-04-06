@@ -2422,7 +2422,7 @@ async function handlePayment(chatId: number, telegramUserId: string, args: strin
   if (!isNaN(argNum) && args.trim()) {
     targetChatId = argNum;
   } else {
-    targetChatId = userSelectedChannel.get(telegramUserId) || null;
+    targetChatId = await getSelectedChannelId(telegramUserId);
   }
 
   if (!targetChatId) {
