@@ -450,19 +450,27 @@ export function AccountManagementDashboard() {
       (filterType === 'verified' && account.email_confirmed_at);
 
     return matchesSearch && matchesType;
+  }).sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    switch (sortField) {
+      case 'name': {
+        const nameA = (a.profile?.display_name || a.profile?.oauth_full_name || '').toLowerCase();
+        const nameB = (b.profile?.display_name || b.profile?.oauth_full_name || '').toLowerCase();
+        return dir * nameA.localeCompare(nameB);
+      }
+      case 'email':
+        return dir * a.email.toLowerCase().localeCompare(b.email.toLowerCase());
+      case 'status': {
+        const sA = a.email_confirmed_at ? 1 : 0;
+        const sB = b.email_confirmed_at ? 1 : 0;
+        return dir * (sA - sB);
+      }
+      case 'created_at':
+        return dir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      default:
+        return 0;
+    }
   });
-
-  const getProviderBadges = (account: UserAccount) => {
-    const providers = account.raw_app_meta_data?.providers || [];
-    return providers.map(provider => (
-      <Badge key={provider} variant="outline" className="text-xs">
-        {provider === 'google' && <Globe className="h-3 w-3 mr-1" />}
-        {provider === 'twitter' && <Twitter className="h-3 w-3 mr-1" />}
-        {provider === 'email' && <Mail className="h-3 w-3 mr-1" />}
-        {provider}
-      </Badge>
-    ));
-  };
 
   const stats = {
     total: accounts.length,
