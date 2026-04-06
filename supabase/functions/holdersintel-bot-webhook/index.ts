@@ -2056,8 +2056,25 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   const activated = await isGroupActivated(chatId);
   if (!activated) return; // silently ignore unactivated groups
 
-  // 3-second delay — let other bots (Phanes, BubbleMaps, etc.) reply first
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  // Dynamic delay from admin config — let other bots reply first
+  let delayMs = 3000; // fallback default
+  try {
+    const { data: instConfig } = await supabase
+      .from("channel_installations")
+      .select("admin_config")
+      .eq("chat_id", chatId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (instConfig?.admin_config) {
+      const cfg = instConfig.admin_config as any;
+      delayMs = typeof cfg.delay_ms === 'number' ? cfg.delay_ms : 3000;
+    }
+  } catch (e) {
+    console.log("[bot] Could not read delay config, using default 3000ms");
+  }
+  if (delayMs > 0) {
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
 
   // Fire a minimalist risk snippet (no gate check — this is a passive feature for activated groups)
   await logUsage(telegramUserId, "/autoscan", ca);
@@ -2200,8 +2217,23 @@ async function handleChannels(chatId: number, telegramUserId: string) {
 }
 
 // ─── /config — DM-only: Text-based channel config ───
-// State to track which channel a user is configuring
-const userSelectedChannel: Map<string, number> = new Map();
+// Persistent channel selection — stored in telegram_link_codes.selected_channel_id
+
+async function getSelectedChannelId(telegramUserId: string): Promise<number | null> {
+  const { data } = await supabase
+    .from("telegram_link_codes")
+    .select("selected_channel_id")
+    .eq("telegram_user_id", telegramUserId)
+    .maybeSingle();
+  return data?.selected_channel_id ?? null;
+}
+
+async function setSelectedChannelId(telegramUserId: string, chatId: number): Promise<void> {
+  await supabase
+    .from("telegram_link_codes")
+    .update({ selected_channel_id: chatId })
+    .eq("telegram_user_id", telegramUserId);
+}
 
 async function handleConfig(chatId: number, telegramUserId: string, args: string) {
   const linked = await getLinkedUser(telegramUserId);
@@ -2216,7 +2248,7 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
 
   // If no args, show usage + current selected channel config
   if (!setting) {
-    const selectedChatId = userSelectedChannel.get(telegramUserId);
+    const selectedChatId = await getSelectedChannelId(telegramUserId);
     let currentConfig = '';
     
     if (selectedChatId) {
@@ -2272,7 +2304,7 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
       return;
     }
 
-    userSelectedChannel.set(telegramUserId, targetChatId);
+    await setSelectedChannelId(telegramUserId, targetChatId);
     await sendMessage(chatId, `✅ Selected: *${inst.chat_title || targetChatId}*\n\nNow use \`/config delay 3000\`, \`/config verbose on\`, etc.`);
     return;
   }
