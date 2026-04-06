@@ -2686,6 +2686,7 @@ async function logBotInteraction(
   from: any,
   chatId: number,
   chatType: string,
+  chatTitle: string | null,
   command: string,
   args: string,
   tokenMint: string | null,
