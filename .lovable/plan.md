@@ -1,39 +1,113 @@
 
 
-## Fix X/Twitter OAuth Login
+## Two New Features: Referral Source Dropdown + User Journey Tracking
 
-### What's Wrong
+---
 
-1. **X Developer Console Website URL is wrong**: Shows `https://blackbox.farm/holders` instead of `https://blackbox.farm`. You should change this to `https://blackbox.farm` in the X Developer Console right now — it's a manual config fix, not code.
+### Feature 1: "How did you hear about us?" Dropdown
 
-2. **Zero successful X logins ever**: No Twitter-provider accounts exist in the database. Zero OAuth callback logs in Supabase. The flow is dying before reaching Supabase's callback.
+**What it does**: Adds a required dropdown to the sign-up form (in `AuthModal`) that captures how the user discovered BlackBox Farm. The answer is saved to the existing `referral_source` column on the `profiles` table (already exists, currently unused).
 
-3. **No OAuth error diagnostics**: When the X OAuth flow fails and redirects back with error params in the URL, the app silently ignores them. Users see nothing — just the login page again with no explanation.
+**Dropdown options**:
+- Scrolling X / Twitter
+- Friend or colleague
+- Telegram group or channel
+- Facebook
+- Instagram
+- Threads
+- Reddit
+- YouTube
+- Discord server
+- DexScreener / DexTools
+- Google search
+- Blog or news article
+- Podcast
+- TikTok
+- Other (free-text input appears)
 
-### The Fix (2 code changes + 1 manual config change)
+**Implementation**:
+1. **`src/components/auth/AuthModal.tsx`** — Add a `<Select>` dropdown below the Confirm Password field in the signup tab. State: `referralSource` + `referralSourceOther`. When "Other" is selected, show a text input. Disable the Create Account button until a selection is made.
+2. **`src/contexts/AuthContext.tsx`** — Extend `signUp()` to accept an optional `metadata` parameter. After successful signup, update the user's profile row with the `referral_source` value using `supabase.from('profiles').update({ referral_source }).eq('id', user.id)`.
+3. **`src/components/auth/SecureAuthModal.tsx`** — Apply the same dropdown for consistency (this is the alternate auth modal).
+4. **Super Admin visibility** — The `AccountManagementDashboard` already queries profiles; add `referral_source` to the displayed columns so you can see how each user found you.
 
-**Manual (you do this):**
-- Go to X Developer Console → App Settings → change Website URL from `https://blackbox.farm/holders` to `https://blackbox.farm`
-- Verify Callback URI remains `https://apxauapuusmgwbbzjgfl.supabase.co/auth/v1/callback`
-- Verify Supabase Dashboard → Authentication → Providers → Twitter is enabled with correct Client ID and Secret
-- Verify Supabase Dashboard → Authentication → URL Configuration → Redirect URLs includes `https://blackbox.farm/`
+**No migration needed** — the `referral_source` column already exists on `profiles`.
 
-**Code change 1: Add OAuth error detection to AuthContext**
-- After the app loads, parse `window.location.hash` and `window.location.search` for `error`, `error_description`, and `error_code` params that Supabase appends on failed OAuth callbacks
-- Display the error via toast so users see exactly why login failed (e.g., "provider not enabled", "access denied", "invalid callback")
-- Clear the error params from the URL after displaying
+---
 
-**Code change 2: Harden redirect URL in OAuthButtons**
-- Replace hardcoded `https://blackbox.farm/` with a canonical origin helper that uses `window.location.origin` when on the production domain, preventing mismatch if testing from preview domains
-- Apply same fix to `GoogleAuthButton.tsx` for consistency
+### Feature 2: User Journey Tracking System
 
-### Files to Edit
-- `src/contexts/AuthContext.tsx` — add OAuth error param detection + toast
-- `src/components/auth/OAuthButtons.tsx` — dynamic redirect URL
-- `src/components/auth/GoogleAuthButton.tsx` — same redirect fix
+**What it does**: Creates a lightweight event-stream table that logs every meaningful user action from signup through daily use. This gives you a per-user timeline: what pages they visited, what tokens they analyzed, what features they used, what errors they hit, and in what order.
 
-### What This Achieves
-- If X OAuth is properly configured in Supabase dashboard, login will work
-- If it's still misconfigured, users will see the exact error message instead of silent failure
-- Preview/staging domains will work correctly for OAuth testing
+**New table: `user_journey_events`**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid PK | Auto-generated |
+| user_id | uuid FK | References auth.users |
+| session_id | text | Browser session grouping |
+| event_type | text | Category: `page_view`, `feature_use`, `error`, `action`, `bot_command` |
+| event_name | text | Specific event: `visited_dashboard`, `ran_bubblemaps`, `registered_telegram_bot`, `used_bot_command` |
+| page_path | text | URL path at time of event |
+| metadata | jsonb | Flexible payload (token mint, error message, command name, etc.) |
+| created_at | timestamptz | Auto timestamp |
+| duration_seconds | integer | Time on page (for page_view events) |
+
+**RLS**: Users can insert their own events. Only admin can read all events.
+
+**Client-side tracking hook: `useJourneyTracker`**:
+- Automatically logs `page_view` events on mount (replacing/augmenting the existing `usePageTracking` for authenticated users)
+- Exposes `trackEvent(event_name, metadata)` for manual instrumentation
+- Captures errors via a global error boundary wrapper
+- Automatically includes session_id and user_id
+
+**Instrumentation points** (where `trackEvent` gets called):
+- **Signup completed** — event logged with referral_source
+- **Onboarding plan selected** — which tier they clicked
+- **Dashboard loaded** — first vs returning visit
+- **Bubblemaps/Holders analysis run** — token mint, success/failure
+- **Telegram bot registered** — from TelegramLinkCode component
+- **Social share clicked** — which platform, which article
+- **Subscription checkout started/completed** — tier info
+- **Error encountered** — any caught error with stack context
+
+**Super Admin "User Journeys" dashboard**:
+- New sub-tab under Account Management or a dedicated tab
+- Per-user timeline view: select a user, see their chronological event stream
+- Summary stats: avg pages per session, most-used features, error rate per user
+- Funnel view: signup → onboarding → first analysis → subscription
+- Filter by date range, event type, specific user
+
+**Retention policy**: 30-day rolling window (aligns with your 8GB storage constraint). A nightly prune removes events older than 30 days.
+
+---
+
+### Files to create/edit
+
+| File | Action |
+|------|--------|
+| `src/components/auth/AuthModal.tsx` | Add referral dropdown to signup form |
+| `src/components/auth/SecureAuthModal.tsx` | Same dropdown |
+| `src/contexts/AuthContext.tsx` | Save referral_source after signup |
+| `src/hooks/useJourneyTracker.ts` | New hook for event tracking |
+| `src/components/admin/UserJourneyDashboard.tsx` | New admin dashboard component |
+| Super Admin page | Add User Journeys tab |
+| Migration | Create `user_journey_events` table + RLS + prune function |
+
+### Technical notes
+
+```text
+Event flow:
+  User action → useJourneyTracker.trackEvent() → INSERT into user_journey_events
+  Page navigation → useJourneyTracker auto-logs page_view on mount
+  Error caught → error boundary calls trackEvent('error', { message, stack })
+  Bot command → telegram webhook already logs to telegram_bot_interactions
+    → admin dashboard joins both tables for unified timeline
+
+Existing infrastructure reuse:
+  - holders_page_visits: keeps working for anonymous visitor tracking
+  - user_journey_events: authenticated user tracking only (richer, per-action)
+  - activity_logs: system-level logs (cron, edge functions) — unchanged
+  - telegram_bot_interactions: already captured, joined in journey view
+```
 
