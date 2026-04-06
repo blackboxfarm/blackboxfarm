@@ -220,6 +220,7 @@ Deno.serve(async (req) => {
         unique_users: stats?.users.size || 0,
         unique_tokens: stats?.tokens.size || 0,
         top_commands: stats?.commands || {},
+        admin_config: (inst as any).admin_config || null,
         first_seen: stats?.first || inst.installed_at || new Date().toISOString(),
         last_seen: stats?.last || inst.installed_at || new Date().toISOString(),
       };
