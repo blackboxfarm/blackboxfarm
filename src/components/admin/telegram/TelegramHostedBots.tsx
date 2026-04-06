@@ -95,8 +95,6 @@ export function TelegramHostedBots() {
         .eq('chat_id', numericChatId)
         .order('created_at', { ascending: false })
         .limit(200);
-        .order('created_at', { ascending: false })
-        .limit(200);
       if (error) throw error;
       setChatMessages((data || []).reverse());
     } catch (err) {
