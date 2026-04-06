@@ -5,6 +5,7 @@ import { detectTokenPhase, contextualizeDevRep, type TokenPhase } from "../_shar
 import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts";
+import { sanitizeTelegramInput, isInputSafeToProcess } from "../_shared/telegram-input-sanitizer.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
