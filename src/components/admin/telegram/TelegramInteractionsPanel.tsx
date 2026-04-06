@@ -48,6 +48,8 @@ export function TelegramInteractionsPanel() {
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState("bot");
 
+  const [linkedProfiles, setLinkedProfiles] = useState<Map<string, LinkedProfile>>(new Map());
+
   const [stats, setStats] = useState({
     totalToday: 0, uniqueUsers: 0, newUsers: 0, joinsToday: 0, leavesToday: 0,
   });
