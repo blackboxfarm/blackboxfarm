@@ -19,6 +19,14 @@ interface GroupInfo {
   is_paid: boolean;
   kicked: boolean;
   installed_at: string;
+  // Installer info
+  installer_user_id: string | null;
+  installer_email: string | null;
+  installer_display_name: string | null;
+  installer_telegram_username: string | null;
+  installer_telegram_id: string | null;
+  installer_oauth_provider: string | null;
+  installer_oauth_username: string | null;
   // Stats from interactions
   total_interactions: number;
   unique_users: number;
@@ -42,7 +50,7 @@ Deno.serve(async (req) => {
     // 1. Get all installations
     const { data: installations, error: instErr } = await supabase
       .from("channel_installations")
-      .select("chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at")
+      .select("chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at, user_id")
       .order("installed_at", { ascending: false });
 
     if (instErr) throw instErr;
@@ -52,8 +60,59 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2. Fetch interaction stats in bulk
-    const chatIds = installations.map((i) => String(i.chat_id));
+    // 2. Get installer profiles in bulk
+    const userIds = [...new Set(installations.map(i => i.user_id).filter(Boolean))];
+    
+    const profileMap = new Map<string, { display_name: string | null; oauth_provider: string | null; oauth_username: string | null }>();
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, display_name, oauth_provider, oauth_username")
+        .in("id", userIds);
+      if (profiles) {
+        for (const p of profiles) {
+          profileMap.set(p.id, { display_name: p.display_name, oauth_provider: p.oauth_provider, oauth_username: p.oauth_username });
+        }
+      }
+    }
+
+    // 3. Get installer emails from auth.users via admin API
+    const emailMap = new Map<string, string>();
+    if (userIds.length > 0) {
+      // Fetch in batches of 50
+      for (let i = 0; i < userIds.length; i += 50) {
+        const batch = userIds.slice(i, i + 50);
+        const { data: { users } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        if (users) {
+          for (const u of users) {
+            if (batch.includes(u.id)) {
+              emailMap.set(u.id, u.email || '');
+            }
+          }
+        }
+        break; // listUsers returns all, so only need one call
+      }
+    }
+
+    // 4. Get TG usernames for installers from interactions
+    const tgMap = new Map<string, { username: string | null; telegram_id: string | null }>();
+    if (userIds.length > 0) {
+      const { data: tgLinks } = await supabase
+        .from("telegram_bot_interactions")
+        .select("linked_user_id, telegram_username, telegram_user_id")
+        .in("linked_user_id", userIds)
+        .not("telegram_username", "is", null)
+        .order("created_at", { ascending: false });
+      if (tgLinks) {
+        for (const t of tgLinks) {
+          if (t.linked_user_id && !tgMap.has(t.linked_user_id)) {
+            tgMap.set(t.linked_user_id, { username: t.telegram_username, telegram_id: t.telegram_user_id });
+          }
+        }
+      }
+    }
+
+    // 5. Fetch interaction stats in bulk
     const { data: interactions } = await supabase
       .from("telegram_bot_interactions")
       .select("chat_id, chat_type, chat_title, telegram_username, token_mint, command, created_at")
@@ -94,12 +153,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Query Telegram API for live info on each group (parallel, with timeout)
+    // 6. Query Telegram API for live info on each group
     const groups: GroupInfo[] = [];
 
     const fetchGroupInfo = async (inst: typeof installations[0]): Promise<GroupInfo> => {
       const chatId = String(inst.chat_id);
       const stats = interactionMap.get(chatId);
+      const userId = inst.user_id;
+      const profile = userId ? profileMap.get(userId) : null;
+      const tgInfo = userId ? tgMap.get(userId) : null;
 
       const base: GroupInfo = {
         chat_id: chatId,
@@ -113,6 +175,15 @@ Deno.serve(async (req) => {
         is_paid: inst.is_paid ?? false,
         kicked: inst.kicked ?? false,
         installed_at: inst.installed_at || new Date().toISOString(),
+        // Installer info
+        installer_user_id: userId || null,
+        installer_email: userId ? (emailMap.get(userId) || null) : null,
+        installer_display_name: profile?.display_name || null,
+        installer_telegram_username: tgInfo?.username || null,
+        installer_telegram_id: tgInfo?.telegram_id || null,
+        installer_oauth_provider: profile?.oauth_provider || null,
+        installer_oauth_username: profile?.oauth_username || null,
+        // Stats
         total_interactions: stats?.total || 0,
         unique_users: stats?.users.size || 0,
         unique_tokens: stats?.tokens.size || 0,
@@ -139,7 +210,6 @@ Deno.serve(async (req) => {
         clearTimeout(timeout);
 
         const chatData = await chatRes.json();
-        console.log(`[telegram-group-info] getChat ${chatId}: ok=${chatData.ok}, status=${chatRes.status}`);
         if (chatData.ok && chatData.result) {
           const r = chatData.result;
           base.chat_title = r.title || base.chat_title;
@@ -147,15 +217,11 @@ Deno.serve(async (req) => {
           base.username = r.username || null;
           base.description = r.description || null;
           base.invite_link = r.invite_link || null;
-        } else {
-          console.warn(`[telegram-group-info] getChat failed for ${chatId}:`, JSON.stringify(chatData));
         }
 
         const countData = await countRes.json();
         if (countData.ok) {
           base.member_count = countData.result;
-        } else {
-          console.warn(`[telegram-group-info] getMemberCount failed for ${chatId}:`, JSON.stringify(countData));
         }
       } catch (err) {
         console.warn(`[telegram-group-info] Failed to fetch info for ${chatId}:`, err);
