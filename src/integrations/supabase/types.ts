@@ -7333,6 +7333,7 @@ export type Database = {
           created_at: string
           db_size_info: Json | null
           dlq_stats: Json | null
+          email_verification_stats: Json | null
           error_patterns: Json
           execution_time_ms: number | null
           external_services_status: Json
@@ -7355,9 +7356,11 @@ export type Database = {
           report_period_start: string
           spider_metrics: Json | null
           table_health: Json
+          telegram_bot_stats: Json | null
           telegram_sent: boolean
           telegram_sent_at: string | null
           unread_notifications: number
+          user_auth_stats: Json | null
           vigil_stats: Json | null
         }
         Insert: {
@@ -7368,6 +7371,7 @@ export type Database = {
           created_at?: string
           db_size_info?: Json | null
           dlq_stats?: Json | null
+          email_verification_stats?: Json | null
           error_patterns?: Json
           execution_time_ms?: number | null
           external_services_status?: Json
@@ -7390,9 +7394,11 @@ export type Database = {
           report_period_start: string
           spider_metrics?: Json | null
           table_health?: Json
+          telegram_bot_stats?: Json | null
           telegram_sent?: boolean
           telegram_sent_at?: string | null
           unread_notifications?: number
+          user_auth_stats?: Json | null
           vigil_stats?: Json | null
         }
         Update: {
@@ -7403,6 +7409,7 @@ export type Database = {
           created_at?: string
           db_size_info?: Json | null
           dlq_stats?: Json | null
+          email_verification_stats?: Json | null
           error_patterns?: Json
           execution_time_ms?: number | null
           external_services_status?: Json
@@ -7425,9 +7432,11 @@ export type Database = {
           report_period_start?: string
           spider_metrics?: Json | null
           table_health?: Json
+          telegram_bot_stats?: Json | null
           telegram_sent?: boolean
           telegram_sent_at?: string | null
           unread_notifications?: number
+          user_auth_stats?: Json | null
           vigil_stats?: Json | null
         }
         Relationships: []
