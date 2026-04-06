@@ -209,7 +209,13 @@ export function TelegramHostedBots() {
 
                       {/* X Profile */}
                       <TableCell>
-                        {g.installer_oauth_provider === 'twitter' && g.installer_oauth_username ? (
+                        {g.installer_x_username ? (
+                          <a href={g.installer_x_url || `https://x.com/${g.installer_x_username}`} target="_blank" rel="noopener noreferrer"
+                            className="text-blue-400 hover:underline text-xs flex items-center gap-1">
+                            𝕏 @{g.installer_x_username}
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        ) : g.installer_oauth_provider === 'twitter' && g.installer_oauth_username ? (
                           <a href={`https://x.com/${g.installer_oauth_username}`} target="_blank" rel="noopener noreferrer"
                             className="text-blue-400 hover:underline text-xs flex items-center gap-1">
                             𝕏 @{g.installer_oauth_username}
