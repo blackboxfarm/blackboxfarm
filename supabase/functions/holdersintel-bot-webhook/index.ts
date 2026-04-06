@@ -2686,6 +2686,7 @@ async function logBotInteraction(
   from: any,
   chatId: number,
   chatType: string,
+  chatTitle: string | null,
   command: string,
   args: string,
   tokenMint: string | null,
@@ -2711,6 +2712,7 @@ async function logBotInteraction(
       last_name: from?.last_name || null,
       chat_id: chatId,
       chat_type: chatType,
+      chat_title: chatTitle,
       command: command || null,
       args_preview: args ? args.substring(0, 100) : null,
       token_mint: tokenMint || null,
@@ -3065,7 +3067,8 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
 
       // Log the interaction asynchronously (fire-and-forget)
       const tokenFromArgs = args?.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/)?.[0] || null;
-      logBotInteraction(telegramUserId, message.from, chatId, chatType, command, args, tokenFromArgs, "success")
+      const chatTitle = message.chat.title || null;
+      logBotInteraction(telegramUserId, message.from, chatId, chatType, chatTitle, command, args, tokenFromArgs, "success")
         .catch(e => console.error("[bot] interaction log failed:", e));
     }
   } catch (err) {
