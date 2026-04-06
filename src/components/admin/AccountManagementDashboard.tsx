@@ -46,7 +46,10 @@ import {
   Copy,
   Check,
   MessageCircle,
-  Zap
+  Zap,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -600,13 +603,19 @@ export function AccountManagementDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>User</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('name')}>
+                    <div className="flex items-center gap-1">User {sortField === 'name' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
+                  </TableHead>
                   <TableHead>Auth Provider</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('status')}>
+                    <div className="flex items-center gap-1">Status {sortField === 'status' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
+                  </TableHead>
                   <TableHead>Reg Code</TableHead>
                   <TableHead>Roles</TableHead>
                   <TableHead>Tier</TableHead>
-                  <TableHead>Activity</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('created_at')}>
+                    <div className="flex items-center gap-1">Activity {sortField === 'created_at' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
+                  </TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
