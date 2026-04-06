@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, UserPlus, UserMinus, Bot, Users, ExternalLink, Mail } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Loader2, RefreshCw, UserPlus, UserMinus, Bot, Users, ExternalLink, UserCheck, History } from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
 
 interface LinkedProfile {
   id: string;
@@ -14,6 +14,16 @@ interface LinkedProfile {
   oauth_provider: string | null;
   oauth_username: string | null;
   email?: string;
+}
+
+interface TelegramUser {
+  telegram_user_id: string;
+  telegram_username: string | null;
+  first_name: string | null;
+  first_seen: string;
+  last_seen: string;
+  total_interactions: number;
+  linked_user_id: string | null;
 }
 
 interface BotInteraction {
@@ -43,15 +53,16 @@ interface ChannelMember {
 }
 
 export function TelegramInteractionsPanel() {
+  const [tgUsers, setTgUsers] = useState<TelegramUser[]>([]);
   const [interactions, setInteractions] = useState<BotInteraction[]>([]);
   const [members, setMembers] = useState<ChannelMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subTab, setSubTab] = useState("bot");
+  const [subTab, setSubTab] = useState("users");
 
   const [linkedProfiles, setLinkedProfiles] = useState<Map<string, LinkedProfile>>(new Map());
 
   const [stats, setStats] = useState({
-    totalToday: 0, uniqueUsers: 0, newUsers: 0, joinsToday: 0, leavesToday: 0,
+    totalToday: 0, totalUsers: 0, registeredUsers: 0, joinsToday: 0, leavesToday: 0,
   });
 
   const load = async () => {
@@ -60,20 +71,46 @@ export function TelegramInteractionsPanel() {
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
 
-    const [intRes, memRes, statsRes, newRes, joinsRes, leavesRes] = await Promise.all([
-      supabase.from("telegram_bot_interactions").select("*").order("created_at", { ascending: false }).limit(100),
+    // Fetch all interactions to aggregate unique users client-side
+    const [intRes, memRes, statsRes, joinsRes, leavesRes] = await Promise.all([
+      supabase.from("telegram_bot_interactions").select("*").order("created_at", { ascending: false }).limit(1000),
       supabase.from("telegram_channel_members").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
-      supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("is_new_user", true),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "joined"),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "left"),
     ]);
 
     if (intRes.data) {
       setInteractions(intRes.data as BotInteraction[]);
-      
-      // Fetch linked profiles for users with linked_user_id
-      const linkedIds = [...new Set(intRes.data.filter(i => i.linked_user_id).map(i => i.linked_user_id))];
+
+      // Aggregate unique users
+      const userMap = new Map<string, TelegramUser>();
+      for (const i of intRes.data) {
+        const existing = userMap.get(i.telegram_user_id);
+        if (!existing) {
+          userMap.set(i.telegram_user_id, {
+            telegram_user_id: i.telegram_user_id,
+            telegram_username: i.telegram_username,
+            first_name: i.first_name,
+            first_seen: i.created_at,
+            last_seen: i.created_at,
+            total_interactions: 1,
+            linked_user_id: i.linked_user_id,
+          });
+        } else {
+          existing.total_interactions++;
+          if (i.telegram_username) existing.telegram_username = i.telegram_username;
+          if (i.first_name) existing.first_name = i.first_name;
+          if (i.linked_user_id) existing.linked_user_id = i.linked_user_id;
+          if (new Date(i.created_at) < new Date(existing.first_seen)) existing.first_seen = i.created_at;
+          if (new Date(i.created_at) > new Date(existing.last_seen)) existing.last_seen = i.created_at;
+        }
+      }
+      const users = Array.from(userMap.values()).sort((a, b) => new Date(b.first_seen).getTime() - new Date(a.first_seen).getTime());
+      setTgUsers(users);
+
+      // Fetch linked profiles
+      const linkedIds = [...new Set(users.filter(u => u.linked_user_id).map(u => u.linked_user_id!))];
       if (linkedIds.length > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
@@ -87,16 +124,17 @@ export function TelegramInteractionsPanel() {
         }
         setLinkedProfiles(map);
       }
+
+      const registered = users.filter(u => u.linked_user_id).length;
+      setStats({
+        totalToday: statsRes.count ?? 0,
+        totalUsers: users.length,
+        registeredUsers: registered,
+        joinsToday: joinsRes.count ?? 0,
+        leavesToday: leavesRes.count ?? 0,
+      });
     }
     if (memRes.data) setMembers(memRes.data as ChannelMember[]);
-
-    setStats({
-      totalToday: statsRes.count ?? 0,
-      uniqueUsers: 0,
-      newUsers: newRes.count ?? 0,
-      joinsToday: joinsRes.count ?? 0,
-      leavesToday: leavesRes.count ?? 0,
-    });
 
     setLoading(false);
   };
@@ -135,16 +173,16 @@ export function TelegramInteractionsPanel() {
         {/* Stats row */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
           <div className="rounded-md border p-2 text-center">
+            <p className="text-xs text-muted-foreground">Total TG Users</p>
+            <p className="text-lg font-bold">{stats.totalUsers}</p>
+          </div>
+          <div className="rounded-md border p-2 text-center">
+            <p className="text-xs text-muted-foreground">Registered (Web)</p>
+            <p className="text-lg font-bold text-green-500">{stats.registeredUsers}</p>
+          </div>
+          <div className="rounded-md border p-2 text-center">
             <p className="text-xs text-muted-foreground">Commands Today</p>
             <p className="text-lg font-bold">{stats.totalToday}</p>
-          </div>
-          <div className="rounded-md border p-2 text-center">
-            <p className="text-xs text-muted-foreground">Unique Users</p>
-            <p className="text-lg font-bold">{stats.uniqueUsers}</p>
-          </div>
-          <div className="rounded-md border p-2 text-center">
-            <p className="text-xs text-muted-foreground">New Users</p>
-            <p className="text-lg font-bold text-green-500">{stats.newUsers}</p>
           </div>
           <div className="rounded-md border p-2 text-center">
             <p className="text-xs text-muted-foreground">Joins Today</p>
@@ -158,10 +196,101 @@ export function TelegramInteractionsPanel() {
 
         <Tabs value={subTab} onValueChange={setSubTab}>
           <TabsList>
-            <TabsTrigger value="bot"><Bot className="h-3 w-3 mr-1" /> Bot Interactions</TabsTrigger>
+            <TabsTrigger value="users"><UserCheck className="h-3 w-3 mr-1" /> Users Directory</TabsTrigger>
+            <TabsTrigger value="bot"><History className="h-3 w-3 mr-1" /> Command Log</TabsTrigger>
             <TabsTrigger value="members"><Users className="h-3 w-3 mr-1" /> Channel Members</TabsTrigger>
           </TabsList>
 
+          {/* PRIMARY: Users Directory */}
+          <TabsContent value="users">
+            <div className="max-h-[500px] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead compact>TG User</TableHead>
+                    <TableHead compact>First Seen</TableHead>
+                    <TableHead compact>Last Active</TableHead>
+                    <TableHead compact>Commands</TableHead>
+                    <TableHead compact>Registered</TableHead>
+                    <TableHead compact>Web Account</TableHead>
+                    <TableHead compact>X / Twitter</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tgUsers.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No users yet</TableCell></TableRow>
+                  ) : tgUsers.map((u) => {
+                    const profile = u.linked_user_id ? linkedProfiles.get(u.linked_user_id) : null;
+                    return (
+                      <TableRow key={u.telegram_user_id}>
+                        <TableCell compact>
+                          {u.telegram_username ? (
+                            <a href={`https://t.me/${u.telegram_username}`} target="_blank" rel="noopener noreferrer"
+                              className="text-blue-400 hover:underline flex items-center gap-1">
+                              @{u.telegram_username} <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">{u.first_name || u.telegram_user_id}</span>
+                          )}
+                          {u.first_name && u.telegram_username && (
+                            <span className="text-[10px] text-muted-foreground block">{u.first_name}</span>
+                          )}
+                        </TableCell>
+                        <TableCell compact className="whitespace-nowrap text-xs">
+                          {format(new Date(u.first_seen), 'MMM d, yyyy')}
+                        </TableCell>
+                        <TableCell compact className="whitespace-nowrap text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(u.last_seen), { addSuffix: true })}
+                        </TableCell>
+                        <TableCell compact className="text-center">{u.total_interactions}</TableCell>
+                        <TableCell compact>
+                          {u.linked_user_id ? (
+                            <Badge className="text-[10px] bg-green-600">✓ Yes</Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No</span>
+                          )}
+                        </TableCell>
+                        <TableCell compact>
+                          {u.linked_user_id && profile ? (
+                            <div className="flex flex-col gap-0.5">
+                              {profile.display_name && (
+                                <span className="text-[10px] text-muted-foreground">{profile.display_name}</span>
+                              )}
+                              <a href={`/super-admin?tab=accounts&user=${u.linked_user_id}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="text-[10px] text-blue-400 hover:underline flex items-center gap-1">
+                                View Profile → <ExternalLink className="w-2 h-2" />
+                              </a>
+                            </div>
+                          ) : u.linked_user_id ? (
+                            <a href={`/super-admin?tab=accounts&user=${u.linked_user_id}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-400 hover:underline flex items-center gap-1">
+                              View Profile → <ExternalLink className="w-2 h-2" />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell compact>
+                          {profile?.oauth_provider === 'twitter' && profile?.oauth_username ? (
+                            <a href={`https://x.com/${profile.oauth_username}`} target="_blank" rel="noopener noreferrer"
+                              className="text-blue-400 hover:underline flex items-center gap-1 text-xs">
+                              𝕏 @{profile.oauth_username} <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* SECONDARY: Command Log */}
           <TabsContent value="bot">
             <div className="max-h-[500px] overflow-auto">
               <Table>
@@ -208,7 +337,7 @@ export function TelegramInteractionsPanel() {
                                 {profile.oauth_provider === 'twitter' ? '𝕏' : profile.oauth_provider}: @{profile.oauth_username}
                               </span>
                             )}
-                            <a href={`https://blackbox.farm/super-admin?tab=accounts&user=${i.linked_user_id}`}
+                            <a href={`/super-admin?tab=accounts&user=${i.linked_user_id}`}
                               target="_blank" rel="noopener noreferrer"
                               className="text-[10px] text-blue-400 hover:underline flex items-center gap-1">
                               View Profile → <ExternalLink className="w-2 h-2" />
@@ -239,7 +368,7 @@ export function TelegramInteractionsPanel() {
                 </TableHeader>
                 <TableBody>
                   {members.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No member events recorded yet — hit Repair Webhook above to enable</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No member events recorded yet</TableCell></TableRow>
                   ) : members.map((m) => (
                     <TableRow key={m.id}>
                       <TableCell compact className="whitespace-nowrap">{formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}</TableCell>
