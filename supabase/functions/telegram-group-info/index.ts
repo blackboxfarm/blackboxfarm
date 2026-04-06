@@ -7,6 +7,14 @@ const corsHeaders = {
 
 const botToken = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
 
+interface AdminConfig {
+  delay_ms: number;
+  verbose: boolean;
+  admin_only_commands: boolean;
+  enabled_tiers: string[];
+  dev_wallet_alerts: boolean;
+}
+
 interface GroupInfo {
   chat_id: string;
   chat_title: string;
@@ -36,6 +44,7 @@ interface GroupInfo {
   unique_users: number;
   unique_tokens: number;
   top_commands: Record<string, number>;
+  admin_config: AdminConfig | null;
   first_seen: string;
   last_seen: string;
 }
@@ -54,7 +63,7 @@ Deno.serve(async (req) => {
     // 1. Get all installations
     const { data: installations, error: instErr } = await supabase
       .from("channel_installations")
-      .select("chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at, user_id")
+      .select("chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at, user_id, admin_config")
       .order("installed_at", { ascending: false });
 
     if (instErr) throw instErr;
@@ -211,6 +220,7 @@ Deno.serve(async (req) => {
         unique_users: stats?.users.size || 0,
         unique_tokens: stats?.tokens.size || 0,
         top_commands: stats?.commands || {},
+        admin_config: (inst as any).admin_config || null,
         first_seen: stats?.first || inst.installed_at || new Date().toISOString(),
         last_seen: stats?.last || inst.installed_at || new Date().toISOString(),
       };
