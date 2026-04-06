@@ -7,6 +7,14 @@ const corsHeaders = {
 
 const botToken = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
 
+interface AdminConfig {
+  delay_ms: number;
+  verbose: boolean;
+  admin_only_commands: boolean;
+  enabled_tiers: string[];
+  dev_wallet_alerts: boolean;
+}
+
 interface GroupInfo {
   chat_id: string;
   chat_title: string;
