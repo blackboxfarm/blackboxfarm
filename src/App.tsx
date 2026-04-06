@@ -91,6 +91,7 @@ const App = () => {
               <Toaster />
               <Sonner />
               <BrowserRouter>
+                <JourneyTrackerProvider />
                 <ScrollToTop />
                 <div className="flex-1">
                   <Suspense fallback={<PageLoader />}>
