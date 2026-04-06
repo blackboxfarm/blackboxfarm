@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Loader2, Users, Calendar, Hash, MessageSquare, ExternalLink, Crown, Shield } from 'lucide-react';
+import { RefreshCw, Loader2, Users, Calendar, Hash, MessageSquare, ExternalLink, Crown, Shield, Lock, Globe } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface HostedGroup {
@@ -124,7 +124,7 @@ export function TelegramHostedBots() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Group / Channel</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>Visibility</TableHead>
                   <TableHead className="text-center">Members</TableHead>
                   <TableHead className="text-center">Bot Users</TableHead>
                   <TableHead className="text-center">Lookups</TableHead>
@@ -138,48 +138,54 @@ export function TelegramHostedBots() {
               <TableBody>
                 {groups.map((g) => {
                   const isActive = new Date(g.last_seen) > new Date(Date.now() - 86400000);
+                  const isPublic = !!g.username;
+                  const joinLink = g.username
+                    ? `https://t.me/${g.username}`
+                    : g.invite_link || null;
+
                   return (
                     <TableRow key={g.chat_id} className={g.kicked ? 'opacity-50' : ''}>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div>
-                            <div className="font-medium text-sm flex items-center gap-1">
-                              {g.username ? (
-                                <a
-                                  href={`https://t.me/${g.username}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-400 hover:underline flex items-center gap-1"
-                                >
-                                  {g.chat_title} <ExternalLink className="w-3 h-3" />
-                                </a>
-                              ) : g.invite_link ? (
-                                <a
-                                  href={g.invite_link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-400 hover:underline flex items-center gap-1"
-                                >
-                                  {g.chat_title} <ExternalLink className="w-3 h-3" />
-                                </a>
-                              ) : (
-                                g.chat_title
-                              )}
-                              {g.kicked && <span className="text-red-500 text-xs">(kicked)</span>}
-                            </div>
-                            {g.username && (
-                              <span className="text-[10px] text-muted-foreground">@{g.username}</span>
+                        <div>
+                          <div className="font-medium text-sm flex items-center gap-1">
+                            {joinLink ? (
+                              <a
+                                href={joinLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-400 hover:underline flex items-center gap-1"
+                              >
+                                {g.chat_title} <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ) : (
+                              g.chat_title
                             )}
-                            {g.description && (
-                              <p className="text-[10px] text-muted-foreground max-w-[200px] truncate">
-                                {g.description}
-                              </p>
-                            )}
+                            {g.kicked && <span className="text-red-500 text-xs">(kicked)</span>}
                           </div>
+                          {g.username && (
+                            <span className="text-[10px] text-muted-foreground">@{g.username}</span>
+                          )}
+                          {g.description && (
+                            <p className="text-[10px] text-muted-foreground max-w-[200px] truncate">
+                              {g.description}
+                            </p>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs">{g.chat_type}</Badge>
+                        {isPublic ? (
+                          <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
+                            <Globe className="w-3 h-3 text-green-500" /> Public
+                          </Badge>
+                        ) : g.invite_link ? (
+                          <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
+                            <Lock className="w-3 h-3 text-yellow-500" /> Invite Only
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs flex items-center gap-1 w-fit">
+                            <Lock className="w-3 h-3 text-red-500" /> Private
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-center font-medium">
                         {g.member_count !== null ? g.member_count.toLocaleString() : '—'}
