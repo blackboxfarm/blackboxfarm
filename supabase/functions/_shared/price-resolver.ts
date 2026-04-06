@@ -863,35 +863,8 @@ export async function resolvePrice(
     }
   }
 
-  // STEP 2: Try pump.fun on-chain bonding curve (skip if hint says bags_fm or bonk_fun)
-  if (heliusApiKey && (!venueHint || venueHint === 'pumpfun_curve')) {
-    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun on-chain curve`);
-    const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
-    
-    if (curveState) {
-      if (curveState.isOnCurve) {
-        // Token IS on pump.fun curve - use curve price (authoritative)
-        const price = computeBondingCurvePrice(curveState, solPrice);
-        const result: PriceResult = {
-          price,
-          source: 'pumpfun_curve',
-          fetchedAt: new Date().toISOString(),
-          latencyMs: 0,
-          isOnCurve: true,
-          bondingCurveProgress: curveState.progress,
-          confidence: 'high',
-          virtualSolReserves: Number(curveState.virtualSolReserves),
-          virtualTokenReserves: Number(curveState.virtualTokenReserves)
-        };
-        
-        console.log(`[${tokenMint.slice(0, 8)}] pump.fun curve: $${price.toFixed(10)}, progress=${curveState.progress.toFixed(1)}%`);
-        priceCache.set(tokenMint, { result, timestamp: Date.now() });
-        return result;
-      } else {
-        console.log(`[${tokenMint.slice(0, 8)}] pump.fun confirms GRADUATED`);
-      }
-    }
-  }
+  // (On-chain bonding curve already tried in Step 1 above)
+
 
   // STEP 3: Try Meteora DBC (bags.fm tokens) - ONLY for BAGS suffix or bags_fm hint
   // Skip this expensive scan for pump.fun tokens (already handled above)
