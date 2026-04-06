@@ -796,37 +796,10 @@ export async function resolvePrice(
   // 'bonk_fun' → skip pump.fun + bags.fm, go to step 4
   // undefined → full cascade (backward compatible)
 
-  // STEP 1: Try pump.fun API (skip if hint says bags_fm or bonk_fun)
-  if (!venueHint || venueHint === 'pumpfun_curve') {
-    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API`);
-    const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
-    
-    if (pumpResult) {
-      console.log(`[${tokenMint.slice(0, 8)}] pump.fun API: $${pumpResult.price.toFixed(10)}, onCurve=${pumpResult.isOnCurve}`);
-      
-      // If token is still on curve, this is authoritative - use it
-      if (pumpResult.isOnCurve) {
-        priceCache.set(tokenMint, { result: pumpResult, timestamp: Date.now() });
-        return pumpResult;
-      }
-      
-      // Token graduated according to pump.fun - skip to DexScreener/Jupiter fast path
-      console.log(`[${tokenMint.slice(0, 8)}] pump.fun says graduated, running parallel DexScreener + Jupiter`);
-      const [dexResult, jupResult] = await Promise.all([
-        fetchDexScreenerPrice(tokenMint),
-        fetchJupiterPrice(tokenMint)
-      ]);
-      const graduatedResult = dexResult || jupResult;
-      if (graduatedResult) {
-        priceCache.set(tokenMint, { result: graduatedResult, timestamp: Date.now() });
-        return graduatedResult;
-      }
-    }
-  }
-
-  // STEP 2: Try pump.fun on-chain bonding curve (skip if hint says bags_fm or bonk_fun)
+  // STEP 1: Try on-chain bonding curve FIRST (fastest, no API dependency)
+  // This avoids pump.fun API 403 blocks entirely for pre-graduation tokens
   if (heliusApiKey && (!venueHint || venueHint === 'pumpfun_curve')) {
-    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun on-chain curve`);
+    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun on-chain curve (priority path)`);
     const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
     
     if (curveState) {
@@ -848,11 +821,50 @@ export async function resolvePrice(
         console.log(`[${tokenMint.slice(0, 8)}] pump.fun curve: $${price.toFixed(10)}, progress=${curveState.progress.toFixed(1)}%`);
         priceCache.set(tokenMint, { result, timestamp: Date.now() });
         return result;
-      } else {
-        console.log(`[${tokenMint.slice(0, 8)}] pump.fun confirms GRADUATED`);
+      }
+      
+      // Token graduated — skip to DexScreener/Jupiter fast path
+      console.log(`[${tokenMint.slice(0, 8)}] On-chain says graduated, running parallel DexScreener + Jupiter`);
+      const [dexResult, jupResult] = await Promise.all([
+        fetchDexScreenerPrice(tokenMint),
+        fetchJupiterPrice(tokenMint)
+      ]);
+      const graduatedResult = dexResult || jupResult;
+      if (graduatedResult) {
+        priceCache.set(tokenMint, { result: graduatedResult, timestamp: Date.now() });
+        return graduatedResult;
       }
     }
   }
+
+  // STEP 2: Fallback to pump.fun HTTP API (skip if hint says bags_fm or bonk_fun)
+  if (!venueHint || venueHint === 'pumpfun_curve') {
+    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API (fallback)`);
+    const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
+    
+    if (pumpResult) {
+      console.log(`[${tokenMint.slice(0, 8)}] pump.fun API: $${pumpResult.price.toFixed(10)}, onCurve=${pumpResult.isOnCurve}`);
+      
+      if (pumpResult.isOnCurve) {
+        priceCache.set(tokenMint, { result: pumpResult, timestamp: Date.now() });
+        return pumpResult;
+      }
+      
+      console.log(`[${tokenMint.slice(0, 8)}] pump.fun says graduated, running parallel DexScreener + Jupiter`);
+      const [dexResult, jupResult] = await Promise.all([
+        fetchDexScreenerPrice(tokenMint),
+        fetchJupiterPrice(tokenMint)
+      ]);
+      const graduatedResult = dexResult || jupResult;
+      if (graduatedResult) {
+        priceCache.set(tokenMint, { result: graduatedResult, timestamp: Date.now() });
+        return graduatedResult;
+      }
+    }
+  }
+
+  // (On-chain bonding curve already tried in Step 1 above)
+
 
   // STEP 3: Try Meteora DBC (bags.fm tokens) - ONLY for BAGS suffix or bags_fm hint
   // Skip this expensive scan for pump.fun tokens (already handled above)

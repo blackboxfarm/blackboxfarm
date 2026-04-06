@@ -14,3 +14,4 @@ export { default as TelegramTargetManager } from './TelegramTargetManager';
 export type { TelegramTarget } from './TelegramTargetManager';
 export { TelegramInteractionsPanel } from './TelegramInteractionsPanel';
 export { ChannelMembersDashboard } from './ChannelMembersDashboard';
+export { TelegramHostedBots } from './TelegramHostedBots';
