@@ -126,6 +126,7 @@ export function TelegramHostedBots() {
                   <TableHead>Group / Channel</TableHead>
                   <TableHead>Visibility</TableHead>
                   <TableHead>Installed By</TableHead>
+                  <TableHead>X Profile</TableHead>
                   <TableHead>Web Account</TableHead>
                   <TableHead className="text-center">Members</TableHead>
                   <TableHead className="text-center">Bot Users</TableHead>
@@ -203,6 +204,19 @@ export function TelegramHostedBots() {
                         </div>
                       </TableCell>
 
+                      {/* X Profile */}
+                      <TableCell>
+                        {g.installer_oauth_provider === 'twitter' && g.installer_oauth_username ? (
+                          <a href={`https://x.com/${g.installer_oauth_username}`} target="_blank" rel="noopener noreferrer"
+                            className="text-blue-400 hover:underline text-xs flex items-center gap-1">
+                            𝕏 @{g.installer_oauth_username}
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
                       {/* Web Account */}
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
@@ -212,15 +226,11 @@ export function TelegramHostedBots() {
                               {g.installer_email}
                             </span>
                           )}
-                          {g.installer_oauth_provider && g.installer_oauth_username && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {g.installer_oauth_provider === 'twitter' ? '𝕏' : g.installer_oauth_provider}: @{g.installer_oauth_username}
-                            </span>
-                          )}
                           {g.installer_user_id && (
-                            <a href={`/admin?tab=accounts&user=${g.installer_user_id}`}
-                              className="text-[10px] text-blue-400 hover:underline">
-                              View Profile →
+                            <a href={`https://blackbox.farm/super-admin?tab=accounts&user=${g.installer_user_id}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-400 hover:underline flex items-center gap-1">
+                              View Profile → <ExternalLink className="w-2 h-2" />
                             </a>
                           )}
                           {!g.installer_email && !g.installer_user_id && (
