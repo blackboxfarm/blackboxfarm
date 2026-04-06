@@ -46,7 +46,10 @@ import {
   Copy,
   Check,
   MessageCircle,
-  Zap
+  Zap,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -132,6 +135,17 @@ export function AccountManagementDashboard() {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isBackfilling, setIsBackfilling] = useState(false);
+  const [sortField, setSortField] = useState<'name' | 'email' | 'status' | 'created_at'>('created_at');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
   const { toast } = useToast();
 
   const fetchAccounts = async () => {
@@ -439,6 +453,26 @@ export function AccountManagementDashboard() {
       (filterType === 'verified' && account.email_confirmed_at);
 
     return matchesSearch && matchesType;
+  }).sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    switch (sortField) {
+      case 'name': {
+        const nameA = (a.profile?.display_name || a.profile?.oauth_full_name || '').toLowerCase();
+        const nameB = (b.profile?.display_name || b.profile?.oauth_full_name || '').toLowerCase();
+        return dir * nameA.localeCompare(nameB);
+      }
+      case 'email':
+        return dir * a.email.toLowerCase().localeCompare(b.email.toLowerCase());
+      case 'status': {
+        const sA = a.email_confirmed_at ? 1 : 0;
+        const sB = b.email_confirmed_at ? 1 : 0;
+        return dir * (sA - sB);
+      }
+      case 'created_at':
+        return dir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      default:
+        return 0;
+    }
   });
 
   const getProviderBadges = (account: UserAccount) => {
@@ -569,13 +603,19 @@ export function AccountManagementDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>User</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('name')}>
+                    <div className="flex items-center gap-1">User {sortField === 'name' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
+                  </TableHead>
                   <TableHead>Auth Provider</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('status')}>
+                    <div className="flex items-center gap-1">Status {sortField === 'status' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
+                  </TableHead>
                   <TableHead>Reg Code</TableHead>
                   <TableHead>Roles</TableHead>
                   <TableHead>Tier</TableHead>
-                  <TableHead>Activity</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('created_at')}>
+                    <div className="flex items-center gap-1">Activity {sortField === 'created_at' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
+                  </TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
