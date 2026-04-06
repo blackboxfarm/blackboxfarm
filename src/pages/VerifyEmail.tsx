@@ -75,10 +75,10 @@ export default function VerifyEmail() {
 
   const iconMap = {
     loading: <Loader2 className="w-16 h-16 text-primary animate-spin" />,
-    success: <CheckCircle className="w-16 h-16 text-green-500" />,
-    reactivated: <ShieldCheck className="w-16 h-16 text-green-500" />,
-    already_verified: <CheckCircle className="w-16 h-16 text-blue-500" />,
-    expired: <AlertTriangle className="w-16 h-16 text-yellow-500" />,
+    success: <CheckCircle className="w-16 h-16 text-primary" />,
+    reactivated: <ShieldCheck className="w-16 h-16 text-primary" />,
+    already_verified: <CheckCircle className="w-16 h-16 text-accent" />,
+    expired: <AlertTriangle className="w-16 h-16 text-muted-foreground" />,
     error: <XCircle className="w-16 h-16 text-destructive" />,
   };
 
