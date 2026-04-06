@@ -1,0 +1,1 @@
+ALTER TABLE public.telegram_bot_interactions ADD COLUMN IF NOT EXISTS chat_title text;

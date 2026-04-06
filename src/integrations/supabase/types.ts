@@ -11793,6 +11793,7 @@ export type Database = {
         Row: {
           args_preview: string | null
           chat_id: number
+          chat_title: string | null
           chat_type: string
           command: string | null
           created_at: string
@@ -11809,6 +11810,7 @@ export type Database = {
         Insert: {
           args_preview?: string | null
           chat_id: number
+          chat_title?: string | null
           chat_type?: string
           command?: string | null
           created_at?: string
@@ -11825,6 +11827,7 @@ export type Database = {
         Update: {
           args_preview?: string | null
           chat_id?: number
+          chat_title?: string | null
           chat_type?: string
           command?: string | null
           created_at?: string
