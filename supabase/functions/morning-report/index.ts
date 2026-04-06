@@ -1231,6 +1231,8 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         funnel_feed_throughput: funnelFeedThroughput,
         db_size_info: dbSizeInfo,
         intelligence_stats: intelligenceStats,
+        email_verification_stats: emailVerificationStats,
+        telegram_bot_stats: telegramBotStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -1275,6 +1277,43 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       tgMessage += `• Banner Purchases: ${bannerPurchaseCount}\n`;
     }
     tgMessage += `• Total Active Subs: ${totalActiveSubscribers || 0} (${totalLinkedAccounts || 0} linked)\n\n`;
+
+    // Email Verification section
+    if (emailVerificationStats.total_verifications > 0 || emailVerificationStats.overnight_sent > 0) {
+      tgMessage += `📧 **Email Verification**\n`;
+      tgMessage += `• Total: ${emailVerificationStats.total_verifications} sent | ${emailVerificationStats.verified} verified | ${emailVerificationStats.pending} pending\n`;
+      if (emailVerificationStats.auto_suspended > 0) {
+        tgMessage += `• ⚠️ Auto-suspended (48h): ${emailVerificationStats.auto_suspended}\n`;
+      }
+      if (emailVerificationStats.overnight_sent > 0 || emailVerificationStats.overnight_verified > 0) {
+        tgMessage += `• Overnight: ${emailVerificationStats.overnight_sent} sent, ${emailVerificationStats.overnight_verified} verified\n`;
+      }
+      const tr = emailVerificationStats.tracking;
+      if (tr && tr.overnight_emails_sent > 0) {
+        tgMessage += `• Tracking: ${tr.overnight_emails_sent} emails → ${tr.open_rate_pct}% opened, ${tr.click_rate_pct}% clicked\n`;
+      }
+      tgMessage += `\n`;
+    }
+
+    // Telegram Bot section
+    if (telegramBotStats.overnight_interactions > 0 || telegramBotStats.overnight_new_users > 0) {
+      tgMessage += `🤖 **Telegram Bot**\n`;
+      tgMessage += `• Overnight: ${telegramBotStats.overnight_interactions} interactions | ${telegramBotStats.overnight_active_users} active users\n`;
+      if (telegramBotStats.overnight_new_users > 0) {
+        tgMessage += `• 🆕 New bot users: ${telegramBotStats.overnight_new_users}\n`;
+        for (const u of (telegramBotStats.overnight_new_user_details || []).slice(0, 5)) {
+          tgMessage += `  → ${u.username ? '@' + u.username : u.telegram_user_id}\n`;
+        }
+      }
+      if (telegramBotStats.top_commands?.length > 0) {
+        const topCmds = telegramBotStats.top_commands.slice(0, 5).map((c: any) => `${c.command}:${c.count}`).join(', ');
+        tgMessage += `• Top commands: ${topCmds}\n`;
+      }
+      if (telegramBotStats.error_count > 0) {
+        tgMessage += `• ⚠️ Errors: ${telegramBotStats.error_count}\n`;
+      }
+      tgMessage += `\n`;
+    }
 
     // API Overview
     tgMessage += `📊 **API Overview** (${totalApiCalls} total calls)\n`;
