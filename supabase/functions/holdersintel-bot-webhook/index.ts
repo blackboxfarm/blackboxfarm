@@ -2624,10 +2624,59 @@ async function handleChatMember(update: any) {
       invited_by_user_id: invitedBy?.id !== user?.id ? String(invitedBy?.id || '') : null,
       old_status: oldStatus || null,
       new_status: newStatus || null,
+      is_bot_account: false, // New individual joins default to real user
     });
     console.log(`[bot] Channel member event: ${eventType} user ${user?.id} in ${chat.title} (${chat.id})`);
+
+    // Send welcome message for new joins (if enabled and not suspended)
+    if (eventType === 'joined') {
+      await maybeSendWelcomeMessage(chat.id, user);
+    }
   } catch (e) {
     console.error("[bot] Failed to log channel member event:", e);
+  }
+}
+
+// ─── Send welcome message if enabled for this channel ───
+async function maybeSendWelcomeMessage(chatId: number, user: any) {
+  try {
+    const { data: config } = await supabase
+      .from("telegram_channel_welcome_config")
+      .select("is_enabled, welcome_message, suspend_until")
+      .eq("chat_id", chatId)
+      .maybeSingle();
+
+    // No config = no welcome message
+    if (!config || !config.is_enabled) return;
+
+    // Check if suspended (for bulk bot additions)
+    if (config.suspend_until) {
+      const suspendUntil = new Date(config.suspend_until);
+      if (suspendUntil > new Date()) {
+        console.log(`[bot] Welcome message suspended for chat ${chatId} until ${config.suspend_until}`);
+        return;
+      }
+    }
+
+    const firstName = user?.first_name || 'there';
+    const message = config.welcome_message.replace('{name}', firstName);
+
+    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
+    if (!botToken) return;
+
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+    console.log(`[bot] Welcome message sent to ${firstName} in chat ${chatId}`);
+  } catch (e) {
+    console.error("[bot] Failed to send welcome message:", e);
   }
 }
 
