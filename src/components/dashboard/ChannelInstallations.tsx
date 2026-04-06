@@ -322,7 +322,7 @@ export function ChannelInstallations() {
                             checked={config.verbose}
                             onCheckedChange={(v) => updateConfig(install.id, { ...config, verbose: v })}
                           />
-                          <span className="text-[10px] text-muted-foreground">{config.verbose ? "Long-form" : "Short-form"}</span>
+                         <span className="text-[10px] text-muted-foreground">{config.verbose ? "Long-form" : "Short-form"}</span>
                         </div>
                       </div>
                     </div>
