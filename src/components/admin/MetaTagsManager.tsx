@@ -27,6 +27,22 @@ interface MetaTagEntry {
   is_active: boolean;
 }
 
+interface ArticleData {
+  slug: string;
+  title: string;
+  subtitle?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  featured_image_url?: string | null;
+  content_md?: string;
+  author?: string;
+  category?: string;
+  tags?: string[] | null;
+  published_at?: string | null;
+}
+
+const SITE_URL = 'https://blackbox.farm';
+
 const KNOWN_ROUTES = [
   { path: '/', label: 'Home' },
   { path: '/holders', label: 'Holders' },
@@ -50,15 +66,15 @@ const KNOWN_ROUTES = [
 ];
 
 const HARDCODED_DEFAULTS: Omit<MetaTagEntry, 'scope'> = {
-  og_title: 'BlackBox Farm',
-  og_description: 'Advanced DeFi trading tools, automated bots, and community-driven campaigns on Solana blockchain',
-  og_image_url: 'https://blackbox.farm/assets/blackbox-og-image.png',
+  og_title: 'BlackBox.Farm',
+  og_description: 'Crypto has hands — we show them. HoldersIntel AI = Deep holder analysis, wallet tracing, social identity verification, and a revolutionary network graph that exposes the connections others can\'t see.',
+  og_image_url: 'https://apxauapuusmgwbbzjgfl.supabase.co/storage/v1/object/public/social-gallery/site001.png',
   og_url: 'https://blackbox.farm',
   og_type: 'website',
   twitter_card: 'summary_large_image',
-  twitter_title: 'BlackBox Farm',
-  twitter_description: 'Advanced DeFi trading tools, automated bots, and community-driven campaigns on Solana blockchain',
-  twitter_image: 'https://blackbox.farm/assets/blackbox-og-image.png',
+  twitter_title: 'BlackBox.Farm',
+  twitter_description: 'Crypto has hands — we show them. HoldersIntel AI = Deep holder analysis, wallet tracing, social identity verification, and a revolutionary network graph that exposes the connections others can\'t see.',
+  twitter_image: 'https://apxauapuusmgwbbzjgfl.supabase.co/storage/v1/object/public/social-gallery/site001.png',
   canonical_url: 'https://blackbox.farm',
   is_active: true,
 };
@@ -88,12 +104,40 @@ const emptyEntry = (scope: 'sitewide' | 'page' | 'article'): MetaTagEntry => ({
   is_active: true,
 });
 
+/** Extract first paragraph of plain text from markdown content */
+function extractFirstParagraph(md: string): string {
+  if (!md) return '';
+  // Remove markdown headings, images, links formatting
+  const lines = md.split('\n').filter(l => {
+    const trimmed = l.trim();
+    return trimmed.length > 0 && !trimmed.startsWith('#') && !trimmed.startsWith('![') && !trimmed.startsWith('---');
+  });
+  // Get first meaningful paragraph
+  const firstPara = lines[0] || '';
+  // Strip markdown formatting
+  return firstPara
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    .replace(/`(.*?)`/g, '$1')
+    .slice(0, 200)
+    .trim();
+}
+
+/** Normalize image URL to absolute */
+function resolveImageUrl(url?: string | null): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) return `${SITE_URL}${url}`;
+  return `${SITE_URL}/${url}`;
+}
+
 export function MetaTagsManager() {
   const { toast } = useToast();
   const [activeScope, setActiveScope] = useState<'sitewide' | 'page' | 'article'>('sitewide');
   const [entries, setEntries] = useState<MetaTagEntry[]>([]);
   const [currentEntry, setCurrentEntry] = useState<MetaTagEntry>(emptyEntry('sitewide'));
-  const [articles, setArticles] = useState<{ slug: string; title: string }[]>([]);
+  const [articles, setArticles] = useState<ArticleData[]>([]);
   const [selectedPage, setSelectedPage] = useState<string>('');
   const [selectedArticle, setSelectedArticle] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -107,7 +151,12 @@ export function MetaTagsManager() {
   useEffect(() => {
     if (activeScope === 'sitewide') {
       const sitewide = entries.find(e => e.scope === 'sitewide');
-      setCurrentEntry(sitewide || emptyEntry('sitewide'));
+      if (sitewide) {
+        setCurrentEntry(sitewide);
+      } else {
+        // No sitewide entry yet — show defaults so admin sees what will be used
+        setCurrentEntry({ ...emptyEntry('sitewide'), ...HARDCODED_DEFAULTS, scope: 'sitewide' });
+      }
     }
   }, [activeScope, entries]);
 
@@ -123,21 +172,90 @@ export function MetaTagsManager() {
   const loadArticles = async () => {
     const { data } = await supabase
       .from('intel_briefings')
-      .select('slug, title')
+      .select('slug, title, subtitle, seo_title, seo_description, featured_image_url, content_md, author, category, tags, published_at')
       .order('created_at', { ascending: false });
-    if (data) setArticles(data);
+    if (data) setArticles(data as ArticleData[]);
   };
 
   const handlePageSelect = (path: string) => {
     setSelectedPage(path);
     const existing = entries.find(e => e.scope === 'page' && e.route_path === path);
-    setCurrentEntry(existing || { ...emptyEntry('page'), route_path: path });
+    if (existing) {
+      // Existing override — show it but fill empty fields with sitewide defaults for visibility
+      const sitewide = entries.find(e => e.scope === 'sitewide');
+      const merged = { ...existing };
+      if (sitewide) {
+        const fields: (keyof MetaTagEntry)[] = ['og_title', 'og_description', 'og_image_url', 'og_url', 'og_type', 'twitter_card', 'twitter_title', 'twitter_description', 'twitter_image', 'canonical_url'];
+        for (const f of fields) {
+          if (!merged[f] && sitewide[f]) {
+            (merged as any)[f] = sitewide[f];
+          }
+        }
+      }
+      setCurrentEntry(merged);
+    } else {
+      // No page override — pre-fill from sitewide so admin sees inherited values
+      const sitewide = entries.find(e => e.scope === 'sitewide');
+      const route = KNOWN_ROUTES.find(r => r.path === path);
+      const pageName = route?.label || path;
+      setCurrentEntry({
+        ...emptyEntry('page'),
+        route_path: path,
+        og_title: sitewide?.og_title || HARDCODED_DEFAULTS.og_title || '',
+        og_description: sitewide?.og_description || HARDCODED_DEFAULTS.og_description || '',
+        og_image_url: sitewide?.og_image_url || HARDCODED_DEFAULTS.og_image_url || '',
+        og_url: `${SITE_URL}${path}`,
+        og_type: sitewide?.og_type || 'website',
+        twitter_card: sitewide?.twitter_card || 'summary_large_image',
+        twitter_title: sitewide?.twitter_title || sitewide?.og_title || '',
+        twitter_description: sitewide?.twitter_description || sitewide?.og_description || '',
+        twitter_image: sitewide?.twitter_image || sitewide?.og_image_url || '',
+        canonical_url: `${SITE_URL}${path}`,
+      });
+    }
   };
 
   const handleArticleSelect = (slug: string) => {
     setSelectedArticle(slug);
     const existing = entries.find(e => e.scope === 'article' && e.article_slug === slug);
-    setCurrentEntry(existing || { ...emptyEntry('article'), article_slug: slug });
+    const article = articles.find(a => a.slug === slug);
+
+    if (existing && article) {
+      // Show existing override but fill blanks from article data
+      const merged = { ...existing };
+      if (!merged.og_title) merged.og_title = article.seo_title || article.title;
+      if (!merged.og_description) merged.og_description = article.seo_description || article.subtitle || extractFirstParagraph(article.content_md || '');
+      if (!merged.og_image_url) merged.og_image_url = resolveImageUrl(article.featured_image_url);
+      if (!merged.og_url) merged.og_url = `${SITE_URL}/intel/briefing/${slug}`;
+      if (!merged.twitter_title) merged.twitter_title = merged.og_title;
+      if (!merged.twitter_description) merged.twitter_description = merged.og_description;
+      if (!merged.twitter_image) merged.twitter_image = merged.og_image_url;
+      if (!merged.canonical_url) merged.canonical_url = `${SITE_URL}/intel/briefing/${slug}`;
+      setCurrentEntry(merged);
+    } else if (article) {
+      // No override yet — auto-populate from article data
+      const ogTitle = article.seo_title || article.title;
+      const ogDesc = article.seo_description || article.subtitle || extractFirstParagraph(article.content_md || '');
+      const ogImage = resolveImageUrl(article.featured_image_url);
+      const articleUrl = `${SITE_URL}/intel/briefing/${slug}`;
+
+      setCurrentEntry({
+        ...emptyEntry('article'),
+        article_slug: slug,
+        og_title: ogTitle,
+        og_description: ogDesc,
+        og_image_url: ogImage,
+        og_url: articleUrl,
+        og_type: 'article',
+        twitter_card: 'summary_large_image',
+        twitter_title: ogTitle,
+        twitter_description: ogDesc,
+        twitter_image: ogImage,
+        canonical_url: articleUrl,
+      });
+    } else {
+      setCurrentEntry({ ...emptyEntry('article'), article_slug: slug });
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'og_image_url' | 'twitter_image') => {
@@ -193,9 +311,9 @@ export function MetaTagsManager() {
     if (activeScope === 'sitewide') {
       setCurrentEntry({ ...emptyEntry('sitewide'), ...DEFAULTS, scope: 'sitewide', id: currentEntry.id });
     } else if (activeScope === 'page') {
-      setCurrentEntry({ ...emptyEntry('page'), route_path: selectedPage, id: currentEntry.id });
+      handlePageSelect(selectedPage);
     } else {
-      setCurrentEntry({ ...emptyEntry('article'), article_slug: selectedArticle, id: currentEntry.id });
+      handleArticleSelect(selectedArticle);
     }
     toast({ title: 'Reset', description: 'Fields reset to defaults. Click Save to apply.' });
   };
@@ -396,7 +514,7 @@ function MetaTagForm({
             </label>
           </div>
           {entry.og_image_url && (
-            <img src={entry.og_image_url} alt="OG" className="mt-2 h-20 rounded border border-border/30 object-cover" />
+            <img src={entry.og_image_url} alt="OG" className="mt-2 h-16 w-28 rounded border border-border/30 object-cover" />
           )}
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -452,6 +570,9 @@ function MetaTagForm({
               </Button>
             </label>
           </div>
+          {entry.twitter_image && (
+            <img src={entry.twitter_image} alt="Twitter" className="mt-2 h-16 w-28 rounded border border-border/30 object-cover" />
+          )}
         </div>
       </div>
     </div>
