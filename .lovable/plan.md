@@ -1,91 +1,51 @@
 
-## Email Verification + Pixel Tracking System
 
-### Feature 1: Secondary Email Verification (48h Auto-Suspend)
+## Fix: Config System is Broken in Two Ways
 
-**Flow:**
-1. User signs up → autoconfirm stays ON → they enter the site seamlessly
-2. During onboarding, remind them: "Check your email and click the verification link"
-3. A **new edge function** (`send-verification-email`) sends a branded email with a unique verification token/link
-4. Link points to something like `https://blackbox.farm/verify-email?token=xxx`
-5. Clicking the link marks the user as "email verified" in a new `email_verifications` table
-6. A **pg_cron job** runs every hour: any user who signed up > 48 hours ago AND hasn't clicked the verification link gets auto-suspended (banned_until = 2099)
-7. When suspended, a "reactivation email" is automatically sent with a unique unsuspend link
-8. Clicking the unsuspend link → unbans the user AND marks them as email-verified
+### Problem 1: Hardcoded 3-second delay
+Line 2060 of the webhook has `setTimeout(resolve, 3000)` — it ignores whatever the admin sets via `/config delay`. The delay should be read from the channel's `admin_config.delay_ms` in the database.
 
-**New table: `email_verifications`**
-- `user_id` (uuid, FK auth.users)
-- `verification_token` (text, unique)
-- `sent_at` (timestamptz)
-- `verified_at` (timestamptz, nullable — NULL = not yet clicked)
-- `verification_type` ('signup' | 'reactivation')
+### Problem 2: `/config select` forgets immediately
+`userSelectedChannel` is a JavaScript `Map()` stored in memory (line 2204). Edge functions are **stateless** — each incoming message spins up a fresh instance. So when you do `/config select -1003739469076`, it stores the selection in RAM, responds "Selected: BLACKBOX", and then the function exits. The next message (`/config delay 2500`) hits a **new instance** with an empty Map, so it says "No channel selected."
 
-**New edge functions:**
-- `send-verification-email` — generates token, stores in table, sends branded email with verification link
-- `verify-email-token` — validates token, marks verified, unbans if needed
+This is why the screenshots show the selection working but every subsequent config command failing.
 
-**Onboarding change:**
-- Add a reminder step/banner: "Check your email to verify your account within 48 hours"
-
-**pg_cron job:**
-- Every hour, find users where `created_at < now() - interval '48 hours'` AND no `verified_at` in `email_verifications` AND not already banned
-- Ban them and trigger reactivation email
+### Problem 3: New installations default to 0ms delay
+The upsert at line 2763 doesn't include `admin_config`, so the DB column default applies — which is `{delay_ms: 0}` instead of `{delay_ms: 3000}`.
 
 ---
 
-### Feature 2: Email Pixel Tracking (All Emails)
+### Plan
 
-**How it works:**
-- Every outgoing email (auth, transactional, verification) includes a 1x1 transparent tracking pixel: `<img src="https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/track-email-open?id=xxx" />`
-- The pixel URL hits a new edge function that logs the open event
+**1. Persist channel selection in the database instead of in-memory**
+- Add a `selected_channel_id` column to `telegram_linked_accounts` (or a small new table)
+- `/config select` writes the selection to the DB
+- All subsequent `/config` commands read it from the DB
+- This survives across function invocations
 
-**New table: `email_tracking_events`**
-- `id` (uuid)
-- `tracking_id` (text, unique — embedded in the pixel URL)
-- `user_id` (uuid, nullable)
-- `email_type` (text — 'auth_signup', 'verification', 'reactivation', 'notification', etc.)
-- `recipient_email` (text)
-- `sent_at` (timestamptz)
-- `opened_at` (timestamptz, nullable — set on first pixel load)
-- `open_count` (integer — increments on each pixel load)
-- `clicked_at` (timestamptz, nullable — set when CTA link is clicked)
-- `metadata` (jsonb)
+**2. Read delay from `admin_config` in `handleGroupAutoScan`**
+- Replace the hardcoded `setTimeout(resolve, 3000)` with a DB lookup of the installation's `admin_config.delay_ms`
+- Fallback to 3000ms if no config exists
 
-**New edge function: `track-email-open`**
-- Receives `?id=tracking_id` query param
-- Updates `opened_at` (if first open) and increments `open_count`
-- Returns a 1x1 transparent GIF
-- No auth required (must work from email clients)
+**3. Set proper defaults on installation upsert**
+- Add `admin_config: { delay_ms: 3000, verbose: false, admin_only_commands: false, dev_wallet_alerts: false }` to the upsert payload at line 2763
 
-**Click tracking:**
-- CTA links in emails go through a redirect edge function: `track-email-click?id=xxx&redirect=https://...`
-- Logs the click, then 302 redirects to the actual destination
+**4. Migration: fix DB defaults + backfill**
+- Change the column default for `admin_config` to `{delay_ms: 3000, ...}`
+- Backfill all existing installations that have `delay_ms: 0` to `3000`
 
-**New edge function: `track-email-click`**
-- Logs click event, redirects user to actual URL
+**5. Auto-select when user has only one channel**
+- If the user runs `/config delay 2500` and has exactly one installation, auto-select it instead of demanding `/config select` first — quality-of-life improvement
 
-**Admin visibility:**
-- New sub-tab or section in Super Admin showing email open rates, click rates, per-user verification status
+**6. Redeploy the webhook**
 
----
+### Technical Detail
 
-### Files to create/edit
-
-| File | Action |
+| File | Change |
 |------|--------|
-| Migration | `email_verifications` + `email_tracking_events` tables |
-| `supabase/functions/send-verification-email/index.ts` | New — sends verification email with token + pixel |
-| `supabase/functions/verify-email-token/index.ts` | New — handles verification link clicks + unsuspend |
-| `supabase/functions/track-email-open/index.ts` | New — pixel tracking endpoint |
-| `supabase/functions/track-email-click/index.ts` | New — click tracking redirect |
-| `src/pages/VerifyEmail.tsx` | New — landing page for verification link |
-| Onboarding component | Add verification reminder |
-| Auth email templates (if scaffolded) | Inject pixel into all templates |
-| pg_cron SQL | 48h auto-suspend job |
+| Migration SQL | Add `selected_channel_id` to `telegram_linked_accounts`, fix `admin_config` default, backfill |
+| `holdersintel-bot-webhook/index.ts` line 2204 | Remove in-memory Map, replace with DB read/write for selection |
+| `holdersintel-bot-webhook/index.ts` line 2060 | Read `admin_config.delay_ms` from DB instead of hardcoded 3000 |
+| `holdersintel-bot-webhook/index.ts` line 2763 | Add default `admin_config` to upsert payload |
+| `holdersintel-bot-webhook/index.ts` handleConfig | Auto-select if user has exactly 1 channel |
 
-### What this achieves
-- Seamless signup (autoconfirm stays)
-- Real email verification with teeth (48h deadline)
-- Self-service reactivation (no admin intervention needed)
-- Full email analytics: who opened, who clicked, who ignored
-- Admin dashboard visibility into verification + engagement rates
