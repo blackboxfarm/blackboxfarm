@@ -5,8 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, UserPlus, UserMinus, Bot, Users } from "lucide-react";
+import { Loader2, RefreshCw, UserPlus, UserMinus, Bot, Users, ExternalLink, Mail } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+
+interface LinkedProfile {
+  id: string;
+  display_name: string | null;
+  oauth_provider: string | null;
+  oauth_username: string | null;
+  email?: string;
+}
 
 interface BotInteraction {
   id: string;
@@ -40,6 +48,8 @@ export function TelegramInteractionsPanel() {
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState("bot");
 
+  const [linkedProfiles, setLinkedProfiles] = useState<Map<string, LinkedProfile>>(new Map());
+
   const [stats, setStats] = useState({
     totalToday: 0, uniqueUsers: 0, newUsers: 0, joinsToday: 0, leavesToday: 0,
   });
@@ -59,7 +69,25 @@ export function TelegramInteractionsPanel() {
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "left"),
     ]);
 
-    if (intRes.data) setInteractions(intRes.data as BotInteraction[]);
+    if (intRes.data) {
+      setInteractions(intRes.data as BotInteraction[]);
+      
+      // Fetch linked profiles for users with linked_user_id
+      const linkedIds = [...new Set(intRes.data.filter(i => i.linked_user_id).map(i => i.linked_user_id))];
+      if (linkedIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, display_name, oauth_provider, oauth_username")
+          .in("id", linkedIds);
+        const map = new Map<string, LinkedProfile>();
+        if (profiles) {
+          for (const p of profiles) {
+            map.set(p.id, p as LinkedProfile);
+          }
+        }
+        setLinkedProfiles(map);
+      }
+    }
     if (memRes.data) setMembers(memRes.data as ChannelMember[]);
 
     setStats({
@@ -145,25 +173,52 @@ export function TelegramInteractionsPanel() {
                     <TableHead compact>Token</TableHead>
                     <TableHead compact>Chat</TableHead>
                     <TableHead compact>Status</TableHead>
-                    <TableHead compact>Linked</TableHead>
+                    <TableHead compact>Web Account</TableHead>
                     <TableHead compact>New</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {interactions.length === 0 ? (
                     <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No interactions recorded yet</TableCell></TableRow>
-                  ) : interactions.map((i) => (
+                  ) : interactions.map((i) => {
+                    const profile = i.linked_user_id ? linkedProfiles.get(i.linked_user_id) : null;
+                    return (
                     <TableRow key={i.id}>
                       <TableCell compact className="whitespace-nowrap">{formatDistanceToNow(new Date(i.created_at), { addSuffix: true })}</TableCell>
-                      <TableCell compact>{i.telegram_username ? `@${i.telegram_username}` : i.first_name || i.telegram_user_id}</TableCell>
+                      <TableCell compact>
+                        {i.telegram_username ? (
+                          <a href={`https://t.me/${i.telegram_username}`} target="_blank" rel="noopener noreferrer"
+                            className="text-blue-400 hover:underline flex items-center gap-1">
+                            @{i.telegram_username} <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        ) : i.first_name || i.telegram_user_id}
+                      </TableCell>
                       <TableCell compact className="font-mono text-xs">{i.command || '—'}</TableCell>
                       <TableCell compact className="font-mono text-xs max-w-[80px] truncate">{i.token_mint ? `${i.token_mint.slice(0, 6)}…` : '—'}</TableCell>
                       <TableCell compact><Badge variant="outline" className="text-[10px]">{i.chat_type}</Badge></TableCell>
                       <TableCell compact>{statusBadge(i.response_status)}</TableCell>
-                      <TableCell compact>{i.linked_user_id ? '✅' : '—'}</TableCell>
+                      <TableCell compact>
+                        {i.linked_user_id ? (
+                          <div className="flex flex-col gap-0.5">
+                            {profile?.display_name && (
+                              <span className="text-[10px] text-muted-foreground">{profile.display_name}</span>
+                            )}
+                            {profile?.oauth_provider && profile?.oauth_username && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {profile.oauth_provider === 'twitter' ? '𝕏' : profile.oauth_provider}: @{profile.oauth_username}
+                              </span>
+                            )}
+                            <a href={`/super-admin?tab=accounts&user=${i.linked_user_id}`}
+                              className="text-[10px] text-blue-400 hover:underline flex items-center gap-1">
+                              View Profile → <ExternalLink className="w-2 h-2" />
+                            </a>
+                          </div>
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                      </TableCell>
                       <TableCell compact>{i.is_new_user ? <Badge className="text-[10px] bg-green-600">NEW</Badge> : ''}</TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
