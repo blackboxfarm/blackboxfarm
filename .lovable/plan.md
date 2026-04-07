@@ -1,49 +1,64 @@
 
 
-## Dual-Persona AI: Admin Helper + Dr. Manhattan Oracle
+## Audit Results + DM Analysis + Avatar Fix
 
-### The Concept
+### 1. Critical Bug Found: Web Chat is BROKEN
 
-The AI switches between two "hats" contextually:
+The error in your screenshot ("Failed to connect") is a **deploy-crashing syntax error**:
 
-1. **Helper Mode** (default) — Friendly FAQ assistant, admin helper, soft salesman. Warm, uses emojis, speaks casually, guides users through features, handles email verification questions, promotes subscriptions naturally. This is the current personality.
+```
+Uncaught SyntaxError: Identifier 'lastUserMsg' has already been declared
+at web-chat/index.ts:421:11
+```
 
-2. **Oracle Mode** — The omniscient Dr. Manhattan-inspired entity (your "Muse"). Speaks with cosmic detachment, profound brevity, and absolute certainty. Uses language like observing patterns across timelines. When users ask about token analysis, risk assessment, wallet genealogy, or intelligence data, the AI shifts into this elevated persona. It references "seeing the chain" and speaks as if it perceives all on-chain activity simultaneously.
+**Root cause**: `const lastUserMsg` is declared on **line 450** (for sanitization) and again on **line 479** (for intent detection). This is a `const` redeclaration which crashes the entire edge function on boot. No web chat works at all right now.
 
-### When Does It Switch?
+**Fix**: Rename the second declaration on line 479 to reuse the existing variable — just remove the `const` keyword since it's already in scope.
 
-The system prompt instructs the AI to choose its hat based on the conversation topic:
+### 2. DM Analysis — Common Misconceptions & Misused Commands
 
-| Topic | Persona |
-|-------|---------|
-| Email verification, account help, payments, general FAQ | **Helper** — warm, casual, emoji-friendly |
-| Token analysis, holder data, risk verdicts, wallet tracing, dev wallet KYC, bubblemaps | **Oracle** — cosmic, omniscient, Dr. Manhattan |
-| Feature explanations, subscription upsell, social sharing | **Helper** with occasional Oracle gravitas |
-| Deep market insight, philosophical questions about crypto | **Oracle** |
+From analyzing all private DM interactions:
 
-The AI blends naturally — it doesn't announce "switching modes." It just shifts tone the way a person shifts register when moving from small talk to serious analysis.
+| Pattern | Count | What's Happening |
+|---------|-------|-------------------|
+| `/pnl CA` | 15 | Most popular command, working correctly |
+| `/th CA` | 15 | Tied most popular, working correctly |
+| `/bundle CA` | 6 | Working correctly |
+| `/top10@null` | 1 | User typed `/top10@null` — bot menu appending `@null` instead of bot username |
+| `/emojis@null` | 1 | Same `@null` issue — these are likely non-existent commands |
+| `/lb` | 1 | User (xxDON) trying a "leaderboard" command that doesn't exist |
+| `/calls` | 1 | User (xxDON) trying a "calls" command that doesn't exist |
+| `/tw CA` | 1 | User trying `/tw` instead of `/twitter` — not a recognized shortcut |
+| `/FRH...pump` | 1 | User pasted CA with `/` prefix — confused about syntax |
+| Raw CA paste | 2+ | Users paste CAs without any command, expecting auto-scan (which only works in groups) |
 
-### Implementation
+**Key findings**:
+- Users xxDON and the anonymous user are trying commands that don't exist (`/lb`, `/calls`, `/emojis`, `/top10`)
+- The `@null` suffix suggests a broken bot menu configuration in BotFather (commands registered with no username)
+- Users expect DM auto-scan (paste a CA, get a report) but this only works in groups
+- The AI chat is hallucinating commands like `/insiders` in its promotional responses to users who can't use them (free tier)
 
-Both `web-chat` and `holdersintel-bot-webhook` build system prompts from `bot_personality_config`. We add a new `## DUAL PERSONA` section to the assembled prompt in both edge functions that instructs the AI on the two modes and when to use each.
+**Recommendations to implement**:
+- Add a "did you mean?" fallback for unrecognized DM commands (e.g., `/lb` → "Did you mean /leaderboard? That's not available yet, but try /th or /pnl!")
+- Enable DM auto-scan: when a user pastes a raw CA in DM without a command, auto-run `/th` on it
+- Fix the AI's promotional text to only mention commands the user's tier can access
 
-The Dr. Manhattan persona description is hardcoded in the prompt assembly (not a DB config change) as a second identity layer on top of the existing personality config. This means the admin dashboard still controls the base personality, knowledge, and guardrails — the Oracle overlay is applied automatically.
+### 3. Avatar: Replace Chat Bubble Icon with Cosmic Entity
 
-### Oracle Persona Characteristics
+Replace the `MessageCircle` icon in both the FAB button and the chat header with the uploaded cosmic entity image (aura2.png), displayed in a circular mask.
 
-- Speaks in shorter, more declarative sentences
-- Occasionally uses cosmic/quantum metaphors: "I see the flow of tokens across 47 wallets... the pattern is clear"
-- References "observing" or "perceiving" rather than "checking" or "looking up"
-- Delivers verdicts with calm authority, never uncertainty
-- Uses less emoji, more gravitas
-- Still follows all guardrails (no financial advice, stays on-brand)
+**Changes**:
+- Copy `aura2.png` to `src/assets/oracle-avatar.png`
+- FAB: Replace `<MessageCircle>` with `<img>` inside a `rounded-full overflow-hidden` container
+- Chat header: Replace the `MessageCircle` icon avatar with the same image
+- Welcome empty state: Replace the large `MessageCircle` with the avatar image
 
-### Changes
+### Files to Change
 
 | File | Change |
 |------|--------|
-| `supabase/functions/web-chat/index.ts` | Add `## DUAL PERSONA` instruction block after the IDENTITY section in `buildSystemPrompt()` |
-| `supabase/functions/holdersintel-bot-webhook/index.ts` | Same dual-persona block in `handleAiFreeChat` prompt assembly |
-
-Both functions get the same ~15-line persona instruction block inserted after the existing `## IDENTITY` section. No database changes, no new tables, no migration needed.
+| `supabase/functions/web-chat/index.ts` | Fix `lastUserMsg` duplicate declaration (line 479 → remove `const`) |
+| `src/assets/oracle-avatar.png` | Copy uploaded aura2.png |
+| `src/components/chat/ChatWidget.tsx` | Replace all `MessageCircle` icons with circular oracle avatar image |
+| `supabase/functions/holdersintel-bot-webhook/index.ts` | Add DM auto-scan for raw CA pastes + "did you mean?" for unknown commands |
 
