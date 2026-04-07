@@ -322,10 +322,12 @@ async function buildSystemPrompt(userContext: {
       prompt += '\n';
     }
 
-    prompt += `## INTERNAL LINKS\nWhen directing users to features, always reference the website with full URLs:\n`;
+    prompt += `## INTERNAL LINKS\nWhen directing users to features, always reference the website with full URLs. When a token CA is mentioned, provide pre-loaded links:\n`;
     prompt += `- Homepage: https://blackbox.farm\n`;
     prompt += `- Holders Analysis: https://blackbox.farm/holders\n`;
+    prompt += `- Holders (pre-loaded token): https://blackbox.farm/holders?token=TOKEN_ADDRESS\n`;
     prompt += `- Bubblemaps: https://blackbox.farm/bubblemaps\n`;
+    prompt += `- Bubblemaps (pre-loaded token): https://blackbox.farm/bubblemaps?token=TOKEN_ADDRESS\n`;
     prompt += `- Intel Briefings: https://blackbox.farm/intel\n`;
     prompt += `- Oracle Risk Tool: https://blackbox.farm/oracle\n`;
     prompt += `- Register/Sign Up: https://blackbox.farm/register\n`;
@@ -335,7 +337,22 @@ async function buildSystemPrompt(userContext: {
     prompt += `- Subscriptions: https://blackbox.farm/subscriptions\n`;
     prompt += `- Live Feed: https://blackbox.farm/feed\n`;
     prompt += `- Telegram Bot: https://blackbox.farm/tgbot\n`;
-    prompt += `Use these links naturally when relevant.\n\n`;
+    prompt += `Replace TOKEN_ADDRESS with the actual CA when a user mentions a specific token. Use these links naturally when relevant.\n\n`;
+
+    prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
+    prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;
+    prompt += `### Setup (All tiers)\n`;
+    prompt += `/start — Welcome & setup\n/register — Link BlackBox Farm account\n/status — Check subscription tier\n/help — Show all commands\n\n`;
+    prompt += `### Analysis (Auth+ tier)\n`;
+    prompt += `/holders CA — Holder distribution analysis\n/risk CA (alias /r) — Composite risk & stability\n/concentration CA — Detailed holder % breakdown\n/dev CA (alias /d) — Developer intel & social doxxing\n/ca CA — Default holder analysis\n/quick CA (alias /q) — Fast holder count & key stats\n/ai CA — Descriptive AI analysis snapshot\n\n`;
+    prompt += `### Advanced (X Subscriber+ tier)\n`;
+    prompt += `/momentum CA (alias /m) — Volume & price momentum scoring\n/insiders CA (alias /i) — Insider cluster & bundling pre-check\n/compare CA1 CA2 (alias /cmp) — Side-by-side token comparison\n/alerts — Manage alert preferences\n\n`;
+    prompt += `### Pro ($9.99/mo)\n`;
+    prompt += `/oracle CA (alias /o) — Full developer reputation mesh\n/wallet CA (alias /w) — Wallet behavior analysis\n\n`;
+    prompt += `### Admin (DM-only)\n`;
+    prompt += `/add — Add bot to a group\n/channels (alias /ch) — Manage installations\n/config — Channel settings\n/payment (alias /pay) — Payment & billing\n\n`;
+    prompt += `IMPORTANT: Commands like /lb, /calls, /top10, /leaderboard, /scan, /emojis DO NOT EXIST. Never mention them.\n`;
+    prompt += `When promoting commands, only promote ones the user's tier can access. Don't tease commands they can't use without mentioning the upgrade path.\n\n`;
 
     // Inject user profile context
     if (userContext.userProfile) {

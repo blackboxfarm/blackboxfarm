@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Network, Crown } from "lucide-react";
@@ -12,6 +12,13 @@ export default function BubbleMapPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { isPro } = useUserTier();
+  const [initialToken, setInitialToken] = useState<string>("");
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token');
+    if (tokenParam) setInitialToken(tokenParam.trim());
+  }, []);
 
   if (loading) return null;
 
@@ -50,7 +57,7 @@ export default function BubbleMapPage() {
           </div>
         </div>
 
-        <PublicBubbleMap mode="authenticated" showUpgradePrompt />
+        <PublicBubbleMap mode="authenticated" showUpgradePrompt initialToken={initialToken} />
 
         {!isPro && (
           <Card>

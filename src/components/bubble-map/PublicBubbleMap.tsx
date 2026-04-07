@@ -26,13 +26,15 @@ const isMobileDevice = () => typeof window !== 'undefined' && window.innerWidth 
 interface PublicBubbleMapProps {
   showUpgradePrompt?: boolean;
   mode: 'promo' | 'authenticated';
+  initialToken?: string;
 }
 
-const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapProps) => {
+const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: PublicBubbleMapProps) => {
   const navigate = useNavigate();
   const graphRef = useRef<any>();
   const containerRef = useRef<HTMLDivElement>(null);
   const [searchInput, setSearchInput] = useState("");
+  const [initialTokenLoaded, setInitialTokenLoaded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<MeshNode | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -225,7 +227,21 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapPro
     }
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
-  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active AND hasn't already run
+  // Auto-load from URL ?token= parameter
+  useEffect(() => {
+    if (initialToken && !initialTokenLoaded && canSearch) {
+      setSearchInput(initialToken);
+      setInitialTokenLoaded(true);
+      // Trigger search after state update
+      setTimeout(() => {
+        recordSearch();
+        focusOnEntity(initialToken, 'wallet');
+        queueTokenFromFrontend(initialToken, 'bubblemap_input', { comment: 'Bubblemap URL preload' });
+      }, 100);
+    }
+  }, [initialToken, initialTokenLoaded, canSearch, recordSearch, focusOnEntity]);
+
+
   const spiderHasError = !!spiderStatus.error;
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !hasSpideredOnce;
 
