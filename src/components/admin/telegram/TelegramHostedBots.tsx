@@ -53,6 +53,7 @@ interface ChatMessage {
   display_name: string | null;
   message_text: string | null;
   created_at: string;
+  is_bot_reply?: boolean;
 }
 
 export function TelegramHostedBots() {
