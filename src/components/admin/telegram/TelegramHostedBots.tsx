@@ -93,17 +93,23 @@ export function TelegramHostedBots() {
     }
   };
 
-  const openChatModal = async (chatId: string, title: string) => {
-    setChatModal({ chatId, title });
+  const openChatModal = async (chatId: string, title: string, isDm?: boolean) => {
+    setChatModal({ chatId, title, isDm });
     setChatLoading(true);
     try {
       const numericChatId = Number(chatId);
-      const { data, error } = await supabase
+      let query = supabase
         .from('telegram_group_messages')
-        .select('id, username, display_name, message_text, created_at')
+        .select('id, username, display_name, message_text, created_at, is_bot_reply')
         .eq('chat_id', numericChatId)
         .order('created_at', { ascending: false })
         .limit(200);
+      
+      if (isDm) {
+        query = query.eq('chat_type', 'private');
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       setChatMessages((data || []).reverse());
     } catch (err) {
