@@ -26,13 +26,15 @@ const isMobileDevice = () => typeof window !== 'undefined' && window.innerWidth 
 interface PublicBubbleMapProps {
   showUpgradePrompt?: boolean;
   mode: 'promo' | 'authenticated';
+  initialToken?: string;
 }
 
-const PublicBubbleMap = ({ showUpgradePrompt = false, mode }: PublicBubbleMapProps) => {
+const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: PublicBubbleMapProps) => {
   const navigate = useNavigate();
   const graphRef = useRef<any>();
   const containerRef = useRef<HTMLDivElement>(null);
   const [searchInput, setSearchInput] = useState("");
+  const [initialTokenLoaded, setInitialTokenLoaded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<MeshNode | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const [showDiagnostics, setShowDiagnostics] = useState(false);
