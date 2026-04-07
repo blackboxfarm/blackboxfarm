@@ -2991,7 +2991,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           default:
             // Unknown command in DM context — route to AI assistant
             if (message.text) {
-              await handleAdminFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated);
+              await handleAdminFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated, username);
             }
             break;
         }
@@ -3110,7 +3110,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           // AI conversational assistant for admin DMs
           else if (!isGroupChat && message.text) {
             console.log('[bot] routing to AI free chat', JSON.stringify({ chatId, telegramUserId, text: sanitized.rawTruncated.slice(0, 50) }));
-            await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated);
+            await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated, username);
           }
           break;
       }
