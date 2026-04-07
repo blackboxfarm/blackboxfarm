@@ -2454,6 +2454,112 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, targe
   );
 }
 
+// ─── AI Conversational Assistant for Admin DMs ───
+const aiChatRateMap = new Map<string, number[]>();
+
+async function handleAdminFreeChat(chatId: number, telegramUserId: string, messageText: string) {
+  // Rate limit: 5 messages per minute per user
+  const now = Date.now();
+  const timestamps = aiChatRateMap.get(telegramUserId) || [];
+  const recent = timestamps.filter(t => now - t < 60_000);
+  if (recent.length >= 5) {
+    await sendMessage(chatId, `⏳ Slow down! You can send up to 5 messages per minute. Try again shortly.`);
+    return;
+  }
+  recent.push(now);
+  aiChatRateMap.set(telegramUserId, recent);
+
+  // Check if user is an admin (has any channel installations)
+  const { data: installations } = await supabase
+    .from('channel_installations')
+    .select('id')
+    .eq('installed_by_telegram_id', telegramUserId)
+    .eq('kicked', false)
+    .limit(1);
+
+  if (!installations || installations.length === 0) {
+    await sendMessage(chatId, `👋 Hey! I'm the HoldersIntel Bot.\n\nType /help to see all available commands, or /start to get set up!`);
+    return;
+  }
+
+  try {
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      await sendMessage(chatId, `🤖 I'd love to chat, but my AI brain isn't configured right now. Try /help for commands!`);
+      return;
+    }
+
+    const systemPrompt = `You are the official BlackBox Farm / HoldersIntel Bot assistant — a knowledgeable, enthusiastic crypto analytics product ambassador.
+
+PERSONALITY: Warm, helpful, emoji-rich, marketing-savvy. You LOVE this product and genuinely believe it helps crypto communities. You're like a friendly expert who's excited to show off features.
+
+PRODUCT INFO:
+- HoldersIntel Bot (@holdersintel_bot) is a Telegram bot for Solana token analysis
+- It provides holder distribution analysis, risk scoring, developer intel, wallet tracing, insider detection, and AI-powered insights
+- Admins install it FREE in their channels/groups — ALL features are included at no cost
+- The bot auto-scans Solana contract addresses posted in group chats
+
+COMMANDS REFERENCE:
+🔧 Setup: /start, /register, /status, /help
+📊 Analysis: /holders (holder distribution), /risk or /r (risk assessment), /concentration (holder % breakdown), /dev or /d (developer intel), /ca (default analysis), /quick or /q (fast stats), /ai (AI snapshot)
+⚡ Advanced: /momentum or /m (volume & price momentum), /insiders or /i (insider cluster detection), /compare or /cmp (side-by-side comparison), /alerts (alert preferences)
+👑 Pro: /oracle or /o (full developer reputation mesh), /wallet or /w (wallet behavior analysis)
+🔧 Admin: /config (channel settings — delay, verbose, admin-only), /channels or /ch (view installations & configs), /add (add new channel)
+
+KEY SELLING POINTS:
+- 100% FREE — no activation fees, no subscriptions needed
+- Auto-scans CAs posted in groups with configurable delay
+- Detects rug pulls, insider clusters, dev wallet patterns
+- AI-powered risk verdicts and market analysis
+- Community-friendly: configurable verbose mode, admin-only mode, custom delays
+
+RULES:
+1. Always be helpful and enthusiastic
+2. If asked about pricing: "Everything is FREE! 🎉"
+3. If asked technical questions outside your scope: politely redirect to the commands or suggest they contact the team
+4. Never give financial advice or price predictions
+5. Keep responses concise but informative (under 500 chars when possible)
+6. Use emojis liberally but naturally
+7. If they ask about a specific command, explain it with an example
+8. If they seem confused, guide them step by step`;
+
+    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-3-flash-preview',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: messageText },
+        ],
+        temperature: 0.8,
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!aiRes.ok) {
+      console.error('[bot] AI chat error:', aiRes.status);
+      await sendMessage(chatId, `🤖 My AI brain is taking a break. Try /help for commands in the meantime!`);
+      return;
+    }
+
+    const aiData = await aiRes.json();
+    const reply = aiData.choices?.[0]?.message?.content;
+
+    if (reply) {
+      await sendMessage(chatId, reply, 'Markdown');
+    } else {
+      await sendMessage(chatId, `🤖 Hmm, I couldn't think of a response. Try asking differently or use /help!`);
+    }
+  } catch (err) {
+    console.error('[bot] AI chat handler error:', err);
+    await sendMessage(chatId, `🤖 Something went wrong on my end. Use /help to see available commands!`);
+  }
+}
+
 // ─── Handle chat_member: track user joins/leaves in channels ───
 async function handleChatMember(update: any) {
   const cm = update.chat_member;
@@ -2959,6 +3065,10 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             if (detectedCA) {
               await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
             }
+          }
+          // AI conversational assistant for admin DMs
+          else if (!isGroupChat && message.text) {
+            await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated);
           }
           break;
       }
