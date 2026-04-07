@@ -126,6 +126,15 @@ export function TelegramHostedBots() {
   };
 
   const openChatModal = async (chatId: string, title: string, isDm?: boolean) => {
+    // Mark DMs as read when opening
+    if (isDm) {
+      localStorage.setItem(`dm_last_viewed_${chatId}`, new Date().toISOString());
+      setUnreadDmSet(prev => {
+        const next = new Set(prev);
+        next.delete(chatId);
+        return next;
+      });
+    }
     setChatModal({ chatId, title, isDm });
     setChatLoading(true);
     try {
@@ -152,7 +161,7 @@ export function TelegramHostedBots() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); checkUnreadDms(); }, []);
 
   const totalGroups = groups.length;
   const totalMembers = groups.reduce((s, g) => s + (g.member_count || 0), 0);
