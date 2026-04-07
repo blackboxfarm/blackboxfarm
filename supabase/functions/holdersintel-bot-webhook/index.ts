@@ -253,6 +253,90 @@ async function getLinkedUser(telegramUserId: string) {
   return data;
 }
 
+// ─── Check if a user's web account is suspended (banned) ───
+async function isUserSuspended(userId: string): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.admin.getUserById(userId);
+    if (!data?.user) return false;
+    const bannedUntil = data.user.banned_until;
+    if (!bannedUntil) return false;
+    return new Date(bannedUntil) > new Date();
+  } catch {
+    return false;
+  }
+}
+
+// ─── Check if user is unverified and past 24h (for gentle nudge) ───
+async function isUserPast24hUnverified(userId: string): Promise<boolean> {
+  try {
+    const { data: authData } = await supabase.auth.admin.getUserById(userId);
+    if (!authData?.user) return false;
+    const createdAt = new Date(authData.user.created_at);
+    const hoursSince = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+    if (hoursSince < 24) return false;
+
+    // Check if they have a verified email
+    const { data: verified } = await supabase
+      .from('email_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('verification_type', 'signup')
+      .not('verified_at', 'is', null)
+      .limit(1);
+
+    if (verified && verified.length > 0) return false;
+
+    // Check if they have a pending verification at all
+    const { data: pending } = await supabase
+      .from('email_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('verification_type', 'signup')
+      .limit(1);
+
+    return (pending && pending.length > 0) || false;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Get or create a reactivation token for a suspended user ───
+async function getOrCreateReactivationToken(userId: string): Promise<string | null> {
+  try {
+    // Check for existing non-expired reactivation token
+    const { data: existing } = await supabase
+      .from('email_verifications')
+      .select('verification_token, expires_at')
+      .eq('user_id', userId)
+      .eq('verification_type', 'reactivation')
+      .is('verified_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (existing && new Date(existing.expires_at) > new Date()) {
+      return existing.verification_token;
+    }
+
+    // Create a new one
+    const tokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(tokenBytes);
+    const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    await supabase.from('email_verifications').insert({
+      user_id: userId,
+      verification_token: token,
+      verification_type: 'reactivation',
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    return token;
+  } catch (err) {
+    console.error('[bot] getOrCreateReactivationToken error:', err);
+    return null;
+  }
+}
+
 async function getUserTier(userId: string): Promise<string> {
   const { data } = await supabase.rpc("get_user_tier", { p_user_id: userId });
   return data || "auth";
