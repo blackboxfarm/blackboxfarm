@@ -1,101 +1,166 @@
 
 
-## Sentient Web Assistant — Website Chat Widget
+## Context-Aware AI Assistant with User Memory & Database Lookups
 
 ### What This Builds
 
-A floating chat widget on every page of blackbox.farm that lets **any visitor** (anonymous, free account, paid subscriber) talk to the same AI personality already configured in your Super Admin → AI Config dashboard. The widget adapts its behavior and sales pitch based on who's chatting.
+Transforms both the **web-chat** and **TG bot AI chat** from stateless Q&A into a context-aware assistant that:
+1. **Remembers users** across sessions with a persistent memory/preferences table
+2. **Cross-references identity** — knows if a web user is also registered on Telegram (and vice versa)
+3. **Looks up real data** when users submit token addresses, Twitter handles, or ask about their account status
+4. **Asks "What should I call you?"** on first interaction and remembers the answer
 
-### How It Works
+### Architecture
 
 ```text
-┌─────────────────────────────────────┐
-│  Website (SiteLayout)               │
-│                                     │
-│   ┌──────────────────────┐          │
-│   │  Page Content         │          │
-│   └──────────────────────┘          │
-│                                     │
-│                    ┌───────────┐    │
-│                    │ 💬 Chat   │    │
-│                    │  Widget   │    │
-│                    │  (fab)    │    │
-│                    └───────────┘    │
-└─────────────────────────────────────┘
-         │
-         ▼
-   Edge Function: web-chat
-         │
-         ▼
-   Same DB config:
-   bot_personality_config
-   bot_knowledge_bins
-   bot_guardrails
+User message arrives (web or TG)
+       │
+       ▼
+┌──────────────────────────┐
+│  Identify User           │
+│  - Web: auth userId      │
+│  - TG: telegram_user_id  │
+│  - Anon: session_id      │
+└──────────┬───────────────┘
+           ▼
+┌──────────────────────────┐
+│  Load User Context       │
+│  (new table:             │
+│   ai_user_memory)        │
+│  + profiles              │
+│  + telegram_link_codes   │
+│  + email_verifications   │
+└──────────┬───────────────┘
+           ▼
+┌──────────────────────────┐
+│  Detect Intent           │
+│  (regex patterns)        │
+│  - Solana CA? → lookup   │
+│  - Twitter @handle?      │
+│  - "email" question?     │
+│  - "bubblemaps"?         │
+└──────────┬───────────────┘
+           ▼
+┌──────────────────────────┐
+│  Query Database          │
+│  (token_lifecycle,       │
+│   token_social_links,    │
+│   reputation_mesh,       │
+│   email_verifications,   │
+│   etc.)                  │
+└──────────┬───────────────┘
+           ▼
+┌──────────────────────────┐
+│  Inject into system      │
+│  prompt as ## USER       │
+│  PROFILE + ## LIVE DATA  │
+│  blocks                  │
+└──────────┬───────────────┘
+           ▼
+        AI Response
 ```
 
-### User Tier Awareness
+### 1. New Table: `ai_user_memory`
 
-The widget detects the user's state and injects a **context block** into the system prompt:
+Persistent per-user memory the AI reads/writes:
 
-| Visitor Type | Behavior |
-|---|---|
-| **Anonymous** | Greet warmly, explain what BlackBox does, encourage sign-up, limit to 3 messages then prompt registration |
-| **Free account** | Full chat, guide through features, soft-sell Pro subscription, help with email verification |
-| **Paid subscriber** | Priority treatment, help with advanced features, no upsell pressure |
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | uuid PK | |
+| `user_id` | uuid (nullable) | Web account ref |
+| `telegram_user_id` | text (nullable) | TG identity |
+| `session_id` | text (nullable) | For anon visitors |
+| `preferred_name` | text | "What should I call you?" |
+| `language_preference` | text | Detected/stated language |
+| `interests` | text[] | Topics they ask about |
+| `notes` | jsonb | Freeform AI memory |
+| `created_at` / `updated_at` | timestamptz | |
 
-### Components to Build
+Unique constraint on `(user_id)` and `(telegram_user_id)` where not null.
 
-1. **`ChatWidget.tsx`** — Floating FAB button (bottom-right corner) that expands into a chat panel. Includes:
-   - Message history (session-only for anon, persisted for logged-in users)
-   - Markdown rendering for AI responses
-   - Typing indicator during streaming
-   - User tier badge in header
-   - Minimized state shows unread dot
+### 2. User Context Loader (shared function)
 
-2. **`web-chat` Edge Function** — New function that:
-   - Accepts `{ messages, user_context }` where user_context includes tier (anon/free/paid), current page path, and user ID if logged in
-   - Fetches the same `bot_personality_config`, `bot_knowledge_bins`, `bot_guardrails` from DB
-   - Appends a web-specific context block: "User is on page X, they are a [tier] user, adjust accordingly"
-   - Streams response via Lovable AI Gateway (same as Telegram bot)
-   - Logs conversations to a `web_chat_messages` table for morning report analysis
+A `buildUserContext()` function used by both `web-chat` and `handleAiFreeChat` that:
 
-3. **`web_chat_messages` table** — Stores all web chat interactions:
-   - `id`, `session_id`, `user_id` (nullable for anon), `role` (user/assistant), `content`, `page_path`, `user_tier`, `created_at`
-   - RLS: users read own messages, service role for insert
+- Loads `ai_user_memory` for the user
+- If `user_id` exists: loads `profiles` (display_name, email_verified, tier, referral_source)
+- Cross-references `telegram_link_codes` to find their TG identity (or web identity from TG)
+- Checks `email_verifications` for verification status, sent/opened/clicked timestamps
+- Returns a structured context block injected into the system prompt
 
-4. **Admin Dashboard addition** — New sub-section in AI Config showing web chat analytics (message volume, popular pages, conversion indicators)
+### 3. Intent Detection & Live Data Lookups
 
-### Integration Points
+Before calling the AI, scan the user's message for actionable patterns:
 
-- **SiteLayout.tsx**: Add `<ChatWidget />` at the bottom, visible on all pages
-- **Shares AI Config**: Same personality, knowledge bins, and guardrails — one dashboard controls both Telegram and web
-- **Morning Report**: Extended to include web chat stats alongside Telegram DM stats
-- **Page-aware**: Widget sends current `location.pathname` so the AI knows what page the user is viewing and can offer contextual help
+| Pattern | Action | Data Source |
+|---------|--------|-------------|
+| Solana address (base58, 32-44 chars) | Lookup token info | `token_lifecycle` + `token_social_links` + `reputation_mesh` |
+| `@handle` or Twitter URL | Find linked tokens | `token_social_links` where `platform='twitter'` |
+| "email" / "verify" / "verification" | Check their email status | `email_verifications` + `email_tracking_events` |
+| "bubblemaps" / "bubble map" | Provide link + explain | Knowledge bins + direct URL |
+| "dev wallet" / "KYC" / "funding" | Lookup genealogy | `reputation_mesh` for the token/wallet |
+| "subscribe" / "upgrade" / "pro" | Check their current tier + link | `profiles.cached_tier_key` |
 
-### Rate Limiting
+Results are injected as a `## LIVE DATA LOOKUP` block in the system prompt so the AI can reference real facts.
 
-| Tier | Limit |
-|---|---|
-| Anonymous | 3 messages per session, then "Sign up to keep chatting!" |
-| Free | 20 messages per hour |
-| Paid | 60 messages per hour |
+### 4. System Prompt Additions
+
+Both web-chat and TG bot get these new prompt sections:
+
+```
+## USER PROFILE
+- Name: Pablo (they prefer this)
+- Platform: Website (also registered on Telegram as @pablo_crypto)
+- Account tier: Free
+- Email: verified ✅ (verified 3 days ago)
+- Member since: March 2026
+- Interests: holders analysis, dev wallets
+
+## LIVE DATA LOOKUP
+User submitted: 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU
+- Token: BONK ($BONK)
+- Phase: Established (bonded 45 days ago)
+- Top 10 holders: 34.2%
+- Dev wallet: 5abc...def → funded by Binance (KYC confirmed)
+- Social links: twitter.com/bonaboracoin, t.me/bonkcommunity
+
+## INSTRUCTIONS
+- Address the user as "Pablo"
+- Reference the live data naturally in your response
+- If they ask follow-up questions about this token, you have the data above
+```
+
+### 5. "What should I call you?" Flow
+
+- On first interaction (no `ai_user_memory` record), the AI's prompt includes: "This is a new user. In your first reply, warmly introduce yourself and ask what they'd like to be called."
+- When the user responds with a name, the AI includes it in the reply — and the edge function parses the conversation to extract it and save to `ai_user_memory.preferred_name`
+- Subsequent sessions: greeting uses their name automatically
+
+### 6. Cross-Platform Identity
+
+When a web user has a linked Telegram account (via `telegram_link_codes`):
+- The AI knows their TG username and can reference it
+- If they mention a TG problem, the AI can check `telegram_group_messages` for recent DM history
+- If a TG user mentions their web account, the AI can look up their profile
 
 ### Files to Create/Change
 
 | File | Change |
-|---|---|
-| `supabase/functions/web-chat/index.ts` | New edge function — streaming AI chat for website |
-| Migration | Create `web_chat_messages` table |
-| `src/components/chat/ChatWidget.tsx` | Floating chat widget component |
-| `src/components/chat/ChatMessage.tsx` | Individual message renderer with markdown |
-| `src/components/chat/useChatStream.ts` | Hook for SSE streaming + message state |
-| `src/components/layout/SiteLayout.tsx` | Add `<ChatWidget />` |
-| `supabase/functions/morning-report/index.ts` | Add web chat analytics section |
+|------|--------|
+| Migration | Create `ai_user_memory` table |
+| `supabase/functions/web-chat/index.ts` | Add user context loader, intent detection, live data lookups |
+| `supabase/functions/holdersintel-bot-webhook/index.ts` | Same context loader in `handleAiFreeChat`, share the same memory table |
 
-### Technical Details
+### What This Does NOT Do (Future Phase)
 
-- **Streaming**: Uses SSE via Lovable AI Gateway (`google/gemini-3-flash-preview`) with token-by-token rendering
-- **Session management**: Anonymous users get a localStorage session ID; logged-in users use their auth token
-- **Prompt assembly**: Identical logic to the Telegram bot's `handleAiFreeChat` but with an added web context block specifying user tier, current page, and whether they've verified email
-- **No new secrets needed**: Uses existing `LOVABLE_API_KEY` for Lovable AI Gateway
+- Does not give the AI write access to modify user accounts
+- Does not auto-submit tokens for scanning (just looks up existing data)
+- Does not create a separate admin dashboard for memory management (uses existing AI Config)
+- Bubblemaps/KYC visualization stays on the website — AI provides links
+
+### Rate Limiting & Safety
+
+- Database lookups are capped at 1 per message (only the first detected pattern triggers a lookup)
+- Memory writes are append-only and limited to preferences (name, language, interests)
+- All guardrails still apply — the AI cannot share other users' data, only the requesting user's own info
 
