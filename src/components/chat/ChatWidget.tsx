@@ -11,7 +11,7 @@ import { useLocation } from 'react-router-dom';
 import oracleAvatar from '@/assets/oracle-avatar.png';
 
 // Pages where the widget should NOT appear
-const HIDDEN_PAGES = ['/checkout', '/payment', '/super-admin'];
+const HIDDEN_PAGES = ['/checkout', '/payment'];
 // Pages where it should always be available (feature pages)
 const PRIORITY_PAGES = ['/holders', '/oracle', '/bubblemaps', '/intel', '/feed'];
 
@@ -121,13 +121,14 @@ export function ChatWidget() {
 
   const handleClose = () => {
     setIsOpen(false);
-    // Remember dismissal for 24 hours
+    // Just close the panel — FAB stays visible for easy re-opening
+  };
+
+  const handleDismiss = () => {
+    setIsOpen(false);
+    // Remember dismissal for 4 hours (not 24)
     localStorage.setItem(DISMISS_KEY, String(Date.now()));
     setFabVisible(false);
-    // Re-show after 24h or on next priority page visit
-    setTimeout(() => {
-      localStorage.removeItem(DISMISS_KEY);
-    }, 86400_000);
   };
 
   const tierLabel = tier === 'paid' ? 'Pro' : tier === 'free' ? 'Free' : 'Guest';
