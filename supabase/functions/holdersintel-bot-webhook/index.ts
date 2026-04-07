@@ -2457,7 +2457,7 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, targe
 // ─── AI Conversational Assistant for Admin DMs ───
 const aiChatRateMap = new Map<string, number[]>();
 
-async function handleAdminFreeChat(chatId: number, telegramUserId: string, messageText: string) {
+async function handleAdminFreeChat(chatId: number, telegramUserId: string, messageText: string, senderUsername?: string | null) {
   // Rate limit: 5 messages per minute per user
   const now = Date.now();
   const timestamps = aiChatRateMap.get(telegramUserId) || [];
@@ -2561,8 +2561,33 @@ RULES:
     const aiData = await aiRes.json();
     const reply = aiData.choices?.[0]?.message?.content;
 
+    // Log admin's incoming DM message
+    supabase.from('telegram_group_messages').insert({
+      chat_id: chatId,
+      telegram_user_id: telegramUserId,
+      username: senderUsername || null,
+      display_name: senderUsername ? `@${senderUsername}` : null,
+      message_text: messageText.slice(0, 2000),
+      chat_type: 'private',
+      is_bot_reply: false,
+    }).then(({ error: logErr }) => {
+      if (logErr) console.error('[bot] DM capture (user) failed:', logErr);
+    });
+
     if (reply) {
       await sendMessage(chatId, reply, 'Markdown');
+      // Log bot's AI reply
+      supabase.from('telegram_group_messages').insert({
+        chat_id: chatId,
+        telegram_user_id: 'bot',
+        username: 'holdersintel_bot',
+        display_name: 'HoldersIntel Bot',
+        message_text: reply.slice(0, 2000),
+        chat_type: 'private',
+        is_bot_reply: true,
+      }).then(({ error: logErr }) => {
+        if (logErr) console.error('[bot] DM capture (bot reply) failed:', logErr);
+      });
     } else {
       await sendMessage(chatId, `🤖 Hmm, I couldn't think of a response. Try asking differently or use /help!`);
     }
@@ -2966,7 +2991,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           default:
             // Unknown command in DM context — route to AI assistant
             if (message.text) {
-              await handleAdminFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated);
+              await handleAdminFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated, username);
             }
             break;
         }
@@ -3085,7 +3110,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           // AI conversational assistant for admin DMs
           else if (!isGroupChat && message.text) {
             console.log('[bot] routing to AI free chat', JSON.stringify({ chatId, telegramUserId, text: sanitized.rawTruncated.slice(0, 50) }));
-            await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated);
+            await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated, username);
           }
           break;
       }

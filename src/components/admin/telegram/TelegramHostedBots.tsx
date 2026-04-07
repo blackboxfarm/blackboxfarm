@@ -53,13 +53,14 @@ interface ChatMessage {
   display_name: string | null;
   message_text: string | null;
   created_at: string;
+  is_bot_reply?: boolean;
 }
 
 export function TelegramHostedBots() {
   const [groups, setGroups] = useState<HostedGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
-  const [chatModal, setChatModal] = useState<{ chatId: string; title: string } | null>(null);
+  const [chatModal, setChatModal] = useState<{ chatId: string; title: string; isDm?: boolean } | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
 
@@ -92,17 +93,23 @@ export function TelegramHostedBots() {
     }
   };
 
-  const openChatModal = async (chatId: string, title: string) => {
-    setChatModal({ chatId, title });
+  const openChatModal = async (chatId: string, title: string, isDm?: boolean) => {
+    setChatModal({ chatId, title, isDm });
     setChatLoading(true);
     try {
       const numericChatId = Number(chatId);
-      const { data, error } = await supabase
+      let query = supabase
         .from('telegram_group_messages')
-        .select('id, username, display_name, message_text, created_at')
+        .select('id, username, display_name, message_text, created_at, is_bot_reply')
         .eq('chat_id', numericChatId)
         .order('created_at', { ascending: false })
         .limit(200);
+      
+      if (isDm) {
+        query = query.eq('chat_type', 'private');
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       setChatMessages((data || []).reverse());
     } catch (err) {
@@ -304,6 +311,16 @@ export function TelegramHostedBots() {
                           {!g.installer_email && !g.installer_user_id && (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
+                          {g.installer_telegram_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-[10px] h-5 px-1.5 text-primary hover:text-primary/80"
+                              onClick={() => openChatModal(g.installer_telegram_id!, `DMs — ${g.installer_telegram_username || g.installer_display_name || 'Admin'}`, true)}
+                            >
+                              💬 View DMs
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
 
@@ -422,16 +439,16 @@ export function TelegramHostedBots() {
               <p className="text-xs mt-1">Messages will appear here as the bot receives them from this group</p>
             </div>
           ) : (
-            <ScrollArea className="h-[500px] pr-4">
+             <ScrollArea className="h-[500px] pr-4">
               <div className="space-y-2">
                 {chatMessages.map((msg) => (
-                  <div key={msg.id} className="flex gap-2 text-sm">
+                  <div key={msg.id} className={`flex gap-2 text-sm ${msg.is_bot_reply ? 'pl-6' : ''}`}>
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">
                       {format(new Date(msg.created_at), 'MMM d HH:mm')}
                     </span>
-                    <div>
-                      <span className="font-medium text-xs text-blue-400">
-                        {msg.username ? `@${msg.username}` : msg.display_name || 'Unknown'}
+                    <div className={msg.is_bot_reply ? 'bg-primary/5 rounded-md px-2 py-1 border border-primary/10' : ''}>
+                      <span className={`font-medium text-xs ${msg.is_bot_reply ? 'text-primary' : 'text-blue-400'}`}>
+                        {msg.is_bot_reply ? '🤖 Bot' : (msg.username ? `@${msg.username}` : msg.display_name || 'Unknown')}
                       </span>
                       <p className="text-xs text-foreground/80 break-words">{msg.message_text}</p>
                     </div>
