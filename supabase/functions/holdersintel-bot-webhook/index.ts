@@ -3523,7 +3523,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             }
           }
           break;
-      }
+        }
 
       // === PASSIVE GROUP MESSAGE CAPTURE ===
       if (isGroupChat && message.text) {
