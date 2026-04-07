@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { X, Send, Trash2, Loader2, AlertCircle, BellOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,7 @@ import { useLocation } from 'react-router-dom';
 import oracleAvatar from '@/assets/oracle-avatar.png';
 
 // Pages where the widget should NOT appear
-const HIDDEN_PAGES = ['/checkout', '/payment', '/super-admin'];
+const HIDDEN_PAGES = ['/checkout', '/payment'];
 // Pages where it should always be available (feature pages)
 const PRIORITY_PAGES = ['/holders', '/oracle', '/bubblemaps', '/intel', '/feed'];
 
@@ -42,9 +42,9 @@ export function ChatWidget() {
       return;
     }
 
-    // Check if user dismissed within last 24 hours
+    // Check if user dismissed within last 4 hours
     const dismissedAt = localStorage.getItem(DISMISS_KEY);
-    if (dismissedAt && Date.now() - Number(dismissedAt) < 86400_000) {
+    if (dismissedAt && Date.now() - Number(dismissedAt) < 14400_000) {
       setFabVisible(false);
       return;
     }
@@ -121,13 +121,14 @@ export function ChatWidget() {
 
   const handleClose = () => {
     setIsOpen(false);
-    // Remember dismissal for 24 hours
+    // Just close the panel — FAB stays visible for easy re-opening
+  };
+
+  const handleDismiss = () => {
+    setIsOpen(false);
+    // Remember dismissal for 4 hours (not 24)
     localStorage.setItem(DISMISS_KEY, String(Date.now()));
     setFabVisible(false);
-    // Re-show after 24h or on next priority page visit
-    setTimeout(() => {
-      localStorage.removeItem(DISMISS_KEY);
-    }, 86400_000);
   };
 
   const tierLabel = tier === 'paid' ? 'Pro' : tier === 'free' ? 'Free' : 'Guest';
@@ -176,7 +177,10 @@ export function ChatWidget() {
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={clearChat} title="Clear chat">
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDismiss} title="Hide for 4 hours">
+                <BellOff className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose} title="Close">
                 <X className="h-4 w-4" />
               </Button>
             </div>
