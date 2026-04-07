@@ -217,6 +217,51 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_compute_log: {
+        Row: {
+          completion_tokens: number | null
+          cost_estimate_usd: number | null
+          created_at: string
+          id: string
+          metadata: Json | null
+          model: string
+          platform: string
+          prompt_tokens: number | null
+          response_time_ms: number | null
+          session_id: string | null
+          total_tokens: number | null
+          user_id: string | null
+        }
+        Insert: {
+          completion_tokens?: number | null
+          cost_estimate_usd?: number | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          model?: string
+          platform?: string
+          prompt_tokens?: number | null
+          response_time_ms?: number | null
+          session_id?: string | null
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          completion_tokens?: number | null
+          cost_estimate_usd?: number | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          model?: string
+          platform?: string
+          prompt_tokens?: number | null
+          response_time_ms?: number | null
+          session_id?: string | null
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       ai_user_memory: {
         Row: {
           created_at: string

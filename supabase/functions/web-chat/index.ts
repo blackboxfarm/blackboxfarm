@@ -369,6 +369,52 @@ async function buildSystemPrompt(userContext: {
   }
 }
 
+// ─── Web Chat Input Sanitization ───
+const WEB_INJECTION_PATTERNS: RegExp[] = [
+  /<script[\s>]/i,
+  /javascript\s*:/i,
+  /data\s*:\s*text\/html/i,
+  /vbscript\s*:/i,
+  /on\w+\s*=\s*["']/i,
+  /\x00/,
+  /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/,
+  /\x1b\[/,
+  /\.\.\//,
+];
+
+function sanitizeWebInput(text: string): { clean: string; suspicious: boolean; flags: string[] } {
+  const flags: string[] = [];
+  let suspicious = false;
+
+  // Truncate
+  let cleaned = text.length > 2000 ? (flags.push('truncated'), text.slice(0, 2000)) : text;
+
+  // Strip control chars (keep normal whitespace)
+  const before = cleaned;
+  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
+  if (cleaned !== before.trim()) {
+    flags.push('control_chars_stripped');
+    suspicious = true;
+  }
+
+  // Check injection patterns
+  let injectionCount = 0;
+  for (const p of WEB_INJECTION_PATTERNS) {
+    if (p.test(cleaned)) {
+      flags.push(`injection:${p.source.slice(0, 25)}`);
+      injectionCount++;
+      suspicious = true;
+    }
+  }
+
+  // If 3+ injection patterns, reject
+  if (injectionCount >= 3) {
+    flags.push('blocked');
+  }
+
+  return { clean: cleaned, suspicious, flags };
+}
+
 // ─── Main handler ───
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -387,6 +433,22 @@ serve(async (req) => {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Sanitize the last user message
+    const lastUserMsg = messages?.[messages.length - 1];
+    if (lastUserMsg?.role === 'user' && lastUserMsg.content) {
+      const sanitized = sanitizeWebInput(lastUserMsg.content);
+      if (sanitized.flags.includes('blocked')) {
+        console.warn('[web-chat] blocked suspicious input:', sanitized.flags);
+        return new Response(JSON.stringify({ error: "I didn't understand that. Could you rephrase?" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (sanitized.suspicious) {
+        console.warn('[web-chat] suspicious input flags:', sanitized.flags);
+      }
+      lastUserMsg.content = sanitized.clean;
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -459,6 +521,11 @@ serve(async (req) => {
       }).then(() => {});
     }
 
+    // Estimate prompt tokens (chars / 4)
+    const promptText = systemPrompt + (messages || []).slice(-20).map((m: any) => m.content || '').join(' ');
+    const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+    const aiCallStart = Date.now();
+
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -495,15 +562,17 @@ serve(async (req) => {
       });
     }
 
-    // Stream response and collect for logging
+    // Stream response and collect for logging + compute tracking
     const reader = aiRes.body!.getReader();
     let fullResponse = '';
+    let completionTokens = 0;
 
     const stream = new ReadableStream({
       async pull(controller) {
         const { done, value } = await reader.read();
         if (done) {
           controller.close();
+          // Log assistant response
           if (fullResponse) {
             supabase.from('web_chat_messages').insert({
               session_id: sessionId || 'anon-' + Date.now(),
@@ -514,6 +583,23 @@ serve(async (req) => {
               user_tier: tier,
             }).then(() => {});
           }
+          // Log AI compute
+          const responseTimeMs = Date.now() - aiCallStart;
+          const totalTokens = estimatedPromptTokens + completionTokens;
+          // Gemini flash pricing: ~$0.10/1M input, ~$0.40/1M output
+          const costEstimate = (estimatedPromptTokens * 0.0000001) + (completionTokens * 0.0000004);
+          supabase.from('ai_compute_log').insert({
+            platform: 'web',
+            user_id: userId || null,
+            session_id: sessionId || null,
+            model: 'google/gemini-3-flash-preview',
+            prompt_tokens: estimatedPromptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: totalTokens,
+            response_time_ms: responseTimeMs,
+            cost_estimate_usd: costEstimate,
+            metadata: { tier, page: pagePath },
+          }).then(() => {});
           return;
         }
         const text = new TextDecoder().decode(value);
@@ -522,7 +608,10 @@ serve(async (req) => {
           try {
             const parsed = JSON.parse(line.slice(6));
             const c = parsed.choices?.[0]?.delta?.content;
-            if (c) fullResponse += c;
+            if (c) {
+              fullResponse += c;
+              completionTokens += Math.ceil(c.length / 4);
+            }
           } catch {}
         }
         controller.enqueue(value);

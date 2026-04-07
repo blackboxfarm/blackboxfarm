@@ -7,21 +7,98 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChatMessage } from './ChatMessage';
 import { useChatStream } from './useChatStream';
 import { cn } from '@/lib/utils';
+import { useLocation } from 'react-router-dom';
+
+// Pages where the widget should NOT appear
+const HIDDEN_PAGES = ['/checkout', '/payment', '/super-admin'];
+// Pages where it should always be available (feature pages)
+const PRIORITY_PAGES = ['/holders', '/oracle', '/bubblemaps', '/intel', '/feed'];
+
+const DISMISS_KEY = 'bb_chat_dismissed_at';
+const VISITS_KEY = 'bb_chat_visits';
+const FAB_SHOWN_KEY = 'bb_chat_fab_shown';
 
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [hasUnread, setHasUnread] = useState(false);
+  const [fabVisible, setFabVisible] = useState(false);
+  const [fabPulsing, setFabPulsing] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
   const { messages, isStreaming, error, sendMessage, clearChat, tier } = useChatStream();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const location = useLocation();
+
+  // Smart appearance logic
+  useEffect(() => {
+    const currentPath = location.pathname;
+
+    // Never show on hidden pages
+    if (HIDDEN_PAGES.some(p => currentPath.startsWith(p))) {
+      setFabVisible(false);
+      return;
+    }
+
+    // Check if user dismissed within last 24 hours
+    const dismissedAt = localStorage.getItem(DISMISS_KEY);
+    if (dismissedAt && Date.now() - Number(dismissedAt) < 86400_000) {
+      setFabVisible(false);
+      return;
+    }
+
+    // Priority pages: show immediately
+    if (PRIORITY_PAGES.some(p => currentPath.startsWith(p))) {
+      setFabVisible(true);
+      return;
+    }
+
+    // Track page visits
+    const visits = Number(sessionStorage.getItem(VISITS_KEY) || '0') + 1;
+    sessionStorage.setItem(VISITS_KEY, String(visits));
+
+    // Show after 2+ page visits
+    if (visits >= 2) {
+      setFabVisible(true);
+      return;
+    }
+
+    // Show after 30 seconds on site
+    const timer = setTimeout(() => setFabVisible(true), 30_000);
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
+
+  // Gentle pulse on first appearance only
+  useEffect(() => {
+    if (fabVisible && !localStorage.getItem(FAB_SHOWN_KEY)) {
+      setFabPulsing(true);
+      localStorage.setItem(FAB_SHOWN_KEY, '1');
+      const timer = setTimeout(() => setFabPulsing(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [fabVisible]);
+
+  // Mobile scroll collapse
+  useEffect(() => {
+    if (isOpen) return; // only for FAB
+    const handleScroll = () => {
+      setIsScrolling(true);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => setIsScrolling(false), 1000);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    };
+  }, [isOpen]);
 
   // Auto-scroll on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    // Mark unread if widget is closed and assistant sends a message
     if (!isOpen && messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
       setHasUnread(true);
     }
@@ -41,19 +118,37 @@ export function ChatWidget() {
     setInput('');
   };
 
+  const handleClose = () => {
+    setIsOpen(false);
+    // Remember dismissal for 24 hours
+    localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    setFabVisible(false);
+    // Re-show after 24h or on next priority page visit
+    setTimeout(() => {
+      localStorage.removeItem(DISMISS_KEY);
+    }, 86400_000);
+  };
+
   const tierLabel = tier === 'paid' ? 'Pro' : tier === 'free' ? 'Free' : 'Guest';
   const tierColor = tier === 'paid' ? 'bg-primary/20 text-primary' : tier === 'free' ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground';
+
+  // Don't render anything if not visible and not open
+  if (!fabVisible && !isOpen) return null;
 
   return (
     <>
       {/* FAB Button */}
-      {!isOpen && (
+      {!isOpen && fabVisible && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center"
+          className={cn(
+            "fixed bottom-5 right-5 z-50 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center",
+            isScrolling ? "w-10 h-10 opacity-60" : "w-14 h-14",
+            fabPulsing && "animate-pulse"
+          )}
           aria-label="Open chat"
         >
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className={cn(isScrolling ? "h-4 w-4" : "h-6 w-6")} />
           {hasUnread && (
             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background" />
           )}
@@ -80,7 +175,7 @@ export function ChatWidget() {
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={clearChat} title="Clear chat">
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsOpen(false)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
