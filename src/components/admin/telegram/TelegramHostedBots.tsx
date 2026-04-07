@@ -63,6 +63,38 @@ export function TelegramHostedBots() {
   const [chatModal, setChatModal] = useState<{ chatId: string; title: string; isDm?: boolean } | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [unreadDmSet, setUnreadDmSet] = useState<Set<string>>(new Set());
+
+  const checkUnreadDms = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('telegram_group_messages')
+        .select('telegram_user_id, created_at')
+        .eq('chat_type', 'private')
+        .order('created_at', { ascending: false });
+      if (error || !data) return;
+
+      // Get latest message per user
+      const latestByUser = new Map<string, string>();
+      for (const row of data) {
+        const uid = String(row.telegram_user_id);
+        if (!latestByUser.has(uid)) {
+          latestByUser.set(uid, row.created_at);
+        }
+      }
+
+      const unread = new Set<string>();
+      latestByUser.forEach((lastMsg, tgUserId) => {
+        const lastViewed = localStorage.getItem(`dm_last_viewed_${tgUserId}`);
+        if (!lastViewed || new Date(lastMsg) > new Date(lastViewed)) {
+          unread.add(tgUserId);
+        }
+      });
+      setUnreadDmSet(unread);
+    } catch (err) {
+      console.error('Error checking unread DMs:', err);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
