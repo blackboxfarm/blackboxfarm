@@ -2561,8 +2561,33 @@ RULES:
     const aiData = await aiRes.json();
     const reply = aiData.choices?.[0]?.message?.content;
 
+    // Log admin's incoming DM message
+    supabase.from('telegram_group_messages').insert({
+      chat_id: chatId,
+      telegram_user_id: telegramUserId,
+      username: null,
+      display_name: null,
+      message_text: messageText.slice(0, 2000),
+      chat_type: 'private',
+      is_bot_reply: false,
+    }).then(({ error: logErr }) => {
+      if (logErr) console.error('[bot] DM capture (user) failed:', logErr);
+    });
+
     if (reply) {
       await sendMessage(chatId, reply, 'Markdown');
+      // Log bot's AI reply
+      supabase.from('telegram_group_messages').insert({
+        chat_id: chatId,
+        telegram_user_id: 'bot',
+        username: 'holdersintel_bot',
+        display_name: 'HoldersIntel Bot',
+        message_text: reply.slice(0, 2000),
+        chat_type: 'private',
+        is_bot_reply: true,
+      }).then(({ error: logErr }) => {
+        if (logErr) console.error('[bot] DM capture (bot reply) failed:', logErr);
+      });
     } else {
       await sendMessage(chatId, `🤖 Hmm, I couldn't think of a response. Try asking differently or use /help!`);
     }
