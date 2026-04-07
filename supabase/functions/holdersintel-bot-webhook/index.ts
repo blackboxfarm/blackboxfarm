@@ -2952,6 +2952,10 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             }
             break;
           default:
+            // Unknown command in DM context — route to AI assistant
+            if (message.text) {
+              await handleAdminFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated);
+            }
             break;
         }
       } catch (dmErr) {
