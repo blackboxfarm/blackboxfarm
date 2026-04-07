@@ -1,32 +1,38 @@
 
 
-## Add Unread DM Indicator and Improve Chat Modal Icons
+## Fix: TG BLACKBOX Posts Showing "$TOKEN" Instead of Real Ticker
 
-### What This Does
-1. Adds a green "new messages" dot indicator on the "View DMs" button when there are unread DM messages since the admin last opened that chat
-2. Uses distinct icons for the DM modal (speech bubble) vs group chat modal (message square) so they're visually distinguishable at a glance
+### Root Cause
+Found in `src/components/BaglessHoldersReport.tsx` lines 528-566. When a holders report is generated on the website, it sends a notification to the BLACKBOX Telegram channel via `admin-notify`. Two problems:
 
-### How It Works
+1. **Line 530**: `const symbol = tokenData?.metadata?.symbol || 'TOKEN'` — the fallback is the literal string "TOKEN", so if metadata hasn't loaded, it posts `$TOKEN` literally
+2. **Lines 547 & 561**: The `$` symbol is hardcoded (`$${symbol}`) — this was missed when we stripped `$` from all other bot outputs to prevent other bots from triggering on cashtags
 
-**Tracking "last viewed"**: Store a `localStorage` key per installer (e.g., `dm_last_viewed_{telegramUserId}`) with a timestamp. When the DM modal opens, update that timestamp. On load, query the DB for the most recent DM message per installer and compare — if newer than stored timestamp, show a green dot.
+### What the User Sees
+The BLACKBOX TG channel receives:
+- `🔔 *Holders Report: $TOKEN*` (title from admin-notify)
+- `🪙 *$TOKEN*` (message body)
 
-**Unread check query**: On `loadData`, run a single query to get the latest `created_at` per `telegram_user_id` where `chat_type='private'`. Compare each against the localStorage timestamps to build an `unreadDmSet`.
+Instead of the actual ticker like `BONK` or `WIF`.
 
-**UI changes**:
-- "View DMs" button gets a relative-positioned green pulsing dot when unread
-- DM modal header uses a `MessageCircle` icon instead of `MessageSquare`  
-- Group chat modal keeps `MessageSquare`
-- "View Chat" button also gets a distinct icon treatment
+### Fix
 
-### Files to Change
+**File: `src/components/BaglessHoldersReport.tsx`**
+
+1. **Better symbol resolution** (line 530): Pull symbol from the report data first, then tokenData metadata, with a smarter fallback:
+   ```
+   const symbol = reportData?.symbol || reportData?.tokenSymbol || 
+                   tokenData?.metadata?.symbol || mint.slice(0, 6);
+   ```
+
+2. **Remove `$` prefix** (line 547): Change `$${symbol}` → just `${symbol}` (no dollar sign, consistent with all other bot outputs)
+
+3. **Remove `$` from title** (line 561): Change `Holders Report: $${symbol}` → `Holders Report: ${symbol}`
+
+### Also check the `HoldersReport` interface
+The bagless-holders-report edge function returns `symbol` in its response — need to verify the interface includes it, or access it from the raw response data.
 
 | File | Change |
 |------|--------|
-| `src/components/admin/telegram/TelegramHostedBots.tsx` | Add unread state tracking via localStorage, query latest DM timestamps, render green dot on View DMs button, use `MessageCircle` for DM modal title |
-
-### Technical Details
-- `useEffect` on mount: query `telegram_group_messages` for `SELECT telegram_user_id, MAX(created_at) as last_msg FROM ... WHERE chat_type='private' GROUP BY telegram_user_id`
-- Compare each against `localStorage.getItem(`dm_last_viewed_${tgUserId}`)` 
-- On `openChatModal` with `isDm=true`, call `localStorage.setItem(...)` with current ISO timestamp and remove from unread set
-- Green dot: `<span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />`
+| `src/components/BaglessHoldersReport.tsx` | Fix symbol resolution, remove `$` prefix from TG notification |
 
