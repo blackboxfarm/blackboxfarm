@@ -2443,12 +2443,6 @@ async function handlePayment(chatId: number, telegramUserId: string, args: strin
     TAGLINE
   );
 }
-    );
-  } catch (err: any) {
-    console.error("[bot] Wallet generation error:", err);
-    await sendMessage(chatId, `❌ Failed to generate wallet: ${err.message}\n\nTry again or use the dashboard at blackbox.farm/dashboard`);
-  }
-}
 
 // ─── /payment verify — now just redirects to free message ───
 async function handlePaymentVerify(chatId: number, telegramUserId: string, targetChatIdStr: string) {
