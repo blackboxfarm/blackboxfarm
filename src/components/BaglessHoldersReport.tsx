@@ -527,7 +527,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
 
   const notifyTelegramGroup = async (reportData: HoldersReport, mint: string) => {
     try {
-      const symbol = tokenData?.metadata?.symbol || 'TOKEN';
+      const symbol = reportData?.symbol || reportData?.tokenSymbol || tokenData?.metadata?.symbol || mint.slice(0, 6);
       const totalHolders = reportData.totalHolders;
       const realHolders = reportData.realHolders || reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length;
       const healthGrade = reportData.healthScore?.grade || 'N/A';
@@ -544,7 +544,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       const dustPct = totalHolders > 0 ? Math.round((dustCount / totalHolders) * 100) : 0;
       
       const message = `📊 *Holders Report Generated*\n\n` +
-        `🪙 *$${symbol.toUpperCase()}*\n` +
+        `🪙 *${symbol.toUpperCase()}*\n` +
         `├ Total: ${totalHolders.toLocaleString()}\n` +
         `├ Real: ${realHolders.toLocaleString()}\n` +
         `└ Grade: ${healthGrade}\n\n` +
@@ -558,7 +558,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       await supabase.functions.invoke('admin-notify', {
         body: {
           type: 'holder_report',
-          title: `Holders Report: $${symbol.toUpperCase()}`,
+          title: `Holders Report: ${symbol.toUpperCase()}`,
           message,
           metadata: { tokenMint: mint, totalHolders, realHolders, healthGrade },
           channels: ['telegram'],
