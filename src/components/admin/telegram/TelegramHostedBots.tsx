@@ -311,6 +311,16 @@ export function TelegramHostedBots() {
                           {!g.installer_email && !g.installer_user_id && (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
+                          {g.installer_telegram_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-[10px] h-5 px-1.5 text-primary hover:text-primary/80"
+                              onClick={() => openChatModal(g.installer_telegram_id!, `DMs — ${g.installer_telegram_username || g.installer_display_name || 'Admin'}`, true)}
+                            >
+                              💬 View DMs
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
 
@@ -429,16 +439,16 @@ export function TelegramHostedBots() {
               <p className="text-xs mt-1">Messages will appear here as the bot receives them from this group</p>
             </div>
           ) : (
-            <ScrollArea className="h-[500px] pr-4">
+             <ScrollArea className="h-[500px] pr-4">
               <div className="space-y-2">
                 {chatMessages.map((msg) => (
-                  <div key={msg.id} className="flex gap-2 text-sm">
+                  <div key={msg.id} className={`flex gap-2 text-sm ${msg.is_bot_reply ? 'pl-6' : ''}`}>
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">
                       {format(new Date(msg.created_at), 'MMM d HH:mm')}
                     </span>
-                    <div>
-                      <span className="font-medium text-xs text-blue-400">
-                        {msg.username ? `@${msg.username}` : msg.display_name || 'Unknown'}
+                    <div className={msg.is_bot_reply ? 'bg-primary/5 rounded-md px-2 py-1 border border-primary/10' : ''}>
+                      <span className={`font-medium text-xs ${msg.is_bot_reply ? 'text-primary' : 'text-blue-400'}`}>
+                        {msg.is_bot_reply ? '🤖 Bot' : (msg.username ? `@${msg.username}` : msg.display_name || 'Unknown')}
                       </span>
                       <p className="text-xs text-foreground/80 break-words">{msg.message_text}</p>
                     </div>
