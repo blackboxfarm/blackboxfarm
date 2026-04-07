@@ -11,6 +11,7 @@ import { useUserTier } from "@/hooks/useUserTier";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { TelegramLinkCode } from "@/components/settings/TelegramLinkCode";
 import { ChannelInstallations } from "@/components/dashboard/ChannelInstallations";
+import { EmailVerificationBanner } from "@/components/dashboard/EmailVerificationBanner";
 
 export default function Dashboard() {
   const navigate = useNavigate();
