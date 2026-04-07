@@ -2631,6 +2631,17 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
           prompt += '\n';
         }
 
+        prompt += `## INTERNAL LINKS\nWhen directing users to features, tools, or information, always reference the website with full URLs:\n`;
+        prompt += `- Homepage: https://blackbox.farm\n`;
+        prompt += `- Holders Analysis: https://blackbox.farm/holders\n`;
+        prompt += `- Bubblemaps: https://blackbox.farm/bubblemaps\n`;
+        prompt += `- Intel Briefings: https://blackbox.farm/intel\n`;
+        prompt += `- Oracle Risk Tool: https://blackbox.farm/oracle\n`;
+        prompt += `- Register/Sign Up: https://blackbox.farm/register\n`;
+        prompt += `- Dashboard: https://blackbox.farm/dashboard\n`;
+        prompt += `- Advertise With Us: https://blackbox.farm/advertise\n`;
+        prompt += `- Share on Socials: https://blackbox.farm/share\n`;
+        prompt += `Use these links naturally when relevant. When users ask how to do something, point them to the right page.\n\n`;
         prompt += `## FALLBACK\nIf you cannot answer: ${config.fallback_response}\n`;
         systemPrompt = prompt;
       } else {

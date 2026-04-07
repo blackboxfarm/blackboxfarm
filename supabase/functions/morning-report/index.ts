@@ -1159,6 +1159,49 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         distinctUserCount = totalBotUsers || 0;
       }
 
+      // AI DM Chat stats
+      let aiChatStats: any = {};
+      try {
+        const { data: aiDMs } = await supabase
+          .from('telegram_group_messages')
+          .select('telegram_user_id, username, is_bot_reply, message_text, created_at')
+          .eq('chat_type', 'private')
+          .gte('created_at', periodStart.toISOString())
+          .lte('created_at', periodEnd.toISOString())
+          .order('created_at', { ascending: false })
+          .limit(2000);
+
+        const dms = aiDMs || [];
+        const userMessages = dms.filter(d => !d.is_bot_reply);
+        const botReplies = dms.filter(d => d.is_bot_reply);
+        const uniqueDMUsers = [...new Set(userMessages.map(d => d.telegram_user_id))];
+
+        // Extract common topics/keywords from user messages
+        const topicCounts: Record<string, number> = {};
+        for (const msg of userMessages) {
+          const text = (msg.message_text || '').toLowerCase();
+          const topicKeywords = ['holders', 'scan', 'price', 'buy', 'sell', 'alert', 'register', 'email', 'verify', 'help', 'subscribe', 'payment', 'feature', 'bubblemaps', 'oracle', 'intel', 'advertise'];
+          for (const kw of topicKeywords) {
+            if (text.includes(kw)) topicCounts[kw] = (topicCounts[kw] || 0) + 1;
+          }
+        }
+        const topTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+        aiChatStats = {
+          total_dm_messages: dms.length,
+          user_messages: userMessages.length,
+          bot_replies: botReplies.length,
+          unique_dm_users: uniqueDMUsers.length,
+          top_topics: topTopics.map(([topic, count]) => ({ topic, count })),
+          sample_questions: userMessages.slice(0, 5).map(m => ({
+            user: m.username || m.telegram_user_id,
+            text: (m.message_text || '').slice(0, 100),
+          })),
+        };
+      } catch (aiErr) {
+        console.warn('[morning-report] Failed to fetch AI chat stats:', aiErr);
+      }
+
       telegramBotStats = {
         overnight_interactions: totalInteractions,
         overnight_new_users: uniqueNewUsers.length,
@@ -1171,6 +1214,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         chat_type_breakdown: chatTypeCounts,
         error_count: errorInteractions.length,
         total_bot_interactions_alltime: totalBotUsers || 0,
+        ai_chat_stats: aiChatStats,
       };
 
       if (uniqueNewUsers.length > 0) {
@@ -1518,6 +1562,22 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         const dSources = funnelFeedThroughput.discovery_sources || {};
         for (const [src, info] of Object.entries(dSources) as [string, any][]) {
           tgMessage += `  ${src}: ${info.count} discovered (${info.watchlisted} watchlisted, ${info.posted} posted)\n`;
+        }
+      }
+    }
+
+    // AI Chat DM stats
+    const acs = telegramBotStats.ai_chat_stats;
+    if (acs && (acs.total_dm_messages > 0 || acs.unique_dm_users > 0)) {
+      tgMessage += `\n💬 **AI Chat (DMs)**\n`;
+      tgMessage += `• ${acs.user_messages} user msgs → ${acs.bot_replies} bot replies (${acs.unique_dm_users} unique users)\n`;
+      if (acs.top_topics?.length > 0) {
+        tgMessage += `• Hot topics: ${acs.top_topics.slice(0, 5).map((t: any) => `${t.topic}(${t.count})`).join(', ')}\n`;
+      }
+      if (acs.sample_questions?.length > 0) {
+        tgMessage += `• Sample Qs:\n`;
+        for (const q of acs.sample_questions.slice(0, 3)) {
+          tgMessage += `  → @${q.user}: "${q.text}"\n`;
         }
       }
     }

@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, BookOpen, X } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, X, Globe, RefreshCw } from "lucide-react";
 
 const CATEGORIES = ["faq", "features", "security", "billing", "onboarding", "troubleshooting", "marketing", "compliance"] as const;
 type Category = typeof CATEGORIES[number];
@@ -49,8 +49,28 @@ export const KnowledgeBinsTab: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [newKeyword, setNewKeyword] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => { fetchBins(); }, []);
+
+  const handleSyncFromWebsite = async () => {
+    setSyncing(true);
+    toast.info("Syncing knowledge from blackbox.farm... this takes ~30 seconds");
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-knowledge-base', { body: {} });
+      if (error) { toast.error("Sync failed: " + error.message); }
+      else if (data?.success) {
+        toast.success(`Synced ${data.synced}/${data.total} pages from website!`);
+        if (data.failed > 0) toast.warning(`${data.failed} pages failed to sync`);
+        fetchBins();
+      } else {
+        toast.error("Sync failed: " + (data?.error || "Unknown error"));
+      }
+    } catch (e) {
+      toast.error("Sync request failed");
+    }
+    setSyncing(false);
+  };
 
   const fetchBins = async () => {
     const { data, error } = await supabase.from("bot_knowledge_bins").select("*").order("priority", { ascending: false });
@@ -127,9 +147,15 @@ export const KnowledgeBinsTab: React.FC = () => {
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" onClick={() => { setEditBin({ ...emptyBin }); setIsNew(true); }}>
-          <Plus className="h-4 w-4 mr-1" /> Add Bin
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={handleSyncFromWebsite} disabled={syncing}>
+            {syncing ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Globe className="h-4 w-4 mr-1" />}
+            {syncing ? "Syncing..." : "Sync from Website"}
+          </Button>
+          <Button size="sm" onClick={() => { setEditBin({ ...emptyBin }); setIsNew(true); }}>
+            <Plus className="h-4 w-4 mr-1" /> Add Bin
+          </Button>
+        </div>
       </div>
 
       <Card>
