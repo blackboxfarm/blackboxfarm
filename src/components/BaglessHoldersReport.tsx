@@ -527,7 +527,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
 
   const notifyTelegramGroup = async (reportData: HoldersReport, mint: string) => {
     try {
-      const symbol = reportData?.symbol || reportData?.tokenSymbol || tokenData?.metadata?.symbol || mint.slice(0, 6);
+      const symbol = tokenData?.metadata?.symbol || mint.slice(0, 6);
       const totalHolders = reportData.totalHolders;
       const realHolders = reportData.realHolders || reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length;
       const healthGrade = reportData.healthScore?.grade || 'N/A';
