@@ -2071,6 +2071,123 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_guardrails: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          rule_content: string
+          rule_name: string
+          rule_type: Database["public"]["Enums"]["bot_guardrail_type"]
+          severity: Database["public"]["Enums"]["bot_guardrail_severity"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          rule_content: string
+          rule_name: string
+          rule_type?: Database["public"]["Enums"]["bot_guardrail_type"]
+          severity?: Database["public"]["Enums"]["bot_guardrail_severity"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          rule_content?: string
+          rule_name?: string
+          rule_type?: Database["public"]["Enums"]["bot_guardrail_type"]
+          severity?: Database["public"]["Enums"]["bot_guardrail_severity"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bot_knowledge_bins: {
+        Row: {
+          category: Database["public"]["Enums"]["bot_knowledge_category"]
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          keywords: string[]
+          priority: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["bot_knowledge_category"]
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          keywords?: string[]
+          priority?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["bot_knowledge_category"]
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          keywords?: string[]
+          priority?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bot_personality_config: {
+        Row: {
+          expertise_areas: string[]
+          fallback_response: string
+          greeting_template: string
+          id: number
+          is_active: boolean
+          language_behavior: string
+          max_response_length: number
+          persona_description: string
+          persona_name: string
+          tone: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          expertise_areas?: string[]
+          fallback_response?: string
+          greeting_template?: string
+          id: number
+          is_active?: boolean
+          language_behavior?: string
+          max_response_length?: number
+          persona_description?: string
+          persona_name?: string
+          tone?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          expertise_areas?: string[]
+          fallback_response?: string
+          greeting_template?: string
+          id?: number
+          is_active?: boolean
+          language_behavior?: string
+          max_response_length?: number
+          persona_description?: string
+          persona_name?: string
+          tone?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       bundle_reports: {
         Row: {
           created_at: string
@@ -17902,6 +18019,22 @@ export type Database = {
     Enums: {
       ai_access_level: "summary" | "analysis" | "overview" | "full" | "api"
       app_role: "super_admin" | "admin" | "moderator" | "user"
+      bot_guardrail_severity: "soft" | "hard" | "critical"
+      bot_guardrail_type:
+        | "never_say"
+        | "always_say"
+        | "redirect"
+        | "tone_override"
+        | "topic_block"
+      bot_knowledge_category:
+        | "faq"
+        | "features"
+        | "security"
+        | "billing"
+        | "onboarding"
+        | "troubleshooting"
+        | "marketing"
+        | "compliance"
       web_tier_key:
         | "free"
         | "auth"
@@ -18038,6 +18171,24 @@ export const Constants = {
     Enums: {
       ai_access_level: ["summary", "analysis", "overview", "full", "api"],
       app_role: ["super_admin", "admin", "moderator", "user"],
+      bot_guardrail_severity: ["soft", "hard", "critical"],
+      bot_guardrail_type: [
+        "never_say",
+        "always_say",
+        "redirect",
+        "tone_override",
+        "topic_block",
+      ],
+      bot_knowledge_category: [
+        "faq",
+        "features",
+        "security",
+        "billing",
+        "onboarding",
+        "troubleshooting",
+        "marketing",
+        "compliance",
+      ],
       web_tier_key: [
         "free",
         "auth",

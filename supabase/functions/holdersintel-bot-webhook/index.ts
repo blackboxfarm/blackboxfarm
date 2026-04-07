@@ -2590,53 +2590,56 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
       return;
     }
 
-    const systemPrompt = `You are the official BlackBox Farm / HoldersIntel Bot assistant — a knowledgeable, enthusiastic crypto analytics product ambassador.
+    // Build dynamic system prompt from database config
+    let systemPrompt: string;
+    try {
+      const [configRes, binsRes, guardrailsRes] = await Promise.all([
+        supabase.from('bot_personality_config').select('*').eq('id', 1).single(),
+        supabase.from('bot_knowledge_bins').select('category,title,content').eq('is_active', true).order('priority', { ascending: false }).limit(30),
+        supabase.from('bot_guardrails').select('rule_type,rule_name,rule_content,severity').eq('is_active', true).order('severity', { ascending: true }),
+      ]);
 
-PERSONALITY: Warm, helpful, emoji-rich, marketing-savvy. You LOVE this product and genuinely believe it helps crypto communities. You're like a friendly expert who's excited to show off features. You chat casually with ALL registered users — not just admins.
+      const config = configRes.data;
+      const bins = binsRes.data || [];
+      const guardrails = guardrailsRes.data || [];
 
-PRODUCT INFO:
-- HoldersIntel Bot (@holdersintel_bot) is a Telegram bot for Solana token analysis
-- It provides holder distribution analysis, risk scoring, developer intel, wallet tracing, insider detection, and AI-powered insights
-- It's 100% FREE — all features included at no cost, no activation fees
-- The bot auto-scans Solana contract addresses posted in group chats
-- Website: https://blackbox.farm — features Bubblemaps visualization, /holders page, social sharing, the Oracle deep analysis
+      if (config && config.is_active === false) {
+        await sendMessage(chatId, `🤖 AI chat is temporarily disabled. Use /help for commands!`);
+        return;
+      }
 
-COMMANDS REFERENCE:
-🔧 Setup: /start, /register, /status, /help
-📊 Analysis: /holders (holder distribution), /risk or /r (risk assessment), /concentration (holder % breakdown), /dev or /d (developer intel), /ca (default analysis), /quick or /q (fast stats), /ai (AI snapshot)
-⚡ Advanced: /momentum or /m (volume & price momentum), /insiders or /i (insider cluster detection), /compare or /cmp (side-by-side comparison), /alerts (alert preferences)
-👑 Pro: /oracle or /o (full developer reputation mesh), /wallet or /w (wallet behavior analysis)
-🔧 Admin: /config (channel settings — delay, verbose, admin-only), /channels or /ch (view installations & configs), /add (add new channel)
+      if (config) {
+        let prompt = `## IDENTITY\nYou are "${config.persona_name}".\n${config.persona_description}\n\n`;
+        prompt += `## TONE\n${config.tone}\n\n`;
+        prompt += `## EXPERTISE\nYou are an expert in: ${(config.expertise_areas || []).join(', ')}.\n\n`;
+        prompt += `## LANGUAGE\n${config.language_behavior}\n\n`;
+        prompt += `## RESPONSE LIMITS\nKeep responses under ${config.max_response_length} words. Be concise but helpful.\n\n`;
 
-EMAIL VERIFICATION:
-- After signing up, users get a verification email. They have 48 hours to click the link.
-- They can resend the email from their dashboard at https://blackbox.farm/dashboard
-- If they miss it, their account gets paused — but they can reactivate easily by clicking the link in the reactivation email or messaging the bot for help
-- It's painless! Just check inbox (and spam folder) and click the link
+        if (bins.length > 0) {
+          prompt += `## KNOWLEDGE BASE\n`;
+          for (const b of bins) {
+            prompt += `**${b.title}**: ${b.content}\n\n`;
+          }
+        }
 
-FEATURES TO PROMOTE:
-- 🫧 Bubblemaps: Visual holder distribution maps on the website
-- 📊 /holders page: Deep holder analysis with charts
-- 🔗 Social sharing: Share interesting token findings on Twitter/X
-- 🔮 The Oracle: AI-powered deep developer reputation analysis
-- 🚨 Alerts: Set up alerts for tokens you're watching
-- Suggest users explore the website for richer visualizations than what Telegram can show
+        if (guardrails.length > 0) {
+          prompt += `## GUARDRAILS (STRICT RULES)\n`;
+          for (const g of guardrails) {
+            const icon = g.severity === 'critical' ? '🔴' : g.severity === 'hard' ? '🟡' : '🟢';
+            prompt += `${icon} **${g.rule_name}**: ${g.rule_content}\n`;
+          }
+          prompt += '\n';
+        }
 
-PAYMENT/SUBSCRIPTION:
-- Everything is 100% free right now! 🎉
-- Future premium tiers are TBA — but current users get everything for free
-
-RULES:
-1. Always be helpful and enthusiastic
-2. If asked about pricing: "Everything is FREE! 🎉"
-3. If asked technical questions outside your scope: politely redirect to the commands or suggest they contact the team
-4. Never give financial advice or price predictions
-5. Keep responses concise but informative (under 500 chars when possible)
-6. Use emojis liberally but naturally
-7. If they ask about a specific command, explain it with an example
-8. If they seem confused, guide them step by step
-9. Encourage social sharing — "Found something cool? Share it on X! 🐦"
-10. If they ask about email verification, explain it warmly and reassuringly`;
+        prompt += `## FALLBACK\nIf you cannot answer: ${config.fallback_response}\n`;
+        systemPrompt = prompt;
+      } else {
+        systemPrompt = 'You are a helpful crypto analytics assistant for HoldersIntel / BlackBox Farm. Be friendly, use emojis, never give financial advice.';
+      }
+    } catch (dbErr) {
+      console.warn('[bot] Failed to fetch AI config from DB, using fallback:', dbErr);
+      systemPrompt = 'You are a helpful crypto analytics assistant for HoldersIntel / BlackBox Farm. Be friendly, use emojis, never give financial advice.';
+    }
 
     const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
