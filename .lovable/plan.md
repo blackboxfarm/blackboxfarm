@@ -1,65 +1,61 @@
 
 
-## Mouse-Aware Contextual Avatar — "The Oracle Watches"
+## Reset Chat Dismiss State + Keyboard Shortcut
 
-### Concept
+### Problem
+The chat widget FAB disappears after dismissal (4-hour `localStorage` timer) and there's no way to manually invoke it.
 
-Track the user's mouse hover over key UI elements. When they linger on something for 2+ seconds, the Oracle avatar briefly peeks in near the cursor with a contextual tooltip — a single short line relevant to what they're hovering over. Not a chat opener, just a whisper. Click it to open the full chat with context pre-loaded.
+### Changes
 
-### How It Works
+**1. Add keyboard shortcut to toggle chat widget**
 
-1. **Hover zones**: Define specific CSS selectors or data attributes (`data-oracle-hint`) on key elements across the site — subscription cards, holder analysis inputs, bubblemaps, nav items, etc.
+Options considered:
+- `Ctrl+Shift+O` — "O" for Oracle, unlikely to conflict
+- `Ctrl+.` — common for assistants (GitHub Copilot uses this)
+- `Ctrl+/` — used by many help systems
+- `Alt+A` — "A" for Assistant, simple
 
-2. **Dwell detection**: A global `mousemove` listener tracks cursor position. When the cursor stays within a hover zone for ~2.5 seconds, a small floating Oracle avatar (40px circle) fades in near the cursor with a one-line hint bubble.
+Recommendation: **`Ctrl+Shift+O`** (Oracle) as primary, plus add a reset of dismiss state whenever the shortcut is used.
 
-3. **Contextual hints**: Each zone maps to a short message:
-   - Hovering over subscription cards → "Curious about Pro? I can explain the differences."
-   - Hovering over holder analysis input → "Paste a token address — I'll walk you through the results."
-   - Hovering over bubblemaps → "Want to trace a dev wallet? Try it."
-   - Hovering over nav items → "This section shows live token activity."
+**2. Reset dismiss on shortcut invocation**
 
-4. **Click to engage**: Clicking the peek avatar opens ChatWidget with a pre-seeded context message like "The user was looking at [holder analysis]. Help them."
+When the keyboard shortcut fires, clear `bb_chat_dismissed_at` from localStorage, set `fabVisible = true`, and open the chat panel immediately.
 
-5. **Anti-annoyance rules**:
-   - Only triggers once per zone per session (sessionStorage tracking)
-   - Never triggers if chat is already open
-   - Never triggers if user dismissed (muted) the widget
-   - Maximum 3 peeks per session total
-   - Fades away after 4 seconds if not clicked
-   - Disabled on mobile (touch devices have no hover)
+**3. One-time dismiss reset now**
 
-### Architecture
+Add a `useEffect` in `ChatWidget.tsx` that clears the dismiss key on mount if a URL param `?reset_chat=1` is present, OR simply clear the stale localStorage key. Since you want it reset right now, we'll remove the dismiss key on next deploy automatically by bumping the key name — but the cleaner fix is the keyboard shortcut which permanently solves re-access.
 
-```text
-┌─────────────────────────────────┐
-│  OracleHoverProvider (context)  │
-│  - global mousemove listener    │
-│  - dwell timer per zone         │
-│  - peek state + position        │
-│  - session limit counter        │
-└──────────┬──────────────────────┘
-           │
-    ┌──────┴──────┐
-    │ OraclePeek  │  ← 40px floating avatar + speech bubble
-    │ (portal)    │     positioned near cursor
-    └─────────────┘
-           │
-    ┌──────┴──────┐
-    │ ChatWidget  │  ← receives context hint on click
-    └─────────────┘
-```
-
-### Files to Create/Change
+### Implementation
 
 | File | Change |
 |------|--------|
-| `src/components/chat/OracleHoverProvider.tsx` | New — context provider with mousemove listener, dwell detection, peek state management |
-| `src/components/chat/OraclePeek.tsx` | New — small floating avatar + hint bubble rendered via portal |
-| `src/components/chat/ChatWidget.tsx` | Accept optional `contextHint` prop to pre-seed AI conversation context |
-| `src/components/layout/SiteLayout.tsx` | Wrap children in `OracleHoverProvider` |
-| Various page components | Add `data-oracle-hint="..."` attributes to key interactive elements (subscription cards, search inputs, nav items) |
+| `src/components/chat/ChatWidget.tsx` | Add `useEffect` with `keydown` listener for `Ctrl+Shift+O` that clears dismiss state, shows FAB, and opens chat. Also clear dismiss state if `?reset_chat=1` is in URL. |
 
-### Privacy Note
+### Code sketch
 
-No mouse coordinates are stored or transmitted. All tracking is ephemeral in React state. Only the fact that a peek was shown (zone ID) is stored in sessionStorage to prevent repeats.
+```typescript
+// In ChatWidget, add keyboard shortcut
+useEffect(() => {
+  const handler = (e: KeyboardEvent) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'O') {
+      e.preventDefault();
+      localStorage.removeItem(DISMISS_KEY);
+      setFabVisible(true);
+      setIsOpen(true);
+    }
+  };
+  window.addEventListener('keydown', handler);
+  return () => window.removeEventListener('keydown', handler);
+}, []);
+
+// Also reset if URL has ?reset_chat=1
+useEffect(() => {
+  if (new URLSearchParams(window.location.search).get('reset_chat') === '1') {
+    localStorage.removeItem(DISMISS_KEY);
+    setFabVisible(true);
+  }
+}, []);
+```
+
+Single file change, ~15 lines added. The shortcut **Ctrl+Shift+O** (or Cmd+Shift+O on Mac) will always bring back the Oracle regardless of dismiss state.
 
