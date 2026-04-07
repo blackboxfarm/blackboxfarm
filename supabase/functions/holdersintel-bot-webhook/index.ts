@@ -2457,7 +2457,7 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, targe
 // ─── AI Conversational Assistant for Admin DMs ───
 const aiChatRateMap = new Map<string, number[]>();
 
-async function handleAdminFreeChat(chatId: number, telegramUserId: string, messageText: string) {
+async function handleAdminFreeChat(chatId: number, telegramUserId: string, messageText: string, senderUsername?: string | null) {
   // Rate limit: 5 messages per minute per user
   const now = Date.now();
   const timestamps = aiChatRateMap.get(telegramUserId) || [];
