@@ -1566,6 +1566,22 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
+    // AI Chat DM stats
+    const acs = telegramBotStats.ai_chat_stats;
+    if (acs && (acs.total_dm_messages > 0 || acs.unique_dm_users > 0)) {
+      tgMessage += `\n💬 **AI Chat (DMs)**\n`;
+      tgMessage += `• ${acs.user_messages} user msgs → ${acs.bot_replies} bot replies (${acs.unique_dm_users} unique users)\n`;
+      if (acs.top_topics?.length > 0) {
+        tgMessage += `• Hot topics: ${acs.top_topics.slice(0, 5).map((t: any) => `${t.topic}(${t.count})`).join(', ')}\n`;
+      }
+      if (acs.sample_questions?.length > 0) {
+        tgMessage += `• Sample Qs:\n`;
+        for (const q of acs.sample_questions.slice(0, 3)) {
+          tgMessage += `  → @${q.user}: "${q.text}"\n`;
+        }
+      }
+    }
+
     tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
