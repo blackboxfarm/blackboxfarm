@@ -55,7 +55,7 @@ export function ChatWidget() {
         >
           <MessageCircle className="h-6 w-6" />
           {hasUnread && (
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full animate-pulse border-2 border-background" />
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background" />
           )}
         </button>
       )}
