@@ -476,7 +476,7 @@ serve(async (req) => {
     const userProfile = await buildUserProfile(userId || undefined, memory);
 
     // Detect intent and do live data lookup from the last user message
-    const lastUserMsg = messages?.[messages.length - 1];
+    const lastMsg = messages?.[messages.length - 1];
     const liveDataBlock = lastUserMsg?.role === 'user'
       ? await detectAndLookup(lastUserMsg.content, userId || undefined)
       : null;
