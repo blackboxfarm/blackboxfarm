@@ -217,6 +217,51 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_user_memory: {
+        Row: {
+          created_at: string
+          id: string
+          interaction_count: number | null
+          interests: string[] | null
+          language_preference: string | null
+          last_platform: string | null
+          notes: Json | null
+          preferred_name: string | null
+          session_id: string | null
+          telegram_user_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          interaction_count?: number | null
+          interests?: string[] | null
+          language_preference?: string | null
+          last_platform?: string | null
+          notes?: Json | null
+          preferred_name?: string | null
+          session_id?: string | null
+          telegram_user_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          interaction_count?: number | null
+          interests?: string[] | null
+          language_preference?: string | null
+          last_platform?: string | null
+          notes?: Json | null
+          preferred_name?: string | null
+          session_id?: string | null
+          telegram_user_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       airdrop_configs: {
         Row: {
           amount_per_wallet: number
