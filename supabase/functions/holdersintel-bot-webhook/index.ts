@@ -2960,6 +2960,10 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
               await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
             }
           }
+          // AI conversational assistant for admin DMs
+          else if (!isGroupChat && message.text) {
+            await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated);
+          }
           break;
       }
 
