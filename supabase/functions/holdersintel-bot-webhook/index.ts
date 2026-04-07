@@ -2565,8 +2565,8 @@ RULES:
     supabase.from('telegram_group_messages').insert({
       chat_id: chatId,
       telegram_user_id: telegramUserId,
-      username: null,
-      display_name: null,
+      username: senderUsername || null,
+      display_name: senderUsername ? `@${senderUsername}` : null,
       message_text: messageText.slice(0, 2000),
       chat_type: 'private',
       is_bot_reply: false,
