@@ -1,51 +1,56 @@
 
 
-## Fix: Config System is Broken in Two Ways
+## AI Conversational Assistant for Admin DMs
 
-### Problem 1: Hardcoded 3-second delay
-Line 2060 of the webhook has `setTimeout(resolve, 3000)` — it ignores whatever the admin sets via `/config delay`. The delay should be read from the channel's `admin_config.delay_ms` in the database.
+### What This Does
+When an admin (someone who has installed the bot in their channel/group) sends a free-text message in DMs — not a recognized command, not a Solana CA, not a registration code — the bot will route it to the Lovable AI Gateway and reply conversationally. The AI acts as a knowledgeable, enthusiastic product ambassador: answering questions about bot usage, features, tiers, troubleshooting, and marketing the project's value.
 
-### Problem 2: `/config select` forgets immediately
-`userSelectedChannel` is a JavaScript `Map()` stored in memory (line 2204). Edge functions are **stateless** — each incoming message spins up a fresh instance. So when you do `/config select -1003739469076`, it stores the selection in RAM, responds "Selected: BLACKBOX", and then the function exits. The next message (`/config delay 2500`) hits a **new instance** with an empty Map, so it says "No channel selected."
+### How It Works
 
-This is why the screenshots show the selection working but every subsequent config command failing.
+**1. New handler: `handleAdminFreeChat(chatId, telegramUserId, messageText)`**
+- Checks if the user has any `channel_installations` (i.e., is an admin with the bot installed). If not, sends a short "use /help to see commands" nudge instead.
+- Builds a system prompt that includes:
+  - Full command reference (from `COMMAND_GROUPS` style data)
+  - Product positioning / marketing tone instructions
+  - Instructions to answer usage questions, troubleshooting, feature explanations
+  - Guardrails: no financial advice, stay on-topic, redirect to /help for unknown commands
+- Sends the user's message + system prompt to `https://ai.gateway.lovable.dev/v1/chat/completions` using `LOVABLE_API_KEY` (already available)
+- Parses the response and sends it back via `sendMessage`
 
-### Problem 3: New installations default to 0ms delay
-The upsert at line 2763 doesn't include `admin_config`, so the DB column default applies — which is `{delay_ms: 0}` instead of `{delay_ms: 3000}`.
+**2. Wire it into the `default` case for DM context (line ~2951)**
+Currently the `default` branch only handles registration codes and group auto-scans. For private chats (non-group), after checking for registration codes and Solana CAs, route unmatched text to `handleAdminFreeChat`.
 
----
+```
+default:
+  if (registration code) { ... }
+  else if (isGroupChat && solana CA) { ... }
+  else if (!isGroupChat && message.text) {
+    await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated);
+  }
+```
 
-### Plan
+**3. Rate limiting**
+- Simple in-memory rate limit: max 5 AI chat messages per user per minute to prevent abuse and control AI costs.
 
-**1. Persist channel selection in the database instead of in-memory**
-- Add a `selected_channel_id` column to `telegram_linked_accounts` (or a small new table)
-- `/config select` writes the selection to the DB
-- All subsequent `/config` commands read it from the DB
-- This survives across function invocations
+**4. System prompt content (key points)**
+- "You are the BlackBox Farm / HoldersIntel bot assistant"
+- Full feature list with descriptions
+- Encourage admins to explore commands, explain benefits
+- Warm, enthusiastic, emoji-rich marketing tone
+- Answer questions about what the bot can do for their community
+- If asked about pricing: "All features are FREE"
+- If asked technical questions outside scope: redirect politely
 
-**2. Read delay from `admin_config` in `handleGroupAutoScan`**
-- Replace the hardcoded `setTimeout(resolve, 3000)` with a DB lookup of the installation's `admin_config.delay_ms`
-- Fallback to 3000ms if no config exists
-
-**3. Set proper defaults on installation upsert**
-- Add `admin_config: { delay_ms: 3000, verbose: false, admin_only_commands: false, dev_wallet_alerts: false }` to the upsert payload at line 2763
-
-**4. Migration: fix DB defaults + backfill**
-- Change the column default for `admin_config` to `{delay_ms: 3000, ...}`
-- Backfill all existing installations that have `delay_ms: 0` to `3000`
-
-**5. Auto-select when user has only one channel**
-- If the user runs `/config delay 2500` and has exactly one installation, auto-select it instead of demanding `/config select` first — quality-of-life improvement
-
-**6. Redeploy the webhook**
-
-### Technical Detail
+### Files to Edit
 
 | File | Change |
 |------|--------|
-| Migration SQL | Add `selected_channel_id` to `telegram_linked_accounts`, fix `admin_config` default, backfill |
-| `holdersintel-bot-webhook/index.ts` line 2204 | Remove in-memory Map, replace with DB read/write for selection |
-| `holdersintel-bot-webhook/index.ts` line 2060 | Read `admin_config.delay_ms` from DB instead of hardcoded 3000 |
-| `holdersintel-bot-webhook/index.ts` line 2763 | Add default `admin_config` to upsert payload |
-| `holdersintel-bot-webhook/index.ts` handleConfig | Auto-select if user has exactly 1 channel |
+| `supabase/functions/holdersintel-bot-webhook/index.ts` | Add `handleAdminFreeChat` function (~60 lines), wire into default case, add rate limiter |
+
+### Technical Notes
+- Uses existing `LOVABLE_API_KEY` env var (already in use by `social-predictor-ai`)
+- Model: `google/gemini-3-flash-preview` (fast, cheap, good enough for chat)
+- No database changes needed
+- No new edge functions needed — stays within the webhook handler
+- Auth.tsx runtime error is unrelated (transient dynamic import issue)
 
