@@ -2191,7 +2191,7 @@ async function handleChannels(chatId: number, telegramUserId: string) {
 
   const { data: installs, error } = await supabase
     .from("channel_installations")
-    .select("id, chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at")
+    .select("id, chat_id, chat_title, chat_type, is_active, is_paid, kicked, installed_at, admin_config")
     .eq("user_id", linked.user_id)
     .order("installed_at", { ascending: false });
 
@@ -2213,8 +2213,12 @@ async function handleChannels(chatId: number, telegramUserId: string) {
     else if (inst.is_paid && inst.is_active) status = '✅ Active';
     else if (inst.is_paid) status = '✅ Paid';
 
+    const cfg = resolveAdminConfig(inst.admin_config);
+    const delayLabel = cfg.delay_ms >= 1000 ? `${(cfg.delay_ms / 1000).toFixed(1)}s` : `${cfg.delay_ms}ms`;
+
     msg += `${idx + 1}️⃣ *${title}* — ${status}\n`;
-    msg += `   _Type: ${inst.chat_type} · ID: ${inst.chat_id}_\n\n`;
+    msg += `   _Type: ${inst.chat_type} · ID: ${inst.chat_id}_\n`;
+    msg += `   ⏱ ${delayLabel}  ·  💬 ${cfg.verbose ? 'Verbose' : 'Terse'}  ·  🛡 ${cfg.admin_only_commands ? 'Admin-only' : 'Public'}  ·  ⚠️ DevAlerts ${cfg.dev_wallet_alerts ? 'ON' : 'OFF'}\n\n`;
   });
 
   msg += `*Commands:*\n` +
