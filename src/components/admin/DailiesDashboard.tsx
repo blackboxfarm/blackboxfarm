@@ -266,7 +266,7 @@ export function DailiesDashboard() {
           token_mint: tokenMint,
           comment_date: dateStr,
           [field]: value
-        }, { onConflict: 'token_mint,comment_date' });
+        } as any, { onConflict: 'token_mint,comment_date' });
 
       if (error) throw error;
     } catch (error) {

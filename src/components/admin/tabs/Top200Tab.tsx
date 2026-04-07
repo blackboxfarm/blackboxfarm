@@ -368,7 +368,7 @@ export default function Top200Tab() {
 
       const { error } = await supabase
         .from("token_lifecycle")
-        .update(updates)
+        .update(updates as any)
         .eq("token_mint", s.token_mint);
       if (error) throw error;
     },

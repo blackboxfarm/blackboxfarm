@@ -2009,7 +2009,7 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                             sell_type: 'bulk_close_stale',
                             closed_at: new Date().toISOString(),
                             exit_reason: 'stale_bulk_close'
-                          })
+                          } as any)
                           .eq('status', 'open')
                           .lt('created_at', cutoff);
                         if (e1) throw e1;
@@ -2314,14 +2314,14 @@ onClick={() => window.open(`https://pump.fun/coin/${item.token_mint}`, '_blank')
                                   className="h-6 text-xs px-2"
                                   onClick={async () => {
                                     try {
-                                      const { error } = await supabase
+                                       const { error } = await supabase
                                         .from('pumpfun_fantasy_positions')
                                         .update({ 
                                           status: 'closed',
                                           sell_type: 'manual',
                                           closed_at: new Date().toISOString(),
                                           total_realized_pnl_sol: pos.unrealized_pnl_sol
-                                        })
+                                        } as any)
                                         .eq('id', pos.id);
                                       if (error) throw error;
                                       toast.success(`Sold ${pos.token_symbol}`);

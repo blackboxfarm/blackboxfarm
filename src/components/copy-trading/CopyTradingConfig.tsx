@@ -171,13 +171,13 @@ export function CopyTradingConfig() {
         if (existingConfig) {
           const { error } = await supabase
             .from('wallet_copy_configs')
-            .update(config)
+            .update(config as any)
             .eq('id', existingConfig.id)
           if (error) throw error
         } else {
           const { error } = await supabase
             .from('wallet_copy_configs')
-            .insert({ user_id: user.id, monitored_wallet_id: walletId, ...config })
+            .insert({ user_id: user.id, monitored_wallet_id: walletId, ...config } as any)
           if (error) throw error
         }
       } else {
