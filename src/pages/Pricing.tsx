@@ -49,7 +49,9 @@ export default function Pricing() {
           </div>
         </div>
 
-        <PricingTable />
+        <div data-oracle-hint="Curious about Pro? I can explain the differences" data-oracle-zone="pricing-cards">
+          <PricingTable />
+        </div>
 
         {/* Testimonial Carousel */}
         <div className="max-w-4xl mx-auto py-4">

@@ -9,6 +9,7 @@ import { useChatStream } from './useChatStream';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import oracleAvatar from '@/assets/oracle-avatar.png';
+import { useOracleHover } from './OracleHoverProvider';
 
 // Pages where the widget should NOT appear
 const HIDDEN_PAGES = ['/checkout', '/payment'];
@@ -31,6 +32,20 @@ export function ChatWidget() {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const location = useLocation();
+  const oracleCtx = useOracleHover();
+
+  // Open chat when Oracle hover context hint is set
+  useEffect(() => {
+    if (oracleCtx?.chatContextHint && !isOpen) {
+      setIsOpen(true);
+      // Send context as a hidden system-like nudge
+      const hint = oracleCtx.chatContextHint;
+      oracleCtx.clearChatContext();
+      setTimeout(() => {
+        sendMessage(`[The user was looking at: ${hint}] — help them with this.`);
+      }, 300);
+    }
+  }, [oracleCtx?.chatContextHint]);
 
   // Smart appearance logic
   useEffect(() => {
@@ -159,7 +174,7 @@ export function ChatWidget() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-background border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        <div data-oracle-chat-open className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-background border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
