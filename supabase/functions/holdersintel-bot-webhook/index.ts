@@ -1348,6 +1348,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
     console.error('[holders] AI health enhancement failed:', aiErr);
   }
 
+  msg += `\n🔗 [Full Web Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})`;
   msg += TAGLINE;
   await sendMessage(chatId, msg);
 }
@@ -1915,6 +1916,7 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
     `❤️ Health: *${healthScore}/100*${phaseLabel}\n` +
     `${top10Pct != null ? `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n` : ''}` +
     `\n_Use /holders for full breakdown or /ai for AI analysis._` +
+    `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})` +
     TAGLINE
   );
 }
@@ -1951,6 +1953,7 @@ async function handleQuick(chatId: number, telegramUserId: string, args: string)
     `❤️ Health: *${health}/100*${qPhaseLabel}\n` +
     `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
     `\n_Use /holders for full breakdown or /ai for AI analysis._` +
+    `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})` +
     TAGLINE
   );
 }
@@ -2231,13 +2234,15 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
     warningsBlock = `\n\n🚨 *Intel Alerts*\n${warningLines.join('\n\n')}`;
   }
 
+  const webLinks = `\n\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})`;
+
   const msg = `⚡ *${tokenLabel} Quick Stats*\n\n` +
     `${holders ? `👥 Holders: *${holders}*\n` : ''}` +
     `${health != null ? `❤️ Health: *${health}/100*\n` : ''}` +
     `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
     distBlock +
     warningsBlock +
-    `` +
+    webLinks +
     TAGLINE;
 
   await sendMessage(chatId, msg, "Markdown", replyToMsgId);
