@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { X, Send, Trash2, Loader2, AlertCircle, BellOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -177,7 +177,10 @@ export function ChatWidget() {
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={clearChat} title="Clear chat">
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDismiss} title="Hide for 4 hours">
+                <BellOff className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose} title="Close">
                 <X className="h-4 w-4" />
               </Button>
             </div>
