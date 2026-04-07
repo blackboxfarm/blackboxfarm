@@ -135,7 +135,7 @@ export function EditLimitOrderDialog({ order, open, onOpenChange, onUpdated, sol
 
       const { error } = await supabase
         .from('flip_limit_orders')
-        .update(updates)
+        .update(updates as any)
         .eq('id', order.id);
 
       if (error) throw error;

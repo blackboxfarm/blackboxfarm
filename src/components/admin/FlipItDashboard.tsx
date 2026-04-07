@@ -2555,7 +2555,7 @@ export function FlipItDashboard() {
           linked_telegram: telegramUrl ? [telegramUrl] : [],
           linked_dev_wallets: creatorWallet ? [creatorWallet] : [],
           linked_x_communities: communityId ? [communityId] : []
-        }, { onConflict: 'entry_type,identifier' });
+        } as any, { onConflict: 'entry_type,identifier' });
         
         if (twitterHandle) {
           await supabase.from('pumpfun_blacklist').upsert({
@@ -2567,7 +2567,7 @@ export function FlipItDashboard() {
             tags: ['manually_rated', nextRating],
             linked_token_mints: [tokenMint],
             linked_dev_wallets: creatorWallet ? [creatorWallet] : []
-          }, { onConflict: 'entry_type,identifier' });
+          } as any, { onConflict: 'entry_type,identifier' });
         }
         
         // Add creator wallet to blacklist (CRITICAL for future cross-referencing)
@@ -2582,7 +2582,7 @@ export function FlipItDashboard() {
             linked_token_mints: [tokenMint],
             linked_twitter: twitterHandle ? [twitterHandle] : [],
             linked_x_communities: communityId ? [communityId] : []
-          }, { onConflict: 'entry_type,identifier' });
+          } as any, { onConflict: 'entry_type,identifier' });
           
         // Trigger team detection via blacklist-enricher with correct params
           supabase.functions.invoke('blacklist-enricher', {
@@ -2613,7 +2613,7 @@ export function FlipItDashboard() {
           linked_telegram: telegramUrl ? [telegramUrl] : [],
           linked_dev_wallets: creatorWallet ? [creatorWallet] : [],
           linked_x_communities: communityId ? [communityId] : []
-        }, { onConflict: 'entry_type,identifier' });
+        } as any, { onConflict: 'entry_type,identifier' });
         
         if (twitterHandle) {
           await supabase.from('pumpfun_whitelist').upsert({
@@ -2625,7 +2625,7 @@ export function FlipItDashboard() {
             tags: ['manually_rated', 'trusted'],
             linked_token_mints: [tokenMint],
             linked_dev_wallets: creatorWallet ? [creatorWallet] : []
-          }, { onConflict: 'entry_type,identifier' });
+          } as any, { onConflict: 'entry_type,identifier' });
         }
         
         // Add creator wallet to whitelist (for trusted devs)
@@ -2640,7 +2640,7 @@ export function FlipItDashboard() {
             linked_token_mints: [tokenMint],
             linked_twitter: twitterHandle ? [twitterHandle] : [],
             linked_x_communities: communityId ? [communityId] : []
-          }, { onConflict: 'entry_type,identifier' });
+          } as any, { onConflict: 'entry_type,identifier' });
         }
       } else if (nextRating === 'unknown') {
         // Add to Neutrallist
@@ -2654,7 +2654,7 @@ export function FlipItDashboard() {
           linked_websites: websiteUrl ? [websiteUrl] : [],
           linked_telegram: telegramUrl ? [telegramUrl] : [],
           linked_dev_wallets: creatorWallet ? [creatorWallet] : []
-        }, { onConflict: 'entry_type,identifier' });
+        } as any, { onConflict: 'entry_type,identifier' });
       }
       
       // Update local state
@@ -2761,7 +2761,7 @@ export function FlipItDashboard() {
             linked_telegram: telegramUrl ? [telegramUrl] : [],
             linked_dev_wallets: creatorWallet ? [creatorWallet] : [],
             linked_x_communities: communityId ? [communityId] : []
-          }, { onConflict: 'entry_type,identifier' });
+          } as any, { onConflict: 'entry_type,identifier' });
           
           if (creatorWallet) {
             await supabase.from('pumpfun_blacklist').upsert({
@@ -2774,7 +2774,7 @@ export function FlipItDashboard() {
               linked_token_mints: [tokenMint],
               linked_twitter: twitterHandle ? [twitterHandle] : [],
               linked_x_communities: communityId ? [communityId] : []
-            }, { onConflict: 'entry_type,identifier' });
+            } as any, { onConflict: 'entry_type,identifier' });
           }
         } else if (rating === 'good') {
           await supabase.from('pumpfun_whitelist').upsert({
@@ -2788,7 +2788,7 @@ export function FlipItDashboard() {
             linked_websites: websiteUrl ? [websiteUrl] : [],
             linked_telegram: telegramUrl ? [telegramUrl] : [],
             linked_dev_wallets: creatorWallet ? [creatorWallet] : []
-          }, { onConflict: 'entry_type,identifier' });
+          } as any, { onConflict: 'entry_type,identifier' });
           
           if (creatorWallet) {
             await supabase.from('pumpfun_whitelist').upsert({
@@ -2800,7 +2800,7 @@ export function FlipItDashboard() {
               tags: ['locked', 'trusted', 'dev_wallet'],
               linked_token_mints: [tokenMint],
               linked_twitter: twitterHandle ? [twitterHandle] : []
-            }, { onConflict: 'entry_type,identifier' });
+            } as any, { onConflict: 'entry_type,identifier' });
           }
         } else {
           // unknown - add to neutral
@@ -2815,7 +2815,7 @@ export function FlipItDashboard() {
             linked_websites: websiteUrl ? [websiteUrl] : [],
             linked_telegram: telegramUrl ? [telegramUrl] : [],
             linked_dev_wallets: creatorWallet ? [creatorWallet] : []
-          }, { onConflict: 'entry_type,identifier' });
+          } as any, { onConflict: 'entry_type,identifier' });
           
           if (creatorWallet) {
             await supabase.from('pumpfun_neutrallist').upsert({
@@ -2827,7 +2827,7 @@ export function FlipItDashboard() {
               tags: ['locked', 'pending_review', 'dev_wallet'],
               linked_token_mints: [tokenMint],
               linked_twitter: twitterHandle ? [twitterHandle] : []
-            }, { onConflict: 'entry_type,identifier' });
+            } as any, { onConflict: 'entry_type,identifier' });
           }
         }
         

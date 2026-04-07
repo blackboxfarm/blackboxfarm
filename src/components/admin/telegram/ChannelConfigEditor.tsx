@@ -203,7 +203,7 @@ export function ChannelConfigEditor({ channel, flipitWallets, onSaved, section }
 
       const { error } = await supabase
         .from('telegram_channel_config')
-        .update(updateData)
+        .update(updateData as any)
         .eq('id', channel.id);
 
       if (error) throw error;
