@@ -2469,16 +2469,28 @@ async function handleAdminFreeChat(chatId: number, telegramUserId: string, messa
   recent.push(now);
   aiChatRateMap.set(telegramUserId, recent);
 
-  // Check if user is an admin (has any channel installations)
-  const { data: installations } = await supabase
+  // Check if user is a linked admin with at least one active installation
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked?.user_id) {
+    await sendMessage(chatId, `👋 Hey! I'm the HoldersIntel Bot.\n\nPlease use /register first, then /help to see all available commands.`);
+    return;
+  }
+
+  const { data: installations, error: installationsError } = await supabase
     .from('channel_installations')
     .select('id')
-    .eq('installed_by_telegram_id', telegramUserId)
+    .eq('user_id', linked.user_id)
     .eq('kicked', false)
     .limit(1);
 
+  if (installationsError) {
+    console.error('[bot] AI admin installation check failed:', installationsError);
+    await sendMessage(chatId, `🤖 I hit a setup issue checking your installations. Please try again in a moment.`);
+    return;
+  }
+
   if (!installations || installations.length === 0) {
-    await sendMessage(chatId, `👋 Hey! I'm the HoldersIntel Bot.\n\nType /help to see all available commands, or /start to get set up!`);
+    await sendMessage(chatId, `👋 Hey! I'm the HoldersIntel Bot.\n\nYou don't have any active channel installs yet — use /add or /channels, or type /help to see commands.`);
     return;
   }
 
