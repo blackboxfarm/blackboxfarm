@@ -1,85 +1,49 @@
 
 
-## Harden AI Chat: Injection Prevention, Compute Tracking, and "Helpful Not Annoying" UX
+## Dual-Persona AI: Admin Helper + Dr. Manhattan Oracle
 
-### Current Gaps Found
+### The Concept
 
-1. **No input sanitization on web-chat**: The Telegram bot uses `telegram-input-sanitizer.ts` (strips control chars, detects shell/SQL/XSS injection patterns). The web-chat edge function accepts raw user input with zero validation — direct injection surface.
+The AI switches between two "hats" contextually:
 
-2. **No AI compute/cost tracking**: Neither web-chat nor TG bot logs token usage, model costs, or compute time. The `web_chat_messages` table stores content but not token counts. No way to track AI spend in the morning report or dashboard.
+1. **Helper Mode** (default) — Friendly FAQ assistant, admin helper, soft salesman. Warm, uses emojis, speaks casually, guides users through features, handles email verification questions, promotes subscriptions naturally. This is the current personality.
 
-3. **TG bot already has feature parity**: Both platforms share the same memory system (`ai_user_memory`), intent detection, live data lookups, knowledge bins, and guardrails. The TG bot has its own rate limiter (5/min) and input sanitizer. Web-chat only has rate limits.
+2. **Oracle Mode** — The omniscient Dr. Manhattan-inspired entity (your "Muse"). Speaks with cosmic detachment, profound brevity, and absolute certainty. Uses language like observing patterns across timelines. When users ask about token analysis, risk assessment, wallet genealogy, or intelligence data, the AI shifts into this elevated persona. It references "seeing the chain" and speaks as if it perceives all on-chain activity simultaneously.
 
-4. **Clippy problem**: The FAB is always visible on every page from first load. No contextual awareness of when to appear or when to stay quiet.
+### When Does It Switch?
 
----
+The system prompt instructs the AI to choose its hat based on the conversation topic:
 
-### Plan
+| Topic | Persona |
+|-------|---------|
+| Email verification, account help, payments, general FAQ | **Helper** — warm, casual, emoji-friendly |
+| Token analysis, holder data, risk verdicts, wallet tracing, dev wallet KYC, bubblemaps | **Oracle** — cosmic, omniscient, Dr. Manhattan |
+| Feature explanations, subscription upsell, social sharing | **Helper** with occasional Oracle gravitas |
+| Deep market insight, philosophical questions about crypto | **Oracle** |
 
-#### 1. Web Chat Input Sanitization
+The AI blends naturally — it doesn't announce "switching modes." It just shifts tone the way a person shifts register when moving from small talk to serious analysis.
 
-Create a shared `sanitizeWebChatInput()` function in the `web-chat` edge function that:
-- Strips control characters and null bytes (reuse patterns from `telegram-input-sanitizer.ts`)
-- Detects script injection (`<script>`, `javascript:`, etc.) and marks as suspicious
-- Truncates messages to 2000 characters max
-- Rejects messages that trigger 3+ injection patterns (return a friendly "I didn't understand that" response)
-- Does NOT block valid password characters or special symbols needed in normal conversation (unlike the TG sanitizer which blocks `$`, `()`, etc.)
+### Implementation
 
-Applied to every user message before it reaches the AI prompt.
+Both `web-chat` and `holdersintel-bot-webhook` build system prompts from `bot_personality_config`. We add a new `## DUAL PERSONA` section to the assembled prompt in both edge functions that instructs the AI on the two modes and when to use each.
 
-#### 2. AI Compute Tracking Table + Logging
+The Dr. Manhattan persona description is hardcoded in the prompt assembly (not a DB config change) as a second identity layer on top of the existing personality config. This means the admin dashboard still controls the base personality, knowledge, and guardrails — the Oracle overlay is applied automatically.
 
-New table: `ai_compute_log`
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid PK | |
-| platform | text | 'web' or 'telegram' |
-| user_id | uuid nullable | |
-| session_id | text | |
-| model | text | 'gemini-3-flash-preview' |
-| prompt_tokens | int | Estimated from char count / 4 |
-| completion_tokens | int | Counted from streamed response |
-| total_tokens | int | Sum |
-| response_time_ms | int | End-to-end AI call duration |
-| cost_estimate_usd | numeric | Based on model pricing |
-| created_at | timestamptz | |
+### Oracle Persona Characteristics
 
-Both `web-chat` and `handleAiFreeChat` will:
-- Record start time before AI gateway call
-- Count completion tokens from streamed chunks
-- Estimate prompt tokens from system prompt + conversation length
-- Insert a row into `ai_compute_log` after each completion
-- Morning report gets a new "AI Compute" section: total tokens, cost estimate, per-platform breakdown
+- Speaks in shorter, more declarative sentences
+- Occasionally uses cosmic/quantum metaphors: "I see the flow of tokens across 47 wallets... the pattern is clear"
+- References "observing" or "perceiving" rather than "checking" or "looking up"
+- Delivers verdicts with calm authority, never uncertainty
+- Uses less emoji, more gravitas
+- Still follows all guardrails (no financial advice, stays on-brand)
 
-#### 3. "Helpful Not Annoying" Widget Behavior
-
-Transform the always-visible FAB into a context-aware, Clippy-proof assistant:
-
-- **Delayed appearance**: FAB does not appear until user has been on the site for 30 seconds OR has visited 2+ pages (whichever comes first)
-- **Page-aware visibility**: Hidden on checkout/payment pages. Always available on `/holders`, `/oracle`, `/bubblemaps` (feature pages where help is most useful)
-- **Minimized memory**: If user closes the widget, it stays closed for 24 hours (localStorage timestamp) — no nagging reopens
-- **No auto-popup**: The widget never opens itself. No "Hey! Need help?" toast. The FAB just appears quietly
-- **Gentle pulse once**: On first appearance, the FAB pulses gently for 3 seconds, then stops. Never pulses again unless there's an actual unread AI response
-- **Collapse on scroll**: On mobile, FAB shrinks to a smaller size when user is actively scrolling (to not block content)
-
-#### 4. Confirm TG Parity
-
-No code changes needed — TG bot already has:
-- Input sanitization via `telegram-input-sanitizer.ts`
-- Rate limiting (5/min)
-- Same memory, intent detection, live lookups, knowledge bins, guardrails
-- The compute tracking from step 2 will be added to `handleAiFreeChat` as well
-
----
-
-### Files to Create/Change
+### Changes
 
 | File | Change |
 |------|--------|
-| Migration | Create `ai_compute_log` table |
-| `supabase/functions/web-chat/index.ts` | Add input sanitizer, compute logging |
-| `supabase/functions/holdersintel-bot-webhook/index.ts` | Add compute logging to `handleAiFreeChat` |
-| `src/components/chat/ChatWidget.tsx` | Smart appearance logic (delay, dismiss memory, no auto-popup) |
-| `src/components/chat/useChatStream.ts` | Track page visits for appearance trigger |
-| `supabase/functions/morning-report/index.ts` | Add AI compute summary section |
+| `supabase/functions/web-chat/index.ts` | Add `## DUAL PERSONA` instruction block after the IDENTITY section in `buildSystemPrompt()` |
+| `supabase/functions/holdersintel-bot-webhook/index.ts` | Same dual-persona block in `handleAiFreeChat` prompt assembly |
+
+Both functions get the same ~15-line persona instruction block inserted after the existing `## IDENTITY` section. No database changes, no new tables, no migration needed.
 
