@@ -353,14 +353,20 @@ export function TelegramHostedBots() {
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                           {g.installer_telegram_id && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-[10px] h-5 px-1.5 text-primary hover:text-primary/80"
-                              onClick={() => openChatModal(g.installer_telegram_id!, `DMs — ${g.installer_telegram_username || g.installer_display_name || 'Admin'}`, true)}
-                            >
-                              💬 View DMs
-                            </Button>
+                            <div className="relative inline-block">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-[10px] h-5 px-1.5 text-primary hover:text-primary/80"
+                                onClick={() => openChatModal(g.installer_telegram_id!, `DMs — ${g.installer_telegram_username || g.installer_display_name || 'Admin'}`, true)}
+                              >
+                                <MessageCircle className="w-3 h-3 mr-0.5" />
+                                View DMs
+                              </Button>
+                              {unreadDmSet.has(String(g.installer_telegram_id)) && (
+                                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse border-2 border-background" />
+                              )}
+                            </div>
                           )}
                         </div>
                       </TableCell>
@@ -465,8 +471,8 @@ export function TelegramHostedBots() {
         <DialogContent className="max-w-2xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" />
-              Chat History — {chatModal?.title}
+              {chatModal?.isDm ? <MessageCircle className="w-5 h-5 text-primary" /> : <MessageSquare className="w-5 h-5" />}
+              {chatModal?.isDm ? 'DM History' : 'Chat History'} — {chatModal?.title}
             </DialogTitle>
           </DialogHeader>
           {chatLoading ? (
