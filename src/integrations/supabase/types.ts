@@ -12756,9 +12756,11 @@ export type Database = {
       telegram_group_messages: {
         Row: {
           chat_id: number
+          chat_type: string
           created_at: string
           display_name: string | null
           id: string
+          is_bot_reply: boolean
           message_id: number | null
           message_text: string | null
           telegram_user_id: string
@@ -12766,9 +12768,11 @@ export type Database = {
         }
         Insert: {
           chat_id: number
+          chat_type?: string
           created_at?: string
           display_name?: string | null
           id?: string
+          is_bot_reply?: boolean
           message_id?: number | null
           message_text?: string | null
           telegram_user_id: string
@@ -12776,9 +12780,11 @@ export type Database = {
         }
         Update: {
           chat_id?: number
+          chat_type?: string
           created_at?: string
           display_name?: string | null
           id?: string
+          is_bot_reply?: boolean
           message_id?: number | null
           message_text?: string | null
           telegram_user_id?: string
