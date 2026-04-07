@@ -10,25 +10,268 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 
-// Rate limit tracking: map of identifier -> timestamps
+// ─── Rate limiting ───
 const rateLimitMap = new Map<string, number[]>();
 
 function checkRateLimit(identifier: string, tier: string): boolean {
   const now = Date.now();
   const maxPerHour = tier === 'paid' ? 60 : tier === 'free' ? 20 : 3;
-  const window = tier === 'anon' ? Infinity : 3600_000; // anon = per session (no window reset)
-  
+  const window = tier === 'anon' ? Infinity : 3600_000;
   const timestamps = rateLimitMap.get(identifier) || [];
   const recent = tier === 'anon' ? timestamps : timestamps.filter(t => now - t < window);
-  
   if (recent.length >= maxPerHour) return false;
-  
   recent.push(now);
-  rateLimitMap.set(identifier, recent.slice(-100)); // keep last 100 entries max
+  rateLimitMap.set(identifier, recent.slice(-100));
   return true;
 }
 
-async function buildSystemPrompt(userContext: { tier: string; pagePath: string; userId?: string; emailVerified?: boolean }): Promise<string | null> {
+// ─── Solana address regex ───
+const SOLANA_RE = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/;
+const TWITTER_HANDLE_RE = /(?:@([a-zA-Z0-9_]{1,15}))|(?:(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]{1,15}))/i;
+
+// ─── User Memory & Context ───
+async function loadUserMemory(userId?: string, sessionId?: string): Promise<any> {
+  if (userId) {
+    const { data } = await supabase.from('ai_user_memory').select('*').eq('user_id', userId).maybeSingle();
+    return data;
+  }
+  if (sessionId) {
+    const { data } = await supabase.from('ai_user_memory').select('*').eq('session_id', sessionId).maybeSingle();
+    return data;
+  }
+  return null;
+}
+
+async function upsertMemory(memory: any, updates: Record<string, any>): Promise<void> {
+  if (memory?.id) {
+    await supabase.from('ai_user_memory').update({
+      ...updates,
+      interaction_count: (memory.interaction_count || 0) + 1,
+      last_platform: 'web',
+    }).eq('id', memory.id);
+  } else if (updates.user_id || updates.session_id) {
+    await supabase.from('ai_user_memory').insert({
+      ...updates,
+      interaction_count: 1,
+      last_platform: 'web',
+    });
+  }
+}
+
+async function buildUserProfile(userId?: string, memory?: any): Promise<string> {
+  let profile = '## USER PROFILE\n';
+
+  if (memory?.preferred_name) {
+    profile += `- Name: ${memory.preferred_name} (they prefer this)\n`;
+  }
+
+  if (memory?.language_preference && memory.language_preference !== 'en') {
+    profile += `- Preferred language: ${memory.language_preference}\n`;
+  }
+
+  if (memory?.interests?.length > 0) {
+    profile += `- Interests: ${memory.interests.join(', ')}\n`;
+  }
+
+  profile += `- Platform: Website\n`;
+  profile += `- Interaction count: ${memory?.interaction_count || 0}\n`;
+
+  // Cross-reference with Telegram
+  if (memory?.telegram_user_id) {
+    profile += `- Also registered on Telegram (TG user ID: ${memory.telegram_user_id})\n`;
+  } else if (userId) {
+    // Check telegram_link_codes for cross-platform identity
+    const { data: tgLink } = await supabase
+      .from('telegram_link_codes')
+      .select('telegram_user_id, telegram_username, telegram_chat_title')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (tgLink?.telegram_user_id) {
+      profile += `- Also registered on Telegram as @${tgLink.telegram_username || tgLink.telegram_user_id}\n`;
+      // Link memory to TG identity for future cross-referencing
+      if (memory?.id) {
+        supabase.from('ai_user_memory').update({ telegram_user_id: tgLink.telegram_user_id }).eq('id', memory.id).then(() => {});
+      }
+    }
+  }
+
+  // Load web profile info
+  if (userId) {
+    const { data: profile_data } = await supabase
+      .from('profiles')
+      .select('display_name, email_verified, cached_tier_key, referral_source, created_at')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profile_data) {
+      if (profile_data.display_name) profile += `- Display name: ${profile_data.display_name}\n`;
+      profile += `- Email verified: ${profile_data.email_verified ? '✅' : '❌'}\n`;
+      profile += `- Account tier: ${profile_data.cached_tier_key || 'free'}\n`;
+      if (profile_data.created_at) {
+        const d = new Date(profile_data.created_at);
+        profile += `- Member since: ${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}\n`;
+      }
+    }
+
+    // Check email verification status
+    const { data: emailVerif } = await supabase
+      .from('email_verifications')
+      .select('verified_at, sent_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (emailVerif) {
+      if (emailVerif.verified_at) {
+        profile += `- Email verified at: ${new Date(emailVerif.verified_at).toLocaleDateString()}\n`;
+      } else if (emailVerif.sent_at) {
+        profile += `- Verification email sent but NOT yet verified\n`;
+      }
+    }
+  }
+
+  if (!memory) {
+    profile += `\n## FIRST INTERACTION\nThis is a new user. In your first reply, warmly introduce yourself and ask what they'd like to be called. Something like "What should I call you?" — keep it natural and friendly.\n`;
+  }
+
+  return profile;
+}
+
+// ─── Intent Detection & Live Data Lookup ───
+async function detectAndLookup(messageText: string, userId?: string): Promise<string | null> {
+  // Only one lookup per message
+  const solMatch = messageText.match(SOLANA_RE);
+  if (solMatch) {
+    const ca = solMatch[0];
+    const [lifecycleRes, socialRes, meshRes] = await Promise.all([
+      supabase.from('token_lifecycle').select('symbol, name, phase, bonded_at, graduated_at, dead_at, peak_mcap, current_mcap, creator_wallet').eq('mint', ca).maybeSingle(),
+      supabase.from('token_social_links').select('platform, handle, url').eq('token_mint', ca).limit(5),
+      supabase.from('reputation_mesh').select('entity_type, entity_id, label, metadata').or(`entity_id.eq.${ca},metadata->>token_mint.eq.${ca}`).limit(5),
+    ]);
+
+    let block = `## LIVE DATA LOOKUP\nUser submitted Solana address: ${ca}\n`;
+    const lc = lifecycleRes.data;
+    if (lc) {
+      block += `- Token: ${lc.name} (${lc.symbol})\n`;
+      block += `- Phase: ${lc.phase || 'unknown'}\n`;
+      if (lc.peak_mcap) block += `- Peak MCap: $${Number(lc.peak_mcap).toLocaleString()}\n`;
+      if (lc.current_mcap) block += `- Current MCap: $${Number(lc.current_mcap).toLocaleString()}\n`;
+      if (lc.creator_wallet) block += `- Creator wallet: ${lc.creator_wallet.slice(0, 6)}...${lc.creator_wallet.slice(-4)}\n`;
+    } else {
+      block += `- Token not found in our database. It may not have been scanned yet.\n`;
+    }
+
+    const socials = socialRes.data || [];
+    if (socials.length > 0) {
+      block += `- Social links: ${socials.map(s => `${s.platform}: ${s.handle || s.url}`).join(', ')}\n`;
+    }
+
+    const mesh = meshRes.data || [];
+    if (mesh.length > 0) {
+      for (const m of mesh) {
+        block += `- ${m.entity_type}: ${m.label || m.entity_id}\n`;
+      }
+    }
+
+    block += `\nUse this data naturally in your response. If the user asks follow-up questions, reference this data.\n`;
+    return block;
+  }
+
+  // Twitter handle lookup
+  const twMatch = messageText.match(TWITTER_HANDLE_RE);
+  if (twMatch) {
+    const handle = (twMatch[1] || twMatch[2]).toLowerCase();
+    const { data: socialLinks } = await supabase
+      .from('token_social_links')
+      .select('token_mint, handle, url')
+      .eq('platform', 'twitter')
+      .ilike('handle', handle)
+      .limit(5);
+
+    if (socialLinks && socialLinks.length > 0) {
+      let block = `## LIVE DATA LOOKUP\nUser mentioned Twitter handle: @${handle}\n`;
+      block += `Found ${socialLinks.length} token(s) linked to this handle:\n`;
+      for (const sl of socialLinks) {
+        const { data: token } = await supabase.from('token_lifecycle').select('symbol, name, phase').eq('mint', sl.token_mint).maybeSingle();
+        block += `- ${token?.name || 'Unknown'} (${token?.symbol || sl.token_mint.slice(0, 8)}) — Phase: ${token?.phase || 'unknown'}\n`;
+      }
+      return block;
+    }
+  }
+
+  // Email/verification intent
+  if (/\b(email|verify|verification|verified|confirm)\b/i.test(messageText) && userId) {
+    const { data: emailVerif } = await supabase
+      .from('email_verifications')
+      .select('verified_at, sent_at, token')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (emailVerif) {
+      let block = `## LIVE DATA LOOKUP\nUser asked about email verification.\n`;
+      if (emailVerif.verified_at) {
+        block += `- Status: VERIFIED ✅ (verified on ${new Date(emailVerif.verified_at).toLocaleDateString()})\n`;
+      } else {
+        block += `- Status: NOT VERIFIED ❌\n`;
+        if (emailVerif.sent_at) block += `- Verification email was sent on ${new Date(emailVerif.sent_at).toLocaleDateString()}\n`;
+        block += `- They can request a new verification email from their dashboard or by visiting https://blackbox.farm/dashboard\n`;
+      }
+      return block;
+    }
+  }
+
+  // Subscription/upgrade intent
+  if (/\b(subscri|upgrade|pro|premium|paid|plan)\b/i.test(messageText) && userId) {
+    const { data: prof } = await supabase.from('profiles').select('cached_tier_key').eq('id', userId).maybeSingle();
+    let block = `## LIVE DATA LOOKUP\nUser asked about subscription/upgrade.\n`;
+    block += `- Current tier: ${prof?.cached_tier_key || 'free'}\n`;
+    block += `- Subscription page: https://blackbox.farm/subscriptions\n`;
+    return block;
+  }
+
+  return null;
+}
+
+// ─── Extract preferred name from conversation ───
+function extractPreferredName(messages: any[]): string | null {
+  // Look at recent user messages for name statements
+  const recentUserMsgs = messages.filter(m => m.role === 'user').slice(-3);
+  for (const msg of recentUserMsgs) {
+    const content = msg.content?.trim();
+    if (!content || content.length > 50) continue;
+    // Patterns: "call me X", "I'm X", "my name is X", "it's X", or just a short name reply
+    const nameMatch = content.match(/(?:call me|i'?m|my name is|it'?s|just)\s+([A-Za-z0-9_\-\s]{1,30})/i);
+    if (nameMatch) return nameMatch[1].trim();
+    // If short reply (1-3 words, no question marks), could be a name
+    if (content.split(/\s+/).length <= 3 && !content.includes('?') && /^[A-Za-z0-9_\-\s]+$/.test(content)) {
+      // Only if previous assistant message asked for name
+      const idx = messages.indexOf(msg);
+      if (idx > 0) {
+        const prev = messages[idx - 1];
+        if (prev?.role === 'assistant' && /call you|your name|what.*name/i.test(prev.content || '')) {
+          return content;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ─── Build System Prompt ───
+async function buildSystemPrompt(userContext: {
+  tier: string;
+  pagePath: string;
+  userId?: string;
+  emailVerified?: boolean;
+  userProfile?: string;
+  liveDataBlock?: string;
+}): Promise<string | null> {
   try {
     const [configRes, binsRes, guardrailsRes] = await Promise.all([
       supabase.from('bot_personality_config').select('*').eq('id', 1).single(),
@@ -40,7 +283,7 @@ async function buildSystemPrompt(userContext: { tier: string; pagePath: string; 
     const bins = binsRes.data || [];
     const guardrails = guardrailsRes.data || [];
 
-    if (config?.is_active === false) return null; // AI disabled
+    if (config?.is_active === false) return null;
 
     let prompt = '';
 
@@ -83,7 +326,17 @@ async function buildSystemPrompt(userContext: { tier: string; pagePath: string; 
     prompt += `- Telegram Bot: https://blackbox.farm/tgbot\n`;
     prompt += `Use these links naturally when relevant.\n\n`;
 
-    // Web-specific context block
+    // Inject user profile context
+    if (userContext.userProfile) {
+      prompt += userContext.userProfile + '\n';
+    }
+
+    // Inject live data lookup
+    if (userContext.liveDataBlock) {
+      prompt += userContext.liveDataBlock + '\n';
+    }
+
+    // Web-specific context
     prompt += `## CURRENT CONTEXT\n`;
     prompt += `- Platform: Website (blackbox.farm)\n`;
     prompt += `- User is currently viewing: ${userContext.pagePath}\n`;
@@ -95,12 +348,15 @@ async function buildSystemPrompt(userContext: { tier: string; pagePath: string; 
 
     // Tier-specific behavior
     if (userContext.tier === 'anon') {
-      prompt += `## VISITOR BEHAVIOR\nThis is an anonymous visitor (not signed in). Be warm and welcoming. Explain what BlackBox Farm does. Encourage them to create a free account. Highlight key features like Holders Analysis, Bubblemaps, and the Telegram Bot. After a few messages, suggest they sign up to continue chatting and unlock more features.\n\n`;
+      prompt += `## VISITOR BEHAVIOR\nThis is an anonymous visitor (not signed in). Be warm and welcoming. Explain what BlackBox Farm does. Encourage them to create a free account. Highlight key features. After a few messages, suggest they sign up.\n\n`;
     } else if (userContext.tier === 'free') {
-      prompt += `## VISITOR BEHAVIOR\nThis is a registered free user. Help them explore all features. If they ask about advanced features, mention Pro subscription benefits naturally (not pushy). Help with email verification if needed. Suggest sharing BlackBox on socials.\n\n`;
+      prompt += `## VISITOR BEHAVIOR\nThis is a registered free user. Help them explore all features. If they ask about advanced features, mention Pro subscription benefits naturally. Help with email verification if needed.\n\n`;
     } else {
-      prompt += `## VISITOR BEHAVIOR\nThis is a paid subscriber. Give them priority treatment. Help with advanced features. No upselling needed — focus on maximizing their experience.\n\n`;
+      prompt += `## VISITOR BEHAVIOR\nThis is a paid subscriber. Give them priority treatment. Help with advanced features. No upselling needed.\n\n`;
     }
+
+    // Name usage instruction
+    prompt += `## NAME USAGE\nIf you know the user's preferred name, address them by it naturally. If this is their first interaction and you don't know their name, warmly ask "What should I call you?" early in the conversation.\n\n`;
 
     if (config?.fallback_response) {
       prompt += `## FALLBACK\nIf you cannot answer: ${config.fallback_response}\n`;
@@ -113,6 +369,7 @@ async function buildSystemPrompt(userContext: { tier: string; pagePath: string; 
   }
 }
 
+// ─── Main handler ───
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -135,21 +392,62 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const systemPrompt = await buildSystemPrompt({ tier, pagePath, userId, emailVerified });
+    // Load user memory
+    const memory = await loadUserMemory(userId || undefined, sessionId || undefined);
+
+    // Build user profile block
+    const userProfile = await buildUserProfile(userId || undefined, memory);
+
+    // Detect intent and do live data lookup from the last user message
+    const lastUserMsg = messages?.[messages.length - 1];
+    const liveDataBlock = lastUserMsg?.role === 'user'
+      ? await detectAndLookup(lastUserMsg.content, userId || undefined)
+      : null;
+
+    // Extract preferred name from conversation if we don't have one
+    if (!memory?.preferred_name && messages?.length >= 2) {
+      const extractedName = extractPreferredName(messages);
+      if (extractedName) {
+        const memoryUpdate: Record<string, any> = { preferred_name: extractedName };
+        if (userId) memoryUpdate.user_id = userId;
+        else if (sessionId) memoryUpdate.session_id = sessionId;
+        await upsertMemory(memory, memoryUpdate);
+      }
+    }
+
+    // Ensure memory record exists for returning users
+    if (!memory) {
+      const memoryInsert: Record<string, any> = {};
+      if (userId) memoryInsert.user_id = userId;
+      else if (sessionId) memoryInsert.session_id = sessionId;
+      if (Object.keys(memoryInsert).length > 0) {
+        await upsertMemory(null, memoryInsert);
+      }
+    } else {
+      // Bump interaction count
+      supabase.from('ai_user_memory').update({
+        interaction_count: (memory.interaction_count || 0) + 1,
+        last_platform: 'web',
+      }).eq('id', memory.id).then(() => {});
+    }
+
+    const systemPrompt = await buildSystemPrompt({
+      tier, pagePath, userId, emailVerified,
+      userProfile,
+      liveDataBlock: liveDataBlock || undefined,
+    });
+
     if (systemPrompt === null) {
       return new Response(JSON.stringify({ error: "AI chat is temporarily disabled." }), {
-        status: 503,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Log user message
-    const lastUserMsg = messages?.[messages.length - 1];
     if (lastUserMsg?.role === 'user') {
       supabase.from('web_chat_messages').insert({
         session_id: sessionId || 'anon-' + Date.now(),
@@ -171,7 +469,7 @@ serve(async (req) => {
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
-          ...(messages || []).slice(-20), // Last 20 messages for context
+          ...(messages || []).slice(-20),
         ],
         stream: true,
         temperature: 0.8,
@@ -197,7 +495,7 @@ serve(async (req) => {
       });
     }
 
-    // Collect streamed response for logging, then pass through
+    // Stream response and collect for logging
     const reader = aiRes.body!.getReader();
     let fullResponse = '';
 
@@ -206,7 +504,6 @@ serve(async (req) => {
         const { done, value } = await reader.read();
         if (done) {
           controller.close();
-          // Log assistant response
           if (fullResponse) {
             supabase.from('web_chat_messages').insert({
               session_id: sessionId || 'anon-' + Date.now(),
@@ -219,7 +516,6 @@ serve(async (req) => {
           }
           return;
         }
-        // Parse for logging
         const text = new TextDecoder().decode(value);
         for (const line of text.split('\n')) {
           if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
@@ -239,8 +535,7 @@ serve(async (req) => {
   } catch (e) {
     console.error("[web-chat] error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
