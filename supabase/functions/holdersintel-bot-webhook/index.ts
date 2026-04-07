@@ -253,6 +253,90 @@ async function getLinkedUser(telegramUserId: string) {
   return data;
 }
 
+// ─── Check if a user's web account is suspended (banned) ───
+async function isUserSuspended(userId: string): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.admin.getUserById(userId);
+    if (!data?.user) return false;
+    const bannedUntil = data.user.banned_until;
+    if (!bannedUntil) return false;
+    return new Date(bannedUntil) > new Date();
+  } catch {
+    return false;
+  }
+}
+
+// ─── Check if user is unverified and past 24h (for gentle nudge) ───
+async function isUserPast24hUnverified(userId: string): Promise<boolean> {
+  try {
+    const { data: authData } = await supabase.auth.admin.getUserById(userId);
+    if (!authData?.user) return false;
+    const createdAt = new Date(authData.user.created_at);
+    const hoursSince = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+    if (hoursSince < 24) return false;
+
+    // Check if they have a verified email
+    const { data: verified } = await supabase
+      .from('email_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('verification_type', 'signup')
+      .not('verified_at', 'is', null)
+      .limit(1);
+
+    if (verified && verified.length > 0) return false;
+
+    // Check if they have a pending verification at all
+    const { data: pending } = await supabase
+      .from('email_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('verification_type', 'signup')
+      .limit(1);
+
+    return (pending && pending.length > 0) || false;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Get or create a reactivation token for a suspended user ───
+async function getOrCreateReactivationToken(userId: string): Promise<string | null> {
+  try {
+    // Check for existing non-expired reactivation token
+    const { data: existing } = await supabase
+      .from('email_verifications')
+      .select('verification_token, expires_at')
+      .eq('user_id', userId)
+      .eq('verification_type', 'reactivation')
+      .is('verified_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (existing && new Date(existing.expires_at) > new Date()) {
+      return existing.verification_token;
+    }
+
+    // Create a new one
+    const tokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(tokenBytes);
+    const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    await supabase.from('email_verifications').insert({
+      user_id: userId,
+      verification_token: token,
+      verification_type: 'reactivation',
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    return token;
+  } catch (err) {
+    console.error('[bot] getOrCreateReactivationToken error:', err);
+    return null;
+  }
+}
+
 async function getUserTier(userId: string): Promise<string> {
   const { data } = await supabase.rpc("get_user_tier", { p_user_id: userId });
   return data || "auth";
@@ -2902,6 +2986,36 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
       isGroupChat,
       sanitizerFlags: sanitized.flags.length > 0 ? sanitized.flags : undefined,
     }));
+
+    // ─── DM-only: Check if linked user is suspended or needs verification nudge ───
+    if (!isGroupChat) {
+      const linked = await getLinkedUser(telegramUserId);
+      if (linked?.user_id) {
+        // Check if account is suspended
+        const suspended = await isUserSuspended(linked.user_id);
+        if (suspended) {
+          const token = await getOrCreateReactivationToken(linked.user_id);
+          const reactivateUrl = token ? `https://blackbox.farm/verify-email?token=${token}` : 'https://blackbox.farm/auth';
+          await sendMessage(chatId,
+            `⚠️ *Account Suspended*\n\n` +
+            `Your BlackBox Farm account was suspended because your email wasn't verified within 48 hours.\n\n` +
+            `But don't worry — click below to reactivate instantly! 🚀\n\n` +
+            `🔗 [Reactivate My Account](${reactivateUrl})\n\n` +
+            `_Once reactivated, all your bot features will work again!_`
+          );
+          return new Response("OK");
+        }
+
+        // Check if past 24h and unverified — gentle nudge
+        const needsNudge = await isUserPast24hUnverified(linked.user_id);
+        if (needsNudge && command !== '/register' && command !== '/start') {
+          // Send nudge but continue processing the command
+          await sendMessage(chatId,
+            `📧 *Quick reminder:* Verify your email soon to keep your account active! Check your inbox or visit your [dashboard](https://blackbox.farm/dashboard). ⏰`
+          );
+        }
+      }
+    }
 
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts'];

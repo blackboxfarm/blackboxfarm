@@ -11,6 +11,7 @@ import { useUserTier } from "@/hooks/useUserTier";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { TelegramLinkCode } from "@/components/settings/TelegramLinkCode";
 import { ChannelInstallations } from "@/components/dashboard/ChannelInstallations";
+import { EmailVerificationBanner } from "@/components/dashboard/EmailVerificationBanner";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -26,6 +27,13 @@ export default function Dashboard() {
   return (
     <SiteLayout>
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-8">
+        {/* Email Verification Banner */}
+        <EmailVerificationBanner
+          userId={user.id}
+          userEmail={user.email || ''}
+          userCreatedAt={user.created_at || new Date().toISOString()}
+        />
+
         {/* Welcome */}
         <div className="space-y-2">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground">

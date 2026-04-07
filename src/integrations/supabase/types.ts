@@ -7690,6 +7690,33 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_reactivation_emails: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          processed: boolean
+          reactivation_token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          processed?: boolean
+          reactivation_token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          processed?: boolean
+          reactivation_token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       phone_verifications: {
         Row: {
           created_at: string
@@ -17502,6 +17529,14 @@ export type Database = {
       generate_telegram_link_code: {
         Args: { p_user_id: string }
         Returns: string
+      }
+      get_24h_unverified_users: {
+        Args: never
+        Returns: {
+          email: string
+          signup_token: string
+          user_id: string
+        }[]
       }
       get_active_positions_with_secrets: {
         Args: { session_id_param: string }
