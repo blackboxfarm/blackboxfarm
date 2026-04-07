@@ -16959,6 +16959,39 @@ export type Database = {
           },
         ]
       }
+      web_chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          page_path: string | null
+          role: string
+          session_id: string
+          user_id: string | null
+          user_tier: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          page_path?: string | null
+          role: string
+          session_id: string
+          user_id?: string | null
+          user_tier?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          page_path?: string | null
+          role?: string
+          session_id?: string
+          user_id?: string | null
+          user_tier?: string | null
+        }
+        Relationships: []
+      }
       web_subscription_tiers: {
         Row: {
           ai_access_level: Database["public"]["Enums"]["ai_access_level"]

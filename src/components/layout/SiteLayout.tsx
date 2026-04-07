@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { ChatWidget } from '@/components/chat/ChatWidget';
 
 const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
@@ -170,6 +171,9 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
         onClose={() => setShowAuthModal(false)}
         defaultTab={authModalTab}
       />
+
+      {/* Sentient Web Assistant */}
+      <ChatWidget />
     </div>
   );
 }
