@@ -2548,6 +2548,161 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, targe
 // ─── AI Conversational Assistant for All Registered Users ───
 const aiChatRateMap = new Map<string, number[]>();
 
+// ─── AI Memory & Context for TG ───
+const SOLANA_RE_TG = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/;
+const TWITTER_HANDLE_RE_TG = /(?:@([a-zA-Z0-9_]{1,15}))|(?:(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]{1,15}))/i;
+
+async function loadTgUserMemory(telegramUserId: string): Promise<any> {
+  const { data } = await supabase.from('ai_user_memory').select('*').eq('telegram_user_id', telegramUserId).maybeSingle();
+  return data;
+}
+
+async function upsertTgMemory(memory: any, telegramUserId: string, updates: Record<string, any>): Promise<void> {
+  if (memory?.id) {
+    await supabase.from('ai_user_memory').update({
+      ...updates,
+      interaction_count: (memory.interaction_count || 0) + 1,
+      last_platform: 'telegram',
+    }).eq('id', memory.id);
+  } else {
+    await supabase.from('ai_user_memory').insert({
+      telegram_user_id: telegramUserId,
+      ...updates,
+      interaction_count: 1,
+      last_platform: 'telegram',
+    });
+  }
+}
+
+async function buildTgUserProfile(telegramUserId: string, memory: any, senderUsername?: string | null): Promise<string> {
+  let profile = '## USER PROFILE\n';
+
+  if (memory?.preferred_name) {
+    profile += `- Name: ${memory.preferred_name} (they prefer this)\n`;
+  } else if (senderUsername) {
+    profile += `- Telegram username: @${senderUsername}\n`;
+  }
+
+  if (memory?.language_preference && memory.language_preference !== 'en') {
+    profile += `- Preferred language: ${memory.language_preference}\n`;
+  }
+
+  if (memory?.interests?.length > 0) {
+    profile += `- Interests: ${memory.interests.join(', ')}\n`;
+  }
+
+  profile += `- Platform: Telegram DM\n`;
+  profile += `- Interaction count: ${memory?.interaction_count || 0}\n`;
+
+  // Cross-reference with web account
+  const linked = await getLinkedUser(telegramUserId);
+  if (linked?.user_id) {
+    profile += `- Has a linked web account on blackbox.farm\n`;
+
+    // Link memory to web user_id
+    if (memory?.id && !memory.user_id) {
+      supabase.from('ai_user_memory').update({ user_id: linked.user_id }).eq('id', memory.id).then(() => {});
+    }
+
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('display_name, email_verified, cached_tier_key, created_at')
+      .eq('id', linked.user_id)
+      .maybeSingle();
+
+    if (prof) {
+      if (prof.display_name) profile += `- Web display name: ${prof.display_name}\n`;
+      profile += `- Email verified: ${prof.email_verified ? '✅' : '❌'}\n`;
+      profile += `- Account tier: ${prof.cached_tier_key || 'free'}\n`;
+    }
+
+    // Check email verification
+    const { data: emailVerif } = await supabase
+      .from('email_verifications')
+      .select('verified_at, sent_at')
+      .eq('user_id', linked.user_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (emailVerif && !emailVerif.verified_at) {
+      profile += `- ⚠️ Email verification pending — sent but not yet confirmed\n`;
+    }
+  }
+
+  if (!memory) {
+    profile += `\n## FIRST INTERACTION\nThis is a new user chatting for the first time. Warmly introduce yourself and ask what they'd like to be called.\n`;
+  }
+
+  return profile;
+}
+
+async function detectTgLookup(messageText: string, telegramUserId: string): Promise<string | null> {
+  const linked = await getLinkedUser(telegramUserId);
+  const userId = linked?.user_id;
+
+  const solMatch = messageText.match(SOLANA_RE_TG);
+  if (solMatch) {
+    const ca = solMatch[0];
+    const [lcRes, socialRes] = await Promise.all([
+      supabase.from('token_lifecycle').select('symbol, name, phase, peak_mcap, current_mcap, creator_wallet').eq('mint', ca).maybeSingle(),
+      supabase.from('token_social_links').select('platform, handle, url').eq('token_mint', ca).limit(5),
+    ]);
+
+    let block = `## LIVE DATA LOOKUP\nUser submitted: ${ca}\n`;
+    const lc = lcRes.data;
+    if (lc) {
+      block += `- Token: ${lc.name} (${lc.symbol})\n`;
+      block += `- Phase: ${lc.phase || 'unknown'}\n`;
+      if (lc.peak_mcap) block += `- Peak MCap: $${Number(lc.peak_mcap).toLocaleString()}\n`;
+      if (lc.creator_wallet) block += `- Creator: ${lc.creator_wallet.slice(0, 6)}...${lc.creator_wallet.slice(-4)}\n`;
+    } else {
+      block += `- Not in our database yet. Suggest they use /quick ${ca} for a scan.\n`;
+    }
+    const socials = socialRes.data || [];
+    if (socials.length > 0) {
+      block += `- Socials: ${socials.map(s => `${s.platform}: ${s.handle || s.url}`).join(', ')}\n`;
+    }
+    return block;
+  }
+
+  const twMatch = messageText.match(TWITTER_HANDLE_RE_TG);
+  if (twMatch) {
+    const handle = (twMatch[1] || twMatch[2]).toLowerCase();
+    const { data: socialLinks } = await supabase
+      .from('token_social_links')
+      .select('token_mint, handle')
+      .eq('platform', 'twitter')
+      .ilike('handle', handle)
+      .limit(5);
+
+    if (socialLinks && socialLinks.length > 0) {
+      let block = `## LIVE DATA LOOKUP\nTwitter handle: @${handle}\n`;
+      for (const sl of socialLinks) {
+        const { data: token } = await supabase.from('token_lifecycle').select('symbol, name, phase').eq('mint', sl.token_mint).maybeSingle();
+        block += `- ${token?.name || 'Unknown'} (${token?.symbol || '?'}) — ${token?.phase || 'unknown'}\n`;
+      }
+      return block;
+    }
+  }
+
+  if (/\b(email|verify|verification)\b/i.test(messageText) && userId) {
+    const { data: ev } = await supabase.from('email_verifications').select('verified_at, sent_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (ev) {
+      let block = `## LIVE DATA LOOKUP\nEmail verification status:\n`;
+      block += ev.verified_at ? `- VERIFIED ✅\n` : `- NOT VERIFIED ❌\n- They should check their inbox or visit https://blackbox.farm/dashboard\n`;
+      return block;
+    }
+  }
+
+  if (/\b(subscri|upgrade|pro|premium)\b/i.test(messageText) && userId) {
+    const { data: prof } = await supabase.from('profiles').select('cached_tier_key').eq('id', userId).maybeSingle();
+    return `## LIVE DATA LOOKUP\nSubscription inquiry:\n- Current tier: ${prof?.cached_tier_key || 'free'}\n- Upgrade: https://blackbox.farm/subscriptions\n`;
+  }
+
+  return null;
+}
+
 async function handleAiFreeChat(chatId: number, telegramUserId: string, messageText: string, senderUsername?: string | null) {
   // Rate limit: 5 messages per minute per user
   const now = Date.now();
@@ -2560,7 +2715,7 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
   recent.push(now);
   aiChatRateMap.set(telegramUserId, recent);
 
-  // Check if user is a linked admin with at least one active installation
+  // Check if user is linked
   const linked = await getLinkedUser(telegramUserId);
   if (!linked?.user_id) {
     await sendMessage(chatId, `👋 Hey! I'm the HoldersIntel Bot.\n\nPlease use /register first, then /help to see all available commands.`);
@@ -2588,6 +2743,27 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
     if (!LOVABLE_API_KEY) {
       await sendMessage(chatId, `🤖 I'd love to chat, but my AI brain isn't configured right now. Try /help for commands!`);
       return;
+    }
+
+    // Load user memory
+    const memory = await loadTgUserMemory(telegramUserId);
+
+    // Build user profile context
+    const userProfile = await buildTgUserProfile(telegramUserId, memory, senderUsername);
+
+    // Live data lookup
+    const liveDataBlock = await detectTgLookup(messageText, telegramUserId);
+
+    // Ensure memory record exists
+    if (!memory) {
+      await upsertTgMemory(null, telegramUserId, {
+        user_id: linked.user_id,
+      });
+    } else {
+      supabase.from('ai_user_memory').update({
+        interaction_count: (memory.interaction_count || 0) + 1,
+        last_platform: 'telegram',
+      }).eq('id', memory.id).then(() => {});
     }
 
     // Build dynamic system prompt from database config
@@ -2641,7 +2817,16 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Dashboard: https://blackbox.farm/dashboard\n`;
         prompt += `- Advertise With Us: https://blackbox.farm/advertise\n`;
         prompt += `- Share on Socials: https://blackbox.farm/share\n`;
-        prompt += `Use these links naturally when relevant. When users ask how to do something, point them to the right page.\n\n`;
+        prompt += `Use these links naturally when relevant.\n\n`;
+
+        // Inject user profile + live data
+        prompt += userProfile + '\n';
+        if (liveDataBlock) prompt += liveDataBlock + '\n';
+
+        prompt += `## NAME USAGE\nIf you know the user's preferred name, address them by it. If this is their first interaction, ask "What should I call you?" naturally.\n\n`;
+
+        prompt += `## PLATFORM CONTEXT\nThis conversation is happening on Telegram DM. Format responses appropriately for Telegram (Markdown supported). Keep messages mobile-friendly.\n\n`;
+
         prompt += `## FALLBACK\nIf you cannot answer: ${config.fallback_response}\n`;
         systemPrompt = prompt;
       } else {
@@ -2705,6 +2890,17 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
       }).then(({ error: logErr }) => {
         if (logErr) console.error('[bot] DM capture (bot reply) failed:', logErr);
       });
+
+      // Extract preferred name from reply context
+      if (!memory?.preferred_name) {
+        const nameMatch = messageText.match(/(?:call me|i'?m|my name is|it'?s|just)\s+([A-Za-z\u0600-\u06FF0-9_\-\s]{1,30})/i);
+        if (nameMatch) {
+          const name = nameMatch[1].trim();
+          if (memory?.id) {
+            supabase.from('ai_user_memory').update({ preferred_name: name }).eq('id', memory.id).then(() => {});
+          }
+        }
+      }
     } else {
       await sendMessage(chatId, `🤖 Hmm, I couldn't think of a response. Try asking differently or use /help!`);
     }
