@@ -2145,8 +2145,15 @@ async function handleAlerts(chatId: number, telegramUserId: string, args: string
   );
 }
 
+// ─── Obfuscate ticker symbols to prevent other bots from matching ───
+function obfuscateTicker(s: string): string {
+  if (s.length <= 2) return s;
+  const mid = Math.floor(s.length / 2);
+  return s.slice(0, mid) + '\u200B' + s.slice(mid);
+}
+
 // ─── Group Chat Auto-Scan: detect pasted CAs and fire mini /risk ───
-async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: string) {
+async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: string, replyToMsgId?: number) {
   // Check if this group has an activated (paid) installation
   const activated = await isGroupActivated(chatId);
   if (!activated) return; // silently ignore unactivated groups
@@ -2184,7 +2191,7 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   const top10 = holdersData?.distributionStats?.top10Percentage ?? null;
   const holders = holdersData?.realHolders ?? holdersData?.totalHolders ?? null;
 
-  const tokenLabel = symbol ? `${symbol}` : ca.slice(0, 8) + '...';
+  const tokenLabel = symbol ? obfuscateTicker(symbol) : ca.slice(0, 8) + '...';
 
   // Build distribution bars from simpleTiers (verbose mode only)
   const tiers = holdersData?.simpleTiers;
@@ -2233,7 +2240,7 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
     `` +
     TAGLINE;
 
-  await sendMessage(chatId, msg);
+  await sendMessage(chatId, msg, "Markdown", replyToMsgId);
 
   // Fire-and-forget: write new warnings from this scan (cumulative)
   const newWarnings = generateWarningsFromHoldersData(ca, holdersData, 'autoscan');
@@ -3218,7 +3225,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           else if (isGroupChat) {
             const detectedCA = looksLikeSolanaCA(sanitized.rawTruncated);
             if (detectedCA) {
-              await handleGroupAutoScan(chatId, telegramUserId, detectedCA);
+              await handleGroupAutoScan(chatId, telegramUserId, detectedCA, messageId);
             }
           }
           // AI conversational assistant for admin DMs
