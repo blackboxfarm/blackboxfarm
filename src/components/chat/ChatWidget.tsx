@@ -42,9 +42,9 @@ export function ChatWidget() {
       return;
     }
 
-    // Check if user dismissed within last 24 hours
+    // Check if user dismissed within last 4 hours
     const dismissedAt = localStorage.getItem(DISMISS_KEY);
-    if (dismissedAt && Date.now() - Number(dismissedAt) < 86400_000) {
+    if (dismissedAt && Date.now() - Number(dismissedAt) < 14400_000) {
       setFabVisible(false);
       return;
     }
