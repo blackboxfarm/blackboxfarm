@@ -60,7 +60,7 @@ export function TelegramHostedBots() {
   const [groups, setGroups] = useState<HostedGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
-  const [chatModal, setChatModal] = useState<{ chatId: string; title: string } | null>(null);
+  const [chatModal, setChatModal] = useState<{ chatId: string; title: string; isDm?: boolean } | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
 
