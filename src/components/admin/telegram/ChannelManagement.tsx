@@ -744,7 +744,7 @@ export function ChannelManagement() {
     try {
       const { error } = await supabase
         .from('telegram_channel_config')
-        .update({ [field]: value })
+        .update({ [field]: value } as any)
         .eq('id', channelId);
 
       if (error) throw error;

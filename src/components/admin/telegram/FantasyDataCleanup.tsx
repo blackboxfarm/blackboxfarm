@@ -71,7 +71,7 @@ export function FantasyDataCleanup() {
           .update({
             status: 'corrupted',
             notes: `Flagged: impossible ${position.current_multiplier}x multiplier`
-          })
+          } as any)
           .eq('id', position.id);
         
         if (error) throw error;
@@ -100,7 +100,7 @@ export function FantasyDataCleanup() {
           .update({
             status: 'corrupted',
             notes: `Auto-flagged: impossible ${pos.current_multiplier}x multiplier`
-          })
+          } as any)
           .eq('id', pos.id);
         
         if (!error) fixed++;
