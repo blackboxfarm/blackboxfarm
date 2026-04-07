@@ -143,13 +143,13 @@ export function ChatWidget() {
         <button
           onClick={() => setIsOpen(true)}
           className={cn(
-            "fixed bottom-5 right-5 z-50 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center",
+            "fixed bottom-5 right-5 z-50 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center overflow-hidden",
             isScrolling ? "w-10 h-10 opacity-60" : "w-14 h-14",
             fabPulsing && "animate-pulse"
           )}
           aria-label="Open chat"
         >
-          <MessageCircle className={cn(isScrolling ? "h-4 w-4" : "h-6 w-6")} />
+          <img src={oracleAvatar} alt="Chat" className="w-full h-full object-cover" />
           {hasUnread && (
             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background" />
           )}
@@ -162,8 +162,8 @@ export function ChatWidget() {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <MessageCircle className="h-4 w-4 text-primary" />
+              <div className="w-8 h-8 rounded-full overflow-hidden">
+                <img src={oracleAvatar} alt="Oracle" className="w-full h-full object-cover" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold">BlackBox Assistant</h3>
@@ -187,7 +187,7 @@ export function ChatWidget() {
             <div className="py-3 space-y-1">
               {messages.length === 0 && (
                 <div className="text-center text-muted-foreground text-sm px-6 py-8">
-                  <MessageCircle className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <img src={oracleAvatar} alt="Oracle" className="h-12 w-12 mx-auto mb-3 rounded-full opacity-70" />
                   <p className="font-medium">Welcome to BlackBox Farm! 👋</p>
                   <p className="mt-1 text-xs">Ask me anything about holders analysis, token scanning, or our features.</p>
                 </div>
