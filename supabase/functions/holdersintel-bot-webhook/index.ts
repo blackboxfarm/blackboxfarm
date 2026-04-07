@@ -2987,6 +2987,36 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
       sanitizerFlags: sanitized.flags.length > 0 ? sanitized.flags : undefined,
     }));
 
+    // ─── DM-only: Check if linked user is suspended or needs verification nudge ───
+    if (!isGroupChat) {
+      const linked = await getLinkedUser(telegramUserId);
+      if (linked?.user_id) {
+        // Check if account is suspended
+        const suspended = await isUserSuspended(linked.user_id);
+        if (suspended) {
+          const token = await getOrCreateReactivationToken(linked.user_id);
+          const reactivateUrl = token ? `https://blackbox.farm/verify-email?token=${token}` : 'https://blackbox.farm/auth';
+          await sendMessage(chatId,
+            `⚠️ *Account Suspended*\n\n` +
+            `Your BlackBox Farm account was suspended because your email wasn't verified within 48 hours.\n\n` +
+            `But don't worry — click below to reactivate instantly! 🚀\n\n` +
+            `🔗 [Reactivate My Account](${reactivateUrl})\n\n` +
+            `_Once reactivated, all your bot features will work again!_`
+          );
+          return new Response("OK");
+        }
+
+        // Check if past 24h and unverified — gentle nudge
+        const needsNudge = await isUserPast24hUnverified(linked.user_id);
+        if (needsNudge && command !== '/register' && command !== '/start') {
+          // Send nudge but continue processing the command
+          await sendMessage(chatId,
+            `📧 *Quick reminder:* Verify your email soon to keep your account active! Check your inbox or visit your [dashboard](https://blackbox.farm/dashboard). ⏰`
+          );
+        }
+      }
+    }
+
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts'];
 
