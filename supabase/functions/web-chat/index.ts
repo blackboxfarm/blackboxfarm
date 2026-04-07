@@ -521,6 +521,11 @@ serve(async (req) => {
       }).then(() => {});
     }
 
+    // Estimate prompt tokens (chars / 4)
+    const promptText = systemPrompt + (messages || []).slice(-20).map((m: any) => m.content || '').join(' ');
+    const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+    const aiCallStart = Date.now();
+
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -557,15 +562,17 @@ serve(async (req) => {
       });
     }
 
-    // Stream response and collect for logging
+    // Stream response and collect for logging + compute tracking
     const reader = aiRes.body!.getReader();
     let fullResponse = '';
+    let completionTokens = 0;
 
     const stream = new ReadableStream({
       async pull(controller) {
         const { done, value } = await reader.read();
         if (done) {
           controller.close();
+          // Log assistant response
           if (fullResponse) {
             supabase.from('web_chat_messages').insert({
               session_id: sessionId || 'anon-' + Date.now(),
@@ -576,6 +583,23 @@ serve(async (req) => {
               user_tier: tier,
             }).then(() => {});
           }
+          // Log AI compute
+          const responseTimeMs = Date.now() - aiCallStart;
+          const totalTokens = estimatedPromptTokens + completionTokens;
+          // Gemini flash pricing: ~$0.10/1M input, ~$0.40/1M output
+          const costEstimate = (estimatedPromptTokens * 0.0000001) + (completionTokens * 0.0000004);
+          supabase.from('ai_compute_log').insert({
+            platform: 'web',
+            user_id: userId || null,
+            session_id: sessionId || null,
+            model: 'google/gemini-3-flash-preview',
+            prompt_tokens: estimatedPromptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: totalTokens,
+            response_time_ms: responseTimeMs,
+            cost_estimate_usd: costEstimate,
+            metadata: { tier, page: pagePath },
+          }).then(() => {});
           return;
         }
         const text = new TextDecoder().decode(value);
@@ -584,7 +608,10 @@ serve(async (req) => {
           try {
             const parsed = JSON.parse(line.slice(6));
             const c = parsed.choices?.[0]?.delta?.content;
-            if (c) fullResponse += c;
+            if (c) {
+              fullResponse += c;
+              completionTokens += Math.ceil(c.length / 4);
+            }
           } catch {}
         }
         controller.enqueue(value);
