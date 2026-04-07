@@ -2545,10 +2545,10 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, targe
   );
 }
 
-// ─── AI Conversational Assistant for Admin DMs ───
+// ─── AI Conversational Assistant for All Registered Users ───
 const aiChatRateMap = new Map<string, number[]>();
 
-async function handleAdminFreeChat(chatId: number, telegramUserId: string, messageText: string, senderUsername?: string | null) {
+async function handleAiFreeChat(chatId: number, telegramUserId: string, messageText: string, senderUsername?: string | null) {
   // Rate limit: 5 messages per minute per user
   const now = Date.now();
   const timestamps = aiChatRateMap.get(telegramUserId) || [];
@@ -2567,21 +2567,20 @@ async function handleAdminFreeChat(chatId: number, telegramUserId: string, messa
     return;
   }
 
-  const { data: installations, error: installationsError } = await supabase
-    .from('channel_installations')
-    .select('id')
-    .eq('user_id', linked.user_id)
-    .eq('kicked', false)
-    .limit(1);
-
-  if (installationsError) {
-    console.error('[bot] AI admin installation check failed:', installationsError);
-    await sendMessage(chatId, `🤖 I hit a setup issue checking your installations. Please try again in a moment.`);
-    return;
-  }
-
-  if (!installations || installations.length === 0) {
-    await sendMessage(chatId, `👋 Hey! I'm the HoldersIntel Bot.\n\nYou don't have any active channel installs yet — use /add or /channels, or type /help to see commands.`);
+  // "Send nudes" easter egg 🐱
+  if (/send\s*nudes/i.test(messageText)) {
+    const catUrl = 'https://blackbox.farm/images/nudes-cat.jpg';
+    const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') || Deno.env.get('telegram_bot_token') || '';
+    try {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, photo: catUrl, caption: '😏 As requested... here are the nudes! 🐱' }),
+      });
+    } catch (e) {
+      console.error('[bot] sendPhoto easter egg error:', e);
+      await sendMessage(chatId, '😏 As requested... here are the nudes! 🐱\n\n(Imagine a very naked sphynx cat here)');
+    }
     return;
   }
 
@@ -2594,13 +2593,14 @@ async function handleAdminFreeChat(chatId: number, telegramUserId: string, messa
 
     const systemPrompt = `You are the official BlackBox Farm / HoldersIntel Bot assistant — a knowledgeable, enthusiastic crypto analytics product ambassador.
 
-PERSONALITY: Warm, helpful, emoji-rich, marketing-savvy. You LOVE this product and genuinely believe it helps crypto communities. You're like a friendly expert who's excited to show off features.
+PERSONALITY: Warm, helpful, emoji-rich, marketing-savvy. You LOVE this product and genuinely believe it helps crypto communities. You're like a friendly expert who's excited to show off features. You chat casually with ALL registered users — not just admins.
 
 PRODUCT INFO:
 - HoldersIntel Bot (@holdersintel_bot) is a Telegram bot for Solana token analysis
 - It provides holder distribution analysis, risk scoring, developer intel, wallet tracing, insider detection, and AI-powered insights
-- Admins install it FREE in their channels/groups — ALL features are included at no cost
+- It's 100% FREE — all features included at no cost, no activation fees
 - The bot auto-scans Solana contract addresses posted in group chats
+- Website: https://blackbox.farm — features Bubblemaps visualization, /holders page, social sharing, the Oracle deep analysis
 
 COMMANDS REFERENCE:
 🔧 Setup: /start, /register, /status, /help
@@ -2609,12 +2609,23 @@ COMMANDS REFERENCE:
 👑 Pro: /oracle or /o (full developer reputation mesh), /wallet or /w (wallet behavior analysis)
 🔧 Admin: /config (channel settings — delay, verbose, admin-only), /channels or /ch (view installations & configs), /add (add new channel)
 
-KEY SELLING POINTS:
-- 100% FREE — no activation fees, no subscriptions needed
-- Auto-scans CAs posted in groups with configurable delay
-- Detects rug pulls, insider clusters, dev wallet patterns
-- AI-powered risk verdicts and market analysis
-- Community-friendly: configurable verbose mode, admin-only mode, custom delays
+EMAIL VERIFICATION:
+- After signing up, users get a verification email. They have 48 hours to click the link.
+- They can resend the email from their dashboard at https://blackbox.farm/dashboard
+- If they miss it, their account gets paused — but they can reactivate easily by clicking the link in the reactivation email or messaging the bot for help
+- It's painless! Just check inbox (and spam folder) and click the link
+
+FEATURES TO PROMOTE:
+- 🫧 Bubblemaps: Visual holder distribution maps on the website
+- 📊 /holders page: Deep holder analysis with charts
+- 🔗 Social sharing: Share interesting token findings on Twitter/X
+- 🔮 The Oracle: AI-powered deep developer reputation analysis
+- 🚨 Alerts: Set up alerts for tokens you're watching
+- Suggest users explore the website for richer visualizations than what Telegram can show
+
+PAYMENT/SUBSCRIPTION:
+- Everything is 100% free right now! 🎉
+- Future premium tiers are TBA — but current users get everything for free
 
 RULES:
 1. Always be helpful and enthusiastic
@@ -2624,7 +2635,9 @@ RULES:
 5. Keep responses concise but informative (under 500 chars when possible)
 6. Use emojis liberally but naturally
 7. If they ask about a specific command, explain it with an example
-8. If they seem confused, guide them step by step`;
+8. If they seem confused, guide them step by step
+9. Encourage social sharing — "Found something cool? Share it on X! 🐦"
+10. If they ask about email verification, explain it warmly and reassuringly`;
 
     const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -3018,7 +3031,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
         if (needsNudge && command !== '/register' && command !== '/start') {
           // Send nudge but continue processing the command
           await sendMessage(chatId,
-            `📧 *Quick reminder:* Verify your email soon to keep your account active! Check your inbox or visit your [dashboard](https://blackbox.farm/dashboard). ⏰`
+            `Hey quick thing 💬 — your email isn't verified yet! Just check your inbox and click the link. If you can't find it, hit "Resend" on your [dashboard](https://blackbox.farm/dashboard). Need help? Just ask me anything here! 🤖`
           );
         }
       }
@@ -3112,7 +3125,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           default:
             // Unknown command in DM context — route to AI assistant
             if (message.text) {
-              await handleAdminFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated, username);
+              await handleAiFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated, username);
             }
             break;
         }
@@ -3231,7 +3244,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           // AI conversational assistant for admin DMs
           else if (!isGroupChat && message.text) {
             console.log('[bot] routing to AI free chat', JSON.stringify({ chatId, telegramUserId, text: sanitized.rawTruncated.slice(0, 50) }));
-            await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated, username);
+            await handleAiFreeChat(chatId, telegramUserId, sanitized.rawTruncated, username);
           }
           break;
       }
