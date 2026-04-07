@@ -3473,7 +3473,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             }
           }
           break;
-        default:
+        default: {
           // Auto-detect registration codes
           if (/^BF-[A-Z0-9]{6}$/i.test(sanitized.rawTruncated)) {
             await handleRegister(chatId, telegramUserId, username, sanitized.rawTruncated);
@@ -3485,10 +3485,42 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
               await handleGroupAutoScan(chatId, telegramUserId, detectedCA, messageId);
             }
           }
-          // AI conversational assistant for admin DMs
-          else if (!isGroupChat && message.text) {
-            console.log('[bot] routing to AI free chat', JSON.stringify({ chatId, telegramUserId, text: sanitized.rawTruncated.slice(0, 50) }));
-            await handleAiFreeChat(chatId, telegramUserId, sanitized.rawTruncated, username);
+          // DM: auto-scan if user pastes a raw CA (no command prefix needed)
+          else if (!isGroupChat) {
+            const dmCA = looksLikeSolanaCA(sanitized.rawTruncated);
+            if (dmCA) {
+              console.log('[bot] DM auto-scan triggered:', dmCA.slice(0, 12));
+              await handleTopHolders(chatId, telegramUserId, dmCA);
+            }
+            // "Did you mean?" for unrecognized slash commands
+            else if (sanitized.rawTruncated.startsWith('/')) {
+              const attempted = sanitized.rawTruncated.split(/\s/)[0].replace(/@\w+$/, '').toLowerCase();
+              const suggestions: Record<string, string> = {
+                '/lb': '/pnl — Check profit/loss for a token',
+                '/leaderboard': '/pnl — Check profit/loss for a token',
+                '/calls': '/quick — Quick token scan',
+                '/tw': '/twitter — Check linked Twitter',
+                '/top10': '/th — Top 10 holders analysis',
+                '/emojis': '/help — See all available commands',
+                '/scan': '/th — Top holders scan',
+                '/check': '/quick — Quick token check',
+                '/report': '/th — Full holders report',
+                '/info': '/quick — Quick token info',
+              };
+              const suggestion = suggestions[attempted];
+              if (suggestion) {
+                await sendMessage(chatId, `🤔 \`${attempted}\` isn't a command I recognize.\n\n💡 *Did you mean:* ${suggestion}\n\nType /help for all commands!`, 'Markdown');
+              } else {
+                // Fall through to AI chat for unknown input
+                console.log('[bot] routing to AI free chat', JSON.stringify({ chatId, telegramUserId, text: sanitized.rawTruncated.slice(0, 50) }));
+                await handleAiFreeChat(chatId, telegramUserId, sanitized.rawTruncated, username);
+              }
+            }
+            // AI conversational assistant for DMs
+            else if (message.text) {
+              console.log('[bot] routing to AI free chat', JSON.stringify({ chatId, telegramUserId, text: sanitized.rawTruncated.slice(0, 50) }));
+              await handleAiFreeChat(chatId, telegramUserId, sanitized.rawTruncated, username);
+            }
           }
           break;
       }
