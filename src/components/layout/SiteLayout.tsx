@@ -14,6 +14,8 @@ import { UserIdentityBadge } from '@/components/layout/UserIdentityBadge';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ChatWidget } from '@/components/chat/ChatWidget';
+import { OracleHoverProvider } from '@/components/chat/OracleHoverProvider';
+import { OraclePeek } from '@/components/chat/OraclePeek';
 
 const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
@@ -50,6 +52,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
   const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
 
   return (
+    <OracleHoverProvider>
     <div className="min-h-screen bg-background">
       {/* Farm Banner - clickable to home */}
       <Link to="/">
@@ -114,6 +117,8 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
                   size="sm"
                   onClick={() => { setAuthModalTab('signup'); setShowAuthModal(true); }}
                   className="gap-1.5 text-xs md:text-sm h-8 md:h-9 px-2.5 md:px-4"
+                  data-oracle-hint="Join free to unlock AI analysis and whale alerts"
+                  data-oracle-zone="join-btn"
                 >
                   <UserPlus className="h-3.5 w-3.5 md:h-4 md:w-4" />
                   <span className="hidden sm:inline">Join BlackBox</span>
@@ -174,6 +179,8 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
 
       {/* Sentient Web Assistant */}
       <ChatWidget />
+      <OraclePeek />
     </div>
+    </OracleHoverProvider>
   );
 }
