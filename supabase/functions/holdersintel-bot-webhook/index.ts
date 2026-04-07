@@ -3084,6 +3084,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           }
           // AI conversational assistant for admin DMs
           else if (!isGroupChat && message.text) {
+            console.log('[bot] routing to AI free chat', JSON.stringify({ chatId, telegramUserId, text: sanitized.rawTruncated.slice(0, 50) }));
             await handleAdminFreeChat(chatId, telegramUserId, sanitized.rawTruncated);
           }
           break;
