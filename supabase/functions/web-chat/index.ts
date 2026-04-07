@@ -477,8 +477,8 @@ serve(async (req) => {
 
     // Detect intent and do live data lookup from the last user message
     const lastMsg = messages?.[messages.length - 1];
-    const liveDataBlock = lastUserMsg?.role === 'user'
-      ? await detectAndLookup(lastUserMsg.content, userId || undefined)
+    const liveDataBlock = lastMsg?.role === 'user'
+      ? await detectAndLookup(lastMsg.content, userId || undefined)
       : null;
 
     // Extract preferred name from conversation if we don't have one
