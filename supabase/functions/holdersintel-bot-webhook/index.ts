@@ -2837,6 +2837,11 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
       systemPrompt = 'You are a helpful crypto analytics assistant for HoldersIntel / BlackBox Farm. Be friendly, use emojis, never give financial advice.';
     }
 
+    // Estimate prompt tokens
+    const promptText = systemPrompt + messageText;
+    const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+    const aiCallStart = Date.now();
+
     const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -2854,6 +2859,8 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
       }),
     });
 
+    const responseTimeMs = Date.now() - aiCallStart;
+
     if (!aiRes.ok) {
       console.error('[bot] AI chat error:', aiRes.status);
       await sendMessage(chatId, `🤖 My AI brain is taking a break. Try /help for commands in the meantime!`);
@@ -2862,6 +2869,23 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
 
     const aiData = await aiRes.json();
     const reply = aiData.choices?.[0]?.message?.content;
+    const completionTokens = Math.ceil((reply || '').length / 4);
+    const totalTokens = estimatedPromptTokens + completionTokens;
+    const costEstimate = (estimatedPromptTokens * 0.0000001) + (completionTokens * 0.0000004);
+
+    // Log AI compute
+    supabase.from('ai_compute_log').insert({
+      platform: 'telegram',
+      user_id: linked.user_id,
+      session_id: `tg-${telegramUserId}`,
+      model: 'google/gemini-3-flash-preview',
+      prompt_tokens: estimatedPromptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+      response_time_ms: responseTimeMs,
+      cost_estimate_usd: costEstimate,
+      metadata: { telegram_user_id: telegramUserId },
+    }).then(() => {});
 
     // Log admin's incoming DM message
     supabase.from('telegram_group_messages').insert({
