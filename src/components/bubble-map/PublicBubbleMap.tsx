@@ -227,7 +227,21 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     }
   }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
 
-  // Auto-spider: if we have a focused entity but zero nodes AND spider isn't active AND hasn't already run
+  // Auto-load from URL ?token= parameter
+  useEffect(() => {
+    if (initialToken && !initialTokenLoaded && canSearch) {
+      setSearchInput(initialToken);
+      setInitialTokenLoaded(true);
+      // Trigger search after state update
+      setTimeout(() => {
+        recordSearch();
+        focusOnEntity(initialToken, 'wallet');
+        queueTokenFromFrontend(initialToken, 'bubblemap_input', { comment: 'Bubblemap URL preload' });
+      }, 100);
+    }
+  }, [initialToken, initialTokenLoaded, canSearch, recordSearch, focusOnEntity]);
+
+
   const spiderHasError = !!spiderStatus.error;
   const shouldOfferSpider = focusedEntity && !isLoading && graphData.nodes.length === 0 && !spiderStatus.active && !hasSpideredOnce;
 
