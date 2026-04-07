@@ -2570,9 +2570,8 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
   // "Send nudes" easter egg 🐱
   if (/send\s*nudes/i.test(messageText)) {
     const catUrl = 'https://blackbox.farm/images/nudes-cat.jpg';
-    const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') || Deno.env.get('telegram_bot_token') || '';
     try {
-      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+      await fetch(`${TELEGRAM_API}/sendPhoto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, photo: catUrl, caption: '😏 As requested... here are the nudes! 🐱' }),
