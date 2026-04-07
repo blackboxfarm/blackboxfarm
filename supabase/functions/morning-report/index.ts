@@ -1582,6 +1582,30 @@ Deno.serve(withRunLog('morning-report', async (req) => {
       }
     }
 
+    // AI Compute Stats
+    try {
+      const { data: computeRows } = await supabase
+        .from('ai_compute_log')
+        .select('platform, prompt_tokens, completion_tokens, total_tokens, response_time_ms, cost_estimate_usd')
+        .gte('created_at', cutoffISO);
+
+      if (computeRows && computeRows.length > 0) {
+        const webRows = computeRows.filter(r => r.platform === 'web');
+        const tgRows = computeRows.filter(r => r.platform === 'telegram');
+        const totalTokens = computeRows.reduce((s, r) => s + (r.total_tokens || 0), 0);
+        const totalCost = computeRows.reduce((s, r) => s + Number(r.cost_estimate_usd || 0), 0);
+        const avgResponseMs = Math.round(computeRows.reduce((s, r) => s + (r.response_time_ms || 0), 0) / computeRows.length);
+
+        tgMessage += `\n🧠 **AI Compute**\n`;
+        tgMessage += `• ${computeRows.length} total calls (Web: ${webRows.length}, TG: ${tgRows.length})\n`;
+        tgMessage += `• ${totalTokens.toLocaleString()} tokens used\n`;
+        tgMessage += `• Est. cost: $${totalCost.toFixed(4)}\n`;
+        tgMessage += `• Avg response: ${avgResponseMs}ms\n`;
+      }
+    } catch (computeErr) {
+      console.warn('[morning-report] AI compute stats error:', computeErr);
+    }
+
     tgMessage += `\n📬 Unread Notifications: ${unreadCount || 0}\n`;
     tgMessage += `⏱️ Report generated in ${executionTimeMs}ms`;
 
