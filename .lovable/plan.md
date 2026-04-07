@@ -1,64 +1,57 @@
 
 
-## Audit: Gaps Found in Recent Changes
+## Prevent Phanes Bot From Triggering on Our Auto-Scan Posts
 
-After reviewing the codebase, database, cron jobs, edge function logs, and wiring across all recent changes, here's what I found:
+### The Problem
+Even without the `$` cashtag prefix, the Phanes bot still detects ticker symbols from our message text. Looking at the screenshot, Phanes grabs `from1kto100Mcoin ($1KTO100M)` from our post and auto-replies with its own report. The Phanes bot likely scans for:
+- Any recognized ticker symbol in message text
+- Token names / contract addresses
+- Bold text patterns that look like tickers
 
-### Status: Working Correctly
-- **EmailVerificationBanner** on Dashboard: wired correctly, queries `email_verifications`, shows gentle/urgent states
-- **Bot suspension check** (`isUserSuspended`): properly checks `auth.users.banned_until` via admin API, sends reactivation link
-- **Bot 24h verification nudge** (`isUserPast24hUnverified`): correctly queries email_verifications before nudging
-- **AI free chat** (`handleAdminFreeChat`): working, logs both user messages and bot replies to `telegram_group_messages` with `chat_type: 'private'`
-- **Unread DM indicator**: wired with localStorage timestamps, green pulse dot on "View DMs" button
-- **Cron job** `process-reactivation-emails`: confirmed running every 15 min, logs show it successfully sent a 24h reminder email
-- **`unban_user` / `ban_user` RPCs**: both exist and correctly update `auth.users.banned_until`
-- **`verify-email-token`**: correctly calls `unban_user` for reactivation type
-- **`pending_reactivation_emails` table**: exists, RLS + index in place, auto_suspend function queues rows
-- **`$TOKEN` placeholder fix** in `BaglessHoldersReport.tsx`: fixed, no more literal `$TOKEN`
-- **Free tier enforcement**: payment checks removed from bot commands
+Our auto-scan currently outputs: `⚡ *1KTO100M Quick Stats*` — the raw ticker in bold is enough for Phanes to trigger.
 
----
+### Proposed Solutions (Layered)
 
-### GAP 1: Leftover `$ TICKER` in Compare Command (Bot Trigger Risk)
-**File**: `supabase/functions/holdersintel-bot-webhook/index.ts` lines 1244-1246
+**Strategy 1: Obfuscate the ticker with zero-width characters**
+Insert a Unicode zero-width space (`\u200B`) inside the ticker symbol so it looks identical to humans but breaks pattern matching by other bots:
+- `1KTO100M` → `1KTO\u200B100M` (invisible split)
+- This is the most reliable approach — humans see the same text, bots can't match it
 
-The `/compare` command still outputs `$ ${sym1}` and `$ ${sym2}` with a dollar sign. This was supposed to be stripped to prevent other bots from triggering on cashtags.
+**Strategy 2: Replace ticker with abbreviated/masked form**
+Instead of showing the full ticker, show a truncated version:
+- `⚡ *1KT...0M Quick Stats*` — partial ticker
+- Less readable but guaranteed to not match
 
-**Fix**: Remove the `$ ` prefix from lines 1244 and 1246, changing to just `*${sym1}*` and `*${sym2}*`.
+**Strategy 3: Reply as a reply-to-message instead of a new message**
+Use Telegram's `reply_to_message_id` parameter when posting the auto-scan. Some bots only scan top-level messages, not replies. This is a behavioral change that may or may not work depending on how Phanes is coded.
 
----
+### Recommended: Strategy 1 (Zero-Width Space) + Strategy 3 (Reply-to)
 
-### GAP 2: `get_24h_unverified_users` Reminder Deduplication May Miss Edge Cases
-**File**: Migration SQL, function `get_24h_unverified_users()`
+Apply zero-width space insertion to the ticker in the `tokenLabel` used by `handleGroupAutoScan`. Also send the auto-scan as a reply to the original message that contained the CA, which is a more natural UX anyway.
 
-The function checks `NOT EXISTS (SELECT 1 FROM email_tracking_events WHERE email_type = 'verification_reminder')` to avoid re-sending. This is correct BUT the `process-reactivation-emails` edge function inserts into `email_tracking_events` after sending. If the edge function crashes between sending the email and inserting the tracking row, the reminder could be sent again next cycle. This is a minor race condition — low risk but worth noting.
+### Changes
 
-**Verdict**: Acceptable. Double-sending a reminder is harmless.
+**File: `supabase/functions/holdersintel-bot-webhook/index.ts`**
 
----
+1. Add a helper function `obfuscateTicker(symbol: string)` that inserts a zero-width space after the 2nd or 3rd character:
+   ```
+   function obfuscateTicker(s: string): string {
+     if (s.length <= 2) return s;
+     const mid = Math.floor(s.length / 2);
+     return s.slice(0, mid) + '\u200B' + s.slice(mid);
+   }
+   ```
 
-### GAP 3: `process-reactivation-emails` Cron Uses Anon Key (Not Service Role)
-**File**: Migration `20260407174430`
+2. In `handleGroupAutoScan` (line 2187): Apply obfuscation to `tokenLabel`:
+   ```
+   const tokenLabel = symbol ? obfuscateTicker(symbol) : ca.slice(0, 8) + '...';
+   ```
 
-The cron job calls the edge function with the **anon key** in the Authorization header. The edge function creates a service-role Supabase client internally (using `SUPABASE_SERVICE_ROLE_KEY` env var), so this works for DB access. However, `supabase.functions.invoke('send-email-notification', ...)` from within an edge function uses the service role key anyway, so there's no auth issue.
+3. Pass the original `message_id` into `handleGroupAutoScan` and use `reply_to_message_id` when calling `sendMessage` so the auto-scan posts as a reply to the user's CA paste — not as a standalone message.
 
-**Verdict**: Working correctly despite using anon key for the cron trigger. No fix needed.
+4. Apply the same obfuscation to `/quick` command output (line 1949) and any other group-facing ticker displays.
 
----
-
-### GAP 4: No Cleanup/Pruning for `pending_reactivation_emails`
-The `pending_reactivation_emails` table has no retention policy. Processed rows (`processed = true`) will accumulate forever. Given the 8GB DB storage constraint, this should have a pruning rule.
-
-**Fix**: Add to the nightly cleanup cron: `DELETE FROM pending_reactivation_emails WHERE processed = true AND created_at < now() - interval '7 days'`.
-
----
-
-### Summary of Required Fixes
-
-| # | Gap | Severity | Fix |
-|---|-----|----------|-----|
-| 1 | `$ TICKER` still in `/compare` output | Medium | Strip `$` from 2 lines in bot webhook |
-| 2 | No pruning for `pending_reactivation_emails` | Low | Add to nightly cleanup cron |
-
-Everything else — the verification banner, bot suspension/nudge flow, AI chat DM logging, unread indicators, reactivation email pipeline, cron scheduling — is wired correctly and confirmed working in production logs.
+| File | Change |
+|------|--------|
+| `supabase/functions/holdersintel-bot-webhook/index.ts` | Add `obfuscateTicker()`, apply to auto-scan + /quick tokenLabel, send auto-scan as reply-to |
 
