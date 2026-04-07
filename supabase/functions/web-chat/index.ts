@@ -369,6 +369,52 @@ async function buildSystemPrompt(userContext: {
   }
 }
 
+// ─── Web Chat Input Sanitization ───
+const WEB_INJECTION_PATTERNS: RegExp[] = [
+  /<script[\s>]/i,
+  /javascript\s*:/i,
+  /data\s*:\s*text\/html/i,
+  /vbscript\s*:/i,
+  /on\w+\s*=\s*["']/i,
+  /\x00/,
+  /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/,
+  /\x1b\[/,
+  /\.\.\//,
+];
+
+function sanitizeWebInput(text: string): { clean: string; suspicious: boolean; flags: string[] } {
+  const flags: string[] = [];
+  let suspicious = false;
+
+  // Truncate
+  let cleaned = text.length > 2000 ? (flags.push('truncated'), text.slice(0, 2000)) : text;
+
+  // Strip control chars (keep normal whitespace)
+  const before = cleaned;
+  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
+  if (cleaned !== before.trim()) {
+    flags.push('control_chars_stripped');
+    suspicious = true;
+  }
+
+  // Check injection patterns
+  let injectionCount = 0;
+  for (const p of WEB_INJECTION_PATTERNS) {
+    if (p.test(cleaned)) {
+      flags.push(`injection:${p.source.slice(0, 25)}`);
+      injectionCount++;
+      suspicious = true;
+    }
+  }
+
+  // If 3+ injection patterns, reject
+  if (injectionCount >= 3) {
+    flags.push('blocked');
+  }
+
+  return { clean: cleaned, suspicious, flags };
+}
+
 // ─── Main handler ───
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -387,6 +433,22 @@ serve(async (req) => {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Sanitize the last user message
+    const lastUserMsg = messages?.[messages.length - 1];
+    if (lastUserMsg?.role === 'user' && lastUserMsg.content) {
+      const sanitized = sanitizeWebInput(lastUserMsg.content);
+      if (sanitized.flags.includes('blocked')) {
+        console.warn('[web-chat] blocked suspicious input:', sanitized.flags);
+        return new Response(JSON.stringify({ error: "I didn't understand that. Could you rephrase?" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (sanitized.suspicious) {
+        console.warn('[web-chat] suspicious input flags:', sanitized.flags);
+      }
+      lastUserMsg.content = sanitized.clean;
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
