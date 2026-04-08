@@ -338,7 +338,7 @@ export default function Subscriptions() {
           <AuthModal
             isOpen={showAuthModal}
             onClose={handleAuthClose}
-            defaultTab="sign-up"
+            defaultTab="signup"
           />
         )}
     </SiteLayout>
