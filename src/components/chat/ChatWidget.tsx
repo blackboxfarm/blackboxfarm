@@ -438,7 +438,7 @@ export function ChatWidget() {
             </form>
             {tier === 'anon' && (
               <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
-                3 free messages • <a href="/subscriptions" className="text-primary underline">Sign up</a> for unlimited
+                15 free chats/hour • <a href="/subscriptions" className="text-primary underline">Sign up</a> for more
               </p>
             )}
           </div>
