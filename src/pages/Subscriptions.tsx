@@ -334,6 +334,13 @@ export default function Subscriptions() {
             </div>
           </div>
         </section>
+        {showAuthModal && (
+          <AuthModal
+            isOpen={showAuthModal}
+            onClose={handleAuthClose}
+            defaultTab="sign-up"
+          />
+        )}
     </SiteLayout>
   );
 }
