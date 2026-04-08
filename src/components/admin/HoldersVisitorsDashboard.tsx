@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { ChatSessionsTab } from './ChatSessionsTab';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -897,6 +898,10 @@ export function HoldersVisitorsDashboard() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="chats">
+          <ChatSessionsTab />
         </TabsContent>
 
         <TabsContent value="utm-builder">
