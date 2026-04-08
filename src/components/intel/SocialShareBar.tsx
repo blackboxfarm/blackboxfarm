@@ -10,8 +10,8 @@ interface SocialShareBarProps {
   url: string;
   title: string;
   description?: string;
-  /** @deprecated No longer used — all platforms share the direct article URL */
-  ogShareUrl?: string;
+  /** Article slug — used to build the OG proxy URL for platforms that unfurl */
+  slug?: string;
 }
 
 const platforms = [
@@ -133,8 +133,9 @@ const platforms = [
   },
 ];
 
-export function SocialShareBar({ url, title, description, ogShareUrl }: SocialShareBarProps) {
+export function SocialShareBar({ url, title, description, slug }: SocialShareBarProps) {
   const [copied, setCopied] = useState(false);
+  const ogProxyUrl = slug ? `https://blackbox.farm/og/intel-share?slug=${slug}` : url;
 
   const copyLink = async () => {
     try {
@@ -155,7 +156,7 @@ export function SocialShareBar({ url, title, description, ogShareUrl }: SocialSh
       <div className="flex items-center gap-1 flex-wrap justify-center">
         {platforms.map((p) => {
           const Icon = p.icon;
-          const shareUrl = url;
+          const shareUrl = (p as any).useOgUrl ? ogProxyUrl : url;
 
           // Discord: copy formatted message to clipboard
           if ((p as any).isClipboard) {
