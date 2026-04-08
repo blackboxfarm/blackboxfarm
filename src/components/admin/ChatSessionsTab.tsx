@@ -52,7 +52,7 @@ export function ChatSessionsTab() {
     if (!error && data) {
       setSessions(data.map(d => ({
         ...d,
-        messages: (Array.isArray(d.messages) ? d.messages : []) as ChatMessage[],
+        messages: (Array.isArray(d.messages) ? d.messages : []) as unknown as ChatMessage[],
       })));
     }
     setLoading(false);
