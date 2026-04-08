@@ -642,16 +642,17 @@ serve(async (req) => {
         const { done, value } = await reader.read();
         if (done) {
           controller.close();
-          // Log assistant response
+          // Update chat session with full conversation including assistant reply
           if (fullResponse) {
-            supabase.from('web_chat_messages').insert({
-              session_id: sessionId || 'anon-' + Date.now(),
-              user_id: userId || null,
-              role: 'assistant',
-              content: fullResponse,
-              page_path: pagePath,
-              user_tier: tier,
-            }).then(() => {});
+            const allMessages = [...(messages || []), { role: 'assistant', content: fullResponse }];
+            supabase.from('web_chat_sessions')
+              .update({
+                messages: allMessages,
+                message_count: allMessages.length,
+                last_message_at: new Date().toISOString(),
+              })
+              .eq('session_id', chatSessionId)
+              .then(() => {});
           }
           // Log AI compute
           const responseTimeMs = Date.now() - aiCallStart;
