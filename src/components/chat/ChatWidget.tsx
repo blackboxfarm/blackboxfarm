@@ -34,11 +34,32 @@ export function ChatWidget() {
   const location = useLocation();
   const oracleCtx = useOracleHover();
 
+  // Keyboard shortcut: Ctrl+Shift+O (Cmd+Shift+O on Mac) to summon Oracle
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'O') {
+        e.preventDefault();
+        localStorage.removeItem(DISMISS_KEY);
+        setFabVisible(true);
+        setIsOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // URL param reset: ?reset_chat=1
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('reset_chat') === '1') {
+      localStorage.removeItem(DISMISS_KEY);
+      setFabVisible(true);
+    }
+  }, []);
+
   // Open chat when Oracle hover context hint is set
   useEffect(() => {
     if (oracleCtx?.chatContextHint && !isOpen) {
       setIsOpen(true);
-      // Send context as a hidden system-like nudge
       const hint = oracleCtx.chatContextHint;
       oracleCtx.clearChatContext();
       setTimeout(() => {
