@@ -11,6 +11,7 @@ import { useLocation } from 'react-router-dom';
 import oracleAvatar from '@/assets/oracle-avatar.png';
 import { useOracleHover } from './OracleHoverProvider';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { AvatarThoughtBubble } from './AvatarThoughtBubble';
 
 // Pages where the widget should NOT appear
 const HIDDEN_PAGES = ['/checkout', '/payment'];
@@ -48,6 +49,19 @@ export function ChatWidget() {
   const location = useLocation();
   const oracleCtx = useOracleHover();
   const isMobile = useIsMobile();
+  const [thoughtText, setThoughtText] = useState<string | null>(null);
+
+  // Listen for thought bubble events from BubbleMap etc.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.text && fabVisible && !isOpen) {
+        setThoughtText(detail.text);
+      }
+    };
+    window.addEventListener('signal-thought', handler);
+    return () => window.removeEventListener('signal-thought', handler);
+  }, [fabVisible, isOpen]);
 
   // Mobile: Triple-tap bottom-right corner to summon Oracle
   useEffect(() => {
@@ -329,6 +343,9 @@ export function ChatWidget() {
           <img src={oracleAvatar} alt="Chat" className="w-full h-full object-cover rounded-full oracle-fab-spin relative z-10" />
           {hasUnread && (
             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background z-20" />
+          )}
+          {thoughtText && (
+            <AvatarThoughtBubble text={thoughtText} onDone={() => setThoughtText(null)} />
           )}
         </button>
       )}

@@ -17,6 +17,7 @@ import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 import SocialTimeline from "./SocialTimeline";
 import BubbleMapMinimap from "./BubbleMapMinimap";
 import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
+import { dispatchThought } from "@/components/chat/AvatarThoughtBubble";
 
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
@@ -323,6 +324,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
     // Otherwise do the real API call
     setCommunitySearching(true);
+    dispatchThought('community');
     toast.info('🐦 Searching for X Community...');
     try {
       const walletNode = graphData.nodes.find(n => n.type === 'wallet');
@@ -346,6 +348,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     if (!targetWallet) { toast.error('No wallet found to trace KYC root'); return; }
     
     setKycSearching(true);
+    dispatchThought('trace_start');
     setTerminalTitle('KYC GENEALOGY TRACER');
     setTerminalVisible(true);
     clearTerminal();
@@ -364,6 +367,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
       // Animate the chain discovery
       if (data?.chain && data.chain.length > 0) {
+        if (data.chain.length >= 3) {
+          setTimeout(() => dispatchThought('discovery'), 2500);
+        }
         data.chain.forEach((link: any, i: number) => {
           setTimeout(() => {
             const wallet = link.wallet?.slice(0, 16) || '???';
@@ -438,6 +444,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           }, 500);
 
           setKycFound(true);
+          dispatchThought('success');
           const toastMsg = isCexConfirmed 
             ? `🏦 CEX Root found in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`
             : `🔍 Deepest funder found (trail cold) in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`;
@@ -447,6 +454,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       } else {
         setTimeout(() => {
           addTerminalLine(`NO FUNDING CHAIN FOUND — ${data?.walletsTraced || 0} WALLETS TRACED`, 'warning');
+          dispatchThought('cold_trail');
           addTerminalLine('TRAIL EXHAUSTED. NO CEX OR FUNDER DISCOVERED.', 'warning');
           toast.warning(`No funding chain found after tracing ${data?.walletsTraced || 0} wallets`);
           setTimeout(() => setTerminalVisible(false), 2500);
