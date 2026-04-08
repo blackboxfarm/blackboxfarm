@@ -1,44 +1,44 @@
 
 
-## Fix Telegram Article Share — Remove Duplicate Link Preview
+## Fix X/Twitter Article Share Cards — OG Tags Not Reaching Crawler
 
 ### Problem
 
-When sharing an Intel Briefing to Telegram, the current template produces TWO URLs:
-1. The `url` parameter (shared as the primary link — correctly unfurled via `og-meta` edge function with article title + image)
-2. The same URL repeated in the `text` body after "Read the full briefing:" — this triggers a SECOND unfurl that pulls the sitewide `index.html` OG tags ("Crypto has hands — we show them...") instead of the article-specific meta
-
-Telegram only unfurls ONE link preview per message. When two URLs are present, it can pick either one — and in this case it's showing the sitewide fallback description from the second occurrence.
+When sharing an Intel Briefing to X via the share button, the card preview shows the **sitewide** default OG tags ("BlackBox.Farm" / "Crypto has hands — we show them...") instead of the article-specific title, description, and featured image. The screenshots confirm this — both in the compose window and the live posted tweet.
 
 ### Root Cause
 
-In `SocialShareBar.tsx` line 60, the Telegram share format is:
-```
-📰 {title}\n\n{description}\n\n🔗 Read the full briefing:
-```
-Then the `url` param appends the same URL again. Telegram sees two instances of the same URL and the unfurl behavior becomes unpredictable.
+The share button passes `https://blackbox.farm/intel/briefing/{slug}` as the URL. X's Twitterbot crawler fetches this URL to generate the card, but it receives the SPA's `index.html` with sitewide OG tags instead of the `og-meta` edge function response. The `_redirects` rewrite rule exists but is not being reached by X's crawler (likely bypassed by the Cloudflare proxy layer).
+
+However, the `/og/*` proxy path **is** reliably intercepted by both Cloudflare and `_redirects` — and the `intel-share` edge function already exists with full article-specific OG tags + crawler detection (serves OG HTML to bots, 302 redirects humans to the real article).
 
 ### Fix
 
-**File: `src/components/intel/SocialShareBar.tsx`** (lines 59-61)
+**File: `src/components/intel/SocialShareBar.tsx`**
 
-Change the Telegram share template to only include the title as text, and let the single `url` parameter handle the link preview. Remove the description and "Read the full briefing:" text since the OG unfurl already shows the article title, description, and image.
+For platforms that rely on OG unfurling (X, Facebook, LinkedIn, Reddit, Pinterest), change the share URL from the direct article URL to `https://blackbox.farm/og/intel-share?slug={slug}`. This ensures:
 
-New format:
-```
-📰 {title}
-```
+1. X's crawler hits `/og/intel-share?slug=...` → Cloudflare proxies to `intel-share` function → returns article-specific OG HTML with correct title, description, image
+2. Humans clicking the card link → `intel-share` detects non-crawler UA → 302 redirect to the real article URL
+3. The card preview shows the correct `og:url` (canonical article URL), so it displays cleanly
 
-The `url` param (which Telegram appends automatically) will be the only URL, ensuring Telegram's crawler hits `/intel/briefing/{slug}` → `og-meta` edge function → article-specific OG tags with the correct title, description, and featured image.
+For platforms that don't unfurl (Telegram, WhatsApp, Discord, Email, Threads), keep using the direct article URL since those were already fixed or don't need OG crawling.
+
+**Changes needed:**
+
+1. Accept a new `slug` prop in `SocialShareBarProps` (extracted from the article data already available in `IntelBriefingArticle.tsx`)
+2. Compute `ogProxyUrl = https://blackbox.farm/og/intel-share?slug=${slug}` inside the component
+3. For platforms with `useOgUrl: true` (X, Facebook, LinkedIn, Reddit, Pinterest), pass `ogProxyUrl` to `getUrl()` instead of the direct article URL
+4. For clipboard copy and non-unfurl platforms, continue using the direct article URL
+
+**File: `src/pages/IntelBriefingArticle.tsx`**
+
+Pass `slug={article.slug}` to both `<SocialShareBar>` instances.
 
 ### Technical Detail
 
-- The `_redirects` rule `/intel/briefing/:slug → og-meta?slug=:slug 200!` already serves correct article OG tags to crawlers
-- The `og-meta` function already resolves `featured_image_url` from the article, not the sitewide default
-- By having exactly ONE URL in the Telegram share, Telegram will unfurl it correctly with the article's OG image and description
-- No edge function changes needed — the og-meta function is already correct
-
-### Single file change
-
-`src/components/intel/SocialShareBar.tsx` — Simplify Telegram `getUrl` to produce clean single-link share text.
+- `intel-share` function (already deployed) handles everything: crawler detection, article OG resolution with `meta_tags_config` overrides, JSON-LD structured data, and human redirect
+- The `/og/*` redirect in `_redirects` (`/og/* → supabase functions 200!`) is the most reliable proxy path
+- No edge function changes needed — `intel-share` is already complete and correct
+- The `og:url` in `intel-share` output is set to the canonical article URL, so X's card will display `blackbox.farm/intel/briefing/...` as the domain, not the ugly `/og/` path
 
