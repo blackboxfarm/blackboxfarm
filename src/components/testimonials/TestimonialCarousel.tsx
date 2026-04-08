@@ -78,6 +78,8 @@ export function TestimonialCarousel({
               <img 
                 src={t.avatar_url} 
                 alt={t.display_name || t.twitter_handle || 'User'} 
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
                 className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-primary/20 object-cover"
               />
             ) : (
