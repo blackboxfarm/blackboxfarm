@@ -1031,12 +1031,19 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
                 });
                 // New object reference forces react-force-graph to fully re-initialize
                 graphRef.current.graphData({ nodes: [...gd.nodes], links: [...gd.links] });
+                // Gentle alpha so it doesn't explode
+                setTimeout(() => {
+                  if (graphRef.current) {
+                    const sim = graphRef.current.d3Force('simulation');
+                    if (sim) sim.alpha(0.3);
+                  }
+                }, 100);
                 // Auto-fit after the simulation settles
                 setTimeout(() => {
                   if (graphRef.current) {
                     graphRef.current.zoomToFit(800, 40);
                   }
-                }, 2500);
+                }, 2000);
               }
             }}
             title="Resets Bubble Layout"
