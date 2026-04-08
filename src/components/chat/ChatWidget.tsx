@@ -340,10 +340,10 @@ export function ChatWidget() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full overflow-hidden">
-                <img src={oracleAvatar} alt="Oracle" className="w-full h-full object-cover" />
+                <img src={oracleAvatar} alt="The Signal" className="w-full h-full object-cover" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold">BlackBox Assistant</h3>
+                <h3 className="text-sm font-semibold">The Signal</h3>
                 <Badge variant="secondary" className={cn("text-[10px] px-1.5 py-0", tierColor)}>
                   {tierLabel}
                 </Badge>
@@ -367,10 +367,10 @@ export function ChatWidget() {
             <div className="py-3 space-y-1">
               {messages.length === 0 && (
                 <div className="text-center text-muted-foreground text-sm px-6 py-8">
-                  <img src={oracleAvatar} alt="Oracle" className="h-12 w-12 mx-auto mb-3 rounded-full opacity-70" />
-                  <p className="font-medium">Welcome to BlackBox Farm! 👋</p>
-                  <p className="mt-1 text-xs">Ask me anything about holders analysis, token scanning, or our features.</p>
-                </div>
+                   <img src={oracleAvatar} alt="The Signal" className="h-12 w-12 mx-auto mb-3 rounded-full opacity-70" />
+                   <p className="font-medium">Welcome! Take a peek inside the BlackBox of crypto with HoldersIntel 👋</p>
+                   <p className="mt-1 text-xs">Your community toolchest — ask me anything about holders analysis, wallet tracing, developer reputation, or our features.</p>
+                 </div>
               )}
               {messages.filter(msg => !(msg.role === 'user' && msg.content.startsWith('['))).map(msg => (
                 <ChatMessage key={msg.id} message={msg} />

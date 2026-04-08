@@ -67,7 +67,7 @@ export function SiteFooter() {
               }}
               className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2 mt-2 block"
             >
-              💬 Chat with Oracle
+              💬 Chat with The Signal
             </button>
           </div>
         </div>

@@ -14,7 +14,7 @@ export function OraclePeek() {
       onClick={() => openChatWithContext(peek.hint)}
       className="fixed z-[60] flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-300 cursor-pointer group"
       style={{ top: peek.y, left: peek.x }}
-      aria-label="Ask the Oracle"
+      aria-label="Ask The Signal"
     >
       <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg ring-2 ring-primary/40 group-hover:ring-primary/70 transition-all group-hover:scale-110">
         <img src={oracleAvatar} alt="Oracle" className="w-full h-full object-cover" />

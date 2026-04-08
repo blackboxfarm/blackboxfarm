@@ -215,7 +215,16 @@ export default function Home() {
             Crypto has hands — we show them. Deep holder analysis, wallet tracing, 
             social identity verification, and a revolutionary network graph that exposes 
             the connections others can't see.
-          </p>
+           </p>
+
+           <div className="max-w-2xl mx-auto mb-8 px-4">
+             <p className="text-sm md:text-base text-muted-foreground/80 italic text-center leading-relaxed">
+               "HoldersIntel" is your community tool chest to open the BlackBox of Crypto and see if the Coin is dead or Alive.
+             </p>
+             <p className="text-xs text-muted-foreground/50 text-right mt-1 pr-4">
+               ~ Geekweek
+             </p>
+           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Button 
