@@ -1242,6 +1242,63 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // WEB CHAT SESSIONS
+    // ═══════════════════════════════════════════════════════════════
+    let webChatStats: any = {};
+    try {
+      const { data: newSessions } = await supabase
+        .from('web_chat_sessions')
+        .select('id, visitor_fingerprint, user_id, tier, message_count, page_path, device_type, created_at, updated_at')
+        .gte('created_at', cutoffISO)
+        .order('created_at', { ascending: false })
+        .limit(500);
+
+      const { data: updatedSessions } = await supabase
+        .from('web_chat_sessions')
+        .select('id, visitor_fingerprint, user_id, tier, message_count, page_path, device_type, created_at, updated_at')
+        .gte('updated_at', cutoffISO)
+        .lt('created_at', cutoffISO)
+        .order('updated_at', { ascending: false })
+        .limit(500);
+
+      const created = newSessions || [];
+      const updated = updatedSessions || [];
+      const allSessions = [...created, ...updated];
+
+      const tierBreakdown: Record<string, number> = {};
+      const deviceBreakdown: Record<string, number> = {};
+      const pageBreakdown: Record<string, number> = {};
+      let totalMessages = 0;
+
+      for (const s of allSessions) {
+        tierBreakdown[s.tier || 'unknown'] = (tierBreakdown[s.tier || 'unknown'] || 0) + 1;
+        deviceBreakdown[s.device_type || 'unknown'] = (deviceBreakdown[s.device_type || 'unknown'] || 0) + 1;
+        pageBreakdown[s.page_path || '/'] = (pageBreakdown[s.page_path || '/'] || 0) + 1;
+        totalMessages += s.message_count || 0;
+      }
+
+      const topPages = Object.entries(pageBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+      webChatStats = {
+        new_sessions: created.length,
+        updated_sessions: updated.length,
+        total_messages: totalMessages,
+        tier_breakdown: tierBreakdown,
+        device_breakdown: deviceBreakdown,
+        top_pages: topPages.map(([page, count]) => ({ page, count })),
+        sample_new: created.slice(0, 5).map(s => ({
+          id: s.id,
+          tier: s.tier,
+          messages: s.message_count,
+          page: s.page_path,
+          device: s.device_type,
+        })),
+      };
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch web chat stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DETERMINE OVERALL STATUS
     // ═══════════════════════════════════════════════════════════════
     const criticalAlerts = alerts.filter(a => a.level === 'critical').length;
@@ -1284,6 +1341,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         intelligence_stats: intelligenceStats,
         email_verification_stats: emailVerificationStats,
         telegram_bot_stats: telegramBotStats,
+        web_chat_stats: webChatStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -1569,7 +1627,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     // AI Chat DM stats
     const acs = telegramBotStats.ai_chat_stats;
     if (acs && (acs.total_dm_messages > 0 || acs.unique_dm_users > 0)) {
-      tgMessage += `\n💬 **AI Chat (DMs)**\n`;
+      tgMessage += `\n💬 **AI Chat (TG DMs)**\n`;
       tgMessage += `• ${acs.user_messages} user msgs → ${acs.bot_replies} bot replies (${acs.unique_dm_users} unique users)\n`;
       if (acs.top_topics?.length > 0) {
         tgMessage += `• Hot topics: ${acs.top_topics.slice(0, 5).map((t: any) => `${t.topic}(${t.count})`).join(', ')}\n`;
@@ -1579,6 +1637,24 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         for (const q of acs.sample_questions.slice(0, 3)) {
           tgMessage += `  → @${q.user}: "${q.text}"\n`;
         }
+      }
+    }
+
+    // Web Chat Sessions
+    if (webChatStats.new_sessions > 0 || webChatStats.updated_sessions > 0) {
+      tgMessage += `\n🌐 **Web Chat Sessions**\n`;
+      tgMessage += `• ${webChatStats.new_sessions} new sessions, ${webChatStats.updated_sessions} updated\n`;
+      tgMessage += `• ${webChatStats.total_messages} total messages\n`;
+      if (webChatStats.tier_breakdown) {
+        const tiers = Object.entries(webChatStats.tier_breakdown).map(([t, c]) => `${t}:${c}`).join(', ');
+        tgMessage += `• Tiers: ${tiers}\n`;
+      }
+      if (webChatStats.device_breakdown) {
+        const devices = Object.entries(webChatStats.device_breakdown).map(([d, c]) => `${d}:${c}`).join(', ');
+        tgMessage += `• Devices: ${devices}\n`;
+      }
+      if (webChatStats.top_pages?.length > 0) {
+        tgMessage += `• Top pages: ${webChatStats.top_pages.slice(0, 3).map((p: any) => `${p.page}(${p.count})`).join(', ')}\n`;
       }
     }
 
