@@ -1348,7 +1348,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
     console.error('[holders] AI health enhancement failed:', aiErr);
   }
 
-  msg += `\n🔗 [Full Web Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})`;
+  msg += `\n🔗 [Full Web Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})`;
   msg += TAGLINE;
   await sendMessage(chatId, msg);
 }
@@ -1916,7 +1916,7 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
     `❤️ Health: *${healthScore}/100*${phaseLabel}\n` +
     `${top10Pct != null ? `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n` : ''}` +
     `\n_Use /holders for full breakdown or /ai for AI analysis._` +
-    `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})` +
+    `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})` +
     TAGLINE
   );
 }
@@ -1953,7 +1953,7 @@ async function handleQuick(chatId: number, telegramUserId: string, args: string)
     `❤️ Health: *${health}/100*${qPhaseLabel}\n` +
     `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
     `\n_Use /holders for full breakdown or /ai for AI analysis._` +
-    `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})` +
+    `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})` +
     TAGLINE
   );
 }
@@ -2234,7 +2234,7 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
     warningsBlock = `\n\n🚨 *Intel Alerts*\n${warningLines.join('\n\n')}`;
   }
 
-  const webLinks = `\n\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemaps?token=${ca})`;
+  const webLinks = `\n\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})`;
 
   const msg = `⚡ *${tokenLabel} Quick Stats*\n\n` +
     `${holders ? `👥 Holders: *${holders}*\n` : ''}` +
@@ -2827,8 +2827,8 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Homepage: https://blackbox.farm\n`;
         prompt += `- Holders Analysis: https://blackbox.farm/holders\n`;
         prompt += `- Holders (pre-loaded token): https://blackbox.farm/holders?token=TOKEN_ADDRESS\n`;
-        prompt += `- Bubblemaps: https://blackbox.farm/bubblemaps\n`;
-        prompt += `- Bubblemaps (pre-loaded token): https://blackbox.farm/bubblemaps?token=TOKEN_ADDRESS\n`;
+        prompt += `- Bubblemap: https://blackbox.farm/bubblemap\n`;
+        prompt += `- Bubblemap (pre-loaded token): https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
         prompt += `- Intel Briefings: https://blackbox.farm/intel\n`;
         prompt += `- Oracle Risk Tool: https://blackbox.farm/oracle\n`;
         prompt += `- Register/Sign Up: https://blackbox.farm/register\n`;
@@ -2836,6 +2836,17 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Advertise With Us: https://blackbox.farm/advertise\n`;
         prompt += `- Share on Socials: https://blackbox.farm/share\n`;
         prompt += `Replace TOKEN_ADDRESS with the actual CA when a user mentions a specific token.\n\n`;
+
+        prompt += `## BUBBLEMAP INTELLIGENCE\n`;
+        prompt += `The Bubblemap is NOT just a wallet visualization. It is a full Developer Reputation & Network Forensics tool:\n`;
+        prompt += `- Maps a Developer's Wallet across ALL their token launches — showing track record (successful projects, rug pulls, slow drains)\n`;
+        prompt += `- Cross-links the Dev Wallet to their social identity (X/Twitter handle, Telegram) via on-chain + social scraping\n`;
+        prompt += `- Traces funding chains: Dev Wallet → funding wallets → KYC Root (the real person behind the money)\n`;
+        prompt += `- Detects wallet bundles, sybil clusters, and circular funding patterns (bad actor signals)\n`;
+        prompt += `- Scores developers as good actors (consistent, transparent) or bad actors (rug history, fake socials)\n`;
+        prompt += `- Shows the X Community network: which Twitter accounts promote the token, who are admins/mods\n`;
+        prompt += `- Pre-load any token: https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
+        prompt += `When a user asks about a token's developer, team, or trustworthiness, the Bubblemap is the primary tool to recommend.\n\n`;
 
         prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
         prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;

@@ -14,7 +14,7 @@ import { useOracleHover } from './OracleHoverProvider';
 // Pages where the widget should NOT appear
 const HIDDEN_PAGES = ['/checkout', '/payment'];
 // Pages where it should always be available (feature pages)
-const PRIORITY_PAGES = ['/holders', '/oracle', '/bubblemaps', '/intel', '/feed'];
+const PRIORITY_PAGES = ['/holders', '/oracle', '/bubblemap', '/intel', '/feed'];
 
 const DISMISS_KEY = 'bb_chat_dismissed_at';
 const VISITS_KEY = 'bb_chat_visits';

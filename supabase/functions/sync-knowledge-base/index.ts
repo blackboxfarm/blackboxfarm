@@ -10,7 +10,7 @@ const corsHeaders = {
 const SITE_PAGES = [
   { path: '/', category: 'marketing', title: 'Homepage — What is BlackBox Farm', keywords: ['home', 'blackbox', 'holdersintel', 'what is', 'about'] },
   { path: '/holders', category: 'features', title: 'Holders Analysis Tool', keywords: ['holders', 'scan', 'token', 'analysis', 'bagless'] },
-  { path: '/bubblemaps', category: 'features', title: 'Bubblemaps — Wallet Visualization', keywords: ['bubblemaps', 'bubbles', 'wallet', 'visualization', 'cluster'] },
+  { path: '/bubblemap', category: 'features', title: 'Bubblemap — Developer Reputation & Network Forensics', keywords: ['bubblemap', 'developer', 'reputation', 'kyc', 'wallet', 'forensics', 'sybil', 'cluster', 'dev wallet', 'x community'] },
   { path: '/intel', category: 'features', title: 'Intel Briefings — Research Reports', keywords: ['intel', 'briefing', 'research', 'report', 'article'] },
   { path: '/oracle', category: 'features', title: 'Oracle — Token Risk Analysis', keywords: ['oracle', 'risk', 'score', 'safety', 'audit'] },
   { path: '/advertise', category: 'billing', title: 'Advertising & Banner Ads', keywords: ['advertise', 'banner', 'ad', 'sponsor', 'promote'] },
