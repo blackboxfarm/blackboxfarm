@@ -14306,11 +14306,15 @@ export type Database = {
         Row: {
           active_boosts: number | null
           ath_24h_usd: number | null
+          autopsy_at: string | null
+          autopsy_notes: string | null
           community_checked_at: string | null
           community_discovery_result: string | null
           created_at: string | null
           creator_wallet: string | null
           current_status: string | null
+          death_cause: string | null
+          death_confidence: number | null
           developer_id: string | null
           dex_id: string | null
           dex_socials_checked_at: string | null
@@ -14349,11 +14353,15 @@ export type Database = {
         Insert: {
           active_boosts?: number | null
           ath_24h_usd?: number | null
+          autopsy_at?: string | null
+          autopsy_notes?: string | null
           community_checked_at?: string | null
           community_discovery_result?: string | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
+          death_cause?: string | null
+          death_confidence?: number | null
           developer_id?: string | null
           dex_id?: string | null
           dex_socials_checked_at?: string | null
@@ -14392,11 +14400,15 @@ export type Database = {
         Update: {
           active_boosts?: number | null
           ath_24h_usd?: number | null
+          autopsy_at?: string | null
+          autopsy_notes?: string | null
           community_checked_at?: string | null
           community_discovery_result?: string | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
+          death_cause?: string | null
+          death_confidence?: number | null
           developer_id?: string | null
           dex_id?: string | null
           dex_socials_checked_at?: string | null

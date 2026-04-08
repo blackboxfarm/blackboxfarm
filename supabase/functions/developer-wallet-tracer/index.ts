@@ -18,32 +18,7 @@ interface WalletTraceNode {
   children: WalletTraceNode[];
 }
 
-// Known CEX hot wallets
-const KNOWN_CEX_WALLETS: Record<string, string[]> = {
-  'Binance': [
-    '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9',
-    '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
-    'FeesMarket3mj6p9C4mHsNhXuJvJuxz5Ncc6Dv5mDPyj'
-  ],
-  'Coinbase': [
-    'H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS',
-    'GJRs4FwHtemZ5ZE9x3FNvJ8TMwitKTh21yxdRPqn7npE',
-    '2ojv9BAiHUrvsm9gxDe7fJSzbNZSJcxZvf8dqmWGHG8S'
-  ],
-  'Kraken': [
-    'CJsLwbP1iu5DuUikHEJnLfANgKy6stB2uFgvBBHoyxwz',
-    'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL'
-  ],
-  'Bybit': [
-    'AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2'
-  ],
-  'OKX': [
-    '5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD'
-  ],
-  'KuCoin': [
-    'BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6'
-  ]
-};
+import { getCexName as getCexNameShared } from '../_shared/cex-wallets.ts';
 
 serve(withRunLog('developer-wallet-tracer', async (req) => {
   if (req.method === 'OPTIONS') {
@@ -94,15 +69,8 @@ serve(withRunLog('developer-wallet-tracer', async (req) => {
 
     console.log(`[developer-wallet-tracer] Tracing wallet: ${walletAddress}, maxDepth: ${maxDepth}`);
 
-    // Check which CEX a wallet belongs to
-    function getCexName(wallet: string): string | null {
-      for (const [cex, wallets] of Object.entries(KNOWN_CEX_WALLETS)) {
-        if (wallets.includes(wallet)) {
-          return cex;
-        }
-      }
-      return null;
-    }
+    // Check which CEX a wallet belongs to (using shared database)
+    const getCexName = getCexNameShared;
 
     // Recursive wallet tracing function using provider fallbacks
     async function traceWallet(

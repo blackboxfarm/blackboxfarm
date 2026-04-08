@@ -15,6 +15,7 @@ import { useBubbleMapRateLimit } from "@/hooks/useBubbleMapRateLimit";
 import { useNavigate } from "react-router-dom";
 import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 import SocialTimeline from "./SocialTimeline";
+import BubbleMapMinimap from "./BubbleMapMinimap";
 import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
 
 type ViewMode = 'bubble' | 'tree';
@@ -1058,6 +1059,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         <div ref={containerRef} className="w-full relative" style={{ height: '600px', background: 'hsl(var(--background))' }}>
           {/* Hacker Terminal Overlay */}
           <HackerTerminal lines={terminalLines} visible={terminalVisible} title={terminalTitle} />
+          {/* Minimap Navigation */}
+          <BubbleMapMinimap
+            graphRef={graphRef}
+            nodes={(displayData?.nodes || []).map((n: any) => ({ x: n.x, y: n.y, color: n.color, type: n.type }))}
+          />
           {/* Action Buttons Overlay — top-left inside graph */}
           {graphData.nodes.length > 0 && (
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">

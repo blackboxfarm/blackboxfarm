@@ -9,58 +9,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Known CEX hot wallets (expanded list)
-const KNOWN_CEX_WALLETS: Record<string, string[]> = {
-  "Binance": [
-    "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9",
-    "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
-    "2ojv9BAiHUrvsm9gxDe7fJSzbNZSJcxZvf8dqmWGHG8S",
-    "AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2",
-    "HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH",
-  ],
-  "Coinbase": [
-    "GJRs4FwHtemZ5ZE9x3FNvJ8TMwitKTh21yxdRPqn7npE",
-    "H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS",
-    "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
-  ],
-  "Kraken": [
-    "CeijuS2rMHqxhbQq6ZvGxV7g7h3MrdKZPdpJR4NRV9WN",
-    "EUuHEFLSqdDKirPEoZpTj9sQHgJY6aJB8KumLFXxcmv8",
-  ],
-  "Bybit": [
-    "AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2",
-    "6F6DgCxqLY9K7irEpHu97sUvZp8KkWG8rwNDK7dLMT5t",
-  ],
-  "OKX": [
-    "5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD",
-    "Bi3Ru8krBjCJfKhKqUwdiLJwz4jPNwT1nz9Cg3Ai5gZf",
-  ],
-  "KuCoin": [
-    "BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6",
-    "6dKkxsSHdq5QK3D9NB95YLXd3GmjAQJGrHGSBDYcNaff",
-  ],
-  "Gate.io": [
-    "u6PJ8DtQuPFnfmwHbGFULQ4u4EgjDiyYKjVEsynXq2w",
-  ],
-  "MEXC": [
-    "ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ",
-  ],
-  "Huobi": [
-    "88xTWZMeKfiTgbfEmPLdsUCQcZinwUfk25EBQZ21XMAZ",
-  ],
-  "Bitget": [
-    "A77HErxSEiyjsLLz6yNMvnA5vKSZwCzLtpAKc1BQy4GL",
-  ],
-  "Phantom Swap": [
-    "PhaNTomSwapProgram11111111111111111111111111",
-  ],
-  "Jupiter": [
-    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
-  ],
-  "Raydium": [
-    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
-  ],
-};
+import { getCexName } from '../_shared/cex-wallets.ts';
 
 interface WalletNode {
   wallet: string;
@@ -82,14 +31,7 @@ interface GenealogyResult {
   total_wallets_traced: number;
 }
 
-function getCexName(wallet: string): string | null {
-  for (const [cex, wallets] of Object.entries(KNOWN_CEX_WALLETS)) {
-    if (wallets.includes(wallet)) {
-      return cex;
-    }
-  }
-  return null;
-}
+// getCexName imported from _shared/cex-wallets.ts
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

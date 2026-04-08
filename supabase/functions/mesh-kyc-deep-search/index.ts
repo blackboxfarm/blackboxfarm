@@ -7,6 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+import { isCexWallet, getCexName } from '../_shared/cex-wallets.ts';
+
 const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin', 'huobi', 'gate.io', 'ftx', 'gemini', 'bitfinex', 'crypto.com', 'mexc'];
 
 interface HeliusFundedByResult {
@@ -20,7 +22,9 @@ interface HeliusFundedByResult {
   slot: number;
 }
 
-function isKnownCex(funderName: string | null, funderType: string | null): boolean {
+function isKnownCex(funderAddress: string, funderName: string | null, funderType: string | null): boolean {
+  // Check shared CEX wallet database first (most reliable)
+  if (isCexWallet(funderAddress)) return true;
   if (funderType === 'exchange' || funderType === 'cex') return true;
   const name = (funderName || '').toLowerCase();
   return CEX_KEYWORDS.some(k => name.includes(k));
@@ -201,7 +205,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         depth: current.depth + 1,
       });
 
-      if (isKnownCex(funding.funderName, funding.funderType)) {
+      if (isKnownCex(funding.funder, funding.funderName, funding.funderType)) {
         knownCexWallets.add(funding.funder);
         kycRoot = current.wallet;
         kycRootLabel = funding.funderName || funding.funderType || 'exchange';
