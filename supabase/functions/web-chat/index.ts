@@ -567,17 +567,29 @@ serve(async (req) => {
       });
     }
 
-    // Log user message
-    if (lastUserMsg?.role === 'user') {
-      supabase.from('web_chat_messages').insert({
-        session_id: sessionId || 'anon-' + Date.now(),
+    // Log full conversation to web_chat_sessions (upsert by session)
+    const chatSessionId = sessionId || 'anon-' + Date.now();
+    const ua = req.headers.get('user-agent') || '';
+    const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
+    const browserMatch = ua.match(/(Chrome|Firefox|Safari|Edge|Opera)/i);
+    const chatBrowser = browserMatch ? browserMatch[1] : 'Unknown';
+    
+    supabase.from('web_chat_sessions')
+      .upsert({
+        session_id: chatSessionId,
+        visitor_fingerprint: sessionId || null,
         user_id: userId || null,
-        role: 'user',
-        content: lastUserMsg.content,
+        tier: tier,
         page_path: pagePath,
-        user_tier: tier,
-      }).then(() => {});
-    }
+        messages: messages || [],
+        message_count: messages?.length || 0,
+        first_message_at: new Date().toISOString(),
+        last_message_at: new Date().toISOString(),
+        device_type: isMobile ? 'mobile' : 'desktop',
+        browser: chatBrowser,
+        user_agent: ua.slice(0, 500),
+      }, { onConflict: 'session_id' })
+      .then(() => {});
 
     // Estimate prompt tokens (chars / 4)
     const promptText = systemPrompt + (messages || []).slice(-20).map((m: any) => m.content || '').join(' ');
