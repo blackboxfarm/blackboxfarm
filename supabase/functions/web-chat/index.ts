@@ -326,8 +326,8 @@ async function buildSystemPrompt(userContext: {
     prompt += `- Homepage: https://blackbox.farm\n`;
     prompt += `- Holders Analysis: https://blackbox.farm/holders\n`;
     prompt += `- Holders (pre-loaded token): https://blackbox.farm/holders?token=TOKEN_ADDRESS\n`;
-    prompt += `- Bubblemaps: https://blackbox.farm/bubblemaps\n`;
-    prompt += `- Bubblemaps (pre-loaded token): https://blackbox.farm/bubblemaps?token=TOKEN_ADDRESS\n`;
+    prompt += `- Bubblemap: https://blackbox.farm/bubblemap\n`;
+    prompt += `- Bubblemap (pre-loaded token): https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
     prompt += `- Intel Briefings: https://blackbox.farm/intel\n`;
     prompt += `- Oracle Risk Tool: https://blackbox.farm/oracle\n`;
     prompt += `- Register/Sign Up: https://blackbox.farm/register\n`;
@@ -338,6 +338,17 @@ async function buildSystemPrompt(userContext: {
     prompt += `- Live Feed: https://blackbox.farm/feed\n`;
     prompt += `- Telegram Bot: https://blackbox.farm/tgbot\n`;
     prompt += `Replace TOKEN_ADDRESS with the actual CA when a user mentions a specific token. Use these links naturally when relevant.\n\n`;
+
+    prompt += `## BUBBLEMAP INTELLIGENCE\n`;
+    prompt += `The Bubblemap is NOT just a wallet visualization. It is a full Developer Reputation & Network Forensics tool:\n`;
+    prompt += `- Maps a Developer's Wallet across ALL their token launches — showing track record (successful projects, rug pulls, slow drains)\n`;
+    prompt += `- Cross-links the Dev Wallet to their social identity (X/Twitter handle, Telegram) via on-chain + social scraping\n`;
+    prompt += `- Traces funding chains: Dev Wallet → funding wallets → KYC Root (the real person behind the money)\n`;
+    prompt += `- Detects wallet bundles, sybil clusters, and circular funding patterns (bad actor signals)\n`;
+    prompt += `- Scores developers as good actors (consistent, transparent) or bad actors (rug history, fake socials)\n`;
+    prompt += `- Shows the X Community network: which Twitter accounts promote the token, who are admins/mods\n`;
+    prompt += `- Pre-load any token: https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
+    prompt += `When a user asks about a token's developer, team, or trustworthiness, the Bubblemap is the primary tool to recommend.\n\n`;
 
     prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
     prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;
