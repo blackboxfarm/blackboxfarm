@@ -239,8 +239,10 @@ async function traceWalletGenealogy(
     children: [],
   };
   
-  // Trace top 3 largest incoming transfers to avoid exponential growth
-  const topTransfers = incomingTransfers.slice(0, 3);
+  // Follow only the LARGEST transfer for KYC tracing (linear, not exponential)
+  // At depth ≤ 3, allow 2nd-largest for near-root diversity
+  const branchWidth = currentDepth <= 3 ? 2 : 1;
+  const topTransfers = incomingTransfers.slice(0, branchWidth);
   
   for (const transfer of topTransfers) {
     const childNode = await traceWalletGenealogy(
@@ -309,7 +311,7 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
     if (wallets.length === 0 && body.wallet) {
       wallets = [body.wallet];
     }
-    const maxDepth = body.maxDepth || body.depth || 8;
+    const maxDepth = body.maxDepth || body.depth || 20;
     const minAmountSol = body.minAmountSol || 0.05;
 
     if (!wallets || !Array.isArray(wallets) || wallets.length === 0) {

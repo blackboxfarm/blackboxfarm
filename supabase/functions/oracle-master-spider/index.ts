@@ -1106,7 +1106,7 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
     try {
       // Trigger genealogy scanner for deeper trace
       supabase.functions.invoke('wallet-genealogy-scanner', {
-        body: { wallet: creatorWallet, depth: 3 }
+        body: { wallet: creatorWallet, depth: 10 }
       }).catch(() => {});
 
       // Trigger community enricher if we found X links

@@ -226,7 +226,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
       if (!error) meshLinksAdded++;
 
       // ═══ SIBLING DISCOVERY: Find other wallets funded by this same funder ═══
-      if (shouldDiscoverBundle && !knownCexWallets.has(funding.funder) && current.depth <= 2) {
+      if (shouldDiscoverBundle && !knownCexWallets.has(funding.funder) && current.depth <= 5) {
         const siblings = await discoverSiblings(funding.funder, heliusApiKey, visited, 50);
         
         for (const sib of siblings) {
