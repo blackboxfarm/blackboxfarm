@@ -17094,6 +17094,60 @@ export type Database = {
         }
         Relationships: []
       }
+      web_chat_sessions: {
+        Row: {
+          browser: string | null
+          created_at: string
+          device_type: string | null
+          first_message_at: string
+          id: string
+          last_message_at: string
+          message_count: number
+          messages: Json
+          page_path: string | null
+          session_id: string | null
+          tier: string | null
+          updated_at: string
+          user_agent: string | null
+          user_id: string | null
+          visitor_fingerprint: string | null
+        }
+        Insert: {
+          browser?: string | null
+          created_at?: string
+          device_type?: string | null
+          first_message_at?: string
+          id?: string
+          last_message_at?: string
+          message_count?: number
+          messages?: Json
+          page_path?: string | null
+          session_id?: string | null
+          tier?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string | null
+          visitor_fingerprint?: string | null
+        }
+        Update: {
+          browser?: string | null
+          created_at?: string
+          device_type?: string | null
+          first_message_at?: string
+          id?: string
+          last_message_at?: string
+          message_count?: number
+          messages?: Json
+          page_path?: string | null
+          session_id?: string | null
+          tier?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string | null
+          visitor_fingerprint?: string | null
+        }
+        Relationships: []
+      }
       web_subscription_tiers: {
         Row: {
           ai_access_level: Database["public"]["Enums"]["ai_access_level"]

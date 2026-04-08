@@ -1,0 +1,1 @@
+ALTER TABLE public.web_chat_sessions ADD CONSTRAINT web_chat_sessions_session_id_key UNIQUE (session_id);

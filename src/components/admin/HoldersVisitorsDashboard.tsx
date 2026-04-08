@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { ChatSessionsTab } from './ChatSessionsTab';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -592,6 +593,7 @@ export function HoldersVisitorsDashboard() {
           <TabsTrigger value="auth-methods">Auth Methods</TabsTrigger>
           <TabsTrigger value="browsers">Browsers</TabsTrigger>
           <TabsTrigger value="recent">Recent Visits</TabsTrigger>
+          <TabsTrigger value="chats">💬 Chats</TabsTrigger>
           <TabsTrigger value="utm-builder">🔗 Link Builder</TabsTrigger>
         </TabsList>
 
@@ -896,6 +898,10 @@ export function HoldersVisitorsDashboard() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="chats">
+          <ChatSessionsTab />
         </TabsContent>
 
         <TabsContent value="utm-builder">
