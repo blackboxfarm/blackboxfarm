@@ -242,7 +242,7 @@ export function ChatWidget() {
                   <p className="mt-1 text-xs">Ask me anything about holders analysis, token scanning, or our features.</p>
                 </div>
               )}
-              {messages.map(msg => (
+              {messages.filter(msg => !(msg.role === 'user' && msg.content.startsWith('['))).map(msg => (
                 <ChatMessage key={msg.id} message={msg} />
               ))}
               {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
