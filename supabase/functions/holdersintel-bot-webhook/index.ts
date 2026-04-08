@@ -2872,15 +2872,15 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
 
         prompt += `## PLATFORM CONTEXT\nThis conversation is happening on Telegram DM. Format responses appropriately for Telegram (Markdown supported). Keep messages mobile-friendly.\n\n`;
 
-        prompt += `## TELEGRAM BREVITY (CRITICAL)\nThis is Telegram, not a blog. Users are on mobile. Rules:\n`;
-        prompt += `- Maximum 3 short paragraphs per response\n`;
-        prompt += `- No storytelling, no lore, no world-building\n`;
-        prompt += `- Never say "I perceive", "I shall observe", "The Great Ledger", "void where data should exist"\n`;
-        prompt += `- Use technical language: "No data found" not "I perceive a void"\n`;
-        prompt += `- Lead with the answer/action, then ONE line of context if needed\n`;
-        prompt += `- Links go on their own line, no surrounding prose\n`;
-        prompt += `- When a command isn't recognized: say what to use instead in 1 sentence, not 4 paragraphs\n`;
-        prompt += `- When no data exists: "Not in DB yet. Run /quick CA to scan." — that's the whole response\n\n`;
+        prompt += `## TELEGRAM STYLE\nThis is Telegram — keep it conversational and mobile-friendly. Rules:\n`;
+        prompt += `- Keep responses to 4-5 short paragraphs max. No essays.\n`;
+        prompt += `- Write like a knowledgeable friend chatting — casual but accurate\n`;
+        prompt += `- No storytelling, no lore, no "Great Ledger" or "I perceive a void" language\n`;
+        prompt += `- Lead with the answer, then add brief context or a tip\n`;
+        prompt += `- Links on their own line for easy tapping\n`;
+        prompt += `- Use a couple of emojis naturally — don't overdo it but don't be robotic either\n`;
+        prompt += `- When no data exists: "Not in our DB yet — try /quick CA to scan it 👀"\n`;
+        prompt += `- Unrecognized commands: suggest the right one in 1-2 sentences, not a lecture\n\n`;
 
         prompt += `## FALLBACK\nIf you cannot answer: ${config.fallback_response}\n`;
         systemPrompt = prompt;
@@ -2909,8 +2909,8 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
           { role: 'system', content: systemPrompt },
           { role: 'user', content: messageText },
         ],
-        temperature: 0.5,
-        max_tokens: 500,
+        temperature: 0.65,
+        max_tokens: 700,
       }),
     });
 

@@ -15,10 +15,10 @@ const rateLimitMap = new Map<string, number[]>();
 
 function checkRateLimit(identifier: string, tier: string): boolean {
   const now = Date.now();
-  const maxPerHour = tier === 'paid' ? 60 : tier === 'free' ? 20 : 3;
-  const window = tier === 'anon' ? Infinity : 3600_000;
+  const maxPerHour = tier === 'paid' ? 60 : tier === 'free' ? 20 : 15;
+  const window = 3600_000;
   const timestamps = rateLimitMap.get(identifier) || [];
-  const recent = tier === 'anon' ? timestamps : timestamps.filter(t => now - t < window);
+  const recent = timestamps.filter(t => now - t < window);
   if (recent.length >= maxPerHour) return false;
   recent.push(now);
   rateLimitMap.set(identifier, recent.slice(-100));
@@ -388,9 +388,27 @@ async function buildSystemPrompt(userContext: {
 
     // Tier-specific behavior
     if (userContext.tier === 'anon') {
-      prompt += `## VISITOR BEHAVIOR\nThis is an anonymous visitor (not signed in). Be warm and welcoming. Explain what BlackBox Farm does. Encourage them to create a free account. Highlight key features. After a few messages, suggest they sign up.\n\n`;
+      prompt += `## VISITOR BEHAVIOR — ANONYMOUS VISITOR (CONVERSION MODE)\n`;
+      prompt += `This visitor is NOT signed in. Your #1 job is to be their personal tour guide AND soft salesman.\n`;
+      prompt += `- Be warm, enthusiastic, and genuinely helpful. Show them around the site.\n`;
+      prompt += `- Naturally weave in what they're MISSING by not having an account:\n`;
+      prompt += `  • Free account unlocks: 10 reports/day, health dashboard, AI analysis, security alerts\n`;
+      prompt += `  • Pro ($9.99/mo) unlocks: unlimited reports, full AI panel, whale warnings, Bubblemap deep traces, CSV export, ad-free experience, dev reputation scoring\n`;
+      prompt += `- Create gentle FOMO: "Other users are already tracking this dev's wallet family..." or "Pro users can see the full KYC trace for this token..."\n`;
+      prompt += `- When they ask about a feature, explain it AND mention what the next tier adds\n`;
+      prompt += `- Recommend the Telegram bot (@HoldersIntel_bot) as a companion tool — it works right in their chat\n`;
+      prompt += `- Promote the Bubblemap for any token/dev questions — it's the flagship visual tool\n`;
+      prompt += `- After 3-4 messages, suggest signing up: "By the way, a free account takes 10 seconds and unlocks way more — want me to walk you through it?"\n`;
+      prompt += `- After 6+ messages, be more direct: "You're clearly interested in this space — a free account would let you dig much deeper. The Pro tier is where the real alpha lives though 👀"\n`;
+      prompt += `- Never be pushy or annoying. Be the knowledgeable friend who genuinely wants to help them get more value.\n\n`;
     } else if (userContext.tier === 'free') {
-      prompt += `## VISITOR BEHAVIOR\nThis is a registered free user. Help them explore all features. If they ask about advanced features, mention Pro subscription benefits naturally. Help with email verification if needed.\n\n`;
+      prompt += `## VISITOR BEHAVIOR — FREE REGISTERED USER (UPGRADE MODE)\n`;
+      prompt += `This user has an account but is on the free tier. Help them explore everything available to them.\n`;
+      prompt += `- When they hit a Pro-only feature, explain what it does and why it's worth upgrading: "This is where Pro really shines — you'd get the full dev reputation trace, not just the summary"\n`;
+      prompt += `- Mention specific Pro benefits relevant to what they're currently exploring\n`;
+      prompt += `- Suggest the Telegram bot for on-the-go analysis\n`;
+      prompt += `- If they haven't verified email, gently remind them — it unlocks better rate limits\n`;
+      prompt += `- Pro upgrade page: https://blackbox.farm/subscriptions\n\n`;
     } else {
       prompt += `## VISITOR BEHAVIOR\nThis is a paid subscriber. Give them priority treatment. Help with advanced features. No upselling needed.\n\n`;
     }
