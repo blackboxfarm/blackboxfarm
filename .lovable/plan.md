@@ -1,56 +1,68 @@
 
 
-## Fix Facebook (and All Platform) Article Share Previews
+## Fix Article OG Sharing — Two Root Causes Found
 
-### Problem
+### What Facebook's Debugger Revealed
 
-The Facebook share screenshots show the same issue as X/Twitter: when sharing an article, the preview displays only the sitewide "BlackBox.Farm" branding with no article title, description, or OG image. The post appears essentially blank.
+1. **`site001.png` does not exist** — The sitewide default OG image (`social-gallery/site001.png`) returns **404** from Supabase Storage. Facebook sees "invalid content type" because the 404 JSON response isn't an image. This is the image referenced in `index.html` line 30.
 
-### Root Cause Analysis
+2. **`intel-share` function has priority bugs** — The meta tags cascade (sitewide → page → article) is working, but the function uses sitewide overrides OVER article-specific data in three places:
+   - `canonical_url`: sitewide sets `https://blackbox.farm`, which overrides the article-specific URL
+   - `twitter:image`: sitewide sets a default, which overrides the article's `featured_image_url`
+   - `og:type`: sitewide sets `website`, should be `article` for briefings
 
-The `SocialShareBar` correctly builds `ogProxyUrl = https://blackbox.farm/og/intel-share?slug={slug}` and Facebook's `useOgUrl: true` means the sharer URL should be `https://www.facebook.com/sharer/sharer.php?u=https://blackbox.farm/og/intel-share?slug=...`.
+The article's featured image (`intel-images/...cropped.jpg`) is fine — serves correctly as `image/jpeg`. The bug is that `intel-share` never uses it for Twitter because the sitewide meta cascade wins.
 
-However, there are two likely issues:
+### Fixes
 
-1. **URL encoding conflict**: The `ogProxyUrl` contains a `?slug=` query parameter. When this is passed through `encodeURIComponent()` inside the Facebook sharer URL, the `?` and `=` get encoded. Facebook's crawler then fetches the URL and it should work — but Facebook may be stripping or misinterpreting the double-encoded query string.
+**1. Fix `intel-share` function — article data must win over sitewide cascade**
 
-2. **No cache-busting**: Facebook aggressively caches OG scrape results. Once it scraped and got the sitewide fallback (before the fix was deployed), it cached that empty result. Without a `&v=timestamp` parameter, Facebook keeps serving the stale cache.
+In `supabase/functions/intel-share/index.ts`, change the priority so article-specific values take precedence:
 
-3. **Cloudflare WAF blocking**: The memory notes a required WAF rule ("Allow Social Crawlers") to skip Bot Fight Mode for `facebookexternalhit`. If this rule is missing or misconfigured, Facebook's crawler gets a 403 and falls back to the domain-level metadata.
+```
+// BEFORE (broken — sitewide canonical wins):
+const canonicalUrl = meta.canonical_url || `${SITE_URL}/intel/briefing/${article.slug}`;
+const twitterImage = meta.twitter_image || ogImage;
 
-### Fix — 3 Changes
-
-**1. Add cache-busting to ogProxyUrl** (`src/components/intel/SocialShareBar.tsx`)
-
-Add a `&v=` timestamp parameter to force Facebook (and all platforms) to re-scrape rather than serve stale cache:
-
-```typescript
-const ogProxyUrl = slug 
-  ? `https://blackbox.farm/og/intel-share?slug=${slug}&v=${Date.now()}` 
-  : url;
+// AFTER (article always wins):
+const canonicalUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
+const ogImage = resolveImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
+const twitterImage = ogImage;  // Always use article image, not sitewide fallback
 ```
 
-**2. Verify Cloudflare WAF rule** (manual check)
+Also hardcode `og:type` to `article` since this function only serves articles:
+```
+<meta property="og:type" content="article" />
+```
 
-The Cloudflare dashboard must have a WAF Custom Rule (Priority 1) named "Allow Social Crawlers" that SKIPs Bot Fight Mode, Super Bot Fight Mode, Managed WAF, Rate Limiting, and Browser Integrity Check for user-agents matching `facebookexternalhit|facebot|twitterbot|linkedinbot|discordbot|meta-externalagent`. If this rule is missing or disabled, Facebook's crawler will be blocked before it ever reaches the `intel-share` function.
+And set `og:url` to the canonical article URL (not whatever sitewide says):
+```
+<meta property="og:url" content="${canonicalUrl}" />
+```
 
-**3. Test with Facebook's debugger tool**
+**2. Fix `site001.png` — sitewide default OG image is missing**
 
-After deploying the cache-bust fix, paste the proxy URL into Facebook's Sharing Debugger (https://developers.facebook.com/tools/debug/) and click "Scrape Again" to force a fresh fetch. This will confirm whether the `intel-share` function is returning proper OG tags to Facebook's crawler.
+The file `social-gallery/site001.png` returns 404. Two options:
+- Re-upload a proper sitewide OG image to the `social-gallery` bucket as `site001.png`
+- OR update `index.html` line 30 to point to an image that actually exists (e.g., the logo or a different asset)
 
-### What this fixes
+This affects the sitewide fallback for any page that doesn't have article-specific OG tags (homepage shares, etc.).
 
-- Facebook shares will show article-specific title, description, and featured image
-- All `useOgUrl` platforms (X, LinkedIn, Reddit, Pinterest) also benefit from the cache-busting
-- Stale/cached previews from before the fix will be bypassed
+**3. Update `index.html` og:image to use a working URL**
+
+Change line 30 to reference an image that exists and serves with correct content-type headers.
 
 ### Files to modify
 
 | File | Change |
 |------|--------|
-| `src/components/intel/SocialShareBar.tsx` | Add `&v=${Date.now()}` cache-busting to `ogProxyUrl` |
+| `supabase/functions/intel-share/index.ts` | Fix priority: article canonical, og:url, og:type, twitter:image always use article data |
+| `index.html` | Fix sitewide og:image URL to a file that exists |
 
-### Manual action required
+### What this fixes
 
-Check Cloudflare WAF rules for the "Allow Social Crawlers" rule — if missing, Facebook's crawler is being 403'd and no code fix will help until the WAF rule is in place.
+- Facebook, X, LinkedIn, etc. will see the correct article title, description, and featured image
+- `twitter:image` will match `og:image` (the article's featured image)
+- `og:url` and canonical will point to the real article URL
+- Sitewide shares (homepage) will have a valid og:image
 
