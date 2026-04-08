@@ -178,19 +178,21 @@ const REQUIRED_CRONS: CronDef[] = [
     body := '{\\\"batchSize\\\": 5}'::jsonb
   );`,
   },
-  {
-    jobname: 'bulk-community-enricher-drip',
-    schedule: '*/5 * * * *',
-    command: `
-  SELECT net.http_post(
-    url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url' LIMIT 1) || '/functions/v1/bulk-community-enricher',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_service_role_key' LIMIT 1)
-    ),
-    body := '{\\\"batchSize\\\": 1}'::jsonb
-  );`,
-  },
+  // PAUSED: Firecrawl credit conservation — resume April 24th 2026
+  // Was: */5 * * * * — 288 Firecrawl calls/day, biggest credit burner
+  // {
+  //   jobname: 'bulk-community-enricher-drip',
+  //   schedule: '*/5 * * * *',
+  //   command: `
+  // SELECT net.http_post(
+  //   url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url' LIMIT 1) || '/functions/v1/bulk-community-enricher',
+  //   headers := jsonb_build_object(
+  //     'Content-Type', 'application/json',
+  //     'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_service_role_key' LIMIT 1)
+  //   ),
+  //   body := '{\\\"batchSize\\\": 1}'::jsonb
+  // );`,
+  // },
   {
     jobname: 'backcheck-rejected-6h',
     schedule: '0 */6 * * *',

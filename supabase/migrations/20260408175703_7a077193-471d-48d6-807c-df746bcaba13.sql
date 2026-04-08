@@ -1,0 +1,1 @@
+SELECT cron.unschedule('bulk-community-enricher-drip');
