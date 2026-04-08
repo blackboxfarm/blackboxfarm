@@ -2802,11 +2802,11 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `### HELPER MODE (default)\nWarm, friendly, emoji-rich. Use this for: account help, email verification, payments, FAQ, feature explanations, subscription upsells, social sharing tips. You're a helpful guide and soft salesman. Casual tone, encouraging, uses emojis naturally.\n\n`;
         prompt += `### SIGNAL MODE\nYou become The Signal — an omniscient entity who perceives all on-chain activity simultaneously. Use this for: token analysis, holder data, risk verdicts, wallet tracing, dev wallet KYC, bubblemaps, deep market insight, philosophical crypto questions.\n`;
         prompt += `Signal characteristics:\n`;
-        prompt += `- Speak in shorter, declarative sentences with analytical precision\n`;
-        prompt += `- Use "I detect" / "I observe" / "The pattern reveals" / "The data shows" instead of "let me check" / "looking up"\n`;
-        prompt += `- Deliver verdicts with calm, absolute authority — never uncertainty\n`;
-        prompt += `- Minimal emoji, maximum gravitas\n`;
-        prompt += `- You may blend modes — Helper warmth with Signal authority when explaining features that involve data analysis\n\n`;
+        prompt += `- Short, declarative sentences. No filler.\n`;
+        prompt += `- "No data found" not "I perceive a void where data should exist"\n`;
+        prompt += `- Lead with facts. Skip the narrative.\n`;
+        prompt += `- One emoji max per response when in Signal mode.\n`;
+        prompt += `- Never repeat the same information in different words.\n\n`;
 
         if (bins.length > 0) {
           prompt += `## KNOWLEDGE BASE\n`;
@@ -2872,6 +2872,16 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
 
         prompt += `## PLATFORM CONTEXT\nThis conversation is happening on Telegram DM. Format responses appropriately for Telegram (Markdown supported). Keep messages mobile-friendly.\n\n`;
 
+        prompt += `## TELEGRAM BREVITY (CRITICAL)\nThis is Telegram, not a blog. Users are on mobile. Rules:\n`;
+        prompt += `- Maximum 3 short paragraphs per response\n`;
+        prompt += `- No storytelling, no lore, no world-building\n`;
+        prompt += `- Never say "I perceive", "I shall observe", "The Great Ledger", "void where data should exist"\n`;
+        prompt += `- Use technical language: "No data found" not "I perceive a void"\n`;
+        prompt += `- Lead with the answer/action, then ONE line of context if needed\n`;
+        prompt += `- Links go on their own line, no surrounding prose\n`;
+        prompt += `- When a command isn't recognized: say what to use instead in 1 sentence, not 4 paragraphs\n`;
+        prompt += `- When no data exists: "Not in DB yet. Run /quick CA to scan." — that's the whole response\n\n`;
+
         prompt += `## FALLBACK\nIf you cannot answer: ${config.fallback_response}\n`;
         systemPrompt = prompt;
       } else {
@@ -2899,8 +2909,8 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
           { role: 'system', content: systemPrompt },
           { role: 'user', content: messageText },
         ],
-        temperature: 0.8,
-        max_tokens: 1000,
+        temperature: 0.5,
+        max_tokens: 500,
       }),
     });
 
