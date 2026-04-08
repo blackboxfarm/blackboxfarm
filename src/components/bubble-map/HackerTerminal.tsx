@@ -38,7 +38,7 @@ const HackerTerminal = ({ lines, visible, title = 'ORACLE TRACE' }: HackerTermin
   if (!visible || lines.length === 0) return null;
 
   return (
-    <div className="absolute inset-0 z-10 pointer-events-none flex items-start justify-center p-4">
+    <div className="absolute inset-0 z-30 pointer-events-none flex items-start justify-center p-4">
       <div className="pointer-events-auto w-full max-w-2xl rounded-lg border border-green-500/30 bg-black/90 backdrop-blur-sm shadow-[0_0_30px_rgba(34,197,94,0.15)] overflow-hidden">
         {/* Terminal header */}
         <div className="flex items-center gap-2 px-3 py-1.5 bg-green-900/20 border-b border-green-500/20">
