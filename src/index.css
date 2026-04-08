@@ -209,3 +209,33 @@ All colors MUST be HSL.
     animation: pulse-slow 3s ease-in-out infinite;
   }
 }
+
+/* Oracle FAB ethereal animations */
+@keyframes oracle-float {
+  0%, 100% { transform: translateY(0); }
+  33% { transform: translateY(-4px); }
+  66% { transform: translateY(2px); }
+}
+
+@keyframes oracle-glow {
+  0%, 100% { box-shadow: 0 0 8px 2px hsl(180 100% 50% / 0.2); }
+  50% { box-shadow: 0 0 18px 6px hsl(180 100% 50% / 0.4); }
+}
+
+@keyframes oracle-spin-slow {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(360deg); }
+}
+
+.oracle-fab-float {
+  animation: oracle-float 4s ease-in-out infinite, oracle-glow 3s ease-in-out infinite;
+}
+
+.oracle-fab-glow {
+  background: radial-gradient(circle, hsl(180 100% 50% / 0.15) 0%, transparent 70%);
+  animation: oracle-glow 3s ease-in-out infinite;
+}
+
+.oracle-fab-spin {
+  animation: oracle-spin-slow 12s linear infinite;
+}
