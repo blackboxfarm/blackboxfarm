@@ -307,6 +307,20 @@ const REQUIRED_CRONS: CronDef[] = [
     schedule: '*/15 * * * *',
     command: httpPost('co-mint-cluster-detector', '{\\\"windowMinutes\\\": 5, \\\"lookbackHours\\\": 24}'),
   },
+
+  // ── Oracle Auto-Classifier (activates scoring + blacklist/whitelist) ──
+  {
+    jobname: 'oracle-auto-classifier-15min',
+    schedule: '*/15 * * * *',
+    command: httpPost('oracle-auto-classifier', '{\\\"processNewTokens\\\": true}'),
+  },
+
+  // ── Token Autopsy (post-mortem cause of death analysis) ──
+  {
+    jobname: 'token-autopsy-30min',
+    schedule: '*/30 * * * *',
+    command: httpPost('token-autopsy', '{\\\"batchSize\\\": 20}'),
+  },
 ];
 
 Deno.serve(withRunLog('reconcile-cron-jobs', async (req) => {
