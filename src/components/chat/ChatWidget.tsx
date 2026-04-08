@@ -20,6 +20,16 @@ const DISMISS_KEY = 'bb_chat_dismissed_at';
 const VISITS_KEY = 'bb_chat_visits';
 const FAB_SHOWN_KEY = 'bb_chat_fab_shown';
 
+const FAB_POS_KEY = 'bb_chat_fab_pos';
+
+function loadFabPos(): { x: number; y: number } | null {
+  try {
+    const raw = localStorage.getItem(FAB_POS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -27,6 +37,9 @@ export function ChatWidget() {
   const [fabVisible, setFabVisible] = useState(false);
   const [fabPulsing, setFabPulsing] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
+  const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(loadFabPos);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const { messages, isStreaming, error, sendMessage, clearChat, tier } = useChatStream();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
