@@ -1,7 +1,8 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
-import { Bot, User } from 'lucide-react';
+import { Bot, User, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { ChatMessage as ChatMessageType } from './useChatStream';
 
 interface ChatMessageProps {
@@ -10,6 +11,21 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const navigate = useNavigate();
+
+  const handleLinkClick = (href: string) => {
+    // Internal links: navigate with from_oracle param
+    if (href.startsWith('/') || href.includes('blackbox.farm/')) {
+      let path = href;
+      if (href.includes('blackbox.farm/')) {
+        path = '/' + href.split('blackbox.farm/')[1];
+      }
+      const separator = path.includes('?') ? '&' : '?';
+      navigate(`${path}${separator}from_oracle=1`);
+      return;
+    }
+    window.open(href, '_blank', 'noopener');
+  };
 
   return (
     <div className={cn("flex gap-2 px-3 py-2", isUser ? "flex-row-reverse" : "flex-row")}>
@@ -28,8 +44,20 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {isUser ? (
           <p className="whitespace-pre-wrap">{message.content}</p>
         ) : (
-          <div className="prose prose-sm prose-invert max-w-none [&_p]:mb-1 [&_p:last-child]:mb-0 [&_a]:text-primary [&_a]:underline">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+          <div className="prose prose-sm prose-invert max-w-none [&_p]:mb-1 [&_p:last-child]:mb-0">
+            <ReactMarkdown
+              components={{
+                a: ({ href, children }) => (
+                  <button
+                    onClick={() => href && handleLinkClick(href)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/20 text-primary hover:bg-primary/30 transition-colors text-xs font-medium no-underline cursor-pointer border border-primary/30"
+                  >
+                    {children}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </button>
+                ),
+              }}
+            >{message.content}</ReactMarkdown>
           </div>
         )}
       </div>
