@@ -128,6 +128,17 @@ export function ChatWidget() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Footer / external summon event listener
+  useEffect(() => {
+    const handler = () => {
+      localStorage.removeItem(DISMISS_KEY);
+      setFabVisible(true);
+      setIsOpen(true);
+    };
+    window.addEventListener('oracle-summon', handler);
+    return () => window.removeEventListener('oracle-summon', handler);
+  }, []);
+
   // URL param reset: ?reset_chat=1 or ?from_oracle=1
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
