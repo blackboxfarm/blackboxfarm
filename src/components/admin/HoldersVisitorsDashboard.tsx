@@ -592,6 +592,7 @@ export function HoldersVisitorsDashboard() {
           <TabsTrigger value="auth-methods">Auth Methods</TabsTrigger>
           <TabsTrigger value="browsers">Browsers</TabsTrigger>
           <TabsTrigger value="recent">Recent Visits</TabsTrigger>
+          <TabsTrigger value="chats">💬 Chats</TabsTrigger>
           <TabsTrigger value="utm-builder">🔗 Link Builder</TabsTrigger>
         </TabsList>
 
