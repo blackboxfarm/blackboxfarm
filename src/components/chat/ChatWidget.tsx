@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import oracleAvatar from '@/assets/oracle-avatar.png';
 import { useOracleHover } from './OracleHoverProvider';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Pages where the widget should NOT appear
 const HIDDEN_PAGES = ['/checkout', '/payment'];
@@ -46,6 +47,72 @@ export function ChatWidget() {
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const location = useLocation();
   const oracleCtx = useOracleHover();
+  const isMobile = useIsMobile();
+
+  // Mobile: Triple-tap bottom-right corner to summon Oracle
+  useEffect(() => {
+    if (!isMobile) return;
+    const taps: number[] = [];
+    const ZONE_SIZE = 80;
+    const TAP_WINDOW = 800;
+
+    const handleTouch = (e: TouchEvent) => {
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const inZone = touch.clientX > window.innerWidth - ZONE_SIZE && touch.clientY > window.innerHeight - ZONE_SIZE;
+      if (!inZone) { taps.length = 0; return; }
+      const now = Date.now();
+      taps.push(now);
+      // Keep only taps within window
+      while (taps.length > 0 && now - taps[0] > TAP_WINDOW) taps.shift();
+      if (taps.length >= 3) {
+        taps.length = 0;
+        localStorage.removeItem(DISMISS_KEY);
+        setFabVisible(true);
+        setIsOpen(true);
+      }
+    };
+    window.addEventListener('touchend', handleTouch, { passive: true });
+    return () => window.removeEventListener('touchend', handleTouch);
+  }, [isMobile]);
+
+  // Mobile: Shake-to-summon Oracle
+  useEffect(() => {
+    if (!isMobile) return;
+    const THRESHOLD = 15;
+    const SHAKE_WINDOW = 1000;
+    const REQUIRED_SPIKES = 3;
+    const spikes: number[] = [];
+    let lastX = 0, lastY = 0, lastZ = 0, initialized = false;
+
+    const handleMotion = (e: DeviceMotionEvent) => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc || acc.x == null || acc.y == null || acc.z == null) return;
+      if (!initialized) {
+        lastX = acc.x; lastY = acc.y; lastZ = acc.z;
+        initialized = true;
+        return;
+      }
+      const deltaX = Math.abs(acc.x - lastX);
+      const deltaY = Math.abs(acc.y - lastY);
+      const deltaZ = Math.abs(acc.z - lastZ);
+      lastX = acc.x; lastY = acc.y; lastZ = acc.z;
+
+      if (deltaX > THRESHOLD || deltaY > THRESHOLD || deltaZ > THRESHOLD) {
+        const now = Date.now();
+        spikes.push(now);
+        while (spikes.length > 0 && now - spikes[0] > SHAKE_WINDOW) spikes.shift();
+        if (spikes.length >= REQUIRED_SPIKES) {
+          spikes.length = 0;
+          localStorage.removeItem(DISMISS_KEY);
+          setFabVisible(true);
+          setIsOpen(true);
+        }
+      }
+    };
+    window.addEventListener('devicemotion', handleMotion, { passive: true });
+    return () => window.removeEventListener('devicemotion', handleMotion);
+  }, [isMobile]);
 
   // Keyboard shortcut: Ctrl+Shift+O (Cmd+Shift+O on Mac) to summon Oracle
   useEffect(() => {
@@ -59,6 +126,17 @@ export function ChatWidget() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Footer / external summon event listener
+  useEffect(() => {
+    const handler = () => {
+      localStorage.removeItem(DISMISS_KEY);
+      setFabVisible(true);
+      setIsOpen(true);
+    };
+    window.addEventListener('oracle-summon', handler);
+    return () => window.removeEventListener('oracle-summon', handler);
   }, []);
 
   // URL param reset: ?reset_chat=1 or ?from_oracle=1

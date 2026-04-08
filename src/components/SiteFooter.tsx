@@ -60,6 +60,15 @@ export function SiteFooter() {
             <p className="text-xs text-muted-foreground">
               AI-powered token intelligence starting at $0/mo
             </p>
+            <button
+              onClick={() => {
+                localStorage.removeItem('bb_chat_dismissed_at');
+                window.dispatchEvent(new CustomEvent('oracle-summon'));
+              }}
+              className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2 mt-2 block"
+            >
+              💬 Chat with Oracle
+            </button>
           </div>
         </div>
         <div className="border-t border-border/40 mt-6 pt-4 text-center text-xs text-muted-foreground">
