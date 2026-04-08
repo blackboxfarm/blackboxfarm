@@ -1,61 +1,48 @@
 
 
-## Reset Chat Dismiss State + Keyboard Shortcut
+## Fix `/bubblemaps` → `/bubblemap` + Enrich AI Bubblemap Knowledge
 
 ### Problem
-The chat widget FAB disappears after dismissal (4-hour `localStorage` timer) and there's no way to manually invoke it.
+
+1. **Wrong URL everywhere**: The route is `/bubblemap` (singular) but all AI prompts, Telegram bot links, knowledge base sync, and the chat widget reference `/bubblemaps` (plural). Every link the AI generates for Bubblemaps is a 404.
+
+2. **AI undersells Bubblemaps**: The current prompt describes it vaguely as "wallet visualization." It says nothing about developer reputation tracking across projects, Dev Wallet → social handle (X/Twitter) cross-linking, token launch history mapping, wallet bundle detection, or good/bad actor scoring — which is the core value proposition.
 
 ### Changes
 
-**1. Add keyboard shortcut to toggle chat widget**
+**File 1: `supabase/functions/web-chat/index.ts`**
+- Lines 329-330: Fix `/bubblemaps` → `/bubblemap` in the INTERNAL LINKS block
+- Add a new `## BUBBLEMAP DEEP KNOWLEDGE` section after INTERNAL LINKS explaining what Bubblemaps actually does: developer reputation across projects, Dev Wallet tracing, X handle cross-linking, wallet bundle/sybil detection, KYC root tracing, good/bad actor scoring, token launch history mapping
 
-Options considered:
-- `Ctrl+Shift+O` — "O" for Oracle, unlikely to conflict
-- `Ctrl+.` — common for assistants (GitHub Copilot uses this)
-- `Ctrl+/` — used by many help systems
-- `Alt+A` — "A" for Assistant, simple
+**File 2: `supabase/functions/holdersintel-bot-webhook/index.ts`**
+- Lines 1351, 1919, 1956, 2237: Fix all `bubblemaps?token=` link URLs to `bubblemap?token=`
+- Lines 2830-2831: Fix INTERNAL LINKS block URLs
+- Add same `## BUBBLEMAP DEEP KNOWLEDGE` block to the TG bot's `handleAiFreeChat` prompt assembly
 
-Recommendation: **`Ctrl+Shift+O`** (Oracle) as primary, plus add a reset of dismiss state whenever the shortcut is used.
+**File 3: `supabase/functions/sync-knowledge-base/index.ts`**
+- Line 13: Fix path from `/bubblemaps` to `/bubblemap`, update title/keywords to reflect the full capability set
 
-**2. Reset dismiss on shortcut invocation**
+**File 4: `src/components/chat/ChatWidget.tsx`**
+- Line 17: Fix PRIORITY_PAGES entry from `/bubblemaps` to `/bubblemap`
 
-When the keyboard shortcut fires, clear `bb_chat_dismissed_at` from localStorage, set `fabVisible = true`, and open the chat panel immediately.
+### Bubblemap Knowledge Block (added to both AI prompts)
 
-**3. One-time dismiss reset now**
-
-Add a `useEffect` in `ChatWidget.tsx` that clears the dismiss key on mount if a URL param `?reset_chat=1` is present, OR simply clear the stale localStorage key. Since you want it reset right now, we'll remove the dismiss key on next deploy automatically by bumping the key name — but the cleaner fix is the keyboard shortcut which permanently solves re-access.
-
-### Implementation
-
-| File | Change |
-|------|--------|
-| `src/components/chat/ChatWidget.tsx` | Add `useEffect` with `keydown` listener for `Ctrl+Shift+O` that clears dismiss state, shows FAB, and opens chat. Also clear dismiss state if `?reset_chat=1` is in URL. |
-
-### Code sketch
-
-```typescript
-// In ChatWidget, add keyboard shortcut
-useEffect(() => {
-  const handler = (e: KeyboardEvent) => {
-    if (e.ctrlKey && e.shiftKey && e.key === 'O') {
-      e.preventDefault();
-      localStorage.removeItem(DISMISS_KEY);
-      setFabVisible(true);
-      setIsOpen(true);
-    }
-  };
-  window.addEventListener('keydown', handler);
-  return () => window.removeEventListener('keydown', handler);
-}, []);
-
-// Also reset if URL has ?reset_chat=1
-useEffect(() => {
-  if (new URLSearchParams(window.location.search).get('reset_chat') === '1') {
-    localStorage.removeItem(DISMISS_KEY);
-    setFabVisible(true);
-  }
-}, []);
+```text
+## BUBBLEMAP INTELLIGENCE
+The Bubblemap is NOT just a wallet visualization. It is a full Developer Reputation & Network Forensics tool:
+- Maps a Developer's Wallet across ALL their token launches — showing track record (successful projects, rug pulls, slow drains)
+- Cross-links the Dev Wallet to their social identity (X/Twitter handle, Telegram) via on-chain + social scraping
+- Traces funding chains: Dev Wallet → funding wallets → KYC Root (the real person behind the money)
+- Detects wallet bundles, sybil clusters, and circular funding patterns (bad actor signals)
+- Scores developers as good actors (consistent, transparent) or bad actors (rug history, fake socials)
+- Shows the X Community network: which Twitter accounts promote the token, who are admins/mods
+- Pre-load any token: https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS
+When a user asks about a token's developer, team, or trustworthiness, the Bubblemap is the primary tool to recommend.
 ```
 
-Single file change, ~15 lines added. The shortcut **Ctrl+Shift+O** (or Cmd+Shift+O on Mac) will always bring back the Oracle regardless of dismiss state.
+### Summary
+
+- 8 URL fixes across 4 files (all `/bubblemaps` → `/bubblemap`)
+- 1 knowledge block added to both web-chat and TG bot prompts
+- 1 keyword/title update in sync-knowledge-base
 
