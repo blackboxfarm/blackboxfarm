@@ -153,7 +153,7 @@ export default function IntelBriefingArticle() {
                 Published by <strong className="text-foreground">BlackBox Farm</strong> | <strong className="text-foreground">HoldersIntel</strong>{' '}
                 Category: {(article.category || 'General').replace(/-/g, ' ')} | Solana Token Intelligence
               </p>
-              <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} />
+              <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} slug={article.slug} />
             </div>
           </header>
 
@@ -173,7 +173,7 @@ export default function IntelBriefingArticle() {
 
           {/* BOTTOM share bar — just above related/footer */}
           <div className="mt-12 border-t border-border pt-4">
-            <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} />
+            <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} slug={article.slug} />
           </div>
 
           {/* Related Briefings */}
