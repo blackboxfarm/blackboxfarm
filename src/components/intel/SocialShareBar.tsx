@@ -57,7 +57,7 @@ const platforms = [
     icon: Send,
     useOgUrl: false,
     getUrl: (url: string, title: string, desc?: string) => {
-      const text = `📰 ${title}${desc ? `\n\n${desc}` : ''}\n\n🔗 Read the full briefing:`;
+      const text = `📰 ${title}`;
       return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
     },
     color: 'hover:text-sky-500',
