@@ -367,6 +367,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
       // Animate the chain discovery
       if (data?.chain && data.chain.length > 0) {
+        if (data.chain.length >= 3) {
+          setTimeout(() => dispatchThought('discovery'), 2500);
+        }
         data.chain.forEach((link: any, i: number) => {
           setTimeout(() => {
             const wallet = link.wallet?.slice(0, 16) || '???';
