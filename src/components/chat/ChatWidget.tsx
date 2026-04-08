@@ -20,6 +20,16 @@ const DISMISS_KEY = 'bb_chat_dismissed_at';
 const VISITS_KEY = 'bb_chat_visits';
 const FAB_SHOWN_KEY = 'bb_chat_fab_shown';
 
+const FAB_POS_KEY = 'bb_chat_fab_pos';
+
+function loadFabPos(): { x: number; y: number } | null {
+  try {
+    const raw = localStorage.getItem(FAB_POS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -27,6 +37,9 @@ export function ChatWidget() {
   const [fabVisible, setFabVisible] = useState(false);
   const [fabPulsing, setFabPulsing] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
+  const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(loadFabPos);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const { messages, isStreaming, error, sendMessage, clearChat, tier } = useChatStream();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -150,6 +163,40 @@ export function ChatWidget() {
     }
   }, [messages, isOpen]);
 
+  // Drag-to-reposition FAB
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: rect.left, origY: rect.top };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const dx = Math.abs(e.clientX - dragRef.current.startX);
+    const dy = Math.abs(e.clientY - dragRef.current.startY);
+    if (dx > 5 || dy > 5) setIsDragging(true);
+    if (isDragging || dx > 5 || dy > 5) {
+      const newX = dragRef.current.origX + (e.clientX - dragRef.current.startX);
+      const newY = dragRef.current.origY + (e.clientY - dragRef.current.startY);
+      const clamped = {
+        x: Math.max(8, Math.min(window.innerWidth - 64, newX)),
+        y: Math.max(8, Math.min(window.innerHeight - 64, newY)),
+      };
+      setFabPos(clamped);
+    }
+  };
+
+  const handlePointerUp = () => {
+    if (isDragging && fabPos) {
+      localStorage.setItem(FAB_POS_KEY, JSON.stringify(fabPos));
+    }
+    if (!isDragging) {
+      setIsOpen(true);
+    }
+    setIsDragging(false);
+    dragRef.current = null;
+  };
+
   // Focus input when opened
   useEffect(() => {
     if (isOpen) {
@@ -184,14 +231,19 @@ export function ChatWidget() {
 
   return (
     <>
-      {/* FAB Button */}
+      {/* FAB Button — draggable */}
       {!isOpen && fabVisible && (
         <button
-          onClick={() => setIsOpen(true)}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : undefined}
           className={cn(
-            "fixed bottom-5 right-5 z-50 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center overflow-hidden oracle-fab-float",
+            "z-50 rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center overflow-hidden oracle-fab-float touch-none select-none",
+            !fabPos && "fixed bottom-5 right-5",
             isScrolling ? "w-10 h-10 opacity-60" : "w-14 h-14",
-            fabPulsing && "animate-pulse"
+            fabPulsing && "animate-pulse",
+            isDragging && "cursor-grabbing scale-110"
           )}
           aria-label="Open chat"
         >
@@ -205,7 +257,7 @@ export function ChatWidget() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div data-oracle-chat-open className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-background border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        <div data-oracle-chat-open className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-background border border-border rounded-xl flex flex-col overflow-hidden shadow-[0_8px_40px_-8px_hsl(var(--primary)/0.25),0_0_0_1px_hsl(var(--border))]">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
