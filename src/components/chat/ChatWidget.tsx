@@ -163,6 +163,40 @@ export function ChatWidget() {
     }
   }, [messages, isOpen]);
 
+  // Drag-to-reposition FAB
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: rect.left, origY: rect.top };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const dx = Math.abs(e.clientX - dragRef.current.startX);
+    const dy = Math.abs(e.clientY - dragRef.current.startY);
+    if (dx > 5 || dy > 5) setIsDragging(true);
+    if (isDragging || dx > 5 || dy > 5) {
+      const newX = dragRef.current.origX + (e.clientX - dragRef.current.startX);
+      const newY = dragRef.current.origY + (e.clientY - dragRef.current.startY);
+      const clamped = {
+        x: Math.max(8, Math.min(window.innerWidth - 64, newX)),
+        y: Math.max(8, Math.min(window.innerHeight - 64, newY)),
+      };
+      setFabPos(clamped);
+    }
+  };
+
+  const handlePointerUp = () => {
+    if (isDragging && fabPos) {
+      localStorage.setItem(FAB_POS_KEY, JSON.stringify(fabPos));
+    }
+    if (!isDragging) {
+      setIsOpen(true);
+    }
+    setIsDragging(false);
+    dragRef.current = null;
+  };
+
   // Focus input when opened
   useEffect(() => {
     if (isOpen) {
