@@ -303,6 +303,19 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         setRevealingXAccounts(false);
         setTimeout(() => setTerminalVisible(false), 2000);
         toast.success(`🐦 ${hiddenXAccounts.length} X Community handles mapped!`);
+        // Auto-center on newly revealed X community bubbles
+        setTimeout(() => {
+          if (graphRef.current) {
+            const gd = graphRef.current.graphData();
+            const xNodes = gd.nodes.filter((n: any) => n.id?.startsWith('x_community:') || n.id?.startsWith('x_account:'));
+            if (xNodes.length > 0) {
+              const cx = xNodes.reduce((s: number, n: any) => s + (n.x || 0), 0) / xNodes.length;
+              const cy = xNodes.reduce((s: number, n: any) => s + (n.y || 0), 0) / xNodes.length;
+              graphRef.current.centerAt(cx, cy, 1200);
+              graphRef.current.zoom(2.5, 1200);
+            }
+          }
+        }, 800);
       }, totalDelay);
       return;
     }
@@ -391,16 +404,34 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           }
           setTimeout(() => {
             refetch();
-            // Center on root node after graph updates
+            // Stabilize graph after new nodes: freeze existing positions, then gently reheat
             setTimeout(() => {
               if (graphRef.current) {
-                const kycNode = graphRef.current.graphData().nodes.find(
-                  (n: any) => n.id === `kyc_root:${data.kycRoot}` || n.id.includes(data.kycRoot)
-                );
-                if (kycNode) {
-                  graphRef.current.centerAt(kycNode.x, kycNode.y, 1200);
-                  graphRef.current.zoom(2.5, 1200);
-                }
+                const gd = graphRef.current.graphData();
+                // Pin all existing nodes at their current positions briefly
+                gd.nodes.forEach((node: any) => {
+                  if (node.x != null) {
+                    node.fx = node.x;
+                    node.fy = node.y;
+                  }
+                });
+                // After a tick, unpin and let the simulation gently settle
+                setTimeout(() => {
+                  gd.nodes.forEach((node: any) => {
+                    node.fx = undefined;
+                    node.fy = undefined;
+                  });
+                  // Very gentle reheat so nodes don't explode
+                  graphRef.current.d3ReheatSimulation();
+                  const sim = graphRef.current.d3Force('simulation');
+                  if (sim) sim.alpha(0.15); // low alpha = gentle settle instead of explosion
+                  // Zoom to fit everything nicely after settling
+                  setTimeout(() => {
+                    if (graphRef.current) {
+                      graphRef.current.zoomToFit(1000, 50);
+                    }
+                  }, 1500);
+                }, 300);
               }
             }, 800);
           }, 500);
