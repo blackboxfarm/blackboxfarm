@@ -34,7 +34,45 @@ export default function Subscriptions() {
   const { checkSubscription, tierInfo } = useUserTier();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingCheckoutTier, setPendingCheckoutTier] = useState<'pro' | 'dev' | 'enterprise' | null>(null);
 
+  const startCheckout = useCallback(async (tierKey: 'pro' | 'dev' | 'enterprise') => {
+    setLoadingTier(tierKey);
+    try {
+      const stripeConfig = STRIPE_TIERS[tierKey];
+      const priceId = tierInfo.isXSubscriber ? stripeConfig.x_sub_price_id : stripeConfig.price_id;
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { priceId },
+      });
+      if (error) throw error;
+      if (data?.url) window.open(data.url, '_blank');
+    } catch (err) {
+      console.error('Checkout error:', err);
+      toast.error('Failed to start checkout. Please try again.');
+    } finally {
+      setLoadingTier(null);
+    }
+  }, [tierInfo.isXSubscriber]);
+
+  const handleHeroCheckout = (tierKey: 'pro' | 'dev' | 'enterprise') => {
+    if (!user) {
+      setPendingCheckoutTier(tierKey);
+      setShowAuthModal(true);
+      return;
+    }
+    startCheckout(tierKey);
+  };
+
+  const handleAuthClose = () => {
+    setShowAuthModal(false);
+    if (pendingCheckoutTier) {
+      const tier = pendingCheckoutTier;
+      setPendingCheckoutTier(null);
+      setTimeout(() => startCheckout(tier), 500);
+    }
+  };
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       toast.success('Subscription activated! Welcome aboard 🎉');
