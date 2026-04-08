@@ -135,7 +135,7 @@ const platforms = [
 
 export function SocialShareBar({ url, title, description, slug }: SocialShareBarProps) {
   const [copied, setCopied] = useState(false);
-  const ogProxyUrl = slug ? `https://blackbox.farm/og/intel-share?slug=${slug}` : url;
+  const ogProxyUrl = slug ? `https://blackbox.farm/og/intel-share?slug=${slug}&v=${Date.now()}` : url;
 
   const copyLink = async () => {
     try {
