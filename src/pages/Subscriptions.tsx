@@ -150,15 +150,15 @@ export default function Subscriptions() {
                   Join now or scroll down and compare packages
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[
-                    { name: 'Pro', price: '$9.99/mo', badge: 'Most Popular', highlight: true, action: () => document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' }) },
-                    { name: 'Developer', price: '$29.99/mo', badge: null, highlight: false, action: () => document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' }) },
-                    { name: 'Enterprise', price: '$49.99/mo', badge: null, highlight: false, action: () => document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' }) },
-                  ].map((plan) => (
+                  {([
+                    { name: 'Pro', price: '$9.99/mo', badge: 'Most Popular', highlight: true, tierKey: 'pro' as const },
+                    { name: 'Developer', price: '$29.99/mo', badge: null, highlight: false, tierKey: 'dev' as const },
+                    { name: 'Enterprise', price: '$49.99/mo', badge: null, highlight: false, tierKey: 'enterprise' as const },
+                  ]).map((plan) => (
                     <Card 
                       key={plan.name}
                       className={`cursor-pointer transition-all hover:scale-[1.02] ${plan.highlight ? 'border-primary shadow-lg shadow-primary/10' : 'border-border/50'}`}
-                      onClick={plan.action}
+                      onClick={() => handleHeroCheckout(plan.tierKey)}
                     >
                       <CardContent className="p-4 text-center space-y-2">
                         {plan.badge && (
@@ -166,8 +166,17 @@ export default function Subscriptions() {
                         )}
                         <p className="font-bold text-lg">{plan.name}</p>
                         <p className="text-2xl font-black text-primary">{plan.price}</p>
-                        <Button size="sm" variant={plan.highlight ? 'default' : 'outline'} className="w-full gap-1">
-                          Get Started <ChevronRight className="w-3 h-3" />
+                        <Button 
+                          size="sm" 
+                          variant={plan.highlight ? 'default' : 'outline'} 
+                          className="w-full gap-1"
+                          disabled={loadingTier === plan.tierKey}
+                        >
+                          {loadingTier === plan.tierKey ? (
+                            <><Loader2 className="w-3 h-3 animate-spin" /> Loading...</>
+                          ) : (
+                            <>Get Started <ChevronRight className="w-3 h-3" /></>
+                          )}
                         </Button>
                       </CardContent>
                     </Card>
