@@ -1,75 +1,91 @@
 
 
-## Credit Audit + Depth/Sibling Optimization
+## Answers + Plan: Minimap, KYC Coverage, Mesh Gaps, Token Autopsy
 
-### Findings: Where Your Helius Credits Go
-
-Here's the actual breakdown from your `helius_api_usage` table (all-time total: **602,495 credits logged**):
+### Your Data Reality (live numbers)
 
 ```text
-APRIL 2026 (so far — 8 days):
-  token-creator-linker      109,180 credits  (36%)  ← #1 THIS MONTH
-  wallet-genealogy-scanner  104,015 credits  (34%)  ← #2
-  oracle-unified-lookup      68,574 credits  (23%)
-  pumpfun-token-enricher     10,260 credits  (3%)
-  everything else             ~7,000 credits  (2%)
-  TOTAL APRIL:             ~300,000 credits
-
-MARCH 2026:
-  wallet-genealogy-scanner  198,055 credits  (65%)  ← DOMINANT
-  oracle-unified-lookup      42,219 credits  (14%)
-  pumpfun-token-enricher     33,275 credits  (11%)
-  everything else            ~28,000 credits  (9%)
-  TOTAL MARCH:             ~302,000 credits
+MESH COVERAGE SCORECARD:
+─────────────────────────────────────────────
+Tokens mapped (created_token):         73,844
+Dev wallets mapped:                    29,031
+X Communities mapped:                   6,441
+Social accounts linked:               113,734
+Wallets with funding chains:           23,630
+KYC roots confirmed:                       11  ← PROBLEM
+─────────────────────────────────────────────
+Watchlist tokens with dev wallet:      89,319
+Token lifecycle entries:                2,494
+Oracle-analyzed tokens:                     0  ← NOT RUNNING
 ```
 
-### The Three Credit Monsters
+### Q2: Background KYC tracer — YES, but it's barely working
 
-**1. `wallet-genealogy-scanner` — 302K credits total (biggest all-time)**
-- Fetches `/v0/addresses/{wallet}/transactions` (5 credits each via interceptor)
-- Traces TOP 3 incoming transfers per wallet recursively (branching tree)
-- At depth 8 with 3 branches: worst case 3^8 = 6,561 API calls per wallet
-- Called by `backfill-genealogy` (batch cron), `oracle-master-spider`, and on-demand
-- **This is your #1 target for optimization**
+`backfill-genealogy` runs every 10 minutes via cron, processing 5 wallets per batch. It calls `wallet-genealogy-scanner` for each. **But only 11 KYC roots exist** out of 23,630 wallets with funding chains. The scanner finds funding links but rarely reaches a confirmed CEX wallet (the known CEX list in `developer-wallet-tracer` has only ~12 hardcoded addresses). Most traces end as "cold trail" because the CEX wallet list is too small.
 
-**2. `token-creator-linker` — 109K credits this month (new spike)**
-- Makes basic RPC calls (1 credit each) but at massive volume: 109K calls in 8 days
-- Likely a cron or batch process linking token creators
-- Running ~13,600 calls/day
+### Q3: Do we have 40K fully mapped? NO.
 
-**3. `oracle-unified-lookup` — 111K credits total**
-- Mix of `getAddressTransactions` (5 credits) and RPC/GET calls (1 credit)
-- Used for on-demand holder analysis queries
+- 73K tokens → 29K dev wallets ✅ (good coverage)
+- 29K dev wallets → 23K have funding chains ✅ (decent)
+- 23K funding chains → **11 KYC roots** ❌ (catastrophic gap)
+- 6.4K X communities mapped, 113K social accounts ✅ (strong)
+- `oracle-auto-classifier` has analyzed **0 tokens** — it exists but is never called by cron
 
-### Your Requests: 20-hop max, no siblings past 5
+### Q4: Token autopsy/post-mortem — DOES NOT EXIST YET
 
-Currently:
-- `funding-resolver.ts`: `maxDepth = 6` (default)
-- `mesh-kyc-deep-search`: siblings discovered at `depth <= 2`
-- `wallet-genealogy-scanner`: `maxDepth = 8` (default), traces **top 3 branches** per hop
+The `oracle-auto-classifier` calculates rug pull scores and can classify wallets, but there is no dedicated "cause of death" analysis. `token_lifecycle` has fields like `current_status`, `market_cap`, `liquidity_usd` but no death-cause column or autopsy function. This needs to be built.
 
-The genealogy scanner is the expensive one because it branches 3-wide. At depth 8 with 3 branches, that's exponential. Going to depth 20 with 3 branches would be catastrophic (3^20 = 3.4 billion theoretical calls).
+---
 
-**The fix**: For KYC tracing, follow only the LARGEST transfer (1 branch) to depth 20. Siblings stay useful at depth ≤ 5 but only for `mesh-kyc-deep-search`, not the genealogy scanner.
+## Plan: 4 Deliverables
 
-### Changes
+### 1. Bubblemap Minimap (navigational overlay)
+
+Add a small canvas in the top-right corner of the bubblemap card that renders a simplified overview of all nodes (dots only, no labels). Shows the current viewport as a rectangle. Click anywhere on the minimap to re-center the main graph on that area. Appears only when node count > 10.
 
 | File | Change |
 |------|--------|
-| `supabase/functions/_shared/funding-resolver.ts` | Change default `maxDepth` from 6 → 20 |
-| `supabase/functions/mesh-kyc-deep-search/index.ts` | Change sibling discovery gate from `depth <= 2` → `depth <= 5`; keep existing logic otherwise |
-| `supabase/functions/wallet-genealogy-scanner/index.ts` | Change default depth from 8 → 20; reduce branch width from top-3 → top-1 (largest transfer only) for the primary KYC trace path. Optionally trace 2nd-largest only at depth ≤ 3 for near-root diversity |
-| `supabase/functions/backfill-genealogy/index.ts` | Update invocation depth from 5 → 20 |
-| `supabase/functions/oracle-master-spider/index.ts` | Update invocation depth from 3 → 10 (spider doesn't need full 20) |
+| `src/components/bubble-map/BubbleMapMinimap.tsx` | New component: renders a 120x80px (mobile: 60x40px) canvas showing all node positions as colored dots + viewport rectangle. Click handler calls `graphRef.current.centerAt()` |
+| `src/components/bubble-map/PublicBubbleMap.tsx` | Render `<BubbleMapMinimap>` in top-right of the graph container div, pass `graphRef`, `displayData`, `dimensions` |
 
-### Credit Impact Estimate
+### 2. Fix KYC Root Discovery (expand CEX wallet database)
 
-**Before** (depth 8, 3 branches): Up to 3^8 = 6,561 calls per wallet trace
-**After** (depth 20, 1 branch): Exactly 20 calls per wallet trace (linear, not exponential)
+The reason only 11 KYC roots exist: the hardcoded CEX list has ~12 addresses. Real Binance alone has 100+ hot wallets. We need to use Helius's address labels or a larger CEX database.
 
-That's a **~300x reduction** in worst-case API calls per trace. Monthly genealogy credits should drop from ~200K to under 20K.
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/cex-wallets.ts` | New shared module: export a comprehensive CEX wallet map (~200 addresses across Binance, Coinbase, Kraken, Bybit, OKX, KuCoin, Gate.io, MEXC, HTX) sourced from known public lists |
+| `supabase/functions/wallet-genealogy-scanner/index.ts` | Import from shared `cex-wallets.ts` instead of inline list; also check Helius address labels (if tx metadata includes `label` field) |
+| `supabase/functions/developer-wallet-tracer/index.ts` | Import from shared `cex-wallets.ts` |
+| `supabase/functions/mesh-kyc-deep-search/index.ts` | Import from shared `cex-wallets.ts` |
 
-### Note on "10 million credits"
+### 3. Activate Oracle Auto-Classifier via Cron
 
-Your logged data shows ~600K total all-time across both tables. The 10M+ figure you're seeing likely comes from your Helius dashboard which counts raw RPC credits differently (e.g., `getProgramAccounts` = 100 credits in Helius billing vs. 1 in our logger). The `token-creator-linker` at 109K logged calls could be 10M+ in Helius billing if each RPC call costs 100 Helius credits.
+The classifier exists but is never scheduled. Add it to the cron reconciliation.
+
+| File | Change |
+|------|--------|
+| `supabase/functions/reconcile-cron-jobs/index.ts` | Add cron entry: `oracle-auto-classifier` every 15 minutes with `{ "processNewTokens": true }` body |
+
+### 4. Token Autopsy Engine (new)
+
+A new edge function that examines dead/dying tokens and determines cause of death.
+
+**Death categories**: `rug_pull` (dev dumped >50% supply fast), `slow_drain` (dev sold gradually over days), `abandoned` (dev stopped all activity), `liquidity_pulled` (LP removed), `organic_death` (natural decline, no dev malice), `unknown`
+
+| File | Change |
+|------|--------|
+| Migration | Add `death_cause`, `death_confidence`, `autopsy_at`, `autopsy_notes` columns to `token_lifecycle` |
+| `supabase/functions/token-autopsy/index.ts` | New function: For tokens where `market_cap < 1000` or `liquidity_usd < 500`, analyze dev wallet behavior (did they dump? pull LP? vanish?). Uses existing `dev_behavior_scores` + `holder_movements` data. Writes cause of death back to `token_lifecycle` |
+| `supabase/functions/reconcile-cron-jobs/index.ts` | Add cron: `token-autopsy` every 30 minutes, batch of 20 tokens |
+
+### Deployment sequence
+
+1. Migration (new columns)
+2. `cex-wallets.ts` shared module
+3. Update scanner + tracer + mesh-kyc to use shared CEX list
+4. New `token-autopsy` function
+5. Update cron reconciliation (add classifier + autopsy jobs)
+6. `BubbleMapMinimap` component
+7. Deploy all edge functions
 
