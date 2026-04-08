@@ -54,13 +54,13 @@ Deno.serve(async (req) => {
     const pageTitle = fullTitle.slice(0, 60);
     const ogDescription = (article.seo_description || article.subtitle || meta.og_description || "").slice(0, 200);
     const ogImage = resolveImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
-    const canonicalUrl = meta.canonical_url || `${SITE_URL}/intel/briefing/${article.slug}`;
+    const canonicalUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
     const category = (article.category || "general").replace(/-/g, " ");
     const tags = article.tags || [];
     const twitterCard = meta.twitter_card || "summary_large_image";
-    const twitterImage = meta.twitter_image || ogImage;
+    const twitterImage = ogImage;
 
     const ua = (req.headers.get("user-agent") || "").toLowerCase();
     const isCrawler = /facebookexternalhit|facebot|twitterbot|linkedinbot|discordbot|slackbot|telegrambot|whatsapp|googlebot|bingbot|applebot|pinterestbot|meta-externalagent|ia_archiver/.test(ua);
@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
   <meta name="robots" content="noindex, follow" />
 
   <!-- Open Graph -->
-  <meta property="og:type" content="${meta.og_type || 'article'}" />
+  <meta property="og:type" content="article" />
   <meta property="og:url" content="${canonicalUrl}" />
   <meta property="og:title" content="${esc(ogTitle)}" />
   <meta property="og:description" content="${esc(ogDescription)}" />
