@@ -48,11 +48,20 @@ export function ChatWidget() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // URL param reset: ?reset_chat=1
+  // URL param reset: ?reset_chat=1 or ?from_oracle=1
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('reset_chat') === '1') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reset_chat') === '1') {
       localStorage.removeItem(DISMISS_KEY);
       setFabVisible(true);
+    }
+    if (params.get('from_oracle') === '1') {
+      localStorage.removeItem(DISMISS_KEY);
+      setFabVisible(true);
+      setTimeout(() => {
+        setIsOpen(true);
+        sendMessage(`[The user just navigated to ${location.pathname} via an Oracle link. Briefly greet them and point out they can scroll through the results. Keep it to 1-2 sentences, be unobtrusive.]`);
+      }, 1500);
     }
   }, []);
 
@@ -180,22 +189,23 @@ export function ChatWidget() {
         <button
           onClick={() => setIsOpen(true)}
           className={cn(
-            "fixed bottom-5 right-5 z-50 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center overflow-hidden",
+            "fixed bottom-5 right-5 z-50 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center overflow-hidden oracle-fab-float",
             isScrolling ? "w-10 h-10 opacity-60" : "w-14 h-14",
             fabPulsing && "animate-pulse"
           )}
           aria-label="Open chat"
         >
-          <img src={oracleAvatar} alt="Chat" className="w-full h-full object-cover" />
+          <div className="oracle-fab-glow absolute inset-0 rounded-full" />
+          <img src={oracleAvatar} alt="Chat" className="w-full h-full object-cover rounded-full oracle-fab-spin relative z-10" />
           {hasUnread && (
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background" />
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background z-20" />
           )}
         </button>
       )}
 
       {/* Chat Panel */}
       {isOpen && (
-        <div data-oracle-chat-open className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-background border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        <div data-oracle-chat-open className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-background border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
