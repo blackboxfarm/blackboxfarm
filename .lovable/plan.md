@@ -1,48 +1,75 @@
 
 
-## Fix `/bubblemaps` → `/bubblemap` + Enrich AI Bubblemap Knowledge
+## Credit Audit + Depth/Sibling Optimization
 
-### Problem
+### Findings: Where Your Helius Credits Go
 
-1. **Wrong URL everywhere**: The route is `/bubblemap` (singular) but all AI prompts, Telegram bot links, knowledge base sync, and the chat widget reference `/bubblemaps` (plural). Every link the AI generates for Bubblemaps is a 404.
+Here's the actual breakdown from your `helius_api_usage` table (all-time total: **602,495 credits logged**):
 
-2. **AI undersells Bubblemaps**: The current prompt describes it vaguely as "wallet visualization." It says nothing about developer reputation tracking across projects, Dev Wallet → social handle (X/Twitter) cross-linking, token launch history mapping, wallet bundle detection, or good/bad actor scoring — which is the core value proposition.
+```text
+APRIL 2026 (so far — 8 days):
+  token-creator-linker      109,180 credits  (36%)  ← #1 THIS MONTH
+  wallet-genealogy-scanner  104,015 credits  (34%)  ← #2
+  oracle-unified-lookup      68,574 credits  (23%)
+  pumpfun-token-enricher     10,260 credits  (3%)
+  everything else             ~7,000 credits  (2%)
+  TOTAL APRIL:             ~300,000 credits
+
+MARCH 2026:
+  wallet-genealogy-scanner  198,055 credits  (65%)  ← DOMINANT
+  oracle-unified-lookup      42,219 credits  (14%)
+  pumpfun-token-enricher     33,275 credits  (11%)
+  everything else            ~28,000 credits  (9%)
+  TOTAL MARCH:             ~302,000 credits
+```
+
+### The Three Credit Monsters
+
+**1. `wallet-genealogy-scanner` — 302K credits total (biggest all-time)**
+- Fetches `/v0/addresses/{wallet}/transactions` (5 credits each via interceptor)
+- Traces TOP 3 incoming transfers per wallet recursively (branching tree)
+- At depth 8 with 3 branches: worst case 3^8 = 6,561 API calls per wallet
+- Called by `backfill-genealogy` (batch cron), `oracle-master-spider`, and on-demand
+- **This is your #1 target for optimization**
+
+**2. `token-creator-linker` — 109K credits this month (new spike)**
+- Makes basic RPC calls (1 credit each) but at massive volume: 109K calls in 8 days
+- Likely a cron or batch process linking token creators
+- Running ~13,600 calls/day
+
+**3. `oracle-unified-lookup` — 111K credits total**
+- Mix of `getAddressTransactions` (5 credits) and RPC/GET calls (1 credit)
+- Used for on-demand holder analysis queries
+
+### Your Requests: 20-hop max, no siblings past 5
+
+Currently:
+- `funding-resolver.ts`: `maxDepth = 6` (default)
+- `mesh-kyc-deep-search`: siblings discovered at `depth <= 2`
+- `wallet-genealogy-scanner`: `maxDepth = 8` (default), traces **top 3 branches** per hop
+
+The genealogy scanner is the expensive one because it branches 3-wide. At depth 8 with 3 branches, that's exponential. Going to depth 20 with 3 branches would be catastrophic (3^20 = 3.4 billion theoretical calls).
+
+**The fix**: For KYC tracing, follow only the LARGEST transfer (1 branch) to depth 20. Siblings stay useful at depth ≤ 5 but only for `mesh-kyc-deep-search`, not the genealogy scanner.
 
 ### Changes
 
-**File 1: `supabase/functions/web-chat/index.ts`**
-- Lines 329-330: Fix `/bubblemaps` → `/bubblemap` in the INTERNAL LINKS block
-- Add a new `## BUBBLEMAP DEEP KNOWLEDGE` section after INTERNAL LINKS explaining what Bubblemaps actually does: developer reputation across projects, Dev Wallet tracing, X handle cross-linking, wallet bundle/sybil detection, KYC root tracing, good/bad actor scoring, token launch history mapping
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/funding-resolver.ts` | Change default `maxDepth` from 6 → 20 |
+| `supabase/functions/mesh-kyc-deep-search/index.ts` | Change sibling discovery gate from `depth <= 2` → `depth <= 5`; keep existing logic otherwise |
+| `supabase/functions/wallet-genealogy-scanner/index.ts` | Change default depth from 8 → 20; reduce branch width from top-3 → top-1 (largest transfer only) for the primary KYC trace path. Optionally trace 2nd-largest only at depth ≤ 3 for near-root diversity |
+| `supabase/functions/backfill-genealogy/index.ts` | Update invocation depth from 5 → 20 |
+| `supabase/functions/oracle-master-spider/index.ts` | Update invocation depth from 3 → 10 (spider doesn't need full 20) |
 
-**File 2: `supabase/functions/holdersintel-bot-webhook/index.ts`**
-- Lines 1351, 1919, 1956, 2237: Fix all `bubblemaps?token=` link URLs to `bubblemap?token=`
-- Lines 2830-2831: Fix INTERNAL LINKS block URLs
-- Add same `## BUBBLEMAP DEEP KNOWLEDGE` block to the TG bot's `handleAiFreeChat` prompt assembly
+### Credit Impact Estimate
 
-**File 3: `supabase/functions/sync-knowledge-base/index.ts`**
-- Line 13: Fix path from `/bubblemaps` to `/bubblemap`, update title/keywords to reflect the full capability set
+**Before** (depth 8, 3 branches): Up to 3^8 = 6,561 calls per wallet trace
+**After** (depth 20, 1 branch): Exactly 20 calls per wallet trace (linear, not exponential)
 
-**File 4: `src/components/chat/ChatWidget.tsx`**
-- Line 17: Fix PRIORITY_PAGES entry from `/bubblemaps` to `/bubblemap`
+That's a **~300x reduction** in worst-case API calls per trace. Monthly genealogy credits should drop from ~200K to under 20K.
 
-### Bubblemap Knowledge Block (added to both AI prompts)
+### Note on "10 million credits"
 
-```text
-## BUBBLEMAP INTELLIGENCE
-The Bubblemap is NOT just a wallet visualization. It is a full Developer Reputation & Network Forensics tool:
-- Maps a Developer's Wallet across ALL their token launches — showing track record (successful projects, rug pulls, slow drains)
-- Cross-links the Dev Wallet to their social identity (X/Twitter handle, Telegram) via on-chain + social scraping
-- Traces funding chains: Dev Wallet → funding wallets → KYC Root (the real person behind the money)
-- Detects wallet bundles, sybil clusters, and circular funding patterns (bad actor signals)
-- Scores developers as good actors (consistent, transparent) or bad actors (rug history, fake socials)
-- Shows the X Community network: which Twitter accounts promote the token, who are admins/mods
-- Pre-load any token: https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS
-When a user asks about a token's developer, team, or trustworthiness, the Bubblemap is the primary tool to recommend.
-```
-
-### Summary
-
-- 8 URL fixes across 4 files (all `/bubblemaps` → `/bubblemap`)
-- 1 knowledge block added to both web-chat and TG bot prompts
-- 1 keyword/title update in sync-knowledge-base
+Your logged data shows ~600K total all-time across both tables. The 10M+ figure you're seeing likely comes from your Helius dashboard which counts raw RPC credits differently (e.g., `getProgramAccounts` = 100 credits in Helius billing vs. 1 in our logger). The `token-creator-linker` at 109K logged calls could be 10M+ in Helius billing if each RPC call costs 100 Helius credits.
 
