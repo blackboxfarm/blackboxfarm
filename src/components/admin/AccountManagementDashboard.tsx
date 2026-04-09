@@ -402,6 +402,7 @@ export function AccountManagementDashboard() {
             expires_at: userSub.expires_at,
           } : null,
           email_verification: verifByUser[profile.user_id] || undefined,
+          buyer_intent: intentByUser[profile.user_id] || null,
         };
       });
 
@@ -585,7 +586,8 @@ export function AccountManagementDashboard() {
       filterType === 'all' ||
       (filterType === 'advertisers' && account.advertiser) ||
       (filterType === 'admins' && account.roles?.includes('super_admin')) ||
-      (filterType === 'verified' && account.email_confirmed_at);
+      (filterType === 'verified' && account.email_confirmed_at) ||
+      (filterType === 'window_shoppers' && account.buyer_intent);
 
     return matchesSearch && matchesType;
   }).sort((a, b) => {
