@@ -18,7 +18,7 @@ import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { STRIPE_TIERS } from "@/config/stripeTiers";
 import { AuthModal } from "@/components/auth/AuthModal";
