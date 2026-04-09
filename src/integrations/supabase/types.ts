@@ -5087,6 +5087,54 @@ export type Database = {
         }
         Relationships: []
       }
+      follower_audits: {
+        Row: {
+          bot_pct: number | null
+          cost_credits: number | null
+          created_at: string
+          follower_count: number | null
+          geo_breakdown: Json | null
+          handle: string
+          id: string
+          raw_sample: Json | null
+          real_pct: number | null
+          sample_size: number
+          signals_summary: Json | null
+          suspicious_pct: number | null
+          verdict: string | null
+        }
+        Insert: {
+          bot_pct?: number | null
+          cost_credits?: number | null
+          created_at?: string
+          follower_count?: number | null
+          geo_breakdown?: Json | null
+          handle: string
+          id?: string
+          raw_sample?: Json | null
+          real_pct?: number | null
+          sample_size?: number
+          signals_summary?: Json | null
+          suspicious_pct?: number | null
+          verdict?: string | null
+        }
+        Update: {
+          bot_pct?: number | null
+          cost_credits?: number | null
+          created_at?: string
+          follower_count?: number | null
+          geo_breakdown?: Json | null
+          handle?: string
+          id?: string
+          raw_sample?: Json | null
+          real_pct?: number | null
+          sample_size?: number
+          signals_summary?: Json | null
+          suspicious_pct?: number | null
+          verdict?: string | null
+        }
+        Relationships: []
+      }
       fuct_gift_claims: {
         Row: {
           claim_date: string
