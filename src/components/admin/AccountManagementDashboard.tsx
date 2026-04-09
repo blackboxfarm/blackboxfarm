@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { BuyerIntentDetail } from '@/components/admin/BuyerIntentDetail';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Table, 
@@ -59,8 +60,18 @@ import {
   Ghost,
   Ban,
   ShieldCheck,
+  ShoppingCart,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+
+interface BuyerIntent {
+  pricing_page_views: number;
+  checkout_attempts: number;
+  last_pricing_visit: string | null;
+  last_checkout_attempt: string | null;
+  intent_level: string;
+  funnel_tag: string | null;
+}
 
 interface UserAccount {
   id: string;
@@ -123,6 +134,7 @@ interface UserAccount {
     verified: boolean;
     pending: boolean;
   };
+  buyer_intent?: BuyerIntent | null;
 }
 
 interface VisitSession {
@@ -178,6 +190,16 @@ const AccountBadges = ({ account }: { account: UserAccount }) => {
     badges.push({ icon: '😎', label: 'TG Bot Installed in Channel/Group' });
   }
 
+  // Shopping cart = buyer intent signal (window shopper)
+  if (account.buyer_intent) {
+    const intentLabels: Record<string, string> = {
+      almost_bought: '🛒 Almost Bought (abandoned checkout)',
+      considering: '🛒 Considering (3+ pricing views)',
+      browsing: '🛒 Browsing (viewed pricing)',
+    };
+    badges.push({ icon: '🛒', label: intentLabels[account.buyer_intent.intent_level] || '🛒 Window Shopper' });
+  }
+
   if (badges.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
 
   return (
@@ -202,7 +224,8 @@ export function AccountManagementDashboard() {
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'advertisers' | 'admins' | 'verified'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'advertisers' | 'admins' | 'verified' | 'window_shoppers'>('all');
+  const [intentDetailAccount, setIntentDetailAccount] = useState<UserAccount | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<UserAccount | null>(null);
   const [visitSessions, setVisitSessions] = useState<VisitSession[]>([]);
   const [isLoadingVisits, setIsLoadingVisits] = useState(false);
@@ -276,6 +299,14 @@ export function AccountManagementDashboard() {
       if (channelError) console.warn('Failed to fetch channel installations:', channelError);
 
       const channelInstallUserIds = new Set(channelInstalls?.map(ci => ci.user_id) || []);
+
+      // Fetch buyer intent signals
+      const { data: intentSignals } = await supabase
+        .from('buyer_intent_signals')
+        .select('user_id, pricing_page_views, checkout_attempts, last_pricing_visit, last_checkout_attempt, intent_level, funnel_tag') as any;
+
+      const intentByUser: Record<string, BuyerIntent> = {};
+      (intentSignals || []).forEach((s: any) => { intentByUser[s.user_id] = s; });
 
       const visitStats_raw = await supabase
         .from('holders_page_visits')
@@ -371,6 +402,7 @@ export function AccountManagementDashboard() {
             expires_at: userSub.expires_at,
           } : null,
           email_verification: verifByUser[profile.user_id] || undefined,
+          buyer_intent: intentByUser[profile.user_id] || null,
         };
       });
 
@@ -554,7 +586,8 @@ export function AccountManagementDashboard() {
       filterType === 'all' ||
       (filterType === 'advertisers' && account.advertiser) ||
       (filterType === 'admins' && account.roles?.includes('super_admin')) ||
-      (filterType === 'verified' && account.email_confirmed_at);
+      (filterType === 'verified' && account.email_confirmed_at) ||
+      (filterType === 'window_shoppers' && account.buyer_intent);
 
     return matchesSearch && matchesType;
   }).sort((a, b) => {
@@ -684,6 +717,7 @@ export function AccountManagementDashboard() {
                   <TabsTrigger value="advertisers">Advertisers</TabsTrigger>
                   <TabsTrigger value="admins">Admins</TabsTrigger>
                   <TabsTrigger value="verified">Verified</TabsTrigger>
+                  <TabsTrigger value="window_shoppers">🛒 Window Shoppers</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Button 
@@ -716,6 +750,7 @@ export function AccountManagementDashboard() {
                   <TableHead className="bg-card">Email Verified</TableHead>
                   <TableHead className="bg-card">Reg Code</TableHead>
                   <TableHead className="bg-card">Tier</TableHead>
+                  <TableHead className="bg-card">Intent</TableHead>
                   <TableHead className="cursor-pointer select-none hover:text-foreground bg-card" onClick={() => toggleSort('created_at')}>
                     <div className="flex items-center gap-1">Activity {sortField === 'created_at' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
                   </TableHead>
@@ -836,6 +871,37 @@ export function AccountManagementDashboard() {
                           )}
                         </div>
                       </div>
+                    </TableCell>
+                    {/* Intent column */}
+                    <TableCell>
+                      {account.buyer_intent ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto p-1"
+                                onClick={() => setIntentDetailAccount(account)}
+                              >
+                                <Badge variant="outline" className={`text-[10px] cursor-pointer ${
+                                  account.buyer_intent.intent_level === 'almost_bought' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
+                                  account.buyer_intent.intent_level === 'considering' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
+                                  'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                                }`}>
+                                  <ShoppingCart className="h-3 w-3 mr-1" />
+                                  {account.buyer_intent.intent_level.replace('_', ' ')}
+                                </Badge>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {account.buyer_intent.pricing_page_views} pricing views, {account.buyer_intent.checkout_attempts} checkouts. Click for timeline.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground">
@@ -1224,6 +1290,13 @@ export function AccountManagementDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Buyer Intent Detail Modal */}
+      <BuyerIntentDetail
+        userId={intentDetailAccount?.id || ''}
+        email={intentDetailAccount?.email || ''}
+        open={!!intentDetailAccount}
+        onOpenChange={(open) => { if (!open) setIntentDetailAccount(null); }}
+      />
     </div>
   );
 }

@@ -528,6 +528,25 @@ serve(async (req) => {
       ? await detectAndLookup(lastMsg.content, userId || undefined)
       : null;
 
+    // Inject buyer intent signals for non-subscribers
+    let buyerIntentBlock: string | null = null;
+    if (userId && tier !== 'paid') {
+      const { data: intentSignal } = await supabase
+        .from('buyer_intent_signals')
+        .select('pricing_page_views, checkout_attempts, intent_level, last_pricing_visit')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (intentSignal) {
+        buyerIntentBlock = `## BUYER CONTEXT (internal — do NOT share this directly)\n`;
+        buyerIntentBlock += `- This user has viewed pricing/subscription pages ${intentSignal.pricing_page_views} time(s)\n`;
+        if (intentSignal.checkout_attempts > 0) {
+          buyerIntentBlock += `- They started checkout ${intentSignal.checkout_attempts} time(s) but didn't complete — they were close to subscribing\n`;
+        }
+        buyerIntentBlock += `- Intent level: ${intentSignal.intent_level}\n`;
+        buyerIntentBlock += `- When relevant, naturally mention specific benefits of upgrading that match what they're asking about. Be helpful, not pushy.\n`;
+      }
+    }
+
     // Extract preferred name from conversation if we don't have one
     if (!memory?.preferred_name && messages?.length >= 2) {
       const extractedName = extractPreferredName(messages);
@@ -558,7 +577,7 @@ serve(async (req) => {
     const systemPrompt = await buildSystemPrompt({
       tier, pagePath, userId, emailVerified,
       userProfile,
-      liveDataBlock: liveDataBlock || undefined,
+      liveDataBlock: (liveDataBlock || '') + (buyerIntentBlock ? '\n' + buyerIntentBlock : '') || undefined,
     });
 
     if (systemPrompt === null) {
