@@ -494,73 +494,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {TIERS.map((tier) => (
-            <Card 
-              key={tier.name} 
-              className={`relative bg-card ${tier.color} ${tier.highlight ? 'ring-1 ring-primary shadow-glow' : ''} transition-all hover:border-primary/40`}
-            >
-              {tier.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase">
-                    Most Popular
-                  </Badge>
-                </div>
-              )}
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="text-primary">{tier.icon}</div>
-                  <h3 className="font-bold text-foreground">{tier.name}</h3>
-                </div>
-                
-                <div>
-                  <span className="text-2xl font-black text-foreground">{tier.price}</span>
-                </div>
-                
-                <p className="text-xs text-muted-foreground">{tier.description}</p>
-
-                <ul className="space-y-2 pt-2">
-                  {tier.features.map((f) => (
-                    <li key={f.name} className="flex items-center gap-2 text-sm">
-                      <FeatureCheck included={f.included} />
-                      <span className={f.included ? 'text-foreground/90' : 'text-muted-foreground/50'}>
-                        {f.name}
-                      </span>
-                    </li>
-                    ))}
-                  </ul>
-                  
-                  <div className="pt-2">
-                    {tier.cta.action === "checkout" ? (
-                      <Button 
-                        variant="default" 
-                        className="w-full gap-2"
-                        disabled={checkoutLoading}
-                        onClick={handleProCheckout}
-                      >
-                        {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tier.cta.label}
-                        {!checkoutLoading && <ArrowRight className="w-4 h-4" />}
-                      </Button>
-                    ) : tier.cta.action === "external" ? (
-                      <a href={tier.cta.to} target="_blank" rel="noopener noreferrer" className="block">
-                        <Button variant={tier.highlight ? "default" : "outline"} className="w-full gap-2">
-                          {tier.cta.label} <ArrowRight className="w-4 h-4" />
-                        </Button>
-                      </a>
-                    ) : (
-                      <Button 
-                        variant={tier.highlight ? "default" : "outline"} 
-                        className="w-full gap-2"
-                        onClick={() => navigate(tier.cta.to)}
-                      >
-                        {tier.cta.label} <ArrowRight className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-          ))}
-        </div>
+        <TierCards />
       </section>
 
       {/* Telegram Bot Section */}
