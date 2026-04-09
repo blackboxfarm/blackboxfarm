@@ -581,7 +581,7 @@ function generateSolRenewalReminderEmail(email: string, name: string | undefined
   `;
 }
 
-
+const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
