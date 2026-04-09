@@ -23,6 +23,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { 
   Users, 
   Search, 
@@ -49,7 +55,10 @@ import {
   Zap,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Ghost,
+  Ban,
+  ShieldCheck,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -59,6 +68,7 @@ interface UserAccount {
   created_at: string;
   last_sign_in_at: string | null;
   email_confirmed_at: string | null;
+  banned_until?: string | null;
   raw_app_meta_data: {
     provider?: string;
     providers?: string[];
@@ -108,6 +118,10 @@ interface UserAccount {
     x_subscription_verified: boolean | null;
     expires_at: string | null;
   } | null;
+  email_verification?: {
+    verified: boolean;
+    pending: boolean;
+  };
 }
 
 interface VisitSession {
@@ -123,6 +137,64 @@ interface VisitSession {
   referrer_domain: string | null;
 }
 
+// Helper: check if user is banned
+const isBanned = (account: UserAccount) => {
+  if (!account.banned_until) return false;
+  return new Date(account.banned_until) > new Date();
+};
+
+// Badge icons component
+const AccountBadges = ({ account }: { account: UserAccount }) => {
+  const badges: { icon: string; label: string }[] = [];
+
+  // Crown = super admin
+  if (account.roles?.includes('super_admin')) {
+    badges.push({ icon: '👑', label: 'Super Admin' });
+  }
+
+  // Money bag = paid subscriber
+  if (account.subscription_tier && account.subscription_tier !== 'auth') {
+    badges.push({ icon: '💰', label: `Subscriber (${account.subscription_tier})` });
+  }
+
+  // Rocket = TG linked
+  if (account.telegram_link?.telegram_user_id) {
+    badges.push({ icon: '🚀', label: `Telegram: @${account.telegram_link.telegram_username || 'linked'}` });
+  }
+
+  // Diamond = advertiser
+  if (account.advertiser) {
+    badges.push({ icon: '💎', label: 'Advertiser' });
+  }
+
+  // Thumbs up = email verified (our secondary verification)
+  if (account.email_verification?.verified) {
+    badges.push({ icon: '👍', label: 'Email Verified' });
+  }
+
+  // Sunglasses = TG bot installed in channel/group (future data source)
+  // badges.push({ icon: '😎', label: 'TG Bot in Channel' });
+
+  if (badges.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+
+  return (
+    <TooltipProvider>
+      <div className="flex items-center gap-0.5 flex-nowrap">
+        {badges.map((b, i) => (
+          <Tooltip key={i}>
+            <TooltipTrigger asChild>
+              <span className="cursor-default text-sm leading-none">{b.icon}</span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {b.label}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </TooltipProvider>
+  );
+};
+
 export function AccountManagementDashboard() {
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -137,6 +209,7 @@ export function AccountManagementDashboard() {
   const [isBackfilling, setIsBackfilling] = useState(false);
   const [sortField, setSortField] = useState<'name' | 'email' | 'status' | 'created_at'>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [banningUserId, setBanningUserId] = useState<string | null>(null);
 
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) {
@@ -151,14 +224,12 @@ export function AccountManagementDashboard() {
   const fetchAccounts = async () => {
     setIsLoading(true);
     try {
-      // Fetch all users from auth.users
       const { data: users, error: usersError } = await supabase
         .from('profiles')
         .select('*');
 
       if (usersError) throw usersError;
 
-      // Fetch user roles
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role, is_active')
@@ -166,21 +237,18 @@ export function AccountManagementDashboard() {
 
       if (rolesError) throw rolesError;
 
-      // Fetch advertiser accounts
       const { data: advertisers, error: advertisersError } = await supabase
         .from('advertiser_accounts')
         .select('user_id, twitter_handle, total_spent_sol, is_active');
 
       if (advertisersError) throw advertisersError;
 
-      // Fetch telegram link codes
       const { data: linkCodes, error: linkCodesError } = await supabase
         .from('telegram_link_codes')
         .select('user_id, link_code, telegram_user_id, telegram_username, linked_at');
 
       if (linkCodesError) console.warn('Failed to fetch link codes:', linkCodesError);
 
-      // Fetch active subscriptions
       const { data: subscriptions, error: subsError } = await supabase
         .from('web_user_subscriptions')
         .select('user_id, tier_key, is_active, stripe_subscription_id, x_handle_linked, x_subscription_verified, expires_at')
@@ -188,24 +256,24 @@ export function AccountManagementDashboard() {
 
       if (subsError) console.warn('Failed to fetch subscriptions:', subsError);
 
-      // Fetch visit stats grouped by user
-      const { data: visitStats, error: visitError } = await supabase
+      // Fetch email verification status
+      const { data: verifications, error: verifError } = await supabase
+        .from('email_verifications')
+        .select('user_id, verified_at, verification_type');
+
+      if (verifError) console.warn('Failed to fetch verifications:', verifError);
+
+      const visitStats_raw = await supabase
         .from('holders_page_visits')
         .select('user_id, created_at, tokens_analyzed, ip_address')
         .not('user_id', 'is', null);
 
-      if (visitError) throw visitError;
+      const visitStats = visitStats_raw.data;
 
-      // Aggregate visit stats by user
       const visitsByUser = visitStats?.reduce((acc, visit) => {
         const userId = visit.user_id;
         if (!acc[userId]) {
-          acc[userId] = {
-            total_visits: 0,
-            last_visit: null,
-            tokens_analyzed: 0,
-            ip_addresses: new Set<string>()
-          };
+          acc[userId] = { total_visits: 0, last_visit: null, tokens_analyzed: 0, ip_addresses: new Set<string>() };
         }
         acc[userId].total_visits++;
         if (!acc[userId].last_visit || new Date(visit.created_at) > new Date(acc[userId].last_visit)) {
@@ -220,15 +288,23 @@ export function AccountManagementDashboard() {
         return acc;
       }, {} as Record<string, { total_visits: number; last_visit: string | null; tokens_analyzed: number; ip_addresses: Set<string> }>);
 
-      // We need to get auth.users data via edge function since we can't query it directly
-      const { data: authData, error: authError } = await supabase.functions.invoke('get-all-users');
+      const { data: authData } = await supabase.functions.invoke('get-all-users');
       
       const authUsersMap = authData?.users?.reduce((acc: Record<string, any>, user: any) => {
         acc[user.id] = user;
         return acc;
       }, {}) || {};
 
-      // Combine all data
+      // Build verification map per user
+      const verifByUser: Record<string, { verified: boolean; pending: boolean }> = {};
+      verifications?.forEach(v => {
+        if (!verifByUser[v.user_id]) {
+          verifByUser[v.user_id] = { verified: false, pending: false };
+        }
+        if (v.verified_at) verifByUser[v.user_id].verified = true;
+        if (v.verification_type === 'signup' && !v.verified_at) verifByUser[v.user_id].pending = true;
+      });
+
       const combinedAccounts: UserAccount[] = (users || []).map(profile => {
         const authUser = authUsersMap[profile.user_id] || {};
         const userRoles = roles?.filter(r => r.user_id === profile.user_id).map(r => r.role) || [];
@@ -243,6 +319,7 @@ export function AccountManagementDashboard() {
           created_at: authUser.created_at || profile.created_at,
           last_sign_in_at: authUser.last_sign_in_at,
           email_confirmed_at: authUser.email_confirmed_at,
+          banned_until: authUser.raw_app_meta_data?.banned_until || null,
           raw_app_meta_data: authUser.raw_app_meta_data || {},
           raw_user_meta_data: authUser.raw_user_meta_data || {},
           identities: authUser.identities || [],
@@ -278,17 +355,14 @@ export function AccountManagementDashboard() {
             x_subscription_verified: userSub.x_subscription_verified,
             expires_at: userSub.expires_at,
           } : null,
+          email_verification: verifByUser[profile.user_id] || undefined,
         };
       });
 
       setAccounts(combinedAccounts);
     } catch (error) {
       console.error('Error fetching accounts:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch accounts',
-        variant: 'destructive'
-      });
+      toast({ title: 'Error', description: 'Failed to fetch accounts', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -323,20 +397,50 @@ export function AccountManagementDashboard() {
 
       if (error) throw error;
 
-      toast({
-        title: 'Password Reset Sent',
-        description: `Password reset email sent to ${resetPasswordEmail}`
-      });
+      toast({ title: 'Password Reset Sent', description: `Password reset email sent to ${resetPasswordEmail}` });
       setIsResetDialogOpen(false);
       setResetPasswordEmail('');
     } catch (error) {
       console.error('Error sending password reset:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to send password reset email',
-        variant: 'destructive'
-      });
+      toast({ title: 'Error', description: 'Failed to send password reset email', variant: 'destructive' });
     }
+  };
+
+  const handleBanToggle = async (account: UserAccount) => {
+    setBanningUserId(account.id);
+    try {
+      const banned = isBanned(account);
+      const fnName = banned ? 'unban_user' : 'ban_user';
+      
+      const { error } = await supabase.rpc(fnName as any, { target_user_id: account.id } as any);
+      if (error) throw error;
+
+      toast({
+        title: banned ? 'Account Unbanned' : 'Account Banned',
+        description: `${account.email} has been ${banned ? 'unbanned' : 'banned'}`
+      });
+      
+      // Optimistic update
+      setAccounts(prev => prev.map(a => a.id === account.id ? {
+        ...a,
+        banned_until: banned ? null : '2099-12-31T00:00:00Z'
+      } : a));
+    } catch (error: any) {
+      console.error('Ban toggle error:', error);
+      toast({ title: 'Error', description: error.message || 'Failed to update ban status', variant: 'destructive' });
+    } finally {
+      setBanningUserId(null);
+    }
+  };
+
+  const handleImpersonate = (account: UserAccount) => {
+    // Open the main site in a new window with impersonation params
+    // The admin will need to use the Supabase admin API to generate a magic link
+    // For now, open the dashboard with the user's info displayed
+    toast({
+      title: 'Impersonation',
+      description: `Feature requires a server-side magic link generation for ${account.email}. Use Supabase Dashboard → Auth → Users → ${account.email.slice(0, 20)}... to generate a magic link.`,
+    });
   };
 
   const copyRegCode = (code: string) => {
@@ -374,7 +478,6 @@ export function AccountManagementDashboard() {
     const account = accounts.find(a => a.id === userId);
     try {
       if (newTier === 'auth') {
-        // Remove active subscription (downgrade to free authenticated)
         const { error } = await supabase
           .from('web_user_subscriptions')
           .update({ is_active: false } as any)
@@ -382,7 +485,6 @@ export function AccountManagementDashboard() {
           .eq('is_active', true);
         if (error) throw error;
       } else {
-        // Preserve existing X/Stripe metadata when changing tier
         const upsertData: Record<string, any> = {
           user_id: userId,
           tier_key: newTier,
@@ -390,17 +492,10 @@ export function AccountManagementDashboard() {
           starts_at: new Date().toISOString(),
         };
 
-        // Preserve linked X handle and Stripe subscription from existing record
         if (account?.subscription_meta) {
-          if (account.subscription_meta.x_handle_linked) {
-            upsertData.x_handle_linked = account.subscription_meta.x_handle_linked;
-          }
-          if (account.subscription_meta.x_subscription_verified) {
-            upsertData.x_subscription_verified = account.subscription_meta.x_subscription_verified;
-          }
-          if (account.subscription_meta.stripe_subscription_id) {
-            upsertData.stripe_subscription_id = account.subscription_meta.stripe_subscription_id;
-          }
+          if (account.subscription_meta.x_handle_linked) upsertData.x_handle_linked = account.subscription_meta.x_handle_linked;
+          if (account.subscription_meta.x_subscription_verified) upsertData.x_subscription_verified = account.subscription_meta.x_subscription_verified;
+          if (account.subscription_meta.stripe_subscription_id) upsertData.stripe_subscription_id = account.subscription_meta.stripe_subscription_id;
         }
 
         const { error } = await supabase
@@ -408,7 +503,6 @@ export function AccountManagementDashboard() {
           .upsert(upsertData as any, { onConflict: 'user_id,tier_key' });
         if (error) throw error;
 
-        // Deactivate other tiers for this user
         await supabase
           .from('web_user_subscriptions')
           .update({ is_active: false } as any)
@@ -417,11 +511,8 @@ export function AccountManagementDashboard() {
       }
 
       const label = newTier === 'auth' ? 'Free (Auth)' : newTier;
-      const warning = account?.subscription_meta?.stripe_subscription_id
-        ? ' (Stripe billing unchanged)'
-        : '';
+      const warning = account?.subscription_meta?.stripe_subscription_id ? ' (Stripe billing unchanged)' : '';
       toast({ title: 'Tier Updated', description: `Set to ${label}${warning}` });
-      // Optimistic update
       setAccounts(prev => prev.map(a => a.id === userId ? { ...a, subscription_tier: newTier === 'auth' ? null : newTier } : a));
     } catch (err: any) {
       console.error('Tier change error:', err);
@@ -439,13 +530,11 @@ export function AccountManagementDashboard() {
   }, []);
 
   const filteredAccounts = accounts.filter(account => {
-    // Search filter
     const matchesSearch = !searchQuery || 
       account.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       account.profile?.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       account.advertiser?.twitter_handle?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Type filter
     const matchesType = 
       filterType === 'all' ||
       (filterType === 'advertisers' && account.advertiser) ||
@@ -599,71 +688,83 @@ export function AccountManagementDashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[500px]">
+          <div className="relative h-[500px] overflow-auto">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('name')}>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow className="border-b border-border">
+                  <TableHead className="cursor-pointer select-none hover:text-foreground bg-card" onClick={() => toggleSort('name')}>
                     <div className="flex items-center gap-1">User {sortField === 'name' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
                   </TableHead>
-                  <TableHead>Auth Provider</TableHead>
-                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('status')}>
-                    <div className="flex items-center gap-1">Status {sortField === 'status' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
-                  </TableHead>
-                  <TableHead>Reg Code</TableHead>
-                  <TableHead>Roles</TableHead>
-                  <TableHead>Tier</TableHead>
-                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort('created_at')}>
+                  <TableHead className="bg-card">Badges</TableHead>
+                  <TableHead className="bg-card">Auth Provider</TableHead>
+                  <TableHead className="bg-card">Auth</TableHead>
+                  <TableHead className="bg-card">Email Verified</TableHead>
+                  <TableHead className="bg-card">Reg Code</TableHead>
+                  <TableHead className="bg-card">Tier</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground bg-card" onClick={() => toggleSort('created_at')}>
                     <div className="flex items-center gap-1">Activity {sortField === 'created_at' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
                   </TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="bg-card">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredAccounts.map((account) => (
-                  <TableRow key={account.id}>
+                  <TableRow key={account.id} className={isBanned(account) ? 'opacity-50 bg-red-500/5' : ''}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
                           {account.profile?.avatar_url ? (
                             <img src={account.profile.avatar_url} alt="" className="w-8 h-8 rounded-full" />
                           ) : (
                             <Users className="h-4 w-4 text-muted-foreground" />
                           )}
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">
                             {account.profile?.display_name || account.profile?.oauth_full_name || 'No name'}
                           </p>
-                          <p className="text-xs text-muted-foreground">{account.email}</p>
+                          <p className="text-xs text-muted-foreground truncate">{account.email}</p>
                           {account.profile?.oauth_username && (
-                            <p className="text-xs text-primary">@{account.profile.oauth_username}</p>
+                            <p className="text-xs text-primary truncate">@{account.profile.oauth_username}</p>
                           )}
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <AccountBadges account={account} />
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {getProviderBadges(account)}
                       </div>
                     </TableCell>
+                    {/* Auth column - shows Auto (yellow) since we auto-confirm on signup */}
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {account.email_confirmed_at ? (
-                          <Badge variant="secondary" className="bg-green-500/20 text-green-400">
-                            <Mail className="h-3 w-3 mr-1" /> Verified
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400">
-                            <UserX className="h-3 w-3 mr-1" /> Pending
-                          </Badge>
-                        )}
-                        {account.profile?.two_factor_enabled && (
-                          <Badge variant="secondary" className="bg-blue-500/20 text-blue-400">
-                            <Key className="h-3 w-3 mr-1" /> 2FA
-                          </Badge>
-                        )}
-                      </div>
+                      {isBanned(account) ? (
+                        <Badge variant="secondary" className="bg-red-500/20 text-red-400">
+                          <Ban className="h-3 w-3 mr-1" /> Banned
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400">
+                          <ShieldCheck className="h-3 w-3 mr-1" /> Auto
+                        </Badge>
+                      )}
+                    </TableCell>
+                    {/* Email Verified column - true verification status */}
+                    <TableCell>
+                      {account.email_verification?.verified ? (
+                        <Badge variant="secondary" className="bg-green-500/20 text-green-400">
+                          <Check className="h-3 w-3 mr-1" /> Verified
+                        </Badge>
+                      ) : account.email_verification?.pending ? (
+                        <Badge variant="secondary" className="bg-orange-500/20 text-orange-400">
+                          <Clock className="h-3 w-3 mr-1" /> Pending
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                          <UserX className="h-3 w-3 mr-1" /> N/A
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {account.telegram_link ? (
@@ -693,21 +794,6 @@ export function AccountManagementDashboard() {
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {account.roles?.map(role => (
-                          <Badge key={role} className="bg-purple-500/20 text-purple-400">
-                            {role}
-                          </Badge>
-                        ))}
-                        {account.advertiser && (
-                          <Badge className="bg-green-500/20 text-green-400">
-                            <DollarSign className="h-3 w-3 mr-1" />
-                            Advertiser
-                          </Badge>
-                        )}
-                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
@@ -754,31 +840,60 @@ export function AccountManagementDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => openAccountDetails(account)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => {
-                            setResetPasswordEmail(account.email);
-                            setIsResetDialogOpen(true);
-                          }}
-                        >
-                          <Key className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <TooltipProvider>
+                        <div className="flex items-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" onClick={() => openAccountDetails(account)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>View Profile</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" onClick={() => {
+                                setResetPasswordEmail(account.email);
+                                setIsResetDialogOpen(true);
+                              }}>
+                                <Key className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Send Password Reset Email</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => handleBanToggle(account)}
+                                disabled={banningUserId === account.id}
+                              >
+                                {isBanned(account) ? (
+                                  <ShieldCheck className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <Ban className="h-4 w-4 text-red-400" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>{isBanned(account) ? 'Unban Account' : 'Ban Account'}</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" onClick={() => handleImpersonate(account)}>
+                                <Ghost className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Impersonate User</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
 
@@ -825,6 +940,14 @@ export function AccountManagementDashboard() {
                         }
                       </span>
                     </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Ban Status</span>
+                      {isBanned(selectedAccount) ? (
+                        <Badge className="bg-red-500/20 text-red-400">Banned</Badge>
+                      ) : (
+                        <Badge className="bg-green-500/20 text-green-400">Active</Badge>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -834,11 +957,17 @@ export function AccountManagementDashboard() {
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Auth Status</span>
+                      <Badge className="bg-yellow-500/20 text-yellow-400">Auto</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Email Verified</span>
-                      {selectedAccount.email_confirmed_at ? (
+                      {selectedAccount.email_verification?.verified ? (
                         <Badge className="bg-green-500/20 text-green-400">Yes</Badge>
                       ) : (
-                        <Badge className="bg-yellow-500/20 text-yellow-400">No</Badge>
+                        <Badge className="bg-orange-500/20 text-orange-400">
+                          {selectedAccount.email_verification?.pending ? 'Pending (7 day)' : 'N/A'}
+                        </Badge>
                       )}
                     </div>
                     <div className="flex justify-between items-center">
