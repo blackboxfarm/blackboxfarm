@@ -105,49 +105,7 @@ const UNIQUE_SIGNALS = [
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   usePageTracking('home');
-
-  const handleProCheckout = async () => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
-    setCheckoutLoading(true);
-    try {
-      const priceId = STRIPE_TIERS.pro.price_id;
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { priceId },
-      });
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (err) {
-      console.error('Checkout error:', err);
-      toast.error('Failed to start checkout. Please try again.');
-    } finally {
-      setCheckoutLoading(false);
-    }
-  };
-
-  // Auto-trigger checkout after user signs in via AuthModal
-  const pendingCheckout = useRef(false);
-  useEffect(() => {
-    if (showAuthModal) {
-      pendingCheckout.current = true;
-    }
-  }, [showAuthModal]);
-
-  useEffect(() => {
-    if (user && pendingCheckout.current) {
-      pendingCheckout.current = false;
-      setShowAuthModal(false);
-      handleProCheckout();
-    }
-  }, [user]);
 
   return (
     <SiteLayout>
