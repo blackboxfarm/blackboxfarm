@@ -535,13 +535,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-      <AuthModal 
-        isOpen={showAuthModal} 
-        onClose={() => {
-          setShowAuthModal(false);
-        }}
-        defaultTab="signup"
-      />
     </SiteLayout>
   );
 }
