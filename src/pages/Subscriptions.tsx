@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { PricingTable } from '@/components/premium/PricingTable';
+import { TierCards } from '@/components/premium/TierCards';
 import { XSubscriberVerification } from '@/components/premium/XSubscriberVerification';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { SocialIcon } from '@/components/token/SocialIcon';

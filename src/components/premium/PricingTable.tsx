@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { XSubscriberVerification } from './XSubscriberVerification';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { CheckoutTransitionModal } from './CheckoutTransitionModal';
+import { TierCards } from './TierCards';
 
 interface PricingFeature {
   label: string;
