@@ -173,12 +173,27 @@ export function EmailCampaignsManager() {
   };
 
   return (
-    <div className="space-y-4">
+    <Tabs defaultValue="campaigns" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="campaigns" className="gap-1.5">
+          <Mail className="h-3.5 w-3.5" /> Campaigns
+        </TabsTrigger>
+        <TabsTrigger value="templates" className="gap-1.5">
+          <FileText className="h-3.5 w-3.5" /> Templates
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="campaigns">
+      <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <Mail className="h-5 w-5 text-primary" />
           Email Campaigns
         </h3>
+        <Button onClick={handleCreate} size="sm" className="gap-1">
+          <Plus className="h-3.5 w-3.5" /> New Campaign
+        </Button>
+      </div>
         <Button onClick={handleCreate} size="sm" className="gap-1">
           <Plus className="h-3.5 w-3.5" /> New Campaign
         </Button>
