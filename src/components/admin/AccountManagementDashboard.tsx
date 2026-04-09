@@ -224,7 +224,8 @@ export function AccountManagementDashboard() {
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'advertisers' | 'admins' | 'verified'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'advertisers' | 'admins' | 'verified' | 'window_shoppers'>('all');
+  const [intentDetailAccount, setIntentDetailAccount] = useState<UserAccount | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<UserAccount | null>(null);
   const [visitSessions, setVisitSessions] = useState<VisitSession[]>([]);
   const [isLoadingVisits, setIsLoadingVisits] = useState(false);
