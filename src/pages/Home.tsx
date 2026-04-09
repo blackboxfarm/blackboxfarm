@@ -515,7 +515,17 @@ export default function Home() {
                   </ul>
                   
                   <div className="pt-2">
-                    {tier.cta.action === "external" ? (
+                    {tier.cta.action === "checkout" ? (
+                      <Button 
+                        variant="default" 
+                        className="w-full gap-2"
+                        disabled={checkoutLoading}
+                        onClick={handleProCheckout}
+                      >
+                        {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tier.cta.label}
+                        {!checkoutLoading && <ArrowRight className="w-4 h-4" />}
+                      </Button>
+                    ) : tier.cta.action === "external" ? (
                       <a href={tier.cta.to} target="_blank" rel="noopener noreferrer" className="block">
                         <Button variant={tier.highlight ? "default" : "outline"} className="w-full gap-2">
                           {tier.cta.label} <ArrowRight className="w-4 h-4" />
