@@ -300,6 +300,14 @@ export function AccountManagementDashboard() {
 
       const channelInstallUserIds = new Set(channelInstalls?.map(ci => ci.user_id) || []);
 
+      // Fetch buyer intent signals
+      const { data: intentSignals } = await supabase
+        .from('buyer_intent_signals')
+        .select('user_id, pricing_page_views, checkout_attempts, last_pricing_visit, last_checkout_attempt, intent_level, funnel_tag') as any;
+
+      const intentByUser: Record<string, BuyerIntent> = {};
+      (intentSignals || []).forEach((s: any) => { intentByUser[s.user_id] = s; });
+
       const visitStats_raw = await supabase
         .from('holders_page_visits')
         .select('user_id, created_at, tokens_analyzed, ip_address')
