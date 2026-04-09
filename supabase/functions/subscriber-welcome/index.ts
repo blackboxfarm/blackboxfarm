@@ -528,7 +528,60 @@ function generateSolPaymentReceiptEmail(email: string, name: string | undefined,
   `;
 }
 
-const handler = async (req: Request): Promise<Response> => {
+function generateSolRenewalReminderEmail(email: string, name: string | undefined, expiresAt: string, daysLeft: number, amountSol: number): string {
+  const displayName = name || email.split('@')[0];
+  const expiryDate = new Date(expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin: 0; padding: 0; background: #080812; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background: #080812;">
+        <tr><td align="center" style="padding: 40px 20px;">
+          <table width="640" cellpadding="0" cellspacing="0" style="background: #0f1724; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 60px rgba(0,0,0,0.5); border: 1px solid #1e293b;">
+            <tr>
+              <td style="background: linear-gradient(135deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%); padding: 40px; text-align: center; border-bottom: 2px solid #f59e0b30;">
+                <img src="https://blackbox.farm/lovable-uploads/8c88fead-d160-47f3-ac65-3493afcf9280.png" alt="BlackBox" style="width: 56px; height: 56px; margin-bottom: 16px;" />
+                <h1 style="color: #f59e0b; font-size: 28px; font-weight: 800; margin: 0;">⏰ Subscription Expiring Soon</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 40px;">
+                <h2 style="color: #f0f4f8; font-size: 24px; margin: 0 0 16px 0;">Hey ${displayName},</h2>
+                <p style="color: #94a3b8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
+                  Your <strong style="color: #9945ff;">Pro</strong> subscription expires on <strong style="color: #f59e0b;">${expiryDate}</strong> — that's just <strong style="color: #f59e0b;">${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> away.
+                </p>
+                <div style="background: #1a2332; border: 1px solid #f59e0b30; border-radius: 12px; padding: 24px; margin-bottom: 24px; text-align: center;">
+                  <p style="color: #f0f4f8; font-size: 18px; font-weight: 700; margin: 0 0 8px 0;">Don't lose your Pro access!</p>
+                  <p style="color: #94a3b8; font-size: 14px; margin: 0 0 16px 0;">Renew via Telegram with <code style="background: #0f1724; padding: 2px 8px; border-radius: 4px; color: #9945ff;">/payment</code> in @holdersintel_bot DM</p>
+                  <p style="color: #9945ff; font-size: 20px; font-weight: 800; margin: 0;">${amountSol || 1} SOL/year (~$84)</p>
+                </div>
+                <div style="text-align: center; margin-bottom: 16px;">
+                  <a href="https://t.me/holdersintel_bot" style="display: inline-block; background: linear-gradient(135deg, #9945ff 0%, #7c3aed 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 12px; font-weight: 700; font-size: 15px; box-shadow: 0 6px 24px rgba(153,69,255,0.3);">
+                    Renew via Telegram →
+                  </a>
+                </div>
+                <p style="color: #64748b; font-size: 13px; text-align: center; margin: 16px 0 0;">
+                  Or subscribe via <a href="https://blackbox.farm/subscriptions" style="color: #D4AF37; text-decoration: none;">Stripe</a> for monthly/yearly billing.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="background: #080812; padding: 24px 40px; border-top: 1px solid #1e293b;">
+                <p style="color: #475569; font-size: 12px; text-align: center; margin: 0;">
+                  BlackBox Farm · <a href="https://blackbox.farm" style="color: #D4AF37; text-decoration: none;">blackbox.farm</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+}
+
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
