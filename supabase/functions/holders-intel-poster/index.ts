@@ -783,7 +783,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       }
       
       // Post tweet
-      const tweetResult = await postTweet(tweetText, supabaseUrl, anonKey);
+      const tweetResult = await postTweet(tweetText, supabaseUrl, anonKey, manualOverride);
       
       // Update queue with success
       await supabase
