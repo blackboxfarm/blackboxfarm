@@ -5,7 +5,6 @@ import { TelegramWebViewBanner } from "@/components/TelegramWebViewBanner";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AnalysisOverview } from "@/components/holders/AnalysisOverview";
-import analysisThumb from "@/assets/analysis-overview-thumb.png";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
@@ -31,13 +30,10 @@ export default function Holders() {
 
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl" data-oracle-hint="Paste a token address — I'll walk you through the results" data-oracle-zone="holders-input">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="flex items-center gap-3 mb-4">
-            <TabsList>
-              <TabsTrigger value="report">Token Holders Report</TabsTrigger>
-              <TabsTrigger value="overview">Analysis Overview</TabsTrigger>
-            </TabsList>
-            <img src={analysisThumb} alt="Analysis Overview" className="rounded-sm" style={{ width: 100, height: 150 }} />
-          </div>
+          <TabsList className="mb-4">
+            <TabsTrigger value="report">Token Holders Report</TabsTrigger>
+            <TabsTrigger value="overview">Analysis Overview</TabsTrigger>
+          </TabsList>
 
           <TabsContent value="report" className="mt-0">
             <div className="w-full">
