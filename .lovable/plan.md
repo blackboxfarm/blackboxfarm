@@ -1,68 +1,71 @@
 
 
-# Profile Dashboard Upgrade, Registration Code Display, SOL Payment Polish & Email Template System
+# Follower Audit Tool — Handle Input, Bot Detection Scoring
 
-## What You Identified (and You're Right)
+## Purpose
+You enter an X/Twitter handle, press "Audit", and get back a bot/fake follower breakdown so you can vet accounts before paying them for marketing posts. No point paying someone with 140K followers if 90% are Nigerian click farms.
 
-1. **Registration code is missing from the profile modal** -- `TelegramLinkCode.tsx` exists as a standalone component but is NOT included in the `UserIdentityBadge` popover. Users only see it on the Telegram Bot tab. No way to retrieve it from the profile.
+## How It Works
 
-2. **The popover is too small** for everything it now needs to hold: display name, secondary email, OAuth unlinking, 2FA, registration code, SOL wallet/payment history. It needs to become a proper profile page/dialog.
+```text
+[Enter Handle] [@142C_] [🔍 Audit Followers]
+         │
+         ▼
+   Edge Function: follower-audit
+         │
+         ├── 1. Apify: apidojo/twitter-followers-scraper
+         │      Sample 500 followers (cost: ~$0.50-1.00)
+         │
+         ├── 2. Score each sampled follower:
+         │      • Default/egg avatar?        +20 bot pts
+         │      • Username is random alphanum? +15
+         │      • Account < 30 days old?      +15
+         │      • 0 tweets, follows 1000+?    +25
+         │      • Bio empty?                  +10
+         │      • Location in known bot farms? +10
+         │      • Following/Follower ratio >50? +15
+         │
+         └── 3. Return aggregate scores
+```
 
-3. **SOL payment receipt email** is missing -- after `/payment verify` confirms payment, no confirmation email is sent.
+## UI — New Sub-Tab "Follower Audit" Under Twitter Scrapes
 
-4. **`/payment` not in all help menus** -- it's in the holdersintel bot help but needs to also be mentioned on the website pricing sections.
+Simple single-page tool:
+- **Input**: Handle text field + "Audit" button
+- **Results card** once complete:
+  - Overall score: "Estimated Real Followers: ~38%" with color badge (green >70%, yellow 40-70%, red <40%)
+  - Pie/donut chart: Real vs Suspicious vs Likely Bot
+  - Geographic breakdown (top 5 locations from bios/locations)
+  - Sample table: 20 most suspicious followers with their signals
+  - Quick verdict: "⚠️ High bot ratio — not recommended for paid promotion" or "✅ Mostly organic — good candidate"
 
-5. **TierCards missing SOL payment callout** -- the yearly toggle area has no mention of the Telegram SOL alternative.
+## Database
 
-6. **Email templates are hardcoded** across ~6 edge functions with inline HTML. No admin-editable template system exists.
+**New table: `follower_audits`**
+- `id`, `handle` (text), `follower_count` (int), `sample_size` (int)
+- `real_pct` (numeric), `suspicious_pct`, `bot_pct`
+- `geo_breakdown` (jsonb), `signals_summary` (jsonb)
+- `raw_sample` (jsonb — stores the 500 sampled profiles)
+- `created_at`, `cost_credits` (numeric)
+- RLS: super_admin read only
 
-## Plan
+## Edge Function: `follower-audit`
 
-### 1. Profile Page (replace popover with full dialog/page)
-- Convert `UserIdentityBadge` gear icon to open a **Sheet** (slide-out panel) or **Dialog** instead of a tiny popover
-- Sections inside:
-  - **Identity**: Display name, primary email, secondary email setup
-  - **Registration Code**: Embed `TelegramLinkCode` (compact mode) so users can always find their code
-  - **Linked Accounts**: OAuth providers (X, Google, Discord, GitHub) with unlink buttons
-  - **Security**: 2FA (TOTP) status + setup link
-  - **SOL Subscriptions**: Show active SOL subscription status, payment wallet, solscan.io link to transaction, expiry date (queried from `tg_sol_subscriptions`)
-  - **Sign Out** button at bottom
-- Files: Edit `src/components/layout/UserIdentityBadge.tsx`, create `src/components/profile/ProfilePanel.tsx`
+1. Accepts `{ handle: string, sampleSize?: number }` (default 500)
+2. Calls Apify `apidojo/twitter-followers-scraper` with the handle
+3. Runs bot-scoring algorithm on each returned follower profile
+4. Computes percentages and geo breakdown
+5. Upserts into `follower_audits` table
+6. Logs to `api_usage_log` for credit tracking
+7. Returns full results to UI
 
-### 2. SOL Payment Receipt Email
-- After `/payment verify` confirms payment in `holdersintel-bot-webhook`, invoke `subscriber-welcome` (or a new email type `sol_payment_confirmed`) with amount, wallet address, solscan link, and expiry date
-- Add a `sol_payment_confirmed` case to `subscriber-welcome/index.ts` with a branded receipt template
-- Files: Edit `supabase/functions/holdersintel-bot-webhook/index.ts`, edit `supabase/functions/subscriber-welcome/index.ts`
+## Files
 
-### 3. SOL Payment Option on TierCards
-- Below the yearly toggle (or within the Pro/X Pro card when yearly is selected), add a highlighted callout:
-  "Pay with Solana via Telegram -- 1 SOL/year (~$84). Use `/payment` in @BlackBoxFarmBot DM"
-- Small SOL icon + link to the bot
-- Files: Edit `src/components/premium/TierCards.tsx`
+- **Create**: `src/components/admin/twitter/FollowerAuditTab.tsx` — handle input, audit button, results display with donut chart and suspect table
+- **Create**: `supabase/functions/follower-audit/index.ts` — Apify call + scoring
+- **Edit**: `src/components/admin/TwitterScrapesView.tsx` — add "Follower Audit" sub-tab with `Search` icon
+- **Migration**: Create `follower_audits` table with RLS
 
-### 4. Email Template Admin System (Email Campaigns Tab)
-- The `EmailCampaignsManager.tsx` already exists for marketing campaigns. Add a **second sub-tab: "Email Templates"**
-- Inventory all hardcoded email templates across edge functions:
-  - `subscriber-welcome`: welcome, renewal, cancellation, new_user_welcome
-  - `send-verification-email`: email verification
-  - `send-notification`: general notifications
-  - `send-email-notification`: trading alerts
-  - `send-ai-analysis-email`: AI analysis delivery
-  - `signup-notify`: admin new-user notification
-- Create a new DB table `email_templates` with columns: `template_key` (e.g. 'subscriber_welcome'), `subject`, `html_body`, `is_active`, `updated_at`
-- Seed with current hardcoded HTML extracted from each edge function
-- Admin UI: dropdown to select template, edit subject + body (preserving HTML skin/wrapper), preview button
-- Edge functions updated to check `email_templates` table first; fall back to hardcoded if no custom template exists
-- Files: New migration, new `src/components/admin/EmailTemplateEditor.tsx`, edit `EmailCampaignsManager.tsx` to add sub-tabs, edit each email edge function to query templates table
-
-### 5. /payment in Help & Website
-- Verify `/payment` is in all bot help text (already in holdersintel help -- confirm telegram-bot-webhook too)
-- Add `/payment` mention to website's Telegram Bot tab documentation section
-- Files: Check/edit `supabase/functions/telegram-bot-webhook/index.ts`, edit relevant website components
-
-## Files Summary
-- **Edit**: `UserIdentityBadge.tsx`, `TierCards.tsx`, `holdersintel-bot-webhook/index.ts`, `subscriber-welcome/index.ts`, `EmailCampaignsManager.tsx`
-- **Create**: `ProfilePanel.tsx`, `EmailTemplateEditor.tsx`
-- **Migration**: `email_templates` table with seed data
-- **Check/Edit**: `telegram-bot-webhook/index.ts` for `/payment` help text
+## Cost
+Each audit samples ~500 followers via Apify at roughly $0.50–$1.50 per run. Results are cached in the table so you won't re-audit the same handle accidentally — the UI will show "Last audited X hours ago" with a re-run option.
 
