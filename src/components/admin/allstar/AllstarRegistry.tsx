@@ -25,6 +25,7 @@ const TIER_LABELS: Record<number, { label: string; color: string }> = {
 export function AllstarRegistry() {
   const [search, setSearch] = useState('');
   const [backfilling, setBackfilling] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const backfillFromTop200 = async () => {
     setBackfilling(true);
