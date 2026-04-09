@@ -176,6 +176,10 @@ serve(async (req) => {
     await logger.complete(200);
 
     console.log(`[FollowerAudit] Got ${followers.length} followers for @${cleanHandle}`);
+    if (followers.length > 0) {
+      console.log(`[FollowerAudit] Sample follower keys:`, JSON.stringify(Object.keys(followers[0])));
+      console.log(`[FollowerAudit] First follower:`, JSON.stringify(followers[0]).slice(0, 500));
+    }
 
     // Score each follower
     const scored: BotScore[] = followers.map(scoreFollower);
