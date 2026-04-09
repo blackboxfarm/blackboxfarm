@@ -799,7 +799,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         .eq('token_mint', item.token_mint);
       
       // Update funnel_feed_discoveries if this came from funnel feed
-      if (item.trigger_source === 'funnel_feed') {
+      if (item.trigger_source === 'funnel_feed' || item.trigger_source === 'manual_push') {
         await supabase
           .from('funnel_feed_discoveries')
           .update({ xpost_status: 'posted', xpost_processed_at: new Date().toISOString() })

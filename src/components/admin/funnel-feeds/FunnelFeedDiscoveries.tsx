@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Zap } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 interface Discovery {
   id: string;
@@ -17,6 +18,7 @@ interface Discovery {
   xpost_status: string;
   watchlist_status: string;
   creator_wallet: string | null;
+  xpost_processed_at: string | null;
   funnel_feed_sources: { source_name: string } | null;
 }
 
@@ -33,9 +35,18 @@ const statusColors: Record<string, string> = {
   inserted: 'bg-green-500/20 text-green-400',
 };
 
+const torontoTime = (d?: Date) =>
+  (d || new Date()).toLocaleString('en-CA', {
+    timeZone: 'America/Toronto',
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
 export function FunnelFeedDiscoveries() {
   const [discoveries, setDiscoveries] = useState<Discovery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pushing, setPushing] = useState<Record<string, boolean>>({});
+  const [pushedAt, setPushedAt] = useState<Record<string, string>>({});
 
   const fetchDiscoveries = async () => {
     setLoading(true);
@@ -49,6 +60,41 @@ export function FunnelFeedDiscoveries() {
   };
 
   useEffect(() => { fetchDiscoveries(); }, []);
+
+  const handlePush = async (d: Discovery) => {
+    setPushing(prev => ({ ...prev, [d.id]: true }));
+    try {
+      // 1. Insert into queue
+      await supabase.from('holders_intel_post_queue').insert({
+        token_mint: d.token_mint,
+        symbol: d.token_symbol || null,
+        name: d.token_name || null,
+        scheduled_at: new Date().toISOString(),
+        status: 'pending',
+        trigger_source: 'manual_push',
+        trigger_comment: `Manual push from funnel feed discovery ${d.id}`,
+      });
+
+      // 2. Invoke poster immediately
+      const { data, error } = await supabase.functions.invoke('holders-intel-poster', {
+        body: { manualOverride: true },
+      });
+
+      if (error) throw error;
+
+      const ts = torontoTime();
+      setPushedAt(prev => ({ ...prev, [d.id]: ts }));
+      toast({ title: 'Pushed!', description: `${d.token_symbol || d.token_mint.slice(0, 8)} posted to X + TG` });
+      
+      // Refresh list after short delay
+      setTimeout(fetchDiscoveries, 2000);
+    } catch (err: any) {
+      console.error('Manual push failed:', err);
+      toast({ title: 'Push failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setPushing(prev => ({ ...prev, [d.id]: false }));
+    }
+  };
 
   const shortMint = (m: string) => `${m.slice(0, 6)}...${m.slice(-4)}`;
   const timeAgo = (ts: string) => {
@@ -87,46 +133,72 @@ export function FunnelFeedDiscoveries() {
                 <TableHead compact>Mesh</TableHead>
                 <TableHead compact>Watchlist</TableHead>
                 <TableHead compact>X Post</TableHead>
+                <TableHead compact>Manual PUSH</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {discoveries.map(d => (
-                <TableRow key={d.id}>
-                  <TableCell compact className="font-medium">
-                    {d.token_symbol ? `$${d.token_symbol}` : '—'}
-                    {d.token_name && <span className="text-muted-foreground ml-1 text-xs">{d.token_name}</span>}
-                  </TableCell>
-                  <TableCell compact>
-                    <a
-                      href={`https://pump.fun/${d.token_mint}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs hover:text-primary"
-                    >
-                      {shortMint(d.token_mint)}
-                    </a>
-                  </TableCell>
-                  <TableCell compact className="text-xs">
-                    {d.funnel_feed_sources?.source_name || '—'}
-                  </TableCell>
-                  <TableCell compact className="text-xs">{timeAgo(d.discovered_at)}</TableCell>
-                  <TableCell compact>
-                    <Badge variant="outline" className={`text-xs ${statusColors[d.mesh_status] || ''}`}>
-                      {d.mesh_status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell compact>
-                    <Badge variant="outline" className={`text-xs ${statusColors[d.watchlist_status] || ''}`}>
-                      {d.watchlist_status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell compact>
-                    <Badge variant="outline" className={`text-xs ${statusColors[d.xpost_status] || ''}`}>
-                      {d.xpost_status}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {discoveries.map(d => {
+                const isPosted = d.xpost_status === 'posted' || !!pushedAt[d.id];
+                const isPushing = pushing[d.id];
+                const postedTime = pushedAt[d.id] || (d.xpost_processed_at ? torontoTime(new Date(d.xpost_processed_at)) : null);
+
+                return (
+                  <TableRow key={d.id}>
+                    <TableCell compact className="font-medium">
+                      {d.token_symbol ? `$${d.token_symbol}` : '—'}
+                      {d.token_name && <span className="text-muted-foreground ml-1 text-xs">{d.token_name}</span>}
+                    </TableCell>
+                    <TableCell compact>
+                      <a
+                        href={`https://pump.fun/${d.token_mint}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs hover:text-primary"
+                      >
+                        {shortMint(d.token_mint)}
+                      </a>
+                    </TableCell>
+                    <TableCell compact className="text-xs">
+                      {d.funnel_feed_sources?.source_name || '—'}
+                    </TableCell>
+                    <TableCell compact className="text-xs">{timeAgo(d.discovered_at)}</TableCell>
+                    <TableCell compact>
+                      <Badge variant="outline" className={`text-xs ${statusColors[d.mesh_status] || ''}`}>
+                        {d.mesh_status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell compact>
+                      <Badge variant="outline" className={`text-xs ${statusColors[d.watchlist_status] || ''}`}>
+                        {d.watchlist_status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell compact>
+                      <Badge variant="outline" className={`text-xs ${statusColors[d.xpost_status] || ''}`}>
+                        {d.xpost_status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell compact>
+                      {isPosted && postedTime ? (
+                        <span className="text-xs text-green-400">{postedTime}</span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs"
+                          disabled={isPushing}
+                          onClick={() => handlePush(d)}
+                        >
+                          {isPushing ? (
+                            <RefreshCw className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <><Zap className="h-3 w-3 mr-1" />PUSH</>
+                          )}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
