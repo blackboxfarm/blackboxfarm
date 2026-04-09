@@ -79,6 +79,7 @@ serve(withRunLog('get-all-users', async (req) => {
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at,
       email_confirmed_at: u.email_confirmed_at,
+      banned_until: u.banned_until,
       raw_app_meta_data: u.app_metadata,
       raw_user_meta_data: u.user_metadata,
       identities: u.identities?.map(i => ({
