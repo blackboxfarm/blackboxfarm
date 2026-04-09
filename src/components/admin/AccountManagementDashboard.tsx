@@ -360,6 +360,7 @@ export function AccountManagementDashboard() {
             telegram_username: userLinkCode.telegram_username,
             linked_at: userLinkCode.linked_at,
           } : null,
+          has_channel_install: channelInstallUserIds.has(profile.user_id),
           subscription_tier: userSub?.tier_key || null,
           subscription_meta: userSub ? {
             stripe_subscription_id: userSub.stripe_subscription_id,
