@@ -111,6 +111,7 @@ interface UserAccount {
     telegram_username: string | null;
     linked_at: string | null;
   } | null;
+  has_channel_install?: boolean;
   subscription_tier?: string | null;
   subscription_meta?: {
     stripe_subscription_id: string | null;
@@ -172,8 +173,10 @@ const AccountBadges = ({ account }: { account: UserAccount }) => {
     badges.push({ icon: '👍', label: 'Email Verified' });
   }
 
-  // Sunglasses = TG bot installed in channel/group (future data source)
-  // badges.push({ icon: '😎', label: 'TG Bot in Channel' });
+  // Sunglasses = TG bot installed in channel/group
+  if (account.has_channel_install) {
+    badges.push({ icon: '😎', label: 'TG Bot Installed in Channel/Group' });
+  }
 
   if (badges.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
 
@@ -263,6 +266,17 @@ export function AccountManagementDashboard() {
 
       if (verifError) console.warn('Failed to fetch verifications:', verifError);
 
+      // Fetch channel installations (users who installed TG bot in a channel/group)
+      const { data: channelInstalls, error: channelError } = await supabase
+        .from('channel_installations')
+        .select('user_id')
+        .eq('is_active', true)
+        .neq('kicked', true);
+
+      if (channelError) console.warn('Failed to fetch channel installations:', channelError);
+
+      const channelInstallUserIds = new Set(channelInstalls?.map(ci => ci.user_id) || []);
+
       const visitStats_raw = await supabase
         .from('holders_page_visits')
         .select('user_id, created_at, tokens_analyzed, ip_address')
@@ -348,6 +362,7 @@ export function AccountManagementDashboard() {
             telegram_username: userLinkCode.telegram_username,
             linked_at: userLinkCode.linked_at,
           } : null,
+          has_channel_install: channelInstallUserIds.has(profile.user_id),
           subscription_tier: userSub?.tier_key || null,
           subscription_meta: userSub ? {
             stripe_subscription_id: userSub.stripe_subscription_id,
