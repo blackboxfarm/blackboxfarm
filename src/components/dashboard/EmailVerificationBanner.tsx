@@ -51,7 +51,8 @@ export function EmailVerificationBanner({ userId, userEmail, userCreatedAt }: Pr
       // Calculate urgency
       const createdAt = new Date(userCreatedAt);
       const hoursSinceSignup = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
-      setState(hoursSinceSignup >= 24 ? 'urgent' : 'gentle');
+      // 7-day window: gentle for first 5 days, urgent for last 2 days
+      setState(hoursSinceSignup >= 120 ? 'urgent' : 'gentle');
     } catch (err) {
       console.error('Failed to check email verification:', err);
       setState('hidden');
@@ -97,12 +98,12 @@ export function EmailVerificationBanner({ userId, userEmail, userCreatedAt }: Pr
       <div className="flex-1 space-y-2">
         <p className="text-sm font-medium">
           {isUrgent
-            ? '⚠️ Less than 24 hours left to verify your email!'
-            : '📧 Please verify your email within 48 hours'}
+            ? '⚠️ Less than 2 days left to verify your email!'
+            : '📧 Please verify your email within 7 days'}
         </p>
         <p className="text-xs opacity-80">
           {isUrgent
-            ? `Your account will be suspended if you don't verify ${userEmail} soon. Check your inbox or resend below.`
+            ? `Please verify ${userEmail} soon to keep your account active. Check your inbox or resend below.`
             : `We sent a verification link to ${userEmail}. Click it to keep your account active.`}
         </p>
         <Button
