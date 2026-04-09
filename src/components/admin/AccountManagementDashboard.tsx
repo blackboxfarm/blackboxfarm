@@ -319,7 +319,7 @@ export function AccountManagementDashboard() {
           created_at: authUser.created_at || profile.created_at,
           last_sign_in_at: authUser.last_sign_in_at,
           email_confirmed_at: authUser.email_confirmed_at,
-          banned_until: authUser.raw_app_meta_data?.banned_until || null,
+          banned_until: authUser.banned_until || null,
           raw_app_meta_data: authUser.raw_app_meta_data || {},
           raw_user_meta_data: authUser.raw_user_meta_data || {},
           identities: authUser.identities || [],
