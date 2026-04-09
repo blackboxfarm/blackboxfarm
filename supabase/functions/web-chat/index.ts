@@ -577,7 +577,7 @@ serve(async (req) => {
     const systemPrompt = await buildSystemPrompt({
       tier, pagePath, userId, emailVerified,
       userProfile,
-      liveDataBlock: liveDataBlock || undefined,
+      liveDataBlock: (liveDataBlock || '') + (buyerIntentBlock ? '\n' + buyerIntentBlock : '') || undefined,
     });
 
     if (systemPrompt === null) {
