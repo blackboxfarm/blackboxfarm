@@ -34,6 +34,7 @@ const IntelBriefingsManager = lazy(() => import("@/components/admin/IntelBriefin
 const CacheBustingTools = lazy(() => import("@/components/intel/CacheBustingTools").then(m => ({ default: m.CacheBustingTools })));
 const MetaTagsManager = lazy(() => import("@/components/admin/MetaTagsManager").then(m => ({ default: m.MetaTagsManager })));
 const AIConfigTab = lazy(() => import("@/components/admin/tabs/AIConfigTab"));
+const EmailCampaignsManager = lazy(() => import("@/components/admin/EmailCampaignsManager").then(m => ({ default: m.EmailCampaignsManager })));
 
 const DEFAULT_ADMIN_TAB = "utilities";
 const ALLOWED_ADMIN_TABS = new Set([
@@ -56,6 +57,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "testimonials",
   "intel-briefings",
   "ai-config",
+  "email-campaigns",
 ]);
 
 // Simple loading fallback
