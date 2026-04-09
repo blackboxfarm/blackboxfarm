@@ -42,11 +42,12 @@ function scoreFollower(f: FollowerProfile): BotScore {
   const signals: string[] = [];
   const username = f.screen_name || f.name || "unknown";
 
-  // Default avatar
+  // Default avatar — field is "profile_image" from this actor
+  const profileImg = f.profile_image_url || (f as any).profile_image || '';
   if (
-    !f.profile_image_url ||
-    f.profile_image_url.includes("default_profile") ||
-    f.profile_image_url.includes("default_pbs")
+    !profileImg ||
+    profileImg.includes("default_profile") ||
+    profileImg.includes("default_pbs")
   ) {
     score += 20;
     signals.push("Default avatar");
