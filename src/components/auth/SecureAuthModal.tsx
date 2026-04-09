@@ -206,6 +206,50 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const rateLimitMessage = getRateLimitMessage();
 
   return (
+    <>
+    {/* 2FA Verification Dialog */}
+    <Dialog open={show2FA} onOpenChange={(open) => { if (!open) { setShow2FA(false); setTotpCode(''); } }}>
+      <DialogContent className="sm:max-w-sm tech-border">
+        <DialogHeader>
+          <DialogTitle className="text-center flex items-center justify-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            Two-Factor Authentication
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground text-center">
+            Enter the 6-digit code from your authenticator app.
+          </p>
+          <div className="flex justify-center">
+            <InputOTP maxLength={6} value={totpCode} onChange={setTotpCode}>
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
+          <Button
+            className="w-full"
+            onClick={handle2FAVerify}
+            disabled={loading || totpCode.length !== 6}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Verify
+          </Button>
+          <button
+            className="text-xs text-muted-foreground hover:underline w-full text-center"
+            onClick={() => { setShow2FA(false); setTotpCode(''); }}
+          >
+            Cancel and go back
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md tech-border">
         <DialogHeader>
