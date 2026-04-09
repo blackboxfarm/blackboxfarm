@@ -264,6 +264,17 @@ export function AccountManagementDashboard() {
 
       if (verifError) console.warn('Failed to fetch verifications:', verifError);
 
+      // Fetch channel installations (users who installed TG bot in a channel/group)
+      const { data: channelInstalls, error: channelError } = await supabase
+        .from('channel_installations')
+        .select('user_id')
+        .eq('is_active', true)
+        .neq('kicked', true);
+
+      if (channelError) console.warn('Failed to fetch channel installations:', channelError);
+
+      const channelInstallUserIds = new Set(channelInstalls?.map(ci => ci.user_id) || []);
+
       const visitStats_raw = await supabase
         .from('holders_page_visits')
         .select('user_id, created_at, tokens_analyzed, ip_address')
