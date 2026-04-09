@@ -685,7 +685,8 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `  _• /config verbose on|off — Toggle detailed vs minimal responses_\n` +
     `  _• /config admin-only on|off — Restrict commands to admins_\n` +
     `  _• /config dev-alerts on|off — Get notified when watched devs launch_\n` +
-    `${check("auth")} /dashboard — Full channel management dashboard\n`;
+    `${check("auth")} /dashboard — Full channel management dashboard\n` +
+    `✅ /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
     `${unlocked} = Available | ${locked} = Locked to your tier\n` +
@@ -2994,9 +2995,9 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Bubblemap (pre-loaded token): https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
         prompt += `- Intel Briefings: https://blackbox.farm/intel\n`;
         prompt += `- Oracle Risk Tool: https://blackbox.farm/oracle\n`;
-        prompt += `- Register/Sign Up: https://blackbox.farm/register\n`;
-        prompt += `- Dashboard: https://blackbox.farm/dashboard\n`;
-        prompt += `- Advertise With Us: https://blackbox.farm/advertise\n`;
+        prompt += `- Register/Sign Up: https://blackbox.farm/auth\n`;
+        prompt += `- Dashboard: https://blackbox.farm/dashboard (note: for TG users, generate tokenized links via the bot instead of sending raw dashboard URLs)\n`;
+        prompt += `- Advertise With Us: https://blackbox.farm/buy-banner\n`;
         prompt += `- Share on Socials: https://blackbox.farm/share\n`;
         prompt += `Replace TOKEN_ADDRESS with the actual CA when a user mentions a specific token.\n\n`;
 
