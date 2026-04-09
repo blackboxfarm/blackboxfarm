@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   CheckCircle2, XCircle, Star, Crown, Zap, Users, ArrowRight, Loader2
 } from "lucide-react";
@@ -20,11 +21,14 @@ interface TierFeature {
 interface Tier {
   name: string;
   icon: React.ReactNode;
-  price: string;
+  monthlyPrice: string;
+  yearlyPrice?: string;
+  yearlySavings?: string;
   description: string;
   color: string;
   badge?: string;
   highlight?: boolean;
+  hasBillingToggle?: boolean;
   cta: { label: string; action: string; to: string };
   features: TierFeature[];
 }
@@ -33,7 +37,7 @@ const TIERS: Tier[] = [
   {
     name: "Free",
     icon: <Zap className="w-5 h-5" />,
-    price: "Free",
+    monthlyPrice: "Free",
     description: "Explore the basics. No account needed.",
     color: "border-muted-foreground/30",
     cta: { label: "Try Free Analysis", action: "navigate", to: "/holders" },
@@ -51,7 +55,7 @@ const TIERS: Tier[] = [
   {
     name: "Signed In",
     icon: <Users className="w-5 h-5" />,
-    price: "Free",
+    monthlyPrice: "Free",
     description: "Create an account to unlock more depth.",
     color: "border-primary/30",
     cta: { label: "Sign Up Free", action: "auth", to: "" },
@@ -69,7 +73,10 @@ const TIERS: Tier[] = [
   {
     name: "X Subscriber",
     icon: <Star className="w-5 h-5" />,
-    price: "$4.99/mo",
+    monthlyPrice: "$4.99/mo",
+    yearlyPrice: "$38.99/yr",
+    yearlySavings: "Save 19%",
+    hasBillingToggle: true,
     description: "Subscribe via X for premium intel.",
     color: "border-primary/50",
     cta: { label: "Subscribe on X", action: "external", to: "https://x.com/holdersintel" },
@@ -87,7 +94,10 @@ const TIERS: Tier[] = [
   {
     name: "Pro",
     icon: <Crown className="w-5 h-5" />,
-    price: "$9.99/mo",
+    monthlyPrice: "$9.99/mo",
+    yearlyPrice: "$89.99/yr",
+    yearlySavings: "Save 25%",
+    hasBillingToggle: true,
     description: "Full power. Every tool. Every signal.",
     color: "border-primary",
     highlight: true,
@@ -118,17 +128,23 @@ export function TierCards() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authIntent, setAuthIntent] = useState<"checkout" | "signup">("signup");
   const pendingCheckout = useRef(false);
+  const [isYearly, setIsYearly] = useState(false);
+  const pendingYearly = useRef(false);
 
-  const handleProCheckout = async () => {
+  const handleProCheckout = async (yearly?: boolean) => {
+    const useYearly = yearly ?? isYearly;
     if (!user) {
       setAuthIntent("checkout");
       pendingCheckout.current = true;
+      pendingYearly.current = useYearly;
       setShowAuthModal(true);
       return;
     }
     setCheckoutLoading(true);
     try {
-      const priceId = STRIPE_TIERS.pro.price_id;
+      const priceId = useYearly
+        ? STRIPE_TIERS.pro.yearly_price_id
+        : STRIPE_TIERS.pro.price_id;
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: { priceId },
       });
@@ -156,7 +172,7 @@ export function TierCards() {
     if (user && pendingCheckout.current) {
       pendingCheckout.current = false;
       setShowAuthModal(false);
-      handleProCheckout();
+      handleProCheckout(pendingYearly.current);
     }
   }, [user]);
 
@@ -174,66 +190,94 @@ export function TierCards() {
 
   return (
     <>
+      {/* Billing toggle */}
+      <div className="flex items-center justify-center gap-3 mb-6">
+        <span className={`text-sm font-medium ${!isYearly ? 'text-foreground' : 'text-muted-foreground'}`}>
+          Monthly
+        </span>
+        <Switch
+          checked={isYearly}
+          onCheckedChange={setIsYearly}
+          className="data-[state=checked]:bg-primary"
+        />
+        <span className={`text-sm font-medium ${isYearly ? 'text-foreground' : 'text-muted-foreground'}`}>
+          Billed yearly
+        </span>
+        {isYearly && (
+          <Badge variant="outline" className="text-primary border-primary text-[10px] ml-1">
+            Save up to 25%
+          </Badge>
+        )}
+      </div>
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {TIERS.map((tier) => (
-          <Card
-            key={tier.name}
-            className={`relative bg-card ${tier.color} ${tier.highlight ? "ring-1 ring-primary shadow-glow" : ""} transition-all hover:border-primary/40`}
-          >
-            {tier.highlight && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase">
-                  Most Popular
-                </Badge>
-              </div>
-            )}
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="text-primary">{tier.icon}</div>
-                <h3 className="font-bold text-foreground">{tier.name}</h3>
-              </div>
+        {TIERS.map((tier) => {
+          const showYearlyPrice = isYearly && tier.hasBillingToggle;
+          const displayPrice = showYearlyPrice ? tier.yearlyPrice! : tier.monthlyPrice;
 
-              <div>
-                <span className="text-2xl font-black text-foreground">{tier.price}</span>
-              </div>
+          return (
+            <Card
+              key={tier.name}
+              className={`relative bg-card ${tier.color} ${tier.highlight ? "ring-1 ring-primary shadow-glow" : ""} transition-all hover:border-primary/40`}
+            >
+              {tier.highlight && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase">
+                    Most Popular
+                  </Badge>
+                </div>
+              )}
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="text-primary">{tier.icon}</div>
+                  <h3 className="font-bold text-foreground">{tier.name}</h3>
+                </div>
 
-              <p className="text-xs text-muted-foreground">{tier.description}</p>
+                <div className="min-h-[48px]">
+                  <span className="text-2xl font-black text-foreground">{displayPrice}</span>
+                  {showYearlyPrice && tier.yearlySavings && (
+                    <span className="ml-2 text-xs font-semibold text-primary">{tier.yearlySavings}</span>
+                  )}
+                </div>
 
-              <ul className="space-y-2 pt-2">
-                {tier.features.map((f) => (
-                  <li key={f.name} className="flex items-center gap-2 text-sm">
-                    <FeatureCheck included={f.included} />
-                    <span className={f.included ? "text-foreground/90" : "text-muted-foreground/50"}>
-                      {f.name}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                <p className="text-xs text-muted-foreground">{tier.description}</p>
 
-              <div className="pt-2">
-                {tier.cta.action === "checkout" ? (
-                  <Button
-                    variant="default"
-                    className="w-full gap-2"
-                    disabled={checkoutLoading}
-                    onClick={() => handleCtaClick(tier)}
-                  >
-                    {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tier.cta.label}
-                    {!checkoutLoading && <ArrowRight className="w-4 h-4" />}
-                  </Button>
-                ) : (
-                  <Button
-                    variant={tier.highlight ? "default" : "outline"}
-                    className="w-full gap-2"
-                    onClick={() => handleCtaClick(tier)}
-                  >
-                    {tier.cta.label} <ArrowRight className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <ul className="space-y-2 pt-2">
+                  {tier.features.map((f) => (
+                    <li key={f.name} className="flex items-center gap-2 text-sm">
+                      <FeatureCheck included={f.included} />
+                      <span className={f.included ? "text-foreground/90" : "text-muted-foreground/50"}>
+                        {f.name}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="pt-2">
+                  {tier.cta.action === "checkout" ? (
+                    <Button
+                      variant="default"
+                      className="w-full gap-2"
+                      disabled={checkoutLoading}
+                      onClick={() => handleCtaClick(tier)}
+                    >
+                      {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tier.cta.label}
+                      {!checkoutLoading && <ArrowRight className="w-4 h-4" />}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant={tier.highlight ? "default" : "outline"}
+                      className="w-full gap-2"
+                      onClick={() => handleCtaClick(tier)}
+                    >
+                      {tier.cta.label} <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <AuthModal
