@@ -4082,6 +4082,39 @@ export type Database = {
         }
         Relationships: []
       }
+      email_templates: {
+        Row: {
+          created_at: string
+          display_name: string
+          html_body: string
+          id: string
+          is_active: boolean
+          subject: string
+          template_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string
+          html_body?: string
+          id?: string
+          is_active?: boolean
+          subject?: string
+          template_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          html_body?: string
+          id?: string
+          is_active?: boolean
+          subject?: string
+          template_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_tracking_events: {
         Row: {
           click_count: number
