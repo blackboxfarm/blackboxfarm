@@ -871,11 +871,28 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
     return;
   }
 
-  const dev = data.developer || data.creator || null;
-  if (!dev) {
+  // Oracle returns: profile, resolvedWallet, score, stats, network, tokenHistory
+  const profile = data.profile || null;
+  const resolvedWallet = data.resolvedWallet || null;
+  
+  if (!profile && !resolvedWallet) {
     await sendMessage(chatId, `❌ No developer profile found for this token.`);
     return;
   }
+
+  // Build a unified dev object from oracle's response shape
+  const dev = {
+    address: profile?.masterWallet || resolvedWallet,
+    reputation_score: data.score ?? profile?.reputationScore ?? null,
+    classification: data.trafficLight || null,
+    total_tokens: data.stats?.totalTokens ?? null,
+    rug_count: data.stats?.rugPulls ?? null,
+    failed_tokens: data.stats?.failedTokens ?? null,
+    avg_lifespan: data.stats?.avgLifespanHours ? `${Math.round(data.stats.avgLifespanHours)}h` : null,
+    tokens_in_top_10_count: null,
+    integrity_score: profile?.kycVerified ? 100 : null,
+    display_name: profile?.displayName || null,
+  };
 
   const isFullAccess = hasTier(gate.tier, "x_subscriber");
 
