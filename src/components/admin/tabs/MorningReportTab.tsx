@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap, Twitter, Archive, CalendarDays, CreditCard, Search, CheckCheck, HardDrive, Mail, Bot } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap, Twitter, Archive, CalendarDays, CreditCard, Search, CheckCheck, HardDrive, Mail, Bot, Cpu } from "lucide-react";
+import { AIComputeSection } from "@/components/admin/morning-report/AIComputeSection";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
 interface MorningReport {
@@ -388,7 +389,14 @@ function ReportView({ report }: { report: MorningReport }) {
             </Section>
           )}
 
-          {/* API Usage Per Service */}
+          {/* AI Compute Activity */}
+          <Section title="AI Compute (overnight)" icon={<Cpu className="w-4 h-4 text-amber-400" />}>
+            <AIComputeSection
+              reportPeriodStart={report.report_period_start}
+              reportPeriodEnd={report.report_period_end}
+            />
+          </Section>
+
           <Section title="API Usage by Service" icon={<Activity className="w-4 h-4 text-green-400" />}>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
