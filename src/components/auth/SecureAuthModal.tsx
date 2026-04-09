@@ -36,6 +36,9 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [referralSource, setReferralSource] = useState('');
   const [referralSourceOther, setReferralSourceOther] = useState('');
+  const [show2FA, setShow2FA] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
+  const [pending2FAEmail, setPending2FAEmail] = useState('');
   const { honeypotProps, isBot, isTooFast, formRenderedAt } = useSignupProtection();
   
   const { signIn, signUp, isRateLimited, rateLimitState } = useSecureAuth();
@@ -46,6 +49,24 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
     if (!email || !password) return;
 
     setLoading(true);
+    
+    try {
+      // Check if user has 2FA enabled before signing in
+      const { data: tfaCheck } = await supabase.functions.invoke('check-2fa-requirement', {
+        body: { email }
+      });
+
+      if (tfaCheck?.requires2FA) {
+        // Don't sign in yet — show 2FA prompt
+        setPending2FAEmail(email);
+        setShow2FA(true);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // If check fails, proceed with normal login
+    }
+
     const { error } = await signIn(email, password);
     
     if (error) {
@@ -62,6 +83,42 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
       onClose();
     }
     setLoading(false);
+  };
+
+  const handle2FAVerify = async () => {
+    if (totpCode.length !== 6) return;
+    setLoading(true);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('verify-2fa-login', {
+        body: { email: pending2FAEmail, totpCode, rememberDevice: true }
+      });
+      
+      if (fnError || !data?.success) {
+        toast({
+          title: "2FA Verification Failed",
+          description: data?.error || fnError?.message || "Invalid code. Please try again.",
+          variant: "destructive"
+        });
+        setTotpCode('');
+        setLoading(false);
+        return;
+      }
+
+      // 2FA passed — now sign in normally
+      const { error } = await signIn(pending2FAEmail, password);
+      if (error) {
+        toast({ title: "Sign In Failed", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Welcome back!", description: "2FA verified successfully." });
+        setShow2FA(false);
+        setTotpCode('');
+        onClose();
+      }
+    } catch (err: any) {
+      toast({ title: "2FA Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
