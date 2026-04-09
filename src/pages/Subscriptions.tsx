@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PricingTable } from '@/components/premium/PricingTable';
 import { TierCards } from '@/components/premium/TierCards';
 import { XSubscriberVerification } from '@/components/premium/XSubscriberVerification';
@@ -8,9 +8,6 @@ import { SocialIcon } from '@/components/token/SocialIcon';
 import { useUserTier } from '@/hooks/useUserTier';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { STRIPE_TIERS } from '@/config/stripeTiers';
-import { AuthModal } from '@/components/auth/AuthModal';
 import {
   ExternalLink,
   Brain,
