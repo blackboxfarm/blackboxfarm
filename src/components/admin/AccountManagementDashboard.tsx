@@ -111,6 +111,7 @@ interface UserAccount {
     telegram_username: string | null;
     linked_at: string | null;
   } | null;
+  has_channel_install?: boolean;
   subscription_tier?: string | null;
   subscription_meta?: {
     stripe_subscription_id: string | null;
