@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,7 +7,8 @@ import {
   Shield, Brain, Bot, Network, Eye, Lock, Zap, Users, 
   TrendingUp, Search, AlertTriangle, Globe, ArrowRight,
   CheckCircle2, XCircle, Star, Crown, Rocket, Target,
-  MessageSquare, BarChart3, Fingerprint, ExternalLink, MessageCircle
+  MessageSquare, BarChart3, Fingerprint, ExternalLink, MessageCircle,
+  Loader2
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SocialIcon } from "@/components/token/SocialIcon";
@@ -17,6 +18,11 @@ import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { STRIPE_TIERS } from "@/config/stripeTiers";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { toast } from "sonner";
 
 const TIERS = [
   {
@@ -84,7 +90,7 @@ const TIERS = [
     color: "border-primary",
     badge: "bg-primary text-primary-foreground",
     highlight: true,
-    cta: { label: "Upgrade to Pro", action: "navigate", to: "/subscriptions#plans" },
+    cta: { label: "Upgrade to Pro", action: "checkout", to: "/subscriptions#plans" },
     features: [
       { name: "Everything in X Subscriber", included: true },
       { name: "Full AI Narrative Reports", included: true },
@@ -188,7 +194,49 @@ function FeatureCheck({ included }: { included: boolean | string }) {
 
 export default function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   usePageTracking('home');
+
+  const handleProCheckout = async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const priceId = STRIPE_TIERS.pro.price_id;
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { priceId },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      toast.error('Failed to start checkout. Please try again.');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+  // Auto-trigger checkout after user signs in via AuthModal
+  const pendingCheckout = useRef(false);
+  useEffect(() => {
+    if (showAuthModal) {
+      pendingCheckout.current = true;
+    }
+  }, [showAuthModal]);
+
+  useEffect(() => {
+    if (user && pendingCheckout.current) {
+      pendingCheckout.current = false;
+      setShowAuthModal(false);
+      handleProCheckout();
+    }
+  }, [user]);
 
   return (
     <SiteLayout>
@@ -483,7 +531,17 @@ export default function Home() {
                   </ul>
                   
                   <div className="pt-2">
-                    {tier.cta.action === "external" ? (
+                    {tier.cta.action === "checkout" ? (
+                      <Button 
+                        variant="default" 
+                        className="w-full gap-2"
+                        disabled={checkoutLoading}
+                        onClick={handleProCheckout}
+                      >
+                        {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tier.cta.label}
+                        {!checkoutLoading && <ArrowRight className="w-4 h-4" />}
+                      </Button>
+                    ) : tier.cta.action === "external" ? (
                       <a href={tier.cta.to} target="_blank" rel="noopener noreferrer" className="block">
                         <Button variant={tier.highlight ? "default" : "outline"} className="w-full gap-2">
                           {tier.cta.label} <ArrowRight className="w-4 h-4" />
@@ -674,6 +732,13 @@ export default function Home() {
           </div>
         </div>
       </section>
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => {
+          setShowAuthModal(false);
+        }}
+        defaultTab="signup"
+      />
     </SiteLayout>
   );
 }
