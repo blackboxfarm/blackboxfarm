@@ -173,8 +173,10 @@ const AccountBadges = ({ account }: { account: UserAccount }) => {
     badges.push({ icon: '👍', label: 'Email Verified' });
   }
 
-  // Sunglasses = TG bot installed in channel/group (future data source)
-  // badges.push({ icon: '😎', label: 'TG Bot in Channel' });
+  // Sunglasses = TG bot installed in channel/group
+  if (account.has_channel_install) {
+    badges.push({ icon: '😎', label: 'TG Bot Installed in Channel/Group' });
+  }
 
   if (badges.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
 
