@@ -191,22 +191,40 @@ export function TierCards() {
   return (
     <>
       {/* Billing toggle */}
-      <div className="flex items-center justify-center gap-3 mb-6">
-        <span className={`text-sm font-medium ${!isYearly ? 'text-foreground' : 'text-muted-foreground'}`}>
-          Monthly
-        </span>
-        <Switch
-          checked={isYearly}
-          onCheckedChange={setIsYearly}
-          className="data-[state=checked]:bg-primary"
-        />
-        <span className={`text-sm font-medium ${isYearly ? 'text-foreground' : 'text-muted-foreground'}`}>
-          Billed yearly
-        </span>
+      <div className="flex flex-col items-center gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <span className={`text-sm font-medium ${!isYearly ? 'text-foreground' : 'text-muted-foreground'}`}>
+            Monthly
+          </span>
+          <Switch
+            checked={isYearly}
+            onCheckedChange={setIsYearly}
+            className="data-[state=checked]:bg-primary"
+          />
+          <span className={`text-sm font-medium ${isYearly ? 'text-foreground' : 'text-muted-foreground'}`}>
+            Billed yearly
+          </span>
+          {isYearly && (
+            <Badge variant="outline" className="text-primary border-primary text-[10px] ml-1">
+              Save up to 25%
+            </Badge>
+          )}
+        </div>
         {isYearly && (
-          <Badge variant="outline" className="text-primary border-primary text-[10px] ml-1">
-            Save up to 25%
-          </Badge>
+          <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 text-xs">
+            <span className="text-primary font-bold">◎</span>
+            <span className="text-muted-foreground">
+              Pay with <strong className="text-foreground">Solana</strong> — 1 SOL/yr (~$84) via Telegram.{' '}
+              <a
+                href="https://t.me/holdersintel_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                DM @BlackBoxFarmBot → /payment
+              </a>
+            </span>
+          </div>
         )}
       </div>
 

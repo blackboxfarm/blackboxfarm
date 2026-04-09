@@ -15,9 +15,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Plus, Edit, Trash2, Send, Eye, Users, Clock, Loader2, BarChart3 } from 'lucide-react';
+import { Mail, Plus, Edit, Trash2, Send, Eye, Users, Clock, Loader2, BarChart3, FileText } from 'lucide-react';
 import { format } from 'date-fns';
+import { EmailTemplateEditor } from './EmailTemplateEditor';
 
 interface Campaign {
   id: string;
