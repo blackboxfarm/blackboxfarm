@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Zap } from "lucide-react";
+import { RefreshCw, Zap, Skull, Undo2, ExternalLink } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Discovery {
@@ -33,6 +33,7 @@ const statusColors: Record<string, string> = {
   posted: 'bg-green-500/20 text-green-400',
   skipped: 'bg-muted text-muted-foreground',
   inserted: 'bg-green-500/20 text-green-400',
+  killed: 'bg-red-500/20 text-red-400',
 };
 
 const torontoTime = (d?: Date) =>
@@ -47,6 +48,7 @@ export function FunnelFeedDiscoveries() {
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState<Record<string, boolean>>({});
   const [pushedAt, setPushedAt] = useState<Record<string, string>>({});
+  const [killing, setKilling] = useState<Record<string, boolean>>({});
 
   const fetchDiscoveries = async () => {
     setLoading(true);
@@ -64,7 +66,6 @@ export function FunnelFeedDiscoveries() {
   const handlePush = async (d: Discovery) => {
     setPushing(prev => ({ ...prev, [d.id]: true }));
     try {
-      // 1. Insert into queue
       await supabase.from('holders_intel_post_queue').insert({
         token_mint: d.token_mint,
         symbol: d.token_symbol || null,
@@ -75,7 +76,6 @@ export function FunnelFeedDiscoveries() {
         trigger_comment: `Manual push from funnel feed discovery ${d.id}`,
       });
 
-      // 2. Invoke poster immediately
       const { data, error } = await supabase.functions.invoke('holders-intel-poster', {
         body: { manualOverride: true },
       });
@@ -86,13 +86,37 @@ export function FunnelFeedDiscoveries() {
       setPushedAt(prev => ({ ...prev, [d.id]: ts }));
       toast({ title: 'Pushed!', description: `${d.token_symbol || d.token_mint.slice(0, 8)} posted to X + TG` });
       
-      // Refresh list after short delay
       setTimeout(fetchDiscoveries, 2000);
     } catch (err: any) {
       console.error('Manual push failed:', err);
       toast({ title: 'Push failed', description: err.message || 'Unknown error', variant: 'destructive' });
     } finally {
       setPushing(prev => ({ ...prev, [d.id]: false }));
+    }
+  };
+
+  const handleKillToggle = async (d: Discovery) => {
+    const isKilled = d.xpost_status === 'killed';
+    const newStatus = isKilled ? 'pending' : 'killed';
+    setKilling(prev => ({ ...prev, [d.id]: true }));
+    try {
+      const { error } = await supabase
+        .from('funnel_feed_discoveries')
+        .update({ xpost_status: newStatus })
+        .eq('id', d.id);
+      if (error) throw error;
+
+      setDiscoveries(prev => prev.map(item =>
+        item.id === d.id ? { ...item, xpost_status: newStatus } : item
+      ));
+      toast({
+        title: isKilled ? 'Reversed' : 'Killed',
+        description: `${d.token_symbol || d.token_mint.slice(0, 8)} ${isKilled ? 'restored to pending' : 'blocked from posting'}`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setKilling(prev => ({ ...prev, [d.id]: false }));
     }
   };
 
@@ -134,16 +158,20 @@ export function FunnelFeedDiscoveries() {
                 <TableHead compact>Watchlist</TableHead>
                 <TableHead compact>X Post</TableHead>
                 <TableHead compact>Manual PUSH</TableHead>
+                <TableHead compact>KILL</TableHead>
+                <TableHead compact>Padre</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {discoveries.map(d => {
+                const isKilled = d.xpost_status === 'killed';
                 const isPosted = d.xpost_status === 'posted' || !!pushedAt[d.id];
                 const isPushing = pushing[d.id];
+                const isKilling = killing[d.id];
                 const postedTime = pushedAt[d.id] || (d.xpost_processed_at ? torontoTime(new Date(d.xpost_processed_at)) : null);
 
                 return (
-                  <TableRow key={d.id}>
+                  <TableRow key={d.id} className={isKilled ? 'opacity-50' : ''}>
                     <TableCell compact className="font-medium">
                       {d.token_symbol ? `$${d.token_symbol}` : '—'}
                       {d.token_name && <span className="text-muted-foreground ml-1 text-xs">{d.token_name}</span>}
@@ -177,6 +205,7 @@ export function FunnelFeedDiscoveries() {
                         {d.xpost_status}
                       </Badge>
                     </TableCell>
+                    {/* Manual PUSH */}
                     <TableCell compact>
                       {isPosted && postedTime ? (
                         <span className="text-xs text-green-400">{postedTime}</span>
@@ -185,7 +214,7 @@ export function FunnelFeedDiscoveries() {
                           size="sm"
                           variant="outline"
                           className="h-6 px-2 text-xs"
-                          disabled={isPushing}
+                          disabled={isPushing || isKilled}
                           onClick={() => handlePush(d)}
                         >
                           {isPushing ? (
@@ -195,6 +224,39 @@ export function FunnelFeedDiscoveries() {
                           )}
                         </Button>
                       )}
+                    </TableCell>
+                    {/* KILL / REVERSE */}
+                    <TableCell compact>
+                      {isPosted ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant={isKilled ? 'outline' : 'destructive'}
+                          className="h-6 px-2 text-xs"
+                          disabled={isKilling}
+                          onClick={() => handleKillToggle(d)}
+                        >
+                          {isKilling ? (
+                            <RefreshCw className="h-3 w-3 animate-spin" />
+                          ) : isKilled ? (
+                            <><Undo2 className="h-3 w-3 mr-1" />REVERSE</>
+                          ) : (
+                            <><Skull className="h-3 w-3 mr-1" />KILL</>
+                          )}
+                        </Button>
+                      )}
+                    </TableCell>
+                    {/* Padre link */}
+                    <TableCell compact>
+                      <a
+                        href={`https://trade.padre.gg/trade/solana/${d.token_mint}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center text-xs hover:text-primary"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
                     </TableCell>
                   </TableRow>
                 );
