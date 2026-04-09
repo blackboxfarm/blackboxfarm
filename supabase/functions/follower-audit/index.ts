@@ -132,7 +132,7 @@ serve(async (req) => {
 
     const cleanHandle = handle.replace(/^@/, "").trim().toLowerCase();
 
-    const apifyToken = Deno.env.get("APIFY_API_TOKEN");
+    const apifyToken = Deno.env.get("APIFY_API_TOKEN") || Deno.env.get("APIFY_API_KEY");
     if (!apifyToken) {
       return new Response(
         JSON.stringify({ error: "APIFY_API_TOKEN not configured" }),
