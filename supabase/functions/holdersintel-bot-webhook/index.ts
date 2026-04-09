@@ -17,6 +17,28 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
 });
 
+// ─── Helper: Generate a one-time tokenized action link ───
+async function generateActionLink(userId: string, actionType: string, payload: Record<string, unknown> = {}): Promise<string> {
+  try {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    await supabase.from('one_time_action_tokens').insert({
+      token,
+      user_id: userId,
+      action_type: actionType,
+      payload,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+
+    return `https://blackbox.farm/action?t=${token}`;
+  } catch (e) {
+    console.error('Failed to generate action link:', e);
+    return 'https://blackbox.farm/auth';
+  }
+}
+
 // ─── Tier hierarchy (higher = more access) ───
 const TIER_RANK: Record<string, number> = {
   free: 0, auth: 1, x_subscriber: 2, pro: 3, dev: 4, enterprise: 5,
