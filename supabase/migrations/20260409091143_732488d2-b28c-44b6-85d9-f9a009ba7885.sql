@@ -1,0 +1,2 @@
+UPDATE funnel_feed_discoveries SET xpost_status = 'queued' WHERE id = 'a75d4d3a-7892-482d-9a9a-b88b4e4649ef';
+UPDATE holders_intel_post_queue SET status = 'pending' WHERE id = '35a1213e-70c0-4d19-a99d-36ef7ed7b2d3';
