@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { FileText, Save, Eye, Loader2, Send, Code } from 'lucide-react';
+import { FileText, Save, Eye, Loader2, Send, Code, SlidersHorizontal } from 'lucide-react';
+import { EmailStructuredEditor } from './EmailStructuredEditor';
 
 interface EmailTemplate {
   id: string;
