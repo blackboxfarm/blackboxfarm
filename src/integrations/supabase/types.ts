@@ -13842,6 +13842,60 @@ export type Database = {
           },
         ]
       }
+      tg_sol_subscriptions: {
+        Row: {
+          amount_sol: number
+          created_at: string
+          expires_at: string | null
+          id: string
+          paid_at: string | null
+          payment_wallet_pubkey: string
+          payment_wallet_secret_encrypted: string
+          sol_price_at_order: number | null
+          status: string
+          sweep_tx_signature: string | null
+          swept_at: string | null
+          telegram_user_id: string
+          tier_granted: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          amount_sol?: number
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          paid_at?: string | null
+          payment_wallet_pubkey: string
+          payment_wallet_secret_encrypted: string
+          sol_price_at_order?: number | null
+          status?: string
+          sweep_tx_signature?: string | null
+          swept_at?: string | null
+          telegram_user_id: string
+          tier_granted?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount_sol?: number
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          paid_at?: string | null
+          payment_wallet_pubkey?: string
+          payment_wallet_secret_encrypted?: string
+          sol_price_at_order?: number | null
+          status?: string
+          sweep_tx_signature?: string | null
+          swept_at?: string | null
+          telegram_user_id?: string
+          tier_granted?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       token_account_cleanup_logs: {
         Row: {
           accounts_closed: number
