@@ -8,7 +8,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// Bot-farm location keywords
 const BOT_FARM_LOCATIONS = new Set([
   "nigeria", "lagos", "abuja", "pakistan", "karachi", "lahore",
   "bangladesh", "dhaka", "india", "mumbai", "delhi", "indonesia",
@@ -16,18 +15,18 @@ const BOT_FARM_LOCATIONS = new Set([
 ]);
 
 interface FollowerProfile {
-  userName?: string;
+  screen_name?: string;
   name?: string;
-  followersCount?: number;
-  followingCount?: number;
-  statusesCount?: number;
-  favouritesCount?: number;
-  isVerified?: boolean;
-  isBlueVerified?: boolean;
-  profileImageUrl?: string;
+  user_id?: string;
+  followers_count?: number;
+  friends_count?: number;
+  statuses_count?: number;
+  favourites_count?: number;
+  is_blue_verified?: boolean;
+  profile_image_url?: string;
   description?: string;
   location?: string;
-  createdAt?: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -41,32 +40,32 @@ interface BotScore {
 function scoreFollower(f: FollowerProfile): BotScore {
   let score = 0;
   const signals: string[] = [];
-  const username = f.userName || f.name || "unknown";
+  const username = f.screen_name || f.name || "unknown";
 
-  // Default avatar
+  // Default avatar — field is "profile_image" from this actor
+  const profileImg = f.profile_image_url || (f as any).profile_image || '';
   if (
-    !f.profileImageUrl ||
-    f.profileImageUrl.includes("default_profile") ||
-    f.profileImageUrl.includes("default_pbs")
+    !profileImg ||
+    profileImg.includes("default_profile") ||
+    profileImg.includes("default_pbs")
   ) {
     score += 20;
     signals.push("Default avatar");
   }
 
-  // Random alphanumeric username (8+ chars with lots of digits)
+  // Random alphanumeric username
   if (username && /^[a-zA-Z]{1,3}[0-9]{5,}$/.test(username)) {
     score += 15;
     signals.push("Random username");
   }
-  // Or pure gibberish: many consecutive consonants
   if (username && /[bcdfghjklmnpqrstvwxyz]{5,}/i.test(username)) {
     score += 10;
     signals.push("Gibberish username");
   }
 
-  // Account age < 90 days
-  if (f.createdAt) {
-    const age = Date.now() - new Date(f.createdAt).getTime();
+  // Account age
+  if (f.created_at) {
+    const age = Date.now() - new Date(f.created_at).getTime();
     const dayAge = age / (1000 * 60 * 60 * 24);
     if (dayAge < 30) {
       score += 15;
@@ -77,10 +76,9 @@ function scoreFollower(f: FollowerProfile): BotScore {
     }
   }
 
-  // 0 tweets but follows 1000+
-  const tweets = f.statusesCount ?? 0;
-  const following = f.followingCount ?? 0;
-  const followers = f.followersCount ?? 0;
+  const tweets = f.statuses_count ?? 0;
+  const following = f.friends_count ?? 0;
+  const followers = f.followers_count ?? 0;
 
   if (tweets === 0 && following > 500) {
     score += 25;
@@ -90,13 +88,11 @@ function scoreFollower(f: FollowerProfile): BotScore {
     signals.push(`${tweets} tweets, follows ${following}`);
   }
 
-  // Empty bio
   if (!f.description || f.description.trim().length === 0) {
     score += 10;
     signals.push("No bio");
   }
 
-  // Following/Follower ratio > 50
   if (followers > 0 && following / followers > 50) {
     score += 15;
     signals.push(`Follow ratio ${(following / followers).toFixed(0)}:1`);
@@ -105,7 +101,6 @@ function scoreFollower(f: FollowerProfile): BotScore {
     signals.push(`0 followers, follows ${following}`);
   }
 
-  // Bot-farm location
   const loc = (f.location || "").toLowerCase();
   if (loc && [...BOT_FARM_LOCATIONS].some((kw) => loc.includes(kw))) {
     score += 10;
@@ -132,7 +127,7 @@ serve(async (req) => {
 
     const cleanHandle = handle.replace(/^@/, "").trim().toLowerCase();
 
-    const apifyToken = Deno.env.get("APIFY_API_TOKEN");
+    const apifyToken = Deno.env.get("APIFY_API_TOKEN") || Deno.env.get("APIFY_API_KEY");
     if (!apifyToken) {
       return new Response(
         JSON.stringify({ error: "APIFY_API_TOKEN not configured" }),
@@ -142,7 +137,7 @@ serve(async (req) => {
 
     const logger = createApiLogger({
       serviceName: "apify",
-      endpoint: "twitter-followers-scraper",
+      endpoint: "x-twitter-followers-scraper",
       functionName: "follower-audit",
       requestType: "holders_report",
       metadata: { handle: cleanHandle, sampleSize },
@@ -150,25 +145,29 @@ serve(async (req) => {
 
     console.log(`[FollowerAudit] Starting audit for @${cleanHandle}, sample=${sampleSize}`);
 
-    // Run Apify actor
+    // Use api-ninja/x-twitter-followers-scraper which returns full profile data
+    const actorInput = {
+      urls: [`https://x.com/${cleanHandle}/followers`],
+      maxResults: Math.max(20, sampleSize),
+      scrapeAllResults: false,
+    };
+    console.log(`[FollowerAudit] Apify input:`, JSON.stringify(actorInput));
+    
     const actorRunRes = await fetch(
-      `https://api.apify.com/v2/acts/apidojo~twitter-followers-scraper/run-sync-get-dataset-items?token=${apifyToken}`,
+      `https://api.apify.com/v2/acts/api-ninja~x-twitter-followers-scraper/run-sync-get-dataset-items?token=${apifyToken}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          twitterHandles: [cleanHandle],
-          maxItems: sampleSize,
-          proxyConfiguration: { useApifyProxy: true },
-        }),
+        body: JSON.stringify(actorInput),
       }
     );
 
     if (!actorRunRes.ok) {
       const errText = await actorRunRes.text();
-      await logger.fail(`Apify error ${actorRunRes.status}: ${errText}`);
+      console.error(`[FollowerAudit] Apify error ${actorRunRes.status}:`, errText.slice(0, 1000));
+      await logger.fail(`Apify error ${actorRunRes.status}: ${errText.slice(0, 200)}`);
       return new Response(
-        JSON.stringify({ error: `Apify request failed: ${actorRunRes.status}` }),
+        JSON.stringify({ error: `Apify request failed: ${actorRunRes.status}`, details: errText.slice(0, 500) }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -177,11 +176,13 @@ serve(async (req) => {
     await logger.complete(200);
 
     console.log(`[FollowerAudit] Got ${followers.length} followers for @${cleanHandle}`);
+    if (followers.length > 0) {
+      console.log(`[FollowerAudit] Sample keys:`, JSON.stringify(Object.keys(followers[0])));
+    }
 
     // Score each follower
     const scored: BotScore[] = followers.map(scoreFollower);
 
-    // Classify
     let botCount = 0;
     let suspiciousCount = 0;
     let realCount = 0;
@@ -212,18 +213,16 @@ serve(async (req) => {
     const signalCounts: Record<string, number> = {};
     for (const s of scored) {
       for (const sig of s.signals) {
-        const key = sig.replace(/\d+/g, "N"); // normalize numbers
+        const key = sig.replace(/\d+/g, "N");
         signalCounts[key] = (signalCounts[key] || 0) + 1;
       }
     }
 
-    // Verdict
     let verdict: string;
     if (realPct >= 70) verdict = "✅ Mostly organic — good candidate for paid promotion";
     else if (realPct >= 40) verdict = "⚠️ Mixed audience — proceed with caution";
     else verdict = "🚫 High bot ratio — not recommended for paid promotion";
 
-    // Top suspects (20 highest scores)
     const topSuspects = scored
       .sort((a, b) => b.score - a.score)
       .slice(0, 20);
@@ -233,8 +232,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get follower count from first result metadata or estimate
-    const followerCount = followers[0]?.followersCount || followers.length;
+    const followerCount = followers[0]?.followers_count || followers.length;
 
     const { error: dbError } = await supabase.from("follower_audits").insert({
       handle: cleanHandle,
@@ -245,7 +243,7 @@ serve(async (req) => {
       bot_pct: botPct,
       geo_breakdown: geoBreakdown,
       signals_summary: signalCounts,
-      raw_sample: topSuspects, // Only store top suspects, not all 500
+      raw_sample: topSuspects,
       cost_credits: 1,
       verdict,
     });
