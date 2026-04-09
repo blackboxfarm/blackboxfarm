@@ -2642,6 +2642,30 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, _args
         `📅 Valid until: *${expiryDate}*\n\n` +
         `All Pro commands are now unlocked. Use /help to see everything available.` + TAGLINE
       );
+
+      // Send SOL payment receipt email
+      try {
+        const email = linked.email || linked.profiles?.email;
+        if (email) {
+          await fetch(`${SUPABASE_URL}/functions/v1/subscriber-welcome`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+            },
+            body: JSON.stringify({
+              emailType: 'sol_payment_confirmed',
+              email,
+              name: linked.profiles?.display_name,
+              amountSol: pendingSub.amount_sol,
+              walletPubkey: pendingSub.payment_wallet_pubkey,
+              expiresAt: data.expires_at,
+            }),
+          });
+        }
+      } catch (emailErr) {
+        console.error('[bot] SOL receipt email error:', emailErr);
+      }
     } else if (data.status === 'partial') {
       await sendMessage(chatId,
         `⚠️ *Partial payment detected*\n\n` +

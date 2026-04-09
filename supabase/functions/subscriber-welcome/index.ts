@@ -506,6 +506,11 @@ const handler = async (req: Request): Promise<Response> => {
         html = generateCancellationEmail(data.email, data.name, data.tierKey || 'pro');
         break;
 
+      case 'sol_payment_confirmed':
+        subject = '✅ SOL Payment Received — BlackBox Pro Yearly';
+        html = generateSolPaymentReceiptEmail(data.email, data.name, data.amountSol, data.walletPubkey, data.expiresAt);
+        break;
+
       default:
         throw new Error(`Unknown email type: ${emailType}`);
     }
