@@ -123,7 +123,7 @@ export function FunnelFeedDiscoveries() {
 
       // 5. Post directly to X via post-share-card-twitter
       const { data: postResult, error: postError } = await supabase.functions.invoke('post-share-card-twitter', {
-        body: { tweetText, twitterHandle: 'HoldersIntel' },
+        body: { tweetText, twitterHandle: 'HoldersIntel', manualOverride: true },
       });
       if (postError) throw postError;
       if (postResult && !postResult.success && !postResult.paused) {
