@@ -35,7 +35,7 @@ export default function Subscriptions() {
   const { checkSubscription, tierInfo } = useUserTier();
   const { user } = useAuth();
   const navigate = useNavigate();
-  };
+
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       toast.success('Subscription activated! Welcome aboard 🎉');
@@ -265,13 +265,6 @@ export default function Subscriptions() {
             </div>
           </div>
         </section>
-        {showAuthModal && (
-          <AuthModal
-            isOpen={showAuthModal}
-            onClose={handleAuthClose}
-            defaultTab="signup"
-          />
-        )}
     </SiteLayout>
   );
 }
