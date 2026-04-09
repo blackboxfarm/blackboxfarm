@@ -2314,6 +2314,48 @@ export type Database = {
         }
         Relationships: []
       }
+      buyer_intent_signals: {
+        Row: {
+          checkout_attempts: number
+          created_at: string
+          funnel_tag: string | null
+          id: string
+          intent_level: string
+          last_checkout_attempt: string | null
+          last_pricing_visit: string | null
+          nurture_email_sent: boolean
+          pricing_page_views: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checkout_attempts?: number
+          created_at?: string
+          funnel_tag?: string | null
+          id?: string
+          intent_level?: string
+          last_checkout_attempt?: string | null
+          last_pricing_visit?: string | null
+          nurture_email_sent?: boolean
+          pricing_page_views?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checkout_attempts?: number
+          created_at?: string
+          funnel_tag?: string | null
+          id?: string
+          intent_level?: string
+          last_checkout_attempt?: string | null
+          last_pricing_visit?: string | null
+          nurture_email_sent?: boolean
+          pricing_page_views?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       campaign_notifications: {
         Row: {
           campaign_id: string
@@ -18215,6 +18257,7 @@ export type Database = {
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
+      refresh_buyer_intent_signals: { Args: never; Returns: undefined }
       refresh_master_token_directory: { Args: never; Returns: undefined }
       refresh_mesh_summary: { Args: never; Returns: undefined }
       reset_daily_auto_buy_counts: { Args: never; Returns: undefined }
