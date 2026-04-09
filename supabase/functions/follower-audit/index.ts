@@ -145,16 +145,19 @@ serve(async (req) => {
     console.log(`[FollowerAudit] Starting audit for @${cleanHandle}, sample=${sampleSize}`);
 
     // Use api-ninja/x-twitter-followers-scraper which returns full profile data
+    const actorInput = {
+      urls: [`https://x.com/${cleanHandle}/followers`],
+      maxResults: sampleSize,
+      scrapeAllResults: false,
+    };
+    console.log(`[FollowerAudit] Apify input:`, JSON.stringify(actorInput));
+    
     const actorRunRes = await fetch(
       `https://api.apify.com/v2/acts/api-ninja~x-twitter-followers-scraper/run-sync-get-dataset-items?token=${apifyToken}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          urls: [`${cleanHandle}/followers`],
-          maxResults: sampleSize,
-          scrapeAllResults: false,
-        }),
+        body: JSON.stringify(actorInput),
       }
     );
 
