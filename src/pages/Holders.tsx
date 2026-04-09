@@ -5,6 +5,7 @@ import { TelegramWebViewBanner } from "@/components/TelegramWebViewBanner";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AnalysisOverview } from "@/components/holders/AnalysisOverview";
+import analysisThumb from "@/assets/analysis-overview-thumb.png";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
@@ -32,7 +33,10 @@ export default function Holders() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-4">
             <TabsTrigger value="report">Token Holders Report</TabsTrigger>
-            <TabsTrigger value="overview">Analysis Overview</TabsTrigger>
+            <TabsTrigger value="overview" className="gap-2">
+              Analysis Overview
+              <img src={analysisThumb} alt="Analysis Overview" className="h-5 w-auto rounded-sm" />
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="report" className="mt-0">
