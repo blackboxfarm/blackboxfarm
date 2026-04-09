@@ -407,5 +407,11 @@ export function EmailCampaignsManager() {
         </DialogContent>
       </Dialog>
     </div>
+      </TabsContent>
+
+      <TabsContent value="templates">
+        <EmailTemplateEditor />
+      </TabsContent>
+    </Tabs>
   );
 }
