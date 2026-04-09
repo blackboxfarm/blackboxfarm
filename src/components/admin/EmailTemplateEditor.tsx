@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { FileText, Save, Eye, Loader2, Send, Code } from 'lucide-react';
+import { FileText, Save, Eye, Loader2, Send, Code, SlidersHorizontal } from 'lucide-react';
+import { EmailStructuredEditor } from './EmailStructuredEditor';
 
 interface EmailTemplate {
   id: string;
@@ -169,10 +170,13 @@ export function EmailTemplateEditor() {
                   />
                 </div>
 
-                <Tabs defaultValue="editor" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                <Tabs defaultValue="visual" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="visual" className="text-xs gap-1">
+                      <SlidersHorizontal className="h-3.5 w-3.5" /> Visual
+                    </TabsTrigger>
                     <TabsTrigger value="editor" className="text-xs gap-1">
-                      <Code className="h-3.5 w-3.5" /> Editor
+                      <Code className="h-3.5 w-3.5" /> HTML
                     </TabsTrigger>
                     <TabsTrigger value="preview" className="text-xs gap-1">
                       <Eye className="h-3.5 w-3.5" /> Preview
@@ -181,6 +185,13 @@ export function EmailTemplateEditor() {
                       <Send className="h-3.5 w-3.5" /> Send Test
                     </TabsTrigger>
                   </TabsList>
+
+                  <TabsContent value="visual" className="mt-3">
+                    <EmailStructuredEditor
+                      htmlBody={editData.html_body}
+                      onChange={(html) => setEditData({ ...editData, html_body: html })}
+                    />
+                  </TabsContent>
 
                   <TabsContent value="editor" className="mt-3">
                     <Textarea
