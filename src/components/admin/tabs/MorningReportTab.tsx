@@ -389,7 +389,14 @@ function ReportView({ report }: { report: MorningReport }) {
             </Section>
           )}
 
-          {/* API Usage Per Service */}
+          {/* AI Compute Activity */}
+          <Section title="AI Compute (overnight)" icon={<Cpu className="w-4 h-4 text-amber-400" />}>
+            <AIComputeSection
+              reportPeriodStart={report.report_period_start}
+              reportPeriodEnd={report.report_period_end}
+            />
+          </Section>
+
           <Section title="API Usage by Service" icon={<Activity className="w-4 h-4 text-green-400" />}>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
