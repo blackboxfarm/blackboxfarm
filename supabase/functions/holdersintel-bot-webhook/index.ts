@@ -662,7 +662,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `  _• /config verbose on|off — Toggle detailed vs minimal responses_\n` +
     `  _• /config admin-only on|off — Restrict commands to admins_\n` +
     `  _• /config dev-alerts on|off — Get notified when watched devs launch_\n` +
-    `${check("auth")} /payment (/pay) — ℹ️ Pricing info (it's free!)\n` +
+    `${check("auth")} /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n` +
     `${check("auth")} /dashboard — Full channel management dashboard\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
@@ -2514,40 +2514,156 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
   await sendMessage(chatId, `✅ *${channelName}*\n${settingLabels[setting]}` + TAGLINE);
 }
 
-// ─── /payment (/pay) — DM-only: Inform user that it's free ───
+// ─── /payment (/pay) — DM-only: Yearly Pro subscription via SOL ───
 async function handlePayment(chatId: number, telegramUserId: string, args: string) {
-  // If they try /payment verify, just tell them it's free
+  // If they send /payment verify, check their pending subscription
   if (args.trim().startsWith('verify')) {
+    await handlePaymentVerify(chatId, telegramUserId, args.replace(/^verify\s*/i, '').trim());
+    return;
+  }
+
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 *Account not linked.*\n\nUse /register first to link your BlackBox Farm account.`);
+    return;
+  }
+
+  // Check if user already has an active paid subscription
+  const { data: activeSub } = await supabase
+    .from('tg_sol_subscriptions')
+    .select('id, expires_at')
+    .eq('telegram_user_id', telegramUserId)
+    .eq('status', 'paid')
+    .gte('expires_at', new Date().toISOString())
+    .maybeSingle();
+
+  if (activeSub) {
+    const expiryDate = new Date(activeSub.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     await sendMessage(chatId,
-      `🎉 *Great news!*\n\n` +
-      `Channel installations are *completely FREE*.\n` +
-      `All features are already unlocked — no payment needed!\n\n` +
-      `Use /channels to manage your installations.` +
-      TAGLINE
+      `✅ *You already have an active Pro subscription!*\n\n` +
+      `Your subscription is valid until *${expiryDate}*.\n\n` +
+      `Use /status to check your tier details.` + TAGLINE
     );
     return;
   }
 
-  await sendMessage(chatId,
-    `🎉 *Great news — it's FREE!*\n\n` +
-    `All channel and group installations are *100% free*.\n` +
-    `Every feature is unlocked out of the box — no activation fee required.\n\n` +
-    `🚀 *Future Premium Tiers:* TBA\n` +
-    `_We'll announce advanced features and pricing when ready._\n\n` +
-    `Use /channels to see your installations.\n` +
-    `Use /add to install the bot in a new group.` +
-    TAGLINE
-  );
+  await sendMessage(chatId, `⏳ Generating your payment wallet...`);
+
+  try {
+    // Call the edge function to create a subscription + payment wallet
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/tg-subscription-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        action: 'create',
+        telegram_user_id: telegramUserId,
+        user_id: linked.user_id,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to create subscription');
+    }
+
+    const amountSol = data.amount_sol;
+    const solPriceStr = data.sol_price ? `($${(amountSol * data.sol_price).toFixed(2)} USD)` : '';
+    const existingNote = data.existing ? `\n⚠️ _Using your existing pending payment wallet._` : '';
+
+    await sendMessage(chatId,
+      `💰 *Yearly Pro Subscription — Pay with SOL*\n\n` +
+      `Send exactly *${amountSol} SOL* ${solPriceStr} to:\n\n` +
+      `\`${data.payment_wallet}\`\n\n` +
+      `📋 _Tap the address above to copy it_\n${existingNote}\n` +
+      `✅ This gets you *Pro tier for 1 full year* — all commands unlocked, highest rate limits.\n\n` +
+      `💡 *Cheaper than Stripe!* Our monthly Pro is $9.99/mo ($119.88/yr) or $89.99/yr. SOL payment saves you even more.\n\n` +
+      `⏱ After sending, use:\n` +
+      `/payment verify\n\n` +
+      `_Payment wallet expires in 1 hour if unused._` + TAGLINE
+    );
+  } catch (e) {
+    console.error('[bot] Payment creation error:', e);
+    await sendMessage(chatId,
+      `❌ *Error generating payment wallet.*\n\nPlease try again in a moment or subscribe via [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions).` + TAGLINE
+    );
+  }
 }
 
-// ─── /payment verify — now just redirects to free message ───
-async function handlePaymentVerify(chatId: number, telegramUserId: string, targetChatIdStr: string) {
-  await sendMessage(chatId,
-    `🎉 *No payment needed!*\n\n` +
-    `All channel installations are *free* with full features.\n` +
-    `Use /channels to see your active installations.` +
-    TAGLINE
-  );
+// ─── /payment verify — Check if SOL payment was received ───
+async function handlePaymentVerify(chatId: number, telegramUserId: string, _args: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 *Account not linked.*\n\nUse /register first.`);
+    return;
+  }
+
+  // Find the most recent pending subscription for this TG user
+  const { data: pendingSub } = await supabase
+    .from('tg_sol_subscriptions')
+    .select('id, payment_wallet_pubkey, amount_sol')
+    .eq('telegram_user_id', telegramUserId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!pendingSub) {
+    await sendMessage(chatId,
+      `❌ *No pending payment found.*\n\nUse /payment first to generate a payment wallet.` + TAGLINE
+    );
+    return;
+  }
+
+  await sendMessage(chatId, `🔍 Checking your payment on-chain...`);
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/tg-subscription-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        action: 'check',
+        subscription_id: pendingSub.id,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.status === 'paid') {
+      const expiryDate = new Date(data.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      await sendMessage(chatId,
+        `🎉 *Payment Confirmed!*\n\n` +
+        `✅ Your *Pro* subscription is now active!\n` +
+        `📅 Valid until: *${expiryDate}*\n\n` +
+        `All Pro commands are now unlocked. Use /help to see everything available.` + TAGLINE
+      );
+    } else if (data.status === 'partial') {
+      await sendMessage(chatId,
+        `⚠️ *Partial payment detected*\n\n` +
+        `Received: *${data.received?.toFixed(4)} SOL*\n` +
+        `Required: *${pendingSub.amount_sol} SOL*\n` +
+        `Remaining: *${data.remaining?.toFixed(4)} SOL*\n\n` +
+        `Please send the remaining amount to:\n\`${pendingSub.payment_wallet_pubkey}\`\n\n` +
+        `Then try /payment verify again.` + TAGLINE
+      );
+    } else {
+      await sendMessage(chatId,
+        `⏳ *No payment detected yet.*\n\n` +
+        `Send *${pendingSub.amount_sol} SOL* to:\n\`${pendingSub.payment_wallet_pubkey}\`\n\n` +
+        `Then use /payment verify to confirm.` + TAGLINE
+      );
+    }
+  } catch (e) {
+    console.error('[bot] Payment verify error:', e);
+    await sendMessage(chatId,
+      `❌ *Error checking payment.* Please try again in a moment.` + TAGLINE
+    );
+  }
 }
 
 // ─── AI Conversational Assistant for All Registered Users ───
