@@ -2857,7 +2857,7 @@ async function detectTgLookup(messageText: string, telegramUserId: string): Prom
     const { data: ev } = await supabase.from('email_verifications').select('verified_at, sent_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (ev) {
       let block = `## LIVE DATA LOOKUP\nEmail verification status:\n`;
-      block += ev.verified_at ? `- VERIFIED ✅\n` : `- NOT VERIFIED ❌\n- They should check their inbox or visit https://blackbox.farm/dashboard\n`;
+      block += ev.verified_at ? `- VERIFIED ✅\n` : `- NOT VERIFIED ❌\n- They should check their inbox or request a resend via the bot\n`;
       return block;
     }
   }
@@ -3479,9 +3479,10 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
         // Check if past 24h and unverified — gentle nudge
         const needsNudge = await isUserPast24hUnverified(linked.user_id);
         if (needsNudge && command !== '/register' && command !== '/start') {
-          // Send nudge but continue processing the command
+          // Send nudge with tokenized resend link
+          const resendLink = await generateActionLink(linked.user_id, 'resend_verification');
           await sendMessage(chatId,
-            `Hey quick thing 💬 — your email isn't verified yet! Just check your inbox and click the link. If you can't find it, hit "Resend" on your [dashboard](https://blackbox.farm/dashboard). Need help? Just ask me anything here! 🤖`
+            `Hey quick thing 💬 — your email isn't verified yet! Just check your inbox and click the link. If you can't find it, tap here to resend: [Resend Verification](${resendLink})\n\nNeed help? Just ask me anything here! 🤖`
           );
         }
       }
