@@ -76,6 +76,7 @@ const Feed = lazy(() => import("./pages/Feed"));
 const IntelBriefings = lazy(() => import("./pages/IntelBriefings"));
 const IntelBriefingArticle = lazy(() => import("./pages/IntelBriefingArticle"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 
 const queryClient = new QueryClient();
 
