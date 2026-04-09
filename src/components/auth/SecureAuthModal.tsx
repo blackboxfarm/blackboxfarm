@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Mail, Lock, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Mail, Lock, AlertTriangle, Eye, EyeOff, Shield } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
 import { InputValidator, ValidationRules } from '@/components/security/InputValidator';
@@ -15,6 +15,7 @@ import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSe
 import { useSignupProtection } from '@/hooks/useSignupProtection';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
 interface SecureAuthModalProps {
   isOpen: boolean;
