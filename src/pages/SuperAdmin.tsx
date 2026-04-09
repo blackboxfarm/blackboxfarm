@@ -177,6 +177,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="testimonials" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-green-500/20">💬 Testimonials</TabsTrigger>
             <TabsTrigger value="intel-briefings" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">📰 Intel Briefings</TabsTrigger>
             <TabsTrigger value="ai-config" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-cyan-500/20">🧠 AI Config</TabsTrigger>
+            <TabsTrigger value="email-campaigns" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500/30 data-[state=active]:to-pink-500/20">📧 Email Campaigns</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
