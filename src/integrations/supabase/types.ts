@@ -4052,6 +4052,36 @@ export type Database = {
         }
         Relationships: []
       }
+      email_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          marketing: boolean
+          product_updates: boolean
+          updated_at: string
+          user_id: string
+          weekly_digest: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          marketing?: boolean
+          product_updates?: boolean
+          updated_at?: string
+          user_id: string
+          weekly_digest?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          marketing?: boolean
+          product_updates?: boolean
+          updated_at?: string
+          user_id?: string
+          weekly_digest?: boolean
+        }
+        Relationships: []
+      }
       email_tracking_events: {
         Row: {
           click_count: number
@@ -6404,6 +6434,98 @@ export type Database = {
           },
         ]
       }
+      marketing_email_campaigns: {
+        Row: {
+          campaign_type: string
+          created_at: string
+          funnel_tag: string | null
+          html_content: string
+          id: string
+          is_active: boolean
+          name: string
+          send_delay_hours: number | null
+          subject: string
+          target_intent_level: string | null
+          updated_at: string
+        }
+        Insert: {
+          campaign_type?: string
+          created_at?: string
+          funnel_tag?: string | null
+          html_content: string
+          id?: string
+          is_active?: boolean
+          name: string
+          send_delay_hours?: number | null
+          subject: string
+          target_intent_level?: string | null
+          updated_at?: string
+        }
+        Update: {
+          campaign_type?: string
+          created_at?: string
+          funnel_tag?: string | null
+          html_content?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          send_delay_hours?: number | null
+          subject?: string
+          target_intent_level?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      marketing_email_queue: {
+        Row: {
+          campaign_id: string
+          clicked_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          opened_at: string | null
+          recipient_email: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          campaign_id: string
+          clicked_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          opened_at?: string | null
+          recipient_email: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          campaign_id?: string
+          clicked_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          opened_at?: string | null
+          recipient_email?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_email_queue_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_email_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mega_whale_alert_config: {
         Row: {
           additional_telegram_ids: string[] | null
@@ -8138,6 +8260,8 @@ export type Database = {
           phone_verified: boolean | null
           preferred_currency: string | null
           referral_source: string | null
+          secondary_email: string | null
+          secondary_email_verified: boolean
           total_session_minutes: number | null
           two_factor_enabled: boolean | null
           two_factor_secret: string | null
@@ -8168,6 +8292,8 @@ export type Database = {
           phone_verified?: boolean | null
           preferred_currency?: string | null
           referral_source?: string | null
+          secondary_email?: string | null
+          secondary_email_verified?: boolean
           total_session_minutes?: number | null
           two_factor_enabled?: boolean | null
           two_factor_secret?: string | null
@@ -8198,6 +8324,8 @@ export type Database = {
           phone_verified?: boolean | null
           preferred_currency?: string | null
           referral_source?: string | null
+          secondary_email?: string | null
+          secondary_email_verified?: boolean
           total_session_minutes?: number | null
           two_factor_enabled?: boolean | null
           two_factor_secret?: string | null

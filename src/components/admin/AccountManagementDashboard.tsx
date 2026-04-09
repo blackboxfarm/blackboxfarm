@@ -103,6 +103,8 @@ interface UserAccount {
     oauth_provider: string | null;
     oauth_username: string | null;
     oauth_full_name: string | null;
+    secondary_email: string | null;
+    secondary_email_verified: boolean;
   };
   roles?: string[];
   advertiser?: {
@@ -376,6 +378,8 @@ export function AccountManagementDashboard() {
             oauth_provider: profile.oauth_provider || null,
             oauth_username: profile.oauth_username || null,
             oauth_full_name: profile.oauth_full_name || null,
+            secondary_email: profile.secondary_email || null,
+            secondary_email_verified: profile.secondary_email_verified || false,
           },
           roles: userRoles,
           advertiser: advertiser ? {

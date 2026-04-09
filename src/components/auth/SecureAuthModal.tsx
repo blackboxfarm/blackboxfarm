@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Mail, Lock, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Mail, Lock, AlertTriangle, Eye, EyeOff, Shield } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
 import { InputValidator, ValidationRules } from '@/components/security/InputValidator';
@@ -15,6 +15,7 @@ import { ReferralSourceSelect, getReferralSourceValue } from './ReferralSourceSe
 import { useSignupProtection } from '@/hooks/useSignupProtection';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
 interface SecureAuthModalProps {
   isOpen: boolean;
@@ -35,6 +36,9 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [referralSource, setReferralSource] = useState('');
   const [referralSourceOther, setReferralSourceOther] = useState('');
+  const [show2FA, setShow2FA] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
+  const [pending2FAEmail, setPending2FAEmail] = useState('');
   const { honeypotProps, isBot, isTooFast, formRenderedAt } = useSignupProtection();
   
   const { signIn, signUp, isRateLimited, rateLimitState } = useSecureAuth();
@@ -45,6 +49,24 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
     if (!email || !password) return;
 
     setLoading(true);
+    
+    try {
+      // Check if user has 2FA enabled before signing in
+      const { data: tfaCheck } = await supabase.functions.invoke('check-2fa-requirement', {
+        body: { email }
+      });
+
+      if (tfaCheck?.requires2FA) {
+        // Don't sign in yet — show 2FA prompt
+        setPending2FAEmail(email);
+        setShow2FA(true);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // If check fails, proceed with normal login
+    }
+
     const { error } = await signIn(email, password);
     
     if (error) {
@@ -61,6 +83,42 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
       onClose();
     }
     setLoading(false);
+  };
+
+  const handle2FAVerify = async () => {
+    if (totpCode.length !== 6) return;
+    setLoading(true);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('verify-2fa-login', {
+        body: { email: pending2FAEmail, totpCode, rememberDevice: true }
+      });
+      
+      if (fnError || !data?.success) {
+        toast({
+          title: "2FA Verification Failed",
+          description: data?.error || fnError?.message || "Invalid code. Please try again.",
+          variant: "destructive"
+        });
+        setTotpCode('');
+        setLoading(false);
+        return;
+      }
+
+      // 2FA passed — now sign in normally
+      const { error } = await signIn(pending2FAEmail, password);
+      if (error) {
+        toast({ title: "Sign In Failed", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Welcome back!", description: "2FA verified successfully." });
+        setShow2FA(false);
+        setTotpCode('');
+        onClose();
+      }
+    } catch (err: any) {
+      toast({ title: "2FA Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -148,6 +206,50 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const rateLimitMessage = getRateLimitMessage();
 
   return (
+    <>
+    {/* 2FA Verification Dialog */}
+    <Dialog open={show2FA} onOpenChange={(open) => { if (!open) { setShow2FA(false); setTotpCode(''); } }}>
+      <DialogContent className="sm:max-w-sm tech-border">
+        <DialogHeader>
+          <DialogTitle className="text-center flex items-center justify-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            Two-Factor Authentication
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground text-center">
+            Enter the 6-digit code from your authenticator app.
+          </p>
+          <div className="flex justify-center">
+            <InputOTP maxLength={6} value={totpCode} onChange={setTotpCode}>
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
+          <Button
+            className="w-full"
+            onClick={handle2FAVerify}
+            disabled={loading || totpCode.length !== 6}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Verify
+          </Button>
+          <button
+            className="text-xs text-muted-foreground hover:underline w-full text-center"
+            onClick={() => { setShow2FA(false); setTotpCode(''); }}
+          >
+            Cancel and go back
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md tech-border">
         <DialogHeader>
@@ -405,5 +507,6 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
         />
       </DialogContent>
     </Dialog>
+    </>
   );
 };

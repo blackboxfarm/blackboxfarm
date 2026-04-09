@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, User, LogOut } from 'lucide-react';
+import { Settings, User, LogOut, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { useNotifications } from '@/hooks/useNotifications';
+import { SecondaryEmailSetup } from '@/components/profile/SecondaryEmailSetup';
+import { UnlinkProvider } from '@/components/auth/UnlinkProvider';
+import { Separator } from '@/components/ui/separator';
 
 export function UserIdentityBadge() {
   const { user } = useAuth();
@@ -17,19 +20,21 @@ export function UserIdentityBadge() {
   const [nameInput, setNameInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     const load = async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('display_name, onboarding_completed')
+        .select('display_name, onboarding_completed, two_factor_enabled')
         .eq('user_id', user.id)
         .maybeSingle();
       if (data?.display_name) {
         setDisplayName(data.display_name);
         setNameInput(data.display_name);
       }
+      setTwoFactorEnabled(data?.two_factor_enabled || false);
       // Send welcome notification on first visit
       if (data && !data.onboarding_completed) {
         showNotification({
@@ -88,9 +93,11 @@ export function UserIdentityBadge() {
               <Settings className="h-3.5 w-3.5 md:h-4 md:w-4 text-gold" />
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-64" align="end">
+          <PopoverContent className="w-72" align="end">
             <div className="space-y-3">
-              <h4 className="font-medium text-sm">Edit Profile</h4>
+              <h4 className="font-medium text-sm">Account Settings</h4>
+
+              {/* Display Name */}
               <div className="space-y-1.5">
                 <Label className="text-xs">Display Name</Label>
                 <Input
@@ -104,6 +111,32 @@ export function UserIdentityBadge() {
               <Button size="sm" className="w-full" onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving...' : 'Save'}
               </Button>
+
+              <Separator />
+
+              {/* Secondary Email */}
+              <SecondaryEmailSetup />
+
+              <Separator />
+
+              {/* Linked Accounts / OAuth */}
+              <UnlinkProvider />
+
+              <Separator />
+
+              {/* 2FA Status */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-medium">2FA (TOTP)</span>
+                </div>
+                <span className={`text-[10px] font-medium ${twoFactorEnabled ? 'text-green-500' : 'text-muted-foreground'}`}>
+                  {twoFactorEnabled ? '✓ Enabled' : 'Not set up'}
+                </span>
+              </div>
+
+              <Separator />
+
               <Button 
                 size="sm" 
                 variant="ghost" 
