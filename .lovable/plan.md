@@ -1,71 +1,85 @@
 
 
-# Follower Audit Tool — Handle Input, Bot Detection Scoring
+# Tokenized One-Time Action Links (Replace Dead `/dashboard` URLs)
 
-## Purpose
-You enter an X/Twitter handle, press "Audit", and get back a bot/fake follower breakdown so you can vet accounts before paying them for marketing posts. No point paying someone with 140K followers if 90% are Nigerian click farms.
+## The Problem
 
-## How It Works
+The TG bot sends users to `/dashboard` and `/reset-password` via plain URLs. When users click these in Telegram, they land in a browser with no active session — the page either shows nothing, redirects to login, or says "invalid reset link." These are dead endpoints for TG users.
+
+## The Solution
+
+Generate **one-time tokenized links** from the bot that lead to purpose-specific action pages. No login required — the token IS the authentication for that single action.
 
 ```text
-[Enter Handle] [@142C_] [🔍 Audit Followers]
-         │
-         ▼
-   Edge Function: follower-audit
-         │
-         ├── 1. Apify: apidojo/twitter-followers-scraper
-         │      Sample 500 followers (cost: ~$0.50-1.00)
-         │
-         ├── 2. Score each sampled follower:
-         │      • Default/egg avatar?        +20 bot pts
-         │      • Username is random alphanum? +15
-         │      • Account < 30 days old?      +15
-         │      • 0 tweets, follows 1000+?    +25
-         │      • Bio empty?                  +10
-         │      • Location in known bot farms? +10
-         │      • Following/Follower ratio >50? +15
-         │
-         └── 3. Return aggregate scores
+TG Bot DM: "Verify your email → https://blackbox.farm/action?t=abc123"
+                                          │
+                                          ▼
+                                  /action?t=abc123
+                                          │
+                              Look up token in DB
+                              ├── type: "resend_verification"
+                              │     → Show "Resend Verification Email" button
+                              ├── type: "password_reset"  
+                              │     → Show "Send Password Reset Email" button
+                              ├── type: "view_reg_code"
+                              │     → Show registration code + copy button
+                              └── expired/used → Show "Link expired" message
 ```
 
-## UI — New Sub-Tab "Follower Audit" Under Twitter Scrapes
+## What Changes
 
-Simple single-page tool:
-- **Input**: Handle text field + "Audit" button
-- **Results card** once complete:
-  - Overall score: "Estimated Real Followers: ~38%" with color badge (green >70%, yellow 40-70%, red <40%)
-  - Pie/donut chart: Real vs Suspicious vs Likely Bot
-  - Geographic breakdown (top 5 locations from bios/locations)
-  - Sample table: 20 most suspicious followers with their signals
-  - Quick verdict: "⚠️ High bot ratio — not recommended for paid promotion" or "✅ Mostly organic — good candidate"
+### Database — New table: `one_time_action_tokens`
+- `id` (uuid), `token` (text, unique, indexed)
+- `user_id` (uuid, references auth.users)
+- `action_type` (text — `resend_verification`, `password_reset`, `view_reg_code`)
+- `payload` (jsonb — optional data like email address)
+- `expires_at` (timestamptz — 1 hour default)
+- `used_at` (timestamptz, nullable)
+- `created_at` (timestamptz)
+- RLS: service_role only (tokens accessed via edge function, not client)
 
-## Database
+### Edge Function — `generate-action-token`
+- Called by the TG bot webhook internally
+- Accepts `{ user_id, action_type }`, generates a random token, inserts into DB
+- Returns the full URL: `https://blackbox.farm/action?t={token}`
 
-**New table: `follower_audits`**
-- `id`, `handle` (text), `follower_count` (int), `sample_size` (int)
-- `real_pct` (numeric), `suspicious_pct`, `bot_pct`
-- `geo_breakdown` (jsonb), `signals_summary` (jsonb)
-- `raw_sample` (jsonb — stores the 500 sampled profiles)
-- `created_at`, `cost_credits` (numeric)
-- RLS: super_admin read only
+### Edge Function — `resolve-action-token`
+- Called by the `/action` page on load
+- Accepts `{ token }`, looks it up, checks expiry/used status
+- For `resend_verification`: triggers the verification email send, marks token used
+- For `password_reset`: calls `supabase.auth.admin.generateLink('recovery', email)` to send the reset email, marks token used
+- For `view_reg_code`: returns the user's registration code from `telegram_link_codes`
+- Returns `{ action_type, success, message }` to the UI
 
-## Edge Function: `follower-audit`
+### New Page — `/action` (`src/pages/TokenAction.tsx`)
+- Reads `?t=` param, calls `resolve-action-token`
+- Shows a branded card with the action result:
+  - **resend_verification**: "✅ Verification email sent to your inbox!"
+  - **password_reset**: "✅ Password reset email sent! Check your inbox."
+  - **view_reg_code**: Shows the code with a copy button
+  - **expired**: "⏰ This link has expired. Ask the bot for a new one."
+- No login required — single-purpose, self-contained
 
-1. Accepts `{ handle: string, sampleSize?: number }` (default 500)
-2. Calls Apify `apidojo/twitter-followers-scraper` with the handle
-3. Runs bot-scoring algorithm on each returned follower profile
-4. Computes percentages and geo breakdown
-5. Upserts into `follower_audits` table
-6. Logs to `api_usage_log` for credit tracking
-7. Returns full results to UI
+### TG Bot Webhook Updates
+- Replace all `https://blackbox.farm/dashboard` links with dynamically generated tokenized URLs
+- When bot says "check your dashboard for registration code" → generate `view_reg_code` token link
+- When bot says "resend verification" → generate `resend_verification` token link  
+- When bot mentions password reset → generate `password_reset` token link
+- Helper function `generateActionLink(supabase, userId, actionType)` used throughout
 
 ## Files
 
-- **Create**: `src/components/admin/twitter/FollowerAuditTab.tsx` — handle input, audit button, results display with donut chart and suspect table
-- **Create**: `supabase/functions/follower-audit/index.ts` — Apify call + scoring
-- **Edit**: `src/components/admin/TwitterScrapesView.tsx` — add "Follower Audit" sub-tab with `Search` icon
-- **Migration**: Create `follower_audits` table with RLS
+- **Create**: `supabase/functions/generate-action-token/index.ts`
+- **Create**: `supabase/functions/resolve-action-token/index.ts`
+- **Create**: `src/pages/TokenAction.tsx`
+- **Edit**: `src/App.tsx` — add `/action` route
+- **Edit**: `supabase/functions/holdersintel-bot-webhook/index.ts` — replace all static `/dashboard` and `/reset-password` links with tokenized link generation
+- **Migration**: `one_time_action_tokens` table
 
-## Cost
-Each audit samples ~500 followers via Apify at roughly $0.50–$1.50 per run. Results are cached in the table so you won't re-audit the same handle accidentally — the UI will show "Last audited X hours ago" with a re-run option.
+## Security
+- Tokens are single-use (marked `used_at` on consumption)
+- 1-hour expiry by default
+- No session or login needed — the token itself is the auth
+- Tokens are UUIDs + random bytes, not guessable
+- RLS blocks direct client access — only edge functions touch the table
 
