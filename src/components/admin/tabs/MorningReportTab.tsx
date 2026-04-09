@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Clock, Users, Activity, Database, Globe, Bell, Zap, Twitter, Archive, CalendarDays, CreditCard, Search, CheckCheck, HardDrive, Mail, Bot, Cpu } from "lucide-react";
 import { AIComputeSection } from "@/components/admin/morning-report/AIComputeSection";
+import { WindowShoppersSection } from "@/components/admin/morning-report/WindowShoppersSection";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
 interface MorningReport {
@@ -395,6 +396,11 @@ function ReportView({ report }: { report: MorningReport }) {
               reportPeriodStart={report.report_period_start}
               reportPeriodEnd={report.report_period_end}
             />
+          </Section>
+
+          {/* Window Shoppers */}
+          <Section title="Window Shoppers" icon={<CreditCard className="w-4 h-4 text-orange-400" />}>
+            <WindowShoppersSection reportPeriodStart={report.report_period_start} />
           </Section>
 
           <Section title="API Usage by Service" icon={<Activity className="w-4 h-4 text-green-400" />}>
