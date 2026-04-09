@@ -194,10 +194,6 @@ export function EmailCampaignsManager() {
           <Plus className="h-3.5 w-3.5" /> New Campaign
         </Button>
       </div>
-        <Button onClick={handleCreate} size="sm" className="gap-1">
-          <Plus className="h-3.5 w-3.5" /> New Campaign
-        </Button>
-      </div>
 
       {loading ? (
         <div className="flex justify-center py-8">
