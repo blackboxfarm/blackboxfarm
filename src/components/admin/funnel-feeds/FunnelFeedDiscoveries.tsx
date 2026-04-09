@@ -67,27 +67,83 @@ export function FunnelFeedDiscoveries() {
   const handlePush = async (d: Discovery) => {
     setPushing(prev => ({ ...prev, [d.id]: true }));
     try {
-      await supabase.from('holders_intel_post_queue').insert({
-        token_mint: d.token_mint,
-        symbol: d.token_symbol || null,
-        name: d.token_name || null,
-        scheduled_at: new Date().toISOString(),
-        status: 'pending',
-        trigger_source: 'manual_push',
-        trigger_comment: `Manual push from funnel feed discovery ${d.id}`,
+      // 1. Fetch holder report
+      const { data: reportData, error: reportError } = await supabase.functions.invoke('bagless-holders-report', {
+        body: { tokenMint: d.token_mint },
       });
+      if (reportError) throw reportError;
+      if (!reportData || !reportData.holders) throw new Error('No holder data returned');
 
-      const { data, error } = await supabase.functions.invoke('holders-intel-poster', {
-        body: { manualOverride: true },
+      const totalHolders = reportData.totalHolders || 0;
+      const dustCount = reportData.dustWallets ?? 0;
+      const dustPercentage = totalHolders > 0 ? parseFloat(((dustCount / totalHolders) * 100).toFixed(2)) : 0;
+
+      // 2. Fetch AI summary
+      let aiSummary = '';
+      let lifecycle = '';
+      try {
+        const { data: aiData } = await supabase.functions.invoke('token-ai-interpreter', {
+          body: { reportData, tokenMint: d.token_mint },
+        });
+        aiSummary = aiData?.interpretation?.abbreviated_summary ?? '';
+        lifecycle = aiData?.interpretation?.lifecycle?.stage ?? '';
+      } catch { /* non-blocking */ }
+
+      // 3. Fetch active template
+      const { data: activeRow } = await supabase
+        .from('holders_intel_templates')
+        .select('name')
+        .eq('is_active_intel', true)
+        .single();
+      const activeTemplateName = (activeRow?.name as 'small' | 'large') || 'large';
+      const templateText = await fetchTemplate(activeTemplateName);
+
+      // 4. Build token data and render template
+      const tokenData: TokenShareData = {
+        ticker: reportData.tokenSymbol || reportData.symbol || d.token_symbol || 'UNKNOWN',
+        name: reportData.tokenName || reportData.name || d.token_name || 'Unknown Token',
+        tokenAddress: d.token_mint,
+        totalWallets: totalHolders,
+        realHolders: reportData.realWalletCount ?? 0,
+        dustCount,
+        dustPercentage,
+        whales: reportData.trueWhaleWallets ?? 0 + (reportData.babyWhaleWallets ?? 0) + (reportData.superBossWallets ?? 0) + (reportData.kingpinWallets ?? 0),
+        serious: reportData.bossWallets ?? 0,
+        realRetail: reportData.realWalletCount ?? 0,
+        casual: (reportData.smallWallets ?? 0) + (reportData.mediumWallets ?? 0) + (reportData.largeWallets ?? 0),
+        retail: (reportData.smallWallets ?? 0) + (reportData.mediumWallets ?? 0) + (reportData.largeWallets ?? 0),
+        healthGrade: reportData.stabilityGrade ?? 'N/A',
+        healthScore: reportData.stabilityScore ?? 0,
+        comment1: '-On the Radar-',
+        aiSummary,
+        aiOverview: '',
+        lifecycle,
+      };
+      const tweetText = processTemplate(templateText, tokenData);
+
+      // 5. Post directly to X via post-share-card-twitter
+      const { data: postResult, error: postError } = await supabase.functions.invoke('post-share-card-twitter', {
+        body: { tweetText, twitterHandle: 'HoldersIntel' },
       });
+      if (postError) throw postError;
+      if (postResult && !postResult.success && !postResult.paused) {
+        throw new Error(postResult.error || 'Failed to post tweet');
+      }
 
-      if (error) throw error;
+      // 6. Update discovery status to posted
+      await supabase
+        .from('funnel_feed_discoveries')
+        .update({ xpost_status: 'posted', xpost_processed_at: new Date().toISOString() })
+        .eq('id', d.id);
 
       const ts = torontoTime();
       setPushedAt(prev => ({ ...prev, [d.id]: ts }));
-      toast({ title: 'Pushed!', description: `${d.token_symbol || d.token_mint.slice(0, 8)} posted to X + TG` });
-      
-      setTimeout(fetchDiscoveries, 2000);
+      setDiscoveries(prev => prev.map(item =>
+        item.id === d.id ? { ...item, xpost_status: 'posted', xpost_processed_at: new Date().toISOString() } : item
+      ));
+
+      const statusMsg = postResult?.paused ? 'Queued (X paused)' : 'Posted to X + TG';
+      toast({ title: 'Pushed!', description: `${d.token_symbol || d.token_mint.slice(0, 8)} — ${statusMsg}` });
     } catch (err: any) {
       console.error('Manual push failed:', err);
       toast({ title: 'Push failed', description: err.message || 'Unknown error', variant: 'destructive' });
