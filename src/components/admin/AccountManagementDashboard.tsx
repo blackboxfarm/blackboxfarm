@@ -62,6 +62,15 @@ import {
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
+interface BuyerIntent {
+  pricing_page_views: number;
+  checkout_attempts: number;
+  last_pricing_visit: string | null;
+  last_checkout_attempt: string | null;
+  intent_level: string;
+  funnel_tag: string | null;
+}
+
 interface UserAccount {
   id: string;
   email: string;
@@ -123,6 +132,7 @@ interface UserAccount {
     verified: boolean;
     pending: boolean;
   };
+  buyer_intent?: BuyerIntent | null;
 }
 
 interface VisitSession {
