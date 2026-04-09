@@ -124,7 +124,7 @@ export function TelegramLinkCode({ compact = false }: { compact?: boolean }) {
                 </Button>
               </div>
             ) : (
-              <p className="text-[9px] text-muted-foreground">Send this code to @BlackBoxFarmBot</p>
+              <p className="text-[9px] text-muted-foreground">Send this code to @holdersintel_bot</p>
             )}
           </div>
         ) : (
@@ -177,7 +177,7 @@ export function TelegramLinkCode({ compact = false }: { compact?: boolean }) {
               <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                 <p className="text-xs font-medium">How to link:</p>
                 <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal list-inside">
-                  <li>Open Telegram and search for @BlackBoxFarmBot</li>
+                  <li>Open Telegram and search for @holdersintel_bot</li>
                   <li>Send /start to the bot</li>
                   <li>Paste your code: <code className="bg-background px-1 rounded">{linkData.link_code}</code></li>
                   <li>Done! Your bot access matches your subscription tier</li>

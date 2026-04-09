@@ -13884,6 +13884,7 @@ export type Database = {
           paid_at: string | null
           payment_wallet_pubkey: string
           payment_wallet_secret_encrypted: string
+          renewal_reminder_sent: boolean | null
           sol_price_at_order: number | null
           status: string
           sweep_tx_signature: string | null
@@ -13901,6 +13902,7 @@ export type Database = {
           paid_at?: string | null
           payment_wallet_pubkey: string
           payment_wallet_secret_encrypted: string
+          renewal_reminder_sent?: boolean | null
           sol_price_at_order?: number | null
           status?: string
           sweep_tx_signature?: string | null
@@ -13918,6 +13920,7 @@ export type Database = {
           paid_at?: string | null
           payment_wallet_pubkey?: string
           payment_wallet_secret_encrypted?: string
+          renewal_reminder_sent?: boolean | null
           sol_price_at_order?: number | null
           status?: string
           sweep_tx_signature?: string | null

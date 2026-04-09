@@ -95,6 +95,11 @@ const REQUIRED_CRONS: CronDef[] = [
     command: httpPost('database-housekeeping', '{\\\"action\\\": \\\"prune\\\", \\\"dryRun\\\": false}'),
   },
   {
+    jobname: 'sol-renewal-reminder-daily',
+    schedule: '0 14 * * *',
+    command: httpPost('sol-renewal-reminder', '{\\\"scheduled\\\": true}'),
+  },
+  {
     jobname: 'reset-monthly-quotas',
     schedule: '5 0 1 * *',
     command: httpPost('reset-monthly-quotas', '{\\\"source\\\": \\\"cron\\\"}'),

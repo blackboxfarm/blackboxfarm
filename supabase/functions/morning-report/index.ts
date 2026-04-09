@@ -1299,6 +1299,76 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // SOL SUBSCRIPTION STATS
+    // ═══════════════════════════════════════════════════════════════
+    let solSubscriptionStats: any = {};
+    try {
+      // Overnight SOL payments
+      const { data: overnightSolPayments } = await supabase
+        .from('tg_sol_subscriptions')
+        .select('id, telegram_user_id, user_id, amount_sol, payment_wallet_pubkey, paid_at, expires_at, status')
+        .eq('status', 'paid')
+        .gte('paid_at', cutoffISO)
+        .order('paid_at', { ascending: false });
+
+      // Total active SOL subs
+      const { count: activeSolSubs } = await supabase
+        .from('tg_sol_subscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'paid')
+        .gte('expires_at', new Date().toISOString());
+
+      // Expiring in 14 days
+      const twoWeeksOut = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: expiringSoon } = await supabase
+        .from('tg_sol_subscriptions')
+        .select('id, telegram_user_id, user_id, expires_at')
+        .eq('status', 'paid')
+        .lte('expires_at', twoWeeksOut)
+        .gte('expires_at', new Date().toISOString());
+
+      const overnight = overnightSolPayments || [];
+      const totalSolRevenue = overnight.reduce((s, p) => s + (p.amount_sol || 0), 0);
+
+      solSubscriptionStats = {
+        overnight_payments: overnight.length,
+        overnight_revenue_sol: totalSolRevenue,
+        active_sol_subs: activeSolSubs || 0,
+        expiring_soon_14d: (expiringSoon || []).length,
+        overnight_details: overnight.slice(0, 10).map(p => ({
+          tg_user: p.telegram_user_id,
+          amount: p.amount_sol,
+          wallet: p.payment_wallet_pubkey?.slice(0, 8) + '...',
+          expires: p.expires_at,
+        })),
+        expiring_details: (expiringSoon || []).slice(0, 10).map(e => ({
+          tg_user: e.telegram_user_id,
+          user_id: e.user_id,
+          expires: e.expires_at,
+        })),
+      };
+
+      if (overnight.length > 0) {
+        alerts.push({
+          level: 'info',
+          category: 'sol_subscriptions',
+          title: `${overnight.length} SOL subscription${overnight.length > 1 ? 's' : ''} overnight (${totalSolRevenue} SOL)`,
+          detail: overnight.map(p => `${p.telegram_user_id}: ${p.amount_sol} SOL`).join(', '),
+        });
+      }
+      if ((expiringSoon || []).length > 0) {
+        alerts.push({
+          level: 'warning',
+          category: 'sol_subscriptions',
+          title: `${(expiringSoon || []).length} SOL sub${(expiringSoon || []).length > 1 ? 's' : ''} expiring within 14 days`,
+          detail: (expiringSoon || []).map(e => `${e.telegram_user_id} → ${new Date(e.expires_at!).toLocaleDateString()}`).join(', '),
+        });
+      }
+    } catch (e) {
+      console.warn('[morning-report] Failed to fetch SOL subscription stats:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DETERMINE OVERALL STATUS
     // ═══════════════════════════════════════════════════════════════
     const criticalAlerts = alerts.filter(a => a.level === 'critical').length;
@@ -1342,6 +1412,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         email_verification_stats: emailVerificationStats,
         telegram_bot_stats: telegramBotStats,
         web_chat_stats: webChatStats,
+        sol_subscription_stats: solSubscriptionStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -1385,6 +1456,17 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     if (bannerPurchaseCount > 0) {
       tgMessage += `• Banner Purchases: ${bannerPurchaseCount}\n`;
     }
+    // SOL subscription overnight
+    if (solSubscriptionStats.overnight_payments > 0) {
+      tgMessage += `• 💰 SOL Payments: ${solSubscriptionStats.overnight_payments} (${solSubscriptionStats.overnight_revenue_sol} SOL)\n`;
+      for (const p of (solSubscriptionStats.overnight_details || []).slice(0, 5)) {
+        tgMessage += `  → TG:${p.tg_user} — ${p.amount} SOL\n`;
+      }
+    }
+    if (solSubscriptionStats.expiring_soon_14d > 0) {
+      tgMessage += `• ⏰ SOL subs expiring <14d: ${solSubscriptionStats.expiring_soon_14d}\n`;
+    }
+    tgMessage += `• Active SOL Subs: ${solSubscriptionStats.active_sol_subs || 0}\n`;
     tgMessage += `• Total Active Subs: ${totalActiveSubscribers || 0} (${totalLinkedAccounts || 0} linked)\n\n`;
 
     // Email Verification section

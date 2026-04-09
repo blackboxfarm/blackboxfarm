@@ -174,6 +174,26 @@ serve(withRunLog('tg-subscription-payment', async (req) => {
             .eq('id', sub.user_id);
         }
 
+        // Insert admin notification for the SOL purchase
+        try {
+          await supabase.from('admin_notifications').insert({
+            notification_type: 'sol_subscription',
+            title: '💰 New SOL Subscription Payment',
+            message: `TG user ${sub.telegram_user_id} paid ${balanceSol.toFixed(4)} SOL for yearly Pro. Wallet: ${sub.payment_wallet_pubkey}. Expires: ${expiresAt.toLocaleDateString('en-US')}`,
+            metadata: {
+              subscription_id,
+              telegram_user_id: sub.telegram_user_id,
+              user_id: sub.user_id,
+              amount_sol: balanceSol,
+              wallet: sub.payment_wallet_pubkey,
+              expires_at: expiresAt.toISOString(),
+              payment_method: 'sol',
+            },
+          });
+        } catch (notifErr) {
+          console.warn('[TG-Sub] Admin notification insert error:', notifErr);
+        }
+
         console.log(`[TG-Sub] Payment confirmed for ${subscription_id}! Expires: ${expiresAt.toISOString()}`);
 
         return new Response(JSON.stringify({
