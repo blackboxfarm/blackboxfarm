@@ -15971,6 +15971,57 @@ export type Database = {
           },
         ]
       }
+      unified_chat_history: {
+        Row: {
+          account_user_id: string | null
+          content: string
+          cost_estimate_usd: number | null
+          created_at: string
+          id: string
+          metadata: Json | null
+          model_used: string | null
+          platform: string
+          response_time_ms: number | null
+          role: string
+          source_message_id: string | null
+          telegram_user_id: string | null
+          token_count: number | null
+          web_session_id: string | null
+        }
+        Insert: {
+          account_user_id?: string | null
+          content: string
+          cost_estimate_usd?: number | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          model_used?: string | null
+          platform: string
+          response_time_ms?: number | null
+          role?: string
+          source_message_id?: string | null
+          telegram_user_id?: string | null
+          token_count?: number | null
+          web_session_id?: string | null
+        }
+        Update: {
+          account_user_id?: string | null
+          content?: string
+          cost_estimate_usd?: number | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          model_used?: string | null
+          platform?: string
+          response_time_ms?: number | null
+          role?: string
+          source_message_id?: string | null
+          telegram_user_id?: string | null
+          token_count?: number | null
+          web_session_id?: string | null
+        }
+        Relationships: []
+      }
       user_2fa_secrets: {
         Row: {
           created_at: string
