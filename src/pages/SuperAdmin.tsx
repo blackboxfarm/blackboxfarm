@@ -138,7 +138,7 @@ export default function SuperAdmin() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-6 py-8">
+      <div className="w-full mx-auto px-4 py-8">
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-4xl font-bold mb-2">Super Admin</h1>
