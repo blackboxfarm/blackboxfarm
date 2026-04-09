@@ -25,6 +25,7 @@ const TIER_LABELS: Record<number, { label: string; color: string }> = {
 export function AllstarRegistry() {
   const [search, setSearch] = useState('');
   const [backfilling, setBackfilling] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const backfillFromTop200 = async () => {
     setBackfilling(true);
@@ -105,8 +106,19 @@ export function AllstarRegistry() {
               {backfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
               Backfill from Top 200
             </Button>
-            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1">
-              <RefreshCw className="h-3 w-3" /> Refresh
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={async () => {
+                setRefreshing(true);
+                await refetch();
+                setRefreshing(false);
+              }} 
+              disabled={refreshing}
+              className="gap-1"
+            >
+              <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> 
+              {refreshing ? 'Refreshing...' : 'Refresh'}
             </Button>
           </div>
         </div>
