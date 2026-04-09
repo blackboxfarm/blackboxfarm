@@ -1290,6 +1290,13 @@ export function AccountManagementDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Buyer Intent Detail Modal */}
+      <BuyerIntentDetail
+        userId={intentDetailAccount?.id || ''}
+        email={intentDetailAccount?.email || ''}
+        open={!!intentDetailAccount}
+        onOpenChange={(open) => { if (!open) setIntentDetailAccount(null); }}
+      />
     </div>
   );
 }
