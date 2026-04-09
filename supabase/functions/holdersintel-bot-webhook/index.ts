@@ -612,7 +612,8 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${unlocked} /start — Get started & connect your account\n` +
     `${unlocked} /register \`CODE\` — Link your BlackBox Farm account\n` +
     `${unlocked} /status — View your tier, usage & limits\n` +
-    `${unlocked} /help — This command reference\n\n`;
+    `${unlocked} /help — This command reference\n` +
+    `${unlocked} /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n\n`;
 
   cmds += `*🔬 Core Analysis — Auth ★ = just signup free online*\n` +
     `_The essentials — know what you're buying before you ape._\n` +
@@ -662,7 +663,6 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `  _• /config verbose on|off — Toggle detailed vs minimal responses_\n` +
     `  _• /config admin-only on|off — Restrict commands to admins_\n` +
     `  _• /config dev-alerts on|off — Get notified when watched devs launch_\n` +
-    `${check("auth")} /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n` +
     `${check("auth")} /dashboard — Full channel management dashboard\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
