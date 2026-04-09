@@ -163,9 +163,10 @@ serve(async (req) => {
 
     if (!actorRunRes.ok) {
       const errText = await actorRunRes.text();
-      await logger.fail(`Apify error ${actorRunRes.status}: ${errText}`);
+      console.error(`[FollowerAudit] Apify error ${actorRunRes.status}:`, errText.slice(0, 1000));
+      await logger.fail(`Apify error ${actorRunRes.status}: ${errText.slice(0, 200)}`);
       return new Response(
-        JSON.stringify({ error: `Apify request failed: ${actorRunRes.status}` }),
+        JSON.stringify({ error: `Apify request failed: ${actorRunRes.status}`, details: errText.slice(0, 500) }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
