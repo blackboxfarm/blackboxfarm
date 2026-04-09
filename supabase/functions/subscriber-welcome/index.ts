@@ -570,6 +570,11 @@ const handler = async (req: Request): Promise<Response> => {
         html = generateSolPaymentReceiptEmail(data.email, data.name, data.amountSol, data.walletPubkey, data.expiresAt);
         break;
 
+      case 'sol_renewal_reminder':
+        subject = `⏰ Your BlackBox Pro Subscription Expires ${data.daysLeft ? `in ${data.daysLeft} days` : 'Soon'}`;
+        html = generateSolRenewalReminderEmail(data.email, data.name, data.expiresAt, data.daysLeft, data.amountSol);
+        break;
+
       default:
         throw new Error(`Unknown email type: ${emailType}`);
     }
