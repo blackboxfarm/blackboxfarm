@@ -1,44 +1,89 @@
-import { withRunLog } from '../_shared/run-logger.ts';
+import { withRunLog } from "../_shared/run-logger.ts";
 import { createHmac } from "node:crypto";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { broadcastToBlackBox } from "../_shared/telegram-broadcast.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 // Default env credentials (for backward compat)
 const DEFAULT_API_KEY = Deno.env.get("TWITTER_CONSUMER_KEY")?.trim();
 const DEFAULT_API_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
 const DEFAULT_ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
-const DEFAULT_ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
+const DEFAULT_ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")
+  ?.trim();
+
+type TwitterCredentials = {
+  apiKey?: string;
+  apiSecret?: string;
+  accessToken?: string;
+  accessTokenSecret?: string;
+};
+
+function getDefaultCredentials(): TwitterCredentials {
+  return {
+    apiKey: DEFAULT_API_KEY,
+    apiSecret: DEFAULT_API_SECRET,
+    accessToken: DEFAULT_ACCESS_TOKEN,
+    accessTokenSecret: DEFAULT_ACCESS_TOKEN_SECRET,
+  };
+}
+
+function hasCompleteCredentials(
+  credentials: TwitterCredentials,
+): credentials is Required<TwitterCredentials> {
+  return Boolean(
+    credentials.apiKey &&
+      credentials.apiSecret &&
+      credentials.accessToken &&
+      credentials.accessTokenSecret,
+  );
+}
+
+function normalizeTwitterHandle(handle?: string | null): string {
+  return (handle || "").replace(/^@/, "").trim();
+}
+
+function shouldPreferDefaultCredentials(
+  twitterHandle?: string | null,
+): boolean {
+  const normalizedHandle = normalizeTwitterHandle(twitterHandle).toLowerCase();
+  return normalizedHandle === "holdersintel" &&
+    hasCompleteCredentials(getDefaultCredentials());
+}
 
 function generateOAuthSignature(
   method: string,
   url: string,
   params: Record<string, string>,
   consumerSecret: string,
-  tokenSecret: string
+  tokenSecret: string,
 ): string {
-  const signatureBaseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(
-    Object.entries(params)
-      .sort()
-      .map(([k, v]) => `${k}=${v}`)
-      .join("&")
-  )}`;
-  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
+  const signatureBaseString = `${method}&${encodeURIComponent(url)}&${
+    encodeURIComponent(
+      Object.entries(params)
+        .sort()
+        .map(([k, v]) => `${k}=${v}`)
+        .join("&"),
+    )
+  }`;
+  const signingKey = `${encodeURIComponent(consumerSecret)}&${
+    encodeURIComponent(tokenSecret)
+  }`;
   const hmacSha1 = createHmac("sha1", signingKey);
   return hmacSha1.update(signatureBaseString).digest("base64");
 }
 
 function generateOAuthHeader(
-  method: string, 
+  method: string,
   url: string,
   apiKey: string,
   apiSecret: string,
   accessToken: string,
-  accessTokenSecret: string
+  accessTokenSecret: string,
 ): string {
   const oauthParams = {
     oauth_consumer_key: apiKey,
@@ -54,7 +99,7 @@ function generateOAuthHeader(
     url,
     oauthParams,
     apiSecret,
-    accessTokenSecret
+    accessTokenSecret,
   );
 
   const signedOAuthParams = {
@@ -77,15 +122,30 @@ async function sendTweet(
   apiSecret: string,
   accessToken: string,
   accessTokenSecret: string,
-  communityId?: string
+  communityId?: string,
 ): Promise<any> {
   const url = "https://api.x.com/2/tweets";
   const method = "POST";
-  const oauthHeader = generateOAuthHeader(method, url, apiKey, apiSecret, accessToken, accessTokenSecret);
+  const oauthHeader = generateOAuthHeader(
+    method,
+    url,
+    apiKey,
+    apiSecret,
+    accessToken,
+    accessTokenSecret,
+  );
 
   console.log("Sending tweet:", tweetText.substring(0, 50) + "...");
-  console.log(`[AUTH-DEBUG] API Key prefix: ${apiKey?.substring(0, 6)}..., len=${apiKey?.length}`);
-  console.log(`[AUTH-DEBUG] Access Token prefix: ${accessToken?.substring(0, 6)}..., len=${accessToken?.length}`);
+  console.log(
+    `[AUTH-DEBUG] API Key prefix: ${
+      apiKey?.substring(0, 6)
+    }..., len=${apiKey?.length}`,
+  );
+  console.log(
+    `[AUTH-DEBUG] Access Token prefix: ${
+      accessToken?.substring(0, 6)
+    }..., len=${accessToken?.length}`,
+  );
   if (communityId) {
     console.log("Posting to X Community:", communityId);
   }
@@ -121,19 +181,22 @@ function formatTwitterErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
 
   // Common X/Twitter misconfiguration: app has Read-only permissions.
-  if (msg.includes('oauth1-permissions') || msg.includes('not configured with the appropriate oauth1 app permissions')) {
+  if (
+    msg.includes("oauth1-permissions") ||
+    msg.includes("not configured with the appropriate oauth1 app permissions")
+  ) {
     return [
       msg,
       "\n\nFIX: In the X Developer Portal, set your App permissions to 'Read and Write', then regenerate the Access Token & Secret used for this account.",
-    ].join('');
+    ].join("");
   }
 
   return msg;
 }
 
-Deno.serve(withRunLog('post-share-card-twitter', async (req) => {
+Deno.serve(withRunLog("post-share-card-twitter", async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -142,24 +205,49 @@ Deno.serve(withRunLog('post-share-card-twitter', async (req) => {
 
     // X account suspended — block automated tweets unless manually overridden
     const X_POSTING_PAUSED = true;
-    console.log('[post-share-card-twitter] manualOverride:', body.manualOverride, 'X_POSTING_PAUSED:', X_POSTING_PAUSED);
+    console.log(
+      "[post-share-card-twitter] manualOverride:",
+      body.manualOverride,
+      "X_POSTING_PAUSED:",
+      X_POSTING_PAUSED,
+    );
     if (X_POSTING_PAUSED && !body.manualOverride) {
-      console.log('[post-share-card-twitter] X posting is PAUSED — account suspended');
-      return new Response(JSON.stringify({ success: true, paused: true, reason: 'X posting disabled — account suspended' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      console.log(
+        "[post-share-card-twitter] X posting is PAUSED — account suspended",
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          paused: true,
+          reason: "X posting disabled — account suspended",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
-    const { tweetText, twitterHandle, tokenStats, communityId, skipTelegram } = body;
+    const {
+      tweetText,
+      text,
+      twitterHandle,
+      tokenStats,
+      communityId,
+      skipTelegram,
+    } = body;
 
     // Determine tweet content
     let finalTweetText: string;
 
-    if (tweetText) {
+    if (tweetText?.trim()) {
       // Use the provided template-processed tweet text directly
-      finalTweetText = tweetText;
+      finalTweetText = tweetText.trim();
+    } else if (text?.trim()) {
+      // Backward compat for older callers
+      finalTweetText = text.trim();
     } else if (tokenStats) {
       // Legacy: build tweet from tokenStats (backward compat)
-      const dustPct = tokenStats.dustPercentage || Math.round((tokenStats.dustCount / tokenStats.totalHolders) * 100);
+      const dustPct = tokenStats.dustPercentage ||
+        Math.round((tokenStats.dustCount / tokenStats.totalHolders) * 100);
       finalTweetText = `🔍 $${tokenStats.symbol} Holder Analysis
 
 📊 ${tokenStats.totalHolders.toLocaleString()} Total Wallets
@@ -181,45 +269,52 @@ Free report 👉 blackbox.farm/holders`;
     }
 
     // Determine credentials
-    let apiKey = DEFAULT_API_KEY;
-    let apiSecret = DEFAULT_API_SECRET;
-    let accessToken = DEFAULT_ACCESS_TOKEN;
-    let accessTokenSecret = DEFAULT_ACCESS_TOKEN_SECRET;
+    const resolvedCredentials: TwitterCredentials = getDefaultCredentials();
+    const normalizedHandle = normalizeTwitterHandle(twitterHandle);
 
     // If a specific twitter handle is requested, fetch credentials from DB
-    if (twitterHandle) {
-      console.log(`Looking up credentials for @${twitterHandle}`);
-      
+    if (normalizedHandle && !shouldPreferDefaultCredentials(normalizedHandle)) {
+      console.log(`Looking up credentials for @${normalizedHandle}`);
+
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
       const { data: account, error } = await supabase
-        .from('twitter_accounts')
-        .select('api_key_encrypted, api_secret_encrypted, access_token_encrypted, access_token_secret_encrypted')
-        .eq('username', twitterHandle)
+        .from("twitter_accounts")
+        .select(
+          "api_key_encrypted, api_secret_encrypted, access_token_encrypted, access_token_secret_encrypted",
+        )
+        .eq("username", normalizedHandle)
         .single();
 
       if (error || !account) {
-        console.error('Failed to fetch twitter account:', error);
-        throw new Error(`Twitter account @${twitterHandle} not found or missing credentials`);
+        console.error("Failed to fetch twitter account:", error);
+        throw new Error(
+          `Twitter account @${normalizedHandle} not found or missing credentials`,
+        );
       }
 
       if (!account.api_key_encrypted || !account.access_token_encrypted) {
-        throw new Error(`Twitter account @${twitterHandle} is missing API credentials`);
+        throw new Error(
+          `Twitter account @${normalizedHandle} is missing API credentials`,
+        );
       }
 
       // Use the account's credentials (they're stored as plaintext with "_encrypted" suffix)
-      apiKey = account.api_key_encrypted;
-      apiSecret = account.api_secret_encrypted;
-      accessToken = account.access_token_encrypted;
-      accessTokenSecret = account.access_token_secret_encrypted;
+      resolvedCredentials.apiKey = account.api_key_encrypted;
+      resolvedCredentials.apiSecret = account.api_secret_encrypted;
+      resolvedCredentials.accessToken = account.access_token_encrypted;
+      resolvedCredentials.accessTokenSecret =
+        account.access_token_secret_encrypted;
 
-      console.log(`Using credentials for @${twitterHandle}`);
+      console.log(`Using stored account credentials for @${normalizedHandle}`);
+    } else if (normalizedHandle) {
+      console.log(`Using default env credentials for @${normalizedHandle}`);
     }
 
     // Validate credentials
-    if (!apiKey || !apiSecret || !accessToken || !accessTokenSecret) {
+    if (!hasCompleteCredentials(resolvedCredentials)) {
       throw new Error("Missing Twitter API credentials");
     }
 
@@ -228,7 +323,14 @@ Free report 👉 blackbox.farm/holders`;
       console.log("Target community:", communityId);
     }
 
-    const result = await sendTweet(finalTweetText, apiKey, apiSecret, accessToken, accessTokenSecret, communityId);
+    const result = await sendTweet(
+      finalTweetText,
+      resolvedCredentials.apiKey,
+      resolvedCredentials.apiSecret,
+      resolvedCredentials.accessToken,
+      resolvedCredentials.accessTokenSecret,
+      communityId,
+    );
 
     console.log("Tweet posted successfully:", result.data?.id);
 
@@ -238,10 +340,11 @@ Free report 👉 blackbox.farm/holders`;
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        
+
         const tweetUrl = `https://x.com/i/status/${result.data?.id}`;
-        const tgMessage = `📢 *New X Post*\n\n${finalTweetText}\n\n🐦 ${tweetUrl}`;
-        
+        const tgMessage =
+          `📢 *New X Post*\n\n${finalTweetText}\n\n🐦 ${tweetUrl}`;
+
         await broadcastToBlackBox(supabase, tgMessage);
         console.log("TG broadcast sent for tweet:", result.data?.id);
       } catch (tgErr) {
@@ -250,12 +353,12 @@ Free report 👉 blackbox.farm/holders`;
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         tweetId: result.data?.id,
-        tweetUrl: `https://x.com/i/status/${result.data?.id}`
+        tweetUrl: `https://x.com/i/status/${result.data?.id}`,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: any) {
     console.error("Error posting tweet:", error);
@@ -264,8 +367,10 @@ Free report 👉 blackbox.farm/holders`;
       // IMPORTANT: return 200 so supabase-js doesn't throw FunctionsHttpError,
       // allowing the client to show the real error message.
       JSON.stringify({ success: false, error: friendly }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 }));
-
