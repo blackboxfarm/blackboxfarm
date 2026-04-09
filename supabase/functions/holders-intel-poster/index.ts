@@ -426,6 +426,8 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
   }
 
   const startTime = Date.now();
+  const reqBody = await req.clone().json().catch(() => ({}));
+  const manualOverride = !!reqBody.manualOverride;
   
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
