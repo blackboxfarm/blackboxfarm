@@ -5,6 +5,7 @@ import { TelegramWebViewBanner } from "@/components/TelegramWebViewBanner";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AnalysisOverview } from "@/components/holders/AnalysisOverview";
+import analysisThumb from "@/assets/analysis-overview-thumb.png";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
