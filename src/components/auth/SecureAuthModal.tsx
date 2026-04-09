@@ -507,5 +507,6 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
         />
       </DialogContent>
     </Dialog>
+    </>
   );
 };
