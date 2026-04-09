@@ -1412,6 +1412,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         email_verification_stats: emailVerificationStats,
         telegram_bot_stats: telegramBotStats,
         web_chat_stats: webChatStats,
+        sol_subscription_stats: solSubscriptionStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
@@ -1455,6 +1456,17 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     if (bannerPurchaseCount > 0) {
       tgMessage += `• Banner Purchases: ${bannerPurchaseCount}\n`;
     }
+    // SOL subscription overnight
+    if (solSubscriptionStats.overnight_payments > 0) {
+      tgMessage += `• 💰 SOL Payments: ${solSubscriptionStats.overnight_payments} (${solSubscriptionStats.overnight_revenue_sol} SOL)\n`;
+      for (const p of (solSubscriptionStats.overnight_details || []).slice(0, 5)) {
+        tgMessage += `  → TG:${p.tg_user} — ${p.amount} SOL\n`;
+      }
+    }
+    if (solSubscriptionStats.expiring_soon_14d > 0) {
+      tgMessage += `• ⏰ SOL subs expiring <14d: ${solSubscriptionStats.expiring_soon_14d}\n`;
+    }
+    tgMessage += `• Active SOL Subs: ${solSubscriptionStats.active_sol_subs || 0}\n`;
     tgMessage += `• Total Active Subs: ${totalActiveSubscribers || 0} (${totalLinkedAccounts || 0} linked)\n\n`;
 
     // Email Verification section
