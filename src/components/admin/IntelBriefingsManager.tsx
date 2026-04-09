@@ -51,13 +51,26 @@ interface Revision {
   created_at: string;
 }
 
+const DEFAULT_TAGS = ['HoldersIntel', 'Solana', 'Crypto'];
+
+const KNOWN_CATEGORIES = [
+  'holder-analysis',
+  'wallet-tracing',
+  'scam-detection',
+  'platform-guides',
+  'market-intel',
+  'developer-intel',
+  'community',
+  'general',
+];
+
 const emptyBriefing = {
   title: '',
   subtitle: '',
   slug: '',
   content_md: '',
-  category: 'intelligence',
-  tags: [] as string[],
+  category: 'holder-analysis',
+  tags: [...DEFAULT_TAGS] as string[],
   author: 'BlackBox Research',
   featured_image_url: '',
   seo_title: '',
@@ -153,15 +166,16 @@ function autoParseMarkdown(md: string): Partial<typeof emptyBriefing> {
   }
   if (bestScore > 0) result.category = bestCategory;
 
-  // Tags: extract **bold keywords** and #hashtags
+  // Tags: extract **bold keywords** and #hashtags, merge with defaults
   const boldMatches = md.match(/\*\*([^*]{2,30})\*\*/g) || [];
   const hashMatches = md.match(/#(\w{3,20})/g) || [];
-  const tags = [
-    ...boldMatches.slice(0, 5).map(b => b.replace(/\*\*/g, '').trim().toLowerCase()),
-    ...hashMatches.slice(0, 3).map(h => h.replace('#', '').toLowerCase()),
+  const extracted = [
+    ...boldMatches.slice(0, 5).map(b => b.replace(/\*\*/g, '').trim()),
+    ...hashMatches.slice(0, 3).map(h => h.replace('#', '')),
   ];
-  const unique = [...new Set(tags)].slice(0, 8);
-  if (unique.length > 0) result.tags = unique;
+  const merged = [...DEFAULT_TAGS, ...extracted];
+  const unique = [...new Set(merged)].slice(0, 10);
+  result.tags = unique;
 
   return result;
 }
@@ -325,7 +339,7 @@ export function IntelBriefingsManager() {
     } else {
       setEditingId(null);
       setForm(emptyBriefing);
-      setTagsInput('');
+    setTagsInput(DEFAULT_TAGS.join(', '));
     }
     setRevisionNote('');
     setEditorTab('edit');
@@ -630,15 +644,24 @@ export function IntelBriefingsManager() {
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Category</Label>
-            <Input
-              value={form.category}
-              onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-              placeholder="intelligence, tutorials, etc."
-              list="category-options"
-            />
-            <datalist id="category-options">
-              {categories.map(c => <option key={c} value={c} />)}
-            </datalist>
+            <Select value={form.category} onValueChange={(v) => {
+              if (v === '__new__') {
+                const newCat = prompt('Enter new category slug (e.g. "defi-analysis"):');
+                if (newCat && newCat.trim()) {
+                  setForm(f => ({ ...f, category: newCat.trim().toLowerCase().replace(/\s+/g, '-') }));
+                }
+              } else {
+                setForm(f => ({ ...f, category: v }));
+              }
+            }}>
+              <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+              <SelectContent>
+                {[...new Set([...KNOWN_CATEGORIES, ...categories])].sort().map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+                <SelectItem value="__new__">➕ Add new category...</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label className="text-xs">Tags (comma-separated)</Label>
