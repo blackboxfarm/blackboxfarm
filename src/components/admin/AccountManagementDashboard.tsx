@@ -872,6 +872,37 @@ export function AccountManagementDashboard() {
                         </div>
                       </div>
                     </TableCell>
+                    {/* Intent column */}
+                    <TableCell>
+                      {account.buyer_intent ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto p-1"
+                                onClick={() => setIntentDetailAccount(account)}
+                              >
+                                <Badge variant="outline" className={`text-[10px] cursor-pointer ${
+                                  account.buyer_intent.intent_level === 'almost_bought' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
+                                  account.buyer_intent.intent_level === 'considering' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
+                                  'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                                }`}>
+                                  <ShoppingCart className="h-3 w-3 mr-1" />
+                                  {account.buyer_intent.intent_level.replace('_', ' ')}
+                                </Badge>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {account.buyer_intent.pricing_page_views} pricing views, {account.buyer_intent.checkout_attempts} checkouts. Click for timeline.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
