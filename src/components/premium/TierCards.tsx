@@ -221,7 +221,7 @@ export function TierCards() {
                 rel="noopener noreferrer"
                 className="text-primary hover:underline font-medium"
               >
-                DM @BlackBoxFarmBot → /payment
+                DM @holdersintel_bot → /payment
               </a>
             </span>
           </div>
