@@ -190,6 +190,16 @@ const AccountBadges = ({ account }: { account: UserAccount }) => {
     badges.push({ icon: '😎', label: 'TG Bot Installed in Channel/Group' });
   }
 
+  // Shopping cart = buyer intent signal (window shopper)
+  if (account.buyer_intent) {
+    const intentLabels: Record<string, string> = {
+      almost_bought: '🛒 Almost Bought (abandoned checkout)',
+      considering: '🛒 Considering (3+ pricing views)',
+      browsing: '🛒 Browsing (viewed pricing)',
+    };
+    badges.push({ icon: '🛒', label: intentLabels[account.buyer_intent.intent_level] || '🛒 Window Shopper' });
+  }
+
   if (badges.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
 
   return (
