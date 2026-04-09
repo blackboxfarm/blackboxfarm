@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Zap, Skull, Undo2, ExternalLink } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { fetchTemplate, processTemplate, type TokenShareData } from "@/lib/share-template";
 
 interface Discovery {
   id: string;
