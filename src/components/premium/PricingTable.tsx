@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { XSubscriberVerification } from './XSubscriberVerification';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { CheckoutTransitionModal } from './CheckoutTransitionModal';
+import { TierCards } from './TierCards';
 
 interface PricingFeature {
   label: string;
@@ -317,124 +318,7 @@ export function PricingTable() {
       )}
 
       {/* Tier Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tiers.map((tier) => {
-          const isCurrent = tierInfo.tierKey === tier.key;
-          const isLoading = loadingTier === tier.key;
-          const showXSubToggle = tier.key === 'pro' && tier.xYearlyPrice && tierInfo.isXSubscriber;
-          return (
-            <Card
-              key={tier.key}
-              className={`relative ${tier.highlight ? 'border-primary shadow-lg shadow-primary/10' : 'border-border/50'} ${isCurrent ? 'ring-2 ring-primary' : ''}`}
-            >
-              {tier.badge && (
-                <Badge className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs">
-                  {tier.badge}
-                </Badge>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  {tier.icon}
-                  <CardTitle className="text-lg">{tier.name}</CardTitle>
-                </div>
-                <p className="text-xs text-muted-foreground">{tier.description}</p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  {/* Price display */}
-                  {showXSubToggle ? (
-                    <>
-                      {/* X Subscriber billing cycle toggle */}
-                      <div className="flex items-center gap-1 mb-2 bg-muted/50 rounded-lg p-0.5">
-                        <button
-                          onClick={() => setXSubBillingCycle('monthly')}
-                          className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-colors ${
-                            xSubBillingCycle === 'monthly'
-                              ? 'bg-background text-foreground shadow-sm'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          Monthly
-                        </button>
-                        <button
-                          onClick={() => setXSubBillingCycle('yearly')}
-                          className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-colors ${
-                            xSubBillingCycle === 'yearly'
-                              ? 'bg-background text-foreground shadow-sm'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          Yearly
-                          <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 border-green-500/50 text-green-400">
-                            -{xSubYearlySavingsPct}%
-                          </Badge>
-                        </button>
-                      </div>
-                      {xSubBillingCycle === 'monthly' ? (
-                        <>
-                          <span className="text-3xl font-bold">{tier.xPrice}</span>
-                          <span className="text-sm text-muted-foreground">/mo</span>
-                          <p className="text-xs text-muted-foreground line-through mt-0.5">{tier.price}/mo regular</p>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-3xl font-bold">{tier.xYearlyPrice}</span>
-                          <span className="text-sm text-muted-foreground">/year</span>
-                          <p className="text-xs text-green-400 mt-0.5">
-                            ≈ ${(xSubYearlyPrice / 12).toFixed(2)}/mo · Save ${(xSubMonthlyAnnualized - xSubYearlyPrice).toFixed(2)}/yr
-                          </p>
-                        </>
-                      )}
-                      <p className="text-[10px] text-blue-400 mt-1">
-                        <Sparkles className="h-2.5 w-2.5 inline mr-0.5" />
-                        X Subscriber exclusive pricing
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-3xl font-bold">{tier.price}</span>
-                      {tier.price !== '$0' && tier.price !== 'Included' && (
-                        <span className="text-sm text-muted-foreground">/mo</span>
-                      )}
-                      {tier.xPrice && (
-                        <p className="text-xs text-blue-400 mt-0.5">
-                          {tier.xPrice}/mo for X Subscribers
-                          {tier.xYearlyPrice && (
-                            <span className="block text-[10px]">
-                              or {tier.xYearlyPrice}/yr (save {xSubYearlySavingsPct}%)
-                            </span>
-                          )}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <Button
-                  className="w-full"
-                  variant={tier.highlight ? 'default' : 'outline'}
-                  disabled={isCurrent || isLoading}
-                  onClick={() => {
-                    if (tier.key === 'x_subscriber') {
-                      window.open('https://x.com/holdersintel', '_blank');
-                    } else if (tier.stripeKey) {
-                      handleCheckout(tier.stripeKey);
-                    } else if (!user) {
-                      setShowAuthModal(true);
-                    }
-                  }}
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                  ) : null}
-                  {isCurrent ? '✓ Current Plan' : tier.cta}
-                  {!isCurrent && !isLoading && <ArrowRight className="h-3.5 w-3.5 ml-1" />}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <TierCards />
 
       {/* X Subscriber Verification */}
       {user && <XSubscriberVerification />}

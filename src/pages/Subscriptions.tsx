@@ -1,15 +1,13 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PricingTable } from '@/components/premium/PricingTable';
+import { TierCards } from '@/components/premium/TierCards';
 import { XSubscriberVerification } from '@/components/premium/XSubscriberVerification';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { useUserTier } from '@/hooks/useUserTier';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { STRIPE_TIERS } from '@/config/stripeTiers';
-import { AuthModal } from '@/components/auth/AuthModal';
 import {
   ExternalLink,
   Brain,
@@ -34,45 +32,7 @@ export default function Subscriptions() {
   const { checkSubscription, tierInfo } = useUserTier();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [loadingTier, setLoadingTier] = useState<string | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [pendingCheckoutTier, setPendingCheckoutTier] = useState<'pro' | 'dev' | 'enterprise' | null>(null);
 
-  const startCheckout = useCallback(async (tierKey: 'pro' | 'dev' | 'enterprise') => {
-    setLoadingTier(tierKey);
-    try {
-      const stripeConfig = STRIPE_TIERS[tierKey];
-      const priceId = tierInfo.isXSubscriber ? stripeConfig.x_sub_price_id : stripeConfig.price_id;
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { priceId },
-      });
-      if (error) throw error;
-      if (data?.url) window.open(data.url, '_blank');
-    } catch (err) {
-      console.error('Checkout error:', err);
-      toast.error('Failed to start checkout. Please try again.');
-    } finally {
-      setLoadingTier(null);
-    }
-  }, [tierInfo.isXSubscriber]);
-
-  const handleHeroCheckout = (tierKey: 'pro' | 'dev' | 'enterprise') => {
-    if (!user) {
-      setPendingCheckoutTier(tierKey);
-      setShowAuthModal(true);
-      return;
-    }
-    startCheckout(tierKey);
-  };
-
-  const handleAuthClose = () => {
-    setShowAuthModal(false);
-    if (pendingCheckoutTier) {
-      const tier = pendingCheckoutTier;
-      setPendingCheckoutTier(null);
-      setTimeout(() => startCheckout(tier), 500);
-    }
-  };
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       toast.success('Subscription activated! Welcome aboard 🎉');
@@ -144,47 +104,15 @@ export default function Subscriptions() {
                 <span className="text-foreground font-semibold">You Handle the Market</span>
               </p>
 
-              {/* Quick-access Popular Plans */}
-              <div className="max-w-4xl mx-auto pt-4">
-                <p className="text-sm text-muted-foreground mb-4">
+              {/* Tier Cards */}
+              <div className="max-w-6xl mx-auto pt-6">
+                <p className="text-sm text-muted-foreground mb-6">
                   Join now or scroll down and compare packages
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {([
-                    { name: 'Pro', price: '$9.99/mo', badge: 'Most Popular', highlight: true, tierKey: 'pro' as const },
-                    { name: 'Developer', price: '$29.99/mo', badge: null, highlight: false, tierKey: 'dev' as const },
-                    { name: 'Enterprise', price: '$49.99/mo', badge: null, highlight: false, tierKey: 'enterprise' as const },
-                  ]).map((plan) => (
-                    <Card 
-                      key={plan.name}
-                      className={`cursor-pointer transition-all hover:scale-[1.02] ${plan.highlight ? 'border-primary shadow-lg shadow-primary/10' : 'border-border/50'}`}
-                      onClick={() => handleHeroCheckout(plan.tierKey)}
-                    >
-                      <CardContent className="p-4 text-center space-y-2">
-                        {plan.badge && (
-                          <Badge className="bg-primary text-primary-foreground text-xs">{plan.badge}</Badge>
-                        )}
-                        <p className="font-bold text-lg">{plan.name}</p>
-                        <p className="text-2xl font-black text-primary">{plan.price}</p>
-                        <Button 
-                          size="sm" 
-                          variant={plan.highlight ? 'default' : 'outline'} 
-                          className="w-full gap-1"
-                          disabled={loadingTier === plan.tierKey}
-                        >
-                          {loadingTier === plan.tierKey ? (
-                            <><Loader2 className="w-3 h-3 animate-spin" /> Loading...</>
-                          ) : (
-                            <>Get Started <ChevronRight className="w-3 h-3" /></>
-                          )}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                <TierCards />
               </div>
 
-              <div className="flex items-center justify-center gap-3 pt-4">
+              <div className="flex items-center justify-center gap-3 pt-6">
                 <Button
                   size="lg"
                   className="gap-2"
@@ -334,13 +262,6 @@ export default function Subscriptions() {
             </div>
           </div>
         </section>
-        {showAuthModal && (
-          <AuthModal
-            isOpen={showAuthModal}
-            onClose={handleAuthClose}
-            defaultTab="signup"
-          />
-        )}
     </SiteLayout>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,8 +7,7 @@ import {
   Shield, Brain, Bot, Network, Eye, Lock, Zap, Users, 
   TrendingUp, Search, AlertTriangle, Globe, ArrowRight,
   CheckCircle2, XCircle, Star, Crown, Rocket, Target,
-  MessageSquare, BarChart3, Fingerprint, ExternalLink, MessageCircle,
-  Loader2
+  MessageSquare, BarChart3, Fingerprint, ExternalLink, MessageCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SocialIcon } from "@/components/token/SocialIcon";
@@ -18,91 +17,8 @@ import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { STRIPE_TIERS } from "@/config/stripeTiers";
-import { AuthModal } from "@/components/auth/AuthModal";
-import { toast } from "sonner";
+import { TierCards } from "@/components/premium/TierCards";
 
-const TIERS = [
-  {
-    name: "Free",
-    icon: <Zap className="w-5 h-5" />,
-    price: "Free",
-    description: "Explore the basics. No account needed.",
-    color: "border-muted-foreground/30",
-    badge: "bg-muted text-muted-foreground",
-    cta: { label: "Try Free Analysis", action: "navigate", to: "/holders" },
-    features: [
-      { name: "Basic Holder Breakdown", included: true },
-      { name: "Top 25 Holders Table", included: true },
-      { name: "Liquidity & Supply Stats", included: true },
-      { name: "Stability Score", included: true },
-      { name: "Telegram /quick command", included: true },
-      { name: "AI Analysis", included: false },
-      { name: "Bubble Map", included: false },
-      { name: "Wallet Deep Scan", included: false },
-    ]
-  },
-  {
-    name: "Signed In",
-    icon: <Users className="w-5 h-5" />,
-    price: "Free",
-    description: "Create an account to unlock more depth.",
-    color: "border-primary/30",
-    badge: "bg-primary/10 text-primary",
-    cta: { label: "Sign Up Free", action: "navigate", to: "/subscriptions#plans" },
-    features: [
-      { name: "Everything in Free", included: true },
-      { name: "Extended Analysis Panel", included: true },
-      { name: "Security Alerts & Flags", included: true },
-      { name: "Reputation Cross-Reference", included: true },
-      { name: "Telegram /holders, /ca", included: true },
-      { name: "AI Narrative Reports", included: false },
-      { name: "Bubble Map (limited)", included: "partial" as const },
-      { name: "Oracle Deep Scan", included: false },
-    ]
-  },
-  {
-    name: "X Subscriber",
-    icon: <Star className="w-5 h-5" />,
-    price: "$4.99/mo",
-    description: "Subscribe via X for premium intel.",
-    color: "border-primary/50",
-    badge: "bg-primary/20 text-primary",
-    cta: { label: "Subscribe on X", action: "external", to: "https://x.com/holdersintel" },
-    features: [
-      { name: "Everything in Signed In", included: true },
-      { name: "AI Analysis & Risk Scores", included: true },
-      { name: "Telegram /risk, /ai", included: true },
-      { name: "Bubble Map (good access)", included: true },
-      { name: "Dev Wallet Tracing", included: true },
-      { name: "KYC Root Discovery", included: "partial" as const },
-      { name: "Full Oracle Network", included: false },
-      { name: "API Access", included: false },
-    ]
-  },
-  {
-    name: "Pro",
-    icon: <Crown className="w-5 h-5" />,
-    price: "$9.99/mo",
-    description: "Full power. Every tool. Every signal.",
-    color: "border-primary",
-    badge: "bg-primary text-primary-foreground",
-    highlight: true,
-    cta: { label: "Upgrade to Pro", action: "checkout", to: "/subscriptions#plans" },
-    features: [
-      { name: "Everything in X Subscriber", included: true },
-      { name: "Full AI Narrative Reports", included: true },
-      { name: "Bubble Map (unlimited)", included: true },
-      { name: "Oracle Deep + Spider Scan", included: true },
-      { name: "KYC Root Network Mapping", included: true },
-      { name: "Recycled Identity Detection", included: true },
-      { name: "Full Telegram Bot Suite", included: true },
-      { name: "Priority API Access", included: true },
-    ]
-  },
-];
 
 const PRODUCT_PILLARS = [
   {
@@ -186,57 +102,10 @@ const UNIQUE_SIGNALS = [
   },
 ];
 
-function FeatureCheck({ included }: { included: boolean | string }) {
-  if (included === true) return <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />;
-  if (included === "partial") return <Star className="w-4 h-4 text-muted-foreground shrink-0" />;
-  return <XCircle className="w-4 h-4 text-muted-foreground/40 shrink-0" />;
-}
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   usePageTracking('home');
-
-  const handleProCheckout = async () => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
-    setCheckoutLoading(true);
-    try {
-      const priceId = STRIPE_TIERS.pro.price_id;
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { priceId },
-      });
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (err) {
-      console.error('Checkout error:', err);
-      toast.error('Failed to start checkout. Please try again.');
-    } finally {
-      setCheckoutLoading(false);
-    }
-  };
-
-  // Auto-trigger checkout after user signs in via AuthModal
-  const pendingCheckout = useRef(false);
-  useEffect(() => {
-    if (showAuthModal) {
-      pendingCheckout.current = true;
-    }
-  }, [showAuthModal]);
-
-  useEffect(() => {
-    if (user && pendingCheckout.current) {
-      pendingCheckout.current = false;
-      setShowAuthModal(false);
-      handleProCheckout();
-    }
-  }, [user]);
 
   return (
     <SiteLayout>
@@ -494,73 +363,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {TIERS.map((tier) => (
-            <Card 
-              key={tier.name} 
-              className={`relative bg-card ${tier.color} ${tier.highlight ? 'ring-1 ring-primary shadow-glow' : ''} transition-all hover:border-primary/40`}
-            >
-              {tier.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase">
-                    Most Popular
-                  </Badge>
-                </div>
-              )}
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="text-primary">{tier.icon}</div>
-                  <h3 className="font-bold text-foreground">{tier.name}</h3>
-                </div>
-                
-                <div>
-                  <span className="text-2xl font-black text-foreground">{tier.price}</span>
-                </div>
-                
-                <p className="text-xs text-muted-foreground">{tier.description}</p>
-
-                <ul className="space-y-2 pt-2">
-                  {tier.features.map((f) => (
-                    <li key={f.name} className="flex items-center gap-2 text-sm">
-                      <FeatureCheck included={f.included} />
-                      <span className={f.included ? 'text-foreground/90' : 'text-muted-foreground/50'}>
-                        {f.name}
-                      </span>
-                    </li>
-                    ))}
-                  </ul>
-                  
-                  <div className="pt-2">
-                    {tier.cta.action === "checkout" ? (
-                      <Button 
-                        variant="default" 
-                        className="w-full gap-2"
-                        disabled={checkoutLoading}
-                        onClick={handleProCheckout}
-                      >
-                        {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : tier.cta.label}
-                        {!checkoutLoading && <ArrowRight className="w-4 h-4" />}
-                      </Button>
-                    ) : tier.cta.action === "external" ? (
-                      <a href={tier.cta.to} target="_blank" rel="noopener noreferrer" className="block">
-                        <Button variant={tier.highlight ? "default" : "outline"} className="w-full gap-2">
-                          {tier.cta.label} <ArrowRight className="w-4 h-4" />
-                        </Button>
-                      </a>
-                    ) : (
-                      <Button 
-                        variant={tier.highlight ? "default" : "outline"} 
-                        className="w-full gap-2"
-                        onClick={() => navigate(tier.cta.to)}
-                      >
-                        {tier.cta.label} <ArrowRight className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-          ))}
-        </div>
+        <TierCards />
       </section>
 
       {/* Telegram Bot Section */}
@@ -732,13 +535,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-      <AuthModal 
-        isOpen={showAuthModal} 
-        onClose={() => {
-          setShowAuthModal(false);
-        }}
-        defaultTab="signup"
-      />
     </SiteLayout>
   );
 }
