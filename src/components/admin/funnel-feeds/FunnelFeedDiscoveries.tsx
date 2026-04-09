@@ -92,10 +92,10 @@ export function FunnelFeedDiscoveries() {
       // 3. Fetch active template
       const { data: activeRow } = await supabase
         .from('holders_intel_templates')
-        .select('name')
-        .eq('is_active_intel', true)
+        .select('template_name')
+        .eq('is_active', true)
         .single();
-      const activeTemplateName = (activeRow?.name as 'small' | 'large') || 'large';
+      const activeTemplateName = (activeRow?.template_name as 'small' | 'large') || 'large';
       const templateText = await fetchTemplate(activeTemplateName);
 
       // 4. Build token data and render template
