@@ -222,6 +222,22 @@ export default function Home() {
     }
   };
 
+  // Auto-trigger checkout after user signs in via AuthModal
+  const pendingCheckout = useRef(false);
+  useEffect(() => {
+    if (showAuthModal) {
+      pendingCheckout.current = true;
+    }
+  }, [showAuthModal]);
+
+  useEffect(() => {
+    if (user && pendingCheckout.current) {
+      pendingCheckout.current = false;
+      setShowAuthModal(false);
+      handleProCheckout();
+    }
+  }, [user]);
+
   return (
     <SiteLayout>
       {/* Hero */}
