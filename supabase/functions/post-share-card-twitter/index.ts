@@ -84,6 +84,8 @@ async function sendTweet(
   const oauthHeader = generateOAuthHeader(method, url, apiKey, apiSecret, accessToken, accessTokenSecret);
 
   console.log("Sending tweet:", tweetText.substring(0, 50) + "...");
+  console.log(`[AUTH-DEBUG] API Key prefix: ${apiKey?.substring(0, 6)}..., len=${apiKey?.length}`);
+  console.log(`[AUTH-DEBUG] Access Token prefix: ${accessToken?.substring(0, 6)}..., len=${accessToken?.length}`);
   if (communityId) {
     console.log("Posting to X Community:", communityId);
   }
