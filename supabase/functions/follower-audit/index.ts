@@ -152,14 +152,13 @@ serve(async (req) => {
 
     // Run Apify actor
     const actorRunRes = await fetch(
-      `https://api.apify.com/v2/acts/apidojo~twitter-followers-scraper/run-sync-get-dataset-items?token=${apifyToken}`,
+      `https://api.apify.com/v2/acts/x_guru~twitter-follower-scraper/run-sync-get-dataset-items?token=${apifyToken}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          twitterHandles: [cleanHandle],
+          userNameList: [cleanHandle],
           maxItems: sampleSize,
-          proxyConfiguration: { useApifyProxy: true },
         }),
       }
     );
