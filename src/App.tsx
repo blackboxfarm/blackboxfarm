@@ -77,6 +77,7 @@ const IntelBriefings = lazy(() => import("./pages/IntelBriefings"));
 const IntelBriefingArticle = lazy(() => import("./pages/IntelBriefingArticle"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
+const TokenAction = lazy(() => import("./pages/TokenAction"));
 
 const queryClient = new QueryClient();
 
@@ -111,6 +112,7 @@ const App = () => {
                       <Route path="/reset-password" element={<ResetPassword />} />
                       <Route path="/verify-email" element={<VerifyEmail />} />
                       <Route path="/unsubscribe" element={<Unsubscribe />} />
+                      <Route path="/action" element={<TokenAction />} />
                       <Route path="/terms" element={<TermsOfService />} />
                       <Route path="/tos" element={<TOS />} />
                       <Route path="/privacy" element={<PrivacyPolicy />} />

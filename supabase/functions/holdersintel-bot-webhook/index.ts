@@ -17,6 +17,28 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
 });
 
+// ─── Helper: Generate a one-time tokenized action link ───
+async function generateActionLink(userId: string, actionType: string, payload: Record<string, unknown> = {}): Promise<string> {
+  try {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    await supabase.from('one_time_action_tokens').insert({
+      token,
+      user_id: userId,
+      action_type: actionType,
+      payload,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+
+    return `https://blackbox.farm/action?t=${token}`;
+  } catch (e) {
+    console.error('Failed to generate action link:', e);
+    return 'https://blackbox.farm/auth';
+  }
+}
+
 // ─── Tier hierarchy (higher = more access) ───
 const TIER_RANK: Record<string, number> = {
   free: 0, auth: 1, x_subscriber: 2, pro: 3, dev: 4, enterprise: 5,
@@ -663,7 +685,8 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `  _• /config verbose on|off — Toggle detailed vs minimal responses_\n` +
     `  _• /config admin-only on|off — Restrict commands to admins_\n` +
     `  _• /config dev-alerts on|off — Get notified when watched devs launch_\n` +
-    `${check("auth")} /dashboard — Full channel management dashboard\n`;
+    `${check("auth")} /dashboard — Full channel management dashboard\n` +
+    `✅ /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
     `${unlocked} = Available | ${locked} = Locked to your tier\n` +
@@ -2835,7 +2858,7 @@ async function detectTgLookup(messageText: string, telegramUserId: string): Prom
     const { data: ev } = await supabase.from('email_verifications').select('verified_at, sent_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (ev) {
       let block = `## LIVE DATA LOOKUP\nEmail verification status:\n`;
-      block += ev.verified_at ? `- VERIFIED ✅\n` : `- NOT VERIFIED ❌\n- They should check their inbox or visit https://blackbox.farm/dashboard\n`;
+      block += ev.verified_at ? `- VERIFIED ✅\n` : `- NOT VERIFIED ❌\n- They should check their inbox or request a resend via the bot\n`;
       return block;
     }
   }
@@ -2972,9 +2995,9 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Bubblemap (pre-loaded token): https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
         prompt += `- Intel Briefings: https://blackbox.farm/intel\n`;
         prompt += `- Oracle Risk Tool: https://blackbox.farm/oracle\n`;
-        prompt += `- Register/Sign Up: https://blackbox.farm/register\n`;
-        prompt += `- Dashboard: https://blackbox.farm/dashboard\n`;
-        prompt += `- Advertise With Us: https://blackbox.farm/advertise\n`;
+        prompt += `- Register/Sign Up: https://blackbox.farm/auth\n`;
+        prompt += `- Dashboard: https://blackbox.farm/dashboard (note: for TG users, generate tokenized links via the bot instead of sending raw dashboard URLs)\n`;
+        prompt += `- Advertise With Us: https://blackbox.farm/buy-banner\n`;
         prompt += `- Share on Socials: https://blackbox.farm/share\n`;
         prompt += `Replace TOKEN_ADDRESS with the actual CA when a user mentions a specific token.\n\n`;
 
@@ -3457,9 +3480,10 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
         // Check if past 24h and unverified — gentle nudge
         const needsNudge = await isUserPast24hUnverified(linked.user_id);
         if (needsNudge && command !== '/register' && command !== '/start') {
-          // Send nudge but continue processing the command
+          // Send nudge with tokenized resend link
+          const resendLink = await generateActionLink(linked.user_id, 'resend_verification');
           await sendMessage(chatId,
-            `Hey quick thing 💬 — your email isn't verified yet! Just check your inbox and click the link. If you can't find it, hit "Resend" on your [dashboard](https://blackbox.farm/dashboard). Need help? Just ask me anything here! 🤖`
+            `Hey quick thing 💬 — your email isn't verified yet! Just check your inbox and click the link. If you can't find it, tap here to resend: [Resend Verification](${resendLink})\n\nNeed help? Just ask me anything here! 🤖`
           );
         }
       }
