@@ -337,6 +337,13 @@ export default function SuperAdmin() {
               </TabErrorBoundary>
             )}
           </TabsContent>
+          <TabsContent value="email-campaigns">
+            {activeTab === "email-campaigns" && (
+              <TabErrorBoundary tabName="Email Campaigns">
+                <Suspense fallback={<TabLoader />}><EmailCampaignsManager /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
