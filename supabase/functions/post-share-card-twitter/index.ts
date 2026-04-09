@@ -14,6 +14,40 @@ const DEFAULT_API_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
 const DEFAULT_ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const DEFAULT_ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
 
+type TwitterCredentials = {
+  apiKey?: string;
+  apiSecret?: string;
+  accessToken?: string;
+  accessTokenSecret?: string;
+};
+
+function getDefaultCredentials(): TwitterCredentials {
+  return {
+    apiKey: DEFAULT_API_KEY,
+    apiSecret: DEFAULT_API_SECRET,
+    accessToken: DEFAULT_ACCESS_TOKEN,
+    accessTokenSecret: DEFAULT_ACCESS_TOKEN_SECRET,
+  };
+}
+
+function hasCompleteCredentials(credentials: TwitterCredentials): credentials is Required<TwitterCredentials> {
+  return Boolean(
+    credentials.apiKey &&
+    credentials.apiSecret &&
+    credentials.accessToken &&
+    credentials.accessTokenSecret
+  );
+}
+
+function normalizeTwitterHandle(handle?: string | null): string {
+  return (handle || '').replace(/^@/, '').trim();
+}
+
+function shouldPreferDefaultCredentials(twitterHandle?: string | null): boolean {
+  const normalizedHandle = normalizeTwitterHandle(twitterHandle).toLowerCase();
+  return normalizedHandle === 'holdersintel' && hasCompleteCredentials(getDefaultCredentials());
+}
+
 function generateOAuthSignature(
   method: string,
   url: string,
@@ -149,14 +183,17 @@ Deno.serve(withRunLog('post-share-card-twitter', async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
-    const { tweetText, twitterHandle, tokenStats, communityId, skipTelegram } = body;
+    const { tweetText, text, twitterHandle, tokenStats, communityId, skipTelegram } = body;
 
     // Determine tweet content
     let finalTweetText: string;
 
-    if (tweetText) {
+    if (tweetText?.trim()) {
       // Use the provided template-processed tweet text directly
-      finalTweetText = tweetText;
+      finalTweetText = tweetText.trim();
+    } else if (text?.trim()) {
+      // Backward compat for older callers
+      finalTweetText = text.trim();
     } else if (tokenStats) {
       // Legacy: build tweet from tokenStats (backward compat)
       const dustPct = tokenStats.dustPercentage || Math.round((tokenStats.dustCount / tokenStats.totalHolders) * 100);
@@ -181,14 +218,12 @@ Free report 👉 blackbox.farm/holders`;
     }
 
     // Determine credentials
-    let apiKey = DEFAULT_API_KEY;
-    let apiSecret = DEFAULT_API_SECRET;
-    let accessToken = DEFAULT_ACCESS_TOKEN;
-    let accessTokenSecret = DEFAULT_ACCESS_TOKEN_SECRET;
+    const resolvedCredentials: TwitterCredentials = getDefaultCredentials();
+    const normalizedHandle = normalizeTwitterHandle(twitterHandle);
 
     // If a specific twitter handle is requested, fetch credentials from DB
-    if (twitterHandle) {
-      console.log(`Looking up credentials for @${twitterHandle}`);
+    if (normalizedHandle && !shouldPreferDefaultCredentials(normalizedHandle)) {
+      console.log(`Looking up credentials for @${normalizedHandle}`);
       
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -197,29 +232,31 @@ Free report 👉 blackbox.farm/holders`;
       const { data: account, error } = await supabase
         .from('twitter_accounts')
         .select('api_key_encrypted, api_secret_encrypted, access_token_encrypted, access_token_secret_encrypted')
-        .eq('username', twitterHandle)
+        .eq('username', normalizedHandle)
         .single();
 
       if (error || !account) {
         console.error('Failed to fetch twitter account:', error);
-        throw new Error(`Twitter account @${twitterHandle} not found or missing credentials`);
+        throw new Error(`Twitter account @${normalizedHandle} not found or missing credentials`);
       }
 
       if (!account.api_key_encrypted || !account.access_token_encrypted) {
-        throw new Error(`Twitter account @${twitterHandle} is missing API credentials`);
+        throw new Error(`Twitter account @${normalizedHandle} is missing API credentials`);
       }
 
       // Use the account's credentials (they're stored as plaintext with "_encrypted" suffix)
-      apiKey = account.api_key_encrypted;
-      apiSecret = account.api_secret_encrypted;
-      accessToken = account.access_token_encrypted;
-      accessTokenSecret = account.access_token_secret_encrypted;
+      resolvedCredentials.apiKey = account.api_key_encrypted;
+      resolvedCredentials.apiSecret = account.api_secret_encrypted;
+      resolvedCredentials.accessToken = account.access_token_encrypted;
+      resolvedCredentials.accessTokenSecret = account.access_token_secret_encrypted;
 
-      console.log(`Using credentials for @${twitterHandle}`);
+      console.log(`Using stored account credentials for @${normalizedHandle}`);
+    } else if (normalizedHandle) {
+      console.log(`Using default env credentials for @${normalizedHandle}`);
     }
 
     // Validate credentials
-    if (!apiKey || !apiSecret || !accessToken || !accessTokenSecret) {
+    if (!hasCompleteCredentials(resolvedCredentials)) {
       throw new Error("Missing Twitter API credentials");
     }
 
@@ -228,7 +265,14 @@ Free report 👉 blackbox.farm/holders`;
       console.log("Target community:", communityId);
     }
 
-    const result = await sendTweet(finalTweetText, apiKey, apiSecret, accessToken, accessTokenSecret, communityId);
+    const result = await sendTweet(
+      finalTweetText,
+      resolvedCredentials.apiKey,
+      resolvedCredentials.apiSecret,
+      resolvedCredentials.accessToken,
+      resolvedCredentials.accessTokenSecret,
+      communityId,
+    );
 
     console.log("Tweet posted successfully:", result.data?.id);
 
