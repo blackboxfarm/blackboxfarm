@@ -147,7 +147,7 @@ serve(async (req) => {
     // Use api-ninja/x-twitter-followers-scraper which returns full profile data
     const actorInput = {
       urls: [`https://x.com/${cleanHandle}/followers`],
-      maxResults: sampleSize,
+      maxResults: Math.max(20, sampleSize),
       scrapeAllResults: false,
     };
     console.log(`[FollowerAudit] Apify input:`, JSON.stringify(actorInput));
