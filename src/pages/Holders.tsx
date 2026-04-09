@@ -36,7 +36,7 @@ export default function Holders() {
               <TabsTrigger value="report">Token Holders Report</TabsTrigger>
               <TabsTrigger value="overview">Analysis Overview</TabsTrigger>
             </TabsList>
-            <img src={analysisThumb} alt="Analysis Overview" className="h-8 w-auto rounded-sm" />
+            <img src={analysisThumb} alt="Analysis Overview" className="rounded-sm" style={{ width: 100, height: 150 }} />
           </div>
 
           <TabsContent value="report" className="mt-0">
