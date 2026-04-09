@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,8 +7,7 @@ import {
   Shield, Brain, Bot, Network, Eye, Lock, Zap, Users, 
   TrendingUp, Search, AlertTriangle, Globe, ArrowRight,
   CheckCircle2, XCircle, Star, Crown, Rocket, Target,
-  MessageSquare, BarChart3, Fingerprint, ExternalLink, MessageCircle,
-  Loader2
+  MessageSquare, BarChart3, Fingerprint, ExternalLink, MessageCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SocialIcon } from "@/components/token/SocialIcon";
@@ -18,11 +17,7 @@ import { SiteLayout } from "@/components/layout/SiteLayout";
 import { XSuspendedPopover } from "@/components/XSuspendedPopover";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarousel";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { STRIPE_TIERS } from "@/config/stripeTiers";
-import { AuthModal } from "@/components/auth/AuthModal";
-import { toast } from "sonner";
+import { TierCards } from "@/components/premium/TierCards";
 
 const TIERS = [
   {
