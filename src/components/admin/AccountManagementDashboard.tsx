@@ -717,6 +717,7 @@ export function AccountManagementDashboard() {
                   <TabsTrigger value="advertisers">Advertisers</TabsTrigger>
                   <TabsTrigger value="admins">Admins</TabsTrigger>
                   <TabsTrigger value="verified">Verified</TabsTrigger>
+                  <TabsTrigger value="window_shoppers">🛒 Window Shoppers</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Button 
@@ -749,6 +750,7 @@ export function AccountManagementDashboard() {
                   <TableHead className="bg-card">Email Verified</TableHead>
                   <TableHead className="bg-card">Reg Code</TableHead>
                   <TableHead className="bg-card">Tier</TableHead>
+                  <TableHead className="bg-card">Intent</TableHead>
                   <TableHead className="cursor-pointer select-none hover:text-foreground bg-card" onClick={() => toggleSort('created_at')}>
                     <div className="flex items-center gap-1">Activity {sortField === 'created_at' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</div>
                   </TableHead>
