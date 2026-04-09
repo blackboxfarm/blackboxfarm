@@ -735,11 +735,11 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   const totalHolders = holdersData?.realHolders ?? holdersData?.totalHolders ?? null;
   const momentumScore = momentumData?.momentum_score ?? null;
 
-  // Dev risk
-  const dev = oracleData?.developer || oracleData?.creator || null;
-  const devScore = dev?.reputation_score ?? null;
-  const rugCount = dev?.rug_count ?? 0;
-  const devClass = dev?.classification || null;
+  // Dev risk (oracle-unified-lookup returns .profile, .score, .trafficLight, .stats)
+  const oracleProfile = oracleData?.profile || null;
+  const devScore = oracleData?.score ?? oracleProfile?.reputationScore ?? null;
+  const rugCount = oracleData?.stats?.rugPulls ?? 0;
+  const devClass = oracleData?.trafficLight === 'RED' ? 'serial_rugger' : null;
 
   // Insider/cluster data from holders report
   const insiderPct = holdersData?.insiderData?.totalInsiderPercentage ?? null;
