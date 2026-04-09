@@ -3674,7 +3674,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             const dmCA = looksLikeSolanaCA(sanitized.rawTruncated);
             if (dmCA) {
               console.log('[bot] DM auto-scan triggered:', dmCA.slice(0, 12));
-              await handleTopHolders(chatId, telegramUserId, dmCA);
+              await handleHolders(chatId, telegramUserId, dmCA);
             }
             // "Did you mean?" for unrecognized slash commands
             else if (sanitized.rawTruncated.startsWith('/')) {
