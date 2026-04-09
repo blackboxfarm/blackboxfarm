@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { BuyerIntentDetail } from '@/components/admin/BuyerIntentDetail';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Table, 
@@ -59,6 +60,7 @@ import {
   Ghost,
   Ban,
   ShieldCheck,
+  ShoppingCart,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
