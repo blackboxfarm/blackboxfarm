@@ -135,18 +135,18 @@ Deno.serve(withRunLog('post-share-card-twitter', async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // X account suspended — block automated tweets unless manually overridden
-  const X_POSTING_PAUSED = true;
-  const body_peek = await req.clone().json().catch(() => ({}));
-  if (X_POSTING_PAUSED && !body_peek.manualOverride) {
-    console.log('[post-share-card-twitter] X posting is PAUSED — account suspended');
-    return new Response(JSON.stringify({ success: true, paused: true, reason: 'X posting disabled — account suspended' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
-
   try {
     const body = await req.json();
+
+    // X account suspended — block automated tweets unless manually overridden
+    const X_POSTING_PAUSED = true;
+    console.log('[post-share-card-twitter] manualOverride:', body.manualOverride, 'X_POSTING_PAUSED:', X_POSTING_PAUSED);
+    if (X_POSTING_PAUSED && !body.manualOverride) {
+      console.log('[post-share-card-twitter] X posting is PAUSED — account suspended');
+      return new Response(JSON.stringify({ success: true, paused: true, reason: 'X posting disabled — account suspended' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
     const { tweetText, twitterHandle, tokenStats, communityId, skipTelegram } = body;
 
     // Determine tweet content
