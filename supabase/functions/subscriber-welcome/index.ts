@@ -469,6 +469,65 @@ function generateCancellationEmail(email: string, name: string | undefined, tier
   `;
 }
 
+function generateSolPaymentReceiptEmail(email: string, name: string | undefined, amountSol: number, walletPubkey: string, expiresAt: string): string {
+  const displayName = name || email.split('@')[0];
+  const expiryDate = new Date(expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const solscanUrl = `https://solscan.io/account/${walletPubkey}`;
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin: 0; padding: 0; background: #080812; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background: #080812;">
+        <tr><td align="center" style="padding: 40px 20px;">
+          <table width="640" cellpadding="0" cellspacing="0" style="background: #0f1724; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 60px rgba(0,0,0,0.5); border: 1px solid #1e293b;">
+            <tr>
+              <td style="background: linear-gradient(135deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%); padding: 40px; text-align: center; border-bottom: 2px solid #9945ff30;">
+                <img src="https://blackbox.farm/lovable-uploads/8c88fead-d160-47f3-ac65-3493afcf9280.png" alt="BlackBox" style="width: 56px; height: 56px; margin-bottom: 16px;" />
+                <h1 style="color: #9945ff; font-size: 28px; font-weight: 800; margin: 0;">◎ SOL Payment Received</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 40px;">
+                <h2 style="color: #f0f4f8; font-size: 24px; margin: 0 0 16px 0;">Thank you, ${displayName}! 🎉</h2>
+                <p style="color: #94a3b8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
+                  Your Solana payment has been confirmed. Your <strong style="color: #9945ff;">Pro</strong> yearly subscription is now active.
+                </p>
+                <div style="background: #1a2332; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                  <table cellpadding="0" cellspacing="0" width="100%">
+                    <tr><td style="color: #64748b; font-size: 14px; padding: 8px 0;">Plan</td><td style="color: #e2e8f0; font-size: 14px; font-weight: 600; text-align: right;">Pro (Yearly)</td></tr>
+                    <tr><td style="color: #64748b; font-size: 14px; padding: 8px 0;">Amount</td><td style="color: #9945ff; font-size: 14px; font-weight: 600; text-align: right;">${amountSol} SOL</td></tr>
+                    <tr><td style="color: #64748b; font-size: 14px; padding: 8px 0;">Valid Until</td><td style="color: #22c55e; font-size: 14px; font-weight: 600; text-align: right;">${expiryDate}</td></tr>
+                    <tr><td style="color: #64748b; font-size: 14px; padding: 8px 0;">Payment Wallet</td><td style="color: #e2e8f0; font-size: 12px; text-align: right; font-family: monospace; word-break: break-all;">${walletPubkey.slice(0,8)}...${walletPubkey.slice(-8)}</td></tr>
+                  </table>
+                </div>
+                <div style="text-align: center; margin-bottom: 24px;">
+                  <a href="${solscanUrl}" style="display: inline-block; background: linear-gradient(135deg, #9945ff 0%, #7c3aed 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 12px; font-weight: 700; font-size: 15px; box-shadow: 0 6px 24px rgba(153,69,255,0.3);">
+                    View Transaction on Solscan →
+                  </a>
+                </div>
+                <div style="text-align: center;">
+                  <a href="https://blackbox.farm/holders" style="display: inline-block; background: linear-gradient(135deg, #00e5ff 0%, #00b8d4 100%); color: #0a0a1a; text-decoration: none; padding: 14px 40px; border-radius: 12px; font-weight: 700; font-size: 15px; box-shadow: 0 6px 24px rgba(0,229,255,0.3);">
+                    Start Analyzing →
+                  </a>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background: #080812; padding: 24px 40px; border-top: 1px solid #1e293b;">
+                <p style="color: #475569; font-size: 12px; text-align: center; margin: 0;">
+                  BlackBox Farm · <a href="https://blackbox.farm" style="color: #D4AF37; text-decoration: none;">blackbox.farm</a> · <a href="https://blackbox.farm/contact" style="color: #D4AF37; text-decoration: none;">Support</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -504,6 +563,11 @@ const handler = async (req: Request): Promise<Response> => {
       case 'subscription_cancelled':
         subject = `Your BlackBox ${(data.tierKey || 'Pro').charAt(0).toUpperCase() + (data.tierKey || 'Pro').slice(1)} Subscription Has Been Cancelled`;
         html = generateCancellationEmail(data.email, data.name, data.tierKey || 'pro');
+        break;
+
+      case 'sol_payment_confirmed':
+        subject = '✅ SOL Payment Received — BlackBox Pro Yearly';
+        html = generateSolPaymentReceiptEmail(data.email, data.name, data.amountSol, data.walletPubkey, data.expiresAt);
         break;
 
       default:

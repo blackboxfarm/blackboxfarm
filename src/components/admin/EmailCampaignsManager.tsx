@@ -15,9 +15,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Plus, Edit, Trash2, Send, Eye, Users, Clock, Loader2, BarChart3 } from 'lucide-react';
+import { Mail, Plus, Edit, Trash2, Send, Eye, Users, Clock, Loader2, BarChart3, FileText } from 'lucide-react';
 import { format } from 'date-fns';
+import { EmailTemplateEditor } from './EmailTemplateEditor';
 
 interface Campaign {
   id: string;
@@ -171,7 +173,18 @@ export function EmailCampaignsManager() {
   };
 
   return (
-    <div className="space-y-4">
+    <Tabs defaultValue="campaigns" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="campaigns" className="gap-1.5">
+          <Mail className="h-3.5 w-3.5" /> Campaigns
+        </TabsTrigger>
+        <TabsTrigger value="templates" className="gap-1.5">
+          <FileText className="h-3.5 w-3.5" /> Templates
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="campaigns">
+      <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <Mail className="h-5 w-5 text-primary" />
@@ -390,5 +403,11 @@ export function EmailCampaignsManager() {
         </DialogContent>
       </Dialog>
     </div>
+      </TabsContent>
+
+      <TabsContent value="templates">
+        <EmailTemplateEditor />
+      </TabsContent>
+    </Tabs>
   );
 }
