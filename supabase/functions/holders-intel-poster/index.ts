@@ -387,8 +387,8 @@ async function fetchHolderReport(tokenMint: string, supabaseUrl: string, anonKey
   return response.json();
 }
 
-async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string): Promise<any> {
-  console.log(`[poster] Posting tweet (${tweetText.length} chars)`);
+async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string, manualOverride = false): Promise<any> {
+  console.log(`[poster] Posting tweet (${tweetText.length} chars, manualOverride=${manualOverride})`);
   
   const response = await fetch(
     `${supabaseUrl}/functions/v1/post-share-card-twitter`,
@@ -401,7 +401,8 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
       body: JSON.stringify({
         tweetText,
         twitterHandle: TWITTER_HANDLE,
-        skipTelegram: true, // holders-intel-poster has its own custom TG formatting
+        skipTelegram: true,
+        manualOverride,
       }),
     }
   );
@@ -410,6 +411,10 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
   
   if (!result.success) {
     throw new Error(result.error || 'Tweet posting failed');
+  }
+  
+  if (result.paused) {
+    throw new Error('X posting is paused — manualOverride not set or not forwarded');
   }
   
   return result;
@@ -421,6 +426,8 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
   }
 
   const startTime = Date.now();
+  const reqBody = await req.clone().json().catch(() => ({}));
+  const manualOverride = !!reqBody.manualOverride;
   
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -776,7 +783,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       }
       
       // Post tweet
-      const tweetResult = await postTweet(tweetText, supabaseUrl, anonKey);
+      const tweetResult = await postTweet(tweetText, supabaseUrl, anonKey, manualOverride);
       
       // Update queue with success
       await supabase
