@@ -1048,6 +1048,20 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       source: 'holders_query',
     }).catch(e => console.warn('[bagless] Snapshot write failed:', e));
 
+    // Upsert into holders_intel_seen_tokens — every scan grows the intelligence layer
+    supabaseForMesh.from('holders_intel_seen_tokens').upsert({
+      token_mint: tokenMint,
+      symbol: tokenSymbol || null,
+      name: tokenName || null,
+      last_seen_at: new Date().toISOString(),
+      times_seen: 1, // Will increment via ON CONFLICT if supported, otherwise just marks seen
+      market_cap_at_discovery: inferredMarketCapUSD || null,
+      health_grade: healthGrade || null,
+    }, { onConflict: 'token_mint' }).then(({ error }) => {
+      if (error) console.warn('[bagless] seen_tokens upsert failed:', error.message);
+      else console.log(`[bagless] ✅ Upserted ${tokenMint.slice(0,8)} into seen_tokens`);
+    }).catch(e => console.warn('[bagless] seen_tokens upsert error:', e));
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
