@@ -97,6 +97,18 @@ export default function SuperAdmin() {
     if (wallet) setOracleWallet(wallet);
   }, []);
 
+  // Listen for navigate-admin-tab events from notification badge
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.tab && ALLOWED_ADMIN_TABS.has(detail.tab)) {
+        setActiveTab(detail.tab);
+      }
+    };
+    window.addEventListener('navigate-admin-tab', handler);
+    return () => window.removeEventListener('navigate-admin-tab', handler);
+  }, []);
+
   // Redirect unauthenticated users to auth page
   if (!authLoading && !isAuthenticated) {
     return <Navigate to="/auth" replace />;

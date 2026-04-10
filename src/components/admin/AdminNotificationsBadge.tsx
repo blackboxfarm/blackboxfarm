@@ -210,10 +210,17 @@ export function AdminNotificationsBadge() {
         </div>
       ) : (
         <div className="divide-y divide-border">
-          {items.map((notification) => (
+          {items.map((notification) => {
+            const isTicketType = TICKET_TYPES.includes(notification.notification_type);
+            return (
             <div
               key={notification.id}
-              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''}`}
+              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''} ${isTicketType ? 'cursor-pointer' : ''}`}
+              onClick={isTicketType ? () => {
+                markAsRead(notification.id);
+                setIsOpen(false);
+                window.dispatchEvent(new CustomEvent('navigate-admin-tab', { detail: { tab: 'tickets', ticketId: (notification.metadata as any)?.ticket_id } }));
+              } : undefined}
             >
               <div className="flex items-start gap-2 max-w-full overflow-hidden">
                 <span className="text-lg mt-0.5 shrink-0">{getTypeEmoji(notification.notification_type)}</span>
@@ -298,7 +305,8 @@ export function AdminNotificationsBadge() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </ScrollArea>
