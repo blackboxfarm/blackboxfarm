@@ -25,6 +25,7 @@ export default function UtilitiesTab() {
 
   return (
     <div className="space-y-4">
+      <ReputationBackfillPanel />
       <ServiceToggles />
       <HealthModeToggles />
       <IntelligenceFeatureToggles />
