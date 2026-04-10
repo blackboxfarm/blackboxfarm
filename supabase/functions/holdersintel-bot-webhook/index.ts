@@ -3655,7 +3655,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             await handleHolders(dmChatId, telegramUserId, args, false);
             break;
           case "/ca":
-            await handleCA(dmChatId, telegramUserId, args);
+            await handleCA(dmChatId, telegramUserId, args, false);
             break;
           case "/ai":
             await handleAI(dmChatId, telegramUserId, args);
@@ -3742,7 +3742,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           await handleHolders(chatId, telegramUserId, args, isGroupChat);
           break;
         case "/ca":
-          await handleCA(chatId, telegramUserId, args);
+          await handleCA(chatId, telegramUserId, args, isGroupChat);
           break;
         case "/quick":
         case "/q":
