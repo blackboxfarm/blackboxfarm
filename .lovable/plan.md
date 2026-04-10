@@ -1,85 +1,56 @@
 
 
-# Contact Form Security + Ticket System Connectivity
+# Reputation Backfill + Pipeline Fix
 
-## Three Issues Found
+## The Problem
 
-1. **No CAPTCHA on contact form** -- The contact form at `/contact` has only a honeypot. Spam like "Sophie Lane" gets through and creates real tickets/emails.
-2. **Ticket alerts are dead-ends** -- The Admin Alerts popover shows ticket notifications (🎫 Tickets tab), but clicking them does nothing. No way to jump from the alert to the actual Tickets sub-tab in Super Admin.
-3. **No TG group notification** -- When a ticket is submitted, it creates an `admin_notifications` DB row and sends an email to `support@blackbox.farm`, but does NOT post to the BlackBox TG group.
-
----
+- `dev_wallet_reputation` has **55,795 wallets** with real data (17,649 flagged ruggers, 5 successful)
+- `developer_profiles` has only **1,703 entries**, and only **29** have a non-default score
+- The `oracle-auto-classifier` only *updates* existing profiles (line 202: `if (profile)`) -- never creates new ones
+- It reads `rug_pull_count` from `developer_profiles` (which is 0) instead of `dev_wallet_reputation.tokens_rugged` (which has real data)
 
 ## Plan
 
-### 1. Add Cloudflare Turnstile to Contact Form
+### Phase 1: New Edge Function `reputation-backfill`
 
-- Install `@marsidev/react-turnstile` (lightweight React wrapper for Cloudflare Turnstile)
-- Add a Turnstile widget to `src/pages/ContactUs.tsx` above the Submit button
-- Store the `CLOUDFLARE_TURNSTILE_SITE_KEY` as a `VITE_` env var (public, safe for client)
-- Store `CLOUDFLARE_TURNSTILE_SECRET_KEY` as a Supabase Edge Function secret
-- Update `send-contact-email` edge function to verify the Turnstile token server-side before processing the ticket (POST to `https://challenges.cloudflare.com/turnstile/v0/siteverify`)
-- Block submission if verification fails
+Creates a new edge function that batch-syncs `dev_wallet_reputation` → `developer_profiles`:
 
-**Files**: Edit `src/pages/ContactUs.tsx`, edit `supabase/functions/send-contact-email/index.ts`
+- Reads wallets from `dev_wallet_reputation` in batches of 200
+- For each wallet, upserts into `developer_profiles` mapping:
+  - `tokens_rugged` → `rug_pull_count`
+  - `tokens_successful` → `successful_tokens`
+  - `total_tokens_launched` → `total_tokens_created`
+  - `avg_peak_mcap_usd`, `avg_time_before_dump_mins` → metadata
+  - Social arrays (`twitter_accounts`, `telegram_groups`) → profile handles
+- Runs `calculateScore()` using the real stats to compute `reputation_score` and `trust_level`
+- Enriches with `reputation_mesh` connection count as a bonus/penalty signal
+- Returns progress (processed count, batch position) for UI polling
+- **No external APIs** -- purely internal DB operations
 
-### 2. Make Ticket Alerts Clickable (Navigate to Tickets Tab)
+### Phase 2: Fix `oracle-auto-classifier`
 
-- In `AdminNotificationsBadge.tsx`, add a click handler for `support_ticket` and `ticket_reply` type notifications
-- On click: close the popover, set the Super Admin active tab to `"tickets"` via a shared state mechanism (URL search param or a context/event)
-- The simplest approach: emit a custom event `window.dispatchEvent(new CustomEvent('navigate-tab', { detail: 'tickets' }))` and listen in `SuperAdmin.tsx` to switch `activeTab`
-- Optionally highlight the specific ticket by passing `ticket_id` from the notification metadata
+Two targeted fixes to the existing function:
 
-**Files**: Edit `src/components/admin/AdminNotificationsBadge.tsx`, edit `src/pages/SuperAdmin.tsx`
+1. **Upsert instead of update-only**: When `profile` is null (line 202), create a new `developer_profiles` entry instead of skipping
+2. **Use `dev_wallet_reputation` as primary source**: Currently line 137 reads `profile?.rug_pull_count` (always 0). Change to prefer `rep?.tokens_rugged` from the `dev_wallet_reputation` row which has real data
+3. **Add mesh enrichment**: Query `reputation_mesh` for connection count and factor into score (wallets linked to known scammers get penalties)
 
-### 3. Send TG Group Notification on New Ticket
+### Phase 3: Admin UI Button
 
-- In `send-contact-email` edge function, after creating the ticket and admin notification, POST a message to the BlackBox TG group via the Telegram Bot API
-- Use the existing `TELEGRAM_BOT_TOKEN` and `BLACKBOX_GROUP_CHAT_ID` secrets (already used by the bot webhook)
-- Format: `🎫 New Ticket #N | Priority | Category\nFrom: Name\nSubject: ...\nPreview: first 200 chars...`
+- Add a "Run Reputation Backfill" card to the Utilities tab
+- Shows progress (X/55,795 processed), start/stop controls
+- Calls the `reputation-backfill` function in batches via polling
 
-**Files**: Edit `supabase/functions/send-contact-email/index.ts`
+## Files Changed
 
----
+| File | Change |
+|------|--------|
+| `supabase/functions/reputation-backfill/index.ts` | **New** -- batch sync engine |
+| `supabase/functions/oracle-auto-classifier/index.ts` | Fix upsert + data source |
+| `src/components/admin/ReputationBackfillPanel.tsx` | **New** -- admin UI |
+| `src/components/admin/tabs/UtilitiesTab.tsx` | Add backfill panel tab |
 
-## Technical Details
+## API Cost
 
-### Turnstile Integration
-```text
-ContactUs.tsx:
-  - Add <Turnstile siteKey={...} onSuccess={setToken} /> widget
-  - Pass token in body to send-contact-email
-  - Disable submit until token is set
-
-send-contact-email/index.ts:
-  - Extract cf_turnstile_token from request body
-  - POST to challenges.cloudflare.com/turnstile/v0/siteverify
-  - Return 403 if verification fails
-```
-
-### Notification Click-Through
-```text
-AdminNotificationsBadge.tsx:
-  - Detect notification_type === 'support_ticket' || 'ticket_reply'
-  - On click: dispatch 'navigate-admin-tab' event with detail { tab: 'tickets', ticketId }
-  - Close popover
-
-SuperAdmin.tsx:
-  - Listen for 'navigate-admin-tab' event
-  - setActiveTab(event.detail.tab)
-```
-
-### TG Group Alert
-```text
-send-contact-email/index.ts (after ticket insert):
-  - fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      chat_id: GROUP_CHAT_ID,
-      text: formatted ticket summary,
-      parse_mode: 'HTML'
-    })
-```
-
-### Secrets Needed
-- `VITE_CLOUDFLARE_TURNSTILE_SITE_KEY` -- added to `.env` (you'll need to create a Turnstile widget at dash.cloudflare.com)
-- `CLOUDFLARE_TURNSTILE_SECRET_KEY` -- added as Supabase edge function secret
+**Zero.** All three phases use only internal Supabase queries. No Helius, no Solscan, no external calls.
 
