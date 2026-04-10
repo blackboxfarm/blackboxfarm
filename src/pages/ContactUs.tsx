@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 
 export default function ContactUs() {
   const { user } = useAuth();
@@ -24,15 +25,21 @@ export default function ContactUs() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!turnstileToken) {
+      toast({ title: "Please complete the verification", variant: "destructive" });
+      return;
+    }
     setIsSubmitting(true);
 
     try {
       const { error } = await supabase.functions.invoke('send-contact-email', {
-        body: formData
+        body: { ...formData, cf_turnstile_token: turnstileToken }
       });
 
       if (error) throw error;
@@ -51,6 +58,8 @@ export default function ContactUs() {
       });
     } finally {
       setIsSubmitting(false);
+      setTurnstileToken(null);
+      turnstileRef.current?.reset();
     }
   };
 
@@ -258,10 +267,20 @@ export default function ContactUs() {
                     />
                   </div>
 
+                  <div className="flex justify-center">
+                    <Turnstile
+                      ref={turnstileRef}
+                      siteKey={import.meta.env.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                      onSuccess={setTurnstileToken}
+                      onExpire={() => setTurnstileToken(null)}
+                      options={{ theme: "dark" }}
+                    />
+                  </div>
+
                   <Button 
                     type="submit" 
                     className="w-full" 
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !turnstileToken}
                   >
                     {isSubmitting ? (
                       <>Sending...</>
