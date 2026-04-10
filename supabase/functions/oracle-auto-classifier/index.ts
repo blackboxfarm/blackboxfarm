@@ -207,16 +207,20 @@ Deno.serve(withRunLog('oracle-auto-classifier', async (req) => {
           }
         }
 
-        // Update developer profile with score
-        if (profile) {
-          await supabase
-            .from('developer_profiles')
-            .update({ 
-              reputation_score: score,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', profile.id);
-        }
+        // Upsert developer profile with score (create if missing)
+        await supabase
+          .from('developer_profiles')
+          .upsert({
+            master_wallet_address: walletAddress,
+            reputation_score: score,
+            trust_level: score >= 80 ? 'trusted' : score >= 40 ? 'neutral' : score >= 20 ? 'suspicious' : 'scammer',
+            total_tokens_created: stats.totalTokens,
+            successful_tokens: stats.successfulTokens,
+            rug_pull_count: stats.rugPulls,
+            slow_drain_count: stats.slowDrains,
+            updated_at: new Date().toISOString(),
+            last_analysis_at: new Date().toISOString(),
+          }, { onConflict: 'master_wallet_address' });
 
         // Mark tokens as analyzed
         await supabase
