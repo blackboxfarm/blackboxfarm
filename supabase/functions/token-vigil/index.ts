@@ -61,29 +61,76 @@ Deno.serve(withRunLog('token-vigil', async (req) => {
   const stats = { seeded: 0, scanned: 0, deaths: 0, midGrowth: 0, errors: 0 };
 
   try {
-    // Step 1: Seed vigil from token_lifecycle (tokens seen in last 24h that aren't tracked yet)
-    const { data: newTokens } = await supabase
+    // Check for manual seed request
+    const body = await req.json().catch(() => ({}));
+    const manualSeed = body.seed === true;
+
+    // Step 1: Seed vigil from MULTIPLE sources (not just token_lifecycle)
+    // Source A: token_lifecycle (recently active, >$5K mcap)
+    const { data: lifecycleTokens } = await supabase
       .from('token_lifecycle')
       .select('token_mint, symbol, name, market_cap, price_usd, volume_24h')
       .gt('last_seen_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-      .gt('market_cap', 5000) // minimum $5K mcap to be worth tracking
+      .gt('market_cap', 5000)
       .limit(50);
 
-    if (newTokens && newTokens.length > 0) {
-      for (const t of newTokens) {
-        const { error } = await supabase.from('token_vigil').upsert({
-          token_mint: t.token_mint,
-          symbol: t.symbol,
-          name: t.name,
-          peak_mcap_usd: Math.max(t.market_cap || 0, 0),
-          peak_price_usd: Math.max(t.price_usd || 0, 0),
-          peak_volume_1h: Math.max((t.volume_24h || 0) / 24, 0),
-          current_mcap_usd: t.market_cap || 0,
-          current_price_usd: t.price_usd || 0,
-          current_volume_1h: (t.volume_24h || 0) / 24,
-        }, { onConflict: 'token_mint', ignoreDuplicates: true });
-        if (!error) stats.seeded++;
+    // Source B: holders_intel_seen_tokens (curated tokens from user scans)
+    const { data: seenTokens } = await supabase
+      .from('holders_intel_seen_tokens')
+      .select('token_mint, symbol, name, market_cap_at_discovery')
+      .gt('last_seen_at', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+      .order('last_seen_at', { ascending: false })
+      .limit(manualSeed ? 200 : 30);
+
+    // Source C: scraped_tokens (top-200 DexScreener scraper — wider net)
+    const { data: scrapedTokens } = await supabase
+      .from('scraped_tokens')
+      .select('token_mint, symbol, name, market_cap, price_usd')
+      .gt('last_seen_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .gt('market_cap', 3000)
+      .order('market_cap', { ascending: false })
+      .limit(manualSeed ? 200 : 30);
+
+    // Merge and deduplicate by token_mint
+    const seedMap = new Map<string, any>();
+    for (const t of (lifecycleTokens || [])) {
+      seedMap.set(t.token_mint, {
+        token_mint: t.token_mint, symbol: t.symbol, name: t.name,
+        mcap: t.market_cap || 0, price: t.price_usd || 0, vol24: t.volume_24h || 0,
+      });
+    }
+    for (const t of (scrapedTokens || [])) {
+      if (!seedMap.has(t.token_mint)) {
+        seedMap.set(t.token_mint, {
+          token_mint: t.token_mint, symbol: t.symbol, name: t.name,
+          mcap: t.market_cap || 0, price: t.price_usd || 0, vol24: 0,
+        });
       }
+    }
+    for (const t of (seenTokens || [])) {
+      if (!seedMap.has(t.token_mint)) {
+        seedMap.set(t.token_mint, {
+          token_mint: t.token_mint, symbol: t.symbol, name: t.name,
+          mcap: t.market_cap_at_discovery || 0, price: 0, vol24: 0,
+        });
+      }
+    }
+
+    console.log(`[vigil] Seeding from ${seedMap.size} unique tokens (lifecycle=${lifecycleTokens?.length || 0}, seen=${seenTokens?.length || 0}, scraped=${scrapedTokens?.length || 0})`);
+
+    for (const t of seedMap.values()) {
+      const { error } = await supabase.from('token_vigil').upsert({
+        token_mint: t.token_mint,
+        symbol: t.symbol,
+        name: t.name,
+        peak_mcap_usd: Math.max(t.mcap, 0),
+        peak_price_usd: Math.max(t.price, 0),
+        peak_volume_1h: Math.max((t.vol24) / 24, 0),
+        current_mcap_usd: t.mcap,
+        current_price_usd: t.price,
+        current_volume_1h: (t.vol24) / 24,
+      }, { onConflict: 'token_mint', ignoreDuplicates: true });
+      if (!error) stats.seeded++;
     }
 
     // Step 2: Fetch tokens to scan (watching or declining, not yet assessed as dead)

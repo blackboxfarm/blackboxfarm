@@ -5,6 +5,8 @@ import { HealthModeToggles } from '@/components/admin/HealthModeToggles';
 import { ServiceToggles } from '@/components/admin/ServiceToggles';
 import { IntelligenceFeatureToggles } from '@/components/admin/IntelligenceFeatureToggles';
 import { ReputationBackfillPanel } from '@/components/admin/ReputationBackfillPanel';
+import { SocialLinksBackfillPanel } from '@/components/admin/SocialLinksBackfillPanel';
+import { VigilStatusPanel } from '@/components/admin/VigilStatusPanel';
 
 // Lazy load each utility component
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
@@ -27,6 +29,8 @@ export default function UtilitiesTab() {
   return (
     <div className="space-y-4">
       <ReputationBackfillPanel />
+      <SocialLinksBackfillPanel />
+      <VigilStatusPanel />
       <ServiceToggles />
       <HealthModeToggles />
       <IntelligenceFeatureToggles />
