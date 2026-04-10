@@ -1,0 +1,1 @@
+UPDATE flipit_settings SET max_price_premium_pct = 25 WHERE max_price_premium_pct = 10;
