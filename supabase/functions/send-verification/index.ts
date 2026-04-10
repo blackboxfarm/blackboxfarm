@@ -7,9 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
-const twilioPhoneNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
+const GATEWAY_URL = 'https://connector-gateway.lovable.dev/twilio';
+const TWILIO_FROM_NUMBER = '+16624814161';
 
 serve(withRunLog('send-verification', async (req) => {
   if (req.method === 'OPTIONS') {
@@ -37,32 +36,36 @@ serve(withRunLog('send-verification', async (req) => {
       .upsert({
         phone_number: phoneNumber,
         verification_code: verificationCode,
-        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         verified: false
       });
 
     if (dbError) throw dbError;
 
     if (type === 'sms') {
-      // Send SMS via Twilio
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
-      
-      const response = await fetch(twilioUrl, {
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
+
+      const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
+      if (!TWILIO_API_KEY) throw new Error('TWILIO_API_KEY is not configured');
+
+      const response = await fetch(`${GATEWAY_URL}/Messages.json`, {
         method: 'POST',
         headers: {
-          'Authorization': `Basic ${btoa(`${twilioAccountSid}:${twilioAuthToken}`)}`,
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'X-Connection-Api-Key': TWILIO_API_KEY,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
           To: phoneNumber,
-          From: twilioPhoneNumber!,
+          From: TWILIO_FROM_NUMBER,
           Body: `Your BlackBox verification code is: ${verificationCode}. Valid for 10 minutes.`
         })
       });
 
+      const data = await response.json();
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Twilio error: ${error}`);
+        throw new Error(`Twilio API error [${response.status}]: ${JSON.stringify(data)}`);
       }
     }
 
@@ -84,4 +87,3 @@ serve(withRunLog('send-verification', async (req) => {
     );
   }
 }));
-
