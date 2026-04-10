@@ -40,6 +40,8 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const [show2FA, setShow2FA] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const [pending2FAEmail, setPending2FAEmail] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
   const { honeypotProps, isBot, isTooFast, formRenderedAt } = useSignupProtection();
   
   const { signIn, signUp, isRateLimited, rateLimitState } = useSecureAuth();
