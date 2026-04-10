@@ -1919,7 +1919,37 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
 }
 
 // ─── /ca CA — Rich snapshot with dev reputation + risk flags ───
-async function handleCA(chatId: number, telegramUserId: string, args: string) {
+async function handleCA(chatId: number, telegramUserId: string, args: string, isGroupChat = false) {
+  const trimmedArgs = args.trim().toLowerCase();
+
+  // Handle /ca on | /ca off toggle (groups only)
+  if (trimmedArgs === 'on' || trimmedArgs === 'off') {
+    if (!isGroupChat) {
+      await sendMessage(chatId, `ℹ️ Toggle is for group chats only. /ca is always active in DMs.`);
+      return;
+    }
+    const enabled = trimmedArgs === 'on';
+    await supabase.from('bot_chat_settings').upsert(
+      { chat_id: chatId, ca_enabled: enabled, updated_at: new Date().toISOString() },
+      { onConflict: 'chat_id' }
+    );
+    await sendMessage(chatId, enabled
+      ? `✅ */ca* responses *enabled* in this chat. I'll reply when you paste a contract address.`
+      : `🔇 */ca* responses *disabled* in this chat. Other bots can handle /ca. Use \`/ca on\` to re-enable.`
+    );
+    return;
+  }
+
+  // In group chats, check if /ca is toggled off
+  if (isGroupChat) {
+    const { data: settings } = await supabase
+      .from('bot_chat_settings')
+      .select('ca_enabled')
+      .eq('chat_id', chatId)
+      .maybeSingle();
+    if (settings && settings.ca_enabled === false) return; // silently ignore
+  }
+
   const ca = extractCA(args);
   if (!ca) {
     await sendMessage(chatId, `❌ Usage: \`/ca <token_address>\``);
@@ -1928,6 +1958,8 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
 
   const gate = await gateCheck(chatId, telegramUserId, "auth", "/ca");
   if (!gate) return;
+
+  const isPaid = hasTier(gate.tier, 'x_subscriber');
 
   await sendMessage(chatId, `🔍 Scanning \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/ca", ca);
@@ -1951,7 +1983,7 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const whaleCount = data.simpleTiers?.whales?.count ?? null;
   const whalePct = data.simpleTiers?.whales?.supplyPercentage ?? null;
 
-  // Dev reputation (now real data from backfill)
+  // Dev reputation — tiered
   let devLine = '';
   const devWallet = data.potentialDevWallet?.address || data.creatorInfo?.wallet;
   if (devWallet) {
@@ -1962,15 +1994,20 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
       .maybeSingle();
 
     if (devProfile && devProfile.reputation_score !== null) {
-      const score = devProfile.reputation_score;
-      const trustEmoji = score >= 70 ? '🟢' : score >= 40 ? '🟡' : '🔴';
-      devLine = `\n🏗 Dev: ${trustEmoji} *${score}/100* (${devProfile.trust_level || 'unknown'})`;
-      if (devProfile.rug_pull_count > 0) devLine += ` ⚠️ *${devProfile.rug_pull_count} prior rug(s)*`;
-      if (devProfile.successful_tokens > 0) devLine += ` ✅ ${devProfile.successful_tokens} successful`;
+      if (isPaid) {
+        const score = devProfile.reputation_score;
+        const trustEmoji = score >= 70 ? '🟢' : score >= 40 ? '🟡' : '🔴';
+        devLine = `\n🏗 Dev: ${trustEmoji} *${score}/100* (${devProfile.trust_level || 'unknown'})`;
+        if (devProfile.rug_pull_count > 0) devLine += ` ⚠️ *${devProfile.rug_pull_count} prior rug(s)*`;
+        if (devProfile.successful_tokens > 0) devLine += ` ✅ ${devProfile.successful_tokens} successful`;
+      } else {
+        devLine = `\n🏗 Dev: 🔒 ██/100 — _upgrade to reveal_`;
+        if (devProfile.rug_pull_count > 0) devLine += `\n⚠️ *${devProfile.rug_pull_count} prior rug(s)* — 🔒 _details locked_`;
+      }
     }
   }
 
-  // Social links count
+  // Social links count — tiered
   let socialLine = '';
   const { count: socialCount } = await supabase
     .from('token_social_links')
@@ -1978,15 +2015,23 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
     .eq('token_mint', ca)
     .eq('is_current', true);
   if (socialCount && socialCount > 0) {
-    socialLine = `\n🔗 Socials: *${socialCount} linked*`;
+    socialLine = isPaid
+      ? `\n🔗 Socials: *${socialCount} linked*`
+      : `\n🔗 Socials: 🔒 _${socialCount} found — upgrade to view_`;
   }
 
-  // Risk flags
+  // Risk flags — tiered
   let riskLine = '';
   if (data.riskFlags && data.riskFlags.length > 0) {
-    const flagTexts = data.riskFlags.slice(0, 3).map((f: any) => typeof f === 'string' ? f : f.label || f.flag || '⚠️');
-    riskLine = `\n⚠️ Flags: ${flagTexts.join(', ')}`;
+    if (isPaid) {
+      const flagTexts = data.riskFlags.slice(0, 3).map((f: any) => typeof f === 'string' ? f : f.label || f.flag || '⚠️');
+      riskLine = `\n⚠️ Flags: ${flagTexts.join(', ')}`;
+    } else {
+      riskLine = `\n⚠️ *${data.riskFlags.length} flag(s) detected* — 🔒 _upgrade to see_`;
+    }
   }
+
+  const upgradeCta = !isPaid ? `\n\n🔓 _Unlock full dev intel & risk flags:_ [Upgrade](https://blackbox.farm/subscriptions)` : '';
 
   await sendMessage(chatId,
     `\`${ca}\`\n` +
@@ -1999,6 +2044,7 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
     devLine +
     socialLine +
     riskLine +
+    upgradeCta +
     `\n\n_/holders for full breakdown · /risk for risk analysis · /ai for AI verdict_` +
     `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})` +
     TAGLINE
