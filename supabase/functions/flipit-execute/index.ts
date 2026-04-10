@@ -923,7 +923,14 @@ serve(withRunLog('flipit-execute', async (req) => {
             })
             .eq("id", position.id);
           
-          return bad(`Trade blocked: ${quoteValidation.blockReason}`);
+          return ok({
+            error: `Trade blocked: ${quoteValidation.blockReason}`,
+            blocked: true,
+            blockReason: quoteValidation.blockReason,
+            premiumPct: quoteValidation.premiumPct,
+            priceImpactPct: quoteValidation.priceImpactPct,
+            fallback: true,
+          });
         }
         
         execLog.logPhaseEnd('TRADE_GUARD', { 
@@ -942,7 +949,11 @@ serve(withRunLog('flipit-execute', async (req) => {
           })
           .eq("id", position.id);
         
-        return bad(`Trade blocked: TradeGuard validation failed - ${guardErr instanceof Error ? guardErr.message : "Unknown error"}`);
+        return ok({
+          error: `Trade blocked: TradeGuard validation failed - ${guardErr instanceof Error ? guardErr.message : "Unknown error"}`,
+          blocked: true,
+          fallback: true,
+        });
       }
 
       // Execute the buy via raydium-swap
