@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import { useSignupProtection } from '@/hooks/useSignupProtection';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 
 interface SecureAuthModalProps {
   isOpen: boolean;
@@ -39,6 +40,8 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const [show2FA, setShow2FA] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const [pending2FAEmail, setPending2FAEmail] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
   const { honeypotProps, isBot, isTooFast, formRenderedAt } = useSignupProtection();
   
   const { signIn, signUp, isRateLimited, rateLimitState } = useSecureAuth();
@@ -47,6 +50,10 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
+    if (!turnstileToken) {
+      toast({ title: 'Please complete the verification', variant: 'destructive' });
+      return;
+    }
 
     setLoading(true);
     
@@ -135,6 +142,11 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
       toast({ title: "Please slow down", description: "Please take a moment to fill out the form carefully.", variant: "destructive" });
       return;
     }
+
+    if (!turnstileToken) {
+      toast({ title: 'Please complete the verification', variant: 'destructive' });
+      return;
+    }
     
     if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
@@ -178,6 +190,8 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
     setPassword('');
     setConfirmPassword('');
     setLoading(false);
+    setTurnstileToken(null);
+    turnstileRef.current?.reset();
   };
 
   const handleClose = () => {
@@ -320,10 +334,20 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
                 </div>
               </div>
 
+              <div className="flex justify-center">
+                <Turnstile
+                  ref={turnstileRef}
+                  siteKey={import.meta.env.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  onSuccess={setTurnstileToken}
+                  onExpire={() => setTurnstileToken(null)}
+                  options={{ theme: 'dark', size: 'compact' }}
+                />
+              </div>
+
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || isRateLimited}
+                disabled={loading || !email || !password || isRateLimited || !turnstileToken}
               >
                 {loading ? (
                   <>
@@ -467,7 +491,7 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || !referralSource || (referralSource === 'other' && !referralSourceOther.trim())}
+                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || !referralSource || (referralSource === 'other' && !referralSourceOther.trim()) || !turnstileToken}
               >
                 {loading ? (
                   <>
