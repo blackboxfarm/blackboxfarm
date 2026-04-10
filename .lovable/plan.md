@@ -1,67 +1,61 @@
 
 
-# What's Next: 4 Remaining Deficits
+# Tiered /ca Response + Toggle Control
 
-## Current State After Backfill
+## What's Changing
 
-The backfill crushed Deficit #1 — dev profiles went from 98.3% default scores to 71% real scores (40,796 scored, 17,463 with rug counts). That was the biggest credibility gap and it's fixed.
+The `/ca` command currently shows the full rich report (dev reputation score, rug counts, social links, risk flags) to all authenticated users. This undermines the upgrade incentive.
 
-Here's what remains:
+## Design
 
-| # | Deficit | Current State | Impact |
-|---|---------|---------------|--------|
-| 2 | `token_social_links` empty | **0 rows** | `/dev` social doxxing shows nothing; mesh data exists but isn't surfaced through this table |
-| 3 | Token assessments thin | **12 total, 0 deaths** — vigil hasn't run since March 19 (3 weeks stale) | AI training loop has no death data; pattern matcher works off 12 records |
-| 4 | `holders_intel_seen_tokens` thin | **1,278 tokens** vs 65K+ tracked | Curated intelligence <2% coverage |
-| 5 | `/ca` and `/quick` identical | Both call same function, return same 3 fields (holders, health, top10%) | Paying users see no differentiation |
+### 1. Tiered /ca Response (in `handleCA`)
 
-## Recommended Priority Order
+The `gateCheck` already returns the user's tier. Use it to control response depth:
 
-### Priority 1: Restart Token Vigil (Deficit #3)
-**Why first**: The vigil is completely stalled — last scan was March 19. Zero death assessments means the AI training loop has no negative examples to learn from. This is the foundation for predictive intelligence.
+| Data Point | Free/Auth | X Subscriber+ |
+|---|---|---|
+| Holders, Health, Phase, Top10% | ✅ Full | ✅ Full |
+| Dust %, Whale count | ✅ Full | ✅ Full |
+| Dev Reputation Score | `🏗 Dev: 🔒 ██/100 (upgrade to reveal)` | ✅ Full (`🏗 Dev: 🟢 78/100`) |
+| Rug Pull Count | `⚠️ X prior rug(s) — 🔒 details locked` | ✅ Full |
+| Social Links Count | `🔗 Socials: 🔒 locked` | ✅ Full |
+| Risk Flags | `⚠️ X flags detected — 🔒 upgrade to see` | ✅ Full |
 
-**What to do**:
-- The vigil only has 9 tokens and only 33 are eligible for seeding (tokens seen in last 24h with >$5K mcap in `token_lifecycle`). The seeding query is too narrow
-- Widen the seeding criteria to pull from `scraped_tokens` or `holders_intel_seen_tokens` (1,278 tokens) — not just `token_lifecycle`
-- Add a manual "seed vigil" admin button to bulk-load tokens from the top-200 scraper
-- Verify the orchestrator cron is actually invoking `token-vigil` (no edge function logs found)
+Free users see that data *exists* (counts/indicators) but not the actual values. This creates urgency — "there ARE risk flags, but you can't see them."
 
-### Priority 2: Backfill `token_social_links` (Deficit #2)
-**Why second**: The `backfill-x-communities` function already writes to this table (line 108) and the mesh has 61K X accounts and 157K wallets. The pipeline exists but the table is empty, meaning the backfill function either isn't running or is failing silently.
+### 2. /ca Toggle (on/off per chat)
 
-**What to do**:
-- Check `backfill-x-communities` logs to see if it's running and why it's inserting 0 rows
-- Run a one-time migration to populate `token_social_links` from existing `reputation_mesh` data (X accounts, Telegram groups already stored there)
-- Create a `social-links-backfill` edge function similar to the reputation backfill — batch-extract social data from mesh into `token_social_links`
+Add `/ca on` and `/ca off` subcommands so users can disable the bot's `/ca` response in chats where another bot already handles `/ca`:
 
-### Priority 3: Differentiate `/ca` vs `/quick` (Deficit #5)
-**Why third**: Quick win, high user-facing impact. Both commands are literally the same 3 data points with slightly different emoji headers.
+- Store toggle state in a new column or lightweight table (e.g., `bot_chat_settings` with `chat_id` + `ca_enabled` boolean, default `true`)
+- When `/ca` fires, check if `ca_enabled` is false for that chat — if so, silently ignore
+- `/ca on` and `/ca off` only work in group chats (DMs always respond)
 
-**What to do**:
-- Make `/quick` the lightweight command it claims to be: holders + mcap + phase only (no edge function call — just DB lookup from `token_lifecycle`)
-- Make `/ca` the richer snapshot: add dev reputation score (now real data!), social links count, risk flags, and a mini risk bar
-- This creates a clear upgrade path: `/quick` (instant, DB only) → `/ca` (richer, calls report) → `/holders` (full breakdown)
+### 3. Group vs DM behavior
 
-### Priority 4: Grow `holders_intel_seen_tokens` (Deficit #4)
-**Why last**: This is an organic growth problem — the table fills as users scan tokens. The real fix is making the other commands (`/quick`, `/ca`, `/holders`) automatically upsert into this table when they process a token, creating a flywheel effect.
-
-**What to do**:
-- Add upsert logic to the `bagless-holders-report` function: every token scanned gets a row in `holders_intel_seen_tokens`
-- This turns every user scan into a data contribution — the table grows with usage
+- **DMs**: `/ca` always active (no toggle check), full behavior
+- **Groups/Channels**: `/ca` respects the toggle, abbreviated response (same as current group behavior for other commands)
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/token-vigil/index.ts` | Widen seeding query, add alternate data sources |
-| `supabase/functions/social-links-backfill/index.ts` | **New** — batch extract socials from mesh → `token_social_links` |
-| `supabase/functions/holdersintel-bot-webhook/index.ts` | Differentiate `/ca` vs `/quick` handlers |
-| `supabase/functions/bagless-holders-report/index.ts` | Add upsert to `holders_intel_seen_tokens` on every scan |
-| `src/components/admin/tabs/UtilitiesTab.tsx` | Add social links backfill button + vigil status card |
+| `supabase/functions/holdersintel-bot-webhook/index.ts` | Modify `handleCA` to check tier and show placeholders for free users; add `/ca on`/`/ca off` toggle logic; add chat settings check |
+| Migration | Create `bot_chat_settings` table (`chat_id bigint PK, ca_enabled boolean default true, updated_at timestamptz`) |
 
-## API Cost
+## Implementation Detail
 
-- Priorities 1, 2, 4: **$0** — internal DB operations only
-- Priority 3: **$0** — code change only, `/quick` becomes cheaper (no edge function call)
-- Token vigil ongoing: Uses DexScreener free API (rate-limited, already handled with 300ms delay)
+In `handleCA` (line 1922), after `gateCheck` returns `{ tier, userId }`:
+
+```
+const isPaid = hasTier(tier, 'x_subscriber');
+```
+
+Then conditionally build `devLine`, `socialLine`, `riskLine`:
+- If `!isPaid`: show placeholder text with lock emoji and upgrade CTA
+- If `isPaid`: show full data (current behavior)
+
+For the toggle, parse `args` before `extractCA`:
+- If args is `"on"` or `"off"` → update `bot_chat_settings` for that chatId, send confirmation, return
+- Otherwise proceed with normal CA logic
 
