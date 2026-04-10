@@ -131,16 +131,25 @@ Deno.serve(withRunLog('oracle-auto-classifier', async (req) => {
         const rep = repResult.data;
         const tokens = tokensResult.data || [];
 
-        // Calculate stats
+        // Calculate stats — prefer dev_wallet_reputation (has real data) over developer_profiles
         const stats: ClassificationResult['stats'] = {
-          totalTokens: profile?.total_tokens_created || tokens.length,
-          rugPulls: profile?.rug_pull_count || rep?.rug_pull_count || 0,
+          totalTokens: rep?.total_tokens_launched || profile?.total_tokens_created || tokens.length,
+          rugPulls: rep?.tokens_rugged || profile?.rug_pull_count || 0,
           slowDrains: profile?.slow_drain_count || rep?.slow_drain_count || 0,
-          successfulTokens: profile?.successful_tokens || tokens.filter(t => t.outcome === 'success').length,
-          avgLifespanHours: profile?.avg_token_lifespan_hours || 0
+          successfulTokens: rep?.tokens_successful || profile?.successful_tokens || tokens.filter(t => t.outcome === 'success').length,
+          avgLifespanHours: rep?.avg_token_lifespan_mins ? (rep.avg_token_lifespan_mins / 60) : (profile?.avg_token_lifespan_hours || 0)
         };
 
-        const score = calculateScore(stats);
+        // Mesh enrichment: penalize wallets connected to known bad actors
+        const { count: meshCount } = await supabase
+          .from('reputation_mesh')
+          .select('id', { count: 'exact', head: true })
+          .or(`source_id.eq.${walletAddress},linked_id.eq.${walletAddress}`);
+
+        // Apply mesh penalty to score
+        let score = calculateScore(stats);
+        if ((meshCount || 0) > 5) score = Math.max(0, score - 10);
+        else if ((meshCount || 0) > 2) score = Math.max(0, score - 5);
         const reason = generateReason(stats, score);
         const recommendation = generateRecommendation(score, stats);
 
