@@ -2161,6 +2161,24 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_chat_settings: {
+        Row: {
+          ca_enabled: boolean
+          chat_id: number
+          updated_at: string
+        }
+        Insert: {
+          ca_enabled?: boolean
+          chat_id: number
+          updated_at?: string
+        }
+        Update: {
+          ca_enabled?: boolean
+          chat_id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bot_guardrails: {
         Row: {
           created_at: string
