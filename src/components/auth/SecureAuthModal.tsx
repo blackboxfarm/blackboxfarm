@@ -142,6 +142,11 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
       toast({ title: "Please slow down", description: "Please take a moment to fill out the form carefully.", variant: "destructive" });
       return;
     }
+
+    if (!turnstileToken) {
+      toast({ title: 'Please complete the verification', variant: 'destructive' });
+      return;
+    }
     
     if (!email || !password || password !== confirmPassword || !referralSource) {
       toast({
@@ -185,6 +190,8 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
     setPassword('');
     setConfirmPassword('');
     setLoading(false);
+    setTurnstileToken(null);
+    turnstileRef.current?.reset();
   };
 
   const handleClose = () => {
@@ -327,10 +334,20 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
                 </div>
               </div>
 
+              <div className="flex justify-center">
+                <Turnstile
+                  ref={turnstileRef}
+                  siteKey={import.meta.env.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  onSuccess={setTurnstileToken}
+                  onExpire={() => setTurnstileToken(null)}
+                  options={{ theme: 'dark', size: 'compact' }}
+                />
+              </div>
+
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || isRateLimited}
+                disabled={loading || !email || !password || isRateLimited || !turnstileToken}
               >
                 {loading ? (
                   <>
@@ -474,7 +491,7 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || !referralSource || (referralSource === 'other' && !referralSourceOther.trim())}
+                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || !referralSource || (referralSource === 'other' && !referralSourceOther.trim()) || !turnstileToken}
               >
                 {loading ? (
                   <>
