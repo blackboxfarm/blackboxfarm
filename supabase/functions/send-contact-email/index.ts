@@ -16,6 +16,7 @@ interface ContactFormRequest {
   subject: string;
   category: string;
   message: string;
+  cf_turnstile_token?: string;
 }
 
 // HTML escape to prevent injection
@@ -44,7 +45,30 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { name, email, subject, category, message }: ContactFormRequest = await req.json();
+    const { name, email, subject, category, message, cf_turnstile_token }: ContactFormRequest = await req.json();
+
+    // Verify Cloudflare Turnstile token
+    const turnstileSecret = Deno.env.get("CLOUDFLARE_TURNSTILE_SECRET_KEY");
+    if (turnstileSecret && cf_turnstile_token) {
+      const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: turnstileSecret, response: cf_turnstile_token }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyData.success) {
+        console.error("Turnstile verification failed:", verifyData);
+        return new Response(JSON.stringify({ error: "CAPTCHA verification failed" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    } else if (turnstileSecret && !cf_turnstile_token) {
+      return new Response(JSON.stringify({ error: "CAPTCHA token required" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
 
     // Sanitize all user inputs
     const safeName = escapeHtml(name || '');
@@ -110,6 +134,33 @@ const handler = async (req: Request): Promise<Response> => {
           name,
         },
       });
+    }
+
+    // Send Telegram notification to BlackBox group
+    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
+    if (ticket && botToken) {
+      try {
+        // Look up BlackBox group chat ID from telegram_message_targets
+        const { data: targets } = await supabaseAdmin
+          .from("telegram_message_targets")
+          .select("chat_id")
+          .eq("label", "BLACKBOX")
+          .limit(1);
+        
+        const chatId = targets?.[0]?.chat_id;
+        if (chatId) {
+          const priorityEmoji = priority === "critical" ? "🔴" : priority === "high" ? "🟠" : priority === "medium" ? "🟡" : "🟢";
+          const tgMessage = `🎫 <b>New Ticket #${ticketNum}</b> | ${priorityEmoji} ${priority.toUpperCase()} | ${safeCategory}\n<b>From:</b> ${safeName} (${safeEmail})\n<b>Subject:</b> ${safeSubject}\n\n${safeMessage.slice(0, 200)}${message.length > 200 ? "…" : ""}`;
+          
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId, text: tgMessage, parse_mode: "HTML" }),
+          });
+        }
+      } catch (tgErr) {
+        console.warn("Failed to send TG notification:", tgErr);
+      }
     }
 
     // Send notification to support team (using escaped values in HTML)
