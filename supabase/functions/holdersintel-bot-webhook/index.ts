@@ -3609,7 +3609,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     }
 
     // Commands that are allowed to reply publicly in groups
-    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts'];
+    const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts', '/ca'];
 
     // If in a group chat, check admin_only_commands config and redirect non-public commands to DM
     if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
