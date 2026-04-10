@@ -4,6 +4,7 @@ import { LazyLoader } from '@/components/ui/lazy-loader';
 import { HealthModeToggles } from '@/components/admin/HealthModeToggles';
 import { ServiceToggles } from '@/components/admin/ServiceToggles';
 import { IntelligenceFeatureToggles } from '@/components/admin/IntelligenceFeatureToggles';
+import { ReputationBackfillPanel } from '@/components/admin/ReputationBackfillPanel';
 
 // Lazy load each utility component
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
