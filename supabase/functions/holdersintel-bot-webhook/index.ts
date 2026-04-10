@@ -1918,7 +1918,7 @@ async function handleWallet(chatId: number, telegramUserId: string, args: string
   await sendMessage(chatId, msg);
 }
 
-// ─── /ca CA — Quick snapshot ───
+// ─── /ca CA — Rich snapshot with dev reputation + risk flags ───
 async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -1929,7 +1929,7 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const gate = await gateCheck(chatId, telegramUserId, "auth", "/ca");
   if (!gate) return;
 
-  await sendMessage(chatId, `🔍 Quick snapshot for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await sendMessage(chatId, `🔍 Scanning \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/ca", ca);
 
   const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
@@ -1947,21 +1947,65 @@ async function handleCA(chatId: number, telegramUserId: string, args: string) {
   const symbol = data.symbol || data.tokenSymbol || null;
   const name = data.name || data.tokenName || null;
   const mcap = data.marketCap || null;
+  const dustPct = data.dustPercentage ?? null;
+  const whaleCount = data.simpleTiers?.whales?.count ?? null;
+  const whalePct = data.simpleTiers?.whales?.supplyPercentage ?? null;
+
+  // Dev reputation (now real data from backfill)
+  let devLine = '';
+  const devWallet = data.potentialDevWallet?.address || data.creatorInfo?.wallet;
+  if (devWallet) {
+    const { data: devProfile } = await supabase
+      .from('developer_profiles')
+      .select('reputation_score, trust_level, rug_pull_count, successful_tokens')
+      .eq('master_wallet', devWallet)
+      .maybeSingle();
+
+    if (devProfile && devProfile.reputation_score !== null) {
+      const score = devProfile.reputation_score;
+      const trustEmoji = score >= 70 ? '🟢' : score >= 40 ? '🟡' : '🔴';
+      devLine = `\n🏗 Dev: ${trustEmoji} *${score}/100* (${devProfile.trust_level || 'unknown'})`;
+      if (devProfile.rug_pull_count > 0) devLine += ` ⚠️ *${devProfile.rug_pull_count} prior rug(s)*`;
+      if (devProfile.successful_tokens > 0) devLine += ` ✅ ${devProfile.successful_tokens} successful`;
+    }
+  }
+
+  // Social links count
+  let socialLine = '';
+  const { count: socialCount } = await supabase
+    .from('token_social_links')
+    .select('*', { count: 'exact', head: true })
+    .eq('token_mint', ca)
+    .eq('is_current', true);
+  if (socialCount && socialCount > 0) {
+    socialLine = `\n🔗 Socials: *${socialCount} linked*`;
+  }
+
+  // Risk flags
+  let riskLine = '';
+  if (data.riskFlags && data.riskFlags.length > 0) {
+    const flagTexts = data.riskFlags.slice(0, 3).map((f: any) => typeof f === 'string' ? f : f.label || f.flag || '⚠️');
+    riskLine = `\n⚠️ Flags: ${flagTexts.join(', ')}`;
+  }
 
   await sendMessage(chatId,
     `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
-    `📊 *Quick Snapshot*\n\n` +
-    `👥 Holders: *${totalHolders}*\n` +
+    `📊 *Token Profile*\n\n` +
+    `👥 Holders: *${totalHolders}*` + (dustPct != null ? ` (${dustPct.toFixed(0)}% dust)` : '') + `\n` +
     `❤️ Health: *${healthScore}/100*${phaseLabel}\n` +
     `${top10Pct != null ? `🏦 Top 10%: *${top10Pct.toFixed(1)}%*\n` : ''}` +
-    `\n_Use /holders for full breakdown or /ai for AI analysis._` +
+    `${whaleCount != null ? `🐋 Whales: *${whaleCount}*${whalePct != null ? ` (${whalePct.toFixed(1)}% supply)` : ''}\n` : ''}` +
+    devLine +
+    socialLine +
+    riskLine +
+    `\n\n_/holders for full breakdown · /risk for risk analysis · /ai for AI verdict_` +
     `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})` +
     TAGLINE
   );
 }
 
-// ─── /quick (/q) CA ───
+// ─── /quick (/q) CA — Lightweight DB-only instant lookup (no edge function call) ───
 async function handleQuick(chatId: number, telegramUserId: string, args: string) {
   const ca = extractCA(args);
   if (!ca) {
@@ -1972,28 +2016,40 @@ async function handleQuick(chatId: number, telegramUserId: string, args: string)
   const gate = await gateCheck(chatId, telegramUserId, "auth", "/quick");
   if (!gate) return;
 
-  await sendMessage(chatId, `⚡ Quick lookup for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/quick", ca);
 
-  const data = await invokeFunction("bagless-holders-report", { tokenMint: ca });
-  if (!data || data.error) {
-    await sendMessage(chatId, `❌ Could not fetch data for this token.`);
+  // Pure DB lookup — no edge function call, instant response
+  const [lifecycleRes, healthRes] = await Promise.all([
+    supabase.from('token_lifecycle').select('symbol, name, market_cap, price_usd, holder_count, phase, last_seen_at').eq('token_mint', ca).maybeSingle(),
+    supabase.from('token_health_snapshots').select('health_score, health_grade, top10_pct, real_holders').eq('token_mint', ca).order('snapshot_at', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+
+  const lc = lifecycleRes.data;
+  const hs = healthRes.data;
+
+  if (!lc && !hs) {
+    await sendMessage(chatId, `⚡ No data found for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`\n\n_This token hasn't been scanned yet. Use /ca for a full scan._` + TAGLINE);
     return;
   }
 
-  const holders = data.realHolders ?? data.totalHolders ?? "?";
-  const health = data.healthScore?.score ?? data.stabilityScore ?? "?";
-  const qPhase = data.healthScore?.phase || null;
-  const qPhaseLabel = qPhase ? ` (${qPhase.replace('_', ' ')})` : '';
-  const top10 = data.distributionStats?.top10Percentage ?? null;
+  const symbol = lc?.symbol || '???';
+  const name = lc?.name || '';
+  const mcap = lc?.market_cap || null;
+  const holders = hs?.real_holders || lc?.holder_count || '?';
+  const health = hs?.health_score ?? '?';
+  const grade = hs?.health_grade || '';
+  const top10 = hs?.top10_pct ?? null;
+  const phase = lc?.phase || null;
+  const phaseLabel = phase ? ` (${phase.replace('_', ' ')})` : '';
+  const gradeLabel = grade ? ` [${grade}]` : '';
 
   await sendMessage(chatId,
-    `⚡ *Quick Stats*\n\n` +
+    `⚡ *Instant Lookup*\n` +
+    `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
     `👥 Holders: *${holders}*\n` +
-    `❤️ Health: *${health}/100*${qPhaseLabel}\n` +
-    `${top10 != null ? `🏦 Top 10%: *${top10.toFixed(1)}%*\n` : ''}` +
-    `\n_Use /holders for full breakdown or /ai for AI analysis._` +
-    `\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})` +
+    `❤️ Health: *${health}/100*${gradeLabel}${phaseLabel}\n` +
+    `${top10 != null ? `🏦 Top 10%: *${typeof top10 === 'number' ? top10.toFixed(1) : top10}%*\n` : ''}` +
+    `\n_Use /ca for full scan or /holders for detailed breakdown._` +
     TAGLINE
   );
 }
