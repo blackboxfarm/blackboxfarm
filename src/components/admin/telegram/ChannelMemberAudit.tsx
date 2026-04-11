@@ -131,7 +131,7 @@ export function ChannelMemberAudit() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Pulls full member list via Telegram Client API. Members who joined on or before the cutoff date are classified as seeded. Joins after are organic.
+            Pulls full member list via Telegram Client API. Members who joined on or before the cutoff date (e.g. March 25) are classified as <strong>seeded</strong>. Members who joined after that date (March 26+) are <strong>organic</strong>.
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             <Input
@@ -141,7 +141,7 @@ export function ChannelMemberAudit() {
               className="h-8 text-xs w-48"
             />
             <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Seeded before:</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Seeded on/before:</span>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
