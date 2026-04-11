@@ -754,11 +754,11 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
     console.log('Could not fetch DexScreener metadata');
   }
 
-  // Try RugCheck
+  // Try RugCheck (cached)
   try {
-    const rugcheckResponse = await fetch(`https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`);
-    if (rugcheckResponse.ok) {
-      const rugData = await rugcheckResponse.json();
+    const { fetchRugCheckSummary } = await import('../_shared/rugcheck-cache.ts');
+    const rugData = await fetchRugCheckSummary(tokenMint, 'pumpfun-fantasy-executor');
+    if (rugData) {
       entryRugcheckScore = rugData.score || null;
     }
   } catch (e) {

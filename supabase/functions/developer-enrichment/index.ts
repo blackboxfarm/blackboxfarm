@@ -324,20 +324,13 @@ Deno.serve(withRunLog('developer-enrichment', async (req) => {
 
 async function checkRugcheck(tokenMint: string): Promise<RugCheckResult> {
   try {
-    console.log(`[developer-enrichment] Calling RugCheck API for ${tokenMint}`);
+    console.log(`[developer-enrichment] Calling RugCheck (cached) for ${tokenMint}`);
     
-    const response = await fetch(
-      `https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'BlindApeAlpha/1.0'
-        }
-      }
-    );
+    const { fetchRugCheckSummary } = await import('../_shared/rugcheck-cache.ts');
+    const data = await fetchRugCheckSummary(tokenMint, 'developer-enrichment');
 
-    if (!response.ok) {
-      console.warn(`[developer-enrichment] RugCheck API returned ${response.status}, proceeding with caution`);
+    if (!data) {
+      console.warn(`[developer-enrichment] RugCheck API unavailable, proceeding with caution`);
       return {
         passed: true,
         score: 0,
@@ -349,8 +342,6 @@ async function checkRugcheck(tokenMint: string): Promise<RugCheckResult> {
         rugged: false
       };
     }
-
-    const data = await response.json();
     console.log(`[developer-enrichment] RugCheck response: score=${data.score}, normalised=${data.score_normalised}, rugged=${data.rugged}`);
 
     // Check if already rugged

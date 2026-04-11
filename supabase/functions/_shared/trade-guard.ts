@@ -114,14 +114,12 @@ async function fetchSolPrice(): Promise<number> {
 export async function checkTokenTax(tokenMint: string): Promise<TokenTaxInfo> {
   console.log(`[TradeGuard] Checking for token tax: ${tokenMint}`);
   
-  // Method 1: RugCheck API (most reliable for pump.fun tokens)
+  // Method 1: RugCheck API (cached, most reliable for pump.fun tokens)
   try {
-    const rugCheckRes = await fetch(`https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`, {
-      signal: AbortSignal.timeout(8000),
-    });
+    const { fetchRugCheckSummary } = await import('./rugcheck-cache.ts');
+    const rugData = await fetchRugCheckSummary(tokenMint, 'trade-guard-tax-check');
     
-    if (rugCheckRes.ok) {
-      const rugData = await rugCheckRes.json();
+    if (rugData) {
       const risks = rugData.risks || [];
       
       // Look for tax-related risks
