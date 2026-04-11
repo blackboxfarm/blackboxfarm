@@ -165,6 +165,9 @@ export function FunctionOperationsDashboard() {
     if (categoryFilter !== 'all') {
       rows = rows.filter(r => (r.category || 'general') === categoryFilter);
     }
+    if (priorityFilter !== 'all') {
+      rows = rows.filter(r => (r.priority_tier || 'legacy') === priorityFilter);
+    }
 
     // Sort
     if (sortBy === 'failures') rows.sort((a, b) => b.stats.failures - a.stats.failures || a.function_name.localeCompare(b.function_name));
