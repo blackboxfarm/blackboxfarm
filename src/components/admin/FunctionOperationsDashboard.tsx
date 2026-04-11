@@ -254,6 +254,11 @@ export function FunctionOperationsDashboard() {
       </div>
 
       {/* Summary bar */}
+      {filteredCount < totalCount && (
+        <div className="text-sm text-muted-foreground">
+          Showing {filteredCount} of {totalCount} functions
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryCard icon={<Activity className="h-4 w-4" />} label="Total Runs" value={totalRuns} color="text-foreground" />
         <SummaryCard icon={<CheckCircle2 className="h-4 w-4" />} label="Successes" value={totalSuccesses} color="text-green-400" />
