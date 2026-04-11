@@ -97,6 +97,9 @@ const OracleBackfillStatus = () => {
               <CardDescription>
                 Background process crawling DexScreener archives via Wayback Machine
               </CardDescription>
+              <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30 w-fit mt-1">
+                🔧 Manual — trigger when needed
+              </Badge>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => refetch()}>
