@@ -332,24 +332,7 @@ function FunctionRow({
   const { stats } = row;
   const rate = stats.total > 0 ? Math.round((stats.successes / stats.total) * 100) : -1;
   const cat = row.category || 'general';
-
-  return (
-    <>
-      <TableRow
-        className={cn("cursor-pointer", stats.failures > 0 && "bg-red-500/5")}
-        onClick={onToggle}
-      >
-        <TableCell compact>
-          {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </TableCell>
-        <TableCell compact>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className={cn("text-[10px] px-1 py-0", categoryColors[cat])}>
-              {cat}
-            </Badge>
-            <span className="font-mono text-xs">{row.function_name}</span>
-          </div>
-        </TableCell>
+  const isPrimary = (row.priority_tier || 'legacy') === 'primary';
         <TableCell compact className="hidden lg:table-cell text-muted-foreground max-w-[200px] truncate">
           {row.description || '—'}
         </TableCell>
