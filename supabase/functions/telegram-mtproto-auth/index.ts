@@ -604,6 +604,206 @@ Copy the printed session string and use **Save Session**.
       });
     }
 
+    if (action === 'audit_channel_members') {
+      const { channelUsername: rawChannel, chatId: rawChatId, seededThreshold } = body;
+      const resolvedPeer = rawChannel || (rawChatId ? String(rawChatId) : null);
+      if (!resolvedPeer) {
+        throw new Error('channelUsername or chatId required');
+      }
+      if (!existingSession?.session_string) {
+        throw new Error('No active MTProto session');
+      }
+
+      const threshold = Number(seededThreshold) || 2200;
+      const isNumeric = /^-?\d+$/.test(resolvedPeer);
+      const peerValue = isNumeric ? resolvedPeer : normalizeUsername(resolvedPeer);
+
+      // Create audit run
+      const { data: auditRun, error: runErr } = await supabase
+        .from('telegram_channel_audit_runs')
+        .insert({ chat_id: 0, seeded_threshold: threshold, status: 'running' })
+        .select('id')
+        .single();
+
+      if (runErr || !auditRun) {
+        throw new Error(`Failed to create audit run: ${runErr?.message}`);
+      }
+
+      const batchId = auditRun.id;
+
+      const mtcuteSession = convertFromTelethonSession(existingSession.session_string);
+      const client = new TelegramClient({ apiId, apiHash, storage: new MemoryStorage() });
+
+      try {
+        await client.importSession(mtcuteSession);
+        await client.connect();
+
+        // Resolve channel
+        const entity = await client.resolvePeer(isNumeric ? parseInt(peerValue, 10) : peerValue);
+        if (!entity || entity._ === 'inputPeerEmpty' || !('channelId' in entity)) {
+          throw new Error('Could not resolve channel');
+        }
+
+        const channelId = entity.channelId;
+        const accessHash = (entity as any).accessHash;
+
+        // Get channel info
+        const channelInfo = await client.call({
+          _: 'channels.getChannels',
+          id: [{ _: 'inputChannel', channelId, accessHash }]
+        }) as any;
+        const chatTitle = channelInfo?.chats?.[0]?.title || peerValue;
+        const chatIdNum = channelInfo?.chats?.[0]?.id || 0;
+
+        // Fetch participants in batches
+        const allParticipants: any[] = [];
+        let offset = 0;
+        const batchSize = 200;
+
+        while (true) {
+          console.log(`[audit] Fetching participants offset=${offset}`);
+          const result = await client.call({
+            _: 'channels.getParticipants',
+            channel: { _: 'inputChannel', channelId, accessHash },
+            filter: { _: 'channelParticipantsRecent' },
+            offset,
+            limit: batchSize,
+            hash: BigInt(0),
+          }) as any;
+
+          if (!result?.participants?.length) break;
+
+          const users = new Map();
+          for (const u of (result.users || [])) {
+            users.set(u.id, u);
+          }
+
+          for (const p of result.participants) {
+            const userId = p.userId;
+            const user = users.get(userId);
+            allParticipants.push({
+              participant: p,
+              user: user || {},
+            });
+          }
+
+          offset += result.participants.length;
+          if (result.participants.length < batchSize) break;
+          if (offset > 10000) break; // safety cap
+        }
+
+        console.log(`[audit] Total participants fetched: ${allParticipants.length}`);
+
+        // Sort by join date to detect batch patterns
+        const withDates = allParticipants.map((p, idx) => {
+          const joinDate = p.participant.date
+            ? new Date(p.participant.date * 1000)
+            : null;
+          const pType = p.participant._ === 'channelParticipantCreator' ? 'creator'
+            : p.participant._ === 'channelParticipantAdmin' ? 'admin'
+            : 'member';
+          return {
+            telegram_user_id: p.participant.userId,
+            telegram_username: p.user.username || null,
+            first_name: p.user.firstName || null,
+            last_name: p.user.lastName || null,
+            is_bot: p.user.bot || false,
+            join_date: joinDate?.toISOString() || null,
+            participant_type: pType,
+            chat_id: chatIdNum,
+            chat_title: chatTitle,
+            audit_batch_id: batchId,
+            _joinTs: joinDate?.getTime() || 0,
+            _idx: idx,
+          };
+        });
+
+        // Classify: sort by join date, first N (threshold) are seeded, rest organic
+        // Also: bots are always classified as 'bot'
+        withDates.sort((a, b) => a._joinTs - b._joinTs);
+
+        let seeded = 0, organic = 0, botCount = 0, unknown = 0;
+
+        const rows = withDates.map((m, sortIdx) => {
+          let classification = 'unknown';
+          if (m.is_bot) {
+            classification = 'bot';
+            botCount++;
+          } else if (!m.join_date) {
+            classification = 'unknown';
+            unknown++;
+          } else if (sortIdx < threshold) {
+            classification = 'seeded';
+            seeded++;
+          } else {
+            classification = 'organic';
+            organic++;
+          }
+
+          return {
+            telegram_user_id: m.telegram_user_id,
+            telegram_username: m.telegram_username,
+            first_name: m.first_name,
+            last_name: m.last_name,
+            is_bot: m.is_bot,
+            join_date: m.join_date,
+            participant_type: m.participant_type,
+            classification,
+            chat_id: m.chat_id,
+            chat_title: m.chat_title,
+            audit_batch_id: batchId,
+          };
+        });
+
+        // Insert in chunks of 500
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows.slice(i, i + 500);
+          const { error: insertErr } = await supabase
+            .from('telegram_channel_member_audit')
+            .insert(chunk);
+          if (insertErr) {
+            console.error(`[audit] Insert error at offset ${i}:`, insertErr.message);
+          }
+        }
+
+        // Update audit run
+        await supabase.from('telegram_channel_audit_runs').update({
+          chat_id: chatIdNum,
+          chat_title: chatTitle,
+          total_members: rows.length,
+          seeded_count: seeded,
+          organic_count: organic,
+          bot_count: botCount,
+          unknown_count: unknown,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        }).eq('id', batchId);
+
+        return new Response(JSON.stringify({
+          success: true,
+          auditRunId: batchId,
+          totalMembers: rows.length,
+          seeded,
+          organic,
+          botCount,
+          unknown,
+          chatTitle,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        console.error('[audit] Error:', e?.message || e);
+        await supabase.from('telegram_channel_audit_runs').update({
+          status: 'error',
+          error_message: e?.message || 'unknown',
+          completed_at: new Date().toISOString(),
+        }).eq('id', batchId);
+        throw e;
+      } finally {
+        try { await client.close(); } catch {}
+      }
+    }
+
     throw new Error(`Unknown action: ${action}`);
 
   } catch (error: any) {
