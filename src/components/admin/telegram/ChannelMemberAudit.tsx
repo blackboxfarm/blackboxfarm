@@ -86,15 +86,17 @@ export function ChannelMemberAudit() {
 
   const deleteRun = async (runId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    // Delete members first, then the run
-    await supabase.from("telegram_channel_member_audit").delete().eq("audit_batch_id", runId);
-    await supabase.from("telegram_channel_audit_runs").delete().eq("id", runId);
+    // Optimistic: remove from UI immediately
     if (selectedRun?.id === runId) {
       setSelectedRun(null);
       setMembers([]);
     }
     setRuns(prev => prev.filter(r => r.id !== runId));
     toast.success("Audit run deleted");
+    // Fire-and-forget DB cleanup
+    supabase.from("telegram_channel_member_audit").delete().eq("audit_batch_id", runId).then(() =>
+      supabase.from("telegram_channel_audit_runs").delete().eq("id", runId)
+    );
   };
 
   useEffect(() => { loadRuns(); }, []);
