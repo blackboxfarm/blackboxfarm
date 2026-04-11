@@ -4010,6 +4010,7 @@ export type Database = {
           description: string | null
           function_name: string
           is_active: boolean | null
+          priority_tier: string
         }
         Insert: {
           category?: string | null
@@ -4019,6 +4020,7 @@ export type Database = {
           description?: string | null
           function_name: string
           is_active?: boolean | null
+          priority_tier?: string
         }
         Update: {
           category?: string | null
@@ -4028,6 +4030,7 @@ export type Database = {
           description?: string | null
           function_name?: string
           is_active?: boolean | null
+          priority_tier?: string
         }
         Relationships: []
       }

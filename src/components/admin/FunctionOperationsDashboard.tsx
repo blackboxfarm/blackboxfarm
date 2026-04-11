@@ -21,6 +21,7 @@ interface RegistryEntry {
   data_out: string | null;
   category: string | null;
   is_active: boolean | null;
+  priority_tier: string | null;
 }
 
 interface RunStats {
@@ -67,6 +68,7 @@ export function FunctionOperationsDashboard() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'failures' | 'total'>('failures');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -149,6 +151,7 @@ export function FunctionOperationsDashboard() {
           data_out: null,
           category: 'general',
           is_active: true,
+          priority_tier: 'legacy',
           stats: rd,
         });
       }
@@ -162,6 +165,9 @@ export function FunctionOperationsDashboard() {
     if (categoryFilter !== 'all') {
       rows = rows.filter(r => (r.category || 'general') === categoryFilter);
     }
+    if (priorityFilter !== 'all') {
+      rows = rows.filter(r => (r.priority_tier || 'legacy') === priorityFilter);
+    }
 
     // Sort
     if (sortBy === 'failures') rows.sort((a, b) => b.stats.failures - a.stats.failures || a.function_name.localeCompare(b.function_name));
@@ -169,7 +175,7 @@ export function FunctionOperationsDashboard() {
     else rows.sort((a, b) => a.function_name.localeCompare(b.function_name));
 
     return rows;
-  }, [registry, runMap, runData, searchQuery, categoryFilter, sortBy]);
+  }, [registry, runMap, runData, searchQuery, categoryFilter, priorityFilter, sortBy]);
 
   // Summary
   const totalRuns = runData.reduce((s, r) => s + r.total, 0);
@@ -219,6 +225,17 @@ export function FunctionOperationsDashboard() {
             {categories.map(c => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Priority</SelectItem>
+            <SelectItem value="primary">⚡ Primary</SelectItem>
+            <SelectItem value="legacy">📦 Legacy</SelectItem>
           </SelectContent>
         </Select>
 
@@ -315,11 +332,12 @@ function FunctionRow({
   const { stats } = row;
   const rate = stats.total > 0 ? Math.round((stats.successes / stats.total) * 100) : -1;
   const cat = row.category || 'general';
+  const isPrimary = (row.priority_tier || 'legacy') === 'primary';
 
   return (
     <>
       <TableRow
-        className={cn("cursor-pointer", stats.failures > 0 && "bg-red-500/5")}
+        className={cn("cursor-pointer", stats.failures > 0 && "bg-red-500/5", !isPrimary && "opacity-60")}
         onClick={onToggle}
       >
         <TableCell compact>
@@ -327,6 +345,9 @@ function FunctionRow({
         </TableCell>
         <TableCell compact>
           <div className="flex items-center gap-2">
+            <span className={cn("text-[9px] font-bold px-1 rounded", isPrimary ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-500/20 text-zinc-500")}>
+              {isPrimary ? '⚡' : '📦'}
+            </span>
             <Badge variant="outline" className={cn("text-[10px] px-1 py-0", categoryColors[cat])}>
               {cat}
             </Badge>
