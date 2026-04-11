@@ -11536,6 +11536,33 @@ export type Database = {
         }
         Relationships: []
       }
+      rugcheck_cache: {
+        Row: {
+          fetched_at: string
+          risk_count: number | null
+          rugged: boolean | null
+          score_normalised: number | null
+          summary_data: Json
+          token_mint: string
+        }
+        Insert: {
+          fetched_at?: string
+          risk_count?: number | null
+          rugged?: boolean | null
+          score_normalised?: number | null
+          summary_data: Json
+          token_mint: string
+        }
+        Update: {
+          fetched_at?: string
+          risk_count?: number | null
+          rugged?: boolean | null
+          score_normalised?: number | null
+          summary_data?: Json
+          token_mint?: string
+        }
+        Relationships: []
+      }
       scalp_signal_tracker: {
         Row: {
           bonding_curve_pct: number | null
