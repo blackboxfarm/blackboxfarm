@@ -12502,6 +12502,54 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_channel_audit_runs: {
+        Row: {
+          bot_count: number | null
+          chat_id: number
+          chat_title: string | null
+          completed_at: string | null
+          error_message: string | null
+          id: string
+          organic_count: number | null
+          seeded_count: number | null
+          seeded_threshold: number | null
+          started_at: string | null
+          status: string | null
+          total_members: number | null
+          unknown_count: number | null
+        }
+        Insert: {
+          bot_count?: number | null
+          chat_id: number
+          chat_title?: string | null
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          organic_count?: number | null
+          seeded_count?: number | null
+          seeded_threshold?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_members?: number | null
+          unknown_count?: number | null
+        }
+        Update: {
+          bot_count?: number | null
+          chat_id?: number
+          chat_title?: string | null
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          organic_count?: number | null
+          seeded_count?: number | null
+          seeded_threshold?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_members?: number | null
+          unknown_count?: number | null
+        }
+        Relationships: []
+      }
       telegram_channel_calls: {
         Row: {
           buy_amount_usd: number | null
@@ -12895,6 +12943,54 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           watch_mode_fantasy_only?: boolean | null
+        }
+        Relationships: []
+      }
+      telegram_channel_member_audit: {
+        Row: {
+          audit_batch_id: string
+          chat_id: number
+          chat_title: string | null
+          classification: string | null
+          created_at: string | null
+          first_name: string | null
+          id: string
+          is_bot: boolean | null
+          join_date: string | null
+          last_name: string | null
+          participant_type: string | null
+          telegram_user_id: number
+          telegram_username: string | null
+        }
+        Insert: {
+          audit_batch_id: string
+          chat_id: number
+          chat_title?: string | null
+          classification?: string | null
+          created_at?: string | null
+          first_name?: string | null
+          id?: string
+          is_bot?: boolean | null
+          join_date?: string | null
+          last_name?: string | null
+          participant_type?: string | null
+          telegram_user_id: number
+          telegram_username?: string | null
+        }
+        Update: {
+          audit_batch_id?: string
+          chat_id?: number
+          chat_title?: string | null
+          classification?: string | null
+          created_at?: string | null
+          first_name?: string | null
+          id?: string
+          is_bot?: boolean | null
+          join_date?: string | null
+          last_name?: string | null
+          participant_type?: string | null
+          telegram_user_id?: number
+          telegram_username?: string | null
         }
         Relationships: []
       }
