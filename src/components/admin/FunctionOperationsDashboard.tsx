@@ -151,6 +151,7 @@ export function FunctionOperationsDashboard() {
           data_out: null,
           category: 'general',
           is_active: true,
+          priority_tier: 'legacy',
           stats: rd,
         });
       }
