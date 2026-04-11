@@ -68,6 +68,7 @@ export function FunctionOperationsDashboard() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'failures' | 'total'>('failures');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
