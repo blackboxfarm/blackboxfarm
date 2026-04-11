@@ -605,7 +605,7 @@ Copy the printed session string and use **Save Session**.
     }
 
     if (action === 'audit_channel_members') {
-      const { channelUsername: rawChannel, chatId: rawChatId, seededThreshold } = body;
+      const { channelUsername: rawChannel, chatId: rawChatId, seededCutoffDate } = body;
       const resolvedPeer = rawChannel || (rawChatId ? String(rawChatId) : null);
       if (!resolvedPeer) {
         throw new Error('channelUsername or chatId required');
@@ -614,14 +614,18 @@ Copy the printed session string and use **Save Session**.
         throw new Error('No active MTProto session');
       }
 
-      const threshold = Number(seededThreshold) || 2200;
+      // Use date-based cutoff: anyone who joined on or before this date is seeded
+      const cutoffDate = seededCutoffDate ? new Date(seededCutoffDate) : new Date('2026-03-25');
+      // Set to end of day so the entire cutoff day is included as seeded
+      cutoffDate.setUTCHours(23, 59, 59, 999);
+      console.log(`[audit] Using seeded cutoff date: ${cutoffDate.toISOString()}`);
       const isNumeric = /^-?\d+$/.test(resolvedPeer);
       const peerValue = isNumeric ? resolvedPeer : normalizeUsername(resolvedPeer);
 
       // Create audit run
       const { data: auditRun, error: runErr } = await supabase
         .from('telegram_channel_audit_runs')
-        .insert({ chat_id: 0, seeded_threshold: threshold, status: 'running' })
+        .insert({ chat_id: 0, seeded_threshold: 0, status: 'running' })
         .select('id')
         .single();
 
@@ -718,13 +722,14 @@ Copy the printed session string and use **Save Session**.
           };
         });
 
-        // Classify: sort by join date, first N (threshold) are seeded, rest organic
-        // Also: bots are always classified as 'bot'
+        // Classify by date: joined on or before cutoff = seeded, after = organic
+        // Bots are always classified as 'bot'
         withDates.sort((a, b) => a._joinTs - b._joinTs);
 
         let seeded = 0, organic = 0, botCount = 0, unknown = 0;
+        const cutoffTs = cutoffDate.getTime();
 
-        const rows = withDates.map((m, sortIdx) => {
+        const rows = withDates.map((m) => {
           let classification = 'unknown';
           if (m.is_bot) {
             classification = 'bot';
@@ -732,7 +737,7 @@ Copy the printed session string and use **Save Session**.
           } else if (!m.join_date) {
             classification = 'unknown';
             unknown++;
-          } else if (sortIdx < threshold) {
+          } else if (m._joinTs <= cutoffTs) {
             classification = 'seeded';
             seeded++;
           } else {
