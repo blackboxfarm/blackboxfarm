@@ -354,6 +354,7 @@ function FunctionRow({
             <span className="font-mono text-xs">{row.function_name}</span>
           </div>
         </TableCell>
+        <TableCell compact className="hidden lg:table-cell text-muted-foreground max-w-[200px] truncate">
           {row.description || '—'}
         </TableCell>
         <TableCell compact className="hidden xl:table-cell text-muted-foreground max-w-[200px] truncate">
