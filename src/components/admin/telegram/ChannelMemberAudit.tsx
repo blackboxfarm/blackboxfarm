@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Users, Bot, UserCheck, UserX, ScanSearch, RefreshCw, CalendarIcon } from "lucide-react";
+import { Loader2, Users, UserCheck, UserX, ScanSearch, RefreshCw, CalendarIcon, Trash2 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -49,7 +49,7 @@ export function ChannelMemberAudit() {
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [channelInput, setChannelInput] = useState("HoldersIntel");
   const [cutoffDate, setCutoffDate] = useState<Date>(new Date("2026-03-25"));
-  const [filter, setFilter] = useState<"all" | "organic" | "seeded" | "bot">("all");
+  const [filter, setFilter] = useState<"all" | "organic" | "seeded">("all");
 
   const loadRuns = async () => {
     setLoading(true);
@@ -64,14 +64,37 @@ export function ChannelMemberAudit() {
 
   const loadMembers = async (runId: string) => {
     setLoadingMembers(true);
-    const { data } = await supabase
-      .from("telegram_channel_member_audit")
-      .select("*")
-      .eq("audit_batch_id", runId)
-      .order("join_date", { ascending: true })
-      .limit(1000);
-    if (data) setMembers(data as unknown as AuditMember[]);
+    // Fetch ALL members (no limit)
+    let allMembers: AuditMember[] = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data } = await supabase
+        .from("telegram_channel_member_audit")
+        .select("*")
+        .eq("audit_batch_id", runId)
+        .order("join_date", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (!data || data.length === 0) break;
+      allMembers = allMembers.concat(data as unknown as AuditMember[]);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    setMembers(allMembers);
     setLoadingMembers(false);
+  };
+
+  const deleteRun = async (runId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Delete members first, then the run
+    await supabase.from("telegram_channel_member_audit").delete().eq("audit_batch_id", runId);
+    await supabase.from("telegram_channel_audit_runs").delete().eq("id", runId);
+    if (selectedRun?.id === runId) {
+      setSelectedRun(null);
+      setMembers([]);
+    }
+    setRuns(prev => prev.filter(r => r.id !== runId));
+    toast.success("Audit run deleted");
   };
 
   useEffect(() => { loadRuns(); }, []);
@@ -88,7 +111,7 @@ export function ChannelMemberAudit() {
       });
       if (error) throw error;
       if (data?.success) {
-        toast.success(`Audit complete: ${data.totalMembers} members found (${data.organic} organic)`);
+        toast.success(`Audit complete: ${data.totalMembers} members (${data.organic} organic since March 26+)`);
         await loadRuns();
       } else {
         toast.error(data?.error || "Audit failed");
@@ -107,7 +130,6 @@ export function ChannelMemberAudit() {
   const filteredMembers = members.filter(m => {
     if (filter === "organic") return m.classification === "organic";
     if (filter === "seeded") return m.classification === "seeded";
-    if (filter === "bot") return m.classification === "bot";
     return true;
   });
 
@@ -115,8 +137,7 @@ export function ChannelMemberAudit() {
     switch (c) {
       case "organic": return <Badge className="text-[10px] bg-green-600"><UserCheck className="h-3 w-3 mr-1" />Organic</Badge>;
       case "seeded": return <Badge variant="secondary" className="text-[10px]"><UserX className="h-3 w-3 mr-1" />Seeded</Badge>;
-      case "bot": return <Badge variant="outline" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />Bot</Badge>;
-      default: return <Badge variant="outline" className="text-[10px]">Unknown</Badge>;
+      default: return <Badge variant="secondary" className="text-[10px]"><UserX className="h-3 w-3 mr-1" />Seeded</Badge>;
     }
   };
 
@@ -131,7 +152,7 @@ export function ChannelMemberAudit() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Pulls full member list via Telegram Client API. Members who joined on or before the cutoff date (e.g. March 25) are classified as <strong>seeded</strong>. Members who joined after that date (March 26+) are <strong>organic</strong>.
+            Pulls <strong>every</strong> member via Telegram Client API. Joined on/before cutoff = <strong>Seeded</strong>. Joined after = <strong>Organic</strong>.
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             <Input
@@ -206,33 +227,33 @@ export function ChannelMemberAudit() {
                         {run.status}
                       </Badge>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {format(new Date(run.started_at), "MMM d, yyyy h:mm a")}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(run.started_at), "MMM d, yyyy h:mm a")}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => deleteRun(run.id, e)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                   {run.status === "completed" && (
-                    <div className="grid grid-cols-5 gap-2 mt-2">
+                    <div className="grid grid-cols-3 gap-2 mt-2">
                       <div className="text-center">
                         <p className="text-xs text-muted-foreground">Total</p>
                         <p className="text-sm font-bold">{run.total_members}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Organic</p>
-                        <p className="text-sm font-bold text-green-500">{run.organic_count}</p>
+                        <p className="text-xs text-muted-foreground">Organic (Mar 26+)</p>
+                        <p className="text-lg font-bold text-green-500">{run.organic_count}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Seeded</p>
+                        <p className="text-xs text-muted-foreground">Seeded (≤ Mar 25)</p>
                         <p className="text-sm font-bold text-muted-foreground">{run.seeded_count}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Bots</p>
-                        <p className="text-sm font-bold text-muted-foreground">{run.bot_count}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Organic %</p>
-                        <p className="text-sm font-bold text-green-500">
-                          {run.total_members > 0 ? Math.round((run.organic_count / run.total_members) * 100) : 0}%
-                        </p>
                       </div>
                     </div>
                   )}
@@ -255,7 +276,7 @@ export function ChannelMemberAudit() {
                 Members — {selectedRun.chat_title} ({filteredMembers.length} shown)
               </CardTitle>
               <div className="flex rounded-md border overflow-hidden">
-                {(["all", "organic", "seeded", "bot"] as const).map(f => (
+                {(["all", "organic", "seeded"] as const).map(f => (
                   <button
                     key={f}
                     onClick={() => setFilter(f)}
