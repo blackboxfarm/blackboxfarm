@@ -1,11 +1,12 @@
 /**
  * Funding Resolver — Helius-first funding chain discovery
  * 
- * Replaces Solscan funding discovery with Helius /v1/wallet/{address}/funded-by
- * as the primary source. Falls back to mesh DB cache.
+ * Uses reputation_mesh cache to avoid redundant Helius API calls.
+ * Falls back to Helius /v1/wallet/{address}/funded-by when no cache hit.
+ * Uses centralized heliusRestFetch for rate limiting + circuit breaker.
  */
 
-import { getHeliusApiKey } from './helius-client.ts';
+import { getHeliusApiKey, heliusRestFetch, redactHeliusSecrets } from './helius-client.ts';
 import { createApiLogger } from './api-logger.ts';
 
 export interface FundingResult {
@@ -21,9 +22,11 @@ const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin',
 
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+// Cache TTL: skip Helius if mesh data is newer than 7 days
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 function isValidSolanaAddress(address: string): boolean {
   if (typeof address !== 'string' || !BASE58_REGEX.test(address)) return false;
-  // Reject all-lowercase addresses — likely lowercased token mints, not valid wallets
   if (address === address.toLowerCase() && address.length > 40) return false;
   return true;
 }
@@ -35,8 +38,94 @@ function isKnownCex(name: string | null, type: string | null): boolean {
 }
 
 /**
- * Discover who funded a wallet using Helius funded-by endpoint.
- * Returns the primary funder with CEX detection.
+ * Check reputation_mesh for cached funding data.
+ * Returns cached result if found and fresh enough.
+ */
+async function checkMeshCache(walletAddress: string): Promise<FundingResult | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.54.0');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data } = await supabase
+      .from('reputation_mesh')
+      .select('linked_id, confidence, metadata, discovered_at')
+      .eq('source_type', 'wallet')
+      .eq('source_id', walletAddress)
+      .eq('relationship', 'funded_by')
+      .order('discovered_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!data?.linked_id) return null;
+
+    // Check freshness
+    const discoveredAt = new Date(data.discovered_at).getTime();
+    if (Date.now() - discoveredAt > CACHE_TTL_MS) {
+      console.log(`[FundingResolver] Cache expired for ${walletAddress.slice(0, 8)}... (${Math.round((Date.now() - discoveredAt) / 86400000)}d old)`);
+      return null;
+    }
+
+    const meta = (data.metadata || {}) as Record<string, any>;
+    const funderName = meta.funder_name || null;
+    const funderType = meta.funder_type || null;
+    const isCex = isKnownCex(funderName, funderType);
+
+    console.log(`[FundingResolver] ✅ CACHE HIT for ${walletAddress.slice(0, 8)}... → ${data.linked_id.slice(0, 8)}... (saved 1 Helius credit)`);
+
+    return {
+      funder: data.linked_id,
+      funderName,
+      funderType,
+      amountSol: meta.amount_sol || 0,
+      isCex,
+      source: 'mesh_cache',
+    };
+  } catch (e) {
+    console.warn(`[FundingResolver] Cache check failed:`, e);
+    return null;
+  }
+}
+
+/**
+ * Write funding result to reputation_mesh for future cache hits.
+ */
+async function writeMeshCache(walletAddress: string, result: FundingResult): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.54.0');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    await supabase.from('reputation_mesh').upsert({
+      source_type: 'wallet',
+      source_id: walletAddress,
+      linked_type: 'wallet',
+      linked_id: result.funder,
+      relationship: 'funded_by',
+      confidence: result.isCex ? 95 : 80,
+      discovered_via: 'funding-resolver',
+      discovered_at: new Date().toISOString(),
+      metadata: {
+        funder_name: result.funderName,
+        funder_type: result.funderType,
+        amount_sol: result.amountSol,
+        is_cex: result.isCex,
+      },
+    }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+  } catch (e) {
+    console.warn(`[FundingResolver] Cache write failed:`, e);
+  }
+}
+
+/**
+ * Discover who funded a wallet.
+ * Checks mesh cache first, then falls back to Helius API.
  */
 export async function discoverFunding(
   walletAddress: string,
@@ -48,6 +137,11 @@ export async function discoverFunding(
     return null;
   }
 
+  // ── Check cache first ──
+  const cached = await checkMeshCache(walletAddress);
+  if (cached) return cached;
+
+  // ── Helius API call ──
   const heliusKey = getHeliusApiKey();
   if (!heliusKey) {
     apiErrors.push('HELIUS_API_KEY not configured for funding discovery');
@@ -64,10 +158,10 @@ export async function discoverFunding(
       credits: 1,
     });
 
-    const resp = await fetch(
-      `https://api.helius.xyz/v1/wallet/${walletAddress}/funded-by?api-key=${heliusKey}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+    // Use centralized heliusRestFetch for rate limiting + circuit breaker
+    const resp = await heliusRestFetch(`/v1/wallet/${walletAddress}/funded-by`, {
+      timeoutMs: 10000,
+    });
 
     if (resp.status === 404) {
       await logger.complete(404, 'No funding transaction found');
@@ -90,7 +184,7 @@ export async function discoverFunding(
 
     console.log(`[FundingResolver] ${walletAddress.slice(0, 8)}... funded by ${data.funder.slice(0, 8)}... name="${data.funderName || 'unknown'}" CEX=${isCex}`);
 
-    return {
+    const result: FundingResult = {
       funder: data.funder,
       funderName: data.funderName || null,
       funderType: data.funderType || null,
@@ -98,8 +192,13 @@ export async function discoverFunding(
       isCex,
       source: 'helius',
     };
+
+    // Write to cache for next time (fire-and-forget)
+    writeMeshCache(walletAddress, result).catch(() => {});
+
+    return result;
   } catch (e) {
-    const msg = `Helius funded-by error: ${e instanceof Error ? e.message : 'timeout'}`;
+    const msg = `Helius funded-by error: ${e instanceof Error ? redactHeliusSecrets(e.message) : 'timeout'}`;
     apiErrors.push(msg);
     console.error(`[FundingResolver] ${msg}`);
     return null;
@@ -132,7 +231,6 @@ export async function discoverFundingChain(
 
   for (let depth = 0; depth < maxDepth; depth++) {
     if (visited.has(current)) {
-      // Circular loop detected!
       circularFunding = true;
       const loopStart = visitOrder.indexOf(current);
       circularWallets = visitOrder.slice(loopStart);
@@ -148,18 +246,19 @@ export async function discoverFundingChain(
     chain.push(funding);
 
     if (funding.isCex) {
-      kycRoot = current; // The wallet funded by CEX is the KYC root
+      kycRoot = current;
       kycRootLabel = funding.funderName || funding.funderType || 'exchange';
-      break; // Don't trace into CEX wallets
+      break;
     }
 
     current = funding.funder;
     
-    // Rate limit
-    if (depth < maxDepth - 1) await new Promise(r => setTimeout(r, 200));
+    // Rate limit only for Helius calls (cache hits are free)
+    if (funding.source === 'helius' && depth < maxDepth - 1) {
+      await new Promise(r => setTimeout(r, 200));
+    }
   }
 
-  // If no CEX found, the deepest wallet with no further funders is the root
   if (!kycRoot && chain.length > 0) {
     kycRoot = chain[chain.length - 1].funder;
   }
