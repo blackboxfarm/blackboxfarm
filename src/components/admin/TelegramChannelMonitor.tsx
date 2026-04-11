@@ -1451,6 +1451,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
           <TelegramAnnouncementBox audience="hosted" />
           <TelegramHostedBots />
           <ChannelMembersDashboard />
+          <ChannelMemberAudit />
         </TabsContent>
       </Tabs>
     </div>
