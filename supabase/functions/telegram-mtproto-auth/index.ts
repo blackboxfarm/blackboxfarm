@@ -659,17 +659,19 @@ Copy the printed session string and use **Save Session**.
         const chatTitle = channelInfo?.chats?.[0]?.title || peerValue;
         const chatIdNum = channelInfo?.chats?.[0]?.id || 0;
 
-        // Fetch participants in batches
+        // Fetch ALL participants using channelParticipantsSearch (empty query returns all)
+        // channelParticipantsRecent only returns ~200, so we use search instead
         const allParticipants: any[] = [];
+        const seenUserIds = new Set();
         let offset = 0;
         const batchSize = 200;
 
         while (true) {
-          console.log(`[audit] Fetching participants offset=${offset}`);
+          console.log(`[audit] Fetching participants offset=${offset} (search filter)`);
           const result = await client.call({
             _: 'channels.getParticipants',
             channel: { _: 'inputChannel', channelId, accessHash },
-            filter: { _: 'channelParticipantsRecent' },
+            filter: { _: 'channelParticipantsSearch', q: '' },
             offset,
             limit: batchSize,
             hash: BigInt(0),
@@ -682,18 +684,23 @@ Copy the printed session string and use **Save Session**.
             users.set(u.id, u);
           }
 
+          let newCount = 0;
           for (const p of result.participants) {
             const userId = p.userId;
+            if (seenUserIds.has(userId)) continue;
+            seenUserIds.add(userId);
             const user = users.get(userId);
             allParticipants.push({
               participant: p,
               user: user || {},
             });
+            newCount++;
           }
 
           offset += result.participants.length;
+          console.log(`[audit] Batch returned ${result.participants.length}, new unique: ${newCount}, total: ${allParticipants.length}`);
           if (result.participants.length < batchSize) break;
-          if (offset > 10000) break; // safety cap
+          if (offset > 50000) break; // safety cap
         }
 
         console.log(`[audit] Total participants fetched: ${allParticipants.length}`);
@@ -722,21 +729,21 @@ Copy the printed session string and use **Save Session**.
           };
         });
 
-        // Classify by date: joined on or before cutoff = seeded, after = organic
-        // Bots are always classified as 'bot'
+        // Classify: on or before cutoff = seeded, after cutoff = organic
+        // Bots are seeded too (they were added during the seeding phase)
         withDates.sort((a, b) => a._joinTs - b._joinTs);
 
         let seeded = 0, organic = 0, botCount = 0, unknown = 0;
         const cutoffTs = cutoffDate.getTime();
 
         const rows = withDates.map((m) => {
-          let classification = 'unknown';
+          let classification: string;
           if (m.is_bot) {
-            classification = 'bot';
             botCount++;
-          } else if (!m.join_date) {
-            classification = 'unknown';
-            unknown++;
+          }
+          if (!m.join_date) {
+            classification = 'seeded'; // no date = old/seeded
+            seeded++;
           } else if (m._joinTs <= cutoffTs) {
             classification = 'seeded';
             seeded++;
