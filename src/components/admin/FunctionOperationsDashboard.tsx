@@ -175,7 +175,7 @@ export function FunctionOperationsDashboard() {
     else rows.sort((a, b) => a.function_name.localeCompare(b.function_name));
 
     return rows;
-  }, [registry, runMap, runData, searchQuery, categoryFilter, sortBy]);
+  }, [registry, runMap, runData, searchQuery, categoryFilter, priorityFilter, sortBy]);
 
   // Summary
   const totalRuns = runData.reduce((s, r) => s + r.total, 0);
