@@ -228,6 +228,17 @@ export function FunctionOperationsDashboard() {
           </SelectContent>
         </Select>
 
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Priority</SelectItem>
+            <SelectItem value="primary">⚡ Primary</SelectItem>
+            <SelectItem value="legacy">📦 Legacy</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Sort by" />
