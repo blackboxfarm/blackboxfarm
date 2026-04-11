@@ -417,17 +417,12 @@ async function fetchRugCheckForBuyGate(mint: string, config: any): Promise<RugCh
   };
 
   try {
-    await delay(config.rugcheck_rate_limit_ms || 500);
-    
-    const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, {
-      headers: { 'Accept': 'application/json' },
-    });
+    const { fetchRugCheckSummary } = await import('../_shared/rugcheck-cache.ts');
+    const data = await fetchRugCheckSummary(mint, 'pumpfun-watchlist-monitor');
 
-    if (!response.ok) {
-      return { ...defaultResult, passed: true, error: `API error: ${response.status}` };
+    if (!data) {
+      return { ...defaultResult, passed: true, error: `API unavailable` };
     }
-
-    const data = await response.json();
     const rawScore = data.score || 0;
     const normalised = Math.min(100, Math.max(0, rawScore / 10));
     

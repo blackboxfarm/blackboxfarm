@@ -668,17 +668,14 @@ async function fetchRugCheck(mint: string, config: any): Promise<RugCheckResult>
     // Rate limit delay
     await new Promise(resolve => setTimeout(resolve, config.rugcheck_rate_limit_ms || 500));
     
-    const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, {
-      headers: { 'Accept': 'application/json' },
-    });
+    const { fetchRugCheckSummary } = await import('../_shared/rugcheck-cache.ts');
+    const data = await fetchRugCheckSummary(mint, 'pumpfun-token-enricher');
 
-    if (!response.ok) {
-      console.log(`   ⚠️ RugCheck API error: ${response.status}`);
+    if (!data) {
+      console.log(`   ⚠️ RugCheck API unavailable`);
       // Fail open - don't reject if API is down
-      return { ...defaultResult, passed: true, error: `API error: ${response.status}` };
+      return { ...defaultResult, passed: true, error: `API unavailable` };
     }
-
-    const data = await response.json();
     
     // Extract score (RugCheck score: 0-1000, higher = safer)
     const rawScore = data.score || 0;

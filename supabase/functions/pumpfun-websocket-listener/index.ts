@@ -324,10 +324,10 @@ function validateIntake(
 // Mayhem Mode check - reject if true (PERMANENT)
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
-    const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`);
-    if (!response.ok) return false;
+    const { fetchRugCheckSummary } = await import('../_shared/rugcheck-cache.ts');
+    const data = await fetchRugCheckSummary(tokenMint, 'pumpfun-websocket-listener');
+    if (!data) return false;
     
-    const data = await response.json();
     const risks = data.risks || [];
     
     // Check for danger-level risks
