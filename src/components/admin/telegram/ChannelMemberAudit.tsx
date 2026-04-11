@@ -4,10 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Users, Bot, UserCheck, UserX, ScanSearch, RefreshCw } from "lucide-react";
+import { Loader2, Users, Bot, UserCheck, UserX, ScanSearch, RefreshCw, CalendarIcon } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface AuditRun {
   id: string;
@@ -45,7 +48,7 @@ export function ChannelMemberAudit() {
   const [auditing, setAuditing] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [channelInput, setChannelInput] = useState("HoldersIntel");
-  const [threshold, setThreshold] = useState("2200");
+  const [cutoffDate, setCutoffDate] = useState<Date>(new Date("2026-03-25"));
   const [filter, setFilter] = useState<"all" | "organic" | "seeded" | "bot">("all");
 
   const loadRuns = async () => {
@@ -80,7 +83,7 @@ export function ChannelMemberAudit() {
         body: {
           action: "audit_channel_members",
           channelUsername: channelInput,
-          seededThreshold: parseInt(threshold),
+          seededCutoffDate: cutoffDate.toISOString().split("T")[0],
         },
       });
       if (error) throw error;
@@ -128,9 +131,9 @@ export function ChannelMemberAudit() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Pulls full member list via Telegram Client API. Members joining in the first batch (before threshold) are classified as seeded, singular joins after are organic.
+            Pulls full member list via Telegram Client API. Members who joined on or before the cutoff date are classified as seeded. Joins after are organic.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Input
               value={channelInput}
               onChange={e => setChannelInput(e.target.value)}
@@ -138,14 +141,30 @@ export function ChannelMemberAudit() {
               className="h-8 text-xs w-48"
             />
             <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">Threshold:</span>
-              <Input
-                type="number"
-                value={threshold}
-                onChange={e => setThreshold(e.target.value)}
-                className="h-8 text-xs w-20"
-                min="0"
-              />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Seeded before:</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "h-8 w-[150px] justify-start text-left text-xs font-normal",
+                      !cutoffDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-1 h-3 w-3" />
+                    {cutoffDate ? format(cutoffDate, "MMM d, yyyy") : "Pick date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={cutoffDate}
+                    onSelect={(d) => d && setCutoffDate(d)}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             <Button size="sm" onClick={runAudit} disabled={auditing}>
               {auditing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ScanSearch className="h-3 w-3 mr-1" />}
