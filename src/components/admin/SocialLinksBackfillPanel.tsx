@@ -157,6 +157,9 @@ export function SocialLinksBackfillPanel() {
         <CardDescription className="text-xs">
           Extract social data from reputation_mesh → token_social_links
         </CardDescription>
+        <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-400 border-green-500/30 w-fit mt-1">
+          ⚡ Automated — runs every ~15 min via orchestrator
+        </Badge>
       </CardHeader>
       <CardContent className="space-y-3">
         {/* Previous run status */}

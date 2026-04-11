@@ -79,6 +79,9 @@ export function VigilStatusPanel() {
         <CardDescription className="text-xs">
           Death detection + post-mortem assessments for AI training
         </CardDescription>
+        <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-400 border-green-500/30 w-fit mt-1">
+          ⚡ Automated — runs every ~5 min via orchestrator
+        </Badge>
       </CardHeader>
       <CardContent className="space-y-3">
         {stats && (
