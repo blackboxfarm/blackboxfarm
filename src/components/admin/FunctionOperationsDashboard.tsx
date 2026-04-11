@@ -21,6 +21,7 @@ interface RegistryEntry {
   data_out: string | null;
   category: string | null;
   is_active: boolean | null;
+  priority_tier: string | null;
 }
 
 interface RunStats {
