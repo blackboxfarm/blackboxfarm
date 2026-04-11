@@ -177,11 +177,13 @@ export function FunctionOperationsDashboard() {
     return rows;
   }, [registry, runMap, runData, searchQuery, categoryFilter, priorityFilter, sortBy]);
 
-  // Summary
-  const totalRuns = runData.reduce((s, r) => s + r.total, 0);
-  const totalSuccesses = runData.reduce((s, r) => s + r.successes, 0);
-  const totalFailures = runData.reduce((s, r) => s + r.failures, 0);
+  // Summary (reflects active filters)
+  const totalRuns = mergedRows.reduce((s, r) => s + r.stats.total, 0);
+  const totalSuccesses = mergedRows.reduce((s, r) => s + r.stats.successes, 0);
+  const totalFailures = mergedRows.reduce((s, r) => s + r.stats.failures, 0);
   const successRate = totalRuns > 0 ? Math.round((totalSuccesses / totalRuns) * 100) : 0;
+  const filteredCount = mergedRows.length;
+  const totalCount = registry.length;
 
   return (
     <div className="space-y-4">
