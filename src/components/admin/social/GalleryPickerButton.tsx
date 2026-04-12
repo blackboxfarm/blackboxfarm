@@ -8,9 +8,11 @@ interface GalleryPickerButtonProps {
   onSelect: (imageUrl: string) => void;
   currentUrl?: string;
   label?: string;
+  articleContent?: string;
+  articleTitle?: string;
 }
 
-export function GalleryPickerButton({ onSelect, currentUrl, label = "Gallery" }: GalleryPickerButtonProps) {
+export function GalleryPickerButton({ onSelect, currentUrl, label = "Gallery", articleContent, articleTitle }: GalleryPickerButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -26,6 +28,8 @@ export function GalleryPickerButton({ onSelect, currentUrl, label = "Gallery" }:
           </DialogHeader>
           <ImageGallery
             mode="pick"
+            articleContent={articleContent}
+            articleTitle={articleTitle}
             onSelect={(url) => {
               onSelect(url);
               setOpen(false);
