@@ -856,6 +856,15 @@ export function TokenCandidatesDashboard() {
     }
   };
 
+  // Precompute symbol duplicate counts for copycat badge
+  const symbolCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const w of watchlist) {
+      const sym = w.token_symbol || '???';
+      counts[sym] = (counts[sym] || 0) + 1;
+    }
+    return counts;
+  }, [watchlist]);
 
   // Clear all discovery logs
   const clearLogs = async () => {
