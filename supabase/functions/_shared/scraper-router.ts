@@ -18,6 +18,8 @@ export interface ScrapeRequest {
   onlyMainContent?: boolean;
   waitFor?: number;
   timeout?: number;
+  /** Force a specific provider (e.g. 'firecrawl' for Cloudflare-protected sites) */
+  preferredProvider?: 'browserless' | 'firecrawl';
 }
 
 export interface ScrapeResponse {
