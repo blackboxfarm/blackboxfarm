@@ -11668,6 +11668,93 @@ export type Database = {
         }
         Relationships: []
       }
+      scraper_audit_log: {
+        Row: {
+          content_usable: boolean | null
+          created_at: string
+          error_message: string | null
+          fallback_provider: string | null
+          fell_back: boolean
+          function_name: string
+          http_status: number | null
+          id: string
+          metadata: Json | null
+          provider_used: string
+          provider_was_primary: boolean
+          response_size_bytes: number | null
+          response_time_ms: number | null
+          success: boolean
+          target_url: string
+        }
+        Insert: {
+          content_usable?: boolean | null
+          created_at?: string
+          error_message?: string | null
+          fallback_provider?: string | null
+          fell_back?: boolean
+          function_name: string
+          http_status?: number | null
+          id?: string
+          metadata?: Json | null
+          provider_used: string
+          provider_was_primary?: boolean
+          response_size_bytes?: number | null
+          response_time_ms?: number | null
+          success?: boolean
+          target_url: string
+        }
+        Update: {
+          content_usable?: boolean | null
+          created_at?: string
+          error_message?: string | null
+          fallback_provider?: string | null
+          fell_back?: boolean
+          function_name?: string
+          http_status?: number | null
+          id?: string
+          metadata?: Json | null
+          provider_used?: string
+          provider_was_primary?: boolean
+          response_size_bytes?: number | null
+          response_time_ms?: number | null
+          success?: boolean
+          target_url?: string
+        }
+        Relationships: []
+      }
+      scraper_provider_config: {
+        Row: {
+          auto_fallback_enabled: boolean
+          browserless_enabled: boolean
+          created_at: string
+          firecrawl_enabled: boolean
+          id: string
+          provider_fallback: string
+          provider_primary: string
+          updated_at: string
+        }
+        Insert: {
+          auto_fallback_enabled?: boolean
+          browserless_enabled?: boolean
+          created_at?: string
+          firecrawl_enabled?: boolean
+          id?: string
+          provider_fallback?: string
+          provider_primary?: string
+          updated_at?: string
+        }
+        Update: {
+          auto_fallback_enabled?: boolean
+          browserless_enabled?: boolean
+          created_at?: string
+          firecrawl_enabled?: boolean
+          id?: string
+          provider_fallback?: string
+          provider_primary?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       secret_access_audit: {
         Row: {
           access_timestamp: string | null
