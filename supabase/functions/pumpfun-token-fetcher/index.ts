@@ -243,7 +243,13 @@ async function fetchAndTriageNewTokens(supabase: any): Promise<FetcherStats> {
   const existingMints = new Set((existingTokens || []).map((t: any) => t.token_mint));
   stats.alreadyKnown = existingMints.size;
 
-  const solPrice = await getSolPrice(supabase);
+  let solPrice: number;
+  try {
+    solPrice = await getSolPriceFromCache(supabase);
+  } catch {
+    console.error('⚠️ SOL price unavailable, using 0 — USD calculations will be skipped');
+    solPrice = 0;
+  }
   const now = new Date();
 
   // Process only NEW tokens
@@ -252,16 +258,19 @@ async function fetchAndTriageNewTokens(supabase: any): Promise<FetcherStats> {
     if (!mint || existingMints.has(mint)) continue;
 
     try {
-      // 1. Mayhem Mode check (one-time, hard reject)
-      const isMayhem = await checkMayhemMode(mint);
-      if (isMayhem) {
-        console.log(`☠️ MAYHEM REJECTED: ${tokenData.token?.symbol}`);
-        stats.mayhemRejected++;
-        continue; // Never store, never see again
+      // 1. Mayhem Mode check using ALREADY-FETCHED data (no extra API call)
+      if ((tokenData as any).bondingCurve) {
+        const coinData = {
+          total_supply: (tokenData as any).bondingCurve?.realTokenReserves || 0,
+          program: null, // Not available from list endpoint; check supply threshold only
+        };
+        // Also check if the token was fetched from pump.fun with program data
+        if (isMayhemFromData(coinData)) {
+          console.log(`☠️ MAYHEM REJECTED: ${tokenData.token?.symbol}`);
+          stats.mayhemRejected++;
+          continue;
+        }
       }
-
-      // Small delay for rate limiting
-      await new Promise(r => setTimeout(r, 50));
 
       // 2. Bundle score check (one-time)
       const risk = await analyzeTokenRisk(mint);
