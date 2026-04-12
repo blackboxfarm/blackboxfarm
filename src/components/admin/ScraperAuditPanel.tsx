@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { RefreshCw, CheckCircle, XCircle, ArrowRightLeft, Zap, Clock, Server, Shield, Activity, TrendingUp, List } from "lucide-react";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { format, subHours, subDays } from "date-fns";
 
 // ─── Static Function Registry ───
