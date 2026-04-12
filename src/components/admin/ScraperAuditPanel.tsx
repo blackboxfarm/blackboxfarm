@@ -32,36 +32,109 @@ const SCRAPER_FUNCTION_REGISTRY: Array<{
 ];
 
 function FunctionRegistryCard() {
+  const { data: auditStats } = useQuery({
+    queryKey: ["scraper-function-stats"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("scraper_audit_log" as any)
+        .select("function_name, success, response_time_ms, fell_back, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5000) as any;
+      if (error) throw error;
+
+      const statsMap: Record<string, {
+        total: number; success: number; errors: number;
+        avgMs: number; totalMs: number; fallbacks: number;
+        lastCall: string;
+      }> = {};
+
+      for (const row of (data || [])) {
+        const fn = row.function_name || "unknown";
+        if (!statsMap[fn]) {
+          statsMap[fn] = { total: 0, success: 0, errors: 0, avgMs: 0, totalMs: 0, fallbacks: 0, lastCall: "" };
+        }
+        const s = statsMap[fn];
+        s.total++;
+        if (row.success) s.success++; else s.errors++;
+        s.totalMs += row.response_time_ms || 0;
+        if (row.fell_back) s.fallbacks++;
+        if (!s.lastCall || row.created_at > s.lastCall) s.lastCall = row.created_at;
+      }
+
+      for (const fn of Object.keys(statsMap)) {
+        statsMap[fn].avgMs = statsMap[fn].total > 0 ? Math.round(statsMap[fn].totalMs / statsMap[fn].total) : 0;
+      }
+      return statsMap;
+    },
+    refetchInterval: 30000,
+  });
+
   const providerBadge = (p: string) => {
     switch (p) {
-      case "smart-scrape": return <Badge variant="secondary" className="text-[10px]">🔀 Smart Scrape</Badge>;
-      case "browserless-direct": return <Badge variant="outline" className="text-[10px]">🖥️ Browserless Direct</Badge>;
-      case "firecrawl-override": return <Badge className="text-[10px] bg-orange-600">🔥 Firecrawl Override</Badge>;
+      case "smart-scrape": return <Badge variant="secondary" className="text-[10px]">🔀 Smart</Badge>;
+      case "browserless-direct": return <Badge variant="outline" className="text-[10px]">🖥️ Direct</Badge>;
+      case "firecrawl-override": return <Badge className="text-[10px] bg-orange-600">🔥 FC Override</Badge>;
       default: return <Badge>{p}</Badge>;
     }
+  };
+
+  const successRate = (s: number, t: number) => {
+    if (t === 0) return <span className="text-muted-foreground">—</span>;
+    const pct = Math.round((s / t) * 100);
+    const color = pct >= 95 ? "text-green-500" : pct >= 70 ? "text-yellow-500" : "text-red-500";
+    return <span className={color}>{pct}%</span>;
   };
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2"><List className="h-4 w-4" /> Function Registry — Scraper Consumers</CardTitle>
+        <CardTitle className="text-sm flex items-center gap-2">
+          <List className="h-4 w-4" /> Function Registry — Scraper Consumers
+          {auditStats && <Badge variant="outline" className="text-[10px] ml-auto">{Object.keys(auditStats).length} tracked</Badge>}
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="max-h-80 overflow-y-auto space-y-1">
-          <div className="grid grid-cols-4 gap-2 text-[10px] font-medium text-muted-foreground p-1 sticky top-0 bg-card">
-            <span>Function</span><span>Routing</span><span>Description</span><span>Schedule</span>
-          </div>
-          {SCRAPER_FUNCTION_REGISTRY.map((fn) => (
-            <div key={fn.name} className="grid grid-cols-4 gap-2 text-xs p-1.5 rounded border items-center">
-              <span className="font-mono truncate" title={fn.name}>{fn.name}</span>
-              <span>{providerBadge(fn.provider)}</span>
-              <span className="text-muted-foreground truncate" title={fn.description}>{fn.description}</span>
-              <span className="text-muted-foreground font-mono">{fn.cronSchedule || "on-demand"}</span>
-            </div>
-          ))}
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-2">
-          <strong>Smart Scrape</strong> = follows global provider toggles above · <strong>Browserless Direct</strong> = bypasses router · <strong>Firecrawl Override</strong> = hardcoded preferredProvider
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead compact>Function</TableHead>
+              <TableHead compact>Routing</TableHead>
+              <TableHead compact>Schedule</TableHead>
+              <TableHead compact className="text-right">Calls</TableHead>
+              <TableHead compact className="text-right">✅</TableHead>
+              <TableHead compact className="text-right">❌</TableHead>
+              <TableHead compact className="text-right">Rate</TableHead>
+              <TableHead compact className="text-right">Avg ms</TableHead>
+              <TableHead compact className="text-right">Fallbacks</TableHead>
+              <TableHead compact>Last Call</TableHead>
+              <TableHead compact>Description</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {SCRAPER_FUNCTION_REGISTRY.map((fn) => {
+              const stats = auditStats?.[fn.name];
+              return (
+                <TableRow key={fn.name}>
+                  <TableCell compact className="font-mono font-medium">{fn.name}</TableCell>
+                  <TableCell compact>{providerBadge(fn.provider)}</TableCell>
+                  <TableCell compact className="font-mono text-muted-foreground">{fn.cronSchedule || "on-demand"}</TableCell>
+                  <TableCell compact className="text-right font-mono">{stats?.total ?? "—"}</TableCell>
+                  <TableCell compact className="text-right font-mono text-green-500">{stats?.success ?? "—"}</TableCell>
+                  <TableCell compact className="text-right font-mono text-red-500">{stats?.errors || "—"}</TableCell>
+                  <TableCell compact className="text-right font-mono">{stats ? successRate(stats.success, stats.total) : "—"}</TableCell>
+                  <TableCell compact className="text-right font-mono">{stats?.avgMs ? `${(stats.avgMs / 1000).toFixed(1)}s` : "—"}</TableCell>
+                  <TableCell compact className="text-right font-mono">{stats?.fallbacks || "—"}</TableCell>
+                  <TableCell compact className="text-muted-foreground text-[10px]">
+                    {stats?.lastCall ? format(new Date(stats.lastCall), "MMM d HH:mm") : "—"}
+                  </TableCell>
+                  <TableCell compact className="text-muted-foreground truncate max-w-[180px]" title={fn.description}>{fn.description}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        <p className="text-[10px] text-muted-foreground p-2">
+          <strong>Smart</strong> = global provider toggles · <strong>Direct</strong> = bypasses router · <strong>FC Override</strong> = hardcoded Firecrawl · Stats from last ~5K audit rows
         </p>
       </CardContent>
     </Card>
