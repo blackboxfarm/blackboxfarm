@@ -128,8 +128,8 @@ export default function Home() {
             AI-Powered Token Intelligence · Telegram Bot · Bubble Map
           </p>
           
-          <h2 className="text-xl md:text-3xl font-bold max-w-3xl mx-auto mb-3 tracking-tight text-white">
-            See Who's About to Dump — Before It Happens
+          <h2 className="text-xl md:text-3xl font-bold max-w-3xl mx-auto mb-3 tracking-tight text-white text-center">
+            See Who's About to Dump<br />Before It Happens
           </h2>
           <p className="text-base md:text-lg max-w-2xl mx-auto mb-6 text-gold font-semibold" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)' }}>
             Link wallets, expose insider clusters, and identify bad devs before you ape.
