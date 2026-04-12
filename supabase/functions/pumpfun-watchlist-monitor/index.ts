@@ -283,7 +283,7 @@ async function fetchDexScreenerMetrics(mint: string): Promise<TokenMetrics | nul
     const marketCap = parseFloat(pair.marketCap) || (pair.fdv ? parseFloat(pair.fdv) : null);
     const txns24h = pair.txns?.h24 || {};
     const estimatedHolders = Math.min((txns24h.buys || 0) + (txns24h.sells || 0), 1000);
-    const solPrice = priceUsd > 0 && pair.priceNative ? (priceUsd / parseFloat(pair.priceNative)) : 200;
+    const solPrice = priceUsd > 0 && pair.priceNative ? (priceUsd / parseFloat(pair.priceNative)) : 0;
     const volumeSol = volume24h / solPrice;
 
     return {
@@ -333,7 +333,7 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
         holders: data.holder_count || 0,
         volume24hSol: (data.volume_24h || 0) / 1e9,
         priceUsd,
-        liquidityUsd: virtualSolReserves > 0 ? (virtualSolReserves / 1e9) * 200 : null,
+        liquidityUsd: null, // Cannot derive USD from SOL reserves without live price — use null
         marketCapUsd: data.usd_market_cap || null,
         bondingCurvePct: data.complete ? 0 : bondingCurvePct,
         buys: data.buy_count || 0,
