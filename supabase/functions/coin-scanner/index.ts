@@ -223,3 +223,63 @@ function calculateAge(timestamp: number): string {
   if (hours > 0) return `${hours}h`
   return '1h'
 }
+
+/**
+ * Compute a real score (0-100) from available DexScreener data.
+ * Weights: Volume/MCap ratio (35%), Liquidity depth (25%), 
+ *          Price momentum (25%), Market cap sweet spot (15%)
+ */
+function computeRealScore(data: {
+  marketCap: number | null;
+  volume24h: number | null;
+  liquidityUsd: number | null;
+  priceChange24h: number | null;
+}): number {
+  let score = 0;
+  const { marketCap, volume24h, liquidityUsd, priceChange24h } = data;
+
+  // 1. Volume/MCap ratio (0-35 pts) — higher ratio = more active trading
+  if (volume24h && marketCap && marketCap > 0) {
+    const volRatio = volume24h / marketCap;
+    // volRatio > 1.0 is exceptional, 0.3 is good, < 0.05 is dead
+    score += Math.min(35, volRatio * 35);
+  }
+
+  // 2. Liquidity depth (0-25 pts) — enough to trade but not whale-dominated
+  if (liquidityUsd) {
+    if (liquidityUsd >= 5000 && liquidityUsd <= 500000) {
+      score += 25; // sweet spot
+    } else if (liquidityUsd >= 1000) {
+      score += 15; // acceptable
+    } else {
+      score += 5; // thin but exists
+    }
+  }
+
+  // 3. Price momentum (0-25 pts) — moderate positive movement is good
+  if (priceChange24h !== null) {
+    if (priceChange24h >= 5 && priceChange24h <= 50) {
+      score += 25; // healthy uptrend
+    } else if (priceChange24h > 50 && priceChange24h <= 100) {
+      score += 15; // hot but risky
+    } else if (priceChange24h > 0) {
+      score += 10; // slight positive
+    } else if (priceChange24h > -20) {
+      score += 5; // small dip, could recover
+    }
+    // > -20% = 0 pts (dumping)
+  }
+
+  // 4. Market cap sweet spot (0-15 pts) — $5k-$500k is the target range
+  if (marketCap) {
+    if (marketCap >= 5000 && marketCap <= 500000) {
+      score += 15;
+    } else if (marketCap > 500000 && marketCap <= 2000000) {
+      score += 10;
+    } else if (marketCap > 0) {
+      score += 5;
+    }
+  }
+
+  return Math.round(score);
+}
