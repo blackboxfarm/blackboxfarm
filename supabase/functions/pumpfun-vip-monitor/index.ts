@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 enableHeliusTracking('pumpfun-vip-monitor');
 
 /**
@@ -255,18 +256,13 @@ async function fetchSocialInfo(mint: string): Promise<{ twitter?: string; telegr
   }
 }
 
-// Get current SOL price
+// Get current SOL price — uses shared utility with staleness guard
 async function getSolPrice(supabase: any): Promise<number> {
   try {
-    const { data } = await supabase
-      .from('sol_price_cache')
-      .select('price_usd')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
-    return data?.price_usd || 200;
+    return await getSolPriceFromCache(supabase);
   } catch {
-    return 200;
+    console.error('⚠️ SOL price unavailable from all sources');
+    return 0;
   }
 }
 
