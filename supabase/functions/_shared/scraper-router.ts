@@ -154,15 +154,9 @@ async function scrapeBrowserless(req: ScrapeRequest): Promise<ScrapeResponse> {
       };
     }
 
-    // Convert HTML to pseudo-markdown (strip tags for text content)
+    // Convert HTML to markdown, preserving links (critical for parsers)
     const html = result.html || '';
-    // Extract text content from HTML as a simple markdown fallback
-    const textContent = html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    const textContent = htmlToMarkdown(html);
 
     return {
       success: true,
