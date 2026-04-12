@@ -336,6 +336,23 @@ async function fetchAndTriageNewTokens(supabase: any): Promise<FetcherStats> {
     }
   }
 
+  // Auto-prune: delete dead/rejected noise older than 7 days with no buy history
+  try {
+    const cutoff = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
+    const { count } = await supabase
+      .from('pumpfun_watchlist')
+      .delete({ count: 'exact' })
+      .in('status', ['dead', 'rejected'])
+      .is('buy_attempted_at', null)
+      .or('market_cap_usd.is.null,market_cap_usd.lt.100')
+      .lt('created_at', cutoff);
+    if (count && count > 0) {
+      console.log(`🧹 Auto-pruned ${count} dead/rejected tokens`);
+    }
+  } catch (pruneErr) {
+    console.warn('⚠️ Auto-prune failed (non-fatal):', pruneErr);
+  }
+
   stats.durationMs = Date.now() - startTime;
   console.log(`📊 FETCHER COMPLETE: ${stats.addedToWatchlist} added, ${stats.mayhemRejected} mayhem, ${stats.bundleRejected} bundle rejected, ${stats.alreadyKnown} already known (${stats.durationMs}ms)`);
 

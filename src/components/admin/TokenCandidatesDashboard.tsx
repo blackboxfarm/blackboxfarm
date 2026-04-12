@@ -856,6 +856,15 @@ export function TokenCandidatesDashboard() {
     }
   };
 
+  // Precompute symbol duplicate counts for copycat badge
+  const symbolCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const w of watchlist) {
+      const sym = w.token_symbol || '???';
+      counts[sym] = (counts[sym] || 0) + 1;
+    }
+    return counts;
+  }, [watchlist]);
 
   // Clear all discovery logs
   const clearLogs = async () => {
@@ -1692,11 +1701,20 @@ export function TokenCandidatesDashboard() {
                                 {expandedRows.has(item.id) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                               </Button>
                             </TableCell>
-                            <TableCell compact className="font-medium">{item.token_symbol || '???'}</TableCell>
+                            <TableCell compact className="font-medium">
+                              <div className="flex items-center gap-1">
+                                {item.token_symbol || '???'}
+                                {(symbolCounts[item.token_symbol || '???'] || 0) > 1 && (
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 border-yellow-500/50 text-yellow-400">
+                                    ×{symbolCounts[item.token_symbol || '???']}
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
                                 <span className="text-primary font-mono text-xs">
-                                  {item.token_mint?.slice(0, 6)}...
+                                  {item.token_mint?.slice(0, 8)}...{item.token_mint?.slice(-4)}
                                 </span>
                                 <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(item.token_mint)}>
                                   <Copy className="h-2.5 w-2.5" />
