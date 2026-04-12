@@ -118,6 +118,7 @@ async function scrapePageMarkdown(url: string, configIndex = 0, isPage2 = false)
     onlyMainContent: configIndex % 2 === 0,
     waitFor,
     timeout: isPage2 ? 60000 : 30000,
+    preferredProvider: 'firecrawl', // DexScreener is Cloudflare-protected; Browserless gets blocked
   });
 
   if (!result.success) {
