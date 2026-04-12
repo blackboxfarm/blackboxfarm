@@ -202,50 +202,35 @@ async function upsertProvenDevTokens(supabase: any, tokens: TrendingToken[], cur
 }
 
 async function fetchTrendingTokens(): Promise<TrendingToken[]> {
-  console.log('[scheduler] Fetching from internal dex-top-200 edge function...');
+  console.log('[scheduler] Reading cached trending tokens from token_lifecycle (no live scrape)...');
   
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const supabase = createClient(supabaseUrl, serviceKey);
     
-    const response = await fetch(`${supabaseUrl}/functions/v1/dex-top-200`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${serviceKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
+    // Read from token_lifecycle table which dex-top-200 populates every 30 min
+    const { data, error } = await supabase
+      .from('token_lifecycle')
+      .select('token_mint, symbol, name, market_cap, fdv')
+      .eq('is_currently_top_200', true)
+      .order('last_top_200_rank', { ascending: true })
+      .limit(200);
     
-    if (!response.ok) {
-      console.error('[scheduler] dex-top-200 fetch failed:', response.status);
+    if (error) {
+      console.error('[scheduler] DB query error:', error.message);
       return [];
     }
     
-    const data = await response.json();
+    const tokens: TrendingToken[] = (data || []).map((t: any) => ({
+      mint: t.token_mint,
+      symbol: t.symbol || 'UNKNOWN',
+      name: t.name || 'Unknown Token',
+      marketCap: t.fdv || t.market_cap || 0,
+      priceChange24h: 0,
+    }));
     
-    if (!data.success) {
-      console.error('[scheduler] dex-top-200 returned error:', data.error);
-      return [];
-    }
-    
-    console.log(`[scheduler] Got ${data.total || 0} ranked tokens from dex-top-200 (${data.resolved || 0} resolved)`);
-    
-    const tokens: TrendingToken[] = [];
-    
-    for (const t of (data.tokens || [])) {
-      if (t.tokenMint) {
-        tokens.push({
-          mint: t.tokenMint,
-          symbol: t.symbol || 'UNKNOWN',
-          name: t.name || 'Unknown Token',
-          marketCap: t.fdv || t.marketCap || 0,
-          priceChange24h: 0,
-        });
-      }
-    }
-    
-    console.log(`[scheduler] Total tokens from dex-top-200: ${tokens.length}`);
+    console.log(`[scheduler] Got ${tokens.length} cached trending tokens from DB`);
     if (tokens.length > 0) {
       console.log(`[scheduler] Sample: ${tokens.slice(0, 5).map((t: TrendingToken) => t.symbol).join(', ')}`);
     }
@@ -253,7 +238,7 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
     return tokens;
     
   } catch (error) {
-    console.error('[scheduler] Error fetching from dex-top-200:', error);
+    console.error('[scheduler] Error reading cached tokens:', error);
     return [];
   }
 }
