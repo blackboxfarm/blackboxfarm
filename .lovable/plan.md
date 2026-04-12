@@ -1,41 +1,32 @@
 
 
-# Fix: Revenue Collector Stale Cache Fallback
+# Pump.fun Watchlist Noise Reduction
 
 ## Problem
-`enhanced-revenue-collector` lines 62-78 has a fallback path that reads `sol_price_cache` directly without checking `updated_at`. If the primary `getSolPriceQuick()` fails, it could silently use a days-old cached price for revenue calculations.
+Not a duplicate bug — pump.fun allows unlimited tokens with the same ticker. The watchlist has 108K rows, 85K of which share repeated symbols. Most are dead/rejected noise that wastes storage and slows queries.
 
-## Fix (1 file, ~5 lines)
-Replace the raw `sol_price_cache` query fallback in `enhanced-revenue-collector/index.ts` with `getSolPriceFromCache(supabaseService)`, which already has the 5-minute staleness guard built in.
+## Solution: Two-part cleanup
 
-**Before (lines 62-78):**
-```typescript
-try {
-  solPriceUSD = await getSolPriceQuick();
-} catch {
-  // Raw cache read — NO staleness check
-  const { data: cached } = await supabaseService
-    .from('sol_price_cache')
-    .select('price_usd')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .single();
-  solPriceUSD = cached?.price_usd || 0;
-  ...
-}
-```
+### Part 1: Prune dead noise (migration)
+Delete rows from `pumpfun_watchlist` where:
+- `status` is `dead` or `rejected`
+- `market_cap_usd` is NULL or < $100
+- `created_at` is older than 7 days
+- No associated buy attempt (`buy_attempted_at IS NULL`)
 
-**After:**
-```typescript
-try {
-  solPriceUSD = await getSolPriceFromCache(supabaseService);
-} catch {
-  throw new Error('Cannot collect revenue: SOL price unavailable from all sources');
-}
-```
+This should remove 70-80K rows of garbage.
 
-### Technical detail
-- Add `import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';`
-- Remove the `getSolPriceQuick` import (no longer needed — `getSolPriceFromCache` already falls through to the live fetcher)
-- The staleness-guarded cache tries cache first → live fetch → throws. No stale data, no hardcoded fallback.
+### Part 2: Auto-prune on insert (edge function update)
+In `pumpfun-token-fetcher` and the websocket listener, before inserting a new token:
+- Skip tokens where the same `token_mint` already exists (already done via upsert)
+- Add a periodic cleanup: after each batch insert, delete rows older than 7 days that are `dead`/`rejected` with no buy history
+
+### Part 3: UI clarity
+In the Super Admin watchlist table, group or badge tokens with repeated symbols so it's visually obvious these are copycats, not duplicates. Add the mint address preview more prominently.
+
+### Files to modify
+1. **New migration**: DELETE pruning query for historical dead rows
+2. `supabase/functions/pumpfun-token-fetcher/index.ts` — add post-batch prune call
+3. `supabase/functions/pumpfun-websocket-listener/index.ts` — same
+4. Super Admin watchlist UI component — add copycat badge/indicator
 
