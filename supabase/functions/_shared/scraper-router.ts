@@ -155,6 +155,8 @@ function htmlToMarkdown(html: string): string {
 }
 
 // ─── Provider implementations ───────────────────────────────────────────
+
+async function scrapeBrowserless(req: ScrapeRequest): Promise<ScrapeResponse> {
   const start = Date.now();
   try {
     const result = await scrapeHtml(req.url, {
