@@ -133,6 +133,27 @@ async function logAudit(entry: {
   }
 }
 
+// ─── HTML → Markdown (link-preserving) ─────────────────────────────────
+
+function htmlToMarkdown(html: string): string {
+  let md = html;
+  // Remove scripts and styles
+  md = md.replace(/<script[\s\S]*?<\/script>/gi, '');
+  md = md.replace(/<style[\s\S]*?<\/style>/gi, '');
+  // Convert <a href="...">text</a> → [text](href)
+  md = md.replace(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => {
+    const cleanText = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return `[${cleanText}](${href})`;
+  });
+  // Convert <img> to ![](src)
+  md = md.replace(/<img\s+[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, '![]($1)');
+  // Strip remaining HTML tags
+  md = md.replace(/<[^>]+>/g, '\n');
+  // Clean up whitespace
+  md = md.replace(/\n{3,}/g, '\n\n').trim();
+  return md;
+}
+
 // ─── Provider implementations ───────────────────────────────────────────
 
 async function scrapeBrowserless(req: ScrapeRequest): Promise<ScrapeResponse> {
@@ -154,15 +175,9 @@ async function scrapeBrowserless(req: ScrapeRequest): Promise<ScrapeResponse> {
       };
     }
 
-    // Convert HTML to pseudo-markdown (strip tags for text content)
+    // Convert HTML to markdown, preserving links (critical for parsers)
     const html = result.html || '';
-    // Extract text content from HTML as a simple markdown fallback
-    const textContent = html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    const textContent = htmlToMarkdown(html);
 
     return {
       success: true,
