@@ -1704,9 +1704,9 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact className="font-medium">
                               <div className="flex items-center gap-1">
                                 {item.token_symbol || '???'}
-                                {watchlist.filter(w => w.token_symbol === item.token_symbol).length > 1 && (
+                                {(symbolCounts[item.token_symbol || '???'] || 0) > 1 && (
                                   <Badge variant="outline" className="text-[10px] px-1 py-0 border-yellow-500/50 text-yellow-400">
-                                    ×{watchlist.filter(w => w.token_symbol === item.token_symbol).length}
+                                    ×{symbolCounts[item.token_symbol || '???']}
                                   </Badge>
                                 )}
                               </div>
