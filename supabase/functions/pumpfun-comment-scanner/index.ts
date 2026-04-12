@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { smartScrape } from '../_shared/scraper-router.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { crypto } from 'https://deno.land/std@0.224.0/crypto/mod.ts'
 import { encodeHex } from 'https://deno.land/std@0.224.0/encoding/hex.ts'
@@ -185,14 +186,9 @@ Deno.serve(withRunLog('pumpfun-comment-scanner', async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY')
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    if (!firecrawlKey) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'FIRECRAWL_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    {
     }
 
     const { tokenMint, tokenSymbol, batchMode, limit: batchLimit } = await req.json()
@@ -238,31 +234,24 @@ Deno.serve(withRunLog('pumpfun-comment-scanner', async (req) => {
         const url = `https://pump.fun/coin/${token.token_mint}`
         console.log(`📝 Scraping comments for ${token.token_symbol}: ${url}`)
 
-        // Scrape with Firecrawl - wait for JS to render comments
-        const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${firecrawlKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url,
-            formats: ['markdown'],
-            onlyMainContent: true,
-            waitFor: 3000, // Wait 3s for comments to load
-          }),
+        // Scrape via smart router (Browserless primary, Firecrawl fallback)
+        const scrapeResult = await smartScrape({
+          url,
+          functionName: 'pumpfun-comment-scanner',
+          formats: ['markdown'],
+          onlyMainContent: true,
+          waitFor: 3000,
         })
 
-        if (!scrapeResponse.ok) {
-          console.error(`Firecrawl failed for ${token.token_symbol}: ${scrapeResponse.status}`)
+        if (!scrapeResult.success) {
+          console.error(`Scrape failed for ${token.token_symbol}: ${scrapeResult.error}`)
           continue
         }
 
-        const scrapeData = await scrapeResponse.json()
-        const markdown = scrapeData?.data?.markdown || scrapeData?.markdown || ''
+        const markdown = scrapeResult.markdown || ''
 
         if (!markdown) {
-          console.log(`No markdown content for ${token.token_symbol}`)
+          console.log(`No content for ${token.token_symbol}`)
           continue
         }
 
