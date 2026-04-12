@@ -34,6 +34,7 @@ export default function SocialMediaTab() {
 
       <Tabs defaultValue="repurpose" className="space-y-4">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="manual">📝 Manual Builder</TabsTrigger>
           <TabsTrigger value="repurpose">🔄 Repurposer</TabsTrigger>
           <TabsTrigger value="gallery">🖼️ Image Gallery</TabsTrigger>
           <TabsTrigger value="threads">🧵 Threads</TabsTrigger>
