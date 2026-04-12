@@ -386,7 +386,7 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
         }
         
         // Quick Mayhem Mode check
-        const isMayhem = await checkMayhemMode(mint);
+        const isMayhem = await checkMayhemMode(mint, 'pumpfun-new-token-monitor');
         if (isMayhem) {
           console.log(`☠️ Skipping Mayhem Mode token: ${tokenData.token?.symbol}`);
           continue;
