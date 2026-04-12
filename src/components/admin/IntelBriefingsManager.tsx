@@ -741,6 +741,8 @@ export function IntelBriefingsManager() {
             <GalleryPickerButton
               onSelect={handleGalleryInsert}
               label="Insert Gallery Image"
+              articleContent={form.content_md}
+              articleTitle={form.title}
             />
             <input ref={fileInputRef} type="file" accept=".md,.txt,.markdown" className="hidden" onChange={handleMdUpload} />
             {editingId && (
