@@ -1,61 +1,45 @@
 
 
-# Tiered /ca Response + Toggle Control
+# Fix: Stop Redundant DexScreener Scraping
 
-## What's Changing
+## Root Cause
 
-The `/ca` command currently shows the full rich report (dev reputation score, rug counts, social links, risk flags) to all authenticated users. This undermines the upgrade incentive.
+Four separate cron jobs all trigger `dex-top-200` scraping of DexScreener:
 
-## Design
-
-### 1. Tiered /ca Response (in `handleCA`)
-
-The `gateCheck` already returns the user's tier. Use it to control response depth:
-
-| Data Point | Free/Auth | X Subscriber+ |
-|---|---|---|
-| Holders, Health, Phase, Top10% | ✅ Full | ✅ Full |
-| Dust %, Whale count | ✅ Full | ✅ Full |
-| Dev Reputation Score | `🏗 Dev: 🔒 ██/100 (upgrade to reveal)` | ✅ Full (`🏗 Dev: 🟢 78/100`) |
-| Rug Pull Count | `⚠️ X prior rug(s) — 🔒 details locked` | ✅ Full |
-| Social Links Count | `🔗 Socials: 🔒 locked` | ✅ Full |
-| Risk Flags | `⚠️ X flags detected — 🔒 upgrade to see` | ✅ Full |
-
-Free users see that data *exists* (counts/indicators) but not the actual values. This creates urgency — "there ARE risk flags, but you can't see them."
-
-### 2. /ca Toggle (on/off per chat)
-
-Add `/ca on` and `/ca off` subcommands so users can disable the bot's `/ca` response in chats where another bot already handles `/ca`:
-
-- Store toggle state in a new column or lightweight table (e.g., `bot_chat_settings` with `chat_id` + `ca_enabled` boolean, default `true`)
-- When `/ca` fires, check if `ca_enabled` is false for that chat — if so, silently ignore
-- `/ca on` and `/ca off` only work in group chats (DMs always respond)
-
-### 3. Group vs DM behavior
-
-- **DMs**: `/ca` always active (no toggle check), full behavior
-- **Groups/Channels**: `/ca` respects the toggle, abbreviated response (same as current group behavior for other commands)
-
-## Files Changed
-
-| File | Change |
-|---|---|
-| `supabase/functions/holdersintel-bot-webhook/index.ts` | Modify `handleCA` to check tier and show placeholders for free users; add `/ca on`/`/ca off` toggle logic; add chat settings check |
-| Migration | Create `bot_chat_settings` table (`chat_id bigint PK, ca_enabled boolean default true, updated_at timestamptz`) |
-
-## Implementation Detail
-
-In `handleCA` (line 1922), after `gateCheck` returns `{ tier, userId }`:
-
-```
-const isPaid = hasTier(tier, 'x_subscriber');
+```text
+Job #148  holdersintel-dex-scanner-5min   */5 * * * *   ← MAIN CULPRIT (every 5 min!)
+Job #173  dex-top-200-30min               */30 * * * *  ← the intended job
+Job #98   oracle-hourly-scan              0 * * * *     ← legacy duplicate
+Job #145  holdersintel-scheduler-hourly   15 * * * *    ← also chains into dex-top-200
 ```
 
-Then conditionally build `devLine`, `socialLine`, `riskLine`:
-- If `!isPaid`: show placeholder text with lock emoji and upgrade CTA
-- If `isPaid`: show full data (current behavior)
+Each run triggers 3 retry attempts per page (Browserless fails to parse → retries), producing 6 scrape calls per invocation. At every-5-minutes frequency, that's **~72 scrape calls/hour**.
 
-For the toggle, parse `args` before `extractCA`:
-- If args is `"on"` or `"off"` → update `bot_chat_settings` for that chatId, send confirmation, return
-- Otherwise proceed with normal CA logic
+## Plan
+
+### 1. Make `holders-intel-dex-scanner` use cached data instead of live-scraping
+- Modify `holders-intel-dex-scanner` to read from the `token_metadata` or `dex_ranking_snapshots` table (which `dex-top-200` already populates every 30 min) instead of calling `dex-top-200` live
+- This eliminates ~12 redundant scrape runs per hour
+
+### 2. Make `holders-intel-scheduler` use cached data too
+- Same change: read from the DB table instead of calling `dex-top-200` live
+- Eliminates another hourly scrape
+
+### 3. Remove legacy cron job #98 (`oracle-hourly-scan`)
+- Migration to unschedule `cron.unschedule('oracle-hourly-scan')`
+- It calls the old `dexscreener-top-200-scraper` which also chains into `dex-top-200` — pure duplication
+
+### 4. Fix the Browserless retry storm
+- The Browserless HTML→markdown conversion strips links, causing 0 pairs parsed, triggering max retries even on "successful" scrapes
+- Already partially fixed in prior changes, but need to verify the `preferredProvider: 'firecrawl'` override in `dex-top-pages.ts` is deployed
+
+## Result
+- DexScreener scraping goes from **~72 calls/hour** down to **~4 calls/hour** (2 pages × 1 attempt × every 30 min)
+- Other functions get the same data from DB cache (< 30 min stale, which is fine for trending tokens)
+
+## Files to modify
+- `supabase/functions/holders-intel-dex-scanner/index.ts` — read from DB instead of calling dex-top-200
+- `supabase/functions/holders-intel-scheduler/index.ts` — read from DB instead of calling dex-top-200
+- `supabase/functions/dexscreener-top-200-scraper/index.ts` — read from DB instead of calling dex-top-200
+- New migration: `cron.unschedule('oracle-hourly-scan')`
 
