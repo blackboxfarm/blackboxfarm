@@ -133,9 +133,28 @@ async function logAudit(entry: {
   }
 }
 
-// ─── Provider implementations ───────────────────────────────────────────
+// ─── HTML → Markdown (link-preserving) ─────────────────────────────────
 
-async function scrapeBrowserless(req: ScrapeRequest): Promise<ScrapeResponse> {
+function htmlToMarkdown(html: string): string {
+  let md = html;
+  // Remove scripts and styles
+  md = md.replace(/<script[\s\S]*?<\/script>/gi, '');
+  md = md.replace(/<style[\s\S]*?<\/style>/gi, '');
+  // Convert <a href="...">text</a> → [text](href)
+  md = md.replace(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => {
+    const cleanText = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return `[${cleanText}](${href})`;
+  });
+  // Convert <img> to ![](src)
+  md = md.replace(/<img\s+[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, '![]($1)');
+  // Strip remaining HTML tags
+  md = md.replace(/<[^>]+>/g, '\n');
+  // Clean up whitespace
+  md = md.replace(/\n{3,}/g, '\n\n').trim();
+  return md;
+}
+
+// ─── Provider implementations ───────────────────────────────────────────
   const start = Date.now();
   try {
     const result = await scrapeHtml(req.url, {
