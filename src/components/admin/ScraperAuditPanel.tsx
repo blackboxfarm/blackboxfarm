@@ -447,6 +447,7 @@ export function ScraperAuditPanel() {
       </div>
 
       <ProviderToggleCard />
+      <FunctionRegistryCard />
       <AuditStatsSummary timeRange={timeRange} />
       <RecentAuditLog timeRange={timeRange} />
     </div>
