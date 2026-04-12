@@ -55,7 +55,8 @@ serve(withRunLog('coin-scanner', async (req) => {
     }
 
     // Convert filtered low-price tokens to qualified tokens — REAL DATA ONLY
-    const qualifiedTokens = lowPriceTokens.slice(0, limit)
+    // Score tokens using available DexScreener metrics
+    const qualifiedTokens = lowPriceTokens
       .map((token) => {
         const marketCap = parseFloat(token.marketCap) || null;
         const volume24h = parseFloat(token.volume?.h24) || null;
@@ -65,6 +66,9 @@ serve(withRunLog('coin-scanner', async (req) => {
 
         // Skip tokens with no real price data
         if (!priceUsd || priceUsd <= 0) return null;
+
+        // Compute a real score from available DexScreener data
+        const totalScore = computeRealScore({ marketCap, volume24h, liquidityUsd, priceChange24h });
 
         return {
           mint: token.pairAddress || token.baseToken?.address || null,
@@ -77,16 +81,18 @@ serve(withRunLog('coin-scanner', async (req) => {
           holderCount: null, // DexScreener doesn't provide this
           volatility24h: priceChange24h !== null ? Math.abs(priceChange24h) : null,
           ageHours: token.age === 'unknown' ? null : (token.age?.includes('d') ? parseInt(token.age) * 24 : parseInt(token.age) || null),
-          spread: null, // Not available from API
-          liquidityLocked: null, // Not available from API
-          swingCount: null, // Not available from API
-          volumeProfile: null, // Not available from API
-          correlationScore: null, // Not available from API
-          newsScore: null, // Not available from API
-          totalScore: null, // Cannot score without real data
+          spread: null,
+          liquidityLocked: null,
+          swingCount: null,
+          volumeProfile: null,
+          correlationScore: null,
+          newsScore: null,
+          totalScore,
         }
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      .sort((a: any, b: any) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
+      .slice(0, limit);
 
     console.log(`✅ Returning ${qualifiedTokens.length} qualified tokens from scraped DexScreener data`)
 
@@ -216,4 +222,64 @@ function calculateAge(timestamp: number): string {
   if (days > 0) return `${days}d`
   if (hours > 0) return `${hours}h`
   return '1h'
+}
+
+/**
+ * Compute a real score (0-100) from available DexScreener data.
+ * Weights: Volume/MCap ratio (35%), Liquidity depth (25%), 
+ *          Price momentum (25%), Market cap sweet spot (15%)
+ */
+function computeRealScore(data: {
+  marketCap: number | null;
+  volume24h: number | null;
+  liquidityUsd: number | null;
+  priceChange24h: number | null;
+}): number {
+  let score = 0;
+  const { marketCap, volume24h, liquidityUsd, priceChange24h } = data;
+
+  // 1. Volume/MCap ratio (0-35 pts) — higher ratio = more active trading
+  if (volume24h && marketCap && marketCap > 0) {
+    const volRatio = volume24h / marketCap;
+    // volRatio > 1.0 is exceptional, 0.3 is good, < 0.05 is dead
+    score += Math.min(35, volRatio * 35);
+  }
+
+  // 2. Liquidity depth (0-25 pts) — enough to trade but not whale-dominated
+  if (liquidityUsd) {
+    if (liquidityUsd >= 5000 && liquidityUsd <= 500000) {
+      score += 25; // sweet spot
+    } else if (liquidityUsd >= 1000) {
+      score += 15; // acceptable
+    } else {
+      score += 5; // thin but exists
+    }
+  }
+
+  // 3. Price momentum (0-25 pts) — moderate positive movement is good
+  if (priceChange24h !== null) {
+    if (priceChange24h >= 5 && priceChange24h <= 50) {
+      score += 25; // healthy uptrend
+    } else if (priceChange24h > 50 && priceChange24h <= 100) {
+      score += 15; // hot but risky
+    } else if (priceChange24h > 0) {
+      score += 10; // slight positive
+    } else if (priceChange24h > -20) {
+      score += 5; // small dip, could recover
+    }
+    // > -20% = 0 pts (dumping)
+  }
+
+  // 4. Market cap sweet spot (0-15 pts) — $5k-$500k is the target range
+  if (marketCap) {
+    if (marketCap >= 5000 && marketCap <= 500000) {
+      score += 15;
+    } else if (marketCap > 500000 && marketCap <= 2000000) {
+      score += 10;
+    } else if (marketCap > 0) {
+      score += 5;
+    }
+  }
+
+  return Math.round(score);
 }
