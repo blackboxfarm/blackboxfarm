@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  ImageIcon, Upload, Trash2, Edit2, Search, Tag, Sparkles, X, Check, Plus, Settings, Loader2, Wand2
+  ImageIcon, Upload, Trash2, Edit2, Search, Tag, Sparkles, X, Check, Plus, Settings, Loader2, Wand2, ZoomIn
 } from "lucide-react";
 import { StyleCategoryManager } from "./StyleCategoryManager";
 
@@ -58,6 +58,7 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
   const [editTags, setEditTags] = useState("");
   const [editCategories, setEditCategories] = useState<string[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [previewImage, setPreviewImage] = useState<GalleryImage | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
@@ -286,13 +287,21 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                       className={`group relative border rounded-lg overflow-hidden transition-all hover:ring-2 hover:ring-primary/50 ${mode === 'pick' ? 'cursor-pointer' : ''}`}
                       onClick={mode === 'pick' ? () => onSelect?.(img.file_url) : undefined}
                     >
-                      <div className="aspect-square bg-muted">
+                      <div className="aspect-square bg-muted relative">
                         <img
                           src={`${img.file_url}?width=200&height=200&resize=cover`}
                           alt={img.display_name}
                           className="w-full h-full object-cover"
                           loading="lazy"
                         />
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          className="absolute bottom-1 left-1 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 hover:bg-black/80 text-white border-0"
+                          onClick={(e) => { e.stopPropagation(); setPreviewImage(img); }}
+                        >
+                          <ZoomIn className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                       <div className="p-2 space-y-1">
                         <p className="text-xs font-medium truncate">{img.display_name}</p>
@@ -391,6 +400,31 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
             <Button variant="outline" onClick={() => setEditImage(null)}>Cancel</Button>
             <Button onClick={saveEdit}>Save Changes</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Modal */}
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="truncate">{previewImage?.display_name}</DialogTitle>
+          </DialogHeader>
+          {previewImage && (
+            <div className="flex flex-col items-center gap-3">
+              <img
+                src={previewImage.file_url}
+                alt={previewImage.display_name}
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              />
+              {previewImage.tags?.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {previewImage.tags.map(tag => (
+                    <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
