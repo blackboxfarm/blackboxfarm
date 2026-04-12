@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withRunLog } from '../_shared/run-logger.ts';
-import { fetchPumpFunCoin, fetchPumpFunNewCoins, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { fetchPumpFunNewCoins, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { isMayhemFromData } from '../_shared/mayhem-check.ts';
+import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 
 /**
  * PUMPFUN TOKEN FETCHER
@@ -135,39 +137,10 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
   }
 }
 
-// Get current SOL price
-async function getSolPrice(supabase: any): Promise<number> {
-  try {
-    const { data } = await supabase
-      .from('sol_price_cache')
-      .select('price_usd')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
-    
-    return data?.price_usd || 200;
-  } catch {
-    return 200;
-  }
-}
+// getSolPrice — delegated to shared utility with staleness guard
+// (imported from _shared/sol-price-cache.ts)
 
-// Check for Mayhem Mode (hard reject) - ONE TIME ONLY
-async function checkMayhemMode(tokenMint: string): Promise<boolean> {
-  try {
-    const data = await fetchPumpFunCoin(tokenMint, 'pumpfun-token-fetcher');
-    if (!data) return false;
-    
-    const totalSupply = data.total_supply || 0;
-    const program = data.program || null;
-    
-    const MAYHEM_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
-    const MAYHEM_SUPPLY = 2000000000000000;
-    
-    return program === MAYHEM_PROGRAM_ID || totalSupply >= MAYHEM_SUPPLY;
-  } catch {
-    return false;
-  }
-}
+// Mayhem Mode check — now uses pre-fetched data via shared utility (no extra API call)
 
 // Bundle analysis - ONE TIME ONLY
 async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; details: any }> {

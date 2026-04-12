@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram } from "npm:@solana/web3.js@1.95.3";
 import { decode } from "https://deno.land/std@0.190.0/encoding/base58.ts";
+import { getSolPriceQuick } from '../_shared/sol-price-fetcher.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,8 +59,23 @@ serve(withRunLog('enhanced-revenue-collector', async (req) => {
       );
     }
 
-    // Get current SOL price (simplified - you'd want real price feed)
-    const solPriceUSD = 200; // You should fetch this from an API like CoinGecko
+    // Get current SOL price from shared fetcher (CoinGecko -> Jupiter -> DexScreener)
+    let solPriceUSD: number;
+    try {
+      solPriceUSD = await getSolPriceQuick();
+    } catch {
+      console.error('⚠️ All SOL price sources failed, using cached price');
+      const { data: cached } = await supabaseService
+        .from('sol_price_cache')
+        .select('price_usd')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+      solPriceUSD = cached?.price_usd || 0;
+      if (solPriceUSD === 0) {
+        throw new Error('Cannot collect revenue: SOL price unavailable from all sources');
+      }
+    }
 
     // Get platform wallet config
     const { data: configData } = await supabaseService
