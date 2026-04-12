@@ -124,15 +124,29 @@ export default function Home() {
             </h1>
           </div>
           
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-4 font-light">
+          <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-4 font-light" style={{ display: 'none' }}>
             AI-Powered Token Intelligence · Telegram Bot · Bubble Map
           </p>
           
-          <p className="text-sm md:text-base text-muted-foreground/70 max-w-2xl mx-auto mb-10">
-            Crypto has hands — we show them. Deep holder analysis, wallet tracing, 
-            social identity verification, and a revolutionary network graph that exposes 
-            the connections others can't see.
-           </p>
+          <h2 className="text-2xl md:text-4xl font-bold max-w-3xl mx-auto mb-3 tracking-tight">
+            See Who's About to Dump — Before It Happens
+          </h2>
+          <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
+            Link wallets, expose insider clusters, and identify bad devs before you ape.
+          </p>
+          <div className="mb-10">
+            <Button 
+              size="lg" 
+              onClick={() => navigate("/holders")}
+              className="gap-2 shadow-glow text-lg px-8 py-6"
+            >
+              {[
+                "Run a Token Check Now",
+                "Check Before You Ape",
+                "Scan Any Token Instantly"
+              ][Math.floor(Math.random() * 3)]}
+            </Button>
+          </div>
 
            <div className="max-w-2xl mx-auto mb-8 px-4">
              <p className="text-sm md:text-base text-muted-foreground/80 italic text-center leading-relaxed">
