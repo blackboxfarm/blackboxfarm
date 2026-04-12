@@ -202,57 +202,48 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
     const discoveredTokens = new Map<string, TokenData>();
     const capturedAt = new Date().toISOString();
 
-    // PRIMARY SOURCE: Internal dex-top-200 edge function (Firecrawl scrape, 200 tokens)
-    console.log('[DexCompiler] 🌐 Fetching from dex-top-200...');
+    // PRIMARY SOURCE: Read cached data from token_lifecycle (populated by dex-top-200 every 30 min)
+    console.log('[DexCompiler] 📦 Reading cached top 200 from token_lifecycle (no live scrape)...');
     try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+      const { data: cachedTokens, error: cacheErr } = await supabase
+        .from('token_lifecycle')
+        .select('token_mint, symbol, name, fdv, market_cap, last_top_200_rank')
+        .eq('is_currently_top_200', true)
+        .order('last_top_200_rank', { ascending: true })
+        .limit(200);
       
-      const topResponse = await fetch(`${supabaseUrl}/functions/v1/dex-top-200`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
-      
-      if (topResponse.ok) {
-        const topData = await topResponse.json();
+      if (cacheErr) {
+        console.error('[DexCompiler] ❌ DB cache read failed:', cacheErr.message);
+      } else if (cachedTokens && cachedTokens.length > 0) {
+        console.log(`[DexCompiler] ✅ Got ${cachedTokens.length} cached tokens from DB`);
         
-        if (topData.success && topData.tokens) {
-          console.log(`[DexCompiler] ✅ Got ${topData.tokens.length} ranked tokens from dex-top-200`);
-          
-          for (const t of topData.tokens) {
-            if (t.tokenMint) {
-              // Fetch socials for each token
-              const socials = await fetchTokenSocials(t.tokenMint);
-              discoveredTokens.set(t.tokenMint, {
-                address: t.tokenMint,
-                symbol: t.symbol || 'UNKNOWN',
-                name: t.name || 'Unknown Token',
-                fdv: t.fdv,
-                marketCap: t.marketCap || t.fdv,
-                discoverySource: 'dex_top_200',
-                twitter: socials.twitter,
-                telegram: socials.telegram,
-                website: socials.website,
-              });
-              
-              // Small delay to avoid rate limits on socials fetch
-              if (discoveredTokens.size % 10 === 0) await new Promise(r => setTimeout(r, 200));
-            }
+        for (const t of cachedTokens) {
+          if (t.token_mint) {
+            // Fetch socials for each token
+            const socials = await fetchTokenSocials(t.token_mint);
+            discoveredTokens.set(t.token_mint, {
+              address: t.token_mint,
+              symbol: t.symbol || 'UNKNOWN',
+              name: t.name || 'Unknown Token',
+              fdv: t.fdv,
+              marketCap: t.market_cap || t.fdv,
+              discoverySource: 'dex_top_200',
+              twitter: socials.twitter,
+              telegram: socials.telegram,
+              website: socials.website,
+            });
+            
+            // Small delay to avoid rate limits on socials fetch
+            if (discoveredTokens.size % 10 === 0) await new Promise(r => setTimeout(r, 200));
           }
-          
-          console.log(`[DexCompiler] ✅ Total tokens from dex-top-200: ${discoveredTokens.size}`);
-        } else {
-          console.error('[DexCompiler] ❌ dex-top-200 returned error:', topData.error);
         }
+        
+        console.log(`[DexCompiler] ✅ Total tokens from cache: ${discoveredTokens.size}`);
       } else {
-        console.error('[DexCompiler] ❌ dex-top-200 fetch failed:', topResponse.status);
+        console.warn('[DexCompiler] ⚠️ No cached top 200 tokens found in DB');
       }
     } catch (error) {
-      console.error('[DexCompiler] ❌ Failed to fetch from dex-top-200:', error);
+      console.error('[DexCompiler] ❌ Failed to read cached tokens:', error);
     }
 
     // SECONDARY SOURCE: Top Boosted Tokens (promoted tokens)
