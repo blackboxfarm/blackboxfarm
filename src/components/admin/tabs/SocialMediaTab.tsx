@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Send, Image, Link, RefreshCw } from "lucide-react";
 import { ContentRepurposer } from "@/components/admin/social/ContentRepurposer";
+import { ManualPostBuilder } from "@/components/admin/social/ManualPostBuilder";
 import { SocialConfigPanel } from "@/components/admin/social/SocialConfigPanel";
 import { ImageGallery } from "@/components/admin/social/ImageGallery";
 import { GalleryPickerButton } from "@/components/admin/social/GalleryPickerButton";
