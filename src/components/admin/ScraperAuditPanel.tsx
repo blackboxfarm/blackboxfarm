@@ -18,17 +18,18 @@ const SCRAPER_FUNCTION_REGISTRY: Array<{
   description: string;
   providerOverride?: string;
   cronSchedule?: string;
+  humanFreq?: string;
 }> = [
-  { name: "dex-top-200", provider: "firecrawl-override", description: "DexScreener top 200 trending tokens", providerOverride: "firecrawl", cronSchedule: "*/30 * * * *" },
-  { name: "firecrawl-scrape", provider: "smart-scrape", description: "General-purpose scrape endpoint (admin)" },
-  { name: "pumpfun-comment-scanner", provider: "smart-scrape", description: "Pump.fun coin pages — comment bot detection" },
-  { name: "pumpfun-kol-registry", provider: "smart-scrape", description: "Pump.fun profiles — KOL detection" },
-  { name: "social-larp-detector", provider: "smart-scrape", description: "Token websites — larp/scam detection" },
-  { name: "social-predictor-ai", provider: "smart-scrape", description: "URL content for AI social prediction" },
-  { name: "sync-knowledge-base", provider: "smart-scrape", description: "Knowledge base URL scraping" },
-  { name: "agentic-browser", provider: "browserless-direct", description: "Browser automation (direct Browserless API)" },
-  { name: "bulk-community-enricher", provider: "browserless-direct", description: "X community about-page scraping" },
-  { name: "test-browserless", provider: "browserless-direct", description: "Browserless connectivity test" },
+  { name: "dex-top-200", provider: "firecrawl-override", description: "DexScreener top 200 trending tokens", providerOverride: "firecrawl", cronSchedule: "*/30 * * * *", humanFreq: "every 30 min" },
+  { name: "firecrawl-scrape", provider: "smart-scrape", description: "General-purpose scrape endpoint (admin)", humanFreq: "on-demand" },
+  { name: "pumpfun-comment-scanner", provider: "smart-scrape", description: "Pump.fun coin pages — comment bot detection", humanFreq: "per token scan" },
+  { name: "pumpfun-kol-registry", provider: "smart-scrape", description: "Pump.fun profiles — KOL detection", humanFreq: "per token scan" },
+  { name: "social-larp-detector", provider: "smart-scrape", description: "Token websites — larp/scam detection", humanFreq: "per token scan" },
+  { name: "social-predictor-ai", provider: "smart-scrape", description: "URL content for AI social prediction", humanFreq: "per prediction" },
+  { name: "sync-knowledge-base", provider: "smart-scrape", description: "Knowledge base URL scraping", humanFreq: "on-demand" },
+  { name: "agentic-browser", provider: "browserless-direct", description: "Browser automation (direct Browserless API)", humanFreq: "on-demand" },
+  { name: "bulk-community-enricher", provider: "browserless-direct", description: "X community about-page scraping", humanFreq: "per enrichment batch" },
+  { name: "test-browserless", provider: "browserless-direct", description: "Browserless connectivity test", humanFreq: "on-demand" },
 ];
 
 function FunctionRegistryCard() {
