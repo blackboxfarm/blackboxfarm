@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { smartScrape } from '../_shared/scraper-router.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -123,47 +124,33 @@ function getTier(rank: number): string {
 
 // Scrape kolscan.io leaderboard using Firecrawl
 async function scrapeKolscanLeaderboard(timeframe: string = '1'): Promise<string | null> {
-  const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
-  if (!firecrawlKey) {
-    console.error('[KOL] FIRECRAWL_API_KEY not configured');
-    return null;
-  }
-
   const url = `https://kolscan.io/leaderboard`;
-  console.log(`[KOL] Scraping kolscan leaderboard...`);
+  console.log(`[KOL] Scraping kolscan leaderboard via smart router...`);
 
   try {
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url,
-        formats: ['markdown'],
-        onlyMainContent: false,
-        waitFor: 3000, // Wait for JS rendering
-      }),
+    const result = await smartScrape({
+      url,
+      functionName: 'pumpfun-kol-registry',
+      formats: ['markdown'],
+      onlyMainContent: false,
+      waitFor: 3000,
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('[KOL] Firecrawl error:', data);
+    if (!result.success) {
+      console.error('[KOL] Scrape failed:', result.error);
       return null;
     }
 
-    const markdown = data?.data?.markdown || data?.markdown;
+    const markdown = result.markdown || '';
     if (!markdown) {
-      console.error('[KOL] No markdown in Firecrawl response');
+      console.error('[KOL] No markdown content returned');
       return null;
     }
 
-    console.log(`[KOL] Got ${markdown.length} chars of markdown`);
+    console.log(`[KOL] Got ${markdown.length} chars via ${result.provider}${result.fellBack ? ' (fallback)' : ''}`);
     return markdown;
   } catch (err) {
-    console.error('[KOL] Firecrawl fetch error:', err);
+    console.error('[KOL] Scrape error:', err);
     return null;
   }
 }
