@@ -7,8 +7,65 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { RefreshCw, CheckCircle, XCircle, ArrowRightLeft, Zap, Clock, Server, Shield, Activity, TrendingUp } from "lucide-react";
+import { RefreshCw, CheckCircle, XCircle, ArrowRightLeft, Zap, Clock, Server, Shield, Activity, TrendingUp, List } from "lucide-react";
 import { format, subHours, subDays } from "date-fns";
+
+// ─── Static Function Registry ───
+const SCRAPER_FUNCTION_REGISTRY: Array<{
+  name: string;
+  provider: "smart-scrape" | "browserless-direct" | "firecrawl-override";
+  description: string;
+  providerOverride?: string;
+  cronSchedule?: string;
+}> = [
+  { name: "dex-top-200", provider: "firecrawl-override", description: "DexScreener top 200 trending tokens", providerOverride: "firecrawl", cronSchedule: "*/30 * * * *" },
+  { name: "firecrawl-scrape", provider: "smart-scrape", description: "General-purpose scrape endpoint (admin)" },
+  { name: "pumpfun-comment-scanner", provider: "smart-scrape", description: "Pump.fun coin pages — comment bot detection" },
+  { name: "pumpfun-kol-registry", provider: "smart-scrape", description: "Pump.fun profiles — KOL detection" },
+  { name: "social-larp-detector", provider: "smart-scrape", description: "Token websites — larp/scam detection" },
+  { name: "social-predictor-ai", provider: "smart-scrape", description: "URL content for AI social prediction" },
+  { name: "sync-knowledge-base", provider: "smart-scrape", description: "Knowledge base URL scraping" },
+  { name: "agentic-browser", provider: "browserless-direct", description: "Browser automation (direct Browserless API)" },
+  { name: "bulk-community-enricher", provider: "browserless-direct", description: "X community about-page scraping" },
+  { name: "test-browserless", provider: "browserless-direct", description: "Browserless connectivity test" },
+];
+
+function FunctionRegistryCard() {
+  const providerBadge = (p: string) => {
+    switch (p) {
+      case "smart-scrape": return <Badge variant="secondary" className="text-[10px]">🔀 Smart Scrape</Badge>;
+      case "browserless-direct": return <Badge variant="outline" className="text-[10px]">🖥️ Browserless Direct</Badge>;
+      case "firecrawl-override": return <Badge className="text-[10px] bg-orange-600">🔥 Firecrawl Override</Badge>;
+      default: return <Badge>{p}</Badge>;
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2"><List className="h-4 w-4" /> Function Registry — Scraper Consumers</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="max-h-80 overflow-y-auto space-y-1">
+          <div className="grid grid-cols-4 gap-2 text-[10px] font-medium text-muted-foreground p-1 sticky top-0 bg-card">
+            <span>Function</span><span>Routing</span><span>Description</span><span>Schedule</span>
+          </div>
+          {SCRAPER_FUNCTION_REGISTRY.map((fn) => (
+            <div key={fn.name} className="grid grid-cols-4 gap-2 text-xs p-1.5 rounded border items-center">
+              <span className="font-mono truncate" title={fn.name}>{fn.name}</span>
+              <span>{providerBadge(fn.provider)}</span>
+              <span className="text-muted-foreground truncate" title={fn.description}>{fn.description}</span>
+              <span className="text-muted-foreground font-mono">{fn.cronSchedule || "on-demand"}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">
+          <strong>Smart Scrape</strong> = follows global provider toggles above · <strong>Browserless Direct</strong> = bypasses router · <strong>Firecrawl Override</strong> = hardcoded preferredProvider
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 // ─── Provider Toggle Card ───
 function ProviderToggleCard() {
