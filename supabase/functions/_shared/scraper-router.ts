@@ -286,10 +286,12 @@ export async function smartScrape(req: ScrapeRequest): Promise<ScrapeResponse> {
     { name: 'firecrawl', fn: scrapeFirecrawl, enabled: config.firecrawl_enabled },
   ];
 
-  // Order by config
+  // Order by config, but allow per-request override
+  const primaryName = req.preferredProvider || config.provider_primary;
+  const fallbackName = primaryName === 'browserless' ? 'firecrawl' : 'browserless';
   const ordered = [
-    providers.find(p => p.name === config.provider_primary),
-    providers.find(p => p.name === config.provider_fallback),
+    providers.find(p => p.name === primaryName),
+    providers.find(p => p.name === fallbackName),
   ].filter(Boolean) as typeof providers;
 
   let result: ScrapeResponse | null = null;
