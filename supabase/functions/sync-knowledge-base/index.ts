@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from "../_shared/run-logger.ts";
+import { smartScrape } from "../_shared/scraper-router.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,13 +31,8 @@ Deno.serve(withRunLog('sync-knowledge-base', async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
-    if (!firecrawlKey) {
-      return new Response(JSON.stringify({ success: false, error: 'Firecrawl not configured' }), { status: 500, headers: corsHeaders });
-    }
-
     const baseUrl = 'https://blackbox.farm';
-    const results: { page: string; status: string; error?: string }[] = [];
+    const results: { page: string; status: string; error?: string; provider?: string }[] = [];
     let synced = 0;
     let failed = 0;
 
@@ -45,44 +41,31 @@ Deno.serve(withRunLog('sync-knowledge-base', async (req) => {
         const url = `${baseUrl}${page.path}`;
         console.log(`[sync-kb] Scraping ${url}...`);
 
-        const scrapeRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${firecrawlKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url,
-            formats: ['markdown'],
-            onlyMainContent: true,
-            waitFor: 5000,
-          }),
+        const scrapeResult = await smartScrape({
+          url,
+          functionName: 'sync-knowledge-base',
+          formats: ['markdown'],
+          onlyMainContent: true,
+          waitFor: 5000,
         });
 
-        if (!scrapeRes.ok) {
-          const errText = await scrapeRes.text();
-          console.error(`[sync-kb] Scrape failed for ${url}: ${scrapeRes.status} ${errText}`);
-          results.push({ page: page.path, status: 'error', error: `HTTP ${scrapeRes.status}` });
+        if (!scrapeResult.success) {
+          console.error(`[sync-kb] Scrape failed for ${url}: ${scrapeResult.error}`);
+          results.push({ page: page.path, status: 'error', error: scrapeResult.error });
           failed++;
           continue;
         }
 
-        const scrapeData = await scrapeRes.json();
-        const markdown = scrapeData.data?.markdown || scrapeData.markdown || '';
-
+        const markdown = scrapeResult.markdown || '';
         if (!markdown || markdown.length < 50) {
           results.push({ page: page.path, status: 'skipped', error: 'Content too short or empty' });
           failed++;
           continue;
         }
 
-        // Truncate to ~4000 chars to keep knowledge bins manageable
-        const truncated = markdown.length > 4000 ? markdown.slice(0, 4000) + '\\n\\n[Content truncated — see full page at ' + url + ']' : markdown;
+        const truncated = markdown.length > 4000 ? markdown.slice(0, 4000) + '\n\n[Content truncated — see full page at ' + url + ']' : markdown;
+        const content = `Source: ${url}\n\n${truncated}`;
 
-        // Add internal link reference
-        const content = `Source: ${url}\\n\\n${truncated}`;
-
-        // Upsert: match by title to avoid duplicates
         const { error: upsertErr } = await supabase
           .from('bot_knowledge_bins')
           .upsert({
@@ -90,7 +73,7 @@ Deno.serve(withRunLog('sync-knowledge-base', async (req) => {
             title: `[Website] ${page.title}`,
             content,
             keywords: [...page.keywords, 'website', 'blackbox.farm'],
-            priority: 50, // Medium priority — manual entries can override
+            priority: 50,
             is_active: true,
           }, { 
             onConflict: 'title',
@@ -98,7 +81,6 @@ Deno.serve(withRunLog('sync-knowledge-base', async (req) => {
           });
 
         if (upsertErr) {
-          // Title might not have unique constraint, try insert/update manually
           const { data: existing } = await supabase
             .from('bot_knowledge_bins')
             .select('id')
@@ -122,7 +104,6 @@ Deno.serve(withRunLog('sync-knowledge-base', async (req) => {
                 is_active: true,
               });
             if (insertErr) {
-              console.error(`[sync-kb] Insert failed for ${page.path}:`, insertErr);
               results.push({ page: page.path, status: 'error', error: insertErr.message });
               failed++;
               continue;
@@ -130,11 +111,10 @@ Deno.serve(withRunLog('sync-knowledge-base', async (req) => {
           }
         }
 
-        results.push({ page: page.path, status: 'synced' });
+        results.push({ page: page.path, status: 'synced', provider: scrapeResult.provider });
         synced++;
-        console.log(`[sync-kb] ✓ Synced ${page.path} (${markdown.length} chars)`);
+        console.log(`[sync-kb] ✓ Synced ${page.path} (${markdown.length} chars via ${scrapeResult.provider})`);
 
-        // Be polite — small delay between scrapes
         await new Promise(r => setTimeout(r, 1500));
       } catch (pageErr) {
         console.error(`[sync-kb] Error on ${page.path}:`, pageErr);

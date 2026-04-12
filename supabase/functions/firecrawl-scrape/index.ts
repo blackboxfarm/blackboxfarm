@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
-import { createApiLogger } from '../_shared/api-logger.ts';
+import { smartScrape } from '../_shared/scraper-router.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -20,16 +21,6 @@ Deno.serve(withRunLog('firecrawl-scrape', async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
-    if (!apiKey) {
-      console.error('FIRECRAWL_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Firecrawl connector not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Format URL
     let formattedUrl = url.trim();
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
       formattedUrl = `https://${formattedUrl}`;
@@ -37,43 +28,37 @@ Deno.serve(withRunLog('firecrawl-scrape', async (req) => {
 
     console.log('Scraping URL:', formattedUrl);
 
-    const apiLogger = createApiLogger({
-      serviceName: 'firecrawl' as any,
-      endpoint: '/v1/scrape',
-      method: 'POST',
+    const result = await smartScrape({
+      url: formattedUrl,
       functionName: 'firecrawl-scrape',
+      formats: options?.formats || ['markdown', 'links'],
+      onlyMainContent: options?.onlyMainContent ?? true,
+      waitFor: options?.waitFor,
     });
 
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: formattedUrl,
-        formats: options?.formats || ['markdown', 'links'],
-        onlyMainContent: options?.onlyMainContent ?? true,
-        waitFor: options?.waitFor,
-        location: options?.location,
-      }),
-    });
-
-    await apiLogger.complete(response.status);
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Firecrawl API error:', data);
+    if (!result.success) {
       return new Response(
-        JSON.stringify({ success: false, error: data.error || `Request failed with status ${response.status}` }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: result.error }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Scrape successful');
+    console.log(`Scrape successful via ${result.provider}${result.fellBack ? ' (fallback)' : ''}`);
+
+    // Return in Firecrawl-compatible format for existing consumers
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify({
+        success: true,
+        data: {
+          markdown: result.markdown,
+          html: result.html,
+          links: result.links || [],
+          metadata: result.metadata || {},
+        },
+        provider: result.provider,
+        fell_back: result.fellBack,
+        response_time_ms: result.responseTimeMs,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

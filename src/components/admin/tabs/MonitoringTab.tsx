@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, Activity, Shield, DollarSign, GitBranch, Server, AlertTriangle, CheckCircle, XCircle, Clock, Mail, TrendingUp } from "lucide-react";
+import { ScraperAuditPanel } from "@/components/admin/ScraperAuditPanel";
 import { format, subDays } from "date-fns";
 
 // ─── Service Status Panel ───
@@ -486,6 +487,7 @@ export default function MonitoringTab() {
       <Tabs value={subTab} onValueChange={setSubTab}>
         <TabsList>
           <TabsTrigger value="overview">📊 Overview</TabsTrigger>
+          <TabsTrigger value="scraper">🕸️ Scraper Audit</TabsTrigger>
           <TabsTrigger value="errors">⚠️ Errors & DLQ</TabsTrigger>
           <TabsTrigger value="costs">💰 Costs</TabsTrigger>
           <TabsTrigger value="pipeline">🔄 Pipeline</TabsTrigger>
@@ -494,6 +496,10 @@ export default function MonitoringTab() {
         <TabsContent value="overview" className="space-y-4">
           <ServiceStatusPanel />
           <FunctionHealthPanel />
+        </TabsContent>
+
+        <TabsContent value="scraper" className="space-y-4">
+          <ScraperAuditPanel />
         </TabsContent>
 
         <TabsContent value="errors" className="space-y-4">

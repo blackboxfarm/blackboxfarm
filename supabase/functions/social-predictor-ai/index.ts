@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { smartScrape, smartSearch } from '../_shared/scraper-router.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -10,13 +11,6 @@ const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 // Fetch content from URL using Firecrawl
 async function fetchUrlContent(url: string): Promise<{ content: string; title: string; links: string[] }> {
-  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-  
-  if (!FIRECRAWL_API_KEY) {
-    console.log('Firecrawl not configured, will analyze URL without scraping');
-    return { content: '', title: '', links: [] };
-  }
-
   try {
     let formattedUrl = url.trim();
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
@@ -25,34 +19,24 @@ async function fetchUrlContent(url: string): Promise<{ content: string; title: s
 
     console.log('Fetching URL content:', formattedUrl);
 
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: formattedUrl,
-        formats: ['markdown', 'links'],
-        onlyMainContent: true,
-      }),
+    const result = await smartScrape({
+      url: formattedUrl,
+      functionName: 'social-predictor-ai',
+      formats: ['markdown', 'links'],
+      onlyMainContent: true,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Firecrawl error:', response.status, errorText);
+    if (!result.success) {
+      console.error('Scrape error:', result.error);
       return { content: '', title: '', links: [] };
     }
 
-    const data = await response.json();
-    const scraped = data.data || data;
-    
-    console.log('Successfully scraped content, length:', scraped.markdown?.length || 0);
+    console.log(`Successfully scraped content via ${result.provider}, length:`, result.markdown?.length || 0);
     
     return {
-      content: scraped.markdown || '',
-      title: scraped.metadata?.title || '',
-      links: scraped.links || [],
+      content: result.markdown || '',
+      title: result.metadata?.title || '',
+      links: result.links || [],
     };
   } catch (error) {
     console.error('Error fetching URL content:', error);
@@ -62,39 +46,20 @@ async function fetchUrlContent(url: string): Promise<{ content: string; title: s
 
 // Perform web search using Firecrawl
 async function searchTopic(query: string): Promise<{ results: Array<{ title: string; url: string; content: string }> }> {
-  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-  
-  if (!FIRECRAWL_API_KEY) {
-    console.log('Firecrawl not configured, will analyze topic without search');
-    return { results: [] };
-  }
-
   try {
     console.log('Searching for:', query);
 
-    const response = await fetch('https://api.firecrawl.dev/v1/search', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: query,
-        limit: 5,
-        scrapeOptions: {
-          formats: ['markdown'],
-        },
-      }),
+    const searchResult = await smartSearch(query, 'social-predictor-ai', {
+      limit: 5,
+      scrapeOptions: { formats: ['markdown'] },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Firecrawl search error:', response.status, errorText);
+    if (!searchResult.success) {
+      console.error('Search error:', searchResult.error);
       return { results: [] };
     }
 
-    const data = await response.json();
-    const results = (data.data || []).map((item: any) => ({
+    const results = (searchResult.data || []).map((item: any) => ({
       title: item.title || item.metadata?.title || 'Unknown',
       url: item.url || item.metadata?.sourceURL || '',
       content: item.markdown || '',
