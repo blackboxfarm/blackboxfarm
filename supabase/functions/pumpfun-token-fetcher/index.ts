@@ -90,7 +90,7 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
           image: coin.image_uri || coin.metadata?.image,
         },
         pools: coin.usd_market_cap ? [{
-          liquidity: { usd: coin.usd_market_cap * 0.1 }, // Estimate
+          liquidity: { usd: null }, // Not available from pump.fun — don't fabricate
           price: { usd: coin.usd_market_cap / (coin.total_supply / 1e6) },
         }] : [],
           events: { createdAt: coin.created_timestamp },
