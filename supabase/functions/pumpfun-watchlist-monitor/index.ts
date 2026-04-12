@@ -1000,7 +1000,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         // === MAYHEM CHECK ===
         let isMayhemToken = false;
         if (!token.mayhem_checked) {
-          isMayhemToken = await checkMayhemMode(token.token_mint);
+          isMayhemToken = await checkMayhemMode(token.token_mint, 'watchlist-monitor');
           updates.mayhem_checked = true;
           if (isMayhemToken) {
             updates.status = 'rejected';
