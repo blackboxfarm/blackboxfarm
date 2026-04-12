@@ -478,6 +478,183 @@ function DLQPanel() {
   );
 }
 
+// ─── Firecrawl Usage Panel ───
+function FirecrawlUsagePanel() {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['firecrawl-usage'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('scraper_audit_log')
+        .select('function_name, provider_used, success, response_time_ms, http_status, error_message, fell_back, fallback_provider, created_at')
+        .or('provider_used.eq.firecrawl,fallback_provider.eq.firecrawl')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 60_000,
+  });
+
+  const rows = data || [];
+  const totalCalls = rows.filter(r => r.provider_used === 'firecrawl').length;
+  const totalSuccess = rows.filter(r => r.provider_used === 'firecrawl' && r.success).length;
+  const totalFallbacks = rows.filter(r => r.fell_back && r.fallback_provider === 'firecrawl').length;
+  const avgMs = totalCalls > 0 ? Math.round(rows.filter(r => r.provider_used === 'firecrawl').reduce((s, r) => s + (r.response_time_ms || 0), 0) / totalCalls) : 0;
+
+  // Per-function breakdown
+  const byFn = rows.filter(r => r.provider_used === 'firecrawl').reduce((acc: Record<string, { total: number; ok: number; fail: number; avgMs: number; totalMs: number; last: string; errors: string[] }>, r) => {
+    const fn = r.function_name;
+    if (!acc[fn]) acc[fn] = { total: 0, ok: 0, fail: 0, avgMs: 0, totalMs: 0, last: '', errors: [] };
+    acc[fn].total++;
+    if (r.success) acc[fn].ok++;
+    else {
+      acc[fn].fail++;
+      if (r.error_message && acc[fn].errors.length < 3) acc[fn].errors.push(r.error_message);
+    }
+    acc[fn].totalMs += r.response_time_ms || 0;
+    acc[fn].avgMs = Math.round(acc[fn].totalMs / acc[fn].total);
+    if (!acc[fn].last || r.created_at > acc[fn].last) acc[fn].last = r.created_at;
+    return acc;
+  }, {});
+
+  // Estimate credits — 1 credit per call
+  const estimatedCreditsUsed = totalCalls;
+
+  // Daily breakdown (last 7 days)
+  const dailyCounts = rows.filter(r => r.provider_used === 'firecrawl').reduce((acc: Record<string, number>, r) => {
+    const day = r.created_at?.split('T')[0] || 'unknown';
+    acc[day] = (acc[day] || 0) + 1;
+    return acc;
+  }, {});
+
+  // All functions that CAN use Firecrawl (registry)
+  const FC_REGISTRY = [
+    { name: 'dex-top-200', role: '🔥 Primary', schedule: 'Cron 30min', note: 'CF-protected, hardcoded FC' },
+    { name: 'social-predictor-ai', role: '🔀 Fallback + Search', schedule: 'On-demand', note: 'smartSearch is FC-only' },
+    { name: 'firecrawl-scrape', role: '🔀 Smart Scrape', schedule: 'On-demand', note: 'General admin scraper' },
+    { name: 'pumpfun-comment-scanner', role: '🔀 Fallback', schedule: 'Per scan', note: 'Falls back if Browserless fails' },
+    { name: 'pumpfun-kol-registry', role: '🔀 Fallback', schedule: 'Per scan', note: 'Falls back if Browserless fails' },
+    { name: 'social-larp-detector', role: '🔀 Fallback', schedule: 'On-demand', note: 'Website verification scraper' },
+    { name: 'sync-knowledge-base', role: '🔀 Fallback', schedule: 'On-demand', note: 'KB page scraper' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold">{totalCalls}</p>
+            <p className="text-xs text-muted-foreground">Total FC Calls</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-green-400">{totalCalls > 0 ? ((totalSuccess / totalCalls) * 100).toFixed(1) : 0}%</p>
+            <p className="text-xs text-muted-foreground">Success Rate</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold">{(avgMs / 1000).toFixed(1)}s</p>
+            <p className="text-xs text-muted-foreground">Avg Response</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-orange-400">{estimatedCreditsUsed}</p>
+            <p className="text-xs text-muted-foreground">Credits Used*</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-blue-400">{totalFallbacks}</p>
+            <p className="text-xs text-muted-foreground">Fallback Hits</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Per-function usage */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">🔥 Per-Function Firecrawl Usage</CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => refetch()}><RefreshCw className="h-4 w-4" /></Button>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? <p className="text-sm text-muted-foreground">Loading...</p> : Object.keys(byFn).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No Firecrawl calls recorded yet in audit log.</p>
+          ) : (
+            <div className="space-y-1">
+              <div className="grid grid-cols-6 gap-2 text-xs font-medium text-muted-foreground p-1">
+                <span>Function</span><span>Calls</span><span>✓ OK</span><span>✗ Fail</span><span>Avg Time</span><span>Last Call</span>
+              </div>
+              {Object.entries(byFn).sort((a, b) => b[1].total - a[1].total).map(([fn, s]) => (
+                <div key={fn} className={`grid grid-cols-6 gap-2 text-xs p-1.5 rounded ${s.fail > 0 ? 'bg-red-500/5 border border-red-500/20' : 'border'}`}>
+                  <span className="font-mono truncate">{fn}</span>
+                  <span>{s.total}</span>
+                  <span className="text-green-400">{s.ok}</span>
+                  <span className={s.fail > 0 ? 'text-red-400 font-medium' : ''}>{s.fail}</span>
+                  <span>{(s.avgMs / 1000).toFixed(1)}s</span>
+                  <span className="text-muted-foreground">{s.last ? format(new Date(s.last), 'MMM d HH:mm') : '—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Daily breakdown */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock className="h-4 w-4" /> Daily Credit Burn</CardTitle></CardHeader>
+        <CardContent>
+          {Object.keys(dailyCounts).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No daily data yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {Object.entries(dailyCounts).sort((a, b) => b[0].localeCompare(a[0])).map(([day, count]) => {
+                const maxCount = Math.max(...Object.values(dailyCounts));
+                const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                return (
+                  <div key={day} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span>{day}</span>
+                      <span className="font-mono">{count} credits</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-orange-500/50" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-[10px] text-muted-foreground mt-3">* 1 credit ≈ 1 scrape call. Search calls also consume credits. Auto-extend: +1,000 credits / $12 CAD.</p>
+        </CardContent>
+      </Card>
+
+      {/* Function Registry */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base">📋 Firecrawl Function Registry</CardTitle></CardHeader>
+        <CardContent>
+          <div className="space-y-1">
+            <div className="grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground p-1">
+              <span>Function</span><span>FC Role</span><span>Schedule</span><span>Notes</span>
+            </div>
+            {FC_REGISTRY.map(fn => (
+              <div key={fn.name} className="grid grid-cols-4 gap-2 text-xs p-1.5 rounded border">
+                <span className="font-mono">{fn.name}</span>
+                <span>{fn.role}</span>
+                <span className="text-muted-foreground">{fn.schedule}</span>
+                <span className="text-muted-foreground">{fn.note}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main Monitoring Tab ───
 export default function MonitoringTab() {
   const [subTab, setSubTab] = useState("overview");
@@ -488,6 +665,7 @@ export default function MonitoringTab() {
         <TabsList>
           <TabsTrigger value="overview">📊 Overview</TabsTrigger>
           <TabsTrigger value="scraper">🕸️ Scraper Audit</TabsTrigger>
+          <TabsTrigger value="firecrawl">🔥 Firecrawl</TabsTrigger>
           <TabsTrigger value="errors">⚠️ Errors & DLQ</TabsTrigger>
           <TabsTrigger value="costs">💰 Costs</TabsTrigger>
           <TabsTrigger value="pipeline">🔄 Pipeline</TabsTrigger>
@@ -500,6 +678,10 @@ export default function MonitoringTab() {
 
         <TabsContent value="scraper" className="space-y-4">
           <ScraperAuditPanel />
+        </TabsContent>
+
+        <TabsContent value="firecrawl" className="space-y-4">
+          <FirecrawlUsagePanel />
         </TabsContent>
 
         <TabsContent value="errors" className="space-y-4">
