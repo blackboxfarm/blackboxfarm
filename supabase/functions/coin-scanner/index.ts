@@ -55,7 +55,8 @@ serve(withRunLog('coin-scanner', async (req) => {
     }
 
     // Convert filtered low-price tokens to qualified tokens — REAL DATA ONLY
-    const qualifiedTokens = lowPriceTokens.slice(0, limit)
+    // Score tokens using available DexScreener metrics
+    const qualifiedTokens = lowPriceTokens
       .map((token) => {
         const marketCap = parseFloat(token.marketCap) || null;
         const volume24h = parseFloat(token.volume?.h24) || null;
@@ -65,6 +66,9 @@ serve(withRunLog('coin-scanner', async (req) => {
 
         // Skip tokens with no real price data
         if (!priceUsd || priceUsd <= 0) return null;
+
+        // Compute a real score from available DexScreener data
+        const totalScore = computeRealScore({ marketCap, volume24h, liquidityUsd, priceChange24h });
 
         return {
           mint: token.pairAddress || token.baseToken?.address || null,
@@ -77,16 +81,18 @@ serve(withRunLog('coin-scanner', async (req) => {
           holderCount: null, // DexScreener doesn't provide this
           volatility24h: priceChange24h !== null ? Math.abs(priceChange24h) : null,
           ageHours: token.age === 'unknown' ? null : (token.age?.includes('d') ? parseInt(token.age) * 24 : parseInt(token.age) || null),
-          spread: null, // Not available from API
-          liquidityLocked: null, // Not available from API
-          swingCount: null, // Not available from API
-          volumeProfile: null, // Not available from API
-          correlationScore: null, // Not available from API
-          newsScore: null, // Not available from API
-          totalScore: null, // Cannot score without real data
+          spread: null,
+          liquidityLocked: null,
+          swingCount: null,
+          volumeProfile: null,
+          correlationScore: null,
+          newsScore: null,
+          totalScore,
         }
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      .sort((a: any, b: any) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
+      .slice(0, limit);
 
     console.log(`✅ Returning ${qualifiedTokens.length} qualified tokens from scraped DexScreener data`)
 
