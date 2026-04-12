@@ -128,17 +128,17 @@ export default function Home() {
             AI-Powered Token Intelligence · Telegram Bot · Bubble Map
           </p>
           
-          <h2 className="text-2xl md:text-4xl font-bold max-w-3xl mx-auto mb-3 tracking-tight">
+          <h2 className="text-xl md:text-3xl font-bold max-w-3xl mx-auto mb-3 tracking-tight text-white">
             See Who's About to Dump — Before It Happens
           </h2>
-          <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
+          <p className="text-base md:text-lg max-w-2xl mx-auto mb-6 text-gold font-semibold" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)' }}>
             Link wallets, expose insider clusters, and identify bad devs before you ape.
           </p>
           <div className="mb-10">
             <Button 
               size="lg" 
               onClick={() => navigate("/holders")}
-              className="gap-2 shadow-glow text-lg px-8 py-6"
+              className="gap-2 text-lg px-8 py-6 bg-gold text-gold-foreground hover:bg-gold/90 font-bold shadow-glow"
             >
               {[
                 "Run a Token Check Now",
