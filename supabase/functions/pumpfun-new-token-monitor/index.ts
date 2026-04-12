@@ -3,6 +3,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { checkMayhemMode } from '../_shared/mayhem-check.ts';
+import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -141,19 +143,13 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
   }
 }
 
-// Get current SOL price
+// Get current SOL price — uses shared utility with staleness guard
 async function getSolPrice(supabase: any): Promise<number> {
   try {
-    const { data } = await supabase
-      .from('sol_price_cache')
-      .select('price_usd')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
-    
-    return data?.price_usd || 200;
+    return await getSolPriceFromCache(supabase);
   } catch {
-    return 200;
+    console.error('⚠️ SOL price unavailable from all sources');
+    return 0;
   }
 }
 
@@ -200,23 +196,8 @@ async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; de
   }
 }
 
-// Check for Mayhem Mode (hard reject)
-async function checkMayhemMode(tokenMint: string): Promise<boolean> {
-  try {
-    const data = await fetchPumpFunCoin(tokenMint, 'pumpfun-new-token-monitor');
-    if (!data) return false;
-    
-    const totalSupply = data.total_supply || 0;
-    const program = data.program || null;
-    
-    const MAYHEM_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
-    const MAYHEM_SUPPLY = 2000000000000000;
-    
-    return program === MAYHEM_PROGRAM_ID || totalSupply >= MAYHEM_SUPPLY;
-  } catch {
-    return false;
-  }
-}
+// Check for Mayhem Mode — uses shared utility
+// (imported from _shared/mayhem-check.ts)
 
 // ============================================================================
 // WATCHLIST POLLING - THE NEW CONTINUOUS MONITORING APPROACH
@@ -405,7 +386,7 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
         }
         
         // Quick Mayhem Mode check
-        const isMayhem = await checkMayhemMode(mint);
+        const isMayhem = await checkMayhemMode(mint, 'pumpfun-new-token-monitor');
         if (isMayhem) {
           console.log(`☠️ Skipping Mayhem Mode token: ${tokenData.token?.symbol}`);
           continue;

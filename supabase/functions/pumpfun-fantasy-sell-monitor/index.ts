@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { broadcastToBlackBox } from '../_shared/telegram-broadcast.ts';
+import { getSolPriceQuick } from '../_shared/sol-price-fetcher.ts';
 enableHeliusTracking('pumpfun-fantasy-sell-monitor');
 
 /**
@@ -84,14 +85,13 @@ async function getConfig(supabase: any): Promise<MonitorConfig> {
   };
 }
 
-// Get SOL price
+// Get SOL price — uses shared utility (CoinGecko -> Jupiter -> DexScreener)
 async function getSolPrice(): Promise<number> {
   try {
-    const response = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
-    const data = await response.json();
-    return data?.data?.['So11111111111111111111111111111111111111112']?.price || 200;
+    return await getSolPriceQuick();
   } catch {
-    return 200;
+    console.error('⚠️ SOL price unavailable from all sources');
+    return 0;
   }
 }
 

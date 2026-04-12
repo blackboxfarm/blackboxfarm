@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withRunLog } from '../_shared/run-logger.ts';
-import { fetchPumpFunCoin, fetchPumpFunNewCoins, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { fetchPumpFunNewCoins, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { isMayhemFromData } from '../_shared/mayhem-check.ts';
+import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 
 /**
  * PUMPFUN TOKEN FETCHER
@@ -88,7 +90,7 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
           image: coin.image_uri || coin.metadata?.image,
         },
         pools: coin.usd_market_cap ? [{
-          liquidity: { usd: coin.usd_market_cap * 0.1 }, // Estimate
+          liquidity: { usd: null }, // Not available from pump.fun — don't fabricate
           price: { usd: coin.usd_market_cap / (coin.total_supply / 1e6) },
         }] : [],
           events: { createdAt: coin.created_timestamp },
@@ -135,39 +137,10 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
   }
 }
 
-// Get current SOL price
-async function getSolPrice(supabase: any): Promise<number> {
-  try {
-    const { data } = await supabase
-      .from('sol_price_cache')
-      .select('price_usd')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
-    
-    return data?.price_usd || 200;
-  } catch {
-    return 200;
-  }
-}
+// getSolPrice — delegated to shared utility with staleness guard
+// (imported from _shared/sol-price-cache.ts)
 
-// Check for Mayhem Mode (hard reject) - ONE TIME ONLY
-async function checkMayhemMode(tokenMint: string): Promise<boolean> {
-  try {
-    const data = await fetchPumpFunCoin(tokenMint, 'pumpfun-token-fetcher');
-    if (!data) return false;
-    
-    const totalSupply = data.total_supply || 0;
-    const program = data.program || null;
-    
-    const MAYHEM_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
-    const MAYHEM_SUPPLY = 2000000000000000;
-    
-    return program === MAYHEM_PROGRAM_ID || totalSupply >= MAYHEM_SUPPLY;
-  } catch {
-    return false;
-  }
-}
+// Mayhem Mode check — now uses pre-fetched data via shared utility (no extra API call)
 
 // Bundle analysis - ONE TIME ONLY
 async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; details: any }> {
@@ -270,7 +243,13 @@ async function fetchAndTriageNewTokens(supabase: any): Promise<FetcherStats> {
   const existingMints = new Set((existingTokens || []).map((t: any) => t.token_mint));
   stats.alreadyKnown = existingMints.size;
 
-  const solPrice = await getSolPrice(supabase);
+  let solPrice: number;
+  try {
+    solPrice = await getSolPriceFromCache(supabase);
+  } catch {
+    console.error('⚠️ SOL price unavailable, using 0 — USD calculations will be skipped');
+    solPrice = 0;
+  }
   const now = new Date();
 
   // Process only NEW tokens
@@ -279,16 +258,19 @@ async function fetchAndTriageNewTokens(supabase: any): Promise<FetcherStats> {
     if (!mint || existingMints.has(mint)) continue;
 
     try {
-      // 1. Mayhem Mode check (one-time, hard reject)
-      const isMayhem = await checkMayhemMode(mint);
-      if (isMayhem) {
-        console.log(`☠️ MAYHEM REJECTED: ${tokenData.token?.symbol}`);
-        stats.mayhemRejected++;
-        continue; // Never store, never see again
+      // 1. Mayhem Mode check using ALREADY-FETCHED data (no extra API call)
+      if ((tokenData as any).bondingCurve) {
+        const coinData = {
+          total_supply: (tokenData as any).bondingCurve?.realTokenReserves || 0,
+          program: null, // Not available from list endpoint; check supply threshold only
+        };
+        // Also check if the token was fetched from pump.fun with program data
+        if (isMayhemFromData(coinData)) {
+          console.log(`☠️ MAYHEM REJECTED: ${tokenData.token?.symbol}`);
+          stats.mayhemRejected++;
+          continue;
+        }
       }
-
-      // Small delay for rate limiting
-      await new Promise(r => setTimeout(r, 50));
 
       // 2. Bundle score check (one-time)
       const risk = await analyzeTokenRisk(mint);

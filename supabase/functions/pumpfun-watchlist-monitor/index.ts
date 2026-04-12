@@ -5,6 +5,8 @@ import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { checkMayhemMode } from '../_shared/mayhem-check.ts';
+import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**
@@ -143,30 +145,8 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
   throw lastError || new Error('Max retries exceeded');
 }
 
-// === MAYHEM MODE CHECK ===
-async function checkMayhemMode(tokenMint: string): Promise<boolean> {
-  try {
-    const data = await fetchPumpFunCoin(tokenMint, 'watchlist-monitor');
-    if (!data) return false;
-    
-    const totalSupply = data.total_supply || 0;
-    const program = data.program || null;
-    
-    const MAYHEM_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
-    const MAYHEM_SUPPLY = 2000000000000000;
-    
-    const isMayhem = program === MAYHEM_PROGRAM_ID || totalSupply >= MAYHEM_SUPPLY;
-    
-    if (isMayhem) {
-      console.log(`   🔥 MAYHEM DETECTED: program=${program?.slice(0,8) || 'unknown'}, supply=${totalSupply}`);
-    }
-    
-    return isMayhem;
-  } catch (error) {
-    console.error(`Error checking mayhem for ${tokenMint}:`, error);
-    return false;
-  }
-}
+// === MAYHEM MODE CHECK — uses shared utility ===
+// (imported from _shared/mayhem-check.ts)
 
 // Unified Helius holder + dust call — ONE getTokenAccounts request for both
 interface HeliusHolderResult {
@@ -303,7 +283,7 @@ async function fetchDexScreenerMetrics(mint: string): Promise<TokenMetrics | nul
     const marketCap = parseFloat(pair.marketCap) || (pair.fdv ? parseFloat(pair.fdv) : null);
     const txns24h = pair.txns?.h24 || {};
     const estimatedHolders = Math.min((txns24h.buys || 0) + (txns24h.sells || 0), 1000);
-    const solPrice = priceUsd > 0 && pair.priceNative ? (priceUsd / parseFloat(pair.priceNative)) : 200;
+    const solPrice = priceUsd > 0 && pair.priceNative ? (priceUsd / parseFloat(pair.priceNative)) : 0;
     const volumeSol = volume24h / solPrice;
 
     return {
@@ -353,7 +333,7 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
         holders: data.holder_count || 0,
         volume24hSol: (data.volume_24h || 0) / 1e9,
         priceUsd,
-        liquidityUsd: virtualSolReserves > 0 ? (virtualSolReserves / 1e9) * 200 : null,
+        liquidityUsd: null, // Cannot derive USD from SOL reserves without live price — use null
         marketCapUsd: data.usd_market_cap || null,
         bondingCurvePct: data.complete ? 0 : bondingCurvePct,
         buys: data.buy_count || 0,
@@ -400,13 +380,13 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   return null;
 }
 
-// Get current SOL price
+// Get current SOL price — uses shared utility with staleness guard
 async function getSolPrice(supabase: any): Promise<number> {
   try {
-    const { data } = await supabase.from('sol_price_cache').select('price_usd').order('updated_at', { ascending: false }).limit(1).single();
-    return data?.price_usd || 200;
+    return await getSolPriceFromCache(supabase);
   } catch {
-    return 200;
+    console.error('⚠️ SOL price unavailable from all sources');
+    return 0;
   }
 }
 
@@ -1020,7 +1000,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         // === MAYHEM CHECK ===
         let isMayhemToken = false;
         if (!token.mayhem_checked) {
-          isMayhemToken = await checkMayhemMode(token.token_mint);
+          isMayhemToken = await checkMayhemMode(token.token_mint, 'watchlist-monitor');
           updates.mayhem_checked = true;
           if (isMayhemToken) {
             updates.status = 'rejected';
