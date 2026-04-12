@@ -118,7 +118,7 @@ function FunctionRegistryCard() {
                 <TableRow key={fn.name}>
                   <TableCell compact className="font-mono font-medium">{fn.name}</TableCell>
                   <TableCell compact>{providerBadge(fn.provider)}</TableCell>
-                  <TableCell compact className="font-mono text-muted-foreground">{fn.cronSchedule || "on-demand"}</TableCell>
+                  <TableCell compact className="font-mono text-muted-foreground">{fn.cronSchedule || "—"} <span className="text-[10px] opacity-70">({fn.humanFreq || "on-demand"})</span></TableCell>
                   <TableCell compact className="text-right font-mono">{stats?.total ?? "—"}</TableCell>
                   <TableCell compact className="text-right font-mono text-green-500">{stats?.success ?? "—"}</TableCell>
                   <TableCell compact className="text-right font-mono text-red-500">{stats?.errors || "—"}</TableCell>
