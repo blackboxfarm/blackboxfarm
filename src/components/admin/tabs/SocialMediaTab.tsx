@@ -46,6 +46,9 @@ export default function SocialMediaTab() {
           <TabsTrigger value="config">🔧 Config</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="manual">
+          <ManualPostBuilder />
+        </TabsContent>
         <TabsContent value="repurpose">
           <ContentRepurposer />
         </TabsContent>
