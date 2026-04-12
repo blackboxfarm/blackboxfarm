@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Send, Image, Link, RefreshCw } from "lucide-react";
 import { ContentRepurposer } from "@/components/admin/social/ContentRepurposer";
+import { ManualPostBuilder } from "@/components/admin/social/ManualPostBuilder";
 import { SocialConfigPanel } from "@/components/admin/social/SocialConfigPanel";
 import { ImageGallery } from "@/components/admin/social/ImageGallery";
 import { GalleryPickerButton } from "@/components/admin/social/GalleryPickerButton";
@@ -33,6 +34,7 @@ export default function SocialMediaTab() {
 
       <Tabs defaultValue="repurpose" className="space-y-4">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="manual">📝 Manual Builder</TabsTrigger>
           <TabsTrigger value="repurpose">🔄 Repurposer</TabsTrigger>
           <TabsTrigger value="gallery">🖼️ Image Gallery</TabsTrigger>
           <TabsTrigger value="threads">🧵 Threads</TabsTrigger>
@@ -44,6 +46,9 @@ export default function SocialMediaTab() {
           <TabsTrigger value="config">🔧 Config</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="manual">
+          <ManualPostBuilder />
+        </TabsContent>
         <TabsContent value="repurpose">
           <ContentRepurposer />
         </TabsContent>

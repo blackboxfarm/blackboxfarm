@@ -11988,31 +11988,64 @@ export type Database = {
       }
       social_posts_log: {
         Row: {
+          alt_text: string | null
+          category: string | null
           content: string | null
           created_at: string | null
+          cta_text: string | null
+          hashtags: string | null
           id: string
+          image_url: string | null
+          link_url: string | null
+          master_template_id: string | null
           metadata: Json | null
           platform: string
           post_id: string | null
+          post_type: string
           status: string | null
+          tags_mentions: string | null
+          title: string | null
+          video_url: string | null
         }
         Insert: {
+          alt_text?: string | null
+          category?: string | null
           content?: string | null
           created_at?: string | null
+          cta_text?: string | null
+          hashtags?: string | null
           id?: string
+          image_url?: string | null
+          link_url?: string | null
+          master_template_id?: string | null
           metadata?: Json | null
           platform: string
           post_id?: string | null
+          post_type?: string
           status?: string | null
+          tags_mentions?: string | null
+          title?: string | null
+          video_url?: string | null
         }
         Update: {
+          alt_text?: string | null
+          category?: string | null
           content?: string | null
           created_at?: string | null
+          cta_text?: string | null
+          hashtags?: string | null
           id?: string
+          image_url?: string | null
+          link_url?: string | null
+          master_template_id?: string | null
           metadata?: Json | null
           platform?: string
           post_id?: string | null
+          post_type?: string
           status?: string | null
+          tags_mentions?: string | null
+          title?: string | null
+          video_url?: string | null
         }
         Relationships: []
       }
