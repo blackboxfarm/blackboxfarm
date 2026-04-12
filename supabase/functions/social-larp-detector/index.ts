@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { smartScrape } from '../_shared/scraper-router.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -66,52 +67,38 @@ async function scrapeWebsiteForTokenMentions(
   tokenSymbol: string,
   tokenMint: string,
 ): Promise<{ mentionsToken: boolean; mentionsCrypto: boolean; content: string }> {
-  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-  if (!FIRECRAWL_API_KEY) {
-    console.warn('[LARP] Firecrawl not configured, skipping deep website check');
-    return { mentionsToken: false, mentionsCrypto: false, content: '' };
-  }
-
   try {
     console.log(`[LARP] Scraping website: ${websiteUrl}`);
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: websiteUrl,
-        formats: ['markdown'],
-        onlyMainContent: false, // Get EVERYTHING — we need to see if token is mentioned anywhere
-        waitFor: 3000,
-      }),
+    
+    const result = await smartScrape({
+      url: websiteUrl,
+      functionName: 'social-larp-detector',
+      formats: ['markdown'],
+      onlyMainContent: false,
+      waitFor: 3000,
     });
 
-    if (!response.ok) {
-      console.warn(`[LARP] Firecrawl scrape failed: ${response.status}`);
+    if (!result.success) {
+      console.warn(`[LARP] Scrape failed: ${result.error}`);
       return { mentionsToken: false, mentionsCrypto: false, content: '' };
     }
 
-    const data = await response.json();
-    const content = (data.data?.markdown || data.markdown || '').toLowerCase();
+    const content = (result.markdown || '').toLowerCase();
     
     if (!content || content.length < 20) {
       return { mentionsToken: false, mentionsCrypto: false, content: '' };
     }
 
-    // Search for token-specific mentions
     const searchTerms = [
       tokenName.toLowerCase(),
       tokenSymbol.toLowerCase(),
       `$${tokenSymbol.toLowerCase()}`,
       tokenMint.toLowerCase(),
-      tokenMint.slice(0, 12).toLowerCase(), // Partial mint match
+      tokenMint.slice(0, 12).toLowerCase(),
     ];
 
     const mentionsToken = searchTerms.some(term => term.length >= 3 && content.includes(term));
 
-    // Search for general crypto/token mentions
     const cryptoTerms = [
       'token', 'solana', 'sol', 'pump.fun', 'pumpfun', 'dex', 'raydium',
       'crypto', 'blockchain', 'mint address', 'contract address', 'airdrop',
@@ -121,12 +108,12 @@ async function scrapeWebsiteForTokenMentions(
 
     const mentionsCrypto = cryptoTerms.some(term => content.includes(term));
 
-    console.log(`[LARP] Website scrape: mentionsToken=${mentionsToken}, mentionsCrypto=${mentionsCrypto}, contentLen=${content.length}`);
+    console.log(`[LARP] Website scrape via ${result.provider}: mentionsToken=${mentionsToken}, mentionsCrypto=${mentionsCrypto}, contentLen=${content.length}`);
 
     return {
       mentionsToken,
       mentionsCrypto,
-      content: content.slice(0, 2000), // Store first 2000 chars for evidence
+      content: content.slice(0, 2000),
     };
   } catch (error) {
     console.error(`[LARP] Website scrape error:`, error);
