@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  ImageIcon, Upload, Trash2, Edit2, Search, Tag, Sparkles, X, Check, Plus, Settings
+  ImageIcon, Upload, Trash2, Edit2, Search, Tag, Sparkles, X, Check, Plus, Settings, Loader2, Wand2
 } from "lucide-react";
 import { StyleCategoryManager } from "./StyleCategoryManager";
 
@@ -41,13 +41,16 @@ export interface StyleCategory {
 interface ImageGalleryProps {
   mode?: 'manage' | 'pick';
   onSelect?: (imageUrl: string) => void;
+  articleContent?: string;
+  articleTitle?: string;
 }
 
-export function ImageGallery({ mode = 'manage', onSelect }: ImageGalleryProps) {
+export function ImageGallery({ mode = 'manage', onSelect, articleContent, articleTitle }: ImageGalleryProps) {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [categories, setCategories] = useState<StyleCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSourceTab, setActiveSourceTab] = useState<string>("uploaded");
   const [editImage, setEditImage] = useState<GalleryImage | null>(null);
@@ -105,6 +108,47 @@ export function ImageGallery({ mode = 'manage', onSelect }: ImageGalleryProps) {
     toast.success(`${uploadCount} image(s) added to gallery`);
     setUploading(false);
     loadData();
+  };
+
+  const handleTrioGenerate = async () => {
+    if (!articleContent) {
+      toast.error("No article content available. Open this gallery from an article editor to use Trio Generate.");
+      return;
+    }
+
+    // Gather uploaded images as style references
+    const uploadedImages = images
+      .filter(i => i.source_type === 'uploaded')
+      .slice(0, 5)
+      .map(i => i.file_url);
+
+    setGenerating(true);
+    setActiveSourceTab('ai_generated');
+    toast.info("Generating 3 AI thumbnails... this may take 30-60 seconds.");
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-gallery-images', {
+        body: {
+          articleContent,
+          articleTitle,
+          styleImageUrls: uploadedImages,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.images?.length) {
+        toast.success(`Generated ${data.images.length} thumbnail(s)! Select any to use, or leave them in the gallery.`);
+        loadData();
+      } else {
+        toast.error("No images were generated. Please try again.");
+      }
+    } catch (err: any) {
+      console.error("Trio generate error:", err);
+      toast.error(err?.message || "Failed to generate images");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleDelete = async (img: GalleryImage) => {
@@ -202,12 +246,37 @@ export function ImageGallery({ mode = 'manage', onSelect }: ImageGalleryProps) {
           </TabsList>
 
           <TabsContent value={activeSourceTab} className="mt-3">
+            {/* Trio Generate button on AI Generated tab */}
+            {activeSourceTab === 'ai_generated' && (
+              <div className="mb-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleTrioGenerate}
+                  disabled={generating || !articleContent}
+                  className="gap-2 border-purple-500/30 text-purple-400 hover:bg-purple-500/10 hover:text-purple-300"
+                >
+                  {generating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="h-4 w-4" />
+                  )}
+                  {generating ? 'Generating 3 thumbnails...' : 'Trio Generate'}
+                </Button>
+                {!articleContent && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Open gallery from an article editor to enable Trio Generate.
+                  </p>
+                )}
+              </div>
+            )}
+
             <ScrollArea className={mode === 'manage' ? 'h-[500px]' : 'h-[350px]'}>
               {loading ? (
                 <p className="text-center text-muted-foreground py-8">Loading...</p>
               ) : filteredImages.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">
-                  {activeSourceTab === 'uploaded' ? 'No uploaded images yet. Click Upload to add some!' : 'No AI-generated images yet. They appear here automatically from the Content Repurposer.'}
+                  {activeSourceTab === 'uploaded' ? 'No uploaded images yet. Click Upload to add some!' : 'No AI-generated images yet. Use Trio Generate or the Content Repurposer.'}
                 </p>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pr-3">
