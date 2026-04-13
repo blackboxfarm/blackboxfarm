@@ -28,15 +28,14 @@ const NotFound = () => {
   return (
     <div className="min-h-screen bg-[#0b0a1a] relative overflow-hidden flex items-center justify-center">
       {/* Background image with overlay */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 flex items-start justify-center">
         <img
           src="/images/404-rekt.png"
           alt="Trader in despair"
-          className="w-[60%] h-[60%] object-cover object-top opacity-70 mx-auto"
+          className="w-[60%] h-[60%] object-cover object-top opacity-70"
         />
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0a1a] via-[#0b0a1a]/80 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0b0a1a]/90 via-transparent to-[#0b0a1a]/90" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0a1a] via-[#0b0a1a]/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0b0a1a]/70 via-transparent to-[#0b0a1a]/70" />
       </div>
 
       {/* Content */}
