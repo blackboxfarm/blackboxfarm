@@ -13,6 +13,7 @@ const FuctAirdropGift = lazy(() => import("@/components/admin/FuctAirdropGift").
 const SurveyManagement = lazy(() => import("@/components/admin/SurveyManagement").then(m => ({ default: m.SurveyManagement })));
 const SecurityActivityDashboard = lazy(() => import("@/components/admin/SecurityActivityDashboard").then(m => ({ default: m.SecurityActivityDashboard })));
 const WalletBundleReport = lazy(() => import("@/components/admin/WalletBundleReport").then(m => ({ default: m.WalletBundleReport })));
+const FotobombApp = lazy(() => import("@/components/admin/FotobombApp"));
 
 export default function BlackBoxTab() {
   const [activeSubTab, setActiveSubTab] = useState("bundle-analysis");
@@ -30,6 +31,7 @@ export default function BlackBoxTab() {
         <TabsTrigger value="airdrops">🎁 Airdrops</TabsTrigger>
         <TabsTrigger value="fuct-airdrops">💜 $FUCT Airdrops</TabsTrigger>
         <TabsTrigger value="surveys">📋 Surveys</TabsTrigger>
+        <TabsTrigger value="fotobomb">💣 FOTOBOMB</TabsTrigger>
       </TabsList>
 
       <TabsContent value="bundle-analysis">
@@ -61,6 +63,9 @@ export default function BlackBoxTab() {
       </TabsContent>
       <TabsContent value="surveys">
         {activeSubTab === "surveys" && <Suspense fallback={<LazyLoader />}><SurveyManagement /></Suspense>}
+      </TabsContent>
+      <TabsContent value="fotobomb">
+        {activeSubTab === "fotobomb" && <Suspense fallback={<LazyLoader />}><FotobombApp /></Suspense>}
       </TabsContent>
     </Tabs>
   );
