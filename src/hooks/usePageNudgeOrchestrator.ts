@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { dispatchThoughtCustom } from '@/components/chat/AvatarThoughtBubble';
@@ -142,9 +142,10 @@ export function usePageNudgeOrchestrator({ nudgesEnabled, isOpen, fabVisible }: 
   const lastRoute = useRef(location.pathname);
   const usedNudges = useRef<Set<string>>(new Set());
 
-  const MAX_NUDGES = 4;
-  const INITIAL_DELAY = 10_000;
-  const REPEAT_DELAY = 18_000;
+  const isAdmin = user?.email === 'admin@blackbox.farm';
+  const MAX_NUDGES = isAdmin ? 999 : 4;
+  const INITIAL_DELAY = isAdmin ? 5_000 : 10_000;
+  const REPEAT_DELAY = isAdmin ? 8_000 : 18_000;
 
   // Reset on route change
   useEffect(() => {
