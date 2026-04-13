@@ -21,16 +21,18 @@ const FEEDBACK_TYPES = [
 
 export function TesterFeedbackWidget() {
   const { user } = useAuth();
+  const { isSuperAdmin } = useUserRoles();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState("general");
   const [message, setMessage] = useState("");
 
-  // Check if user is an active tester
+  // Check if user is an active tester OR super admin
   const { data: isTester } = useQuery({
-    queryKey: ["is-tester", user?.id],
+    queryKey: ["is-tester", user?.id, isSuperAdmin],
     queryFn: async () => {
       if (!user?.id) return false;
+      if (isSuperAdmin) return true;
       const { data, error } = await supabase
         .from("promo_redemptions")
         .select("id")
