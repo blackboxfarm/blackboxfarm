@@ -1,68 +1,90 @@
-import { useLocation } from "react-router-dom";
-import { useEffect } from "react";
-import { FarmBanner } from "@/components/FarmBanner";
-import { AuthButton } from "@/components/auth/AuthButton";
-import { NotificationCenter } from "@/components/NotificationCenter";
-import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+const existentialQuips = [
+  "Your portfolio is down 99%. This page is down 100%.",
+  "In the grand ledger of life, this route was never minted.",
+  "You searched for meaning. You found a 404.",
+  "Sartre said 'Hell is other people.' He never tried finding liquidity on a dead route.",
+  "The real rug pull was the pages we lost along the way.",
+  "If a page doesn't exist and no one is around to see it… did you still lose money?",
+  "Nietzsche stared into the abyss. The abyss returned a 404.",
+  "This page went to zero faster than your last memecoin.",
+  "Buy the dip? There is no dip. There is no page. There is only void.",
+  "You HODL'd this URL too long. It's worthless now.",
+];
 
 const NotFound = () => {
-  const { user } = useAuth();
   const location = useLocation();
+  const [quip] = useState(() => existentialQuips[Math.floor(Math.random() * existentialQuips.length)]);
 
   useEffect(() => {
-    console.error(
-      "404 Error: User attempted to access non-existent route:",
-      location.pathname
-    );
+    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Farm Banner Header */}
-      <FarmBanner />
-      <div className="container mx-auto py-6 space-y-8">
-        {/* Main Header Section */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
-          <div className="text-center md:text-left flex-1 space-y-4">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <img 
-                src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
-                alt="BlackBox Cube Logo" 
-                className="w-10 h-10 md:w-12 md:h-12"
-              />
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                BlackBox Farm
-              </h1>
-            </div>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
-              Putting the needle in the haystack — follow the wallets.
-            </p>
-            <div className="flex justify-center md:hidden space-x-3">
-              <AuthButton />
-            </div>
-          </div>
-          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
-            <NotificationCenter />
-            <AuthButton />
+    <div className="min-h-screen bg-[#0b0a1a] relative overflow-hidden flex items-center justify-center">
+      {/* Background image with overlay */}
+      <div className="absolute inset-0">
+        <img
+          src="/images/404-rekt.png"
+          alt="Trader in despair"
+          className="w-full h-full object-cover object-top opacity-40"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0a1a] via-[#0b0a1a]/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0b0a1a]/90 via-transparent to-[#0b0a1a]/90" />
+      </div>
+
+      {/* Content */}
+      <div className="relative z-10 text-center px-6 max-w-2xl mx-auto space-y-6">
+        {/* Glitchy 404 */}
+        <div className="relative">
+          <h1 className="text-[10rem] md:text-[14rem] font-black leading-none tracking-tighter bg-gradient-to-b from-red-400 via-red-500 to-red-900 bg-clip-text text-transparent opacity-90 select-none">
+            404
+          </h1>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs md:text-sm font-mono text-red-400/80 bg-red-950/60 px-3 py-1 rounded-full border border-red-800/40 backdrop-blur-sm animate-pulse">
+              ▼ -100.00%
+            </span>
           </div>
         </div>
 
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <div className="flex items-center gap-4 mb-8">
-            <Link to="/" className="hover:opacity-80 transition-opacity">
-              <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+        {/* Existential quip */}
+        <p className="text-lg md:text-xl text-purple-200/90 font-medium italic max-w-lg mx-auto leading-relaxed">
+          "{quip}"
+        </p>
+
+        {/* Sub text */}
+        <p className="text-sm text-muted-foreground font-mono">
+          Route <code className="text-red-400 bg-red-950/40 px-2 py-0.5 rounded">{location.pathname}</code> has been rugged.
+        </p>
+
+        {/* CTA */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+          <Button asChild variant="default" size="lg" className="gap-2">
+            <Link to="/">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Safety
             </Link>
-            <h1 className="text-4xl font-bold">404 - Page Not Found</h1>
-          </div>
-          <p className="text-xl text-gray-600 mb-4">Oops! The page you're looking for doesn't exist.</p>
-          <a href="/" className="text-blue-500 hover:text-blue-700 underline">
-            Return to Home
-          </a>
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            className="gap-2 border-purple-700/50 text-purple-300 hover:bg-purple-900/30"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try Again (it won't help)
+          </Button>
         </div>
-      </div>
+
+        {/* Tiny footer joke */}
+        <p className="text-xs text-muted-foreground/50 pt-8 font-mono">
+          This is not financial advice. This is not even a page.
+        </p>
       </div>
     </div>
   );
