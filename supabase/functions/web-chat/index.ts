@@ -693,6 +693,17 @@ serve(async (req) => {
               })
               .eq('session_id', chatSessionId)
               .then(() => {});
+
+            // Write to unified_chat_history for cross-platform continuity
+            if (userId) {
+              const lastUserContent = lastUserMsg?.content || '';
+              supabase.from('unified_chat_history').insert([
+                { account_user_id: userId, web_session_id: sessionId || null, platform: 'web', role: 'user', content: lastUserContent.slice(0, 2000) },
+                { account_user_id: userId, web_session_id: sessionId || null, platform: 'web', role: 'assistant', content: fullResponse.slice(0, 2000) },
+              ]).then(({ error: uhErr }) => {
+                if (uhErr) console.error('[web-chat] unified_chat_history write failed:', uhErr);
+              });
+            }
           }
           // Log AI compute
           const responseTimeMs = Date.now() - aiCallStart;
