@@ -15,8 +15,8 @@ export const BUBBLE_MAP_TIERS = [
 export const BUBBLE_MAP_FEATURES: BubbleMapFeature[] = [
   {
     label: 'Daily Lookups',
-    description: 'Number of entity searches per day',
-    tiers: { free: '2', auth: '2', x_subscriber: '10', pro: '∞' },
+    description: 'Number of complete deep scans per day',
+    tiers: { free: '1', auth: '1', x_subscriber: '∞', pro: '∞' },
   },
   {
     label: 'Graph Visualization',
