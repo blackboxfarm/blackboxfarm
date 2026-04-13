@@ -32,7 +32,8 @@ const NotFound = () => {
         <img
           src="/images/404-rekt.png"
           alt="Trader in despair"
-          className="w-full h-full object-cover object-top opacity-40"
+          className="w-[60%] h-[60%] object-cover object-top opacity-70 mx-auto"
+        />
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b0a1a] via-[#0b0a1a]/80 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#0b0a1a]/90 via-transparent to-[#0b0a1a]/90" />
