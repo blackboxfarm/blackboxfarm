@@ -307,7 +307,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         toast.success(`🐦 ${hiddenXAccounts.length} X Community handles mapped!`);
         // Auto-center on newly revealed X community bubbles
         setTimeout(() => {
-          if (graphRef.current) {
+          if (graphRef.current && typeof graphRef.current.graphData === 'function') {
             const gd = graphRef.current.graphData();
             const xNodes = gd.nodes.filter((n: any) => n.id?.startsWith('x_community:') || n.id?.startsWith('x_account:'));
             if (xNodes.length > 0) {
