@@ -13938,6 +13938,39 @@ export type Database = {
           },
         ]
       }
+      telegram_feedback: {
+        Row: {
+          created_at: string
+          feedback_text: string
+          id: string
+          is_tester: boolean
+          linked_user_id: string | null
+          platform: string
+          telegram_user_id: string
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          feedback_text: string
+          id?: string
+          is_tester?: boolean
+          linked_user_id?: string | null
+          platform?: string
+          telegram_user_id: string
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          feedback_text?: string
+          id?: string
+          is_tester?: boolean
+          linked_user_id?: string | null
+          platform?: string
+          telegram_user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       telegram_group_messages: {
         Row: {
           chat_id: number
