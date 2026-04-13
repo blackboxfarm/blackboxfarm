@@ -23,7 +23,7 @@ const SLOW_FUNCTIONS: Record<string, number> = {
   'social-link-mint-checker': 3, // every ~15 min — check Metaplex + PumpFun for missing socials
   'x-community-enricher': 4, // every ~20 min — spider unspidered X communities for admin/mod handles
   'ai-pattern-extractor': 2016, // weekly (~every 7 days) — extract recurring patterns from post-mortems
-  'backfill-allstars': 96, // ~3x/day (~every 8 hours) — resolve creators & promote new allstars from top 200
+  'backfill-allstars': 36, // every ~3 hours — resolve creators & promote new allstars from top 200
 };
 
 Deno.serve(withRunLog('holdersintel-orchestrator', async (req) => {
