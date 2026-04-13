@@ -51,8 +51,6 @@ const MyBanners = lazy(() => import("./pages/MyBanners"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
 
 const IntelReport = lazy(() => import("./pages/IntelReport"));
-const BumpBotLanding = lazy(() => import("./pages/BumpBotLanding"));
-const VolumeBotLanding = lazy(() => import("./pages/VolumeBotLanding"));
 const HoldersLanding = lazy(() => import("./pages/HoldersLanding"));
 const HoldersBotLanding = lazy(() => import("./pages/HoldersBotLanding"));
 const Security = lazy(() => import("./pages/Security"));
@@ -138,8 +136,6 @@ const App = () => {
                       <Route path="/helius-usage" element={<SuperAdminRoute><HeliusUsage /></SuperAdminRoute>} />
                       <Route path="/token-analysis" element={<SuperAdminRoute><TokenAnalysisDownload /></SuperAdminRoute>} />
                       
-                      <Route path="/bumpbot" element={<BumpBotLanding />} />
-                      <Route path="/volumebot" element={<VolumeBotLanding />} />
                       <Route path="/holders-info" element={<HoldersLanding />} />
                       <Route path="/holders-bot" element={<HoldersBotLanding />} />
                       <Route path="/security" element={<Security />} />
