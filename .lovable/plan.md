@@ -1,130 +1,87 @@
 
 
-# Telegram Bot OTP Auth — Sign Up, Sign In, Link via Inline Buttons
+# Two-Part Implementation: Dynamic Article Sitemap + Unified AI Identity & Chat History
 
-## What This Does
+## Part 1: Dynamic Article Sitemap
 
-Adds a `/signup` command and revamps `/start` to show **three inline keyboard buttons** in the bot's welcome message — Padre.gg style. Users tap a button, get taken to a secure OTP URL on blackbox.farm that creates or logs into their account and auto-links their Telegram. The old `/register CODE` flow remains as a fallback.
+### What it does
+Creates an edge function that generates a live XML sitemap from published `intel_briefings`, and converts the static `sitemap.xml` into a sitemap index that references both the static pages and the dynamic articles sitemap. Articles added/removed are automatically reflected.
 
-## How It Works
+### Changes
 
-```text
-User taps /start or /signup in bot DM
-         │
-         ▼
-┌──────────────────────────────────┐
-│  Bot Welcome Message             │
-│                                  │
-│  [🆕 Create Account]            │  ← inline_keyboard button
-│  [🔑 Log In]                    │  ← inline_keyboard button  
-│  [🔗 Link Existing (/register)] │  ← inline_keyboard button
-└──────────────────────────────────┘
-         │
-    User taps "Create Account" or "Log In"
-         │
-         ▼
-  Bot generates OTP token (2-min expiry)
-  stored in one_time_action_tokens table
-  with action_type = 'tg_signup' or 'tg_signin'
-  payload = { telegram_user_id, telegram_username }
-         │
-         ▼
-  Bot sends inline button:
-  "Open BlackBox Farm" → blackbox.farm/auth/tg?t=TOKEN
-         │
-         ▼
-┌──────────────────────────────────┐
-│  /auth/tg page on website        │
-│                                  │
-│  action_type = tg_signup:        │
-│    → Show signup form (email +   │
-│      password), on submit:       │
-│      create account via Supabase │
-│      auth, auto-link Telegram    │
-│                                  │
-│  action_type = tg_signin:        │
-│    → Show login form, on submit: │
-│      sign in, auto-link Telegram │
-│      if not already linked       │
-└──────────────────────────────────┘
+**Create `supabase/functions/sitemap-articles/index.ts`**
+- Queries `intel_briefings` where `is_published = true`
+- Generates valid XML sitemap with `<loc>`, `<lastmod>`, `<changefreq>daily`, `<priority>0.7`
+- URL format: `https://blackbox.farm/intel/briefing/{slug}`
+- Returns `Content-Type: application/xml`, no auth required
+
+**Update `public/sitemap.xml` → Sitemap Index**
+- Convert to `<sitemapindex>` format pointing to:
+  - `https://blackbox.farm/sitemap-static.xml` (the current static pages)
+  - `https://blackbox.farm/sitemap-articles.xml` (proxied to edge function)
+
+**Create `public/sitemap-static.xml`**
+- Move all current static `<url>` entries here (minus the removed /bumpbot and /volumebot)
+
+**Update `public/_redirects`**
+- Add: `/sitemap-articles.xml https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/sitemap-articles 200!`
+
+---
+
+## Part 2: `/myname` Command + Unified Cross-Platform Chat History
+
+### What it does
+1. Adds `/myname NAME` command so users can explicitly set their preferred name
+2. Both web-chat and TG bot write every message to `unified_chat_history` (the table already exists)
+3. When the AI responds on either platform, it loads the user's `preferred_name` from `ai_user_memory` and uses it
+4. Chat windows start fresh each session (no loading old messages), but everything is recorded for AI context
+
+### Changes
+
+**Bot webhook: `holdersintel-bot-webhook/index.ts`**
+
+- Add `/myname` command handler:
+  - Parses name from args (e.g. `/myname Alex`)
+  - Updates `ai_user_memory.preferred_name` for the linked user
+  - Confirms: "Got it, I'll call you Alex from now on!"
+  - If no args: shows current name or prompts to set one
+- Add `/myname` to the command switch
+- Add `/myname` to `handleHelp` output under Setup commands
+- Add `/myname` and `/signup` to the system prompt's command reference section
+- After each AI chat exchange, write both user + assistant messages to `unified_chat_history` with `platform: 'telegram'`, `telegram_user_id`, and `account_user_id` (from linked account)
+- Inject last 5 cross-platform messages from `unified_chat_history` into the AI system prompt as "Recent conversation context" so the AI knows what was discussed on the website too
+
+**Web chat: `web-chat/index.ts`**
+
+- After streaming completes, write user messages + assistant reply to `unified_chat_history` with `platform: 'web'`, `web_session_id`, and `account_user_id`
+- When building the system prompt for logged-in users, fetch last 5 entries from `unified_chat_history` (across both platforms) and inject as context
+- The frontend behavior stays the same: `sessionStorage` clears on tab close, chat starts fresh on return
+
+**Command list UI: `TelegramCommandList.tsx`**
+
+- Add `/myname` to the Setup group
+- Add `/signup` to the Setup group
+
+### Welcome message update
+
+Update `handleStart` for linked users to greet them by preferred name if available:
+```
+✅ Welcome back, Alex! Your tier: PRO. Use /help for commands.
 ```
 
-## Detailed Changes
-
-### 1. Bot webhook: `holdersintel-bot-webhook/index.ts`
-
-**Add `sendMessageWithButtons` helper** — wraps `sendMessage` but includes `reply_markup.inline_keyboard` for Telegram inline buttons.
-
-**Revamp `handleStart`** — For unlinked users, send a welcome message with 3 inline buttons:
-- "🆕 Create Account" → callback_data: `auth_signup`
-- "🔑 Log In & Link" → callback_data: `auth_signin`  
-- "🔗 Link with Code" → callback_data: `auth_link_code`
-
-For already-linked users, keep existing "Welcome back" behavior.
-
-**Add `/signup` command** — Alias that calls the same handler as `/start` for unlinked users.
-
-**Handle callback_query** — When user taps a button:
-- `auth_signup` / `auth_signin`: Generate a 2-minute OTP token in `one_time_action_tokens` with `action_type: 'tg_signup'` or `'tg_signin'`, payload contains `telegram_user_id` and `telegram_username`. Send a new inline button: "🌐 Open BlackBox Farm" → URL button pointing to `blackbox.farm/auth/tg?t=TOKEN`.
-- `auth_link_code`: Send instructions for the existing `/register CODE` flow.
-
-### 2. New page: `src/pages/TelegramAuth.tsx`
-
-A dedicated page at `/auth/tg` that:
-- Reads `?t=TOKEN` from URL
-- Calls `resolve-action-token` to validate (checks expiry, not-used)
-- Based on `action_type`:
-  - **`tg_signup`**: Shows a signup form (email + password). On submit, creates account via `supabase.auth.signUp()`, then calls a new edge function to auto-link Telegram using the payload's `telegram_user_id`.
-  - **`tg_signin`**: Shows a login form (email + password). On submit, signs in via `supabase.auth.signInWithPassword()`, then auto-links if not already linked.
-- Shows success state with "Return to Telegram" button.
-- Branded with BlackBox styling, mobile-friendly (users are coming from Telegram's in-app browser).
-
-### 3. Edge function: `resolve-action-token/index.ts`
-
-Add two new `action_type` cases:
-- **`tg_signup`**: Returns the token payload (telegram_user_id, telegram_username) so the frontend can use it after account creation. Does NOT create the account server-side (that's done client-side via Supabase auth).
-- **`tg_signin`**: Same — returns payload for the frontend to auto-link after login.
-
-### 4. New edge function: `tg-link-after-auth/index.ts`
-
-Called by the frontend after successful signup/signin:
-- Accepts `{ user_id, telegram_user_id, telegram_username, otp_token }`
-- Validates the OTP token is valid and matches
-- Creates/updates the `telegram_link_codes` entry to link the accounts
-- Marks the OTP token as used
-- Returns success
-
-This is a separate function because the account linking requires `service_role` access.
-
-### 5. Router: `src/App.tsx`
-
-Add route: `<Route path="/auth/tg" element={<TelegramAuth />} />`
-
-### 6. Bot command router
-
-In the main command dispatcher, add:
-- `/signup` → calls `handleStart` (same flow)
-- `callback_query` handling in the webhook's main handler
-
-## Database Changes
-
-**None** — reuses existing `one_time_action_tokens` table with new `action_type` values (`tg_signup`, `tg_signin`). Reuses existing `telegram_link_codes` table for linking.
-
-## Files to Create/Modify
+### Files to Create/Modify
 
 | File | Action |
 |------|--------|
-| `supabase/functions/holdersintel-bot-webhook/index.ts` | MODIFY — add buttons, callback_query handler, /signup |
-| `supabase/functions/resolve-action-token/index.ts` | MODIFY — add tg_signup/tg_signin cases |
-| `supabase/functions/tg-link-after-auth/index.ts` | CREATE — auto-link after auth |
-| `src/pages/TelegramAuth.tsx` | CREATE — /auth/tg page |
-| `src/App.tsx` | MODIFY — add /auth/tg route |
+| `supabase/functions/sitemap-articles/index.ts` | CREATE |
+| `public/sitemap.xml` | MODIFY → sitemap index |
+| `public/sitemap-static.xml` | CREATE (current static URLs) |
+| `public/_redirects` | MODIFY — add sitemap proxy |
+| `supabase/functions/holdersintel-bot-webhook/index.ts` | MODIFY — /myname, unified history writes, cross-platform context |
+| `supabase/functions/web-chat/index.ts` | MODIFY — unified history writes, cross-platform context |
+| `src/components/telegram/TelegramCommandList.tsx` | MODIFY — add /myname, /signup |
 
-## Security Notes
-
-- OTP tokens expire in 2 minutes (short window)
-- Tokens are single-use (marked used after resolution)
-- `tg-link-after-auth` validates the OTP token server-side before linking
-- Telegram user uniqueness constraint prevents multi-account farming (existing)
-- No secrets needed — all functions use existing `SUPABASE_SERVICE_ROLE_KEY` and `TELEGRAM_HOLDERSINTEL_BOT_TOKEN`
+### No database changes needed
+- `unified_chat_history` table already exists with correct schema
+- `ai_user_memory.preferred_name` column already exists
 
