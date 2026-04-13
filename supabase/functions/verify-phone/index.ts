@@ -7,6 +7,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function normalizePhoneNumber(value: string): string {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, '');
+
+  if (trimmed.startsWith('+') && digits.length >= 10 && digits.length <= 15) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+
+  throw new Error('Please enter a valid phone number with area code');
+}
+
 serve(withRunLog('verify-phone', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -38,11 +57,13 @@ serve(withRunLog('verify-phone', async (req) => {
       throw new Error('Phone number and verification code are required');
     }
 
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+
     // Verify the code
     const { data: verification, error: verifyError } = await supabase
       .from('phone_verifications')
       .select('*')
-      .eq('phone_number', phoneNumber)
+      .eq('phone_number', normalizedPhoneNumber)
       .eq('verification_code', code)
       .eq('verified', false)
       .gt('expires_at', new Date().toISOString())
@@ -65,7 +86,7 @@ serve(withRunLog('verify-phone', async (req) => {
       .from('profiles')
       .upsert({
         user_id: user.id,
-        phone_number: phoneNumber,
+        phone_number: normalizedPhoneNumber,
         phone_verified: true
       });
 
@@ -89,4 +110,3 @@ serve(withRunLog('verify-phone', async (req) => {
     );
   }
 }));
-
