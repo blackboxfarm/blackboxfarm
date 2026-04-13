@@ -14,6 +14,7 @@ import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { useDomainRedirect } from "@/hooks/useDomainRedirect";
 import { SuperAdminRoute } from "@/components/guards/SuperAdminRoute";
 import { JourneyTrackerProvider } from "@/components/JourneyTrackerProvider";
+import { TesterFeedbackWidget } from "@/components/tester/TesterFeedbackWidget";
 
 // Lazy load all pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
@@ -66,6 +67,7 @@ const TelegramBot = lazy(() => import("./pages/TelegramBot"));
 const Features = lazy(() => import("./pages/Features"));
 const BubblePromo = lazy(() => import("./pages/BubblePromo"));
 const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
+const TesterFeedbackPage = lazy(() => import("./pages/TesterFeedback"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const HoldersHowTo = lazy(() => import("./pages/HoldersHowTo"));
 const BubblesHowTo = lazy(() => import("./pages/BubblesHowTo"));
@@ -161,11 +163,13 @@ const App = () => {
                       <Route path="/feed" element={<Feed />} />
                       <Route path="/intel" element={<IntelBriefings />} />
                       <Route path="/intel/briefing/:slug" element={<IntelBriefingArticle />} />
+                      <Route path="/tester" element={<TesterFeedbackPage />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
                 </div>
+                <TesterFeedbackWidget />
                 <Footer />
               </BrowserRouter>
             </div>

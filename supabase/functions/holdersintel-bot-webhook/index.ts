@@ -775,7 +775,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${unlocked} /myname \`NAME\` — Set your preferred name for AI chat\n` +
     `${unlocked} /status — View your tier, usage & limits\n` +
     `${unlocked} /help — This command reference\n` +
-    `${unlocked} /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n\n`;
+    `${unlocked} /payment (/pay) — 💰 Yearly Pro via SOL · /pay CODE to redeem invite\n\n`;
 
   cmds += `*🔬 Core Analysis — Auth ★ = just signup free online*\n` +
     `_The essentials — know what you're buying before you ape._\n` +
@@ -826,7 +826,9 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `  _• /config admin-only on|off — Restrict commands to admins_\n` +
     `  _• /config dev-alerts on|off — Get notified when watched devs launch_\n` +
     `${check("auth")} /dashboard — Full channel management dashboard\n` +
-    `✅ /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n`;
+    `✅ /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n` +
+    `  _• /payment CODE — Redeem an invitation/promo code_\n` +
+    `  _• /payment verify — Check if your SOL payment was received_\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
     `${unlocked} = Available | ${locked} = Locked to your tier\n` +
@@ -2942,11 +2944,157 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
   await sendMessage(chatId, `✅ *${channelName}*\n${settingLabels[setting]}` + TAGLINE);
 }
 
+// ─── Promo code redemption helper ───
+async function handlePromoRedemption(chatId: number, telegramUserId: string, code: string) {
+  try {
+    // Look up promo code
+    const { data: promo, error: promoErr } = await supabase
+      .from('promo_codes')
+      .select('*')
+      .eq('code', code)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (promoErr || !promo) {
+      // Not a valid promo code — fall through to normal payment flow
+      // Re-call handlePayment with empty args to trigger normal flow
+      await sendMessage(chatId,
+        `❓ *"${code}" is not a valid promo code.*\n\n` +
+        `If you want to pay with SOL, just use /payment without a code.\n` +
+        `To verify an existing payment: /payment verify` + TAGLINE
+      );
+      return;
+    }
+
+    // Check if limit reached
+    if (promo.current_uses >= promo.max_uses) {
+      await sendMessage(chatId,
+        `⛔ *This invitation code has reached its limit.*\n\n` +
+        `All ${promo.max_uses} spots for "${code}" have been claimed.\n` +
+        `You can still subscribe via /payment or at blackbox.farm/subscriptions.` + TAGLINE
+      );
+      return;
+    }
+
+    // Check if this TG user already redeemed ANY promo code
+    const { data: existingRedemption } = await supabase
+      .from('promo_redemptions')
+      .select('id, expires_at')
+      .eq('telegram_user_id', telegramUserId)
+      .eq('is_active', true)
+      .gte('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (existingRedemption) {
+      const expiryDate = new Date(existingRedemption.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      await sendMessage(chatId,
+        `✅ *You already have an active tester subscription!*\n\n` +
+        `Your trial is valid until *${expiryDate}*.\n` +
+        `Use /status to check your tier details.` + TAGLINE
+      );
+      return;
+    }
+
+    // Get linked user (optional for promo)
+    const linked = await getLinkedUser(telegramUserId);
+
+    // Calculate expiry
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + promo.trial_duration_days * 24 * 60 * 60 * 1000);
+
+    // Create redemption record
+    const { error: redemptionErr } = await supabase
+      .from('promo_redemptions')
+      .insert({
+        promo_code_id: promo.id,
+        telegram_user_id: telegramUserId,
+        user_id: linked?.user_id || null,
+        expires_at: expiresAt.toISOString(),
+        is_active: true,
+        source_label: promo.source_label,
+      });
+
+    if (redemptionErr) throw redemptionErr;
+
+    // Increment usage counter
+    await supabase
+      .from('promo_codes')
+      .update({ current_uses: promo.current_uses + 1, updated_at: new Date().toISOString() })
+      .eq('id', promo.id);
+
+    // Create a tg_sol_subscriptions record for tier recognition
+    await supabase
+      .from('tg_sol_subscriptions')
+      .insert({
+        user_id: linked?.user_id || null,
+        telegram_user_id: telegramUserId,
+        payment_wallet_pubkey: 'PROMO_' + code,
+        payment_wallet_secret_encrypted: 'promo',
+        amount_sol: 0,
+        sol_price_at_order: null,
+        status: 'paid',
+        tier_granted: promo.tier_granted,
+        paid_at: now.toISOString(),
+        expires_at: expiresAt.toISOString(),
+      });
+
+    // Update user tier if linked
+    if (linked?.user_id) {
+      await supabase
+        .from('profiles')
+        .update({ cached_tier_key: promo.tier_granted })
+        .eq('id', linked.user_id);
+    }
+
+    // Admin notification
+    try {
+      await supabase.from('admin_notifications').insert({
+        notification_type: 'promo_redemption',
+        title: '🎟️ Promo Code Redeemed',
+        message: `TG user ${telegramUserId} redeemed "${code}" (${promo.current_uses + 1}/${promo.max_uses}). Source: ${promo.source_label || 'N/A'}. Expires: ${expiresAt.toLocaleDateString('en-US')}`,
+        metadata: {
+          code,
+          telegram_user_id: telegramUserId,
+          user_id: linked?.user_id,
+          source_label: promo.source_label,
+          uses: `${promo.current_uses + 1}/${promo.max_uses}`,
+          expires_at: expiresAt.toISOString(),
+        },
+      });
+    } catch { /* non-critical */ }
+
+    const spotsLeft = promo.max_uses - promo.current_uses - 1;
+    console.log(`[bot] Promo "${code}" redeemed by TG ${telegramUserId}. ${spotsLeft} spots remaining.`);
+
+    await sendMessage(chatId,
+      `🎉 *Welcome, Tester!*\n\n` +
+      `You now have *${promo.trial_duration_days}-day Pro access* courtesy of the "${code}" invitation.\n\n` +
+      `🔓 All commands unlocked • Full analytics • AI assistant\n\n` +
+      `📅 Expires: *${expiresAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}*\n\n` +
+      `🌐 Visit [blackbox.farm](https://blackbox.farm) to explore all features.\n\n` +
+      `💬 We value your feedback! Use the feedback widget on the website to share your thoughts.` + TAGLINE
+    );
+
+  } catch (e) {
+    console.error('[bot] Promo redemption error:', e);
+    await sendMessage(chatId,
+      `❌ *Error processing promo code.*\n\nPlease try again or contact support.` + TAGLINE
+    );
+  }
+}
+
 // ─── /payment (/pay) — DM-only: Yearly Pro subscription via SOL ───
 async function handlePayment(chatId: number, telegramUserId: string, args: string) {
   // If they send /payment verify, check their pending subscription
   if (args.trim().startsWith('verify')) {
     await handlePaymentVerify(chatId, telegramUserId, args.replace(/^verify\s*/i, '').trim());
+    return;
+  }
+
+  // ─── Promo code interception (e.g. /payment ARAB10) ───
+  const trimmedArgs = args.trim().toUpperCase();
+  if (trimmedArgs && !trimmedArgs.startsWith('VERIFY')) {
+    await handlePromoRedemption(chatId, telegramUserId, trimmedArgs);
     return;
   }
 
