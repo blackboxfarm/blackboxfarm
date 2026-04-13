@@ -53,6 +53,9 @@ export function ChatWidget() {
   const [thoughtText, setThoughtText] = useState<string | null>(null);
   const [nudgesEnabled, setNudgesEnabled] = useState(true);
 
+  // Sitewide page nudge orchestrator
+  usePageNudgeOrchestrator({ nudgesEnabled, isOpen, fabVisible });
+
   // Listen for thought bubble events from BubbleMap etc. (only when nudges enabled)
   useEffect(() => {
     const handler = (e: Event) => {
