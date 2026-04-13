@@ -64,8 +64,6 @@ export function AccountSnapshotWidget() {
 
   useEffect(() => {
     fetchSnapshot();
-    const interval = setInterval(fetchSnapshot, 120_000);
-    return () => clearInterval(interval);
   }, [fetchSnapshot]);
 
   return (
