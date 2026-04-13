@@ -38,6 +38,9 @@ export default function BlackBoxTab() {
       <TabsContent value="security">
         {activeSubTab === "security" && <Suspense fallback={<LazyLoader />}><SecurityDashboard /></Suspense>}
       </TabsContent>
+      <TabsContent value="security-activity">
+        {activeSubTab === "security-activity" && <Suspense fallback={<LazyLoader />}><SecurityActivityDashboard /></Suspense>}
+      </TabsContent>
       <TabsContent value="accounts">
         {activeSubTab === "accounts" && <Suspense fallback={<LazyLoader />}><AccountViewer /></Suspense>}
       </TabsContent>
