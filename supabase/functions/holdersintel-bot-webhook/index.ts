@@ -781,7 +781,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `_The essentials — know what you're buying before you ape._\n` +
     `${check("auth")} /risk (/r) \`CA\` — 360° risk score: rug probability, liquidity traps & holder red flags\n` +
     `${check("auth")} /holders \`CA\` — Full holder breakdown: whales, retail spread & distribution health\n` +
-    `${check("auth")} /concentration \`CA\` — Top wallet % tiers: see exactly who controls the supply\n` +
+    `${check("auth")} /concentration (/con) \`CA\` — Top wallet % tiers: see exactly who controls the supply\n` +
     `${check("auth")} /dev (/d) \`CA\` — Dev identity mesh: socials, past launches & reputation score\n` +
     `${check("auth")} /ca \`CA\` — Quick-glance holder profile for any token\n` +
     `${check("auth")} /quick (/q) \`CA\` — Instant snapshot: holder count, MCap & key metrics in seconds\n` +
@@ -793,7 +793,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
 
   cmds += `*⚡ Advanced Intel — X Subscriber ★★*\n` +
     `_Deeper signals that separate smart money from exit liquidity._\n` +
-    `${check("x_subscriber")} /momentum (/m) \`CA\` — Volume surge detection, price velocity & trend momentum scoring\n` +
+    `${check("x_subscriber")} /momentum (/m /mom) \`CA\` — Volume surge detection, price velocity & trend momentum scoring\n` +
     `${check("x_subscriber")} /insiders (/i) \`CA\` — Bundled wallet detection: spot coordinated buys before they dump\n` +
     `${check("x_subscriber")} /compare (/cmp) \`CA CA\` — Head-to-head token showdown: risk, holders & momentum side-by-side\n`;
   if (!hasTier(tier, "x_subscriber")) {
@@ -3963,6 +3963,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             await handleInsiders(dmChatId, telegramUserId, args);
             break;
           case "/concentration":
+          case "/con":
             await handleConcentration(dmChatId, telegramUserId, args);
             break;
           case "/compare":
@@ -4054,6 +4055,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           await handleInsiders(chatId, telegramUserId, args);
           break;
         case "/concentration":
+        case "/con":
           await handleConcentration(chatId, telegramUserId, args);
           break;
         case "/compare":

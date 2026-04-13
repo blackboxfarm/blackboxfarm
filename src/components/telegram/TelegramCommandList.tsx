@@ -20,7 +20,7 @@ const COMMAND_GROUPS = [
     commands: [
       { cmd: "/holders", alias: null, desc: "Holder distribution analysis" },
       { cmd: "/risk", alias: "/r", desc: "Composite risk & stability assessment" },
-      { cmd: "/concentration", alias: null, desc: "Detailed holder % breakdown" },
+      { cmd: "/concentration", alias: "/con", desc: "Detailed holder % breakdown" },
       { cmd: "/dev", alias: "/d", desc: "Developer intel & social doxxing" },
       { cmd: "/ca", alias: null, desc: "Default holder analysis" },
       { cmd: "/quick", alias: "/q", desc: "Fast holder count & key stats" },
