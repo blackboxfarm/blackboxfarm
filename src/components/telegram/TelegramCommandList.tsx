@@ -11,6 +11,7 @@ const COMMAND_GROUPS = [
       { cmd: "/myname", desc: "Set your preferred name" },
       { cmd: "/status", desc: "Check your subscription tier" },
       { cmd: "/help", desc: "Show all commands" },
+      { cmd: "/feedback", alias: "/fb", desc: "Send feedback to the team" },
     ],
     tier: "All",
     tierClass: "text-muted-foreground border-muted-foreground/40",
