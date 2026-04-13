@@ -65,6 +65,50 @@ export type Database = {
         }
         Relationships: []
       }
+      account_lockdowns: {
+        Row: {
+          alert_id: string | null
+          id: string
+          is_locked: boolean
+          locked_at: string
+          locked_reason: string
+          metadata: Json | null
+          unlock_method: string | null
+          unlocked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          alert_id?: string | null
+          id?: string
+          is_locked?: boolean
+          locked_at?: string
+          locked_reason: string
+          metadata?: Json | null
+          unlock_method?: string | null
+          unlocked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          alert_id?: string | null
+          id?: string
+          is_locked?: boolean
+          locked_at?: string
+          locked_reason?: string
+          metadata?: Json | null
+          unlock_method?: string | null
+          unlocked_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_lockdowns_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "security_sms_alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_logs: {
         Row: {
           id: string
@@ -6536,6 +6580,59 @@ export type Database = {
           },
         ]
       }
+      login_history: {
+        Row: {
+          alert_id: string | null
+          city: string | null
+          country: string | null
+          created_at: string
+          device_fingerprint: string | null
+          id: string
+          ip_address: string | null
+          is_suspicious: boolean
+          login_method: string | null
+          suspicion_reasons: string[] | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          alert_id?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_fingerprint?: string | null
+          id?: string
+          ip_address?: string | null
+          is_suspicious?: boolean
+          login_method?: string | null
+          suspicion_reasons?: string[] | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          alert_id?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_fingerprint?: string | null
+          id?: string
+          ip_address?: string | null
+          is_suspicious?: boolean
+          login_method?: string | null
+          suspicion_reasons?: string[] | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "login_history_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "security_sms_alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_email_campaigns: {
         Row: {
           campaign_type: string
@@ -11878,6 +11975,60 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      security_sms_alerts: {
+        Row: {
+          action_executed_at: string | null
+          alert_type: string
+          created_at: string
+          expected_responses: string[]
+          expires_at: string
+          id: string
+          message_body: string
+          metadata: Json | null
+          phone_number: string
+          responded_at: string | null
+          response_action: string | null
+          status: string
+          twilio_message_sid: string | null
+          user_id: string
+          user_response: string | null
+        }
+        Insert: {
+          action_executed_at?: string | null
+          alert_type: string
+          created_at?: string
+          expected_responses?: string[]
+          expires_at?: string
+          id?: string
+          message_body: string
+          metadata?: Json | null
+          phone_number: string
+          responded_at?: string | null
+          response_action?: string | null
+          status?: string
+          twilio_message_sid?: string | null
+          user_id: string
+          user_response?: string | null
+        }
+        Update: {
+          action_executed_at?: string | null
+          alert_type?: string
+          created_at?: string
+          expected_responses?: string[]
+          expires_at?: string
+          id?: string
+          message_body?: string
+          metadata?: Json | null
+          phone_number?: string
+          responded_at?: string | null
+          response_action?: string | null
+          status?: string
+          twilio_message_sid?: string | null
+          user_id?: string
+          user_response?: string | null
         }
         Relationships: []
       }
