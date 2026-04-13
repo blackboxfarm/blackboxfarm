@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ChatWidget } from '@/components/chat/ChatWidget';
 import { OracleHoverProvider } from '@/components/chat/OracleHoverProvider';
 import { OraclePeek } from '@/components/chat/OraclePeek';
+import { useCanonical } from '@/hooks/useCanonical';
 
 const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
@@ -32,6 +33,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  useCanonical();
 
   const { data: intelPublic } = useQuery({
     queryKey: ['intel-public-access'],
