@@ -1,107 +1,134 @@
 
 
-# BubbleMap AI-Guided Experience + Rate Limit Overhaul
+# AI-Powered Contextual Nudge Mesh — Sitewide Implementation
 
-## Summary
+## What This Does
 
-Transform the BubbleMap from a static tool into an AI-guided interactive experience where The Signal avatar coaches users through features, while simplifying the tier model to "1 full deep scan per day" for free/anon users.
+Transforms The Signal's ambient thought bubbles from hardcoded quips into an **AI-driven, page-aware contextual nudge system** that reacts to where the user is, what they're looking at, how long they've been idle, and whether they're anonymous or logged in. The avatar becomes a smart guide across every public-facing page — driving conversions for anon visitors and providing FAQ/feature guidance for logged-in users.
 
-## Rate Limit Changes
+## Architecture
 
-**Current state**: 20 lookups/day (testing values), confusing "node cap" concept.
-
-**New model**:
-- Anon (IP/fingerprint): 1 complete deep bubblemap per day, full features
-- Free signed-in: 1 complete deep bubblemap per day, full features  
-- X Subscriber / Pro $9.99: Unlimited
-
-**Changes in `useBubbleMapRateLimit.ts`**:
-- Set `DAILY_LIMIT_ANON = 1`, `DAILY_LIMIT_FREE_AUTH = 1`, `DISPLAY_LIMIT = 1`
-- Remove node cap restrictions (give full node cap to everyone)
-
-**Banner wording update** in `PublicBubbleMap.tsx`:
-- Replace current banner text with: "ONLY 1 Complete* Bubblemap Per Day — Multi Node · 100% Exposed Structures · as DEEP as we can go!!"
-- When used: "Daily scan used! Subscribe for unlimited."
-
-## AI Avatar Scripted Journey
-
-All changes in `PublicBubbleMap.tsx` using the existing `dispatchThought` system, extended with a new `dispatchThoughtCustom(text)` function that sends arbitrary text (not just from quip pools).
-
-### Phase 1: Empty State
-When page loads with empty input, dispatch a thought bubble: random from pool like "put in a token address and let's look", "paste a contract, let's trace it", "got a token? drop it in".
-
-### Phase 2: Token Address Entered (input onChange detection)
-When valid Solana address detected in input:
-1. Auto-resolve dev wallet (already works)
-2. AI bubble: random from "nice, we have the Dev wallet", "dev wallet locked in", "got the creator"
-3. Dev wallet bar gets a 5-second CSS pulse animation (`animate-pulse` with gold border)
-4. Trace button turns gold (`bg-gold text-black`) with 3-second pulse
-5. If no click in 20 seconds: AI bubble "click Trace to map it out" + button pulses again
-
-### Phase 3: After Initial Graph Display
-- Solar Min mode buttons get a light gold tint when active (already `secondary` variant, add gold accent)
-- If no user action for 15 seconds after graph renders: AI bubble suggests a feature, random from:
-  - "want the wallet mesh? click Deep Spider"
-  - "backtrace the Dev with Find KYC Root"
-  - "Map X Community shows Admins and Mods too"
-  - "try Find All Tokens to see what else they made"
-
-### Phase 4: After Feature Button Click + Results
-- Replace ALL toast notifications from feature buttons with AI avatar chat bubbles instead
-  - KYC: "tracing the funding chain..." → "KYC root locked in" (instead of toast)
-  - Find All Tokens: "scanning for token mints..." → "found X tokens"
-  - Deep Spider: "deep spidering the mesh..." → "mesh expanded"
-  - Map X Community: "scanning X community..." → "community mapped"
-- After results display, AI suggests view switching: "try Solar Clusters to regroup" or "switch to Tree view for hierarchy" with 3-second pulse on those buttons
-- Alternate suggestions: "change the line spacing with +/- controls", "use the mini map to navigate clusters" with minimap border pulse
-
-### Phase 5: Shakey-Shake
-- Currently works (resets node positions + reheat). Add:
-  - Button depress animation on click (scale-95 transition)
-  - Brief 1-second CSS shake animation on the graph container (`@keyframes shake`)
-  - AI bubble: "shaking it out..." or "reshuffling the mesh"
-
-## Technical Implementation
-
-### New utility: `dispatchThoughtCustom`
-Add to `AvatarThoughtBubble.tsx`:
-```typescript
-export function dispatchThoughtCustom(text: string) {
-  window.dispatchEvent(new CustomEvent('signal-thought', { detail: { text } }));
-}
+```text
+┌─────────────────────────────────────────────────┐
+│  Page Components (Home, Feed, Pricing, etc.)    │
+│  ┌──────────────────────────────────────┐       │
+│  │ data-oracle-hint="..."               │◄──────── Static anchor points (hover-triggered)
+│  │ data-oracle-zone="..."               │       │
+│  └──────────────────────────────────────┘       │
+│                                                 │
+│  ┌──────────────────────────────────────┐       │
+│  │ usePageNudgeOrchestrator() hook      │◄──────── NEW: Per-page idle/scroll/journey nudges
+│  │  - watches route, idle time, scroll  │       │
+│  │  - picks nudge from page config      │       │
+│  │  - respects nudgesEnabled toggle     │       │
+│  │  - fires dispatchThoughtCustom()     │       │
+│  └──────────────────────────────────────┘       │
+│                                                 │
+│  ChatWidget (existing)                          │
+│   └─ AvatarThoughtBubble (existing)             │
+└─────────────────────────────────────────────────┘
 ```
 
-### New CSS classes in `tailwind.config.ts` or inline:
-- `animate-pulse-gold`: gold-bordered pulse for trace button / dev wallet bar
-- `animate-shake`: graph container shake for Shakey-Shake
-- `animate-depress`: scale-95 on button press
+## Two Nudge Layers
 
-### Idle timer system in `PublicBubbleMap.tsx`:
-- `useRef` for idle timers
-- Reset on any user interaction (button click, input change)
-- Fire AI suggestions at 15-20 second intervals
-- Max 3 suggestions before going quiet (avoid annoyance)
+### Layer 1: Static Anchor Points (`data-oracle-hint` / `data-oracle-zone`)
+Already exists via `OracleHoverProvider` — fires on mouse dwell over marked elements. Currently only 3 pages have anchors. We'll add ~25 more across all public pages.
 
-### Files Modified
-1. **`src/hooks/useBubbleMapRateLimit.ts`** — Change limits to 1/day, remove node cap logic
-2. **`src/components/chat/AvatarThoughtBubble.tsx`** — Add `dispatchThoughtCustom`, add BubbleMap-specific quip pools
-3. **`src/components/bubble-map/PublicBubbleMap.tsx`** — Main changes:
-   - Rate limit banner wording
-   - Remove node cap enforcement (everyone gets full depth)
-   - AI avatar scripted journey (phases 1-5)
-   - Replace toasts with AI bubbles for feature actions
-   - Gold Trace button + pulse animations
-   - Dev wallet pulse animation
-   - Shakey-Shake visual feedback
-   - Idle timer suggestion system
-   - Solar Min gold tint
-   - View switch pulse suggestions
-   - Minimap border pulse suggestion
-4. **`src/index.css`** — Add `@keyframes shake` and pulse-gold animations
+### Layer 2: Dynamic Page Nudge Orchestrator (NEW)
+A new hook `usePageNudgeOrchestrator` that runs inside `ChatWidget` and:
+- Detects current route + auth state (anon vs free vs paid)
+- Fires contextual thought bubbles on idle (12-20s intervals)
+- Has per-page nudge pools with different pools for anon (conversion) vs logged-in (guidance)
+- Tracks scroll depth to trigger scroll-based nudges ("keep scrolling — pricing breakdown below")
+- Caps at 3-4 nudges per page visit, resets on route change
+- Respects the existing `nudgesEnabled` toggle (Ctrl+Space / "/")
 
-### Guardrails Against Annoyance
-- Max 3-4 AI suggestions per session before going silent
-- Minimum 15 seconds between suggestions
-- No suggestions while user is actively clicking/interacting
-- Reset suggestion count on new token search
+## Detailed Changes
+
+### 1. New file: `src/hooks/usePageNudgeOrchestrator.ts`
+
+Core logic:
+- A config map keyed by route pattern (exact or prefix match)
+- Each route has `anonNudges: string[]`, `authNudges: string[]`, `scrollNudges: { depth: number, text: string }[]`
+- Idle timer fires first nudge after 10s on page, subsequent nudges every 18s
+- Scroll listener fires nudges when user crosses depth thresholds (25%, 50%, 75%)
+- Returns nothing — just dispatches `signal-thought` events
+- Max 4 nudges per page visit, stored in a ref
+
+**Page nudge config (examples):**
+
+| Route | Anon Nudge Examples | Auth Nudge Examples |
+|-------|-------------------|-------------------|
+| `/` (Home) | "sign up free — unlock AI analysis", "500+ tokens tracked daily" | "try the Bubble Map — it's wild", "check the Live Feed for fresh tokens" |
+| `/feed` | "create a free account to get alerts", "these tokens update in real-time" | "click any token for deep analysis", "sort by health grade to find the gems" |
+| `/holders` | "sign up to save your searches", "this is the free preview — imagine Pro" | "try the AI tab for narrative analysis", "check the wallet tab for dev history" |
+| `/subscriptions` | "X subscribers save on every plan", "1 bubblemap per day is free" | "Pro unlocks unlimited bubble maps", "the AI risk engine catches what you miss" |
+| `/bubblepromo` | "1 free deep scan per day — make it count", "paste any token address above" | *(redirects to /bubblemap)* |
+| `/bubblemap` | — | "try Deep Spider for the full mesh", "switch views with Solar Cluster" |
+| `/pricing` | "curious about Pro? ask me anything", "X subscribers get a discount" | "you can upgrade anytime — no lock-in" |
+| `/tgbot` | "the bot works in group chats too", "try /quick in Telegram — it's instant" | "link your Telegram for cross-platform intel" |
+
+### 2. Expand `data-oracle-hint` anchors across pages
+
+Add hover-triggered anchor points to key UI elements on every public page:
+
+**Home.tsx** (~6 new anchors):
+- Hero CTA button: "I can help you run your first token check"
+- Product pillar cards: "Ask me about holder analysis / Telegram bot / Bubble Map"
+- Testimonial section: "Real users, real results — want to try it?"
+- Tier comparison: "Not sure which plan? I can help"
+
+**Feed.tsx** (~4 new anchors):
+- Search input: "Search by name, symbol, or paste a contract address"
+- Health grade column: "Health grades are AI-calculated — ask me how"
+- Token row actions: "Click any token to see the full breakdown"
+- Sort controls: "Sort by health grade to surface the strongest tokens"
+
+**Subscriptions.tsx** (~4 new anchors):
+- Tier cards section: "Want me to compare these plans for you?"
+- X subscriber verification: "Link your X account here to unlock discounts"
+- Feature list: "Each feature stacks — free gets you started, Pro goes deep"
+- FAQ section: "Still have questions? Just ask me"
+
+**Holders.tsx** (~3 new anchors):
+- Token input: already exists
+- AI Analysis tab: "The AI panel gives you a narrative summary — try it"
+- Wallet trace section: "This traces the dev's funding chain back to KYC"
+
+**TelegramBot.tsx** (~2 new anchors):
+- Bot link: "Click to open the bot in Telegram — it's instant"
+- Command list: "Try /quick first — it's free and fast"
+
+### 3. Integrate orchestrator into `ChatWidget.tsx`
+
+- Import and call `usePageNudgeOrchestrator()` inside `ChatWidget`
+- Pass `nudgesEnabled`, `fabVisible`, `isOpen` as params so it knows when to fire
+- The hook handles all timing internally
+
+### 4. Minor Enhancement: AI-generated nudges (optional future phase)
+
+For now, all nudges are static string pools (fast, zero-cost, no API calls). A future enhancement could call the Lovable AI gateway with page context to generate dynamic nudges, but that adds latency and cost per impression — not recommended for v1.
+
+## What Makes This Better Than Current State
+
+- **Current**: 3 pages have hover anchors, BubbleMap has scripted journey, everything else is silent
+- **After**: Every public page has idle nudges + hover anchors + scroll nudges, differentiated by auth state
+- **Conversion path**: Anon visitors get soft conversion nudges; logged-in users get feature discovery
+- **Non-annoying**: 4 nudge cap per page, 18s cooldown, respects Ctrl+Space toggle, goes silent after cap
+
+## Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `src/hooks/usePageNudgeOrchestrator.ts` | **CREATE** — core orchestrator hook |
+| `src/components/chat/ChatWidget.tsx` | **MODIFY** — integrate orchestrator |
+| `src/pages/Home.tsx` | **MODIFY** — add ~6 `data-oracle-hint` anchors |
+| `src/pages/Feed.tsx` | **MODIFY** — add ~4 anchors |
+| `src/pages/Subscriptions.tsx` | **MODIFY** — add ~4 anchors |
+| `src/pages/Holders.tsx` | **MODIFY** — add ~3 anchors |
+| `src/pages/Pricing.tsx` | **MODIFY** — add ~2 anchors |
+| `src/pages/TelegramBot.tsx` | **MODIFY** — add ~2 anchors |
+| `src/pages/BubblePromo.tsx` | **MODIFY** — add ~2 anchors |
+
+No database changes. No edge function changes. No new dependencies.
 
