@@ -249,6 +249,53 @@ async function sendMessage(chatId: number, text: string, parseMode = "Markdown",
   }
 }
 
+/** Send a message with inline keyboard buttons */
+async function sendMessageWithButtons(chatId: number, text: string, buttons: Array<Array<Record<string, string>>>, parseMode = "Markdown") {
+  const body = {
+    chat_id: chatId,
+    text,
+    parse_mode: parseMode,
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: buttons },
+  };
+  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    console.error(`[bot] sendMessageWithButtons failed:`, await res.text());
+  }
+}
+
+/** Answer a callback_query to dismiss the loading spinner */
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+  });
+}
+
+/** Generate a short-lived OTP token for Telegram auth (2-min expiry) */
+async function generateTelegramOTP(actionType: string, telegramUserId: string, telegramUsername: string | null): Promise<string> {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const token = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // Use a placeholder user_id since the user doesn't have an account yet
+  // The resolve-action-token function will handle this specially for tg_ types
+  await supabase.from('one_time_action_tokens').insert({
+    token,
+    user_id: '00000000-0000-0000-0000-000000000000',
+    action_type: actionType,
+    payload: { telegram_user_id: telegramUserId, telegram_username: telegramUsername },
+    expires_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(), // 2 minutes
+  });
+
+  return token;
+}
+
 /** For advanced commands in group chats: reply "check DMs" in group, send report via DM */
 async function groupDMRedirect(
   groupChatId: number,
@@ -518,16 +565,68 @@ async function handleStart(chatId: number, telegramUserId: string, username: str
     );
     return;
   }
-  await sendMessage(chatId,
+  await sendMessageWithButtons(chatId,
     `👋 *Welcome to HoldersIntel Bot!*\n\n` +
     `This bot delivers tier-specific analysis from [BlackBox Farm](https://blackbox.farm).\n\n` +
-    `To get started, link your account:\n` +
-    `1️⃣ Log in at blackbox.farm\n` +
-    `2️⃣ Go to Settings → Telegram Link\n` +
-    `3️⃣ Copy your code (e.g. \`BF-A3X9K2\`)\n` +
-    `4️⃣ Send: \`/register YOUR-CODE\`\n\n` +
-    `Example: \`/register BF-A3X9K2\``
+    `Get started by choosing an option below:`,
+    [
+      [{ text: "🆕 Create Account", callback_data: "auth_signup" }],
+      [{ text: "🔑 Log In & Link", callback_data: "auth_signin" }],
+      [{ text: "🔗 Link with Code", callback_data: "auth_link_code" }],
+    ]
   );
+}
+
+/** Handle callback_query from inline keyboard buttons */
+async function handleCallbackQuery(callbackQuery: any) {
+  const chatId = callbackQuery.message?.chat?.id;
+  const telegramUserId = String(callbackQuery.from.id);
+  const username = callbackQuery.from.username || null;
+  const data = callbackQuery.data;
+
+  if (!chatId || !data) return;
+
+  // Dismiss the loading spinner immediately
+  await answerCallbackQuery(callbackQuery.id);
+
+  // Check if already linked
+  const linked = await getLinkedUser(telegramUserId);
+  if (linked && (data === 'auth_signup' || data === 'auth_signin')) {
+    const tier = await getUserTier(linked.user_id);
+    await sendMessage(chatId,
+      `✅ Your account is already linked! Tier: *${tier.toUpperCase()}*\n\nUse /help to see commands.`
+    );
+    return;
+  }
+
+  switch (data) {
+    case 'auth_signup':
+    case 'auth_signin': {
+      const actionType = data === 'auth_signup' ? 'tg_signup' : 'tg_signin';
+      const token = await generateTelegramOTP(actionType, telegramUserId, username);
+      const url = `https://blackbox.farm/auth/tg?t=${token}`;
+      const label = data === 'auth_signup' ? 'Create Account' : 'Log In & Link';
+
+      await sendMessageWithButtons(chatId,
+        `🔐 *${label}*\n\n` +
+        `Tap the button below to open BlackBox Farm.\n` +
+        `⏱ This link expires in *2 minutes*.`,
+        [[{ text: "🌐 Open BlackBox Farm", url }]]
+      );
+      break;
+    }
+    case 'auth_link_code': {
+      await sendMessage(chatId,
+        `🔗 *Link with Registration Code*\n\n` +
+        `1️⃣ Log in at blackbox.farm\n` +
+        `2️⃣ Go to Settings → Telegram Link\n` +
+        `3️⃣ Copy your code (e.g. \`BF-A3X9K2\`)\n` +
+        `4️⃣ Send: \`/register YOUR-CODE\`\n\n` +
+        `Example: \`/register BF-A3X9K2\``
+      );
+      break;
+    }
+  }
 }
 
 async function handleRegister(chatId: number, telegramUserId: string, username: string | null, args: string) {
@@ -3496,7 +3595,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
       const res = await fetch(`${TELEGRAM_API}/setWebhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message", "my_chat_member", "chat_member"] }),
+        body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message", "my_chat_member", "chat_member", "callback_query"] }),
       });
       const data = await res.json();
       return new Response(JSON.stringify(data), {
@@ -3526,6 +3625,12 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     // ─── Handle my_chat_member events (bot added/removed from groups) ───
     if (update.my_chat_member) {
       await handleMyChatMember(update);
+      return new Response("OK");
+    }
+
+    // ─── Handle callback_query events (inline keyboard button taps) ───
+    if (update.callback_query) {
+      await handleCallbackQuery(update.callback_query);
       return new Response("OK");
     }
 
@@ -3708,6 +3813,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
       // DM context or public-allowed group commands
       switch (command) {
         case "/start":
+        case "/signup":
           await handleStart(chatId, telegramUserId, username);
           break;
         case "/register":
