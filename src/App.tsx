@@ -14,6 +14,7 @@ import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { useDomainRedirect } from "@/hooks/useDomainRedirect";
 import { SuperAdminRoute } from "@/components/guards/SuperAdminRoute";
 import { JourneyTrackerProvider } from "@/components/JourneyTrackerProvider";
+import { TesterFeedbackWidget } from "@/components/tester/TesterFeedbackWidget";
 
 // Lazy load all pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
@@ -168,6 +169,7 @@ const App = () => {
                     </Routes>
                   </Suspense>
                 </div>
+                <TesterFeedbackWidget />
                 <Footer />
               </BrowserRouter>
             </div>
