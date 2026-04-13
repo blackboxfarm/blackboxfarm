@@ -66,6 +66,7 @@ const TelegramBot = lazy(() => import("./pages/TelegramBot"));
 const Features = lazy(() => import("./pages/Features"));
 const BubblePromo = lazy(() => import("./pages/BubblePromo"));
 const BubbleMapPage = lazy(() => import("./pages/BubbleMap"));
+const TesterFeedbackPage = lazy(() => import("./pages/TesterFeedback"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const HoldersHowTo = lazy(() => import("./pages/HoldersHowTo"));
 const BubblesHowTo = lazy(() => import("./pages/BubblesHowTo"));
@@ -161,6 +162,7 @@ const App = () => {
                       <Route path="/feed" element={<Feed />} />
                       <Route path="/intel" element={<IntelBriefings />} />
                       <Route path="/intel/briefing/:slug" element={<IntelBriefingArticle />} />
+                      <Route path="/tester" element={<TesterFeedbackPage />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
