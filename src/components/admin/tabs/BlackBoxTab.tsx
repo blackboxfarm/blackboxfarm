@@ -22,6 +22,7 @@ export default function BlackBoxTab() {
       <TabsList className="flex flex-wrap gap-1">
         <TabsTrigger value="bundle-analysis">🕵️ Bundle Analysis</TabsTrigger>
         <TabsTrigger value="security">🛡️ Security Dashboard</TabsTrigger>
+        <TabsTrigger value="security-activity">🔐 Security Activity</TabsTrigger>
         <TabsTrigger value="accounts">📁 Account Directory</TabsTrigger>
         <TabsTrigger value="tokens">🪙 All Tokens</TabsTrigger>
         <TabsTrigger value="arbitrage">📊 Arbitrage Bot</TabsTrigger>
