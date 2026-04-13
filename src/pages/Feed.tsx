@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { LitmusStrip } from '@/components/feed/LitmusStrip';
+import { useAuth } from '@/hooks/useAuth';
 
 const PAGE_SIZE = 50;
 

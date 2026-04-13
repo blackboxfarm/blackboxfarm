@@ -11,8 +11,8 @@ export function AvatarThoughtBubble({ text, onDone }: AvatarThoughtBubbleProps) 
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('visible'), 50);
-    const t2 = setTimeout(() => setPhase('exit'), 2200);
-    const t3 = setTimeout(onDone, 2600);
+    const t2 = setTimeout(() => setPhase('exit'), 4800);
+    const t3 = setTimeout(onDone, 5200);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onDone]);
 
