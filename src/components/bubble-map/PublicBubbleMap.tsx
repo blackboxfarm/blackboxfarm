@@ -17,7 +17,7 @@ import HackerTerminal, { TerminalLine } from "./HackerTerminal";
 import SocialTimeline from "./SocialTimeline";
 import BubbleMapMinimap from "./BubbleMapMinimap";
 import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
-import { dispatchThought } from "@/components/chat/AvatarThoughtBubble";
+import { dispatchThought, dispatchThoughtCustom } from "@/components/chat/AvatarThoughtBubble";
 
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
@@ -53,6 +53,18 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const [hasSpideredOnce, setHasSpideredOnce] = useState(false);
   const [devWalletAddress, setDevWalletAddress] = useState<string | null>(null);
   const [devWalletLoading, setDevWalletLoading] = useState(false);
+
+  // AI-guided journey state
+  const [traceButtonGold, setTraceButtonGold] = useState(false);
+  const [traceButtonPulse, setTraceButtonPulse] = useState(false);
+  const [devWalletPulse, setDevWalletPulse] = useState(false);
+  const [shakeGraph, setShakeGraph] = useState(false);
+  const [suggestCount, setSuggestCount] = useState(0);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const traceNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastInteractionRef = useRef<number>(Date.now());
+  const MAX_SUGGESTIONS = 4;
+  const IDLE_DELAY = 15000;
 
   // Showmanship state
   const [xAccountsRevealed, setXAccountsRevealed] = useState(false);
@@ -166,12 +178,35 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
   // Auto-resolve dev wallet when a token mint is searched
   const [copiedDevWallet, setCopiedDevWallet] = useState(false);
+
+  // Phase 1: Empty state AI greeting
+  useEffect(() => {
+    if (!searchInput.trim() && !focusedEntity) {
+      const greetings = [
+        "put in a token address and let's look",
+        "paste a contract, let's trace it",
+        "got a token? drop it in",
+        "ready when you are — paste a mint",
+      ];
+      const timer = setTimeout(() => {
+        dispatchThoughtCustom(greetings[Math.floor(Math.random() * greetings.length)]);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Phase 2: Valid token entered — AI reacts, gold trace button, dev wallet pulse
   useEffect(() => {
     const input = searchInput.trim();
-    if (!input || input.length < 20 || input.startsWith('@')) {
+    if (!input || input.length < 30 || input.startsWith('@')) {
+      setTraceButtonGold(false);
+      setTraceButtonPulse(false);
+      setDevWalletPulse(false);
       setDevWalletAddress(null);
+      if (traceNudgeTimerRef.current) clearTimeout(traceNudgeTimerRef.current);
       return;
     }
+
     // Check from graph data first
     const devNode = graphData.nodes.find(n => n.type === 'wallet' && n.isDev);
     if (devNode) {
@@ -183,15 +218,69 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       setDevWalletLoading(true);
       supabase.functions.invoke('solscan-creator-lookup', { body: { tokenMint: input } })
         .then(({ data }) => {
-          if (data?.creatorWallet) setDevWalletAddress(data.creatorWallet);
+          if (data?.creatorWallet) {
+            setDevWalletAddress(data.creatorWallet);
+            // AI bubble for dev wallet found
+            const devQuips = ["nice, we have the Dev wallet", "dev wallet locked in", "got the creator", "dev wallet resolved ✓"];
+            dispatchThoughtCustom(devQuips[Math.floor(Math.random() * devQuips.length)]);
+            // Dev wallet pulse for 5 seconds
+            setDevWalletPulse(true);
+            setTimeout(() => setDevWalletPulse(false), 5000);
+            // Gold trace button with 3s pulse
+            setTraceButtonGold(true);
+            setTraceButtonPulse(true);
+            setTimeout(() => setTraceButtonPulse(false), 3000);
+            // Nudge to click trace after 20 seconds
+            traceNudgeTimerRef.current = setTimeout(() => {
+              dispatchThoughtCustom("click Trace to map it out");
+              setTraceButtonPulse(true);
+              setTimeout(() => setTraceButtonPulse(false), 3000);
+            }, 20000);
+          }
         })
         .catch(() => {})
         .finally(() => setDevWalletLoading(false));
     }
   }, [searchInput, graphData.nodes]);
 
+  // Track user interactions for idle detection
+  const recordInteraction = useCallback(() => {
+    lastInteractionRef.current = Date.now();
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+  }, []);
+
+  // Phase 3: After graph renders — idle suggestions
+  useEffect(() => {
+    if (graphData.nodes.length === 0 || suggestCount >= MAX_SUGGESTIONS) return;
+    
+    const startIdle = () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        if (suggestCount >= MAX_SUGGESTIONS) return;
+        const suggestions = [
+          "want the wallet mesh? click Deep Spider",
+          "backtrace the Dev with Find KYC Root",
+          "Map X Community shows Admins and Mods too",
+          "try Find All Tokens to see what else they made",
+          "try Solar Clusters to regroup the view",
+          "switch to Tree view for hierarchy",
+          "use the mini map to navigate clusters",
+        ];
+        const pick = suggestions[Math.floor(Math.random() * suggestions.length)];
+        dispatchThoughtCustom(pick);
+        setSuggestCount(c => c + 1);
+        // Chain another idle suggestion
+        startIdle();
+      }, IDLE_DELAY);
+    };
+    
+    startIdle();
+    return () => { if (idleTimerRef.current) clearTimeout(idleTimerRef.current); };
+  }, [graphData.nodes.length, suggestCount]);
+
   // Reset reveal state on new search
   const handleSearch = useCallback(() => {
+    recordInteraction();
     if (!searchInput.trim()) {
       resetView();
       setXAccountsRevealed(false);
@@ -200,13 +289,17 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       return;
     }
     if (!canSearch) {
-      toast.error("Daily limit reached! Sign up or subscribe for unlimited access.");
+      dispatchThoughtCustom("daily scan used — subscribe for unlimited");
       return;
     }
     recordSearch();
     setXAccountsRevealed(false);
     setHasSpideredOnce(false);
     setDevWalletAddress(null);
+    setSuggestCount(0); // Reset suggestion count for new search
+    setTraceButtonGold(false);
+    setTraceButtonPulse(false);
+    if (traceNudgeTimerRef.current) clearTimeout(traceNudgeTimerRef.current);
     clearCooldown(searchInput.trim());
     let type = 'wallet';
     const rawInput = searchInput.trim();
@@ -227,7 +320,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         comment: `Bubblemap ${mode} lookup`,
       });
     }
-  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode]);
+  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode, recordInteraction]);
 
   // Auto-load from URL ?token= parameter
   useEffect(() => {
