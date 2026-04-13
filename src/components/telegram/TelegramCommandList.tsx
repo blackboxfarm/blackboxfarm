@@ -6,7 +6,9 @@ const COMMAND_GROUPS = [
     label: "🔧 Setup",
     commands: [
       { cmd: "/start", desc: "Welcome & setup" },
+      { cmd: "/signup", desc: "Create account via Telegram" },
       { cmd: "/register", desc: "Link your BlackBox Farm account" },
+      { cmd: "/myname", desc: "Set your preferred name" },
       { cmd: "/status", desc: "Check your subscription tier" },
       { cmd: "/help", desc: "Show all commands" },
     ],

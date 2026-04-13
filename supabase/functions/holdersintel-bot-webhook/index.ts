@@ -558,8 +558,11 @@ async function handleStart(chatId: number, telegramUserId: string, username: str
   const linked = await getLinkedUser(telegramUserId);
   if (linked) {
     const tier = await getUserTier(linked.user_id);
+    // Try to greet by preferred name
+    const { data: mem } = await supabase.from('ai_user_memory').select('preferred_name').or(`telegram_user_id.eq.${telegramUserId},user_id.eq.${linked.user_id}`).limit(1).maybeSingle();
+    const greeting = mem?.preferred_name ? `Welcome back, ${mem.preferred_name}!` : 'Welcome back!';
     await sendMessage(chatId,
-      `✅ *Welcome back!*\n\n` +
+      `✅ *${greeting}*\n\n` +
       `Your account is linked. Tier: *${tier.toUpperCase()}*\n\n` +
       `Use /help to see available commands.`
     );
@@ -575,6 +578,42 @@ async function handleStart(chatId: number, telegramUserId: string, username: str
       [{ text: "🔗 Link with Code", callback_data: "auth_link_code" }],
     ]
   );
+}
+
+// ─── /myname — Set preferred name for AI interactions ───
+async function handleMyName(chatId: number, telegramUserId: string, args: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 Please link your account first with /register.`);
+    return;
+  }
+
+  const name = args.trim();
+  if (!name) {
+    // Show current name
+    const { data: mem } = await supabase.from('ai_user_memory').select('preferred_name').or(`telegram_user_id.eq.${telegramUserId},user_id.eq.${linked.user_id}`).limit(1).maybeSingle();
+    if (mem?.preferred_name) {
+      await sendMessage(chatId, `👤 Your current name: *${mem.preferred_name}*\n\nTo change it: \`/myname NewName\``);
+    } else {
+      await sendMessage(chatId, `👤 No name set yet.\n\nUsage: \`/myname Alex\``);
+    }
+    return;
+  }
+
+  if (name.length > 30) {
+    await sendMessage(chatId, `❌ Name too long. Max 30 characters.`);
+    return;
+  }
+
+  // Upsert into ai_user_memory
+  const { data: existing } = await supabase.from('ai_user_memory').select('id').or(`telegram_user_id.eq.${telegramUserId},user_id.eq.${linked.user_id}`).limit(1).maybeSingle();
+  if (existing) {
+    await supabase.from('ai_user_memory').update({ preferred_name: name, telegram_user_id: telegramUserId, user_id: linked.user_id }).eq('id', existing.id);
+  } else {
+    await supabase.from('ai_user_memory').insert({ preferred_name: name, telegram_user_id: telegramUserId, user_id: linked.user_id, last_platform: 'telegram' });
+  }
+
+  await sendMessage(chatId, `✅ Got it, I'll call you *${name}* from now on! 🎉`);
 }
 
 /** Handle callback_query from inline keyboard buttons */
@@ -731,7 +770,9 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   let cmds = `🔍 *HoldersIntel — Your Edge in Solana Intel*\n\n` +
     `*🌐 General — Free for Everyone*\n` +
     `${unlocked} /start — Get started & connect your account\n` +
+    `${unlocked} /signup — Create account via Telegram\n` +
     `${unlocked} /register \`CODE\` — Link your BlackBox Farm account\n` +
+    `${unlocked} /myname \`NAME\` — Set your preferred name for AI chat\n` +
     `${unlocked} /status — View your tier, usage & limits\n` +
     `${unlocked} /help — This command reference\n` +
     `${unlocked} /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n\n`;
@@ -3233,7 +3274,7 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
         prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;
         prompt += `### Setup (All tiers)\n`;
-        prompt += `/start — Welcome & setup\n/register — Link BlackBox Farm account\n/status — Check subscription tier\n/help — Show all commands\n\n`;
+        prompt += `/start — Welcome & setup\n/signup — Create account via Telegram\n/register — Link BlackBox Farm account\n/myname NAME — Set your preferred name\n/status — Check subscription tier\n/help — Show all commands\n\n`;
         prompt += `### Analysis (Auth+ tier)\n`;
         prompt += `/holders CA — Holder distribution analysis\n/risk CA (alias /r) — Composite risk & stability\n/concentration CA — Detailed holder % breakdown\n/dev CA (alias /d) — Developer intel & social doxxing\n/ca CA — Default holder analysis\n/quick CA (alias /q) — Fast holder count & key stats\n/ai CA — Descriptive AI analysis snapshot\n\n`;
         prompt += `### Advanced (X Subscriber+ tier)\n`;
@@ -3248,6 +3289,24 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         // Inject user profile + live data
         prompt += userProfile + '\n';
         if (liveDataBlock) prompt += liveDataBlock + '\n';
+
+        // Inject cross-platform chat history for continuity
+        try {
+          const { data: recentChat } = await supabase
+            .from('unified_chat_history')
+            .select('platform, role, content, created_at')
+            .eq('account_user_id', linked.user_id)
+            .order('created_at', { ascending: false })
+            .limit(5);
+          if (recentChat && recentChat.length > 0) {
+            prompt += `## RECENT CROSS-PLATFORM CONTEXT\nRecent messages from this user across web and Telegram (newest first):\n`;
+            for (const msg of recentChat.reverse()) {
+              const plat = msg.platform === 'web' ? '🌐' : '📱';
+              prompt += `${plat} [${msg.role}]: ${(msg.content || '').slice(0, 200)}\n`;
+            }
+            prompt += `\nUse this context naturally — don't reference "cross-platform" to the user.\n\n`;
+          }
+        } catch (e) { console.warn('[bot] cross-platform context fetch failed:', e); }
 
         prompt += `## NAME USAGE\nIf you know the user's preferred name, address them by it. If this is their first interaction, ask "What should I call you?" naturally.\n\n`;
 
@@ -3349,6 +3408,14 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         is_bot_reply: true,
       }).then(({ error: logErr }) => {
         if (logErr) console.error('[bot] DM capture (bot reply) failed:', logErr);
+      });
+
+      // Write to unified_chat_history for cross-platform context
+      supabase.from('unified_chat_history').insert([
+        { account_user_id: linked.user_id, telegram_user_id: telegramUserId, platform: 'telegram', role: 'user', content: messageText.slice(0, 2000) },
+        { account_user_id: linked.user_id, telegram_user_id: telegramUserId, platform: 'telegram', role: 'assistant', content: reply.slice(0, 2000) },
+      ]).then(({ error: uhErr }) => {
+        if (uhErr) console.error('[bot] unified_chat_history write failed:', uhErr);
       });
 
       // Extract preferred name from reply context
@@ -3815,6 +3882,9 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
         case "/start":
         case "/signup":
           await handleStart(chatId, telegramUserId, username);
+          break;
+        case "/myname":
+          await handleMyName(chatId, telegramUserId, args);
           break;
         case "/register":
           await handleRegister(chatId, telegramUserId, username, args);
