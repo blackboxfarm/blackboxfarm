@@ -46,5 +46,6 @@ export default function PumpfunMonitorTab() {
         {activeSubTab === "profit-exits" && <Suspense fallback={<LazyLoader />}><ProfitExitBackcheck /></Suspense>}
       </TabsContent>
     </Tabs>
+    </div>
   );
 }
