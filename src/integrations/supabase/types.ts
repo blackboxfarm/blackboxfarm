@@ -8605,6 +8605,86 @@ export type Database = {
         }
         Relationships: []
       }
+      promo_codes: {
+        Row: {
+          code: string
+          created_at: string
+          current_uses: number
+          id: string
+          is_active: boolean
+          max_uses: number
+          source_label: string | null
+          tier_granted: string
+          trial_duration_days: number
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          current_uses?: number
+          id?: string
+          is_active?: boolean
+          max_uses?: number
+          source_label?: string | null
+          tier_granted?: string
+          trial_duration_days?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          current_uses?: number
+          id?: string
+          is_active?: boolean
+          max_uses?: number
+          source_label?: string | null
+          tier_granted?: string
+          trial_duration_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      promo_redemptions: {
+        Row: {
+          expires_at: string
+          id: string
+          is_active: boolean
+          promo_code_id: string
+          redeemed_at: string
+          source_label: string | null
+          telegram_user_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          expires_at: string
+          id?: string
+          is_active?: boolean
+          promo_code_id: string
+          redeemed_at?: string
+          source_label?: string | null
+          telegram_user_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          expires_at?: string
+          id?: string
+          is_active?: boolean
+          promo_code_id?: string
+          redeemed_at?: string
+          source_label?: string | null
+          telegram_user_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promo_redemptions_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "promo_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       promo_tweet_config: {
         Row: {
           created_at: string
@@ -14314,6 +14394,104 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tester_feedback: {
+        Row: {
+          created_at: string
+          feedback_type: string
+          id: string
+          message: string
+          page_path: string | null
+          screenshot_url: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          feedback_type?: string
+          id?: string
+          message: string
+          page_path?: string | null
+          screenshot_url?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          feedback_type?: string
+          id?: string
+          message?: string
+          page_path?: string | null
+          screenshot_url?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tester_questionnaire_responses: {
+        Row: {
+          answers: Json
+          completed_at: string | null
+          created_at: string
+          id: string
+          questionnaire_id: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          questionnaire_id: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          questionnaire_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tester_questionnaire_responses_questionnaire_id_fkey"
+            columns: ["questionnaire_id"]
+            isOneToOne: false
+            referencedRelation: "tester_questionnaires"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tester_questionnaires: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          questions: Json
+          target_promo_code: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          target_promo_code?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          target_promo_code?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       testimonial_invites: {
         Row: {
