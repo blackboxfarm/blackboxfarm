@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LazyLoader } from '@/components/ui/lazy-loader';
+import { PumpFunApiStatus } from '@/components/admin/PumpFunApiStatus';
 
 // Lazy load each component
 const DailyOpeningWizard = lazy(() => import("@/components/admin/DailyOpeningWizard"));
