@@ -12,6 +12,7 @@ import oracleAvatar from '@/assets/oracle-avatar.png';
 import { useOracleHover } from './OracleHoverProvider';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AvatarThoughtBubble } from './AvatarThoughtBubble';
+import { usePageNudgeOrchestrator } from '@/hooks/usePageNudgeOrchestrator';
 
 // Pages where the widget should NOT appear
 const HIDDEN_PAGES = ['/checkout', '/payment'];
@@ -51,6 +52,9 @@ export function ChatWidget() {
   const isMobile = useIsMobile();
   const [thoughtText, setThoughtText] = useState<string | null>(null);
   const [nudgesEnabled, setNudgesEnabled] = useState(true);
+
+  // Sitewide page nudge orchestrator
+  usePageNudgeOrchestrator({ nudgesEnabled, isOpen, fabVisible });
 
   // Listen for thought bubble events from BubbleMap etc. (only when nudges enabled)
   useEffect(() => {

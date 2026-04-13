@@ -105,7 +105,7 @@ export default function Subscriptions() {
               </p>
 
               {/* Tier Cards */}
-              <div className="max-w-6xl mx-auto pt-6">
+              <div className="max-w-6xl mx-auto pt-6" data-oracle-hint="Want me to compare these plans for you?" data-oracle-zone="subs-tier-cards">
                 <p className="text-sm text-muted-foreground mb-6">
                   Join now or scroll down and compare packages
                 </p>
@@ -147,7 +147,7 @@ export default function Subscriptions() {
         {/* Features Grid */}
         <section className="mx-auto max-w-6xl px-4 py-16">
           <h2 className="text-2xl font-bold text-center mb-10">What You Get</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-oracle-hint="Each feature stacks — free gets you started, Pro goes deep" data-oracle-zone="subs-features">
             {features.map((f, i) => (
               <Card key={i} className="bg-card/50 border-border/50 hover:border-primary/30 transition-colors">
                 <CardContent className="p-5 flex gap-4">
@@ -232,7 +232,7 @@ export default function Subscriptions() {
         </div>
 
         {/* FAQ */}
-        <section className="mx-auto max-w-2xl px-4 pb-16 space-y-4 text-sm">
+        <section className="mx-auto max-w-2xl px-4 pb-16 space-y-4 text-sm" data-oracle-hint="Still have questions? Just ask me" data-oracle-zone="subs-faq">
           <h2 className="text-xl font-semibold text-center">FAQ</h2>
           <div className="space-y-3">
             <div>

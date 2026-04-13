@@ -134,7 +134,7 @@ export default function Home() {
           <p className="text-base md:text-lg max-w-2xl mx-auto mb-6 text-gold font-semibold" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)' }}>
             Link wallets, expose insider clusters, and identify bad devs before you ape.
           </p>
-          <div className="mb-10">
+          <div className="mb-10" data-oracle-hint="I can help you run your first token check" data-oracle-zone="home-hero-cta">
             <Button 
               size="lg" 
               onClick={() => navigate("/holders")}
@@ -259,7 +259,7 @@ export default function Home() {
       </section>
 
       {/* Testimonial Carousel */}
-      <section className="max-w-4xl mx-auto px-4 py-6">
+      <section className="max-w-4xl mx-auto px-4 py-6" data-oracle-hint="Real users, real results — want to try it?" data-oracle-zone="home-testimonials">
         <TestimonialCarousel />
       </section>
 
@@ -274,7 +274,7 @@ export default function Home() {
           </h2>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 gap-6" data-oracle-hint="Ask me about holder analysis, the Telegram bot, or the Bubble Map" data-oracle-zone="home-pillars">
           {PRODUCT_PILLARS.map((pillar) => (
             <Card key={pillar.title} className="bg-card border-border relative overflow-hidden group hover:border-primary/30 transition-colors">
               {pillar.isNew && (
@@ -363,7 +363,7 @@ export default function Home() {
       </section>
 
       {/* Tier Comparison */}
-      <section className="max-w-6xl mx-auto px-4 py-20">
+      <section className="max-w-6xl mx-auto px-4 py-20" data-oracle-hint="Not sure which plan? I can help you compare" data-oracle-zone="home-tier-compare">
         <div className="text-center mb-12">
           <Badge variant="outline" className="mb-3 text-primary border-primary/30">
             Access Levels
@@ -528,7 +528,7 @@ export default function Home() {
       {/* CTA */}
       <section className="border-t border-border">
         <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-6">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground">
+          <h2 className="text-3xl md:text-4xl font-bold text-foreground" data-oracle-hint="Ready to dive in? I'll walk you through it" data-oracle-zone="home-cta-bottom">
             Stop Trading Blind
           </h2>
           <p className="text-lg text-muted-foreground max-w-xl mx-auto">

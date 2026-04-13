@@ -337,7 +337,7 @@ export default function Feed() {
         </div>
 
         {/* Intelligence Warning Banner */}
-        <div className="rounded-lg border-2 border-amber-500/40 bg-amber-500/5 p-4 md:p-5 space-y-2">
+        <div className="rounded-lg border-2 border-amber-500/40 bg-amber-500/5 p-4 md:p-5 space-y-2" data-oracle-hint="Health grades are AI-calculated — ask me how they work" data-oracle-zone="feed-health-info">
           <div className="flex items-start gap-3">
             <span className="text-2xl leading-none mt-0.5">⚠️</span>
             <div className="space-y-1.5">
@@ -361,7 +361,7 @@ export default function Feed() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative flex-1 md:w-72">
+            <div className="relative flex-1 md:w-72" data-oracle-hint="Search by name, symbol, or paste a contract address" data-oracle-zone="feed-search">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search $TICKER or token address..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
@@ -377,7 +377,7 @@ export default function Feed() {
         </div>
 
         {/* Litmus Strip Legend */}
-        <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+        <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1" data-oracle-hint="Click any token row for the full breakdown and action buttons" data-oracle-zone="feed-litmus">
           <span className="font-medium">12h History:</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-emerald-500 inline-block" /> Strong (A-B+)</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-yellow-400 inline-block" /> Moderate (B-C)</span>

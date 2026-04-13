@@ -17,7 +17,7 @@ export default function BubblePromo() {
   }
   return (
     <SiteLayout>
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6" data-oracle-hint="1 free deep scan per day — paste a token address to start" data-oracle-zone="bubblepromo-main">
         <PublicBubbleMap mode="promo" showUpgradePrompt />
 
         {/* Testimonial Carousel */}
@@ -25,7 +25,7 @@ export default function BubblePromo() {
           <TestimonialCarousel />
         </div>
         
-        <Card>
+        <Card data-oracle-hint="Sign up free to unlock full Bubble Map features" data-oracle-zone="bubblepromo-tiers">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">🫧 Bubble Map — Feature Tiers</CardTitle>
           </CardHeader>
