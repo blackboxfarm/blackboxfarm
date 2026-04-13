@@ -56,3 +56,8 @@ export function dispatchThought(category: string) {
   const text = pickQuip(category as any);
   window.dispatchEvent(new CustomEvent('signal-thought', { detail: { text } }));
 }
+
+/** Dispatch a thought bubble with custom arbitrary text. */
+export function dispatchThoughtCustom(text: string) {
+  window.dispatchEvent(new CustomEvent('signal-thought', { detail: { text } }));
+}
