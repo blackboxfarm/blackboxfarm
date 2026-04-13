@@ -50,18 +50,38 @@ export function ChatWidget() {
   const oracleCtx = useOracleHover();
   const isMobile = useIsMobile();
   const [thoughtText, setThoughtText] = useState<string | null>(null);
+  const [nudgesEnabled, setNudgesEnabled] = useState(true);
 
-  // Listen for thought bubble events from BubbleMap etc.
+  // Listen for thought bubble events from BubbleMap etc. (only when nudges enabled)
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.text && fabVisible && !isOpen) {
+      if (detail?.text && fabVisible && !isOpen && nudgesEnabled) {
         setThoughtText(detail.text);
       }
     };
     window.addEventListener('signal-thought', handler);
     return () => window.removeEventListener('signal-thought', handler);
-  }, [fabVisible, isOpen]);
+  }, [fabVisible, isOpen, nudgesEnabled]);
+
+  // Keyboard shortcuts: Ctrl+Space or "/" to toggle AI nudge bubbles
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+Space toggle
+      if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
+        e.preventDefault();
+        setNudgesEnabled(prev => !prev);
+        return;
+      }
+      // "/" toggle — only when not typing in an input/textarea
+      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
+        e.preventDefault();
+        setNudgesEnabled(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // Mobile: Triple-tap bottom-right corner to summon Oracle
   useEffect(() => {
