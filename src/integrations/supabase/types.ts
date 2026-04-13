@@ -6347,6 +6347,47 @@ export type Database = {
         }
         Relationships: []
       }
+      intel_publications: {
+        Row: {
+          briefing_id: string
+          content_depth: number
+          created_at: string
+          id: string
+          notes: string | null
+          platform: string
+          published_at: string
+          published_url: string | null
+        }
+        Insert: {
+          briefing_id: string
+          content_depth?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          platform: string
+          published_at?: string
+          published_url?: string | null
+        }
+        Update: {
+          briefing_id?: string
+          content_depth?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          platform?: string
+          published_at?: string
+          published_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_publications_briefing_id_fkey"
+            columns: ["briefing_id"]
+            isOneToOne: false
+            referencedRelation: "intel_briefings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intelligence_feature_flags: {
         Row: {
           description: string | null
