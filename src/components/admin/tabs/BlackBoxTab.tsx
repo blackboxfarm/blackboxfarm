@@ -11,6 +11,7 @@ const Playground = lazy(() => import("@/components/admin/Playground").then(m => 
 const AirdropManager = lazy(() => import("@/components/admin/AirdropManager").then(m => ({ default: m.AirdropManager })));
 const FuctAirdropGift = lazy(() => import("@/components/admin/FuctAirdropGift").then(m => ({ default: m.FuctAirdropGift })));
 const SurveyManagement = lazy(() => import("@/components/admin/SurveyManagement").then(m => ({ default: m.SurveyManagement })));
+const SecurityActivityDashboard = lazy(() => import("@/components/admin/SecurityActivityDashboard").then(m => ({ default: m.SecurityActivityDashboard })));
 const WalletBundleReport = lazy(() => import("@/components/admin/WalletBundleReport").then(m => ({ default: m.WalletBundleReport })));
 
 export default function BlackBoxTab() {
@@ -21,6 +22,7 @@ export default function BlackBoxTab() {
       <TabsList className="flex flex-wrap gap-1">
         <TabsTrigger value="bundle-analysis">🕵️ Bundle Analysis</TabsTrigger>
         <TabsTrigger value="security">🛡️ Security Dashboard</TabsTrigger>
+        <TabsTrigger value="security-activity">🔐 Security Activity</TabsTrigger>
         <TabsTrigger value="accounts">📁 Account Directory</TabsTrigger>
         <TabsTrigger value="tokens">🪙 All Tokens</TabsTrigger>
         <TabsTrigger value="arbitrage">📊 Arbitrage Bot</TabsTrigger>
@@ -35,6 +37,9 @@ export default function BlackBoxTab() {
       </TabsContent>
       <TabsContent value="security">
         {activeSubTab === "security" && <Suspense fallback={<LazyLoader />}><SecurityDashboard /></Suspense>}
+      </TabsContent>
+      <TabsContent value="security-activity">
+        {activeSubTab === "security-activity" && <Suspense fallback={<LazyLoader />}><SecurityActivityDashboard /></Suspense>}
       </TabsContent>
       <TabsContent value="accounts">
         {activeSubTab === "accounts" && <Suspense fallback={<LazyLoader />}><AccountViewer /></Suspense>}
