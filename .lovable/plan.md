@@ -1,127 +1,107 @@
 
 
-# Manual Social Post Builder — Master Template + 25 Platform Tabs
+# BubbleMap AI-Guided Experience + Rate Limit Overhaul
 
-## Concept
+## Summary
 
-A new section within the Social Media Manager called **"Manual Post Builder"** that works as a two-layer system:
+Transform the BubbleMap from a static tool into an AI-guided interactive experience where The Signal avatar coaches users through features, while simplifying the tier model to "1 full deep scan per day" for free/anon users.
 
-1. **Master Template Tab** — You fill in ALL content once (title, body text, hashtags, image URL, video URL, link URL, alt text, CTA, etc.)
-2. **Platform Tabs (25 platforms)** — Each tab auto-formats the master content into that platform's ideal layout, displayed as a read-only "copy-paste card" with:
-   - Platform-specific character limits applied
-   - "Copy to Clipboard" buttons per field
-   - "Open Platform" button that opens the social site in a new browser tab
-   - A "Save as Draft" button that logs it to the database for historical reference
-3. **History per Platform** — View past manual posts filtered by platform
+## Rate Limit Changes
 
-## Master Template Fields
+**Current state**: 20 lookups/day (testing values), confusing "node cap" concept.
 
-| Field | Description |
-|-------|-------------|
-| Title / Headline | Short title (used by YouTube, Medium, LinkedIn, etc.) |
-| Body Text (Long) | Full-length post body (trimmed per platform) |
-| Body Text (Short) | Optional short version for Twitter/Threads |
-| Hashtags | Comma-separated, auto-formatted with # |
-| Image URL | Primary image + Gallery picker |
-| Video URL | For YouTube, TikTok, Kick, Twitch clips |
-| Link URL | Primary CTA link |
-| Alt Text | Image accessibility text |
-| Tags / Mentions | @handles relevant to the post |
-| CTA Text | Call-to-action line |
-| Category | Dropdown: Announcement, Alpha, Meme, Thread, Tutorial |
+**New model**:
+- Anon (IP/fingerprint): 1 complete deep bubblemap per day, full features
+- Free signed-in: 1 complete deep bubblemap per day, full features  
+- X Subscriber / Pro $9.99: Unlimited
 
-## 25 Platform Tabs with Specs
+**Changes in `useBubbleMapRateLimit.ts`**:
+- Set `DAILY_LIMIT_ANON = 1`, `DAILY_LIMIT_FREE_AUTH = 1`, `DISPLAY_LIMIT = 1`
+- Remove node cap restrictions (give full node cap to everyone)
 
-Each tab shows a formatted preview card with the master data adapted to that platform's constraints:
+**Banner wording update** in `PublicBubbleMap.tsx`:
+- Replace current banner text with: "ONLY 1 Complete* Bubblemap Per Day — Multi Node · 100% Exposed Structures · as DEEP as we can go!!"
+- When used: "Daily scan used! Subscribe for unlimited."
 
-| # | Platform | Max Chars | Needs Image | Needs Video | Has Title Field | API Status |
-|---|----------|-----------|-------------|-------------|-----------------|------------|
-| 1 | X / Twitter | 280 | optional | optional | no | Has API |
-| 2 | Threads | 500 | optional | optional | no | No API |
-| 3 | Instagram | 2200 | required | optional | no | Has API |
-| 4 | Facebook | 63,206 | optional | optional | no | Has API |
-| 5 | LinkedIn | 3000 | optional | optional | no | Has API |
-| 6 | TikTok | 2200 | no | required | yes | Has API |
-| 7 | YouTube | 5000 (desc) | yes (thumb) | required | yes | Has API |
-| 8 | Reddit | 40000 | optional | optional | yes | Has API |
-| 9 | Pinterest | 500 | required | optional | yes | Has API |
-| 10 | Telegram | 4096 | optional | optional | no | Has API |
-| 11 | Discord | 2000 | optional | optional | no | Has API |
-| 12 | Medium | unlimited | optional | no | yes | Has API |
-| 13 | Substack | unlimited | optional | no | yes | No API |
-| 14 | Mirror.xyz | unlimited | optional | no | yes | Has API |
-| 15 | Hashnode | unlimited | optional | no | yes | Has API |
-| 16 | Dev.to | unlimited | optional | no | yes | Has API |
-| 17 | Farcaster | 1024 | optional | optional | no | Has API |
-| 18 | Lens Protocol | 5000 | optional | optional | no | Has API |
-| 19 | Warpcast | 1024 | optional | no | no | Has API |
-| 20 | Quora | 100000 | optional | no | yes | No API |
-| 21 | Twitch | 500 (title) | no | required | yes | Has API |
-| 22 | Kick | 500 | no | required | yes | No API |
-| 23 | Snapchat | 250 | required | optional | no | No API |
-| 24 | Guild | n/a | optional | no | yes | No API |
-| 25 | DeBank | 1000 | optional | no | no | No API |
+## AI Avatar Scripted Journey
 
-## Architecture
+All changes in `PublicBubbleMap.tsx` using the existing `dispatchThought` system, extended with a new `dispatchThoughtCustom(text)` function that sends arbitrary text (not just from quip pools).
 
-### Database Changes (1 migration)
+### Phase 1: Empty State
+When page loads with empty input, dispatch a thought bubble: random from pool like "put in a token address and let's look", "paste a contract, let's trace it", "got a token? drop it in".
 
-Extend `social_posts_log` with new columns for manual posts:
-- `post_type` — `'api'` or `'manual'` (default `'api'` for backward compat)
-- `title` — post title
-- `hashtags` — text
-- `image_url` — text
-- `video_url` — text
-- `link_url` — text
-- `alt_text` — text
-- `tags_mentions` — text
-- `cta_text` — text
-- `category` — text
-- `master_template_id` — uuid (links platform posts back to the master snapshot)
+### Phase 2: Token Address Entered (input onChange detection)
+When valid Solana address detected in input:
+1. Auto-resolve dev wallet (already works)
+2. AI bubble: random from "nice, we have the Dev wallet", "dev wallet locked in", "got the creator"
+3. Dev wallet bar gets a 5-second CSS pulse animation (`animate-pulse` with gold border)
+4. Trace button turns gold (`bg-gold text-black`) with 3-second pulse
+5. If no click in 20 seconds: AI bubble "click Trace to map it out" + button pulses again
 
-### New Files
+### Phase 3: After Initial Graph Display
+- Solar Min mode buttons get a light gold tint when active (already `secondary` variant, add gold accent)
+- If no user action for 15 seconds after graph renders: AI bubble suggests a feature, random from:
+  - "want the wallet mesh? click Deep Spider"
+  - "backtrace the Dev with Find KYC Root"
+  - "Map X Community shows Admins and Mods too"
+  - "try Find All Tokens to see what else they made"
 
-1. **`src/components/admin/social/ManualPostBuilder.tsx`** (~400 lines)
-   - Master Template form with all fields
-   - State management via `useState` that feeds all platform tabs
-   - "Save Master Template" persists a snapshot row
+### Phase 4: After Feature Button Click + Results
+- Replace ALL toast notifications from feature buttons with AI avatar chat bubbles instead
+  - KYC: "tracing the funding chain..." → "KYC root locked in" (instead of toast)
+  - Find All Tokens: "scanning for token mints..." → "found X tokens"
+  - Deep Spider: "deep spidering the mesh..." → "mesh expanded"
+  - Map X Community: "scanning X community..." → "community mapped"
+- After results display, AI suggests view switching: "try Solar Clusters to regroup" or "switch to Tree view for hierarchy" with 3-second pulse on those buttons
+- Alternate suggestions: "change the line spacing with +/- controls", "use the mini map to navigate clusters" with minimap border pulse
 
-2. **`src/components/admin/social/PlatformPostCard.tsx`** (~150 lines)
-   - Reusable card component that receives master data + platform config
-   - Auto-trims text to platform char limit
-   - Shows formatted preview
-   - "Copy All" and per-field "Copy" buttons
-   - "Open [Platform]" button → `window.open(platformUrl, '_blank')`
-   - "Save as Posted" → inserts into `social_posts_log` with `post_type='manual'`
+### Phase 5: Shakey-Shake
+- Currently works (resets node positions + reheat). Add:
+  - Button depress animation on click (scale-95 transition)
+  - Brief 1-second CSS shake animation on the graph container (`@keyframes shake`)
+  - AI bubble: "shaking it out..." or "reshuffling the mesh"
 
-3. **`src/components/admin/social/platformConfigs.ts`** (~200 lines)
-   - Array of 25 platform definitions: name, icon/color, charLimit, requiresImage, requiresVideo, hasTitle, postUrl, apiStatus
+## Technical Implementation
 
-4. **`src/components/admin/social/ManualPostHistory.tsx`** (~100 lines)
-   - Filtered view of `social_posts_log` where `post_type='manual'`
-   - Grouped by `master_template_id` so you can see "I posted this to 8 platforms on April 12"
+### New utility: `dispatchThoughtCustom`
+Add to `AvatarThoughtBubble.tsx`:
+```typescript
+export function dispatchThoughtCustom(text: string) {
+  window.dispatchEvent(new CustomEvent('signal-thought', { detail: { text } }));
+}
+```
 
-### Modified Files
+### New CSS classes in `tailwind.config.ts` or inline:
+- `animate-pulse-gold`: gold-bordered pulse for trace button / dev wallet bar
+- `animate-shake`: graph container shake for Shakey-Shake
+- `animate-depress`: scale-95 on button press
 
-5. **`src/components/admin/tabs/SocialMediaTab.tsx`**
-   - Add a new top-level tab: "📝 Manual Builder"
-   - Contains `ManualPostBuilder` which internally renders sub-tabs for all 25 platforms
+### Idle timer system in `PublicBubbleMap.tsx`:
+- `useRef` for idle timers
+- Reset on any user interaction (button click, input change)
+- Fire AI suggestions at 15-20 second intervals
+- Max 3 suggestions before going quiet (avoid annoyance)
 
-## UX Flow
+### Files Modified
+1. **`src/hooks/useBubbleMapRateLimit.ts`** — Change limits to 1/day, remove node cap logic
+2. **`src/components/chat/AvatarThoughtBubble.tsx`** — Add `dispatchThoughtCustom`, add BubbleMap-specific quip pools
+3. **`src/components/bubble-map/PublicBubbleMap.tsx`** — Main changes:
+   - Rate limit banner wording
+   - Remove node cap enforcement (everyone gets full depth)
+   - AI avatar scripted journey (phases 1-5)
+   - Replace toasts with AI bubbles for feature actions
+   - Gold Trace button + pulse animations
+   - Dev wallet pulse animation
+   - Shakey-Shake visual feedback
+   - Idle timer suggestion system
+   - Solar Min gold tint
+   - View switch pulse suggestions
+   - Minimap border pulse suggestion
+4. **`src/index.css`** — Add `@keyframes shake` and pulse-gold animations
 
-1. Click "Manual Builder" tab
-2. Fill in master template fields (title, body, hashtags, image, etc.)
-3. Click through platform sub-tabs — each shows your content formatted for that platform
-4. Click "Copy All" → copies the formatted post text
-5. Click "Open X" → opens twitter.com/compose/tweet in new tab
-6. Paste and post manually
-7. Come back, click "Mark as Posted" → saves to history
-8. Tomorrow: repeat with a new master template, old ones preserved in history
-
-## Implementation Priority
-
-This is a large feature. The plan creates it in one pass:
-- Migration + platformConfigs + ManualPostBuilder + PlatformPostCard + ManualPostHistory + wire into SocialMediaTab
-
-Total: ~5 files modified/created, 1 migration.
+### Guardrails Against Annoyance
+- Max 3-4 AI suggestions per session before going silent
+- Minimum 15 seconds between suggestions
+- No suggestions while user is actively clicking/interacting
+- Reset suggestion count on new token search
 
