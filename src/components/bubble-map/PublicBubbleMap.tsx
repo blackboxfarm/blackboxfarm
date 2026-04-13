@@ -349,11 +349,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
   const handleSpider = useCallback(() => {
     if (!searchInput.trim()) return;
-    // Clear cooldown so retry always works immediately
+    recordInteraction();
+    dispatchThoughtCustom("deep spidering the mesh...");
     clearCooldown(searchInput.trim());
     triggerSpider(searchInput.trim(), 'deep');
     setHasSpideredOnce(true);
-  }, [searchInput, triggerSpider, clearCooldown]);
+  }, [searchInput, triggerSpider, clearCooldown, recordInteraction]);
 
   // --- X Community discovery with showmanship ---
   const handleDiscoverCommunity = useCallback(async () => {
@@ -417,20 +418,20 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
     // Otherwise do the real API call
     setCommunitySearching(true);
-    dispatchThought('community');
-    toast.info('🐦 Searching for X Community...');
+    recordInteraction();
+    dispatchThoughtCustom("scanning X community...");
     try {
       const walletNode = graphData.nodes.find(n => n.type === 'wallet');
       const wallet = walletNode?.fullId || walletNode?.id.replace(/^wallet:/, '');
       await autoDiscoverCommunity(tokenMint, wallet);
       setTimeout(() => refetch(), 1500);
-      toast.success('🐦 X Community discovery complete — refreshing graph');
+      dispatchThoughtCustom("community mapped ✓");
     } catch (err) {
-      toast.error('X Community discovery failed');
+      dispatchThoughtCustom("X Community discovery failed");
     } finally {
       setCommunitySearching(false);
     }
-  }, [graphData.nodes, searchInput, autoDiscoverCommunity, refetch, xAccountsRevealed, addTerminalLine, clearTerminal]);
+  }, [graphData.nodes, searchInput, autoDiscoverCommunity, refetch, xAccountsRevealed, addTerminalLine, clearTerminal, recordInteraction]);
 
   // --- KYC search with hacker terminal showmanship ---
   const handleFindKYC = useCallback(async () => {
@@ -538,10 +539,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
           setKycFound(true);
           dispatchThought('success');
-          const toastMsg = isCexConfirmed 
+          const kycMsg = isCexConfirmed 
             ? `🏦 CEX Root found in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`
-            : `🔍 Deepest funder found (trail cold) in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`;
-          toast.success(toastMsg);
+            : `🔍 Deepest funder (trail cold) in ${data.chainDepth || data.chain?.length || 0} hops`;
+          dispatchThoughtCustom(kycMsg);
           setTimeout(() => setTerminalVisible(false), 3000);
         }, chainDelay + 1200);
       } else {
@@ -549,7 +550,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           addTerminalLine(`NO FUNDING CHAIN FOUND — ${data?.walletsTraced || 0} WALLETS TRACED`, 'warning');
           dispatchThought('cold_trail');
           addTerminalLine('TRAIL EXHAUSTED. NO CEX OR FUNDER DISCOVERED.', 'warning');
-          toast.warning(`No funding chain found after tracing ${data?.walletsTraced || 0} wallets`);
+          dispatchThoughtCustom(`no funding chain found — ${data?.walletsTraced || 0} wallets traced`);
           setTimeout(() => setTerminalVisible(false), 2500);
         }, chainDelay + 400);
       }
@@ -565,8 +566,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
   const handleFindTokens = useCallback(async () => {
     const walletNodes = graphData.nodes.filter(n => n.type === 'wallet');
-    if (walletNodes.length === 0 && !focusedEntity) { toast.error('No wallet nodes to scan'); return; }
+    if (walletNodes.length === 0 && !focusedEntity) { dispatchThoughtCustom('no wallet nodes to scan'); return; }
     setTokenSearching(true);
+    recordInteraction();
+    dispatchThoughtCustom("scanning for token mints...");
     const walletsToScan = focusedEntity?.type === 'wallet'
       ? [focusedEntity.id.replace(/^wallet:/, '')]
       : walletNodes.slice(0, 5).map(n => n.id.split(':').slice(1).join(':'));
@@ -579,14 +582,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         if (error) throw error;
         totalTokens += data?.tokensFound || 0;
       } catch (err: any) {
-        toast.error(`Token scan failed: ${err.message}`);
+        dispatchThoughtCustom(`token scan failed: ${err.message}`);
       }
     }
-    if (totalTokens > 0) toast.success(`🎯 ${totalTokens} tokens discovered`);
-    else toast.warning('No tokens found');
+    if (totalTokens > 0) dispatchThoughtCustom(`found ${totalTokens} tokens`);
+    else dispatchThoughtCustom('no tokens found');
     setTimeout(() => refetch(), 1000);
     setTokenSearching(false);
-  }, [graphData.nodes, focusedEntity, refetch]);
+  }, [graphData.nodes, focusedEntity, refetch, recordInteraction]);
 
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickNodeRef = useRef<string | null>(null);
@@ -812,14 +815,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     <div className="space-y-4">
       {/* Rate Limit Banner */}
       {isLimited && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+        <div className="rounded-lg border border-gold/30 bg-gold/5 p-4 space-y-2">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <Lock className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium text-foreground">
+              <Lock className="h-4 w-4 text-gold" />
+              <span className="text-sm font-bold text-foreground">
                 {remaining > 0
-                  ? `${remaining} of ${limit} free lookups remaining today`
-                  : "Daily limit reached!"}
+                  ? "ONLY 1 Complete* Bubblemap Per Day"
+                  : "Daily scan used!"}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -828,14 +831,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
                   Sign Up Free
                 </Button>
               )}
-              <Button size="sm" onClick={() => navigate('/subscriptions')} className="text-xs h-7 gap-1">
+              <Button size="sm" onClick={() => navigate('/subscriptions')} className="text-xs h-7 gap-1 bg-gold text-gold-foreground hover:bg-gold/90">
                 <Crown className="h-3 w-3" />
                 Subscribe for Unlimited
               </Button>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            🎯 2 lookups a day per IP — check a Dev Wallet and a Token anytime! Subscribe for $9.99/mo for unlimited Bubble Map access.
+            {remaining > 0
+              ? "Multi Node · 100% Exposed Structures · as DEEP as we can go!! Subscribe for $9.99/mo for unlimited."
+              : "Subscribe for $9.99/mo to unlock unlimited Bubble Map access."}
           </p>
         </div>
       )}
@@ -871,7 +876,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               className="flex-1 font-mono text-xs"
               disabled={!canSearch}
             />
-            <Button variant="outline" size="sm" onClick={handleSearch} disabled={isLoading || !canSearch}>
+            <Button
+              size="sm"
+              onClick={() => { recordInteraction(); handleSearch(); }}
+              disabled={isLoading || !canSearch}
+              className={`${traceButtonGold ? 'bg-gold text-gold-foreground hover:bg-gold/90 border-gold' : 'border-border'} ${traceButtonPulse ? 'animate-pulse-gold' : ''}`}
+            >
               <Search className="h-3.5 w-3.5 mr-1" /> Trace
             </Button>
             <Button variant="ghost" size="sm" onClick={resetView}>
@@ -1051,7 +1061,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
       {/* Dev Wallet Bar — auto-filled above graph */}
       {devWalletAddress && (
-        <div className="rounded-lg border border-primary/20 bg-card/80 backdrop-blur px-4 py-2 flex items-center gap-3">
+        <div className={`rounded-lg border bg-card/80 backdrop-blur px-4 py-2 flex items-center gap-3 transition-all ${devWalletPulse ? 'border-gold animate-pulse-gold' : 'border-primary/20'}`}>
           <div className="flex items-center gap-2 text-xs">
             <span className="text-green-400">●</span>
             <span>📡 Dev Wallet</span>
@@ -1088,10 +1098,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/80 backdrop-blur">
           {/* Solar Mode */}
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-            <Button variant={solarMode === 'minimum' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('minimum')}>
+            <Button variant={solarMode === 'minimum' ? 'secondary' : 'ghost'} size="sm"
+              className={`h-7 text-xs px-2 ${solarMode === 'minimum' ? 'text-gold border-gold/30' : ''}`}
+              onClick={() => { setSolarMode('minimum'); recordInteraction(); }}>
               <Sun className="h-3 w-3 mr-1" /> Solar Min
             </Button>
-            <Button variant={solarMode === 'clusters' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setSolarMode('clusters')}>
+            <Button variant={solarMode === 'clusters' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => { setSolarMode('clusters'); recordInteraction(); }}>
               <Orbit className="h-3 w-3 mr-1" /> Solar Clusters
             </Button>
           </div>
@@ -1118,11 +1130,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs px-2"
+            className="h-7 text-xs px-2 btn-depress"
             onClick={() => {
+              recordInteraction();
+              const shakeQuips = ["shaking it out...", "reshuffling the mesh", "unsticking the bubbles"];
+              dispatchThoughtCustom(shakeQuips[Math.floor(Math.random() * shakeQuips.length)]);
+              // Trigger shake animation on graph container
+              setShakeGraph(true);
+              setTimeout(() => setShakeGraph(false), 800);
               if (graphRef.current && typeof graphRef.current.graphData === 'function') {
                 const gd = graphRef.current.graphData();
-                // Strip all position/velocity data so the simulation starts fresh
                 gd.nodes.forEach((node: any) => {
                   delete node.x;
                   delete node.y;
@@ -1131,16 +1148,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
                   node.fx = undefined;
                   node.fy = undefined;
                 });
-                // New object reference forces react-force-graph to fully re-initialize
                 graphRef.current.graphData({ nodes: [...gd.nodes], links: [...gd.links] });
-                // Gentle alpha so it doesn't explode
                 setTimeout(() => {
                   if (graphRef.current) {
                     const sim = graphRef.current.d3Force('simulation');
                     if (sim) sim.alpha(0.3);
                   }
                 }, 100);
-                // Auto-fit after the simulation settles
                 setTimeout(() => {
                   if (graphRef.current) {
                     graphRef.current.zoomToFit(800, 40);
@@ -1157,7 +1171,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
       {/* Graph Canvas */}
       <Card className="overflow-hidden">
-        <div ref={containerRef} className="w-full relative" style={{ height: '600px', background: 'hsl(var(--background))' }}>
+        <div ref={containerRef} className={`w-full relative ${shakeGraph ? 'animate-shake-graph' : ''}`} style={{ height: '600px', background: 'hsl(var(--background))' }}>
           {/* Hacker Terminal Overlay */}
           <HackerTerminal lines={terminalLines} visible={terminalVisible} title={terminalTitle} />
           {/* Minimap Navigation */}
