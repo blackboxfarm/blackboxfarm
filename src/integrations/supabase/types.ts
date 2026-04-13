@@ -5239,6 +5239,98 @@ export type Database = {
         }
         Relationships: []
       }
+      fotobomb_images: {
+        Row: {
+          album_name: string | null
+          caption: string | null
+          created_at: string | null
+          facebook_photo_id: string | null
+          id: string
+          image_url: string
+          metadata: Json | null
+          posted_at: string | null
+          review_status: string
+          reviewed_at: string | null
+          target_id: string
+          thumbnail_url: string | null
+        }
+        Insert: {
+          album_name?: string | null
+          caption?: string | null
+          created_at?: string | null
+          facebook_photo_id?: string | null
+          id?: string
+          image_url: string
+          metadata?: Json | null
+          posted_at?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          target_id: string
+          thumbnail_url?: string | null
+        }
+        Update: {
+          album_name?: string | null
+          caption?: string | null
+          created_at?: string | null
+          facebook_photo_id?: string | null
+          id?: string
+          image_url?: string
+          metadata?: Json | null
+          posted_at?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          target_id?: string
+          thumbnail_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fotobomb_images_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "fotobomb_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fotobomb_targets: {
+        Row: {
+          apify_run_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          last_scraped_at: string | null
+          page_name: string | null
+          page_url: string
+          status: string
+          total_photos_found: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          apify_run_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          last_scraped_at?: string | null
+          page_name?: string | null
+          page_url: string
+          status?: string
+          total_photos_found?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          apify_run_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          last_scraped_at?: string | null
+          page_name?: string | null
+          page_url?: string
+          status?: string
+          total_photos_found?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       fuct_gift_claims: {
         Row: {
           claim_date: string
