@@ -64,6 +64,9 @@ export default function BlackBoxTab() {
       <TabsContent value="surveys">
         {activeSubTab === "surveys" && <Suspense fallback={<LazyLoader />}><SurveyManagement /></Suspense>}
       </TabsContent>
+      <TabsContent value="fotobomb">
+        {activeSubTab === "fotobomb" && <Suspense fallback={<LazyLoader />}><FotobombApp /></Suspense>}
+      </TabsContent>
     </Tabs>
   );
 }
