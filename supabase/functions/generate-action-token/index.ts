@@ -25,7 +25,7 @@ serve(async (req) => {
       });
     }
 
-    const validTypes = ['resend_verification', 'password_reset', 'view_reg_code'];
+    const validTypes = ['resend_verification', 'password_reset', 'view_reg_code', 'tg_signup', 'tg_signin'];
     if (!validTypes.includes(action_type)) {
       return new Response(JSON.stringify({ error: 'Invalid action_type' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
