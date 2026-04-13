@@ -31,6 +31,7 @@ export default function BlackBoxTab() {
         <TabsTrigger value="airdrops">🎁 Airdrops</TabsTrigger>
         <TabsTrigger value="fuct-airdrops">💜 $FUCT Airdrops</TabsTrigger>
         <TabsTrigger value="surveys">📋 Surveys</TabsTrigger>
+        <TabsTrigger value="fotobomb">💣 FOTOBOMB</TabsTrigger>
       </TabsList>
 
       <TabsContent value="bundle-analysis">
