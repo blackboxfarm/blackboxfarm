@@ -16,7 +16,7 @@ export default function BubbleMapPage() {
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const tokenParam = urlParams.get('token');
+    const tokenParam = urlParams.get('token') || urlParams.get('mint');
     if (tokenParam) setInitialToken(tokenParam.trim());
   }, []);
 
