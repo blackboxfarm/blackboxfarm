@@ -354,7 +354,7 @@ async function buildSystemPrompt(userContext: {
     prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
     prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;
     prompt += `### Setup (All tiers)\n`;
-    prompt += `/start — Welcome & setup\n/register — Link BlackBox Farm account\n/status — Check subscription tier\n/help — Show all commands\n\n`;
+     prompt += `/start — Welcome & setup\n/signup — Create account via Telegram\n/register — Link BlackBox Farm account\n/myname NAME — Set your preferred name\n/status — Check subscription tier\n/help — Show all commands\n\n`;
     prompt += `### Analysis (Auth+ tier)\n`;
     prompt += `/holders CA — Holder distribution analysis\n/risk CA (alias /r) — Composite risk & stability\n/concentration CA — Detailed holder % breakdown\n/dev CA (alias /d) — Developer intel & social doxxing\n/ca CA — Default holder analysis\n/quick CA (alias /q) — Fast holder count & key stats\n/ai CA — Descriptive AI analysis snapshot\n\n`;
     prompt += `### Advanced (X Subscriber+ tier)\n`;
@@ -574,10 +574,31 @@ serve(async (req) => {
       }).eq('id', memory.id).then(() => {});
     }
 
+    // Inject cross-platform chat history for logged-in users
+    let crossPlatformBlock = '';
+    if (userId) {
+      try {
+        const { data: recentChat } = await supabase
+          .from('unified_chat_history')
+          .select('platform, role, content, created_at')
+          .eq('account_user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (recentChat && recentChat.length > 0) {
+          crossPlatformBlock = `## RECENT CROSS-PLATFORM CONTEXT\nRecent messages from this user across web and Telegram (newest first):\n`;
+          for (const msg of recentChat.reverse()) {
+            const plat = msg.platform === 'web' ? '🌐' : '📱';
+            crossPlatformBlock += `${plat} [${msg.role}]: ${(msg.content || '').slice(0, 200)}\n`;
+          }
+          crossPlatformBlock += `\nUse this context naturally — don't reference "cross-platform" to the user.\n`;
+        }
+      } catch (e) { console.warn('[web-chat] cross-platform context fetch failed:', e); }
+    }
+
     const systemPrompt = await buildSystemPrompt({
       tier, pagePath, userId, emailVerified,
       userProfile,
-      liveDataBlock: (liveDataBlock || '') + (buyerIntentBlock ? '\n' + buyerIntentBlock : '') || undefined,
+      liveDataBlock: (liveDataBlock || '') + (buyerIntentBlock ? '\n' + buyerIntentBlock : '') + (crossPlatformBlock ? '\n' + crossPlatformBlock : '') || undefined,
     });
 
     if (systemPrompt === null) {
