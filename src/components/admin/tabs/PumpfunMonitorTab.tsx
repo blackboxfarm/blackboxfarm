@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LazyLoader } from '@/components/ui/lazy-loader';
+import { PumpFunApiStatus } from '@/components/admin/PumpFunApiStatus';
 
 // Lazy load each component
 const DailyOpeningWizard = lazy(() => import("@/components/admin/DailyOpeningWizard"));
@@ -14,7 +15,9 @@ export default function PumpfunMonitorTab() {
   const [activeSubTab, setActiveSubTab] = useState("wizard");
 
   return (
-    <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
+    <div className="space-y-4">
+      <PumpFunApiStatus />
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList>
         <TabsTrigger value="wizard">🧙 Daily Wizard</TabsTrigger>
         <TabsTrigger value="candidates">📊 Candidates</TabsTrigger>
@@ -43,5 +46,6 @@ export default function PumpfunMonitorTab() {
         {activeSubTab === "profit-exits" && <Suspense fallback={<LazyLoader />}><ProfitExitBackcheck /></Suspense>}
       </TabsContent>
     </Tabs>
+    </div>
   );
 }
