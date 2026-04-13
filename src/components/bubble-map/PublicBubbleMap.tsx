@@ -439,10 +439,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     const targetWallet = focusedEntity?.type === 'wallet' 
       ? focusedEntity.id.replace(/^wallet:/, '') 
       : walletNodes[0]?.id.split(':').slice(1).join(':');
-    if (!targetWallet) { toast.error('No wallet found to trace KYC root'); return; }
+    if (!targetWallet) { dispatchThoughtCustom('no wallet found to trace'); return; }
     
     setKycSearching(true);
-    dispatchThought('trace_start');
+    recordInteraction();
+    dispatchThoughtCustom("tracing the funding chain...");
     setTerminalTitle('KYC GENEALOGY TRACER');
     setTerminalVisible(true);
     clearTerminal();
