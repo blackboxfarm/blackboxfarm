@@ -775,7 +775,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${unlocked} /myname \`NAME\` — Set your preferred name for AI chat\n` +
     `${unlocked} /status — View your tier, usage & limits\n` +
     `${unlocked} /help — This command reference\n` +
-    `${unlocked} /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n\n`;
+    `${unlocked} /payment (/pay) — 💰 Yearly Pro via SOL · /pay CODE to redeem invite\n\n`;
 
   cmds += `*🔬 Core Analysis — Auth ★ = just signup free online*\n` +
     `_The essentials — know what you're buying before you ape._\n` +
@@ -826,7 +826,9 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `  _• /config admin-only on|off — Restrict commands to admins_\n` +
     `  _• /config dev-alerts on|off — Get notified when watched devs launch_\n` +
     `${check("auth")} /dashboard — Full channel management dashboard\n` +
-    `✅ /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n`;
+    `✅ /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n` +
+    `  _• /payment CODE — Redeem an invitation/promo code_\n` +
+    `  _• /payment verify — Check if your SOL payment was received_\n`;
 
   cmds += `\n━━━━━━━━━━━━━━━━━\n` +
     `${unlocked} = Available | ${locked} = Locked to your tier\n` +
