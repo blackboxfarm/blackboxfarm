@@ -770,7 +770,9 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   let cmds = `🔍 *HoldersIntel — Your Edge in Solana Intel*\n\n` +
     `*🌐 General — Free for Everyone*\n` +
     `${unlocked} /start — Get started & connect your account\n` +
+    `${unlocked} /signup — Create account via Telegram\n` +
     `${unlocked} /register \`CODE\` — Link your BlackBox Farm account\n` +
+    `${unlocked} /myname \`NAME\` — Set your preferred name for AI chat\n` +
     `${unlocked} /status — View your tier, usage & limits\n` +
     `${unlocked} /help — This command reference\n` +
     `${unlocked} /payment (/pay) — 💰 Yearly Pro subscription via SOL (1 SOL/yr)\n\n`;
@@ -3272,7 +3274,7 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
         prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;
         prompt += `### Setup (All tiers)\n`;
-        prompt += `/start — Welcome & setup\n/register — Link BlackBox Farm account\n/status — Check subscription tier\n/help — Show all commands\n\n`;
+        prompt += `/start — Welcome & setup\n/signup — Create account via Telegram\n/register — Link BlackBox Farm account\n/myname NAME — Set your preferred name\n/status — Check subscription tier\n/help — Show all commands\n\n`;
         prompt += `### Analysis (Auth+ tier)\n`;
         prompt += `/holders CA — Holder distribution analysis\n/risk CA (alias /r) — Composite risk & stability\n/concentration CA — Detailed holder % breakdown\n/dev CA (alias /d) — Developer intel & social doxxing\n/ca CA — Default holder analysis\n/quick CA (alias /q) — Fast holder count & key stats\n/ai CA — Descriptive AI analysis snapshot\n\n`;
         prompt += `### Advanced (X Subscriber+ tier)\n`;
@@ -3854,6 +3856,9 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
         case "/start":
         case "/signup":
           await handleStart(chatId, telegramUserId, username);
+          break;
+        case "/myname":
+          await handleMyName(chatId, telegramUserId, args);
           break;
         case "/register":
           await handleRegister(chatId, telegramUserId, username, args);
