@@ -775,6 +775,7 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     `${unlocked} /myname \`NAME\` — Set your preferred name for AI chat\n` +
     `${unlocked} /status — View your tier, usage & limits\n` +
     `${unlocked} /help — This command reference\n` +
+    `${unlocked} /feedback (/fb) — 📝 Send feedback to the team\n` +
     `${unlocked} /payment (/pay) — 💰 Yearly Pro via SOL · /pay CODE to redeem invite\n\n`;
 
   cmds += `*🔬 Core Analysis — Auth ★ = just signup free online*\n` +
@@ -840,6 +841,68 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     TAGLINE;
 
   await sendMessage(chatId, cmds);
+}
+
+// ─── /feedback — Collect user feedback (open to all) ───
+async function handleFeedback(chatId: number, telegramUserId: string, username: string | null, args: string) {
+  const feedbackText = args.trim();
+
+  if (!feedbackText || feedbackText.length < 3) {
+    await sendMessage(chatId,
+      `📝 *Send Feedback*\n\nUsage: \`/feedback Your message here\`\n\nExample: \`/feedback The /risk command is awesome but could show liquidity depth\`\n\n_Your feedback helps us improve! All messages are read by the team._`
+    );
+    return;
+  }
+
+  // Hard cap at 1000 chars (sanitizer already caps at 512 for args, but be safe)
+  const safeFeedback = feedbackText.slice(0, 1000);
+
+  // Check if user is a linked tester
+  const linked = await getLinkedUser(telegramUserId);
+  let linkedUserId: string | null = null;
+  let isTester = false;
+
+  if (linked) {
+    linkedUserId = linked.user_id;
+    // Check if they have an active tester promo
+    const { data: promo } = await supabase
+      .from('promo_redemptions')
+      .select('id')
+      .eq('user_id', linked.user_id)
+      .eq('is_active', true)
+      .gte('expires_at', new Date().toISOString())
+      .limit(1);
+    isTester = (promo?.length ?? 0) > 0;
+  }
+
+  const { error } = await supabase.from('telegram_feedback').insert({
+    telegram_user_id: telegramUserId,
+    username: username?.slice(0, 64) || null,
+    feedback_text: safeFeedback,
+    linked_user_id: linkedUserId,
+    is_tester: isTester,
+  });
+
+  if (error) {
+    console.error('[bot] feedback insert failed:', error);
+    await sendMessage(chatId, `⚠️ Failed to save feedback. Please try again.`);
+    return;
+  }
+
+  // If tester, also insert into tester_feedback for their dashboard
+  if (isTester && linkedUserId) {
+    await supabase.from('tester_feedback').insert({
+      user_id: linkedUserId,
+      feedback_type: 'general',
+      page_path: '/telegram',
+      message: `[TG @${username || telegramUserId}] ${safeFeedback}`,
+    }).then(({ error: tfErr }) => {
+      if (tfErr) console.error('[bot] tester_feedback mirror failed:', tfErr);
+    });
+  }
+
+  const testerBadge = isTester ? `\n🧪 _Logged to your tester account_` : '';
+  await sendMessage(chatId, `✅ *Feedback received!* Thank you 🙏${testerBadge}\n\n_The team reads every submission._`);
 }
 
 // ─── /risk CA — Composite Risk & Stability Assessment ───
@@ -4261,6 +4324,10 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           } else {
             await handleConfig(chatId, telegramUserId, args);
           }
+          break;
+        case "/feedback":
+        case "/fb":
+          await handleFeedback(chatId, telegramUserId, username, args);
           break;
         case "/payment":
         case "/pay":
