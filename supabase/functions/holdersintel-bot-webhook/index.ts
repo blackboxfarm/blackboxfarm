@@ -3392,6 +3392,14 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         if (logErr) console.error('[bot] DM capture (bot reply) failed:', logErr);
       });
 
+      // Write to unified_chat_history for cross-platform context
+      supabase.from('unified_chat_history').insert([
+        { account_user_id: linked.user_id, telegram_user_id: telegramUserId, platform: 'telegram', role: 'user', content: messageText.slice(0, 2000) },
+        { account_user_id: linked.user_id, telegram_user_id: telegramUserId, platform: 'telegram', role: 'assistant', content: reply.slice(0, 2000) },
+      ]).then(({ error: uhErr }) => {
+        if (uhErr) console.error('[bot] unified_chat_history write failed:', uhErr);
+      });
+
       // Extract preferred name from reply context
       if (!memory?.preferred_name) {
         const nameMatch = messageText.match(/(?:call me|i'?m|my name is|it'?s|just)\s+([A-Za-z\u0600-\u06FF0-9_\-\s]{1,30})/i);
