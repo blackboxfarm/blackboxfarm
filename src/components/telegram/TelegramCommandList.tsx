@@ -20,7 +20,7 @@ const COMMAND_GROUPS = [
     commands: [
       { cmd: "/holders", alias: null, desc: "Holder distribution analysis" },
       { cmd: "/risk", alias: "/r", desc: "Composite risk & stability assessment" },
-      { cmd: "/concentration", alias: null, desc: "Detailed holder % breakdown" },
+      { cmd: "/concentration", alias: "/con", desc: "Detailed holder % breakdown" },
       { cmd: "/dev", alias: "/d", desc: "Developer intel & social doxxing" },
       { cmd: "/ca", alias: null, desc: "Default holder analysis" },
       { cmd: "/quick", alias: "/q", desc: "Fast holder count & key stats" },
@@ -32,7 +32,7 @@ const COMMAND_GROUPS = [
   {
     label: "⚡ Advanced",
     commands: [
-      { cmd: "/momentum", alias: "/m", desc: "Volume & price momentum scoring" },
+      { cmd: "/momentum", alias: "/m /mom", desc: "Volume & price momentum scoring" },
       { cmd: "/insiders", alias: "/i", desc: "Insider cluster & bundling pre-check" },
       { cmd: "/compare", alias: "/cmp", desc: "Side-by-side token comparison" },
       { cmd: "/alerts", alias: null, desc: "Manage alert preferences" },
