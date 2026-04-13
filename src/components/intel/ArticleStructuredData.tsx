@@ -46,13 +46,24 @@ export function ArticleStructuredData({
       el.content = content;
     };
 
+    // Dynamic canonical
+    const articleUrl = `${SITE_URL}/intel/briefing/${slug}`;
+    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
+    const prevCanonical = canonical?.href;
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      document.head.appendChild(canonical);
+    }
+    canonical.href = articleUrl;
+
     const ogTitle = title.length > 60 ? title.slice(0, 57) + '...' : title;
 
     setMeta('description', description);
     setMeta('og:title', ogTitle, 'property');
     setMeta('og:description', description, 'property');
     setMeta('og:type', 'article', 'property');
-    setMeta('og:url', `https://blackbox.farm/intel/briefing/${slug}`, 'property');
+    setMeta('og:url', articleUrl, 'property');
     if (normalizedImageUrl) {
       setMeta('og:image', normalizedImageUrl, 'property');
       setMeta('og:image:secure_url', normalizedImageUrl, 'property');
@@ -95,6 +106,7 @@ export function ArticleStructuredData({
     return () => {
       document.title = prev;
       document.getElementById('intel-briefing-jsonld')?.remove();
+      if (prevCanonical) canonical.href = prevCanonical;
     };
   }, [title, description, datePublished, author, imageUrl, slug, category, tags]);
 
