@@ -81,7 +81,7 @@ export function TesterFeedbackWidget() {
 
       {/* Feedback panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border bg-card shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom-4">
+        <div className="fixed top-20 left-4 z-50 w-80 rounded-xl border bg-card shadow-2xl p-4 space-y-3 animate-in slide-in-from-top-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">🧪 Tester Feedback</h3>
             <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
