@@ -362,29 +362,36 @@ export function ChatWidget() {
     <>
       {/* FAB Button — draggable */}
       {!isOpen && fabVisible && (
-        <button
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
+        <div
           style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : undefined}
           className={cn(
-            "z-50 rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center overflow-hidden oracle-fab-float touch-none select-none",
+            "z-50 touch-none select-none",
             !fabPos && "fixed bottom-5 right-5",
-            isScrolling ? "w-10 h-10 opacity-60" : "w-14 h-14",
-            fabPulsing && "animate-pulse",
-            isDragging && "cursor-grabbing scale-110"
           )}
-          aria-label="Open chat"
         >
-          <div className="oracle-fab-glow absolute inset-0 rounded-full" />
-          <img src={oracleAvatar} alt="Chat" className="w-full h-full object-cover rounded-full oracle-fab-spin relative z-10" />
-          {hasUnread && (
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background z-20" />
-          )}
+          {/* Thought bubble — rendered outside the overflow-hidden button */}
           {thoughtText && (
             <AvatarThoughtBubble text={thoughtText} onDone={() => setThoughtText(null)} />
           )}
-        </button>
+          <button
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            className={cn(
+              "rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center overflow-hidden oracle-fab-float",
+              isScrolling ? "w-10 h-10 opacity-60" : "w-14 h-14",
+              fabPulsing && "animate-pulse",
+              isDragging && "cursor-grabbing scale-110"
+            )}
+            aria-label="Open chat"
+          >
+            <div className="oracle-fab-glow absolute inset-0 rounded-full" />
+            <img src={oracleAvatar} alt="Chat" className="w-full h-full object-cover rounded-full oracle-fab-spin relative z-10" />
+            {hasUnread && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-background z-20" />
+            )}
+          </button>
+        </div>
       )}
 
       {/* Chat Panel */}
