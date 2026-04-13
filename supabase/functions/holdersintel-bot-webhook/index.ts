@@ -3290,6 +3290,24 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += userProfile + '\n';
         if (liveDataBlock) prompt += liveDataBlock + '\n';
 
+        // Inject cross-platform chat history for continuity
+        try {
+          const { data: recentChat } = await supabase
+            .from('unified_chat_history')
+            .select('platform, role, content, created_at')
+            .eq('account_user_id', linked.user_id)
+            .order('created_at', { ascending: false })
+            .limit(5);
+          if (recentChat && recentChat.length > 0) {
+            prompt += `## RECENT CROSS-PLATFORM CONTEXT\nRecent messages from this user across web and Telegram (newest first):\n`;
+            for (const msg of recentChat.reverse()) {
+              const plat = msg.platform === 'web' ? '🌐' : '📱';
+              prompt += `${plat} [${msg.role}]: ${(msg.content || '').slice(0, 200)}\n`;
+            }
+            prompt += `\nUse this context naturally — don't reference "cross-platform" to the user.\n\n`;
+          }
+        } catch (e) { console.warn('[bot] cross-platform context fetch failed:', e); }
+
         prompt += `## NAME USAGE\nIf you know the user's preferred name, address them by it. If this is their first interaction, ask "What should I call you?" naturally.\n\n`;
 
         prompt += `## PLATFORM CONTEXT\nThis conversation is happening on Telegram DM. Format responses appropriately for Telegram (Markdown supported). Keep messages mobile-friendly.\n\n`;
