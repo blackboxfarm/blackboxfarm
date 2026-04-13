@@ -34,6 +34,9 @@ type FeedItem = {
   // enriched client-side
   total_holders: number | null;
   dust_pct: number | null;
+  creator_wallet: string | null;
+  x_community_url: string | null;
+  x_community_name: string | null;
 };
 
 type SortField = 'last_activity' | 'symbol' | 'health_grade' | 'freshness_tier';
@@ -278,6 +281,16 @@ export default function Feed() {
         <a href={`https://solscan.io/token/${item.token_mint}`} target="_blank" rel="noopener noreferrer">
           <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> SolScan</Button>
         </a>
+        {item.creator_wallet && (
+          <a href={`https://solscan.io/account/${item.creator_wallet}`} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-2 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"><ExternalLink className="h-3 w-3" /> Dev Wallet</Button>
+          </a>
+        )}
+        {item.x_community_url && (
+          <a href={item.x_community_url} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> {item.x_community_name || 'X Community'}</Button>
+          </a>
+        )}
         <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(`/holders?token=${item.token_mint}`); }}>
           <Users className="h-3 w-3" /> Wallet Analysis
         </Button>
