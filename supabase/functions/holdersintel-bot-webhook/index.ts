@@ -558,8 +558,11 @@ async function handleStart(chatId: number, telegramUserId: string, username: str
   const linked = await getLinkedUser(telegramUserId);
   if (linked) {
     const tier = await getUserTier(linked.user_id);
+    // Try to greet by preferred name
+    const { data: mem } = await supabase.from('ai_user_memory').select('preferred_name').or(`telegram_user_id.eq.${telegramUserId},user_id.eq.${linked.user_id}`).limit(1).maybeSingle();
+    const greeting = mem?.preferred_name ? `Welcome back, ${mem.preferred_name}!` : 'Welcome back!';
     await sendMessage(chatId,
-      `✅ *Welcome back!*\n\n` +
+      `✅ *${greeting}*\n\n` +
       `Your account is linked. Tier: *${tier.toUpperCase()}*\n\n` +
       `Use /help to see available commands.`
     );
@@ -575,6 +578,42 @@ async function handleStart(chatId: number, telegramUserId: string, username: str
       [{ text: "🔗 Link with Code", callback_data: "auth_link_code" }],
     ]
   );
+}
+
+// ─── /myname — Set preferred name for AI interactions ───
+async function handleMyName(chatId: number, telegramUserId: string, args: string) {
+  const linked = await getLinkedUser(telegramUserId);
+  if (!linked) {
+    await sendMessage(chatId, `🔒 Please link your account first with /register.`);
+    return;
+  }
+
+  const name = args.trim();
+  if (!name) {
+    // Show current name
+    const { data: mem } = await supabase.from('ai_user_memory').select('preferred_name').or(`telegram_user_id.eq.${telegramUserId},user_id.eq.${linked.user_id}`).limit(1).maybeSingle();
+    if (mem?.preferred_name) {
+      await sendMessage(chatId, `👤 Your current name: *${mem.preferred_name}*\n\nTo change it: \`/myname NewName\``);
+    } else {
+      await sendMessage(chatId, `👤 No name set yet.\n\nUsage: \`/myname Alex\``);
+    }
+    return;
+  }
+
+  if (name.length > 30) {
+    await sendMessage(chatId, `❌ Name too long. Max 30 characters.`);
+    return;
+  }
+
+  // Upsert into ai_user_memory
+  const { data: existing } = await supabase.from('ai_user_memory').select('id').or(`telegram_user_id.eq.${telegramUserId},user_id.eq.${linked.user_id}`).limit(1).maybeSingle();
+  if (existing) {
+    await supabase.from('ai_user_memory').update({ preferred_name: name, telegram_user_id: telegramUserId, user_id: linked.user_id }).eq('id', existing.id);
+  } else {
+    await supabase.from('ai_user_memory').insert({ preferred_name: name, telegram_user_id: telegramUserId, user_id: linked.user_id, last_platform: 'telegram' });
+  }
+
+  await sendMessage(chatId, `✅ Got it, I'll call you *${name}* from now on! 🎉`);
 }
 
 /** Handle callback_query from inline keyboard buttons */
