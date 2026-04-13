@@ -59,11 +59,29 @@ export default function TodoListTab() {
     const { data, error } = await query;
     if (error) {
       console.error('Error fetching todos:', error);
+      setLoading(false);
       return;
     }
-    setItems((data as TodoItem[]) || []);
+    const fetched = (data as TodoItem[]) || [];
+    
+    // Seed default items if empty
+    if (fetched.length === 0 && filter === 'active') {
+      const seeds = [
+        { title: 'BlackBox Verified Program', description: 'Dev verification system — wallet-signature login for non-custodial wallets, micro-transfer verification for custodial (Pump.fun) accounts. Devs partially dox socials for positive reputation.', category: 'feature', priority: 'high' as const, created_by: user?.id },
+        { title: 'CoinGecko Analyst Tier Integration', description: 'Subscribe to CoinGecko Analyst plan ($103/mo). Query ATH, lifecycle, historical data. Build developer quality scoring: Hits (>$100k ATH), Medium ($10k-$100k), Bleeders, Rugs/Dumps. Wave graphs for volume & holders over time.', category: 'integration', priority: 'high' as const, created_by: user?.id },
+        { title: 'Bubblemap Screenshot & Social Share', description: 'Screenshot bubblemap display area → shareable JPG/PNG for Twitter cards and social media.', category: 'feature', priority: 'medium' as const, created_by: user?.id },
+      ];
+      await supabase.from('admin_todo_items').insert(seeds);
+      // Re-fetch after seeding
+      const { data: seeded } = await supabase.from('admin_todo_items').select('*').order('created_at', { ascending: false });
+      setItems((seeded as TodoItem[]) || []);
+      setLoading(false);
+      return;
+    }
+    
+    setItems(fetched);
     setLoading(false);
-  }, [filter]);
+  }, [filter, user?.id]);
 
   useEffect(() => {
     fetchItems();
