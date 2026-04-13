@@ -2,6 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+// Get device fingerprint if available
+const getDeviceFingerprint = async (): Promise<string | undefined> => {
+  try {
+    const FingerprintJS = await import('@fingerprintjs/fingerprintjs');
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+    return result.visitorId;
+  } catch {
+    return undefined;
+  }
+};
+
 interface AuthError {
   message: string;
   code?: string;
@@ -77,6 +89,13 @@ export const useSecureAuth = () => {
               timestamp: new Date().toISOString(),
               userAgent: navigator.userAgent
             });
+
+            // Run anomaly detection on sign-in
+            if (event === 'SIGNED_IN' && session?.user?.id) {
+              runAnomalyDetection(session.user.id).catch(err =>
+                console.error('Anomaly detection failed:', err)
+              );
+            }
           } catch (error) {
             console.error('Failed to log security event:', error);
           }
@@ -361,6 +380,53 @@ export const useSecureAuth = () => {
     }
   };
 
+  const runAnomalyDetection = async (userId: string) => {
+    try {
+      const fingerprint = await getDeviceFingerprint();
+      
+      const { data, error } = await supabase.functions.invoke('login-anomaly-detector', {
+        body: {
+          user_id: userId,
+          device_fingerprint: fingerprint,
+          device_name: navigator.platform || navigator.userAgent.substring(0, 50),
+          user_agent: navigator.userAgent,
+          login_method: 'password',
+        }
+      });
+
+      if (error) {
+        console.error('Anomaly detection error:', error);
+        return;
+      }
+
+      // If account is locked, sign out immediately
+      if (data?.blocked) {
+        console.warn('Account is locked:', data.reason);
+        await supabase.auth.signOut();
+      }
+
+      if (data?.suspicious) {
+        console.warn('Suspicious login detected:', data.reasons);
+      }
+    } catch (err) {
+      console.error('Failed to run anomaly detection:', err);
+    }
+  };
+
+  const checkAccountLockdown = async (userId: string): Promise<boolean> => {
+    try {
+      const { data } = await supabase
+        .from('account_lockdowns')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('is_locked', true)
+        .maybeSingle();
+      return !!data;
+    } catch {
+      return false;
+    }
+  };
+
   return {
     user,
     session,
@@ -373,6 +439,7 @@ export const useSecureAuth = () => {
     resendVerification,
     isAuthenticated: !!user,
     rateLimitState,
-    isRateLimited: rateLimitState.isBlocked
+    isRateLimited: rateLimitState.isBlocked,
+    checkAccountLockdown
   };
 };
