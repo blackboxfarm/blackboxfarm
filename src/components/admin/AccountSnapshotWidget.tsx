@@ -38,7 +38,7 @@ export function AccountSnapshotWidget() {
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('email_verified', true),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('two_factor_enabled', true),
         supabase.from('telegram_link_codes').select('*', { count: 'exact', head: true }).not('telegram_user_id', 'is', null),
-        supabase.from('telegram_link_codes').select('*', { count: 'exact', head: true }).eq('is_registered', true),
+        supabase.from('telegram_link_codes').select('*', { count: 'exact', head: true }).not('telegram_user_id', 'is', null),
         supabase.from('stripe_customers').select('*', { count: 'exact', head: true }),
         supabase.from('tg_sol_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('channel_installations').select('*', { count: 'exact', head: true }),

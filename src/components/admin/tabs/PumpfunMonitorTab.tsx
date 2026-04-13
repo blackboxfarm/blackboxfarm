@@ -15,7 +15,9 @@ export default function PumpfunMonitorTab() {
   const [activeSubTab, setActiveSubTab] = useState("wizard");
 
   return (
-    <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
+    <div className="space-y-4">
+      <PumpFunApiStatus />
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList>
         <TabsTrigger value="wizard">🧙 Daily Wizard</TabsTrigger>
         <TabsTrigger value="candidates">📊 Candidates</TabsTrigger>
