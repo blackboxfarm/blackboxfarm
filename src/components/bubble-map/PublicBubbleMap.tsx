@@ -413,7 +413,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             refetch();
             // Stabilize graph after new nodes: freeze existing positions, then gently reheat
             setTimeout(() => {
-              if (graphRef.current) {
+              if (graphRef.current && typeof graphRef.current.graphData === 'function') {
                 const gd = graphRef.current.graphData();
                 // Pin all existing nodes at their current positions briefly
                 gd.nodes.forEach((node: any) => {
@@ -1027,7 +1027,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             size="sm"
             className="h-7 text-xs px-2"
             onClick={() => {
-              if (graphRef.current) {
+              if (graphRef.current && typeof graphRef.current.graphData === 'function') {
                 const gd = graphRef.current.graphData();
                 // Strip all position/velocity data so the simulation starts fresh
                 gd.nodes.forEach((node: any) => {
