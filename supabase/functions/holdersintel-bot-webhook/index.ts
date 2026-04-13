@@ -2950,6 +2950,13 @@ async function handlePayment(chatId: number, telegramUserId: string, args: strin
     return;
   }
 
+  // ─── Promo code interception (e.g. /payment ARAB10) ───
+  const trimmedArgs = args.trim().toUpperCase();
+  if (trimmedArgs && !trimmedArgs.startsWith('VERIFY')) {
+    await handlePromoRedemption(chatId, telegramUserId, trimmedArgs);
+    return;
+  }
+
   const linked = await getLinkedUser(telegramUserId);
   if (!linked) {
     await sendMessage(chatId, `🔒 *Account not linked.*\n\nUse /register first to link your BlackBox Farm account.`);
