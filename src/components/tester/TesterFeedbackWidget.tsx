@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRoles } from "@/hooks/useUserRoles";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -20,16 +21,18 @@ const FEEDBACK_TYPES = [
 
 export function TesterFeedbackWidget() {
   const { user } = useAuth();
+  const { isSuperAdmin } = useUserRoles();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState("general");
   const [message, setMessage] = useState("");
 
-  // Check if user is an active tester
+  // Check if user is an active tester OR super admin
   const { data: isTester } = useQuery({
-    queryKey: ["is-tester", user?.id],
+    queryKey: ["is-tester", user?.id, isSuperAdmin],
     queryFn: async () => {
       if (!user?.id) return false;
+      if (isSuperAdmin) return true;
       const { data, error } = await supabase
         .from("promo_redemptions")
         .select("id")
@@ -69,7 +72,7 @@ export function TesterFeedbackWidget() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center"
+          className="fixed top-20 left-4 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center"
           title="Share feedback"
         >
           <MessageSquarePlus className="h-5 w-5" />
@@ -78,7 +81,7 @@ export function TesterFeedbackWidget() {
 
       {/* Feedback panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border bg-card shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom-4">
+        <div className="fixed top-20 left-4 z-50 w-80 rounded-xl border bg-card shadow-2xl p-4 space-y-3 animate-in slide-in-from-top-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">🧪 Tester Feedback</h3>
             <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
