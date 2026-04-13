@@ -147,6 +147,21 @@ serve(async (req) => {
         }
         break;
       }
+
+      case 'tg_signup':
+      case 'tg_signin': {
+        // For Telegram OTP auth, return the payload so the frontend can use it
+        // Don't mark as used yet — tg-link-after-auth will do that after successful auth
+        result.telegram_user_id = record.payload?.telegram_user_id;
+        result.telegram_username = record.payload?.telegram_username;
+        result.message = record.action_type === 'tg_signup'
+          ? 'Create your BlackBox Farm account below.'
+          : 'Log in to link your Telegram account.';
+        // Return early WITHOUT marking token as used
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // Mark token as used

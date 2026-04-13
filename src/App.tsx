@@ -76,6 +76,7 @@ const IntelBriefingArticle = lazy(() => import("./pages/IntelBriefingArticle"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const TokenAction = lazy(() => import("./pages/TokenAction"));
+const TelegramAuth = lazy(() => import("./pages/TelegramAuth"));
 
 const queryClient = new QueryClient();
 
@@ -111,6 +112,7 @@ const App = () => {
                       <Route path="/verify-email" element={<VerifyEmail />} />
                       <Route path="/unsubscribe" element={<Unsubscribe />} />
                       <Route path="/action" element={<TokenAction />} />
+                      <Route path="/auth/tg" element={<TelegramAuth />} />
                       <Route path="/terms" element={<TermsOfService />} />
                       <Route path="/tos" element={<TOS />} />
                       <Route path="/privacy" element={<PrivacyPolicy />} />
