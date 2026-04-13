@@ -32,7 +32,7 @@ const COMMAND_GROUPS = [
   {
     label: "⚡ Advanced",
     commands: [
-      { cmd: "/momentum", alias: "/m", desc: "Volume & price momentum scoring" },
+      { cmd: "/momentum", alias: "/m /mom", desc: "Volume & price momentum scoring" },
       { cmd: "/insiders", alias: "/i", desc: "Insider cluster & bundling pre-check" },
       { cmd: "/compare", alias: "/cmp", desc: "Side-by-side token comparison" },
       { cmd: "/alerts", alias: null, desc: "Manage alert preferences" },

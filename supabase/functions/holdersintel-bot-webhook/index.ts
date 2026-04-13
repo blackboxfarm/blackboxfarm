@@ -3981,6 +3981,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             break;
           case "/momentum":
           case "/m":
+          case "/mom":
             await handleMomentum(dmChatId, telegramUserId, args);
             break;
           case "/oracle":
@@ -4077,6 +4078,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           break;
         case "/momentum":
         case "/m":
+        case "/mom":
           await handleMomentum(chatId, telegramUserId, args);
           break;
         case "/oracle":
