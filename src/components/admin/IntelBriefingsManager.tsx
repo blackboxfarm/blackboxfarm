@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { IntelPublicationsManager } from './IntelPublicationsManager';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -180,7 +181,7 @@ function autoParseMarkdown(md: string): Partial<typeof emptyBriefing> {
   return result;
 }
 
-export function IntelBriefingsManager() {
+function IntelBriefingsArticlesManager() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -832,6 +833,25 @@ export function IntelBriefingsManager() {
         />
       )}
     </div>
+  );
+}
+
+export function IntelBriefingsManager() {
+  const [mainTab, setMainTab] = useState('articles');
+
+  return (
+    <Tabs value={mainTab} onValueChange={setMainTab}>
+      <TabsList className="mb-4">
+        <TabsTrigger value="articles"><FileText className="h-3.5 w-3.5 mr-1" />Articles</TabsTrigger>
+        <TabsTrigger value="publications"><Globe className="h-3.5 w-3.5 mr-1" />Publications</TabsTrigger>
+      </TabsList>
+      <TabsContent value="articles">
+        <IntelBriefingsArticlesManager />
+      </TabsContent>
+      <TabsContent value="publications">
+        <IntelPublicationsManager />
+      </TabsContent>
+    </Tabs>
   );
 }
 

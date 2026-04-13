@@ -1,0 +1,106 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from '@/hooks/use-toast';
+import { PublicationForm } from './publications/PublicationForm';
+import { CalendarView } from './publications/CalendarView';
+import { PlatformView } from './publications/PlatformView';
+import { ArticleView } from './publications/ArticleView';
+import { Calendar, LayoutGrid, Newspaper, CalendarDays } from 'lucide-react';
+
+export const IntelPublicationsManager = () => {
+  const queryClient = useQueryClient();
+  const [viewTab, setViewTab] = useState('month');
+
+  // Fetch briefings for dropdown
+  const { data: briefings = [] } = useQuery({
+    queryKey: ['intel-briefings-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('intel_briefings')
+        .select('id, title, slug')
+        .eq('is_published', true)
+        .order('published_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch publications
+  const { data: publications = [] } = useQuery({
+    queryKey: ['intel-publications'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('intel_publications')
+        .select('*')
+        .order('published_at', { ascending: false });
+      if (error) throw error;
+      // Enrich with briefing titles
+      return (data || []).map((p: any) => ({
+        ...p,
+        briefing_title: briefings.find(b => b.id === p.briefing_id)?.title || 'Unknown',
+      }));
+    },
+    enabled: briefings.length > 0,
+  });
+
+  const addMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const { error } = await supabase.from('intel_publications').insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['intel-publications'] });
+      toast({ title: 'Publication logged' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('intel_publications').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['intel-publications'] });
+      toast({ title: 'Publication deleted' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <PublicationForm
+        briefings={briefings}
+        onSubmit={data => addMutation.mutate(data)}
+        isSubmitting={addMutation.isPending}
+      />
+
+      <Tabs value={viewTab} onValueChange={setViewTab}>
+        <TabsList>
+          <TabsTrigger value="month"><Calendar className="h-3.5 w-3.5 mr-1" />Month</TabsTrigger>
+          <TabsTrigger value="week"><CalendarDays className="h-3.5 w-3.5 mr-1" />Week</TabsTrigger>
+          <TabsTrigger value="platform"><LayoutGrid className="h-3.5 w-3.5 mr-1" />Platform</TabsTrigger>
+          <TabsTrigger value="article"><Newspaper className="h-3.5 w-3.5 mr-1" />Article</TabsTrigger>
+        </TabsList>
+        <TabsContent value="month">
+          <CalendarView publications={publications} mode="month" />
+        </TabsContent>
+        <TabsContent value="week">
+          <CalendarView publications={publications} mode="week" />
+        </TabsContent>
+        <TabsContent value="platform">
+          <PlatformView publications={publications} onDelete={id => deleteMutation.mutate(id)} />
+        </TabsContent>
+        <TabsContent value="article">
+          <ArticleView publications={publications} briefings={briefings} onDelete={id => deleteMutation.mutate(id)} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
