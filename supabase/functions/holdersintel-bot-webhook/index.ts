@@ -1002,27 +1002,40 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
   const gate = await gateCheck(chatId, telegramUserId, "auth", "/dev");
   if (!gate) return;
 
-  await sendMessage(chatId, `🏗 Looking up developer for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
+  await sendMessage(chatId, `🏗 Looking up developer for \`${ca}\`...`);
   await logUsage(telegramUserId, "/dev", ca);
 
-  const data = await invokeFunction("oracle-unified-lookup", { input: ca });
+  // Fetch oracle + DexScreener in parallel
+  const [data, dexData] = await Promise.all([
+    invokeFunction("oracle-unified-lookup", { input: ca }),
+    (async () => {
+      try {
+        const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+        if (r.ok) { const j = await r.json(); return j?.pairs?.[0] || null; }
+      } catch (_) {}
+      return null;
+    })(),
+  ]);
+
   if (!data) {
     await sendMessage(chatId, `❌ Could not resolve developer for this token.`);
     return;
   }
 
-  // Oracle returns: profile, resolvedWallet, score, stats, network, tokenHistory
   const profile = data.profile || null;
   const resolvedWallet = data.resolvedWallet || null;
-  
+
   if (!profile && !resolvedWallet) {
     await sendMessage(chatId, `❌ No developer profile found for this token.`);
     return;
   }
 
-  // Build a unified dev object from oracle's response shape
+  const devAddress = profile?.masterWallet || resolvedWallet;
+  const tokenSymbol = dexData?.baseToken?.symbol || null;
+  const tokenName = dexData?.baseToken?.name || null;
+
   const dev = {
-    address: profile?.masterWallet || resolvedWallet,
+    address: devAddress,
     reputation_score: data.score ?? profile?.reputationScore ?? null,
     classification: data.trafficLight || null,
     total_tokens: data.stats?.totalTokens ?? null,
@@ -1036,12 +1049,66 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
 
   const isFullAccess = hasTier(gate.tier, "x_subscriber");
 
-  let msg = `🏗 *Dev Intel Report*\n\n`;
+  // ── Resolve KYC/CEX label from mesh + cex-wallets DB ──
+  const meshLinks: any[] = data.network?.meshLinks || [];
+  let cexLabel: string | null = null;
 
-  // Dev wallet
-  if (dev.address) msg += `👤 Wallet: \`${dev.address.slice(0, 8)}...${dev.address.slice(-6)}\`\n`;
+  // Import CEX wallets for label resolution
+  const { KNOWN_CEX_WALLETS } = await import('../_shared/cex-wallets.ts');
 
-  // Rep score with color
+  // Check dev wallet itself against CEX DB
+  if (devAddress) {
+    for (const [exchange, addrs] of Object.entries(KNOWN_CEX_WALLETS)) {
+      if (addrs.includes(devAddress)) { cexLabel = exchange; break; }
+    }
+  }
+
+  // Check KYC roots from mesh for CEX label
+  if (!cexLabel) {
+    const kycRoots = meshLinks.filter((m: any) =>
+      m.relationship === 'same_kyc_root' || m.relationship === 'is_kyc_root'
+    );
+    for (const kr of kycRoots) {
+      const rootId = kr.sourceType === 'kyc_root' ? kr.sourceId : kr.linkedId;
+      if (rootId) {
+        for (const [exchange, addrs] of Object.entries(KNOWN_CEX_WALLETS)) {
+          if (addrs.includes(rootId)) { cexLabel = exchange; break; }
+        }
+        if (cexLabel) break;
+      }
+    }
+  }
+
+  // Check funding chain for CEX label
+  if (!cexLabel && data.upstreamChain?.length > 0) {
+    for (const hop of data.upstreamChain) {
+      if (hop.wallet) {
+        for (const [exchange, addrs] of Object.entries(KNOWN_CEX_WALLETS)) {
+          if (addrs.includes(hop.wallet)) { cexLabel = exchange; break; }
+        }
+        if (cexLabel) break;
+      }
+    }
+  }
+
+  // ── Build message ──
+  let msg = `🏗 *Dev Intel Report*\n`;
+  if (tokenSymbol) {
+    msg += `Token: *$${tokenSymbol.replace(/\$/g, '')}*${tokenName ? ` (${tokenName})` : ''}\n`;
+  }
+  msg += `\n`;
+
+  // Dev wallet — FULL address, linked to Solscan
+  if (dev.address) {
+    msg += `👤 Wallet: [${dev.address}](https://solscan.io/account/${dev.address})\n`;
+  }
+
+  // KYC/CEX Account
+  if (cexLabel) {
+    msg += `🏦 Account: *${cexLabel}*\n`;
+  }
+
+  // Rep score
   if (dev.reputation_score != null) {
     const scoreEmoji = dev.reputation_score >= 60 ? '🟢' : dev.reputation_score >= 35 ? '🟡' : '🔴';
     msg += `${scoreEmoji} Reputation: *${dev.reputation_score}/100*\n`;
@@ -1063,17 +1130,9 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
 
   // Performance stats
   if (dev.avg_lifespan) msg += `⏱ Avg Token Lifespan: *${dev.avg_lifespan}*\n`;
-  if (dev.top_10_count != null || dev.tokens_in_top_10_count != null) {
-    const t10 = dev.top_10_count ?? dev.tokens_in_top_10_count ?? 0;
-    msg += `🏆 Hit Top 10: *${t10}* tokens\n`;
-  }
   if (dev.integrity_score != null) msg += `🔒 Integrity: *${dev.integrity_score}/100*\n`;
 
-  // ── Extract rich data from oracle's network.meshLinks ──
-  const meshLinks: any[] = data.network?.meshLinks || [];
-  const linkedXAccounts: string[] = data.network?.linkedXAccounts || [];
-
-  // Extract KYC Root from mesh
+  // ── KYC Root section ──
   const kycRoots = meshLinks.filter((m: any) =>
     m.relationship === 'same_kyc_root' || m.relationship === 'is_kyc_root'
   );
@@ -1081,16 +1140,19 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
     msg += `\n🏦 *KYC Root*\n`;
     for (const kr of kycRoots.slice(0, 3)) {
       const rootId = kr.sourceType === 'kyc_root' ? kr.sourceId : kr.linkedId;
-      // Try to resolve CEX name
-      let label = rootId;
-      if (typeof rootId === 'string' && rootId.length > 16) {
-        label = `\`${rootId.slice(0, 8)}...${rootId.slice(-6)}\``;
+      // Resolve CEX name for this root
+      let rootLabel = '';
+      if (rootId) {
+        for (const [exchange, addrs] of Object.entries(KNOWN_CEX_WALLETS)) {
+          if (addrs.includes(rootId)) { rootLabel = ` (${exchange})`; break; }
+        }
       }
-      msg += `• ${label} (${kr.confidence}% confidence)\n`;
+      msg += `• [${rootId}](https://solscan.io/account/${rootId})${rootLabel} — ${kr.confidence}%\n`;
     }
   }
 
-  // Extract X Communities from mesh
+  // ── X Communities ──
+  const linkedXAccounts: string[] = data.network?.linkedXAccounts || [];
   const xCommunities = meshLinks.filter((m: any) =>
     m.sourceType === 'x_community' || m.linkedType === 'x_community'
   );
@@ -1102,33 +1164,30 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
     }
   }
 
-  // Social doxxing — now reading from meshLinks correctly
+  // ── Social Links ──
   msg += `\n🔗 *Social Links*\n`;
   let hasSocial = false;
 
-  // X accounts from oracle network
   if (linkedXAccounts.length > 0) {
     for (const handle of linkedXAccounts.slice(0, 3)) {
       if (handle) {
-        msg += `𝕏 Twitter: [${handle}](https://x.com/${handle.replace('@', '')})\n`;
+        msg += `𝕏 [${handle}](https://x.com/${handle.replace('@', '')})\n`;
         hasSocial = true;
       }
     }
   }
 
-  // Websites from mesh
   const websites = meshLinks.filter((m: any) =>
     m.relationship === 'website_of' && (m.sourceType === 'website' || m.linkedType === 'website')
   );
   for (const w of websites.slice(0, 3)) {
     const url = w.sourceType === 'website' ? w.sourceId : w.linkedId;
     if (url && !url.includes('x.com') && !url.includes('twitter.com')) {
-      msg += `🌐 Website: ${url}\n`;
+      msg += `🌐 ${url}\n`;
       hasSocial = true;
     }
   }
 
-  // X accounts from mesh (backup if linkedXAccounts was empty)
   if (!hasSocial) {
     const xFromMesh = meshLinks.filter((m: any) =>
       m.sourceType === 'x_account' || m.linkedType === 'x_account' ||
@@ -1137,13 +1196,13 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
     for (const xm of xFromMesh.slice(0, 3)) {
       const handle = xm.sourceType === 'x_account' || xm.sourceType === 'twitter' ? xm.sourceId : xm.linkedId;
       if (handle) {
-        msg += `𝕏 Twitter: [${handle}](https://x.com/${handle.replace('@', '')})\n`;
+        msg += `𝕏 [${handle}](https://x.com/${handle.replace('@', '')})\n`;
         hasSocial = true;
       }
     }
   }
 
-  // Identity Mesh details (Pro+)
+  // Identity Mesh (Pro+)
   if (isFullAccess && meshLinks.length > 0) {
     const socialMesh = meshLinks.filter((c: any) =>
       c.relationship === 'same_kyc_root' || c.relationship === 'same_team' ||
@@ -1155,7 +1214,12 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
       for (const c of socialMesh.slice(0, 5)) {
         const rel = c.relationship || 'linked';
         const target = c.linkedId || '?';
-        msg += `• ${rel}: \`${typeof target === 'string' && target.length > 16 ? target.slice(0, 8) + '...' + target.slice(-6) : target}\`\n`;
+        // Full address for wallets, plain for handles
+        const isWallet = typeof target === 'string' && target.length > 32;
+        const display = isWallet
+          ? `[${target}](https://solscan.io/account/${target})`
+          : `\`${target}\``;
+        msg += `• ${rel}: ${display}\n`;
       }
       hasSocial = true;
     }
@@ -1165,7 +1229,7 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
     msg += `_No social accounts linked to this developer._\n`;
   }
 
-  // Funded-by chain (Pro+) — now reading from meshLinks
+  // Funded-by chain (Pro+) — FULL addresses linked to Solscan
   if (isFullAccess && meshLinks.length > 0) {
     const fundedBy = meshLinks.filter((c: any) =>
       c.relationship === 'funded_by' || c.relationship === 'directly_funded'
@@ -1174,17 +1238,29 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
       msg += `\n💰 *Funding Chain:*\n`;
       for (const f of fundedBy.slice(0, 3)) {
         const src = f.sourceId || '?';
-        msg += `• Funded by: \`${typeof src === 'string' && src.length > 16 ? src.slice(0, 8) + '...' + src.slice(-6) : src}\`\n`;
+        let fundLabel = '';
+        if (typeof src === 'string') {
+          for (const [exchange, addrs] of Object.entries(KNOWN_CEX_WALLETS)) {
+            if (addrs.includes(src)) { fundLabel = ` 🏦 ${exchange}`; break; }
+          }
+        }
+        msg += `• [${src}](https://solscan.io/account/${src})${fundLabel}\n`;
       }
     }
   }
 
-  // Upstream chain from genealogy scanner
+  // Upstream chain from genealogy scanner — FULL addresses
   if (isFullAccess && data.upstreamChain?.length > 0) {
     msg += `\n🔗 *Wallet Lineage:*\n`;
     for (const hop of data.upstreamChain.slice(0, 5)) {
       const emoji = hop.role === 'KYC_ROOT' ? '🏦' : hop.role === 'FUNDER' ? '💰' : '📡';
-      msg += `${emoji} ${hop.role}: \`${hop.wallet.slice(0, 8)}...${hop.wallet.slice(-6)}\`\n`;
+      let hopLabel = '';
+      if (hop.wallet) {
+        for (const [exchange, addrs] of Object.entries(KNOWN_CEX_WALLETS)) {
+          if (addrs.includes(hop.wallet)) { hopLabel = ` (${exchange})`; break; }
+        }
+      }
+      msg += `${emoji} ${hop.role}: [${hop.wallet}](https://solscan.io/account/${hop.wallet})${hopLabel}\n`;
     }
   }
 
@@ -1192,16 +1268,21 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
     msg += `\n_Upgrade to X Subscriber for full social mesh & funding chains._`;
   }
 
+  // ── Quick Links ──
+  msg += `\n\n🔗 *Quick Links:*\n`;
+  msg += `├ [Padre.gg](https://trade.padre.gg/rk/blackbox/trade/solana/${ca})\n`;
+  if (dev.address) {
+    msg += `├ [Dev on Pump.fun](https://pump.fun/profile/${dev.address})\n`;
+    msg += `├ [Dev on Solscan](https://solscan.io/account/${dev.address})\n`;
+  }
+  msg += `├ [Token on Pump.fun](https://pump.fun/${ca})\n`;
+  msg += `└ [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})\n`;
+
   // Token phase context
   try {
-    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
-    if (dexRes.ok) {
-      const dexJson = await dexRes.json();
-      const pair = dexJson?.pairs?.[0];
-      if (pair && dev.reputation_score != null) {
-        const pr = detectTokenPhase({ pairCreatedAt: pair.pairCreatedAt || null, liquidityUsd: pair.liquidity?.usd || null, dexId: pair.dexId || null });
-        msg += `\n💡 _${contextualizeDevRep(dev.reputation_score, pr.phase)}_\n`;
-      }
+    if (dexData && dev.reputation_score != null) {
+      const pr = detectTokenPhase({ pairCreatedAt: dexData.pairCreatedAt || null, liquidityUsd: dexData.liquidity?.usd || null, dexId: dexData.dexId || null });
+      msg += `\n💡 _${contextualizeDevRep(dev.reputation_score, pr.phase)}_\n`;
     }
   } catch (_) {}
 
