@@ -34,6 +34,9 @@ type FeedItem = {
   // enriched client-side
   total_holders: number | null;
   dust_pct: number | null;
+  creator_wallet: string | null;
+  x_community_url: string | null;
+  x_community_name: string | null;
 };
 
 type SortField = 'last_activity' | 'symbol' | 'health_grade' | 'freshness_tier';
@@ -194,19 +197,37 @@ export default function Feed() {
     const rawItems = (data || []) as any[];
     const mints = rawItems.map((d: any) => d.token_mint);
 
-    // Enrich with holder data
+    // Enrich with holder data + master token directory (creator wallet, X community)
     let holderMap: Record<string, { total_holders: number; dust_pct: number }> = {};
+    let tokenDirMap: Record<string, { creator_wallet: string | null; x_community_url: string | null; x_community_name: string | null }> = {};
     if (mints.length > 0) {
-      const { data: holderData } = await supabase
-        .from('holder_daily_summary')
-        .select('token_mint, total_holders, shrimp_count')
-        .in('token_mint', mints)
-        .order('summary_date', { ascending: false });
-      if (holderData) {
-        holderData.forEach((h: any) => {
+      const [holderRes, dirRes] = await Promise.all([
+        supabase
+          .from('holder_daily_summary')
+          .select('token_mint, total_holders, shrimp_count')
+          .in('token_mint', mints)
+          .order('summary_date', { ascending: false }),
+        supabase
+          .from('master_token_directory' as any)
+          .select('token_mint, creator_wallet, x_community_urls, x_community_names')
+          .in('token_mint', mints),
+      ]);
+      if (holderRes.data) {
+        holderRes.data.forEach((h: any) => {
           if (!holderMap[h.token_mint]) {
             const dustPct = h.total_holders > 0 ? ((h.shrimp_count || 0) / h.total_holders) * 100 : 0;
             holderMap[h.token_mint] = { total_holders: h.total_holders, dust_pct: dustPct };
+          }
+        });
+      }
+      if (dirRes.data) {
+        dirRes.data.forEach((d: any) => {
+          if (!tokenDirMap[d.token_mint]) {
+            tokenDirMap[d.token_mint] = {
+              creator_wallet: d.creator_wallet || null,
+              x_community_url: d.x_community_urls?.[0] || null,
+              x_community_name: d.x_community_names?.[0] || null,
+            };
           }
         });
       }
@@ -227,6 +248,9 @@ export default function Feed() {
       banner_url: d.banner_url,
       total_holders: holderMap[d.token_mint]?.total_holders || null,
       dust_pct: holderMap[d.token_mint]?.dust_pct ?? null,
+      creator_wallet: tokenDirMap[d.token_mint]?.creator_wallet || null,
+      x_community_url: tokenDirMap[d.token_mint]?.x_community_url || null,
+      x_community_name: tokenDirMap[d.token_mint]?.x_community_name || null,
     }));
 
     setItems(merged);
@@ -278,6 +302,16 @@ export default function Feed() {
         <a href={`https://solscan.io/token/${item.token_mint}`} target="_blank" rel="noopener noreferrer">
           <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> SolScan</Button>
         </a>
+        {item.creator_wallet && (
+          <a href={`https://solscan.io/account/${item.creator_wallet}`} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-2 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"><ExternalLink className="h-3 w-3" /> Dev Wallet</Button>
+          </a>
+        )}
+        {item.x_community_url && (
+          <a href={item.x_community_url} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> {item.x_community_name || 'X Community'}</Button>
+          </a>
+        )}
         <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(`/holders?token=${item.token_mint}`); }}>
           <Users className="h-3 w-3" /> Wallet Analysis
         </Button>

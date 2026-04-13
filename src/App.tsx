@@ -156,6 +156,7 @@ const App = () => {
                       <Route path="/features" element={<Features />} />
                       <Route path="/bubblepromo" element={<BubblePromo />} />
                       <Route path="/bubblemap" element={<BubbleMapPage />} />
+                      <Route path="/bubblemaps" element={<Navigate to="/bubblemap" replace />} />
                       <Route path="/holders-how-to" element={<HoldersHowTo />} />
                       <Route path="/bubbles-how-to" element={<BubblesHowTo />} />
                       <Route path="/testimonial-submit" element={<TestimonialSubmit />} />
