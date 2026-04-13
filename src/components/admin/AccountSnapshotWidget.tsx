@@ -94,7 +94,7 @@ export function AccountSnapshotWidget() {
             <Row icon={<Bot className="h-3.5 w-3.5" />} label="TG Linked" count={data.tgLinked}>
               <Sub>{data.tgRegistered} registered via bot</Sub>
             </Row>
-            <Row icon={<CreditCard className="h-3.5 w-3.5" />} label="Stripe Subscribers" count={data.stripeMonthly} />
+            <Row icon={<CreditCard className="h-3.5 w-3.5" />} label="Stripe Customers" count={data.stripeMonthly} />
             {data.solYearly > 0 && (
               <Row icon={<Gem className="h-3.5 w-3.5" />} label="SOL Subscribers" count={data.solYearly} />
             )}
