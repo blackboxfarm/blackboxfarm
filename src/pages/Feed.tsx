@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { LitmusStrip } from '@/components/feed/LitmusStrip';
+import { useAuth } from '@/hooks/useAuth';
 
 const PAGE_SIZE = 50;
 
@@ -136,6 +137,7 @@ export default function Feed() {
   const [redirectModal, setRedirectModal] = useState<{ type: 'wallet' | 'handle'; value: string } | null>(null);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
@@ -270,17 +272,16 @@ export default function Feed() {
   }, [page, totalPages]);
 
   function ItemActions({ item, onClose }: { item: FeedItem; onClose?: () => void }) {
+    const bubblePath = user ? `/bubblemap?token=${item.token_mint}` : `/bubblepromo?token=${item.token_mint}`;
     return (
       <div className="flex gap-2 flex-wrap">
-        {item.tweet_id && (
-          <a href={`https://x.com/HoldersIntel/status/${item.tweet_id}`} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> View on X</Button>
-          </a>
-        )}
+        <a href={`https://solscan.io/token/${item.token_mint}`} target="_blank" rel="noopener noreferrer">
+          <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> SolScan</Button>
+        </a>
         <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(`/holders?token=${item.token_mint}`); }}>
           <Users className="h-3 w-3" /> Wallet Analysis
         </Button>
-        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(`/bubblemap?mint=${item.token_mint}`); }}>
+        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(bubblePath); }}>
           <Compass className="h-3 w-3" /> Bubble Map!
         </Button>
       </div>
