@@ -257,7 +257,7 @@ export function IntelBriefingsManager() {
       let briefingId = editingId;
 
       if (isNew) {
-        const { data, error } = await supabase.from('intel_briefings').insert(payload).select().single();
+        const { data, error } = await supabase.from('intel_briefings').upsert(payload, { onConflict: 'slug' }).select().single();
         if (error) throw error;
         briefingId = data.id;
       } else {
