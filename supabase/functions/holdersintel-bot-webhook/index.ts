@@ -1069,41 +1069,95 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
   }
   if (dev.integrity_score != null) msg += `🔒 Integrity: *${dev.integrity_score}/100*\n`;
 
-  // Social doxxing — the key differentiator
+  // ── Extract rich data from oracle's network.meshLinks ──
+  const meshLinks: any[] = data.network?.meshLinks || [];
+  const linkedXAccounts: string[] = data.network?.linkedXAccounts || [];
+
+  // Extract KYC Root from mesh
+  const kycRoots = meshLinks.filter((m: any) =>
+    m.relationship === 'same_kyc_root' || m.relationship === 'is_kyc_root'
+  );
+  if (kycRoots.length > 0) {
+    msg += `\n🏦 *KYC Root*\n`;
+    for (const kr of kycRoots.slice(0, 3)) {
+      const rootId = kr.sourceType === 'kyc_root' ? kr.sourceId : kr.linkedId;
+      // Try to resolve CEX name
+      let label = rootId;
+      if (typeof rootId === 'string' && rootId.length > 16) {
+        label = `\`${rootId.slice(0, 8)}...${rootId.slice(-6)}\``;
+      }
+      msg += `• ${label} (${kr.confidence}% confidence)\n`;
+    }
+  }
+
+  // Extract X Communities from mesh
+  const xCommunities = meshLinks.filter((m: any) =>
+    m.sourceType === 'x_community' || m.linkedType === 'x_community'
+  );
+  if (xCommunities.length > 0) {
+    msg += `\n🏠 *X Communities*\n`;
+    for (const xc of xCommunities.slice(0, 5)) {
+      const cid = xc.sourceType === 'x_community' ? xc.sourceId : xc.linkedId;
+      msg += `• [Community ${cid}](https://x.com/i/communities/${cid})\n`;
+    }
+  }
+
+  // Social doxxing — now reading from meshLinks correctly
   msg += `\n🔗 *Social Links*\n`;
   let hasSocial = false;
 
-  if (data.social_links || data.mesh_connections?.length) {
-    const socials = data.social_links || {};
-    if (socials.twitter || socials.x) {
-      msg += `𝕏 Twitter: [${socials.twitter || socials.x}](https://x.com/${(socials.twitter || socials.x).replace('@', '')})\n`;
-      hasSocial = true;
-    }
-    if (socials.telegram) {
-      msg += `📱 Telegram: ${socials.telegram}\n`;
-      hasSocial = true;
-    }
-    if (socials.website) {
-      msg += `🌐 Website: ${socials.website}\n`;
-      hasSocial = true;
-    }
-
-    // Mesh connections for social doxxing
-    if (isFullAccess && data.mesh_connections?.length) {
-      const socialMesh = data.mesh_connections.filter((c: any) =>
-        c.relationship === 'same_kyc_root' || c.relationship === 'same_team' ||
-        c.source_type === 'twitter' || c.source_type === 'x_account' ||
-        c.linked_type === 'twitter' || c.linked_type === 'x_account'
-      );
-      if (socialMesh.length > 0) {
-        msg += `\n🕸 *Identity Mesh:*\n`;
-        for (const c of socialMesh.slice(0, 5)) {
-          const rel = c.relationship || c.type || 'linked';
-          const target = c.target || c.linked_id || '?';
-          msg += `• ${rel}: \`${typeof target === 'string' && target.length > 16 ? target.slice(0, 8) + '...' + target.slice(-6) : target}\`\n`;
-        }
+  // X accounts from oracle network
+  if (linkedXAccounts.length > 0) {
+    for (const handle of linkedXAccounts.slice(0, 3)) {
+      if (handle) {
+        msg += `𝕏 Twitter: [${handle}](https://x.com/${handle.replace('@', '')})\n`;
         hasSocial = true;
       }
+    }
+  }
+
+  // Websites from mesh
+  const websites = meshLinks.filter((m: any) =>
+    m.relationship === 'website_of' && (m.sourceType === 'website' || m.linkedType === 'website')
+  );
+  for (const w of websites.slice(0, 3)) {
+    const url = w.sourceType === 'website' ? w.sourceId : w.linkedId;
+    if (url && !url.includes('x.com') && !url.includes('twitter.com')) {
+      msg += `🌐 Website: ${url}\n`;
+      hasSocial = true;
+    }
+  }
+
+  // X accounts from mesh (backup if linkedXAccounts was empty)
+  if (!hasSocial) {
+    const xFromMesh = meshLinks.filter((m: any) =>
+      m.sourceType === 'x_account' || m.linkedType === 'x_account' ||
+      m.sourceType === 'twitter' || m.linkedType === 'twitter'
+    );
+    for (const xm of xFromMesh.slice(0, 3)) {
+      const handle = xm.sourceType === 'x_account' || xm.sourceType === 'twitter' ? xm.sourceId : xm.linkedId;
+      if (handle) {
+        msg += `𝕏 Twitter: [${handle}](https://x.com/${handle.replace('@', '')})\n`;
+        hasSocial = true;
+      }
+    }
+  }
+
+  // Identity Mesh details (Pro+)
+  if (isFullAccess && meshLinks.length > 0) {
+    const socialMesh = meshLinks.filter((c: any) =>
+      c.relationship === 'same_kyc_root' || c.relationship === 'same_team' ||
+      c.sourceType === 'twitter' || c.sourceType === 'x_account' ||
+      c.linkedType === 'twitter' || c.linkedType === 'x_account'
+    );
+    if (socialMesh.length > 0) {
+      msg += `\n🕸 *Identity Mesh:*\n`;
+      for (const c of socialMesh.slice(0, 5)) {
+        const rel = c.relationship || 'linked';
+        const target = c.linkedId || '?';
+        msg += `• ${rel}: \`${typeof target === 'string' && target.length > 16 ? target.slice(0, 8) + '...' + target.slice(-6) : target}\`\n`;
+      }
+      hasSocial = true;
     }
   }
 
@@ -1111,15 +1165,26 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
     msg += `_No social accounts linked to this developer._\n`;
   }
 
-  // Funded-by chain (Pro+)
-  if (isFullAccess && data.mesh_connections?.length) {
-    const fundedBy = data.mesh_connections.filter((c: any) => c.relationship === 'funded_by');
+  // Funded-by chain (Pro+) — now reading from meshLinks
+  if (isFullAccess && meshLinks.length > 0) {
+    const fundedBy = meshLinks.filter((c: any) =>
+      c.relationship === 'funded_by' || c.relationship === 'directly_funded'
+    );
     if (fundedBy.length > 0) {
       msg += `\n💰 *Funding Chain:*\n`;
       for (const f of fundedBy.slice(0, 3)) {
-        const src = f.source_id || f.source || '?';
+        const src = f.sourceId || '?';
         msg += `• Funded by: \`${typeof src === 'string' && src.length > 16 ? src.slice(0, 8) + '...' + src.slice(-6) : src}\`\n`;
       }
+    }
+  }
+
+  // Upstream chain from genealogy scanner
+  if (isFullAccess && data.upstreamChain?.length > 0) {
+    msg += `\n🔗 *Wallet Lineage:*\n`;
+    for (const hop of data.upstreamChain.slice(0, 5)) {
+      const emoji = hop.role === 'KYC_ROOT' ? '🏦' : hop.role === 'FUNDER' ? '💰' : '📡';
+      msg += `${emoji} ${hop.role}: \`${hop.wallet.slice(0, 8)}...${hop.wallet.slice(-6)}\`\n`;
     }
   }
 
