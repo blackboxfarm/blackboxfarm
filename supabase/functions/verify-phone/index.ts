@@ -84,11 +84,11 @@ serve(withRunLog('verify-phone', async (req) => {
     // Update user profile
     const { error: profileError } = await supabase
       .from('profiles')
-      .upsert({
-        user_id: user.id,
+      .update({
         phone_number: normalizedPhoneNumber,
         phone_verified: true
-      });
+      })
+      .eq('user_id', user.id);
 
     if (profileError) throw profileError;
 
