@@ -12,6 +12,7 @@ import oracleAvatar from '@/assets/oracle-avatar.png';
 import { useOracleHover } from './OracleHoverProvider';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AvatarThoughtBubble } from './AvatarThoughtBubble';
+import { usePageNudgeOrchestrator } from '@/hooks/usePageNudgeOrchestrator';
 
 // Pages where the widget should NOT appear
 const HIDDEN_PAGES = ['/checkout', '/payment'];

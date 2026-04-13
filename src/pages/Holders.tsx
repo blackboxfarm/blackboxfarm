@@ -32,7 +32,7 @@ export default function Holders() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-4">
             <TabsTrigger value="report">Token Holders Report</TabsTrigger>
-            <TabsTrigger value="overview">Analysis Overview</TabsTrigger>
+            <TabsTrigger value="overview" data-oracle-hint="The AI panel gives you a narrative summary — try it" data-oracle-zone="holders-ai-tab">Analysis Overview</TabsTrigger>
           </TabsList>
 
           <TabsContent value="report" className="mt-0">

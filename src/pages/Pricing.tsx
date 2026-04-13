@@ -49,7 +49,7 @@ export default function Pricing() {
           </div>
         </div>
 
-        <div data-oracle-hint="Curious about Pro? I can explain the differences" data-oracle-zone="pricing-cards">
+        <div data-oracle-hint="Curious about Pro? I can explain the differences — just ask" data-oracle-zone="pricing-cards">
           <PricingTable />
         </div>
 
@@ -74,7 +74,7 @@ export default function Pricing() {
           </span>
         </div>
 
-        <div className="max-w-2xl mx-auto space-y-4 text-sm">
+        <div className="max-w-2xl mx-auto space-y-4 text-sm" data-oracle-hint="Still have questions? Just ask me anything" data-oracle-zone="pricing-faq">
           <h2 className="text-xl font-semibold text-center">Frequently Asked Questions</h2>
           <div className="space-y-3">
             <div>

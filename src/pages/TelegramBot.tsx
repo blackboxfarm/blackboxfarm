@@ -65,7 +65,7 @@ export default function TelegramBot() {
               <br />
               <span className="text-foreground font-medium">Paste a contract address. Get instant alpha.</span>
             </p>
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex items-center justify-center gap-3 pt-2" data-oracle-hint="Click to open the bot in Telegram — it's instant" data-oracle-zone="tgbot-launch">
               <Button size="lg" className="gap-2" asChild>
                 <a href="https://t.me/holdersintel_bot" target="_blank" rel="noopener noreferrer">
                   <MessageCircle className="w-4 h-4" />
@@ -143,7 +143,7 @@ export default function TelegramBot() {
         <p className="text-sm text-muted-foreground text-center mb-8">
           Full command suite from <code className="text-primary">/help</code>. Access is gated by your subscription tier.
         </p>
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-2xl mx-auto" data-oracle-hint="Try /quick first — it's free and gives you an instant snapshot" data-oracle-zone="tgbot-commands">
           <TelegramCommandList />
         </div>
       </section>
