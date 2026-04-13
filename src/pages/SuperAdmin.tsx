@@ -35,6 +35,7 @@ const CacheBustingTools = lazy(() => import("@/components/intel/CacheBustingTool
 const MetaTagsManager = lazy(() => import("@/components/admin/MetaTagsManager").then(m => ({ default: m.MetaTagsManager })));
 const AIConfigTab = lazy(() => import("@/components/admin/tabs/AIConfigTab"));
 const EmailCampaignsManager = lazy(() => import("@/components/admin/EmailCampaignsManager").then(m => ({ default: m.EmailCampaignsManager })));
+const TodoListTab = lazy(() => import("@/components/admin/tabs/TodoListTab"));
 
 const DEFAULT_ADMIN_TAB = "utilities";
 const ALLOWED_ADMIN_TABS = new Set([
@@ -58,6 +59,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "intel-briefings",
   "ai-config",
   "email-campaigns",
+  "todo-list",
 ]);
 
 // Simple loading fallback
@@ -190,6 +192,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="intel-briefings" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">📰 Intel Briefings</TabsTrigger>
             <TabsTrigger value="ai-config" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-cyan-500/20">🧠 AI Config</TabsTrigger>
             <TabsTrigger value="email-campaigns" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500/30 data-[state=active]:to-pink-500/20">📧 Email Campaigns</TabsTrigger>
+            <TabsTrigger value="todo-list" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-lime-500/20">📝 To-Do</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -353,6 +356,13 @@ export default function SuperAdmin() {
             {activeTab === "email-campaigns" && (
               <TabErrorBoundary tabName="Email Campaigns">
                 <Suspense fallback={<TabLoader />}><EmailCampaignsManager /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
+          <TabsContent value="todo-list">
+            {activeTab === "todo-list" && (
+              <TabErrorBoundary tabName="To-Do List">
+                <Suspense fallback={<TabLoader />}><TodoListTab /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
