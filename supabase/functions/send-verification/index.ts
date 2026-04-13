@@ -7,8 +7,27 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/twilio';
+const TWILIO_API_BASE = 'https://api.twilio.com/2010-04-01';
 const TWILIO_FROM_NUMBER = '+16624814161';
+
+function normalizePhoneNumber(value: string): string {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, '');
+
+  if (trimmed.startsWith('+') && digits.length >= 10 && digits.length <= 15) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+
+  throw new Error('Please enter a valid phone number with area code');
+}
 
 serve(withRunLog('send-verification', async (req) => {
   if (req.method === 'OPTIONS') {
@@ -22,6 +41,8 @@ serve(withRunLog('send-verification', async (req) => {
       throw new Error('Phone number is required');
     }
 
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+
     // Generate 6-digit verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -34,7 +55,7 @@ serve(withRunLog('send-verification', async (req) => {
     const { error: dbError } = await supabase
       .from('phone_verifications')
       .upsert({
-        phone_number: phoneNumber,
+        phone_number: normalizedPhoneNumber,
         verification_code: verificationCode,
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         verified: false
@@ -43,21 +64,20 @@ serve(withRunLog('send-verification', async (req) => {
     if (dbError) throw dbError;
 
     if (type === 'sms') {
-      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-      if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
+      const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
+      if (!TWILIO_ACCOUNT_SID) throw new Error('TWILIO_ACCOUNT_SID is not configured');
 
-      const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
-      if (!TWILIO_API_KEY) throw new Error('TWILIO_API_KEY is not configured');
+      const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
+      if (!TWILIO_AUTH_TOKEN) throw new Error('TWILIO_AUTH_TOKEN is not configured');
 
-      const response = await fetch(`${GATEWAY_URL}/Messages.json`, {
+      const response = await fetch(`${TWILIO_API_BASE}/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'X-Connection-Api-Key': TWILIO_API_KEY,
+          'Authorization': `Basic ${btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          To: phoneNumber,
+          To: normalizedPhoneNumber,
           From: TWILIO_FROM_NUMBER,
           Body: `Your BlackBox verification code is: ${verificationCode}. Valid for 10 minutes.`
         })
