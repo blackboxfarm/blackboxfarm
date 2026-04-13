@@ -70,13 +70,26 @@ export function ChatWidget() {
       // Ctrl+Space toggle
       if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
         e.preventDefault();
-        setNudgesEnabled(prev => !prev);
+        setNudgesEnabled(prev => {
+          const next = !prev;
+          if (!next) setThoughtText(null);
+          // Brief feedback via thought bubble (uses raw setState, not dispatch)
+          setTimeout(() => setThoughtText(next ? '💬 nudges on' : '🔇 nudges off'), 50);
+          setTimeout(() => setThoughtText(null), 2000);
+          return next;
+        });
         return;
       }
       // "/" toggle — only when not typing in an input/textarea
       if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
         e.preventDefault();
-        setNudgesEnabled(prev => !prev);
+        setNudgesEnabled(prev => {
+          const next = !prev;
+          if (!next) setThoughtText(null);
+          setTimeout(() => setThoughtText(next ? '💬 nudges on' : '🔇 nudges off'), 50);
+          setTimeout(() => setThoughtText(null), 2000);
+          return next;
+        });
       }
     };
     window.addEventListener('keydown', handler);
