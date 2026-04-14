@@ -14,10 +14,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
-  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe
+  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon
 } from 'lucide-react';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
@@ -231,7 +234,7 @@ function IntelBriefingsArticlesManager() {
       const { data, error } = await supabase
         .from('intel_briefings')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('published_at', { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as unknown as Briefing[];
     },
@@ -338,6 +341,20 @@ function IntelBriefingsArticlesManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
+    },
+  });
+
+  // Update published_at date
+  const updateDate = useMutation({
+    mutationFn: async ({ id, date }: { id: string; date: Date }) => {
+      const { error } = await supabase.from('intel_briefings').update({
+        published_at: date.toISOString(),
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
+      toast({ title: 'Date updated' });
     },
   });
 
@@ -556,8 +573,32 @@ function IntelBriefingsArticlesManager() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {format(new Date(b.created_at), 'MMM d, yyyy')}
+                  <TableCell>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            'text-xs justify-start font-normal h-7 px-2',
+                            !b.published_at && 'text-muted-foreground'
+                          )}
+                        >
+                          <CalendarIcon className="h-3 w-3 mr-1" />
+                          {b.published_at ? format(new Date(b.published_at), 'MMM d, yyyy') : 'Set date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={b.published_at ? new Date(b.published_at) : undefined}
+                          onSelect={(date) => {
+                            if (date) updateDate.mutate({ id: b.id, date });
+                          }}
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
