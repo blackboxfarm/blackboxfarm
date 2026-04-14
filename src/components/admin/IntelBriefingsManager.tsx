@@ -587,6 +587,7 @@ function IntelBriefingsArticlesManager() {
               ))}
             </TableBody>
           </Table>
+          </>
         )}
       </div>
     );
