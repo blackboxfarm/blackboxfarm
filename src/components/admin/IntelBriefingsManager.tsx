@@ -344,6 +344,20 @@ function IntelBriefingsArticlesManager() {
     },
   });
 
+  // Update published_at date
+  const updateDate = useMutation({
+    mutationFn: async ({ id, date }: { id: string; date: Date }) => {
+      const { error } = await supabase.from('intel_briefings').update({
+        published_at: date.toISOString(),
+      }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
+      toast({ title: 'Date updated' });
+    },
+  });
+
   const openEditor = useCallback((briefing?: Briefing) => {
     if (briefing) {
       setEditingId(briefing.id);
