@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     const ogDescription = (article.seo_description || article.subtitle || meta.og_description || "").slice(0, 200);
     const ogImage = resolveImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
     const canonicalUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
-    const shareRequestUrl = `${SUPABASE_URL}/functions/v1/intel-share?slug=${encodeURIComponent(article.slug)}${version ? `&v=${encodeURIComponent(version)}` : ''}`;
+    const shareRequestUrl = `${SITE_URL}/og/intel-share?slug=${encodeURIComponent(article.slug)}${version ? `&v=${encodeURIComponent(version)}` : ''}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
     const category = (article.category || "general").replace(/-/g, " ");
