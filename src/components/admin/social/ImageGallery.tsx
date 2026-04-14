@@ -154,6 +154,49 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
     }
   };
 
+  const toggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleInspireGenerate = async () => {
+    const selected = images.filter(i => selectedIds.has(i.id));
+    if (selected.length === 0) return;
+
+    setInspiring(true);
+    setActiveSourceTab('ai_generated');
+    toast.info(`Using ${selected.length} image(s) as inspiration — generating 3 new images...`);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-gallery-images', {
+        body: {
+          articleContent: articleContent || `Create unique, visually striking images inspired by the selected reference images.`,
+          articleTitle: articleTitle || 'Inspired Generation',
+          styleImageUrls: selected.map(i => i.file_url),
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.images?.length) {
+        toast.success(`Generated ${data.images.length} inspired image(s)!`);
+        setSelectedIds(new Set());
+        loadData();
+      } else {
+        toast.error("No images generated. Try again.");
+      }
+    } catch (err: any) {
+      console.error("Inspire generate error:", err);
+      toast.error(err?.message || "Failed to generate inspired images");
+    } finally {
+      setInspiring(false);
+    }
+  };
+
   const handleDelete = async (img: GalleryImage) => {
     await (supabase as any).from('social_media_gallery').update({ is_active: false }).eq('id', img.id);
     toast.success('Image removed from gallery');
