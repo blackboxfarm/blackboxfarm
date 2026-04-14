@@ -663,8 +663,8 @@ function IntelBriefingsArticlesManager() {
                                 {Object.keys(s.bots).length > 0 && (
                                   <div className="pt-1 border-t border-border mt-1">
                                     <p className="font-medium mb-0.5">Bot breakdown:</p>
-                                    {Object.entries(s.bots).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
-                                      <p key={name}>{name}: {count}</p>
+                                    {Object.entries(s.bots).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([name, count]) => (
+                                      <p key={name}>{name}: {count as number}</p>
                                     ))}
                                   </div>
                                 )}
