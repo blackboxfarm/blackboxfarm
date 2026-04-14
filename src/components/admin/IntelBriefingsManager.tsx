@@ -625,6 +625,55 @@ function IntelBriefingsArticlesManager() {
                         />
                       </PopoverContent>
                     </Popover>
+                   </TableCell>
+                  <TableCell className="text-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="inline-flex items-center gap-1.5 text-xs cursor-default">
+                            {(() => {
+                              const s = viewStats[b.id];
+                              if (!s || s.total === 0) return <span className="text-muted-foreground">—</span>;
+                              return (
+                                <>
+                                  <span className="flex items-center gap-0.5">
+                                    <Users className="h-3 w-3 text-green-500" />{s.human}
+                                  </span>
+                                  <span className="flex items-center gap-0.5">
+                                    <Globe className="h-3 w-3 text-blue-500" />{s.crawler}
+                                  </span>
+                                  <span className="flex items-center gap-0.5">
+                                    <Bot className="h-3 w-3 text-purple-500" />{s.ai_bot}
+                                  </span>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[250px]">
+                          {(() => {
+                            const s = viewStats[b.id];
+                            if (!s || s.total === 0) return <p className="text-xs">No views yet</p>;
+                            return (
+                              <div className="text-xs space-y-1">
+                                <p className="font-medium">{s.total} total views</p>
+                                <p>👤 Humans: {s.human}</p>
+                                <p>🔍 Crawlers: {s.crawler}</p>
+                                <p>🤖 AI Bots: {s.ai_bot}</p>
+                                {Object.keys(s.bots).length > 0 && (
+                                  <div className="pt-1 border-t border-border mt-1">
+                                    <p className="font-medium mb-0.5">Bot breakdown:</p>
+                                    {Object.entries(s.bots).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+                                      <p key={name}>{name}: {count}</p>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
