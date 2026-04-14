@@ -51,6 +51,7 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [inspiring, setInspiring] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSourceTab, setActiveSourceTab] = useState<string>("uploaded");
   const [editImage, setEditImage] = useState<GalleryImage | null>(null);
@@ -59,6 +60,7 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
   const [editCategories, setEditCategories] = useState<string[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [previewImage, setPreviewImage] = useState<GalleryImage | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
@@ -149,6 +151,49 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
       toast.error(err?.message || "Failed to generate images");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const toggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleInspireGenerate = async () => {
+    const selected = images.filter(i => selectedIds.has(i.id));
+    if (selected.length === 0) return;
+
+    setInspiring(true);
+    setActiveSourceTab('ai_generated');
+    toast.info(`Using ${selected.length} image(s) as inspiration — generating 3 new images...`);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-gallery-images', {
+        body: {
+          articleContent: articleContent || `Create unique, visually striking images inspired by the selected reference images.`,
+          articleTitle: articleTitle || 'Inspired Generation',
+          styleImageUrls: selected.map(i => i.file_url),
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.images?.length) {
+        toast.success(`Generated ${data.images.length} inspired image(s)!`);
+        setSelectedIds(new Set());
+        loadData();
+      } else {
+        toast.error("No images generated. Try again.");
+      }
+    } catch (err: any) {
+      console.error("Inspire generate error:", err);
+      toast.error(err?.message || "Failed to generate inspired images");
+    } finally {
+      setInspiring(false);
     }
   };
 
@@ -272,6 +317,25 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
               </div>
             )}
 
+            {/* Selection bar */}
+            {selectedIds.size > 0 && (
+              <div className="mb-3 flex items-center gap-3 p-2 rounded-lg bg-accent/50 border border-accent">
+                <Badge variant="secondary">{selectedIds.size} selected</Badge>
+                <Button
+                  size="sm"
+                  onClick={handleInspireGenerate}
+                  disabled={inspiring}
+                  className="gap-2"
+                >
+                  {inspiring ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {inspiring ? 'Generating...' : `Inspire 3 New from ${selectedIds.size} Image${selectedIds.size > 1 ? 's' : ''}`}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                  <X className="h-4 w-4 mr-1" /> Clear
+                </Button>
+              </div>
+            )}
+
             <ScrollArea className={mode === 'manage' ? 'h-[500px]' : 'h-[350px]'}>
               {loading ? (
                 <p className="text-center text-muted-foreground py-8">Loading...</p>
@@ -281,10 +345,12 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                 </p>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pr-3">
-                  {filteredImages.map((img) => (
+                  {filteredImages.map((img) => {
+                    const isSelected = selectedIds.has(img.id);
+                    return (
                     <div
                       key={img.id}
-                      className={`group relative border rounded-lg overflow-hidden transition-all hover:ring-2 hover:ring-primary/50 ${mode === 'pick' ? 'cursor-pointer' : ''}`}
+                      className={`group relative border rounded-lg overflow-hidden transition-all hover:ring-2 hover:ring-primary/50 ${mode === 'pick' ? 'cursor-pointer' : ''} ${isSelected ? 'ring-2 ring-primary' : ''}`}
                       onClick={mode === 'pick' ? () => onSelect?.(img.file_url) : undefined}
                     >
                       <div className="aspect-square bg-muted relative">
@@ -294,6 +360,19 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                           className="w-full h-full object-cover"
                           loading="lazy"
                         />
+                        {/* Selection checkbox */}
+                        {mode === 'manage' && (
+                          <button
+                            onClick={(e) => toggleSelect(img.id, e)}
+                            className={`absolute top-1.5 left-1.5 h-6 w-6 rounded border-2 flex items-center justify-center transition-all ${
+                              isSelected
+                                ? 'bg-primary border-primary text-primary-foreground'
+                                : 'bg-background/80 border-muted-foreground/40 opacity-0 group-hover:opacity-100'
+                            }`}
+                          >
+                            {isSelected && <Check className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
                         <Button
                           size="icon"
                           variant="secondary"
@@ -343,7 +422,8 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </ScrollArea>
