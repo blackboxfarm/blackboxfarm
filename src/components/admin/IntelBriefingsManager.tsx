@@ -527,7 +527,7 @@ function IntelBriefingsArticlesManager() {
             <p>No briefings found. Create your first one!</p>
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground mb-2">{filtered.length} article{filtered.length !== 1 ? 's' : ''}</div>
+          <><div className="text-sm text-muted-foreground mb-2">{filtered.length} article{filtered.length !== 1 ? 's' : ''}</div>
           <Table>
             <TableHeader>
               <TableRow>
