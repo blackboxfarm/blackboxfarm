@@ -3,6 +3,17 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
+function intelBriefingStaticPages() {
+  return {
+    name: "intel-briefing-static-pages",
+    apply: "build" as const,
+    async closeBundle() {
+      const mod = await import("./scripts/generate-intel-briefing-pages.mjs");
+      await mod.generateIntelBriefingPages();
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -12,6 +23,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === 'development' && componentTagger(),
+    intelBriefingStaticPages(),
   ].filter(Boolean),
   resolve: {
     alias: {
