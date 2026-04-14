@@ -41,6 +41,7 @@ interface ArticleData {
   category?: string;
   tags?: string[] | null;
   published_at?: string | null;
+  is_published?: boolean;
 }
 
 const SITE_URL = 'https://blackbox.farm';
@@ -171,7 +172,7 @@ export function MetaTagsManager() {
   const loadArticles = async () => {
     const { data } = await supabase
       .from('intel_briefings')
-      .select('slug, title, subtitle, seo_title, seo_description, featured_image_url, content_md, author, category, tags, published_at')
+      .select('slug, title, subtitle, seo_title, seo_description, featured_image_url, content_md, author, category, tags, published_at, is_published')
       .order('created_at', { ascending: false });
     if (data) setArticles(data as ArticleData[]);
   };
