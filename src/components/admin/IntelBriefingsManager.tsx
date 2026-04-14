@@ -125,6 +125,27 @@ function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+async function createUniqueBriefingSlug(baseSlug: string) {
+  const normalizedBase = slugify(baseSlug) || `briefing-${Date.now()}`;
+
+  const { data, error } = await supabase
+    .from('intel_briefings')
+    .select('slug')
+    .ilike('slug', `${normalizedBase}%`);
+
+  if (error) throw error;
+
+  const existingSlugs = new Set((data ?? []).map((item) => item.slug));
+  if (!existingSlugs.has(normalizedBase)) return normalizedBase;
+
+  let suffix = 2;
+  while (existingSlugs.has(`${normalizedBase}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${normalizedBase}-${suffix}`;
+}
+
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   'holder-analysis': ['holder', 'holders', 'whale', 'whales', 'distribution', 'top 25', 'wallet concentration'],
   'wallet-tracing': ['wallet', 'tracing', 'tracking', 'transaction', 'on-chain', 'onchain'],
@@ -238,7 +259,8 @@ function IntelBriefingsArticlesManager() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (isNew: boolean) => {
-      const slug = form.slug || slugify(form.title);
+      const baseSlug = form.slug || slugify(form.title);
+      const slug = isNew ? await createUniqueBriefingSlug(baseSlug) : baseSlug;
       const payload = {
         title: form.title,
         subtitle: form.subtitle || null,
@@ -258,7 +280,7 @@ function IntelBriefingsArticlesManager() {
       let briefingId = editingId;
 
       if (isNew) {
-        const { data, error } = await supabase.from('intel_briefings').upsert(payload, { onConflict: 'slug' }).select().single();
+        const { data, error } = await supabase.from('intel_briefings').insert(payload).select().single();
         if (error) throw error;
         briefingId = data.id;
       } else {
@@ -281,6 +303,7 @@ function IntelBriefingsArticlesManager() {
     onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
       queryClient.invalidateQueries({ queryKey: ['intel-briefing-revisions', id] });
+      setForm((current) => ({ ...current, slug: current.slug || slugify(current.title) }));
       toast({ title: 'Saved', description: 'Briefing saved successfully.' });
       setRevisionNote('');
       if (!editingId) {
