@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const slug = url.searchParams.get("slug");
+    const shareRequestUrl = url.toString();
 
     if (!slug) {
       return new Response("Missing slug", { status: 400, headers: corsHeaders });
@@ -162,7 +163,7 @@ Deno.serve(async (req) => {
 
   <!-- Open Graph -->
   <meta property="og:type" content="article" />
-  <meta property="og:url" content="${canonicalUrl}" />
+  <meta property="og:url" content="${shareRequestUrl}" />
   <meta property="og:title" content="${esc(ogTitle)}" />
   <meta property="og:description" content="${esc(ogDescription)}" />
   <meta property="og:image" content="${ogImage}" />
