@@ -234,7 +234,7 @@ function IntelBriefingsArticlesManager() {
       const { data, error } = await supabase
         .from('intel_briefings')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('published_at', { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as unknown as Briefing[];
     },
