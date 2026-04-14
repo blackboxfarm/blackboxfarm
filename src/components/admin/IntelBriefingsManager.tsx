@@ -1006,6 +1006,9 @@ export function IntelBriefingsManager() {
       <TabsContent value="repurpose">
         <ContentCondenser />
       </TabsContent>
+      <TabsContent value="platforms">
+        <PlatformsCheatSheet />
+      </TabsContent>
     </Tabs>
   );
 }
