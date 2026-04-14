@@ -401,29 +401,56 @@ export function MetaTagsManager() {
           </TabsContent>
 
           <TabsContent value="article">
+            <div className="mb-2 p-3 rounded-lg bg-accent/30 border border-accent/50">
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Articles auto-populate their meta tags</strong> from their own title, description, and hero image — no manual setup needed. 
+                Only create an override here if you want to customize what shows on social media differently from the article itself.
+              </p>
+            </div>
             <div className="mb-4">
-              <label className="text-sm font-medium text-muted-foreground mb-1 block">Select Article</label>
+              <label className="text-sm font-medium text-muted-foreground mb-1 block">Select Article to Preview / Override</label>
               <Select value={selectedArticle} onValueChange={handleArticleSelect}>
                 <SelectTrigger><SelectValue placeholder="Choose an article..." /></SelectTrigger>
                 <SelectContent>
-                  {articles.map(a => (
-                    <SelectItem key={a.slug} value={a.slug}>
-                      {a.title}
-                      {entries.some(e => e.scope === 'article' && e.article_slug === a.slug) && ' ✅'}
-                    </SelectItem>
-                  ))}
+                  {articles.map(a => {
+                    const hasOverride = entries.some(e => e.scope === 'article' && e.article_slug === a.slug);
+                    const isPublished = !!a.published_at;
+                    return (
+                      <SelectItem key={a.slug} value={a.slug}>
+                        <span className="flex items-center gap-2">
+                          {a.title}
+                          {isPublished ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">Published</span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">Draft</span>
+                          )}
+                          {hasOverride && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Custom Override</span>}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
             {selectedArticle ? (
-              <MetaTagForm
-                entry={currentEntry}
-                onChange={updateField}
-                onImageUpload={handleImageUpload}
-                uploading={uploading}
-              />
+              <>
+                {!entries.some(e => e.scope === 'article' && e.article_slug === selectedArticle) && (
+                  <div className="mb-3 p-2 rounded border border-border/50 bg-muted/30">
+                    <p className="text-xs text-muted-foreground">
+                      ✅ <strong>Using article defaults</strong> — These fields are auto-populated from the article's own data. 
+                      Only click Save if you want to create a custom override.
+                    </p>
+                  </div>
+                )}
+                <MetaTagForm
+                  entry={currentEntry}
+                  onChange={updateField}
+                  onImageUpload={handleImageUpload}
+                  uploading={uploading}
+                />
+              </>
             ) : (
-              <p className="text-sm text-muted-foreground py-8 text-center">Select an article to configure its meta tags.</p>
+              <p className="text-sm text-muted-foreground py-8 text-center">Select an article to preview its auto-populated meta tags.</p>
             )}
           </TabsContent>
         </Tabs>
