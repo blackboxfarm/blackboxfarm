@@ -58,13 +58,38 @@ export default {
     const url = new URL(request.url);
     const ua = request.headers.get('user-agent') || '';
 
-    // Only intercept /intel/briefing/:slug routes
+    // --- /og/* proxy: pass ALL requests (crawlers + humans) to Supabase edge functions ---
+    if (url.pathname.startsWith('/og/')) {
+      const functionPath = url.pathname.slice(4); // strip "/og/"
+      const proxyUrl = `${OG_META_BASE.replace('/og-meta', '')}/${functionPath}${url.search}`;
+      try {
+        const response = await fetch(proxyUrl, {
+          method: request.method,
+          headers: {
+            'User-Agent': ua,
+            'Accept': request.headers.get('Accept') || 'text/html',
+          },
+        });
+        const body = await response.arrayBuffer();
+        const headers = new Headers(response.headers);
+        headers.set('X-OG-Source', 'cloudflare-og-proxy');
+        // Pass through status + headers from Supabase (302 redirects, content-type, etc.)
+        return new Response(body, {
+          status: response.status,
+          headers,
+        });
+      } catch (err) {
+        console.error('[og-proxy] error:', err.message);
+        return fetch(request);
+      }
+    }
+
+    // --- /intel/briefing/:slug — intercept crawlers only ---
     const match = url.pathname.match(/^\/intel\/briefing\/([^/]+)\/?$/);
     if (!match) {
       return fetch(request);
     }
 
-    // Only proxy crawler requests — humans get the normal SPA
     if (!isCrawler(ua)) {
       return fetch(request);
     }
@@ -80,7 +105,6 @@ export default {
         },
       });
 
-      // Return the og-meta response with proper headers
       const html = await response.text();
       return new Response(html, {
         status: 200,
@@ -92,7 +116,6 @@ export default {
         },
       });
     } catch (err) {
-      // On error, fall through to origin
       console.error('[og-router] proxy error:', err.message);
       return fetch(request);
     }
