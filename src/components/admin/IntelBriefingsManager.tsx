@@ -20,8 +20,10 @@ import { cn } from '@/lib/utils';
 
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
-  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon
+  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon,
+  Bot, Users, Activity
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { format } from 'date-fns';
