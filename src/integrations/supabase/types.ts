@@ -6382,6 +6382,38 @@ export type Database = {
           },
         ]
       }
+      intel_briefing_variants: {
+        Row: {
+          briefing_id: string
+          content_md: string
+          depth: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          briefing_id: string
+          content_md?: string
+          depth: number
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          briefing_id?: string
+          content_md?: string
+          depth?: number
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_briefing_variants_briefing_id_fkey"
+            columns: ["briefing_id"]
+            isOneToOne: false
+            referencedRelation: "intel_briefings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intel_briefing_views: {
         Row: {
           bot_name: string | null
