@@ -422,7 +422,7 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                         </div>
                       )}
                     </div>
-                  ))}
+                  })}
                 </div>
               )}
             </ScrollArea>
