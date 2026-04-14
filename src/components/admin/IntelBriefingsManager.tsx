@@ -991,6 +991,7 @@ export function IntelBriefingsManager() {
         <TabsTrigger value="publications"><Globe className="h-3.5 w-3.5 mr-1" />Publications</TabsTrigger>
         <TabsTrigger value="playbook">🎯 AI Playbook</TabsTrigger>
         <TabsTrigger value="repurpose">✂️ Repurpose</TabsTrigger>
+        <TabsTrigger value="platforms">📋 Platforms</TabsTrigger>
       </TabsList>
       <TabsContent value="articles">
         <IntelBriefingsArticlesManager />
