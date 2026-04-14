@@ -7,6 +7,9 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://apxauapuusmgwbbzj
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU';
 const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/blackbox-og-image.png`;
 const DIST_INDEX_PATH = path.resolve('dist/index.html');
+const DIST_REDIRECTS_PATH = path.resolve('dist/_redirects');
+const GENERATED_REDIRECTS_START = '# BEGIN INTEL BRIEFING STATIC ROUTES';
+const GENERATED_REDIRECTS_END = '# END INTEL BRIEFING STATIC ROUTES';
 
 export async function generateIntelBriefingPages() {
   const baseHtml = await readFile(DIST_INDEX_PATH, 'utf8');
@@ -21,6 +24,8 @@ export async function generateIntelBriefingPages() {
     await mkdir(outputDir, { recursive: true });
     await writeFile(path.join(outputDir, 'index.html'), buildArticleHtml(article, assetTags, appRoot), 'utf8');
   }
+
+  await writeStaticArticleRedirects(articles);
 
   console.log(`[intel-og-pages] generated ${articles.length} article page(s)`);
 }
@@ -184,6 +189,40 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+async function writeStaticArticleRedirects(articles) {
+  let redirects = '';
+
+  try {
+    redirects = await readFile(DIST_REDIRECTS_PATH, 'utf8');
+  } catch {
+    redirects = '/*  /index.html  200\n';
+  }
+
+  const generatedRules = articles
+    .filter((article) => typeof article?.slug === 'string' && article.slug.trim())
+    .map((article) => article.slug.trim())
+    .flatMap((slug) => [
+      `/intel/briefing/${slug}  /intel/briefing/${slug}/index.html  200`,
+      `/intel/briefing/${slug}/  /intel/briefing/${slug}/index.html  200`,
+    ])
+    .join('\n');
+
+  const generatedBlock = `${GENERATED_REDIRECTS_START}\n${generatedRules}\n${GENERATED_REDIRECTS_END}`;
+  const existingBlock = new RegExp(`${escapeRegExp(GENERATED_REDIRECTS_START)}[\\s\\S]*?${escapeRegExp(GENERATED_REDIRECTS_END)}\\n?`, 'g');
+  const cleaned = redirects.replace(existingBlock, '').trimEnd();
+  const fallbackIndex = cleaned.indexOf('\n/*  /index.html  200');
+
+  const nextRedirects = fallbackIndex >= 0
+    ? `${cleaned.slice(0, fallbackIndex).trimEnd()}\n\n${generatedBlock}\n${cleaned.slice(fallbackIndex + 1)}`
+    : `${cleaned}\n\n${generatedBlock}\n`;
+
+  await writeFile(DIST_REDIRECTS_PATH, `${nextRedirects.trim()}\n`, 'utf8');
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
