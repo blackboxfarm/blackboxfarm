@@ -51,6 +51,7 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [inspiring, setInspiring] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSourceTab, setActiveSourceTab] = useState<string>("uploaded");
   const [editImage, setEditImage] = useState<GalleryImage | null>(null);
@@ -59,6 +60,7 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
   const [editCategories, setEditCategories] = useState<string[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [previewImage, setPreviewImage] = useState<GalleryImage | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
