@@ -5,129 +5,370 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BlackBox Farm — Development Timeline</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-  :root{--bg:#0a0a0f;--surface:#111118;--surface-alt:#16161f;--border:rgba(255,255,255,0.08);--text:#e8e8f0;--text-muted:#8a8a9a;--cyan:#00e5ff;--cyan-dim:rgba(0,229,255,0.15);--gold:#d4a017;--gold-dim:rgba(212,160,23,0.12)}
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased}
-  .container{max-width:960px;margin:0 auto;padding:60px 24px 100px}
-  .header{text-align:center;padding:80px 0 60px;border-bottom:1px solid var(--border);margin-bottom:60px}
-  .header .badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--cyan);background:var(--cyan-dim);border:1px solid rgba(0,229,255,0.2);padding:6px 18px;border-radius:100px;margin-bottom:28px}
-  .header h1{font-size:42px;font-weight:800;letter-spacing:-0.03em;margin-bottom:16px;background:linear-gradient(135deg,#fff 40%,var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  .header .subtitle{font-size:17px;color:var(--text-muted);font-weight:300;max-width:600px;margin:0 auto}
-  .phase{margin-bottom:56px;position:relative}
-  .phase::before{content:'';position:absolute;left:14px;top:48px;bottom:0;width:2px;background:linear-gradient(to bottom,var(--cyan-dim),transparent)}
-  .phase-header{display:flex;align-items:center;gap:16px;margin-bottom:24px}
-  .phase-dot{width:30px;height:30px;border-radius:50%;background:var(--surface);border:2px solid var(--cyan);box-shadow:0 0 12px rgba(0,229,255,0.25);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);font-weight:600}
-  .phase h2{font-size:22px;font-weight:700;letter-spacing:-0.02em}
-  .phase h2 span{color:var(--text-muted);font-weight:400;font-size:15px;margin-left:8px}
-  .card-grid{margin-left:46px;display:grid;gap:14px}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;transition:border-color 0.2s}
-  .card:hover{border-color:rgba(0,229,255,0.2)}
-  .card h3{font-size:15px;font-weight:600;margin-bottom:10px;color:var(--gold)}
-  .card p{font-size:14px;color:var(--text-muted);line-height:1.65;margin-bottom:6px}
-  .card ul{margin:8px 0 8px 18px;padding:0}
-  .card li{font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:4px}
-  .card li strong{color:var(--text);font-weight:600}
-  .card code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--surface-alt);padding:2px 6px;border-radius:4px;color:var(--cyan)}
-  .decision{background:var(--gold-dim);border-left:3px solid var(--gold);border-radius:0 10px 10px 0;padding:16px 20px;margin-top:14px;margin-bottom:14px}
-  .decision .label{font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--gold);font-weight:700;margin-bottom:8px}
-  .decision p{font-size:13px;color:var(--text-muted);margin-bottom:4px}
-  .decision ul{margin:8px 0 8px 18px;padding:0}
-  .decision li{font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:4px}
-  .decision code{font-family:'JetBrains Mono',monospace;font-size:12px;background:rgba(212,160,23,0.15);padding:2px 6px;border-radius:4px;color:var(--gold)}
-  .footer{text-align:center;padding-top:60px;border-top:1px solid var(--border);margin-top:60px}
-  .footer p{font-size:13px;color:var(--text-muted)}
-  .footer a{color:var(--cyan);text-decoration:none}
-  @media(max-width:640px){.header h1{font-size:28px}.container{padding:30px 16px 60px}.card-grid{margin-left:24px}.decision{margin-left:0}.phase::before{left:8px}}
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#1a1a1a;line-height:1.75;-webkit-font-smoothing:antialiased;padding:48px 24px 100px}
+.container{max-width:820px;margin:0 auto}
+h1{font-size:32px;font-weight:800;letter-spacing:-0.02em;margin-bottom:4px;color:#111}
+h2{font-size:22px;font-weight:700;margin-top:40px;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #e5e5e5;color:#111}
+h3.subtitle{font-size:16px;font-weight:400;color:#666;margin-bottom:16px}
+hr{border:none;border-top:1px solid #e5e5e5;margin:32px 0}
+.section-title{font-size:15px;font-weight:600;color:#333;margin:20px 0 8px}
+p{font-size:15px;color:#444;margin-bottom:6px}
+ul{margin:4px 0 12px 24px;padding:0}
+li{font-size:14px;color:#444;line-height:1.75;margin-bottom:5px}
+li strong{color:#1a1a1a;font-weight:600}
+code{font-family:"JetBrains Mono",monospace;font-size:13px;background:#f4f4f5;padding:2px 6px;border-radius:4px;color:#d63384}
+strong{font-weight:600}
+@media(max-width:640px){body{padding:24px 16px}h1{font-size:24px}h2{font-size:18px}}
 </style>
 </head>
 <body>
 <div class="container">
-<div class="header">
-  <div class="badge">Internal Development Record</div>
-  <h1>BlackBox Farm</h1>
-  <p class="subtitle">Full-stack development timeline covering November 2025 through April 2026 — from initial token registry to AI-powered intelligence platform. ~10,000 messages condensed.</p>
-</div>
+<h1>BlackBox Farm — Development Timeline</h1>
+<h3 class="subtitle">A 6-Month Build Log · November 2025 – April 2026</h3>
 
+<hr>
 
-<div class="phase">
-  <div class="phase-header"><div class="phase-dot">01</div><h2>November 2025 <span>Foundation & Data Ingestion</span></h2></div>
-  <div class="card-grid">
-    <div class="decision"><div class="label">Key Decisions</div><ul><li>Adopted a single <code>scraped_tokens</code> table as the canonical token registry, consolidating data from multiple scraping sources</li><li>Established a "tight display" design philosophy — minimal padding, maximum data density across all admin interfaces</li><li>Chose Supabase as the unified backend for auth, database, edge functions, and storage</li></ul></div>
-<div class="decision"><div class="label">Architecture</div><ul><li>React 18 + Vite + Tailwind CSS + TypeScript frontend</li><li>Supabase backend with PostgreSQL, Edge Functions (Deno), and Row-Level Security</li><li>Helius API for Solana RPC and token metadata</li></ul></div>
-  </div>
-</div>
+<h2>November 2025: Foundation &amp; Data Ingestion</h2>
 
-<div class="phase">
-  <div class="phase-header"><div class="phase-dot">02</div><h2>December 2025 <span>Trading Infrastructure & Advertising Platform</span></h2></div>
-  <div class="card-grid">
-    <div class="card"><h3>Banner Advertising System</h3><ul><li>Created the self-service advertiser portal (<code>/buy-banner</code>) with tiered pricing (1hr test tier through 30-day packages)</li><li>Built payment flow with Solana wallet generation per advertiser, payment detection, and automatic banner activation</li><li>Developed admin <strong>Advertiser Management</strong> panel for monitoring accounts, orders, wallet balances, and banner images</li><li>Implemented auth modal integration to preserve form state during sign-up/login flow</li></ul></div>
-<div class="card"><h3>Telegram Channel Monitor & Fantasy Portfolio</h3><ul><li>Built real-time Telegram channel monitoring via bot webhook — ingests token calls from monitored alpha groups</li><li>Created the <strong>Fantasy Portfolio Dashboard</strong> — automatically opens fantasy positions on first token mention, tracks price performance, and attributes calls to specific channels</li><li>Implemented deduplication logic: one token = one fantasy position, earliest mention wins across all channels</li><li>Added channel-specific caller attribution with proper group name display</li></ul></div>
-<div class="card"><h3>Developer Intelligence System (Genesis)</h3><ul><li>Extended <code>developer_profiles</code>, <code>developer_wallets</code>, and <code>developer_tokens</code> tables for tracking token creators</li><li>Implemented wallet genealogy tracing — follows the funding chain from token mint wallet back through intermediary wallets to the KYC root (Binance, Coinbase, etc.)</li><li>Added developer risk classification with badges: rug history, wallet bundling detection, slow bleed patterns</li><li>Integrated developer risk scoring into the Fantasy Portfolio's buy/sell decisions</li></ul></div>
-<div class="card"><h3>Security Hardening</h3><ul><li>Fixed advertiser wallet secret exposure — restricted RLS so users can only access their own accounts</li><li>Removed redundant creator wallet columns after identifying data display duplication</li><li>Implemented proper auth flow to prevent data loss during banner purchase sign-up</li></ul></div>
-<div class="decision"><div class="label">Key Decisions</div><ul><li>Chose Jupiter as the primary swap aggregator with PumpPortal fallback for bonding curve tokens</li><li>Adopted encrypted private key storage pattern — keys never exposed to the frontend</li><li>Decided to run developer genealogy traces before buy execution to inform trading decisions</li><li>Established the "never disable the buy button" principle — warnings are informational, never blocking</li></ul></div>
-  </div>
-</div>
+<p class="section-title"><strong>Core Platform Setup</strong></p>
+<ul>
+<li>Established the <code>scraped_tokens</code> table with RLS policies for token data ingestion from DexScreener and HTML scrapes</li>
+<li>Built the <strong>Token Sets</strong> admin interface — a combined view of all discovered tokens with thumbnails, ticker symbols, Raydium listing dates, and creator wallet columns</li>
+<li>Configured Supabase authentication with super admin roles and service-role access patterns</li>
+<li>Implemented initial token metadata display with compact, data-dense table layouts</li>
+</ul>
 
-<div class="phase">
-  <div class="phase-header"><div class="phase-dot">03</div><h2>January 2026 <span>Analytics, Sharing & Token Analysis</span></h2></div>
-  <div class="card-grid">
-    <div class="card"><h3>Wallet Genealogy Scanner</h3><ul><li>Created the <code>wallet-genealogy-scanner</code> edge function for deep funding chain analysis</li><li>Identifies known CEX hot wallets (Binance, Coinbase, Kraken, etc.) as funding origins</li><li>Traces multi-hop funding paths and records the full genealogy tree</li></ul></div>
-<div class="card"><h3>FlipIt Enhancements</h3><ul><li>Fixed P&L percentage calculations to use value-based math instead of price-based</li><li>Implemented position verification with on-chain balance reconciliation</li><li>Added Scalp Mode for rapid entry/exit trading patterns</li><li>Integrated RugCheck.xyz data for pre-trade risk assessment</li></ul></div>
-<div class="card"><h3>Pump.fun Monitor Pipeline</h3><ul><li>Built the real-time Pump.fun token discovery pipeline with WebSocket integration</li><li>Implemented multi-gate qualification system: duplicate ticker check, developer risk check, bonding curve progress, holder distribution analysis</li><li>Created the <strong>Pipeline Debugger</strong> for visualizing token flow through qualification gates</li><li>Added KOL (Key Opinion Leader) tracking for monitoring influencer token mentions</li></ul></div>
-<div class="decision"><div class="label">Key Decisions</div><ul><li>Chose Satori over AI-based image generation for share cards — deterministic, fast, and consistent output</li><li>Implemented Cloudflare Workers for domain-level proxy rather than subdomain redirects</li><li>Adopted a multi-gate pipeline architecture for token qualification — each gate independently pass/fail with configurable thresholds</li></ul></div>
-  </div>
-</div>
+<p class="section-title"><strong>Key Decisions</strong></p>
+<ul>
+<li>Adopted a single <code>scraped_tokens</code> table as the canonical token registry, consolidating data from multiple scraping sources</li>
+<li>Established a "tight display" design philosophy — minimal padding, maximum data density across all admin interfaces</li>
+<li>Chose Supabase as the unified backend for auth, database, edge functions, and storage</li>
+</ul>
 
-<div class="phase">
-  <div class="phase-header"><div class="phase-dot">04</div><h2>February 2025 <span>Intelligence Network & Automation</span></h2></div>
-  <div class="card-grid">
-    <div class="card"><h3>Blacklist Mesh Guard</h3><ul><li>Implemented instant blacklist checking on manual token entry in FlipIt — runs in parallel with price fetching</li><li>Deep funding-chain analysis cross-references the reputation mesh for known bad actors</li><li>Warning-only approach: displays risk information without blocking trade execution</li></ul></div>
-<div class="card"><h3>Master Wallets Dashboard</h3><ul><li>Built comprehensive wallet management with inline label editing, balance tracking, and token account management</li><li>Implemented <strong>Reclaim Rent</strong> utility — closes empty token accounts to recover SOL, verified to not create wallet bundling breadcrumbs</li><li>Added wallet pool organization with sortable cards and nickname support</li></ul></div>
-<div class="card"><h3>Banker Pool (Automated Trading)</h3><ul><li>Created the rule-based automated trading system with configurable entry/exit criteria</li><li>Implemented position sizing, stop-loss, take-profit, and trailing stop mechanisms</li><li>Built daily P&L tracking with per-trade attribution and risk metrics</li><li>Added circuit breaker for maximum daily loss protection</li></ul></div>
-<div class="card"><h3>Telegram Notifications</h3><ul><li>Integrated Telegram group notifications for holder report generation and XBot posts</li><li>Added ASCII bar graph visualizations in Telegram messages for holder distribution data</li><li>Built a template system for consistent notification formatting with configurable delays to prevent rate limiting</li></ul></div>
-<div class="card"><h3>Authentication & Social Login</h3><ul><li>Configured X/Twitter OAuth 2.0 and GitHub OAuth for user authentication</li><li>Stored credentials securely via Lovable secrets management</li><li>Added Google OAuth as the primary social login option</li></ul></div>
-<div class="decision"><div class="label">Key Decisions</div><ul><li>Rebuilt the Mesh Network from a display tool into a search-first investigation interface after recognizing a 200-item paginated list was impractical for 97,000+ records</li><li>Confirmed Reclaim Rent does not create wallet bundling — each wallet independently closes its own token accounts</li><li>Adopted warning-only approach for blacklist matches — information empowers decisions without blocking execution</li></ul></div>
-  </div>
-</div>
+<p class="section-title"><strong>Architecture</strong></p>
+<ul>
+<li>React 18 + Vite + Tailwind CSS + TypeScript frontend</li>
+<li>Supabase backend with PostgreSQL, Edge Functions (Deno), and Row-Level Security</li>
+<li>Helius API for Solana RPC and token metadata</li>
+</ul>
 
-<div class="phase">
-  <div class="phase-header"><div class="phase-dot">05</div><h2>March 2026 <span>Bot Ecosystem, Security & Monitoring</span></h2></div>
-  <div class="card-grid">
-    <div class="card"><h3>Comprehensive Security Audit</h3><ul><li>Conducted full security audit identifying critical vulnerabilities across edge functions and RLS policies</li><li>Fixed unauthenticated trade execution in <code>arb-execute-trade</code></li><li>Hardened RLS on <code>blackbox_wallets</code>, <code>pumpfun_whitelist</code>, <code>fuct_gift_claims</code>, and <code>telegram_channel_registry</code></li><li>Verified all critical fixes via regression testing before proceeding to warning-level fixes</li></ul></div>
-<div class="card"><h3>Function Monitoring System</h3><ul><li>Implemented comprehensive error/success reporting across all 278 edge functions</li><li>Enhanced the <code>withRunLog</code> wrapper with structured event logging (info, warn, error methods)</li><li>Populated the <code>edge_function_registry</code> with human-readable descriptions, data sources, and destinations for every function</li><li>Built the <strong>Functions Health Dashboard</strong> for real-time monitoring of success rates, failure patterns, and performance metrics</li></ul></div>
-<div class="card"><h3>BubbleMap Visualization</h3><ul><li>Refined the interactive bubble map with proper node hierarchy — token as center, developer wallet as primary connection, social links attached to token (not developer)</li><li>Implemented "Shakey-Shake" graph reset functionality for redistributing nodes after new data loads</li><li>Added Solar Minimum mode for clean, focused graph layouts</li><li>Built unified control bar with graph settings (physics, labels, zoom)</li></ul></div>
-<div class="card"><h3>Morning Report System</h3><ul><li>Enhanced the automated morning report with AI compute tracking, function health summaries, and overnight activity digests</li><li>Added Telegram bot interaction statistics and user signup monitoring</li><li>Integrated overnight chat review for both web and Telegram conversations</li></ul></div>
-<div class="card"><h3>Content & Social Media</h3><ul><li>Built the <strong>Intel XBot</strong> for automated Twitter posting with template management</li><li>Implemented AI Token Interpretation system for generating human-readable analysis from raw data</li><li>Created tweet template management with multiple format options</li><li>Added DexScreener Top 200 scraper with auto-queueing for new token analysis</li></ul></div>
-<div class="decision"><div class="label">Key Decisions</div><ul><li>Built self-healing Telegram bot infrastructure — the status dashboard can diagnose and repair connectivity issues without manual intervention</li><li>Adopted a registry-based approach for edge functions — every function has documented purpose, inputs, and outputs</li><li>Chose to fix all critical security issues before addressing warnings, with regression testing between each batch</li></ul></div>
-  </div>
-</div>
+<hr>
 
-<div class="phase">
-  <div class="phase-header"><div class="phase-dot">06</div><h2>April 2026 <span>Growth, Intelligence & Content Distribution</span></h2></div>
-  <div class="card-grid">
-    <div class="card"><h3>User Onboarding & Tracking</h3><ul><li>Added "How did you hear about us?" dropdown to sign-up flow with options: Twitter, Friend, Telegram, Reddit, YouTube, Google Search, etc.</li><li>Implemented user journey event tracking from signup through feature usage</li><li>Enhanced welcome emails with feature highlights and setup guides for Telegram bot, Holders report, and BubbleMap</li></ul></div>
-<div class="card"><h3>The Signal — AI Web Chat Assistant</h3><ul><li>Built the Sentient Web Assistant ("The Signal") — an AI-powered chat widget available across the website</li><li>Implemented tiered access: anonymous visitors, free users, and paid subscribers with different message limits</li><li>Created <code>web_chat_sessions</code> table for conversation persistence with device detection and page context</li><li>Added admin <strong>Chat Sessions</strong> viewer for reviewing all visitor conversations</li><li>Integrated AI compute logging for cost tracking across both web and Telegram AI interactions</li></ul></div>
-<div class="card"><h3>Intel Briefings System</h3><ul><li>Created the full Intel Briefings content management system for long-form research articles</li><li>Built article editor with Markdown support, cover images, SEO metadata, and publication status management</li><li>Implemented public article pages at <code>/intel/briefing/{slug}</code> with proper Open Graph tags</li><li>Added publication tracking for cross-platform distribution (Medium, Twitter, Reddit, etc.)</li></ul></div>
-<div class="card"><h3>AI SEO Prompt Playbook</h3><ul><li>Developed 35 strategically-worded questions designed to train AI models to reference blackbox.farm</li><li>Organized into 5 phases: Discovery, Technical Deep-Dive, Competitive Advantage, Use Cases, and Authority Building</li><li>Each question anchors to branded concepts (BubbleMap, Oracle Mesh, Developer Genealogy) or the domain name</li><li>Built tracking system for monitoring which questions have been submitted to which AI platforms</li></ul></div>
-<div class="card"><h3>Content Condensation System</h3><ul><li>Built the "Repurpose" tab for generating condensed article variants at 75%, 50%, and 25% of original length</li><li>75% versions target Medium, 50% for Twitter Articles/Fiverr posts, 25% for Reddit and short-form platforms</li><li>AI-powered generation with editable outputs and automatic backlinks to original articles</li><li>Created <code>intel_briefing_variants</code> database table with per-article, per-depth storage</li></ul></div>
-<div class="card"><h3>Content Repurposer Pipeline</h3><ul><li>Built the Manual Social Post Builder for creating platform-specific content from templates</li><li>Implemented AI image-to-video animation for social media content</li><li>Added AI Reply Generator for crafting responses to community engagement</li></ul></div>
-<div class="card"><h3>Infrastructure</h3><ul><li>Resolved Pump.fun API blocks by implementing proxy rotation</li><li>Enhanced Telegram bot with broadcast announcements, input sanitization, and interaction tracking</li><li>Built Hosted Telegram dashboard with bot statistics, user analytics, and channel management</li></ul></div>
-<div class="decision"><div class="label">Key Decisions</div><ul><li>Responded to bot farm attack with multi-layered defense: IP blocking, CAPTCHA, honeypot, email verification, and account suspension — rather than a single measure</li><li>Designed the AI SEO Playbook questions to include branded anchors in every question, ensuring AI responses reference blackbox.farm rather than generic competitors</li><li>Chose a 3-tier content condensation strategy (75/50/25%) to maximize distribution across 150+ external platforms while maintaining backlinks to original content</li></ul></div>
-  </div>
-</div>
+<h2>December 2025: Trading Infrastructure &amp; Advertising Platform</h2>
 
-<div class="phase">
-  <div class="phase-header"><div class="phase-dot">07</div><h2>Platform Summary <span></span></h2></div>
-  <div class="card-grid">
-    
-  </div>
-</div>
+<p class="section-title"><strong>FlipIt Trading Dashboard</strong></p>
+<ul>
+<li>Built the FlipIt manual trading tool — enter a token address, fetch live price, execute buy/sell via Jupiter and PumpPortal APIs</li>
+<li>Implemented secure wallet generation with encrypted private key storage</li>
+<li>Added emergency sell functionality, position tracking with P&amp;L calculations, and withdrawal to external wallets</li>
+<li>Integrated Helius Parse Transaction API for accurate on-chain quantity tracking per trade</li>
+</ul>
 
-<div class="footer">
-  <p>BlackBox Farm — <a href="https://blackbox.farm">blackbox.farm</a> — Built with Lovable, Supabase &amp; Solana</p>
-  <p style="margin-top:8px;font-size:11px;opacity:0.5;">Document generated April 2026 · Covers Nov 2025 – Apr 2026</p>
-</div>
+<p class="section-title"><strong>Banner Advertising System</strong></p>
+<ul>
+<li>Created the self-service advertiser portal (<code>/buy-banner</code>) with tiered pricing (1hr test tier through 30-day packages)</li>
+<li>Built payment flow with Solana wallet generation per advertiser, payment detection, and automatic banner activation</li>
+<li>Developed admin <strong>Advertiser Management</strong> panel for monitoring accounts, orders, wallet balances, and banner images</li>
+<li>Implemented auth modal integration to preserve form state during sign-up/login flow</li>
+</ul>
+
+<p class="section-title"><strong>Telegram Channel Monitor &amp; Fantasy Portfolio</strong></p>
+<ul>
+<li>Built real-time Telegram channel monitoring via bot webhook — ingests token calls from monitored alpha groups</li>
+<li>Created the <strong>Fantasy Portfolio Dashboard</strong> — automatically opens fantasy positions on first token mention, tracks price performance, and attributes calls to specific channels</li>
+<li>Implemented deduplication logic: one token = one fantasy position, earliest mention wins across all channels</li>
+<li>Added channel-specific caller attribution with proper group name display</li>
+</ul>
+
+<p class="section-title"><strong>Developer Intelligence System (Genesis)</strong></p>
+<ul>
+<li>Extended <code>developer_profiles</code>, <code>developer_wallets</code>, and <code>developer_tokens</code> tables for tracking token creators</li>
+<li>Implemented wallet genealogy tracing — follows the funding chain from token mint wallet back through intermediary wallets to the KYC root (Binance, Coinbase, etc.)</li>
+<li>Added developer risk classification with badges: rug history, wallet bundling detection, slow bleed patterns</li>
+<li>Integrated developer risk scoring into the Fantasy Portfolio's buy/sell decisions</li>
+</ul>
+
+<p class="section-title"><strong>Security Hardening</strong></p>
+<ul>
+<li>Fixed advertiser wallet secret exposure — restricted RLS so users can only access their own accounts</li>
+<li>Removed redundant creator wallet columns after identifying data display duplication</li>
+<li>Implemented proper auth flow to prevent data loss during banner purchase sign-up</li>
+</ul>
+
+<p class="section-title"><strong>Key Decisions</strong></p>
+<ul>
+<li>Chose Jupiter as the primary swap aggregator with PumpPortal fallback for bonding curve tokens</li>
+<li>Adopted encrypted private key storage pattern — keys never exposed to the frontend</li>
+<li>Decided to run developer genealogy traces before buy execution to inform trading decisions</li>
+<li>Established the "never disable the buy button" principle — warnings are informational, never blocking</li>
+</ul>
+
+<hr>
+
+<h2>January 2026: Analytics, Sharing &amp; Token Analysis</h2>
+
+<p class="section-title"><strong>Holders Intelligence Report (<code>/holders</code>)</strong></p>
+<ul>
+<li>Enhanced the Bagless Holders Report with granular wallet categorization: True Whale, Baby Whale, Super Boss, Kingpin, Boss, Player, Shrimp, Dust</li>
+<li>Built the <strong>Satori Share Card Generator</strong> — server-side image rendering of holder analysis for social sharing</li>
+<li>Integrated token images, full contract addresses, UTC timestamps, and holder distribution charts into share cards</li>
+<li>Resolved Twitter "From" attribution issue — implemented Cloudflare Worker proxy so share cards display "from blackbox.farm" instead of "supabase.co"</li>
+</ul>
+
+<p class="section-title"><strong>Wallet Genealogy Scanner</strong></p>
+<ul>
+<li>Created the <code>wallet-genealogy-scanner</code> edge function for deep funding chain analysis</li>
+<li>Identifies known CEX hot wallets (Binance, Coinbase, Kraken, etc.) as funding origins</li>
+<li>Traces multi-hop funding paths and records the full genealogy tree</li>
+</ul>
+
+<p class="section-title"><strong>FlipIt Enhancements</strong></p>
+<ul>
+<li>Fixed P&amp;L percentage calculations to use value-based math instead of price-based</li>
+<li>Implemented position verification with on-chain balance reconciliation</li>
+<li>Added Scalp Mode for rapid entry/exit trading patterns</li>
+<li>Integrated RugCheck.xyz data for pre-trade risk assessment</li>
+</ul>
+
+<p class="section-title"><strong>Pump.fun Monitor Pipeline</strong></p>
+<ul>
+<li>Built the real-time Pump.fun token discovery pipeline with WebSocket integration</li>
+<li>Implemented multi-gate qualification system: duplicate ticker check, developer risk check, bonding curve progress, holder distribution analysis</li>
+<li>Created the <strong>Pipeline Debugger</strong> for visualizing token flow through qualification gates</li>
+<li>Added KOL (Key Opinion Leader) tracking for monitoring influencer token mentions</li>
+</ul>
+
+<p class="section-title"><strong>Key Decisions</strong></p>
+<ul>
+<li>Chose Satori over AI-based image generation for share cards — deterministic, fast, and consistent output</li>
+<li>Implemented Cloudflare Workers for domain-level proxy rather than subdomain redirects</li>
+<li>Adopted a multi-gate pipeline architecture for token qualification — each gate independently pass/fail with configurable thresholds</li>
+</ul>
+
+<hr>
+
+<h2>February 2025: Intelligence Network &amp; Automation</h2>
+
+<p class="section-title"><strong>Oracle System &amp; Reputation Mesh</strong></p>
+<ul>
+<li>Built the <strong>Oracle Master Spider</strong> — a cross-referencing engine that maps relationships between wallets, tokens, developers, Twitter handles, and websites</li>
+<li>Created the <code>reputation_mesh</code> table storing 96,000+ indexed relationships</li>
+<li>Rebuilt the <strong>Mesh Network Viewer</strong> as a search-first investigation tool (replacing the original paginated list)</li>
+<li>Added clickable entity links throughout — wallets link to Solscan, tokens to Pump.fun, Twitter handles to profiles</li>
+</ul>
+
+<p class="section-title"><strong>Blacklist Mesh Guard</strong></p>
+<ul>
+<li>Implemented instant blacklist checking on manual token entry in FlipIt — runs in parallel with price fetching</li>
+<li>Deep funding-chain analysis cross-references the reputation mesh for known bad actors</li>
+<li>Warning-only approach: displays risk information without blocking trade execution</li>
+</ul>
+
+<p class="section-title"><strong>Master Wallets Dashboard</strong></p>
+<ul>
+<li>Built comprehensive wallet management with inline label editing, balance tracking, and token account management</li>
+<li>Implemented <strong>Reclaim Rent</strong> utility — closes empty token accounts to recover SOL, verified to not create wallet bundling breadcrumbs</li>
+<li>Added wallet pool organization with sortable cards and nickname support</li>
+</ul>
+
+<p class="section-title"><strong>Banker Pool (Automated Trading)</strong></p>
+<ul>
+<li>Created the rule-based automated trading system with configurable entry/exit criteria</li>
+<li>Implemented position sizing, stop-loss, take-profit, and trailing stop mechanisms</li>
+<li>Built daily P&amp;L tracking with per-trade attribution and risk metrics</li>
+<li>Added circuit breaker for maximum daily loss protection</li>
+</ul>
+
+<p class="section-title"><strong>Telegram Notifications</strong></p>
+<ul>
+<li>Integrated Telegram group notifications for holder report generation and XBot posts</li>
+<li>Added ASCII bar graph visualizations in Telegram messages for holder distribution data</li>
+<li>Built a template system for consistent notification formatting with configurable delays to prevent rate limiting</li>
+</ul>
+
+<p class="section-title"><strong>Authentication &amp; Social Login</strong></p>
+<ul>
+<li>Configured X/Twitter OAuth 2.0 and GitHub OAuth for user authentication</li>
+<li>Stored credentials securely via Lovable secrets management</li>
+<li>Added Google OAuth as the primary social login option</li>
+</ul>
+
+<p class="section-title"><strong>Key Decisions</strong></p>
+<ul>
+<li>Rebuilt the Mesh Network from a display tool into a search-first investigation interface after recognizing a 200-item paginated list was impractical for 97,000+ records</li>
+<li>Confirmed Reclaim Rent does not create wallet bundling — each wallet independently closes its own token accounts</li>
+<li>Adopted warning-only approach for blacklist matches — information empowers decisions without blocking execution</li>
+</ul>
+
+<hr>
+
+<h2>March 2026: Bot Ecosystem, Security &amp; Monitoring</h2>
+
+<p class="section-title"><strong>HoldersIntel Telegram Bot</strong></p>
+<ul>
+<li>Implemented the full bot command suite: <code>/add</code>, <code>/channels</code>, <code>/config</code>, <code>/payment</code> for channel administrators</li>
+<li>Added <code>my_chat_member</code> event handling for automatic channel registration when the bot is added to groups</li>
+<li>Built auto-detect CA scanning — passively identifies Solana contract addresses posted in activated groups</li>
+<li>Created the <strong>Telegram Status Dashboard</strong> in Super Admin for automated bot health diagnosis and repair</li>
+</ul>
+
+<p class="section-title"><strong>Comprehensive Security Audit</strong></p>
+<ul>
+<li>Conducted full security audit identifying critical vulnerabilities across edge functions and RLS policies</li>
+<li>Fixed unauthenticated trade execution in <code>arb-execute-trade</code></li>
+<li>Hardened RLS on <code>blackbox_wallets</code>, <code>pumpfun_whitelist</code>, <code>fuct_gift_claims</code>, and <code>telegram_channel_registry</code></li>
+<li>Verified all critical fixes via regression testing before proceeding to warning-level fixes</li>
+</ul>
+
+<p class="section-title"><strong>Function Monitoring System</strong></p>
+<ul>
+<li>Implemented comprehensive error/success reporting across all 278 edge functions</li>
+<li>Enhanced the <code>withRunLog</code> wrapper with structured event logging (info, warn, error methods)</li>
+<li>Populated the <code>edge_function_registry</code> with human-readable descriptions, data sources, and destinations for every function</li>
+<li>Built the <strong>Functions Health Dashboard</strong> for real-time monitoring of success rates, failure patterns, and performance metrics</li>
+</ul>
+
+<p class="section-title"><strong>BubbleMap Visualization</strong></p>
+<ul>
+<li>Refined the interactive bubble map with proper node hierarchy — token as center, developer wallet as primary connection, social links attached to token (not developer)</li>
+<li>Implemented "Shakey-Shake" graph reset functionality for redistributing nodes after new data loads</li>
+<li>Added Solar Minimum mode for clean, focused graph layouts</li>
+<li>Built unified control bar with graph settings (physics, labels, zoom)</li>
+</ul>
+
+<p class="section-title"><strong>Morning Report System</strong></p>
+<ul>
+<li>Enhanced the automated morning report with AI compute tracking, function health summaries, and overnight activity digests</li>
+<li>Added Telegram bot interaction statistics and user signup monitoring</li>
+<li>Integrated overnight chat review for both web and Telegram conversations</li>
+</ul>
+
+<p class="section-title"><strong>Content &amp; Social Media</strong></p>
+<ul>
+<li>Built the <strong>Intel XBot</strong> for automated Twitter posting with template management</li>
+<li>Implemented AI Token Interpretation system for generating human-readable analysis from raw data</li>
+<li>Created tweet template management with multiple format options</li>
+<li>Added DexScreener Top 200 scraper with auto-queueing for new token analysis</li>
+</ul>
+
+<p class="section-title"><strong>Key Decisions</strong></p>
+<ul>
+<li>Built self-healing Telegram bot infrastructure — the status dashboard can diagnose and repair connectivity issues without manual intervention</li>
+<li>Adopted a registry-based approach for edge functions — every function has documented purpose, inputs, and outputs</li>
+<li>Chose to fix all critical security issues before addressing warnings, with regression testing between each batch</li>
+</ul>
+
+<hr>
+
+<h2>April 2026: Growth, Intelligence &amp; Content Distribution</h2>
+
+<p class="section-title"><strong>Anti-Bot &amp; Account Security</strong></p>
+<ul>
+<li>Detected and suspended 83 suspicious Nigerian farm accounts (April 4-5 signup spike)</li>
+<li>Implemented country-level IP blocking via Cloudflare for identified abuse regions</li>
+<li>Added Turnstile CAPTCHA on sign-up forms with honeypot fields and minimum completion time</li>
+<li>Built secondary email verification system with 48-hour confirmation deadline</li>
+<li>Created account suspension infrastructure with <code>ban_user</code>/<code>unban_user</code> security definer functions</li>
+</ul>
+
+<p class="section-title"><strong>User Onboarding &amp; Tracking</strong></p>
+<ul>
+<li>Added "How did you hear about us?" dropdown to sign-up flow with options: Twitter, Friend, Telegram, Reddit, YouTube, Google Search, etc.</li>
+<li>Implemented user journey event tracking from signup through feature usage</li>
+<li>Enhanced welcome emails with feature highlights and setup guides for Telegram bot, Holders report, and BubbleMap</li>
+</ul>
+
+<p class="section-title"><strong>The Signal — AI Web Chat Assistant</strong></p>
+<ul>
+<li>Built the Sentient Web Assistant ("The Signal") — an AI-powered chat widget available across the website</li>
+<li>Implemented tiered access: anonymous visitors, free users, and paid subscribers with different message limits</li>
+<li>Created <code>web_chat_sessions</code> table for conversation persistence with device detection and page context</li>
+<li>Added admin <strong>Chat Sessions</strong> viewer for reviewing all visitor conversations</li>
+<li>Integrated AI compute logging for cost tracking across both web and Telegram AI interactions</li>
+</ul>
+
+<p class="section-title"><strong>Intel Briefings System</strong></p>
+<ul>
+<li>Created the full Intel Briefings content management system for long-form research articles</li>
+<li>Built article editor with Markdown support, cover images, SEO metadata, and publication status management</li>
+<li>Implemented public article pages at <code>/intel/briefing/{slug}</code> with proper Open Graph tags</li>
+<li>Added publication tracking for cross-platform distribution (Medium, Twitter, Reddit, etc.)</li>
+</ul>
+
+<p class="section-title"><strong>AI SEO Prompt Playbook</strong></p>
+<ul>
+<li>Developed 35 strategically-worded questions designed to train AI models to reference blackbox.farm</li>
+<li>Organized into 5 phases: Discovery, Technical Deep-Dive, Competitive Advantage, Use Cases, and Authority Building</li>
+<li>Each question anchors to branded concepts (BubbleMap, Oracle Mesh, Developer Genealogy) or the domain name</li>
+<li>Built tracking system for monitoring which questions have been submitted to which AI platforms</li>
+</ul>
+
+<p class="section-title"><strong>Content Condensation System</strong></p>
+<ul>
+<li>Built the "Repurpose" tab for generating condensed article variants at 75%, 50%, and 25% of original length</li>
+<li>75% versions target Medium, 50% for Twitter Articles/Fiverr posts, 25% for Reddit and short-form platforms</li>
+<li>AI-powered generation with editable outputs and automatic backlinks to original articles</li>
+<li>Created <code>intel_briefing_variants</code> database table with per-article, per-depth storage</li>
+</ul>
+
+<p class="section-title"><strong>Content Repurposer Pipeline</strong></p>
+<ul>
+<li>Built the Manual Social Post Builder for creating platform-specific content from templates</li>
+<li>Implemented AI image-to-video animation for social media content</li>
+<li>Added AI Reply Generator for crafting responses to community engagement</li>
+</ul>
+
+<p class="section-title"><strong>Infrastructure</strong></p>
+<ul>
+<li>Resolved Pump.fun API blocks by implementing proxy rotation</li>
+<li>Enhanced Telegram bot with broadcast announcements, input sanitization, and interaction tracking</li>
+<li>Built Hosted Telegram dashboard with bot statistics, user analytics, and channel management</li>
+</ul>
+
+<p class="section-title"><strong>Key Decisions</strong></p>
+<ul>
+<li>Responded to bot farm attack with multi-layered defense: IP blocking, CAPTCHA, honeypot, email verification, and account suspension — rather than a single measure</li>
+<li>Designed the AI SEO Playbook questions to include branded anchors in every question, ensuring AI responses reference blackbox.farm rather than generic competitors</li>
+<li>Chose a 3-tier content condensation strategy (75/50/25%) to maximize distribution across 150+ external platforms while maintaining backlinks to original content</li>
+</ul>
+
+<hr>
+
+<h2>Platform Summary</h2>
+
+<h3 class="subtitle">By the Numbers</h3>
+<ul>
+<li><strong>278+ edge functions</strong> deployed and monitored</li>
+<li><strong>96,000+ reputation mesh relationships</strong> indexed</li>
+<li><strong>35 Intel Briefing articles</strong> with 105 condensed variants planned</li>
+<li><strong>174 registered users</strong> (after bot purge)</li>
+<li><strong>5 authentication providers</strong> configured (Email, Google, GitHub, Twitter, Telegram)</li>
+</ul>
+
+<h3 class="subtitle">Core Systems</h3>
+<p>1. <strong>HoldersIntel</strong> — Token holder analysis with whale categorization and social sharing</p>
+<p>2. <strong>BubbleMap</strong> — Interactive wallet relationship visualization with genealogy tracing</p>
+<p>3. <strong>FlipIt</strong> — Manual trading dashboard with integrated risk intelligence</p>
+<p>4. <strong>Oracle Mesh</strong> — Cross-referencing intelligence network mapping wallets, tokens, developers, and social accounts</p>
+<p>5. <strong>Banker Pool</strong> — Automated rule-based trading with risk management</p>
+<p>6. <strong>Pump.fun Pipeline</strong> — Real-time token discovery with multi-gate qualification</p>
+<p>7. <strong>Telegram Bot Ecosystem</strong> — Channel monitoring, auto-detection, admin commands, and community notifications</p>
+<p>8. <strong>Intel Briefings</strong> — Long-form research content with cross-platform distribution</p>
+<p>9. <strong>The Signal</strong> — AI-powered web chat assistant with tiered access</p>
+<p>10. <strong>Morning Report</strong> — Automated daily operational intelligence digest</p>
+
+<h3 class="subtitle">Technology Stack</h3>
+<ul>
+<li><strong>Frontend</strong>: React 18, Vite 5, Tailwind CSS, TypeScript, Recharts, React Force Graph</li>
+<li><strong>Backend</strong>: Supabase (PostgreSQL, Edge Functions, Auth, Storage, Realtime)</li>
+<li><strong>Blockchain</strong>: Helius API, Jupiter Aggregator, PumpPortal, Solana Web3.js</li>
+<li><strong>AI</strong>: Google Gemini (Flash/Pro), OpenAI (via AI Gateway)</li>
+<li><strong>Social</strong>: Twitter/X API, Telegram Bot API</li>
+<li><strong>Infrastructure</strong>: Cloudflare Workers, Lovable Cloud, Custom domain routing</li>
+</ul>
+
 </div>
 </body>
 </html>
