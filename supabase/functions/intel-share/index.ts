@@ -63,7 +63,61 @@ Deno.serve(async (req) => {
     const twitterImage = ogImage;
 
     const ua = (req.headers.get("user-agent") || "").toLowerCase();
-    const isCrawler = /facebookexternalhit|facebot|twitterbot|linkedinbot|discordbot|slackbot|telegrambot|whatsapp|googlebot|bingbot|applebot|pinterestbot|meta-externalagent|ia_archiver/.test(ua);
+    const crawlerPatterns: [RegExp, string, string][] = [
+      // Social crawlers
+      [/facebookexternalhit|facebot/, 'facebookbot', 'crawler'],
+      [/twitterbot/, 'twitterbot', 'crawler'],
+      [/linkedinbot/, 'linkedinbot', 'crawler'],
+      [/discordbot/, 'discordbot', 'crawler'],
+      [/slackbot/, 'slackbot', 'crawler'],
+      [/telegrambot/, 'telegrambot', 'crawler'],
+      [/whatsapp/, 'whatsapp', 'crawler'],
+      [/pinterestbot/, 'pinterestbot', 'crawler'],
+      [/meta-externalagent/, 'meta-agent', 'crawler'],
+      // Search crawlers
+      [/googlebot/, 'googlebot', 'crawler'],
+      [/bingbot/, 'bingbot', 'crawler'],
+      [/applebot/, 'applebot', 'crawler'],
+      [/yandexbot/, 'yandexbot', 'crawler'],
+      [/baiduspider/, 'baiduspider', 'crawler'],
+      [/duckduckbot/, 'duckduckbot', 'crawler'],
+      // AI bots
+      [/chatgpt-user|oai-searchbot|gptbot/, 'chatgpt', 'ai_bot'],
+      [/claudebot|anthropic/, 'claudebot', 'ai_bot'],
+      [/perplexitybot/, 'perplexitybot', 'ai_bot'],
+      [/cohere-ai/, 'cohere', 'ai_bot'],
+      [/gemini|google-extended/, 'gemini', 'ai_bot'],
+      [/ccbot/, 'ccbot', 'ai_bot'],
+      [/ia_archiver/, 'ia_archiver', 'crawler'],
+    ];
+
+    let visitorType = 'human';
+    let botName: string | null = null;
+    for (const [pattern, name, type] of crawlerPatterns) {
+      if (pattern.test(ua)) {
+        visitorType = type;
+        botName = name;
+        break;
+      }
+    }
+    const isCrawler = visitorType !== 'human';
+
+    // Log the view asynchronously (fire-and-forget)
+    const ipAddress = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || req.headers.get('cf-connecting-ip')
+      || req.headers.get('x-real-ip');
+    
+    supabase.from('intel_briefing_views').insert({
+      briefing_id: article.id || null,
+      slug,
+      visitor_type: visitorType,
+      bot_name: botName,
+      user_agent: (req.headers.get("user-agent") || "").slice(0, 500),
+      ip_address: ipAddress,
+      referer: req.headers.get('referer'),
+    }).then(({ error: logErr }) => {
+      if (logErr) console.warn('[intel-share] view log error:', logErr.message);
+    });
 
     // Human visitors → instant redirect to the real article
     if (!isCrawler) {
