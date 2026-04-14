@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { IntelPublicationsManager } from './IntelPublicationsManager';
+import { AiSeoPlaybook } from './publications/AiSeoPlaybook';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -987,12 +988,16 @@ export function IntelBriefingsManager() {
       <TabsList className="mb-4">
         <TabsTrigger value="articles"><FileText className="h-3.5 w-3.5 mr-1" />Articles</TabsTrigger>
         <TabsTrigger value="publications"><Globe className="h-3.5 w-3.5 mr-1" />Publications</TabsTrigger>
+        <TabsTrigger value="playbook">🎯 AI Playbook</TabsTrigger>
       </TabsList>
       <TabsContent value="articles">
         <IntelBriefingsArticlesManager />
       </TabsContent>
       <TabsContent value="publications">
         <IntelPublicationsManager />
+      </TabsContent>
+      <TabsContent value="playbook">
+        <AiSeoPlaybook />
       </TabsContent>
     </Tabs>
   );
