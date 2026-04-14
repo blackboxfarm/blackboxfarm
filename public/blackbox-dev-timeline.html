@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlackBox Farm — Development Timeline</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root{--bg:#0a0a0f;--surface:#111118;--surface-alt:#16161f;--border:rgba(255,255,255,0.08);--text:#e8e8f0;--text-muted:#8a8a9a;--cyan:#00e5ff;--cyan-dim:rgba(0,229,255,0.15);--gold:#d4a017;--gold-dim:rgba(212,160,23,0.12)}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased}
+  .container{max-width:900px;margin:0 auto;padding:60px 24px 100px}
+  .header{text-align:center;padding:80px 0 60px;border-bottom:1px solid var(--border);margin-bottom:60px}
+  .header .badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--cyan);background:var(--cyan-dim);border:1px solid rgba(0,229,255,0.2);padding:6px 18px;border-radius:100px;margin-bottom:28px}
+  .header h1{font-size:42px;font-weight:800;letter-spacing:-0.03em;margin-bottom:16px;background:linear-gradient(135deg,#fff 40%,var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .header .subtitle{font-size:17px;color:var(--text-muted);font-weight:300;max-width:540px;margin:0 auto}
+  .phase{margin-bottom:56px;position:relative}
+  .phase::before{content:'';position:absolute;left:14px;top:48px;bottom:0;width:2px;background:linear-gradient(to bottom,var(--cyan-dim),transparent)}
+  .phase-header{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+  .phase-dot{width:30px;height:30px;border-radius:50%;background:var(--surface);border:2px solid var(--cyan);box-shadow:0 0 12px rgba(0,229,255,0.25);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);font-weight:600}
+  .phase h2{font-size:22px;font-weight:700;letter-spacing:-0.02em}
+  .phase h2 span{color:var(--text-muted);font-weight:400;font-size:15px;margin-left:8px}
+  .card-grid{margin-left:46px;display:grid;gap:14px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;transition:border-color 0.2s}
+  .card:hover{border-color:rgba(0,229,255,0.2)}
+  .card h3{font-size:15px;font-weight:600;margin-bottom:8px;color:var(--gold)}
+  .card p{font-size:14px;color:var(--text-muted);line-height:1.65}
+  .card code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--surface-alt);padding:2px 6px;border-radius:4px;color:var(--cyan)}
+  .card .tech{display:inline-flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .card .tech span{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 10px;border-radius:6px;background:var(--surface-alt);border:1px solid var(--border);color:var(--text-muted)}
+  .decision{background:var(--gold-dim);border-left:3px solid var(--gold);border-radius:0 10px 10px 0;padding:14px 20px;margin-left:46px;margin-top:14px;margin-bottom:14px}
+  .decision .label{font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:var(--gold);font-weight:600;margin-bottom:4px}
+  .decision p{font-size:13px;color:var(--text-muted)}
+  .footer{text-align:center;padding-top:60px;border-top:1px solid var(--border);margin-top:60px}
+  .footer p{font-size:13px;color:var(--text-muted)}
+  .footer a{color:var(--cyan);text-decoration:none}
+  @media(max-width:640px){.header h1{font-size:28px}.container{padding:30px 16px 60px}.card-grid{margin-left:24px}.decision{margin-left:24px}.phase::before{left:8px}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+  <div class="badge">Internal Development Record</div>
+  <h1>BlackBox Farm</h1>
+  <p class="subtitle">Full-stack development timeline covering November 2025 through April 2026 — from initial token registry to AI-powered intelligence platform.</p>
+</div>
+
+<!-- NOV 2025 -->
+<div class="phase">
+  <div class="phase-header"><div class="phase-dot">01</div><h2>November 2025 <span>Foundation</span></h2></div>
+  <div class="card-grid">
+    <div class="card"><h3>Token Registry &amp; Data Pipeline</h3><p>Established the <code>scraped_tokens</code> table as the core data model — capturing mint addresses, symbols, market caps, and metadata from on-chain sources. Built the initial scraping pipeline to populate token data.</p><div class="tech"><span>Supabase</span><span>PostgreSQL</span><span>Edge Functions</span></div></div>
+    <div class="card"><h3>Authentication &amp; Security Layer</h3><p>Implemented Supabase Auth with Row-Level Security policies across all tables. Established the admin role system and access control patterns that would scale across the entire platform.</p><div class="tech"><span>Supabase Auth</span><span>RLS</span><span>user_roles</span></div></div>
+    <div class="card"><h3>Initial UI Framework</h3><p>Built the dark-theme UI shell using React 18, Vite, and Tailwind CSS with a tech-inspired aesthetic — cyan accents on deep navy backgrounds, monospace code styling, and glow effects.</p><div class="tech"><span>React 18</span><span>Tailwind</span><span>shadcn/ui</span></div></div>
+  </div>
+  <div class="decision"><div class="label">Key Decision</div><p>Selected Supabase as the backend-as-a-service layer for authentication, database, storage, and edge functions — enabling rapid iteration without managing infrastructure.</p></div>
+</div>
+
+<!-- DEC 2025 -->
+<div class="phase">
+  <div class="phase-header"><div class="phase-dot">02</div><h2>December 2025 <span>Infrastructure &amp; Trading</span></h2></div>
+  <div class="card-grid">
+    <div class="card"><h3>FlipIt Trading Engine</h3><p>Developed the FlipIt trading interface integrating Jupiter and PumpPortal APIs for Solana token swaps. Implemented session-based trading with activity logs, P&amp;L tracking, and position management.</p><div class="tech"><span>Jupiter API</span><span>PumpPortal</span><span>Solana Web3.js</span></div></div>
+    <div class="card"><h3>Banner Advertising System</h3><p>Built a complete ad placement system with banner rotation, impression tracking, click analytics, and advertiser account management. Introduced SOL-based payment for banner orders with automated activation keys.</p><div class="tech"><span>SOL Payments</span><span>Satori</span><span>Image Compositing</span></div></div>
+    <div class="card"><h3>Developer Genealogy Tracing</h3><p>Created the initial developer profiling system — tracing wallet connections from token creators to identify repeat developers, wallet families, and historical token performance across the Solana ecosystem.</p><div class="tech"><span>Helius API</span><span>Wallet Analysis</span></div></div>
+  </div>
+  <div class="decision"><div class="label">Key Decision</div><p>Adopted a multi-provider API strategy (Helius, Birdeye, DexScreener, Jupiter) with automatic failover to ensure data reliability across all on-chain queries.</p></div>
+</div>
+
+<!-- JAN 2026 -->
+<div class="phase">
+  <div class="phase-header"><div class="phase-dot">03</div><h2>January 2026 <span>Analytics &amp; Intelligence</span></h2></div>
+  <div class="card-grid">
+    <div class="card"><h3>Holders Intelligence Reports</h3><p>Launched the flagship holder analysis system — scanning any Solana token's holder distribution, identifying whale clusters, calculating risk scores, and generating shareable report cards with Satori-rendered OG images.</p><div class="tech"><span>Helius DAS</span><span>Satori</span><span>Share Cards</span></div></div>
+    <div class="card"><h3>Pump.fun Qualification Pipeline</h3><p>Built a multi-gate token qualification system for Pump.fun launches — filtering tokens through market cap gates, holder distribution checks, developer history validation, and liquidity depth analysis before surfacing them to users.</p><div class="tech"><span>Multi-Gate Scoring</span><span>Real-time Pipeline</span></div></div>
+    <div class="card"><h3>BubbleMap Visualization</h3><p>Integrated force-directed graph visualization for holder networks using React Force Graph 2D. Added AI-guided analysis overlays that highlight suspicious wallet clusters, insider holdings, and coordinated trading patterns.</p><div class="tech"><span>React Force Graph</span><span>D3</span><span>AI Analysis</span></div></div>
+  </div>
+  <div class="decision"><div class="label">Key Decision</div><p>Implemented server-side image generation via Satori for social share cards, enabling rich OG previews when holder reports are shared on Twitter, Telegram, and Discord.</p></div>
+</div>
+
+<!-- FEB 2026 -->
+<div class="phase">
+  <div class="phase-header"><div class="phase-dot">04</div><h2>February 2026 <span>Intelligence Network</span></h2></div>
+  <div class="card-grid">
+    <div class="card"><h3>Oracle Master Spider / Reputation Mesh</h3><p>Built the Oracle intelligence layer — a reputation mesh tracking 96,000+ wallet entries across the Solana ecosystem. Maps developer relationships, identifies known bad actors, and provides real-time risk assessment for any wallet or token.</p><div class="tech"><span>96k+ Entries</span><span>Graph DB Pattern</span><span>Risk Scoring</span></div></div>
+    <div class="card"><h3>Automated Banker Pool</h3><p>Developed a virtual portfolio management system that automatically evaluates tokens against qualification criteria, manages simulated positions with configurable stop-losses and take-profit levels, and tracks daily P&amp;L across the portfolio.</p><div class="tech"><span>Position Management</span><span>Risk Controls</span><span>Daily Stats</span></div></div>
+    <div class="card"><h3>Wallet Chain Analysis</h3><p>Extended the holder analysis to support multi-hop wallet chain tracing — following fund flows across wallet families to expose hidden connections between seemingly independent wallets and identify coordinated market manipulation.</p><div class="tech"><span>Multi-hop Tracing</span><span>Fund Flow</span></div></div>
+  </div>
+  <div class="decision"><div class="label">Key Decision</div><p>Structured the Oracle as a flat reputation table with composite scoring rather than a full graph database — optimizing for Supabase's relational model while maintaining rapid lookup performance.</p></div>
+</div>
+
+<!-- MAR 2026 -->
+<div class="phase">
+  <div class="phase-header"><div class="phase-dot">05</div><h2>March 2026 <span>Bots, Security &amp; Scale</span></h2></div>
+  <div class="card-grid">
+    <div class="card"><h3>HoldersIntel Telegram Bot</h3><p>Deployed a full-featured Telegram bot enabling users to run holder analyses, check developer histories, and receive formatted intelligence reports directly in chat. Implemented rate limiting, session management, and inline keyboard navigation.</p><div class="tech"><span>Telegram Bot API</span><span>Edge Functions</span><span>Webhooks</span></div></div>
+    <div class="card"><h3>Comprehensive Security Audit</h3><p>Conducted a full security review covering RLS policies, API key exposure, edge function authentication, CORS configurations, and input validation. Implemented Cloudflare Turnstile integration and IP-based rate limiting.</p><div class="tech"><span>Turnstile</span><span>Rate Limiting</span><span>RLS Audit</span></div></div>
+    <div class="card"><h3>Function Health Dashboard</h3><p>Built an admin dashboard monitoring 278+ edge functions with real-time health status, error rates, response times, and deployment tracking. Includes automated alerting for function failures and performance degradation.</p><div class="tech"><span>278+ Functions</span><span>Health Monitoring</span><span>Alerting</span></div></div>
+    <div class="card"><h3>Arbitrage Bot Framework</h3><p>Designed a cross-chain arbitrage system for ETH/Base with configurable loop strategies, balance-aware trading, circuit breakers, and comprehensive position tracking with daily P&amp;L reporting.</p><div class="tech"><span>ETH/Base</span><span>Loop Strategies</span><span>Circuit Breakers</span></div></div>
+  </div>
+  <div class="decision"><div class="label">Key Decision</div><p>Adopted a run-logger pattern across all edge functions — every function invocation is recorded with timing, status, and metadata for comprehensive operational visibility.</p></div>
+</div>
+
+<!-- APR 2026 -->
+<div class="phase">
+  <div class="phase-header"><div class="phase-dot">06</div><h2>April 2026 <span>Growth &amp; Content Distribution</span></h2></div>
+  <div class="card-grid">
+    <div class="card"><h3>Anti-Bot &amp; Access Control</h3><p>Implemented multi-layer bot mitigation including Cloudflare Turnstile CAPTCHA, fingerprint-based device tracking, IP reputation scoring, and adaptive rate limiting to protect public-facing tools from abuse.</p><div class="tech"><span>Turnstile</span><span>FingerprintJS</span><span>IP Scoring</span></div></div>
+    <div class="card"><h3>"The Signal" — AI Web Chat</h3><p>Launched an AI-powered conversational interface providing real-time token intelligence, holder analysis summaries, and developer history lookups through natural language queries. Features persistent memory and multi-platform deployment.</p><div class="tech"><span>AI Chat</span><span>User Memory</span><span>Multi-platform</span></div></div>
+    <div class="card"><h3>Intel Briefings CMS</h3><p>Built a full content management system for publishing long-form intelligence articles with Markdown rendering, featured images, SEO metadata, publication tracking, and social sharing capabilities.</p><div class="tech"><span>CMS</span><span>Markdown</span><span>SEO</span></div></div>
+    <div class="card"><h3>AI SEO Playbook &amp; Content Condensation</h3><p>Developed an automated content repurposing system that condenses articles to 75%, 50%, and 25% lengths for distribution across Medium, Twitter Articles, Fiverr, Reddit, and 30+ additional platforms.</p><div class="tech"><span>AI Condensation</span><span>Multi-platform</span><span>SEO Playbook</span></div></div>
+    <div class="card"><h3>AllStar Developer Registry</h3><p>Created a curated registry of proven Solana developers — tracking their wallet families, best token performances, KYC status, and mint alerts. Enables automated notifications when registered developers launch new tokens.</p><div class="tech"><span>Dev Registry</span><span>Mint Alerts</span><span>KYC Tracking</span></div></div>
+  </div>
+  <div class="decision"><div class="label">Key Decision</div><p>Adopted a content-depth taxonomy (Original → 75% → 50% → 25%) with platform-specific distribution mapping, enabling a single article to generate 4+ syndicated placements across different channels.</p></div>
+</div>
+
+<div class="footer">
+  <p>BlackBox Farm — <a href="https://blackbox.farm">blackbox.farm</a> — Built with Lovable, Supabase &amp; Solana</p>
+  <p style="margin-top:8px;font-size:11px;opacity:0.5;">Document generated April 2026 · Covers Nov 2025 – Apr 2026</p>
+</div>
+</div>
+</body>
+</html>
