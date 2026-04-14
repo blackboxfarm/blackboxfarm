@@ -1,7 +1,18 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { execFileSync } from "node:child_process";
 import { componentTagger } from "lovable-tagger";
+
+function intelBriefingStaticPages() {
+  return {
+    name: "intel-briefing-static-pages",
+    apply: "build" as const,
+    async closeBundle() {
+      execFileSync("node", ["scripts/generate-intel-briefing-pages.mjs"], { stdio: "inherit" });
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,6 +23,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === 'development' && componentTagger(),
+    intelBriefingStaticPages(),
   ].filter(Boolean),
   resolve: {
     alias: {
