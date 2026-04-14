@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { IntelPublicationsManager } from './IntelPublicationsManager';
 import { AiSeoPlaybook } from './publications/AiSeoPlaybook';
 import { ContentCondenser } from './publications/ContentCondenser';
+import { PlatformsCheatSheet } from './publications/PlatformsCheatSheet';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
