@@ -23,7 +23,9 @@ export async function generateIntelBriefingPages() {
   for (const article of articles) {
     if (!article?.slug) continue;
 
-    const outputPath = path.join(briefingsDir, article.slug);
+    const articleDir = path.join(briefingsDir, article.slug);
+    await mkdir(articleDir, { recursive: true });
+    const outputPath = path.join(articleDir, 'index.html');
     await writeFile(outputPath, buildArticleHtml(article, assetTags, appRoot), 'utf8');
   }
 
