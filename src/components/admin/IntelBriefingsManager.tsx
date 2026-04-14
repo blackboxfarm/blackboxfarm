@@ -465,7 +465,7 @@ function IntelBriefingsArticlesManager() {
       toast({ title: 'Hero image set', description: 'Cropped image uploaded.' });
       URL.revokeObjectURL(blobUrl);
     } else {
-      // Inline: upload cropped blob, insert markdown tag
+      // Inline: upload cropped blob, insert markdown tag at smart position
       const path = `${Date.now()}-inline-cropped.jpg`;
       const { error } = await supabase.storage.from('intel-images').upload(path, blob, { contentType: 'image/jpeg' });
       if (error) {
@@ -474,16 +474,50 @@ function IntelBriefingsArticlesManager() {
         return;
       }
       const { data: urlData } = supabase.storage.from('intel-images').getPublicUrl(path);
-      const tag = `\n![image](${urlData.publicUrl})\n`;
-      const textarea = editorRef.current;
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const before = form.content_md.slice(0, start);
-        const after = form.content_md.slice(start);
-        setForm(f => ({ ...f, content_md: before + tag + after }));
-      } else {
-        setForm(f => ({ ...f, content_md: f.content_md + tag }));
+      const tag = `\n\n![image](${urlData.publicUrl})\n`;
+      
+      // Smart insertion: find paragraph breaks and place image between paragraphs
+      const content = form.content_md;
+      // Split into paragraphs (double newline separated blocks)
+      const paraBreaks: number[] = [];
+      const regex = /\n\s*\n/g;
+      let match;
+      while ((match = regex.exec(content)) !== null) {
+        paraBreaks.push(match.index + match[0].length);
       }
+      
+      // Count existing inline images to determine which insertion this is
+      const existingImages = (content.match(/!\[.*?\]\(.*?\)/g) || []).length;
+      // Subtract hero image if content starts with one
+      const heroOffset = content.trimStart().startsWith('![') ? 1 : 0;
+      const insertionIndex = existingImages - heroOffset; // 0-based: 0=first, 1=second, 2=third...
+      
+      let insertPos = content.length; // fallback: end
+      
+      if (paraBreaks.length >= 2) {
+        if (insertionIndex === 0) {
+          // First image: after paragraph 1 (between para 1 and 2), or para 2 if enough
+          const targetBreak = paraBreaks.length >= 3 ? 1 : 0;
+          insertPos = paraBreaks[targetBreak];
+        } else if (insertionIndex === 1 && paraBreaks.length >= 3) {
+          // Second image: near the end, before last paragraph
+          insertPos = paraBreaks[paraBreaks.length - 2];
+        } else if (insertionIndex === 2) {
+          // Third image: middle of the article
+          const midIdx = Math.floor(paraBreaks.length / 2);
+          insertPos = paraBreaks[midIdx];
+        } else {
+          // 4+ images: distribute evenly
+          const slot = Math.floor((paraBreaks.length * (insertionIndex + 1)) / (insertionIndex + 2));
+          insertPos = paraBreaks[Math.min(slot, paraBreaks.length - 1)];
+        }
+      } else if (paraBreaks.length === 1) {
+        insertPos = paraBreaks[0];
+      }
+      
+      const before = content.slice(0, insertPos);
+      const after = content.slice(insertPos);
+      setForm(f => ({ ...f, content_md: before + tag + after }));
       toast({ title: 'Image inserted', description: 'Cropped gallery image added to article.' });
       URL.revokeObjectURL(blobUrl);
     }
