@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const SITE_URL = 'https://blackbox.farm';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://apxauapuusmgwbbzjgfl.supabase.co';
@@ -7,21 +8,22 @@ const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.e
 const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/blackbox-og-image.png`;
 const DIST_INDEX_PATH = path.resolve('dist/index.html');
 
-const baseHtml = await readFile(DIST_INDEX_PATH, 'utf8');
-const assetTags = extractAssetTags(baseHtml);
-const appRoot = baseHtml.match(/<div id="root"><\/div>/)?.[0] || '<div id="root"></div>';
+export async function generateIntelBriefingPages() {
+  const baseHtml = await readFile(DIST_INDEX_PATH, 'utf8');
+  const assetTags = extractAssetTags(baseHtml);
+  const appRoot = baseHtml.match(/<div id="root"><\/div>/)?.[0] || '<div id="root"></div>';
+  const articles = await fetchPublishedArticles();
 
-const articles = await fetchPublishedArticles();
+  for (const article of articles) {
+    if (!article?.slug) continue;
 
-for (const article of articles) {
-  if (!article?.slug) continue;
+    const outputDir = path.resolve('dist', 'intel', 'briefing', article.slug);
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(path.join(outputDir, 'index.html'), buildArticleHtml(article, assetTags, appRoot), 'utf8');
+  }
 
-  const outputDir = path.resolve('dist', 'intel', 'briefing', article.slug);
-  await mkdir(outputDir, { recursive: true });
-  await writeFile(path.join(outputDir, 'index.html'), buildArticleHtml(article, assetTags, appRoot), 'utf8');
+  console.log(`[intel-og-pages] generated ${articles.length} article page(s)`);
 }
-
-console.log(`[intel-og-pages] generated ${articles.length} article page(s)`);
 
 async function fetchPublishedArticles() {
   const params = new URLSearchParams({
@@ -182,4 +184,8 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await generateIntelBriefingPages();
 }
