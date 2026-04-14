@@ -527,9 +527,11 @@ function IntelBriefingsArticlesManager() {
             <p>No briefings found. Create your first one!</p>
           </div>
         ) : (
+          <><div className="text-sm text-muted-foreground mb-2">{filtered.length} article{filtered.length !== 1 ? 's' : ''}</div>
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[40px]">#</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
@@ -538,8 +540,9 @@ function IntelBriefingsArticlesManager() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(b => (
+              {filtered.map((b, idx) => (
                 <TableRow key={b.id}>
+                  <TableCell className="text-muted-foreground text-xs">{idx + 1}</TableCell>
                   <TableCell className="font-medium max-w-[300px] truncate">{b.title}</TableCell>
                   <TableCell><Badge variant="secondary">{b.category}</Badge></TableCell>
                   <TableCell>
@@ -584,6 +587,7 @@ function IntelBriefingsArticlesManager() {
               ))}
             </TableBody>
           </Table>
+          </>
         )}
       </div>
     );
