@@ -868,6 +868,16 @@ function IntelBriefingsArticlesManager() {
           <ImageIcon className="h-4 w-4 mr-2" /> Upload Hero Image
         </Button>
         <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+        <GalleryPickerButton
+          onSelect={(url) => {
+            setCropSrc(url);
+            setCropMode('hero');
+            setShowCrop(true);
+          }}
+          label="Hero from Gallery"
+          articleContent={form.content_md}
+          articleTitle={form.title}
+        />
         <span className="text-xs text-muted-foreground">Recommended: 1200 × 630px (2:1 ratio)</span>
         {form.featured_image_url && (
           <div className="flex items-center gap-2">
