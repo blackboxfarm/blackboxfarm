@@ -33,6 +33,7 @@ const TestimonialsManager = lazy(() => import("@/components/admin/TestimonialsMa
 const IntelBriefingsManager = lazy(() => import("@/components/admin/IntelBriefingsManager").then(m => ({ default: m.IntelBriefingsManager })));
 const CacheBustingTools = lazy(() => import("@/components/intel/CacheBustingTools").then(m => ({ default: m.CacheBustingTools })));
 const MetaTagsManager = lazy(() => import("@/components/admin/MetaTagsManager").then(m => ({ default: m.MetaTagsManager })));
+const OgMetaDiagnostic = lazy(() => import("@/components/admin/OgMetaDiagnostic").then(m => ({ default: m.OgMetaDiagnostic })));
 const AIConfigTab = lazy(() => import("@/components/admin/tabs/AIConfigTab"));
 const EmailCampaignsManager = lazy(() => import("@/components/admin/EmailCampaignsManager").then(m => ({ default: m.EmailCampaignsManager })));
 const TodoListTab = lazy(() => import("@/components/admin/tabs/TodoListTab"));
