@@ -340,6 +340,9 @@ export default function SuperAdmin() {
                 <Suspense fallback={<TabLoader />}>
                   <IntelBriefingsManager />
                    <div className="mt-8">
+                     <OgMetaDiagnostic />
+                   </div>
+                   <div className="mt-8">
                      <MetaTagsManager />
                    </div>
                    <div className="mt-8">
