@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SiteLayout } from '@/components/layout/SiteLayout';
@@ -12,6 +13,7 @@ import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
+  const viewLogged = useRef(false);
 
   const { data: isPublic, isLoading: accessLoading } = useQuery({
     queryKey: ['intel-public-access'],
@@ -54,6 +56,23 @@ export default function IntelBriefingArticle() {
     },
     enabled: !!article?.related_slugs && article.related_slugs.length > 0,
   });
+
+  // Track direct page view (human visitor)
+  useEffect(() => {
+    if (!article?.id || viewLogged.current) return;
+    viewLogged.current = true;
+    supabase.from('intel_briefing_views').insert({
+      briefing_id: article.id,
+      slug: article.slug,
+      visitor_type: 'human',
+      bot_name: null,
+      user_agent: navigator.userAgent.slice(0, 500),
+      ip_address: null,
+      referer: document.referrer || null,
+    } as any).then(({ error }) => {
+      if (error) console.warn('[view-track]', error.message);
+    });
+  }, [article?.id]);
 
   if (!accessLoading && !isPublic) {
     return (
