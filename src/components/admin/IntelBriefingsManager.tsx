@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
+import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { format } from 'date-fns';
 
@@ -451,10 +452,13 @@ function IntelBriefingsArticlesManager() {
   };
 
   const handleGalleryCropComplete = async (blobUrl: string, blob: Blob) => {
+    // Strip EXIF data and inject BlackBox Farm copyright
+    const cleanBlob = await stripExifAndBrand(blob);
+
     if (cropMode === 'hero') {
-      // Upload cropped blob to storage
-      const path = `${Date.now()}-${slugify(form.title || 'hero')}-cropped.jpg`;
-      const { error } = await supabase.storage.from('intel-images').upload(path, blob, { contentType: 'image/jpeg' });
+      const imageName = generateImageName('hero', form.title);
+      const path = `${Date.now()}-${imageName}.jpg`;
+      const { error } = await supabase.storage.from('intel-images').upload(path, cleanBlob, { contentType: 'image/jpeg' });
       if (error) {
         toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
         URL.revokeObjectURL(blobUrl);
@@ -462,12 +466,12 @@ function IntelBriefingsArticlesManager() {
       }
       const { data: urlData } = supabase.storage.from('intel-images').getPublicUrl(path);
       setForm(f => ({ ...f, featured_image_url: urlData.publicUrl }));
-      toast({ title: 'Hero image set', description: 'Cropped image uploaded.' });
+      toast({ title: 'Hero image set', description: `Uploaded as "${imageName}" — EXIF stripped & branded.` });
       URL.revokeObjectURL(blobUrl);
     } else {
-      // Inline: upload cropped blob, insert markdown tag at smart position
-      const path = `${Date.now()}-inline-cropped.jpg`;
-      const { error } = await supabase.storage.from('intel-images').upload(path, blob, { contentType: 'image/jpeg' });
+      const imageName = generateImageName('inline', form.title);
+      const path = `${Date.now()}-${imageName}.jpg`;
+      const { error } = await supabase.storage.from('intel-images').upload(path, cleanBlob, { contentType: 'image/jpeg' });
       if (error) {
         toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
         URL.revokeObjectURL(blobUrl);
