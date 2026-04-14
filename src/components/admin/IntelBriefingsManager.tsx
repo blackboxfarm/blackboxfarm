@@ -242,7 +242,30 @@ function IntelBriefingsArticlesManager() {
     },
   });
 
-  // Fetch revisions for current editing briefing
+  // Fetch view stats per briefing
+  const { data: viewStats = [] } = useQuery({
+    queryKey: ['intel-briefing-view-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('intel_briefing_views')
+        .select('briefing_id, visitor_type, bot_name');
+      if (error) throw error;
+      // Aggregate in JS since the view might not be queryable via client
+      const stats: Record<string, { human: number; crawler: number; ai_bot: number; total: number; bots: Record<string, number> }> = {};
+      for (const row of data || []) {
+        if (!stats[row.briefing_id]) stats[row.briefing_id] = { human: 0, crawler: 0, ai_bot: 0, total: 0, bots: {} };
+        const s = stats[row.briefing_id];
+        s.total++;
+        if (row.visitor_type === 'human') s.human++;
+        else if (row.visitor_type === 'crawler') s.crawler++;
+        else if (row.visitor_type === 'ai_bot') s.ai_bot++;
+        if (row.bot_name) s.bots[row.bot_name] = (s.bots[row.bot_name] || 0) + 1;
+      }
+      return stats;
+    },
+  });
+
+
   const { data: revisions = [] } = useQuery({
     queryKey: ['intel-briefing-revisions', editingId],
     queryFn: async () => {
