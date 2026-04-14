@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
     const { data: article, error } = await supabase
       .from("intel_briefings")
-      .select("title, subtitle, seo_title, seo_description, featured_image_url, slug, category, author, published_at, created_at, tags, updated_at")
+      .select("id, title, subtitle, seo_title, seo_description, featured_image_url, slug, category, author, published_at, created_at, tags, updated_at")
       .eq("slug", slug)
       .eq("is_published", true)
       .maybeSingle();
