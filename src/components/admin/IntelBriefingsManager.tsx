@@ -20,8 +20,10 @@ import { cn } from '@/lib/utils';
 
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
-  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon
+  Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon,
+  Bot, Users, Activity
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { format } from 'date-fns';
@@ -240,7 +242,30 @@ function IntelBriefingsArticlesManager() {
     },
   });
 
-  // Fetch revisions for current editing briefing
+  // Fetch view stats per briefing
+  const { data: viewStats = [] } = useQuery({
+    queryKey: ['intel-briefing-view-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('intel_briefing_views')
+        .select('briefing_id, visitor_type, bot_name');
+      if (error) throw error;
+      // Aggregate in JS since the view might not be queryable via client
+      const stats: Record<string, { human: number; crawler: number; ai_bot: number; total: number; bots: Record<string, number> }> = {};
+      for (const row of data || []) {
+        if (!stats[row.briefing_id]) stats[row.briefing_id] = { human: 0, crawler: 0, ai_bot: 0, total: 0, bots: {} };
+        const s = stats[row.briefing_id];
+        s.total++;
+        if (row.visitor_type === 'human') s.human++;
+        else if (row.visitor_type === 'crawler') s.crawler++;
+        else if (row.visitor_type === 'ai_bot') s.ai_bot++;
+        if (row.bot_name) s.bots[row.bot_name] = (s.bots[row.bot_name] || 0) + 1;
+      }
+      return stats;
+    },
+  });
+
+
   const { data: revisions = [] } = useQuery({
     queryKey: ['intel-briefing-revisions', editingId],
     queryFn: async () => {
@@ -553,6 +578,7 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead className="text-center">Views</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -599,6 +625,55 @@ function IntelBriefingsArticlesManager() {
                         />
                       </PopoverContent>
                     </Popover>
+                   </TableCell>
+                  <TableCell className="text-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="inline-flex items-center gap-1.5 text-xs cursor-default">
+                            {(() => {
+                              const s = viewStats[b.id];
+                              if (!s || s.total === 0) return <span className="text-muted-foreground">—</span>;
+                              return (
+                                <>
+                                  <span className="flex items-center gap-0.5">
+                                    <Users className="h-3 w-3 text-green-500" />{s.human}
+                                  </span>
+                                  <span className="flex items-center gap-0.5">
+                                    <Globe className="h-3 w-3 text-blue-500" />{s.crawler}
+                                  </span>
+                                  <span className="flex items-center gap-0.5">
+                                    <Bot className="h-3 w-3 text-purple-500" />{s.ai_bot}
+                                  </span>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[250px]">
+                          {(() => {
+                            const s = viewStats[b.id];
+                            if (!s || s.total === 0) return <p className="text-xs">No views yet</p>;
+                            return (
+                              <div className="text-xs space-y-1">
+                                <p className="font-medium">{s.total} total views</p>
+                                <p>👤 Humans: {s.human}</p>
+                                <p>🔍 Crawlers: {s.crawler}</p>
+                                <p>🤖 AI Bots: {s.ai_bot}</p>
+                                {Object.keys(s.bots).length > 0 && (
+                                  <div className="pt-1 border-t border-border mt-1">
+                                    <p className="font-medium mb-0.5">Bot breakdown:</p>
+                                    {Object.entries(s.bots).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([name, count]) => (
+                                      <p key={name}>{name}: {count as number}</p>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
