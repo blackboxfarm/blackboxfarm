@@ -71,7 +71,8 @@ Deno.serve(async (req) => {
     const ogTitle = (article.seo_title || article.title || meta.og_title || "").slice(0, 120);
     const ogDescription = (article.seo_description || article.subtitle || meta.og_description || "").slice(0, 200);
     const ogImage = resolveOgImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
-    const articleUrl = meta.canonical_url || `${SITE_URL}/intel/briefing/${article.slug}`;
+    // Article canonical/URL/type must ALWAYS be article-specific, never sitewide
+    const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
     const category = (article.category || "general").replace(/-/g, " ");
@@ -84,7 +85,7 @@ Deno.serve(async (req) => {
       description: ogDescription,
       image: ogImage,
       url: articleUrl,
-      type: meta.og_type || "article",
+      type: "article",
       publishedAt,
       author,
       category,
