@@ -522,7 +522,7 @@ function IntelBriefingsArticlesManager() {
       const before = content.slice(0, insertPos);
       const after = content.slice(insertPos);
       setForm(f => ({ ...f, content_md: before + tag + after }));
-      toast({ title: 'Image inserted', description: 'Cropped gallery image added to article.' });
+      toast({ title: 'Image inserted', description: `"${imageName}" — EXIF stripped & branded.` });
       URL.revokeObjectURL(blobUrl);
     }
   };
