@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const slug = url.searchParams.get("slug");
+    const version = url.searchParams.get("v");
 
     if (!slug) {
       return new Response("Missing slug", { status: 400, headers: corsHeaders });
@@ -55,6 +56,7 @@ Deno.serve(async (req) => {
     const ogDescription = (article.seo_description || article.subtitle || meta.og_description || "").slice(0, 200);
     const ogImage = resolveImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
     const canonicalUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
+    const shareRequestUrl = `${SUPABASE_URL}/functions/v1/intel-share?slug=${encodeURIComponent(article.slug)}${version ? `&v=${encodeURIComponent(version)}` : ''}`;
     const publishedAt = article.published_at || article.created_at;
     const author = article.author || "BlackBox Research";
     const category = (article.category || "general").replace(/-/g, " ");
@@ -162,7 +164,7 @@ Deno.serve(async (req) => {
 
   <!-- Open Graph -->
   <meta property="og:type" content="article" />
-  <meta property="og:url" content="${canonicalUrl}" />
+  <meta property="og:url" content="${shareRequestUrl}" />
   <meta property="og:title" content="${esc(ogTitle)}" />
   <meta property="og:description" content="${esc(ogDescription)}" />
   <meta property="og:image" content="${ogImage}" />
