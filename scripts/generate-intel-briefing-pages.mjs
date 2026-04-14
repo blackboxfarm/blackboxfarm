@@ -17,17 +17,17 @@ export async function generateIntelBriefingPages() {
   const appRoot = baseHtml.match(/<div id="root"><\/div>/)?.[0] || '<div id="root"></div>';
   const articles = await fetchPublishedArticles();
 
+  const briefingsDir = path.resolve('dist', 'intel', 'briefing');
+  await mkdir(briefingsDir, { recursive: true });
+
   for (const article of articles) {
     if (!article?.slug) continue;
 
-    const outputDir = path.resolve('dist', 'intel', 'briefing', article.slug);
-    await mkdir(outputDir, { recursive: true });
-    await writeFile(path.join(outputDir, 'index.html'), buildArticleHtml(article, assetTags, appRoot), 'utf8');
+    const outputPath = path.join(briefingsDir, article.slug);
+    await writeFile(outputPath, buildArticleHtml(article, assetTags, appRoot), 'utf8');
   }
 
-  await writeStaticArticleRedirects(articles);
-
-  console.log(`[intel-og-pages] generated ${articles.length} article page(s)`);
+  console.log(`[intel-og-pages] generated ${articles.length} article page(s) as exact-match files`);
 }
 
 async function fetchPublishedArticles() {
