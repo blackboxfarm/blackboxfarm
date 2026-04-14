@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { execFileSync } from "node:child_process";
 import { componentTagger } from "lovable-tagger";
 
 function intelBriefingStaticPages() {
@@ -8,8 +9,7 @@ function intelBriefingStaticPages() {
     name: "intel-briefing-static-pages",
     apply: "build" as const,
     async closeBundle() {
-      const mod = await import("./scripts/generate-intel-briefing-pages.mjs");
-      await mod.generateIntelBriefingPages();
+      execFileSync("node", ["scripts/generate-intel-briefing-pages.mjs"], { stdio: "inherit" });
     },
   };
 }
