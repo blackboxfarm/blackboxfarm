@@ -578,6 +578,7 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead className="text-center">Views</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
