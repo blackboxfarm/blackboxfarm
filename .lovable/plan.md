@@ -1,58 +1,54 @@
 
 
-# Content Condensation System — 75% / 50% / 25% Variants
+# AI-Summarized Development Timeline — 6 Month History
 
-## What This Builds
+## What This Produces
 
-A new **"Repurpose"** tab in Intel Briefings that lets you generate and edit condensed versions of every article at 3 depth levels — ready to copy-paste onto Medium (75%), Twitter Articles / Fiverr paid posts (50%), and Reddit / short-form platforms (25%). Each variant includes a backlink to the original article.
+A polished Markdown document at `/mnt/documents/blackbox-dev-timeline.md` covering the full ~10,000 message development history (~Nov 2025 – Apr 2026), condensed into a structured project timeline with your comments reworded in "peaceful diplomat" tone.
 
-## How It Works
+## Approach
 
-1. **New database table** `intel_briefing_variants` stores the condensed content per article per depth level
-2. **AI auto-generates** the initial condensed versions from the original `content_md`
-3. **Editable textareas** let you tweak each version before publishing externally
-4. Each variant automatically appends a "Read the full analysis at blackbox.farm/intel/briefing/{slug}" backlink
+Since the chat read tool only handles 20 messages at a time, I'll:
 
-## Database
+1. **Batch-read the full history** in parallel chunks (20 messages each, ~500 reads batched aggressively)
+2. **Summarize each chunk** into key decisions, features built, and milestones
+3. **Compile into phases** — grouping by month/feature area
+4. **Reword your comments** — removing informal language and presenting everything in a professional, diplomatic tone
 
-New table `intel_briefing_variants`:
-- `id` (uuid, PK)
-- `briefing_id` (uuid, FK → intel_briefings.id)
-- `depth` (integer — 75, 50, or 25)
-- `content_md` (text — the condensed article)
-- `updated_at` (timestamp)
-- Unique constraint on `(briefing_id, depth)`
-- RLS: authenticated users only
+## Document Structure
 
-## New Component: `ContentCondenser.tsx`
+```text
+# BlackBox Farm — Development Timeline
+## Nov 2025: Foundation
+  - Token genealogy system
+  - Holder reports & risk scoring
+  - Banner/ad system
+  - RLS policies & auth setup
 
-- Lists all published briefings in a compact accordion
-- Each briefing expands to show 3 cards: **75%** (Medium), **50%** (Twitter/Fiverr), **25%** (Reddit)
-- Each card has:
-  - A **Generate** button (calls AI to condense from original)
-  - An **editable textarea** showing the condensed content
-  - A **Save** button to persist edits
-  - A **Copy** button to clipboard
-  - A badge showing target platform hint
-- Progress indicator showing how many articles have all 3 variants generated
+## Dec 2025: Core Platform
+  - BubbleMap integration
+  - Wallet chain analysis
+  - ...
 
-## AI Condensation Logic
+## Jan 2026: ...
+## Feb 2026: ...
+## Mar 2026: ...
+## Apr 2026: Current State
+  - AI SEO Playbook
+  - Content Condensation System
+  - Tester/Feedback Program
+```
 
-Uses the AI gateway script to generate each variant with tailored prompts:
-- **75%**: "Rewrite this article at ~75% length. Preserve all key arguments, data points, and structure. End with: *Read the full deep-dive at blackbox.farm/intel/briefing/{slug}*"
-- **50%**: "Condense to ~50% length. Keep the core thesis, key stats, and 2-3 strongest points. Conversational tone. End with backlink."
-- **25%**: "Create a punchy summary at ~25% length. Lead with the hook, include 1-2 key insights. End with backlink."
+Each phase includes:
+- **Features built** (bullet list)
+- **Key decisions made** (diplomatically reworded)
+- **Architecture choices** (tech context)
 
-## Integration
+## Practical Note
 
-- New tab **"✂️ Repurpose"** added to `IntelBriefingsManager` alongside Articles, Publications, and AI Playbook
-- Ties into existing `intel_publications` tracking — after you post a condensed version somewhere, log it in the Publications tab with the matching content_depth (75/50/25)
+This will require many sequential read calls across multiple batches. The output will be a single comprehensive document — likely 3,000–5,000 words covering 6 months of development. No code changes to the project.
 
-## Files Changed
+## Deliverable
 
-| File | Change |
-|------|--------|
-| `supabase/migrations/new.sql` | Create `intel_briefing_variants` table |
-| `src/components/admin/publications/ContentCondenser.tsx` | New component — the repurpose UI |
-| `src/components/admin/IntelBriefingsManager.tsx` | Add Repurpose tab |
+One file: `/mnt/documents/blackbox-dev-timeline.md`
 
