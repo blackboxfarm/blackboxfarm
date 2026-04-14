@@ -60,8 +60,10 @@ export default {
     const url = new URL(request.url);
     const ua = request.headers.get('user-agent') || '';
 
-    // --- /s/:slug — short share URL, proxy ALL requests to intel-share ---
-    const shortMatch = url.pathname.match(/^\/s\/([^/]+)\/?$/);
+    // --- /s/:slug or /:slug on share subdomain — short share URL, proxy ALL requests to intel-share ---
+    const isShareSubdomain = url.hostname === 'share.blackbox.farm';
+    const shortMatch = url.pathname.match(/^\/s\/([^/]+)\/?$/)
+      || (isShareSubdomain && url.pathname.match(/^\/([^/]+)\/?$/));
     if (shortMatch) {
       const slug = shortMatch[1];
       const proxyUrl = `${SUPABASE_FUNCTIONS_BASE}/intel-share?slug=${encodeURIComponent(slug)}${url.search ? '&' + url.search.slice(1) : ''}`;

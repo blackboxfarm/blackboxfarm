@@ -136,7 +136,7 @@ const platforms = [
 export function SocialShareBar({ url, title, description, slug }: SocialShareBarProps) {
   const [copied, setCopied] = useState(false);
   const ogProxyUrl = slug
-    ? `https://blackbox.farm/s/${encodeURIComponent(slug)}`
+    ? `https://share.blackbox.farm/${encodeURIComponent(slug)}`
     : url;
   const copyableUrl = ogProxyUrl;
 
