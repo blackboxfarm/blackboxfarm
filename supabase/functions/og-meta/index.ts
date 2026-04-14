@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     const category = (article.category || "general").replace(/-/g, " ");
     const tags = article.tags || [];
     const twitterCard = meta.twitter_card || "summary_large_image";
-    const twitterImage = meta.twitter_image || ogImage;
+    const twitterImage = ogImage;
 
     return buildFullPageResponse({
       title: ogTitle,
