@@ -55,7 +55,7 @@ const platforms = [
   {
     name: 'Telegram',
     icon: Send,
-    useOgUrl: false,
+    useOgUrl: true,
     getUrl: (url: string, title: string, desc?: string) => {
       const text = `📰 ${title}`;
       return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
