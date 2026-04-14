@@ -6382,6 +6382,50 @@ export type Database = {
           },
         ]
       }
+      intel_briefing_views: {
+        Row: {
+          bot_name: string | null
+          briefing_id: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          referer: string | null
+          slug: string
+          user_agent: string | null
+          visitor_type: string
+        }
+        Insert: {
+          bot_name?: string | null
+          briefing_id: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          referer?: string | null
+          slug: string
+          user_agent?: string | null
+          visitor_type?: string
+        }
+        Update: {
+          bot_name?: string | null
+          briefing_id?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          referer?: string | null
+          slug?: string
+          user_agent?: string | null
+          visitor_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_briefing_views_briefing_id_fkey"
+            columns: ["briefing_id"]
+            isOneToOne: false
+            referencedRelation: "intel_briefings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intel_briefings: {
         Row: {
           author: string
@@ -18785,6 +18829,26 @@ export type Database = {
           trust_level: string | null
         }
         Relationships: []
+      }
+      intel_briefing_view_stats: {
+        Row: {
+          ai_bot_hits: number | null
+          bot_breakdown: Json | null
+          briefing_id: string | null
+          crawler_hits: number | null
+          human_views: number | null
+          slug: string | null
+          total_views: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_briefing_views_briefing_id_fkey"
+            columns: ["briefing_id"]
+            isOneToOne: false
+            referencedRelation: "intel_briefings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       live_feed_curated: {
         Row: {
