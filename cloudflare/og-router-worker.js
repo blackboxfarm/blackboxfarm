@@ -53,33 +53,34 @@ function isCrawler(userAgent) {
   return CRAWLER_PATTERNS.some(pattern => pattern.test(userAgent));
 }
 
+const SUPABASE_FUNCTIONS_BASE = 'https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1';
+
 export default {
   async fetch(request) {
     const url = new URL(request.url);
     const ua = request.headers.get('user-agent') || '';
 
-    // --- /og/* proxy: pass ALL requests (crawlers + humans) to Supabase edge functions ---
-    if (url.pathname.startsWith('/og/')) {
-      const functionPath = url.pathname.slice(4); // strip "/og/"
-      const proxyUrl = `${OG_META_BASE.replace('/og-meta', '')}/${functionPath}${url.search}`;
+    // --- /s/:slug — short share URL, proxy ALL requests to intel-share ---
+    const shortMatch = url.pathname.match(/^\/s\/([^/]+)\/?$/);
+    if (shortMatch) {
+      const slug = shortMatch[1];
+      const proxyUrl = `${SUPABASE_FUNCTIONS_BASE}/intel-share?slug=${encodeURIComponent(slug)}${url.search ? '&' + url.search.slice(1) : ''}`;
       try {
         const response = await fetch(proxyUrl, {
-          method: request.method,
           headers: {
             'User-Agent': ua,
-            'Accept': request.headers.get('Accept') || 'text/html',
+            'Accept': 'text/html',
           },
         });
         const body = await response.arrayBuffer();
         const headers = new Headers(response.headers);
-        headers.set('X-OG-Source', 'cloudflare-og-proxy');
-        // Pass through status + headers from Supabase (302 redirects, content-type, etc.)
+        headers.set('X-OG-Source', 'cloudflare-short-url');
         return new Response(body, {
           status: response.status,
           headers,
         });
       } catch (err) {
-        console.error('[og-proxy] error:', err.message);
+        console.error('[short-url] error:', err.message);
         return fetch(request);
       }
     }
