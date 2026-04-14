@@ -573,8 +573,32 @@ function IntelBriefingsArticlesManager() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {format(new Date(b.created_at), 'MMM d, yyyy')}
+                  <TableCell>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            'text-xs justify-start font-normal h-7 px-2',
+                            !b.published_at && 'text-muted-foreground'
+                          )}
+                        >
+                          <CalendarIcon className="h-3 w-3 mr-1" />
+                          {b.published_at ? format(new Date(b.published_at), 'MMM d, yyyy') : 'Set date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={b.published_at ? new Date(b.published_at) : undefined}
+                          onSelect={(date) => {
+                            if (date) updateDate.mutate({ id: b.id, date });
+                          }}
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
