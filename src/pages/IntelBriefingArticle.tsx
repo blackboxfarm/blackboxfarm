@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SiteLayout } from '@/components/layout/SiteLayout';
@@ -12,6 +13,7 @@ import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
+  const viewLogged = useRef(false);
 
   const { data: isPublic, isLoading: accessLoading } = useQuery({
     queryKey: ['intel-public-access'],
