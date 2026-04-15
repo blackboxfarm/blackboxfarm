@@ -181,7 +181,9 @@ export default function Feed() {
     }
 
     // Sort
-    if (sortField === 'freshness_tier') {
+    if (sortField === 'last_top_200_rank') {
+      query = query.order('last_top_200_rank', { ascending: sortDir === 'asc', nullsFirst: false }).order('last_activity', { ascending: false });
+    } else if (sortField === 'freshness_tier') {
       query = query.order('freshness_tier', { ascending: true }).order('last_activity', { ascending: false });
     } else if (sortField === 'last_activity') {
       query = query.order('last_activity', { ascending: sortDir === 'asc' });
