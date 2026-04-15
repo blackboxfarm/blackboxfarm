@@ -52,6 +52,26 @@ export function ChatWidget() {
   const isMobile = useIsMobile();
   const [thoughtText, setThoughtText] = useState<string | null>(null);
   const [nudgesEnabled, setNudgesEnabled] = useState(true);
+  const [navFabStyle, setNavFabStyle] = useState<React.CSSProperties | undefined>(undefined);
+
+  // Measure nav bar position for desktop FAB default placement
+  useEffect(() => {
+    if (isMobile || fabPos) return;
+    const measure = () => {
+      const nav = document.querySelector('nav.flex.items-center');
+      if (!nav) return;
+      const rect = nav.getBoundingClientRect();
+      // Position FAB vertically centered with nav, horizontally right after last child
+      const lastChild = nav.lastElementChild as HTMLElement | null;
+      const left = lastChild ? lastChild.getBoundingClientRect().right + 12 : rect.right + 12;
+      const top = rect.top + (rect.height - 56) / 2; // 56 = w-14 FAB size
+      setNavFabStyle({ position: 'fixed', left, top, bottom: 'auto', right: 'auto' });
+    };
+    measure();
+    window.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => { window.removeEventListener('scroll', measure); window.removeEventListener('resize', measure); };
+  }, [isMobile, fabPos]);
 
   // Sitewide page nudge orchestrator
   usePageNudgeOrchestrator({ nudgesEnabled, isOpen, fabVisible });
