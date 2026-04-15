@@ -52,6 +52,26 @@ export function ChatWidget() {
   const isMobile = useIsMobile();
   const [thoughtText, setThoughtText] = useState<string | null>(null);
   const [nudgesEnabled, setNudgesEnabled] = useState(true);
+  const [navFabStyle, setNavFabStyle] = useState<React.CSSProperties | undefined>(undefined);
+
+  // Measure nav bar position for desktop FAB default placement
+  useEffect(() => {
+    if (isMobile || fabPos) return;
+    const measure = () => {
+      const nav = document.querySelector('nav.flex.items-center');
+      if (!nav) return;
+      const rect = nav.getBoundingClientRect();
+      // Position FAB vertically centered with nav, horizontally right after last child
+      const lastChild = nav.lastElementChild as HTMLElement | null;
+      const left = lastChild ? lastChild.getBoundingClientRect().right + 12 : rect.right + 12;
+      const top = rect.top + (rect.height - 56) / 2; // 56 = w-14 FAB size
+      setNavFabStyle({ position: 'fixed', left, top, bottom: 'auto', right: 'auto' });
+    };
+    measure();
+    window.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => { window.removeEventListener('scroll', measure); window.removeEventListener('resize', measure); };
+  }, [isMobile, fabPos]);
 
   // Sitewide page nudge orchestrator
   usePageNudgeOrchestrator({ nudgesEnabled, isOpen, fabVisible });
@@ -363,10 +383,10 @@ export function ChatWidget() {
       {/* FAB Button — draggable */}
       {!isOpen && fabVisible && (
         <div
-          style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : undefined}
+          style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : (!isMobile && navFabStyle ? navFabStyle : undefined)}
           className={cn(
             "z-50 touch-none select-none",
-            !fabPos && (isMobile ? "fixed bottom-5 right-5" : "fixed top-[95px] right-[20%]"),
+            !fabPos && (isMobile ? "fixed bottom-5 right-5" : (!navFabStyle ? "fixed top-[95px] right-4" : "")),
           )}
         >
           {/* Thought bubble — rendered outside the overflow-hidden button */}
