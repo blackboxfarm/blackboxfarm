@@ -118,6 +118,14 @@ serve(async (req) => {
 
     console.log(`[tg-link] Linked TG ${telegram_user_id} → user ${user_id}`);
 
+    // Fire admin notification for TG link
+    await supabase.from('admin_notifications').insert({
+      notification_type: 'new_signup',
+      title: 'Telegram Account Linked',
+      message: `@${telegram_username || telegram_user_id} linked via OTP auth flow`,
+      metadata: { telegram_user_id, telegram_username, user_id, link_method: 'otp_auth' },
+    });
+
     return new Response(JSON.stringify({ success: true, message: 'Telegram account linked!' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

@@ -721,6 +721,14 @@ async function handleRegister(chatId: number, telegramUserId: string, username: 
     `🎉 *Account linked!*\n\nTier: *${tier.toUpperCase()}* | Code: \`${code}\`\n\nUse /help to see your commands.`
   );
   console.log(`[bot] Linked TG ${telegramUserId} (@${username}) → ${codeRecord.user_id}`);
+
+  // Fire admin notification for TG link
+  await supabase.from('admin_notifications').insert({
+    notification_type: 'new_signup',
+    title: 'Telegram Account Linked',
+    message: `@${username || telegramUserId} linked via /register code ${code}`,
+    metadata: { telegram_user_id: telegramUserId, telegram_username: username, user_id: codeRecord.user_id, link_method: 'registration_code', tier },
+  });
 }
 
 async function handleStatus(chatId: number, telegramUserId: string) {
