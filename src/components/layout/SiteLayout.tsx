@@ -21,7 +21,7 @@ import { useCanonical } from '@/hooks/useCanonical';
 const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
   { label: 'Join!', path: '/subscriptions' },
-  { label: 'Live Feed', path: '/feed' },
+  // { label: 'Live Feed', path: '/feed' },  // Hidden temporarily — re-enable ~6h from 2026-04-15 15:45 UTC
   { label: 'Holder Analysis', path: '/holders' },
   { label: 'Bubble Map', path: '/bubblepromo' },
   { label: 'Telegram Bot', path: '/tgbot' },
