@@ -94,7 +94,29 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
         .select('*')
         .eq('announcement_id', announcementId)
         .order('created_at', { ascending: true });
-      setRecipients(prev => ({ ...prev, [announcementId]: (data as RecipientEntry[]) || [] }));
+      const entries = (data as RecipientEntry[]) || [];
+      
+      // Resolve TG usernames
+      if (entries.length > 0) {
+        const tgIds = [...new Set(entries.map(e => e.telegram_user_id))];
+        const { data: interactions } = await supabase
+          .from('telegram_bot_interactions')
+          .select('telegram_user_id, telegram_username, first_name')
+          .in('telegram_user_id', tgIds.slice(0, 200));
+        const nameMap = new Map<string, string>();
+        for (const i of interactions || []) {
+          if (i.telegram_username && !nameMap.has(i.telegram_user_id)) {
+            nameMap.set(i.telegram_user_id, `@${i.telegram_username}`);
+          } else if (i.first_name && !nameMap.has(i.telegram_user_id)) {
+            nameMap.set(i.telegram_user_id, i.first_name);
+          }
+        }
+        for (const e of entries) {
+          (e as any).display_name = nameMap.get(e.telegram_user_id) || null;
+        }
+      }
+      
+      setRecipients(prev => ({ ...prev, [announcementId]: entries }));
     } catch (err) {
       console.error('Failed to load recipients:', err);
     } finally {
@@ -324,7 +346,9 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                         ) : (
                           recipients[entry.id].map(r => (
                             <div key={r.id} className="flex items-center justify-between text-[10px]">
-                              <span className="font-mono text-muted-foreground">TG: {r.telegram_user_id}</span>
+                              <span className="font-mono text-muted-foreground truncate max-w-[200px]">
+                                {(r as any).display_name || `TG:${r.telegram_user_id}`}
+                              </span>
                               <span className={r.delivery_status === 'sent' ? 'text-green-500' : 'text-red-500'}>
                                 {r.delivery_status}
                               </span>
