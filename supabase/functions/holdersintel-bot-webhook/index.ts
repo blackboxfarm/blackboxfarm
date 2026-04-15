@@ -3411,6 +3411,7 @@ async function buildTgUserProfile(telegramUserId: string, memory: any, senderUse
 
     if (emailVerif && !emailVerif.verified_at) {
       profile += `- ⚠️ Email verification pending — sent but not yet confirmed\n`;
+      profile += `- IMPORTANT: Do NOT send the user a link to /dashboard for verification. The bot already sends a dedicated verification nudge with a tokenized Resend link. If the user asks about verification, just tell them to check their inbox or use /feedback if they need help.\n`;
     }
   }
 
@@ -3612,7 +3613,7 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Intel Briefings: https://blackbox.farm/intel\n`;
         prompt += `- Oracle Risk Tool: https://blackbox.farm/oracle\n`;
         prompt += `- Register/Sign Up: https://blackbox.farm/auth\n`;
-        prompt += `- Dashboard: https://blackbox.farm/dashboard (note: for TG users, generate tokenized links via the bot instead of sending raw dashboard URLs)\n`;
+        prompt += `- Dashboard: NEVER send https://blackbox.farm/dashboard as a raw link in Telegram — it renders poorly in mobile browsers. Instead, tell users to open the site and navigate to their dashboard, or generate a tokenized action link.\n`;
         prompt += `- Advertise With Us: https://blackbox.farm/buy-banner\n`;
         prompt += `- Share on Socials: https://blackbox.farm/share\n`;
         prompt += `Replace TOKEN_ADDRESS with the actual CA when a user mentions a specific token.\n\n`;
