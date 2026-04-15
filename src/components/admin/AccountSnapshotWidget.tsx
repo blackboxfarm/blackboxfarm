@@ -92,7 +92,7 @@ export function AccountSnapshotWidget() {
               <Sub>{data.emailVerified} verified · {data.with2fa} with 2FA</Sub>
             </Row>
             <Row icon={<Bot className="h-3.5 w-3.5" />} label="TG Linked" count={data.tgLinked}>
-              <Sub>{data.tgRegistered} registered via bot</Sub>
+              <Sub>{data.tgRegistered} total TG users</Sub>
             </Row>
             <Row icon={<CreditCard className="h-3.5 w-3.5" />} label="Stripe Customers" count={data.stripeMonthly} />
             {data.solYearly > 0 && (
