@@ -128,10 +128,12 @@ export function TelegramInteractionsPanel() {
       }
 
       const registered = users.filter(u => u.linked_user_id).length;
+      const totalUsersCount = typeof totalUsersRes.data === 'number' ? totalUsersRes.data : users.length;
+      const registeredCount = typeof registeredUsersRes.data === 'number' ? registeredUsersRes.data : registered;
       setStats({
         totalToday: statsRes.count ?? 0,
-        totalUsers: users.length,
-        registeredUsers: registered,
+        totalUsers: totalUsersCount,
+        registeredUsers: registeredCount,
         joinsToday: joinsRes.count ?? 0,
         leavesToday: leavesRes.count ?? 0,
       });
