@@ -383,10 +383,10 @@ export function ChatWidget() {
       {/* FAB Button — draggable */}
       {!isOpen && fabVisible && (
         <div
-          style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : undefined}
+          style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : (!isMobile && navFabStyle ? navFabStyle : undefined)}
           className={cn(
             "z-50 touch-none select-none",
-            !fabPos && (isMobile ? "fixed bottom-5 right-5" : "fixed top-[95px] right-4"),
+            !fabPos && (isMobile ? "fixed bottom-5 right-5" : (!navFabStyle ? "fixed top-[95px] right-4" : "")),
           )}
         >
           {/* Thought bubble — rendered outside the overflow-hidden button */}
