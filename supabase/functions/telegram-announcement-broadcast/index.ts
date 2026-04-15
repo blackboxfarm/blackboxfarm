@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const SYSTEM_RESET_TG_ID = "7045582884";
+const RATE_LIMIT_MS = 75; // ~13 msgs/sec, well under Telegram's 30/sec limit
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,7 +21,6 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { message, testOnly } = body;
-    // Support both single `audience` (string) and multi `audiences` (string[])
     const audiences: string[] = body.audiences
       ? body.audiences
       : body.audience
@@ -42,39 +42,54 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If testOnly, just send to @system_reset
+    // ─── Test-only: send to @system_reset ───
     if (testOnly) {
       const result = await sendTgMessage(botToken, SYSTEM_RESET_TG_ID, message);
-      // Log test send with explicit audience marker
-      const logRes = await supabase.from("telegram_announcement_log").insert({
-        message_text: message,
-        audiences: ["test_system_reset"],
-        sent_count: result ? 1 : 0,
-        failed_count: result ? 0 : 1,
-      });
-      if (logRes.error) {
-        console.error("[announcement] Failed to log test send:", logRes.error);
+
+      // Log the announcement
+      const { data: logEntry, error: logErr } = await supabase
+        .from("telegram_announcement_log")
+        .insert({
+          message_text: message,
+          audiences: ["test_system_reset"],
+          sent_count: result ? 1 : 0,
+          failed_count: result ? 0 : 1,
+        })
+        .select("id")
+        .single();
+
+      if (logErr) {
+        console.error("[announcement] Failed to log test send:", logErr);
       }
+
+      // Log recipient
+      if (logEntry?.id) {
+        await supabase.from("telegram_announcement_recipients").insert({
+          announcement_id: logEntry.id,
+          telegram_user_id: SYSTEM_RESET_TG_ID,
+          linked_user_id: null,
+          delivery_status: result ? "sent" : "failed",
+        });
+      }
+
       return new Response(JSON.stringify({ sent: result ? 1 : 0, failed: result ? 0 : 1, skipped: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get all hosted admin telegram IDs
+    // ─── Build target list ───
     const { data: installations } = await supabase
       .from("channel_installations")
       .select("user_id")
       .eq("is_active", true);
     const hostedUserIds = new Set((installations || []).map((i: any) => i.user_id).filter(Boolean));
 
-    // Get all unique DM users (chat_type = 'private')
     const { data: interactions } = await supabase
       .from("telegram_bot_interactions")
       .select("telegram_user_id, linked_user_id, chat_type")
       .eq("chat_type", "private")
       .not("telegram_user_id", "is", null);
 
-    // Deduplicate by telegram_user_id
     const userMap = new Map<string, { tgId: string; linkedUserId: string | null }>();
     for (const row of interactions || []) {
       const existing = userMap.get(row.telegram_user_id);
@@ -88,7 +103,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get subscriber info if needed
     let subscriberUserIds = new Set<string>();
     if (audiences.some(a => ["subscribers_only", "free_only", "all_registered"].includes(a))) {
       const { data: subs } = await supabase
@@ -98,8 +112,8 @@ Deno.serve(async (req) => {
       subscriberUserIds = new Set((subs || []).map((s: any) => s.user_id).filter(Boolean));
     }
 
-    // Collect all targets across all audiences (deduplicated)
-    const targetSet = new Set<string>();
+    // Collect targets with their linked user IDs
+    const targetMap = new Map<string, string | null>(); // tgId -> linkedUserId
     for (const [tgId, info] of userMap) {
       const isHostedAdmin = info.linkedUserId && hostedUserIds.has(info.linkedUserId);
       const isRegistered = !!info.linkedUserId;
@@ -126,40 +140,86 @@ Deno.serve(async (req) => {
             break;
         }
         if (match) {
-          targetSet.add(tgId);
-          break; // no need to check other audiences for same user
+          targetMap.set(tgId, info.linkedUserId);
+          break;
         }
       }
     }
 
-    const targets = Array.from(targetSet);
+    const targets = Array.from(targetMap.entries());
     console.log(`[announcement] Audiences: ${audiences.join(', ')}, targets: ${targets.length}`);
 
-    let sent = 0;
-    let failed = 0;
-
-    // Rate limit: 1 message per 50ms (20/sec)
-    for (const tgId of targets) {
-      try {
-        const ok = await sendTgMessage(botToken, tgId, message);
-        if (ok) sent++;
-        else failed++;
-      } catch {
-        failed++;
-      }
-      await new Promise((r) => setTimeout(r, 50));
-    }
-
-    // Log to announcement history
-    try {
-      await supabase.from("telegram_announcement_log").insert({
+    // ─── Create announcement log entry first ───
+    const { data: logEntry, error: logCreateErr } = await supabase
+      .from("telegram_announcement_log")
+      .insert({
         message_text: message,
         audiences,
-        sent_count: sent,
-        failed_count: failed,
-      });
-    } catch (logErr) {
-      console.warn("[announcement] Failed to log broadcast:", logErr);
+        sent_count: 0,
+        failed_count: 0,
+      })
+      .select("id")
+      .single();
+
+    if (logCreateErr) {
+      console.error("[announcement] Failed to create log entry:", logCreateErr);
+    }
+
+    const announcementId = logEntry?.id;
+
+    // ─── Send with rate limiting + per-recipient logging ───
+    let sent = 0;
+    let failed = 0;
+    const recipientRows: any[] = [];
+
+    for (const [tgId, linkedUserId] of targets) {
+      try {
+        const ok = await sendTgMessage(botToken, tgId, message);
+        if (ok) {
+          sent++;
+          recipientRows.push({
+            announcement_id: announcementId,
+            telegram_user_id: tgId,
+            linked_user_id: linkedUserId,
+            delivery_status: "sent",
+          });
+        } else {
+          failed++;
+          recipientRows.push({
+            announcement_id: announcementId,
+            telegram_user_id: tgId,
+            linked_user_id: linkedUserId,
+            delivery_status: "failed",
+          });
+        }
+      } catch {
+        failed++;
+        recipientRows.push({
+          announcement_id: announcementId,
+          telegram_user_id: tgId,
+          linked_user_id: linkedUserId,
+          delivery_status: "failed",
+        });
+      }
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
+    }
+
+    // Batch insert recipient logs
+    if (announcementId && recipientRows.length > 0) {
+      const { error: recipErr } = await supabase
+        .from("telegram_announcement_recipients")
+        .insert(recipientRows);
+      if (recipErr) {
+        console.warn("[announcement] Failed to log recipients:", recipErr);
+      }
+    }
+
+    // Update announcement log with final counts
+    if (announcementId) {
+      await supabase
+        .from("telegram_announcement_log")
+        .update({ sent_count: sent, failed_count: failed })
+        .eq("id", announcementId);
     }
 
     return new Response(

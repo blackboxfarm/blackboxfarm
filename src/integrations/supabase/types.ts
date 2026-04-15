@@ -12991,6 +12991,41 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_announcement_recipients: {
+        Row: {
+          announcement_id: string
+          created_at: string
+          delivery_status: string
+          id: string
+          linked_user_id: string | null
+          telegram_user_id: string
+        }
+        Insert: {
+          announcement_id: string
+          created_at?: string
+          delivery_status?: string
+          id?: string
+          linked_user_id?: string | null
+          telegram_user_id: string
+        }
+        Update: {
+          announcement_id?: string
+          created_at?: string
+          delivery_status?: string
+          id?: string
+          linked_user_id?: string | null
+          telegram_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_announcement_recipients_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_announcement_log"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_announcement_targets: {
         Row: {
           created_at: string | null
