@@ -78,6 +78,8 @@ export function TelegramInteractionsPanel() {
       supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "joined"),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "left"),
+      supabase.rpc("count_distinct_tg_users" as any),
+      supabase.rpc("count_registered_tg_users" as any),
     ]);
 
     if (intRes.data) {
