@@ -19209,6 +19209,23 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_accounts_directory: {
+        Args: never
+        Returns: {
+          cached_subscription_active: boolean
+          cached_tier_key: string
+          created_at: string
+          display_name: string
+          email: string
+          email_verified: boolean
+          has_telegram: boolean
+          last_active_at: string
+          login_count: number
+          oauth_provider: string
+          telegram_username: string
+          user_id: string
+        }[]
+      }
       get_active_positions_with_secrets: {
         Args: { session_id_param: string }
         Returns: {

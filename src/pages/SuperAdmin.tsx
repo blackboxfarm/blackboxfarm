@@ -38,6 +38,7 @@ const AIConfigTab = lazy(() => import("@/components/admin/tabs/AIConfigTab"));
 const EmailCampaignsManager = lazy(() => import("@/components/admin/EmailCampaignsManager").then(m => ({ default: m.EmailCampaignsManager })));
 const TodoListTab = lazy(() => import("@/components/admin/tabs/TodoListTab"));
 const TestersTab = lazy(() => import("@/components/admin/tabs/TestersTab"));
+const AccountsTab = lazy(() => import("@/components/admin/tabs/AccountsTab"));
 
 const DEFAULT_ADMIN_TAB = "utilities";
 const ALLOWED_ADMIN_TABS = new Set([
@@ -63,6 +64,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "email-campaigns",
   "todo-list",
   "testers",
+  "accounts",
 ]);
 
 // Simple loading fallback
@@ -197,6 +199,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="email-campaigns" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500/30 data-[state=active]:to-pink-500/20">📧 Email Campaigns</TabsTrigger>
             <TabsTrigger value="todo-list" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-lime-500/20">📝 To-Do</TabsTrigger>
             <TabsTrigger value="testers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-rose-500/20">🧪 Testers</TabsTrigger>
+            <TabsTrigger value="accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-cyan-500/20">👥 Accounts</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -377,6 +380,13 @@ export default function SuperAdmin() {
             {activeTab === "testers" && (
               <TabErrorBoundary tabName="Testers">
                 <Suspense fallback={<TabLoader />}><TestersTab /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
+          <TabsContent value="accounts">
+            {activeTab === "accounts" && (
+              <TabErrorBoundary tabName="Accounts">
+                <Suspense fallback={<TabLoader />}><AccountsTab /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
