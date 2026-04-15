@@ -3640,6 +3640,8 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `/oracle CA (alias /o) — Full developer reputation mesh\n/wallet CA (alias /w) — Wallet behavior analysis\n\n`;
         prompt += `### Admin (DM-only)\n`;
         prompt += `/add — Add bot to a group\n/channels (alias /ch) — Manage installations\n/config — Channel settings\n/payment (alias /pay) — Payment & billing\n\n`;
+        prompt += `### Utility (All tiers)\n`;
+        prompt += `/feedback (alias /fb) — Send feedback to the team\n\n`;
         prompt += `IMPORTANT: Commands like /lb, /calls, /top10, /leaderboard, /scan, /emojis DO NOT EXIST. Never mention them.\n`;
         prompt += `When promoting commands, only promote ones available to this user's tier. Don't tease unavailable commands without mentioning the upgrade path.\n\n`;
 
