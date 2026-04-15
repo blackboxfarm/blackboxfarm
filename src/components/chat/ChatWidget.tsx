@@ -54,24 +54,40 @@ export function ChatWidget() {
   const [nudgesEnabled, setNudgesEnabled] = useState(true);
   const [navFabStyle, setNavFabStyle] = useState<React.CSSProperties | undefined>(undefined);
 
-  // Measure nav bar position for desktop FAB default placement
+  // Measure nav bar position for default FAB placement relative to the nav
   useEffect(() => {
-    if (isMobile || fabPos) return;
+    if (fabPos) return;
     const measure = () => {
       const nav = document.querySelector('nav.flex.items-center');
-      if (!nav) return;
+      if (!nav) {
+        setNavFabStyle(undefined);
+        return;
+      }
+
       const rect = nav.getBoundingClientRect();
-      // Position FAB vertically centered with nav, horizontally right after last child
+      const FAB_SIZE = 56;
+
+      if (isMobile) {
+        const liveFeedTab = nav.querySelector('a[href="/feed"]') as HTMLElement | null;
+        const targetRect = (liveFeedTab ?? nav).getBoundingClientRect();
+        const left = Math.max(8, Math.min(window.innerWidth - FAB_SIZE - 8, targetRect.left + (targetRect.width / 2) - (FAB_SIZE / 2)));
+        const top = rect.bottom - 15;
+
+        setNavFabStyle({ position: 'fixed', left, top, bottom: 'auto', right: 'auto' });
+        return;
+      }
+
       const lastChild = nav.lastElementChild as HTMLElement | null;
       const left = lastChild ? lastChild.getBoundingClientRect().right + 12 : rect.right + 12;
-      const top = rect.top + (rect.height - 56) / 2; // 56 = w-14 FAB size
+      const top = rect.top + (rect.height - FAB_SIZE) / 2;
+
       setNavFabStyle({ position: 'fixed', left, top, bottom: 'auto', right: 'auto' });
     };
+
     measure();
-    window.addEventListener('scroll', measure, { passive: true });
     window.addEventListener('resize', measure);
-    return () => { window.removeEventListener('scroll', measure); window.removeEventListener('resize', measure); };
-  }, [isMobile, fabPos]);
+    return () => window.removeEventListener('resize', measure);
+  }, [fabPos, isMobile, location.pathname]);
 
   // Sitewide page nudge orchestrator
   usePageNudgeOrchestrator({ nudgesEnabled, isOpen, fabVisible });
@@ -383,10 +399,10 @@ export function ChatWidget() {
       {/* FAB Button — draggable */}
       {!isOpen && fabVisible && (
         <div
-          style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : (!isMobile && navFabStyle ? navFabStyle : undefined)}
+          style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : navFabStyle}
           className={cn(
             "z-50 touch-none select-none",
-            !fabPos && (isMobile ? "fixed bottom-5 right-5" : (!navFabStyle ? "fixed top-[95px] right-4" : "")),
+            !fabPos && !navFabStyle && (isMobile ? "fixed top-24 right-4" : "fixed top-[95px] right-4"),
           )}
         >
           {/* Thought bubble — rendered outside the overflow-hidden button */}
