@@ -49,7 +49,7 @@ export function AccountSnapshotWidget() {
         emailVerified: emailVerified ?? 0,
         with2fa: with2fa ?? 0,
         tgLinked: tgLinked ?? 0,
-        tgRegistered: tgLinked ?? 0,
+        tgRegistered: typeof tgRegisteredRes.data === 'number' ? tgRegisteredRes.data : (tgLinked ?? 0),
         stripeMonthly: stripeCustomers ?? 0,
         stripeYearly: 0,
         solYearly: solActive ?? 0,
