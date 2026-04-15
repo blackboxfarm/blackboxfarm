@@ -26,6 +26,11 @@ const FAB_SHOWN_KEY = 'bb_chat_fab_shown';
 const FAB_POS_KEY = 'bb_chat_fab_pos';
 
 function loadFabPos(): { x: number; y: number } | null {
+  // On mobile, never persist drag — always reset to nav-centered position
+  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    localStorage.removeItem(FAB_POS_KEY);
+    return null;
+  }
   try {
     const raw = localStorage.getItem(FAB_POS_KEY);
     if (raw) return JSON.parse(raw);
