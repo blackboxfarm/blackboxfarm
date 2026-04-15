@@ -8211,6 +8211,7 @@ export type Database = {
           report_date: string
           report_period_end: string
           report_period_start: string
+          sol_subscription_stats: Json | null
           spider_metrics: Json | null
           table_health: Json
           telegram_bot_stats: Json | null
@@ -8219,6 +8220,7 @@ export type Database = {
           unread_notifications: number
           user_auth_stats: Json | null
           vigil_stats: Json | null
+          web_chat_stats: Json | null
         }
         Insert: {
           alerts?: Json
@@ -8249,6 +8251,7 @@ export type Database = {
           report_date: string
           report_period_end: string
           report_period_start: string
+          sol_subscription_stats?: Json | null
           spider_metrics?: Json | null
           table_health?: Json
           telegram_bot_stats?: Json | null
@@ -8257,6 +8260,7 @@ export type Database = {
           unread_notifications?: number
           user_auth_stats?: Json | null
           vigil_stats?: Json | null
+          web_chat_stats?: Json | null
         }
         Update: {
           alerts?: Json
@@ -8287,6 +8291,7 @@ export type Database = {
           report_date?: string
           report_period_end?: string
           report_period_start?: string
+          sol_subscription_stats?: Json | null
           spider_metrics?: Json | null
           table_health?: Json
           telegram_bot_stats?: Json | null
@@ -8295,6 +8300,7 @@ export type Database = {
           unread_notifications?: number
           user_auth_stats?: Json | null
           vigil_stats?: Json | null
+          web_chat_stats?: Json | null
         }
         Relationships: []
       }
@@ -8324,11 +8330,13 @@ export type Database = {
           report_date: string
           report_period_end: string | null
           report_period_start: string | null
+          sol_subscription_stats: Json | null
           spider_metrics: Json | null
           table_health: Json | null
           telegram_sent: boolean | null
           telegram_sent_at: string | null
           unread_notifications: number | null
+          web_chat_stats: Json | null
         }
         Insert: {
           alerts?: Json | null
@@ -8355,11 +8363,13 @@ export type Database = {
           report_date: string
           report_period_end?: string | null
           report_period_start?: string | null
+          sol_subscription_stats?: Json | null
           spider_metrics?: Json | null
           table_health?: Json | null
           telegram_sent?: boolean | null
           telegram_sent_at?: string | null
           unread_notifications?: number | null
+          web_chat_stats?: Json | null
         }
         Update: {
           alerts?: Json | null
@@ -8386,11 +8396,13 @@ export type Database = {
           report_date?: string
           report_period_end?: string | null
           report_period_start?: string | null
+          sol_subscription_stats?: Json | null
           spider_metrics?: Json | null
           table_health?: Json | null
           telegram_sent?: boolean | null
           telegram_sent_at?: string | null
           unread_notifications?: number | null
+          web_chat_stats?: Json | null
         }
         Relationships: []
       }
