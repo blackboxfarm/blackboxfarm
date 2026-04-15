@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
         ? [body.audience]
         : [];
 
-    if (!message || audiences.length === 0) {
+    if (!message || (!testOnly && audiences.length === 0)) {
       return new Response(JSON.stringify({ error: "message and audiences required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
