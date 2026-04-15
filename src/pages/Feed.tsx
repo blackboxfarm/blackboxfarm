@@ -39,7 +39,7 @@ type FeedItem = {
   x_community_name: string | null;
 };
 
-type SortField = 'last_activity' | 'symbol' | 'health_grade' | 'freshness_tier';
+type SortField = 'last_activity' | 'symbol' | 'health_grade' | 'freshness_tier' | 'last_top_200_rank';
 type SortDir = 'asc' | 'desc';
 
 const HEALTH_COLORS: Record<string, string> = {
@@ -135,7 +135,7 @@ export default function Feed() {
   const [view, setView] = useState<'summary' | 'grid'>('summary');
   const [expandedMint, setExpandedMint] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<FeedItem | null>(null);
-  const [sortField, setSortField] = useState<SortField>('freshness_tier');
+  const [sortField, setSortField] = useState<SortField>('last_top_200_rank');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [redirectModal, setRedirectModal] = useState<{ type: 'wallet' | 'handle'; value: string } | null>(null);
   const isMobile = useIsMobile();
@@ -181,7 +181,9 @@ export default function Feed() {
     }
 
     // Sort
-    if (sortField === 'freshness_tier') {
+    if (sortField === 'last_top_200_rank') {
+      query = query.order('last_top_200_rank', { ascending: sortDir === 'asc', nullsFirst: false }).order('last_activity', { ascending: false });
+    } else if (sortField === 'freshness_tier') {
       query = query.order('freshness_tier', { ascending: true }).order('last_activity', { ascending: false });
     } else if (sortField === 'last_activity') {
       query = query.order('last_activity', { ascending: sortDir === 'asc' });
