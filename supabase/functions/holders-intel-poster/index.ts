@@ -409,12 +409,13 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
   
   const result = await response.json();
   
-  if (!result.success) {
-    throw new Error(result.error || 'Tweet posting failed');
+  if (result.paused) {
+    console.log('[poster] X posting is PAUSED (account suspended) — skipping tweet, continuing pipeline');
+    return { ...result, tweetId: null, tweetUrl: null, skipped: true };
   }
   
-  if (result.paused) {
-    throw new Error('X posting is paused — manualOverride not set or not forwarded');
+  if (!result.success) {
+    throw new Error(result.error || 'Tweet posting failed');
   }
   
   return result;
@@ -916,7 +917,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
           .replace(/\{seriousPct\}/g, seriousPct.toString().padStart(2))
           .replace(/\{retailPct\}/g, retailPct.toString().padStart(2))
           .replace(/\{dustPct\}/g, dustPctVal.toString().padStart(2))
-          .replace(/\{tweetUrl\}/g, tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`)
+          .replace(/\{tweetUrl\}/g, tweetResult.tweetUrl || (tweetResult.tweetId ? `Tweet ID: ${tweetResult.tweetId}` : '(X posting paused)'))
           .replace(/\{healthScore\}/g, String(stats.healthScore || ''))
           .replace(/\{structuralScore\}/g, String(stats.structuralScore ?? ''))
           .replace(/\{activityScore\}/g, String(stats.activityScore ?? ''))
