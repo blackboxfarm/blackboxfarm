@@ -29,7 +29,7 @@ export function AccountSnapshotWidget() {
         { count: emailVerified },
         { count: with2fa },
         { count: tgLinked },
-        { count: tgRegistered },
+        tgRegisteredRes,
         { count: stripeCustomers },
         { count: solActive },
         { count: channelInstalls },
@@ -38,7 +38,7 @@ export function AccountSnapshotWidget() {
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('email_verified', true),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('two_factor_enabled', true),
         supabase.from('telegram_link_codes').select('*', { count: 'exact', head: true }).not('telegram_user_id', 'is', null),
-        supabase.from('telegram_link_codes').select('*', { count: 'exact', head: true }).not('telegram_user_id', 'is', null),
+        supabase.rpc('count_distinct_tg_users' as any),
         supabase.from('stripe_customers').select('*', { count: 'exact', head: true }),
         supabase.from('tg_sol_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('channel_installations').select('*', { count: 'exact', head: true }),
@@ -49,7 +49,7 @@ export function AccountSnapshotWidget() {
         emailVerified: emailVerified ?? 0,
         with2fa: with2fa ?? 0,
         tgLinked: tgLinked ?? 0,
-        tgRegistered: tgLinked ?? 0,
+        tgRegistered: typeof tgRegisteredRes.data === 'number' ? tgRegisteredRes.data : (tgLinked ?? 0),
         stripeMonthly: stripeCustomers ?? 0,
         stripeYearly: 0,
         solYearly: solActive ?? 0,
@@ -92,7 +92,7 @@ export function AccountSnapshotWidget() {
               <Sub>{data.emailVerified} verified · {data.with2fa} with 2FA</Sub>
             </Row>
             <Row icon={<Bot className="h-3.5 w-3.5" />} label="TG Linked" count={data.tgLinked}>
-              <Sub>{data.tgRegistered} registered via bot</Sub>
+              <Sub>{data.tgRegistered} total TG users</Sub>
             </Row>
             <Row icon={<CreditCard className="h-3.5 w-3.5" />} label="Stripe Customers" count={data.stripeMonthly} />
             {data.solYearly > 0 && (

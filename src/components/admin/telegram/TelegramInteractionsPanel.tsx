@@ -71,13 +71,15 @@ export function TelegramInteractionsPanel() {
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
 
-    // Fetch all interactions to aggregate unique users client-side
-    const [intRes, memRes, statsRes, joinsRes, leavesRes] = await Promise.all([
+    // Fetch recent interactions for display + separate count queries for accurate stats
+    const [intRes, memRes, statsRes, joinsRes, leavesRes, totalUsersRes, registeredUsersRes] = await Promise.all([
       supabase.from("telegram_bot_interactions").select("*").order("created_at", { ascending: false }).limit(1000),
       supabase.from("telegram_channel_members").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "joined"),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "left"),
+      supabase.rpc("count_distinct_tg_users" as any),
+      supabase.rpc("count_registered_tg_users" as any),
     ]);
 
     if (intRes.data) {
@@ -126,10 +128,12 @@ export function TelegramInteractionsPanel() {
       }
 
       const registered = users.filter(u => u.linked_user_id).length;
+      const totalUsersCount = typeof totalUsersRes.data === 'number' ? totalUsersRes.data : users.length;
+      const registeredCount = typeof registeredUsersRes.data === 'number' ? registeredUsersRes.data : registered;
       setStats({
         totalToday: statsRes.count ?? 0,
-        totalUsers: users.length,
-        registeredUsers: registered,
+        totalUsers: totalUsersCount,
+        registeredUsers: registeredCount,
         joinsToday: joinsRes.count ?? 0,
         leavesToday: leavesRes.count ?? 0,
       });
