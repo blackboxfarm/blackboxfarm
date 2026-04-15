@@ -19,16 +19,17 @@ export function AvatarThoughtBubble({ text, onDone }: AvatarThoughtBubbleProps) 
   return (
     <div
       className={cn(
-        "absolute -top-14 -left-2 pointer-events-none transition-all duration-300 ease-out",
+        "absolute pointer-events-none transition-all duration-300 ease-out",
         phase === 'enter' && "opacity-0 translate-y-2 scale-90",
         phase === 'visible' && "opacity-100 translate-y-0 scale-100",
         phase === 'exit' && "opacity-0 -translate-y-1 scale-95"
       )}
+      style={{ bottom: 'calc(100% - 6px)', left: 'calc(100% - 10px)' }}
     >
       {/* Cloud-shaped thought bubble */}
       <div
-        className="relative max-w-[220px] whitespace-normal bg-[#f5f5f0] border border-black rounded-[20px] px-4 py-2 text-xs text-black font-medium shadow-lg"
-        style={{ fontFamily: "'Comic Sans MS', 'Comic Sans', cursive' " }}
+        className="relative max-w-[260px] whitespace-normal bg-[#f5f5f0] border border-black rounded-[20px] px-4 py-2 text-black font-medium shadow-lg"
+        style={{ fontFamily: "'Comic Sans MS', 'Comic Sans', cursive", fontSize: '11px' }}
       >
         {/* Cloud puffs — decorative circles on corners */}
         <div className="absolute -top-1.5 left-3 w-4 h-4 rounded-full bg-[#f5f5f0] border border-black" />
@@ -39,9 +40,9 @@ export function AvatarThoughtBubble({ text, onDone }: AvatarThoughtBubbleProps) 
         {/* Inner fill to cover puff borders inside the bubble */}
         <div className="absolute inset-[1px] rounded-[19px] bg-[#f5f5f0] -z-0" />
         <span className="relative z-10">{text}</span>
-        {/* Tail dots */}
-        <div className="absolute -bottom-3 left-4 w-2.5 h-2.5 rounded-full bg-[#f5f5f0] border border-black" />
-        <div className="absolute -bottom-5 left-3 w-1.5 h-1.5 rounded-full bg-[#f5f5f0] border border-black" />
+        {/* Tail dots — bottom-left pointing toward FAB */}
+        <div className="absolute -bottom-3 left-2 w-2.5 h-2.5 rounded-full bg-[#f5f5f0] border border-black" />
+        <div className="absolute -bottom-5 left-0.5 w-1.5 h-1.5 rounded-full bg-[#f5f5f0] border border-black" />
       </div>
     </div>
   );

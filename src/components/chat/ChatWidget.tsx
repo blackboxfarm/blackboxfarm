@@ -366,7 +366,7 @@ export function ChatWidget() {
           style={fabPos ? { position: 'fixed', left: fabPos.x, top: fabPos.y, bottom: 'auto', right: 'auto' } : undefined}
           className={cn(
             "z-50 touch-none select-none",
-            !fabPos && (isMobile ? "fixed bottom-5 right-5" : "fixed top-[95px] right-[20%]"),
+            !fabPos && (isMobile ? "fixed bottom-5 right-5" : "fixed top-[95px] right-4"),
           )}
         >
           {/* Thought bubble — rendered outside the overflow-hidden button */}
