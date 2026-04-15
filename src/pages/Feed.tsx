@@ -125,6 +125,34 @@ function FreshnessBadge({ tier, rank }: { tier: number; rank: number | null }) {
   return null;
 }
 
+const PLACEHOLDER_SYMBOLS = new Set(['', '-', '???', 'UNKNOWN', 'UNK', 'NO SYMBOL']);
+const PLACEHOLDER_NAMES = new Set(['', '-', 'UNKNOWN', 'UNKNOWN TOKEN']);
+
+function getCleanSymbol(symbol: string | null) {
+  const raw = symbol?.trim() || '';
+  const normalized = raw.startsWith('$') ? raw.slice(1) : raw;
+  return PLACEHOLDER_SYMBOLS.has(normalized.toUpperCase()) ? null : normalized;
+}
+
+function getCleanName(name: string | null) {
+  const raw = name?.trim() || '';
+  return PLACEHOLDER_NAMES.has(raw.toUpperCase()) ? null : raw;
+}
+
+function getDisplayTicker(item: FeedItem) {
+  const cleanSymbol = getCleanSymbol(item.symbol);
+  if (cleanSymbol) return cleanSymbol;
+
+  const nameGuess = getCleanName(item.name)?.split(/\s|-/)[0]?.replace(/[^A-Za-z0-9]/g, '');
+  if (nameGuess) return nameGuess;
+
+  return item.token_mint.slice(0, 6);
+}
+
+function getDisplayName(item: FeedItem) {
+  return getCleanName(item.name) || 'Metadata pending';
+}
+
 export default function Feed() {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -348,7 +376,7 @@ export default function Feed() {
                 12-hour <strong>Health &amp; Risk Rating Blocks</strong> of the most recent <strong>active top 500 tokens</strong>, curated from our database of the last 30 days — filtered from the top 12,000 tokens scraped and collected from our <strong>65,000+ token database</strong> and growing daily.
               </p>
               <p className="text-xs md:text-sm text-foreground/70 leading-relaxed">
-                Spidered and cross-linked with wallets and community socials. Mouse over blocks for historical snapshots of grades and risk. Use the refresh button for the latest analysis on any token.
+                 Spidered and cross-linked with wallets and community socials. Mouse over blocks for saved snapshot history when available. Use the refresh button for the latest analysis on any token.
               </p>
             </div>
           </div>
@@ -386,7 +414,7 @@ export default function Feed() {
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-orange-500 inline-block" /> Weak (D)</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-red-500 inline-block" /> Critical (F)</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-3 rounded-sm bg-muted-foreground/20 inline-block" /> No data</span>
-          <span className="hidden sm:inline">— Hover for hourly snapshots • <Star className="h-2.5 w-2.5 inline fill-amber-400 text-amber-400" /> = Top 200</span>
+          <span className="hidden sm:inline">— Hover for saved snapshots • <Star className="h-2.5 w-2.5 inline fill-amber-400 text-amber-400" /> = Top 200</span>
         </div>
 
         {/* Content */}
@@ -409,15 +437,15 @@ export default function Feed() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <FreshnessBadge tier={item.freshness_tier} rank={item.last_top_200_rank} />
-                        <span className="font-bold text-sm">${item.symbol || '???'}</span>
-                        <span className="text-xs text-muted-foreground truncate">{item.name}</span>
+                        <span className="font-bold text-sm">${getDisplayTicker(item)}</span>
+                        <span className="text-xs text-muted-foreground truncate">{getDisplayName(item)}</span>
                         <HealthBadge grade={item.health_grade} showDescription />
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                         <RiskSignalBadge grade={item.health_grade} />
                         <WalletInfo holders={item.total_holders} dustPct={item.dust_pct} />
                         <LitmusStrip tokenMint={item.token_mint} />
-                        {item.last_activity && <span>{format(new Date(item.last_activity), 'MMM d, yyyy HH:mm')}</span>}
+                        {item.last_activity && <span>Last activity {format(new Date(item.last_activity), 'MMM d, yyyy HH:mm')}</span>}
                       </div>
                     </div>
                     {!isMobile && (
@@ -455,7 +483,7 @@ export default function Feed() {
                   <TableHead compact>Risk</TableHead>
                   <TableHead compact>Wallets</TableHead>
                   <TableHead compact className="cursor-pointer" onClick={() => toggleSort('last_activity')}>
-                    <div className="flex items-center gap-1">Date <ArrowUpDown className="h-3 w-3" /></div>
+                    <div className="flex items-center gap-1">Last activity <ArrowUpDown className="h-3 w-3" /></div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -468,7 +496,7 @@ export default function Feed() {
                     <TableCell compact>
                       <div className="flex items-center gap-2">
                         {item.image_uri && <img src={item.image_uri} alt="" className="w-5 h-5 rounded-full" />}
-                        <span className="font-medium">${item.symbol || '???'}</span>
+                         <span className="font-medium">${getDisplayTicker(item)}</span>
                       </div>
                     </TableCell>
                     <TableCell compact><HealthBadge grade={item.health_grade} showDescription /></TableCell>
@@ -515,11 +543,11 @@ export default function Feed() {
                 <DialogTitle className="flex items-center gap-2">
                   {modalItem.image_uri && <img src={modalItem.image_uri} alt="" className="w-8 h-8 rounded-full" />}
                   <FreshnessBadge tier={modalItem.freshness_tier} rank={modalItem.last_top_200_rank} />
-                  ${modalItem.symbol || '???'}
+                   ${getDisplayTicker(modalItem)}
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-3 text-sm">
-                <p className="text-muted-foreground">{modalItem.name}</p>
+                <p className="text-muted-foreground">{getDisplayName(modalItem)}</p>
                 <div className="flex items-center gap-3 flex-wrap">
                   <HealthBadge grade={modalItem.health_grade} showDescription />
                   <RiskSignalBadge grade={modalItem.health_grade} />
