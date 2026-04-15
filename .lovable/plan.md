@@ -1,49 +1,55 @@
 
 
-## Plan: Restore holders-intel-poster cron while keeping X posting disabled
+## Plan: SMS Alerts, Subscription Notifications, and Announcement UI Upgrade
 
-### What went wrong
-The poster cron was entirely commented out in `reconcile-cron-jobs/index.ts` (lines 59-64). This killed ALL poster work — health snapshots, risk assessment, AI summaries, mesh feeding, Telegram broadcasts — not just the X post.
+### 1. SMS Alert on assertDbWrite Failure
 
-The X post was ALREADY independently blocked by `X_POSTING_PAUSED = true` inside `post-share-card-twitter` (line 207). The cron comment-out was redundant and destructive.
+**What:** When any Edge Function DB write fails via `assertDbWrite`, immediately send an SMS to 1-226-583-5975 with maximum detail about the failure.
 
-### What to fix
+**How:**
+- Modify `supabase/functions/_shared/db-assert.ts` to add an `sendFailureSms` function that calls the Twilio gateway (using existing `LOVABLE_API_KEY` + `TWILIO_API_KEY` secrets and `TWILIO_FROM = +16624814161`)
+- In `assertDbWrite`, before throwing, call `sendFailureSms` with table name, operation, error message, error code, and details — packed into the max SMS character limit (1600 chars)
+- The SMS is fire-and-forget (wrapped in try/catch so it never blocks/breaks the throw chain)
+- Hardcode the phone number `+12265835975` in the utility
 
-**Step 1: Uncomment the poster cron**
-In `supabase/functions/reconcile-cron-jobs/index.ts`, restore lines 59-64 to active:
-```js
-{
-  jobname: 'holdersintel-poster-3min',
-  schedule: '*/3 * * * *',
-  command: httpPost('holders-intel-poster', '{}'),
-},
-```
+### 2. SMS Notification on New Subscription Purchase
 
-**Step 2: Make `postTweet` gracefully handle the pause**
-In `supabase/functions/holders-intel-poster/index.ts`, modify the `postTweet` call site (around line 786) so that when the downstream function returns `paused: true`, the poster continues its work (updates queue status, seen tokens, mesh feed, etc.) instead of throwing an error and aborting.
+**What:** Send an SMS to the same number whenever a new subscription is purchased via Stripe or Solana wallet.
 
-Change the flow so:
-- `postTweet` returns a "paused" result instead of throwing
-- Queue item still gets marked as "posted" (data was processed)
-- All downstream work (seen_tokens update, mesh feed, community enrichment, Telegram) still executes
-- The only thing skipped is the actual X API call — which `post-share-card-twitter` already blocks
+**How:**
+- **Stripe:** In `supabase/functions/stripe-webhook/index.ts`, after the admin notification insert (around line 176), add a Twilio SMS call when `event.type === "customer.subscription.created"`. Message includes customer name/email, tier, amount.
+- **Solana:** In `supabase/functions/tg-subscription-payment/index.ts`, after a payment is confirmed/activated, add a similar Twilio SMS call. Message includes telegram user ID, amount SOL, subscription details.
+- Both use the same Twilio gateway pattern already established in `security-sms-alert`.
 
-**Step 3: Deploy both functions**
-- Deploy `reconcile-cron-jobs` (to re-register the cron)
-- Deploy `holders-intel-poster` (with the graceful pause handling)
+### 3. Announcement UI: Multi-select Checkboxes + History Tab
 
-### What this restores
-- Health snapshots written every 3 minutes for queued tokens (Litmus bars)
-- Health grades in `holders_intel_seen_tokens`
-- Risk assessments
-- AI summaries
-- Mesh feeding
-- X Community auto-enrichment
-- All queue processing
+**What:** Replace the tab-based audience selector with checkboxes so you can select multiple groups (or "ALL") and send one message to all of them. Add a History tab showing past broadcasts.
 
-### What stays blocked
-- The actual Twitter/X API post — still blocked by `X_POSTING_PAUSED = true` in `post-share-card-twitter`
+**How:**
 
-### Technical detail
-No database migration needed. No new secrets. Just code edits to two existing Edge Functions and redeployment.
+**UI Changes** (`src/components/admin/telegram/TelegramAnnouncementBox.tsx`):
+- Replace `Tabs` with a checkbox grid: "ALL" checkbox + individual checkboxes for All Registered, Subscribers, Free Users, Unregistered
+- "ALL" toggles all on/off
+- Single message textarea, single send button
+- When sending, pass `audiences: string[]` (array of selected groups) instead of single `audience`
+
+**Backend** (`supabase/functions/telegram-announcement-broadcast/index.ts`):
+- Accept `audiences` as an array (backward-compat: also accept `audience` as string)
+- Loop through each selected audience, collect targets (deduplicated), broadcast once
+- After broadcast, log to a new `telegram_announcement_log` table
+
+**Database Migration:**
+- Create `telegram_announcement_log` table: `id`, `message_text`, `audiences` (text[]), `sent_count`, `failed_count`, `sent_by` (uuid), `created_at`
+
+**History Tab:**
+- Add a Tabs wrapper in the component: "Compose" | "History"
+- History tab queries `telegram_announcement_log` ordered by `created_at desc`, displays message preview, audiences badges, sent/failed counts, and date
+
+### Technical Details
+
+- All SMS calls use the Twilio connector gateway (`https://connector-gateway.lovable.dev/twilio/Messages.json`) with `LOVABLE_API_KEY` and `TWILIO_API_KEY` headers
+- Phone number for admin SMS: `+12265835975`
+- Twilio FROM: `+16624814161` (already used across the project)
+- New table `telegram_announcement_log` with RLS policy for super admins only
+- Deploy: `db-assert` changes propagate to all functions on next deploy; explicitly deploy `stripe-webhook` and `tg-subscription-payment`
 
