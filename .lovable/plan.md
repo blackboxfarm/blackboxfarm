@@ -1,52 +1,49 @@
 
 
-## Plan: FAB Position, Thought Bubble Styling & Timing
+## Plan: Restore holders-intel-poster cron while keeping X posting disabled
 
-### 1. FAB Default Position
+### What went wrong
+The poster cron was entirely commented out in `reconcile-cron-jobs/index.ts` (lines 59-64). This killed ALL poster work — health snapshots, risk assessment, AI summaries, mesh feeding, Telegram broadcasts — not just the X post.
 
-**Desktop**: Position top-right, calculated so the top edge of the FAB sits 5px below the nav bar bottom. The nav is roughly 90px tall (header + nav strip). Left edge at 80% from left (i.e. 20% from right edge). Using `top: 95px; right: 20%` equivalent via CSS calc.
+The X post was ALREADY independently blocked by `X_POSTING_PAUSED = true` inside `post-share-card-twitter` (line 207). The cron comment-out was redundant and destructive.
 
-**Mobile**: Keep current `bottom-5 right-5` position (which you confirmed looks good).
+### What to fix
 
-**File**: `src/components/chat/ChatWidget.tsx` line 367-370
-- Use `useIsMobile()` (already imported) to switch default position
-- Desktop default: `top-[95px] right-[20%]`
-- Mobile default: `bottom-5 right-5`
+**Step 1: Uncomment the poster cron**
+In `supabase/functions/reconcile-cron-jobs/index.ts`, restore lines 59-64 to active:
+```js
+{
+  jobname: 'holdersintel-poster-3min',
+  schedule: '*/3 * * * *',
+  command: httpPost('holders-intel-poster', '{}'),
+},
+```
 
-### 2. Thought Bubble Position — Keep Above FAB
+**Step 2: Make `postTweet` gracefully handle the pause**
+In `supabase/functions/holders-intel-poster/index.ts`, modify the `postTweet` call site (around line 786) so that when the downstream function returns `paused: true`, the poster continues its work (updates queue status, seen tokens, mesh feed, etc.) instead of throwing an error and aborting.
 
-No change to the `-top-14` positioning. The bubble stays above the FAB as it currently is. Only the FAB itself moves.
+Change the flow so:
+- `postTweet` returns a "paused" result instead of throwing
+- Queue item still gets marked as "posted" (data was processed)
+- All downstream work (seen_tokens update, mesh feed, community enrichment, Telegram) still executes
+- The only thing skipped is the actual X API call — which `post-share-card-twitter` already blocks
 
-### 3. Thought Bubble Timing
+**Step 3: Deploy both functions**
+- Deploy `reconcile-cron-jobs` (to re-register the cron)
+- Deploy `holders-intel-poster` (with the graceful pause handling)
 
-**File**: `src/components/chat/AvatarThoughtBubble.tsx` lines 14-15
-- Change exit from `4800` → `6500` ms
-- Change cleanup from `5200` → `7000` ms
-- Net visible time: ~6.5 seconds (up from ~4.8s)
+### What this restores
+- Health snapshots written every 3 minutes for queued tokens (Litmus bars)
+- Health grades in `holders_intel_seen_tokens`
+- Risk assessments
+- AI summaries
+- Mesh feeding
+- X Community auto-enrichment
+- All queue processing
 
-### 4. Thought Bubble Visual Redesign — Cloud Shape
+### What stays blocked
+- The actual Twitter/X API post — still blocked by `X_POSTING_PAUSED = true` in `post-share-card-twitter`
 
-**File**: `src/components/chat/AvatarThoughtBubble.tsx` lines 28-34
-
-- **Background**: off-white (`#f5f5f0` / `bg-[#f5f5f0]`)
-- **Border**: 1px solid black (`border border-black`)
-- **Font**: Comic Sans (`font-[Comic_Sans_MS,cursive]`)
-- **Shape**: Cloud-like with extra `border-radius` bumps using a custom CSS approach — multiple layered pseudo-elements or a chunky `rounded-full` with padding. Practical approach: use `rounded-[20px]` with visible cloud-puff circles at corners via extra divs.
-- **Max width**: ~220px with text wrapping (`max-w-[220px] whitespace-normal` instead of `whitespace-nowrap`)
-- **Tail**: Keep the two descending circles (already cloud-like), update their color to off-white with black border
-
-### 5. Feed Default Sort (from approved plan)
-
-**File**: `src/pages/Feed.tsx`
-- Default `sortField` → `'last_top_200_rank'`
-- Default `sortDir` → `'asc'`
-
-### Current defaults (to answer your questions)
-- **Bubble width**: Currently unlimited (`whitespace-nowrap`) — text renders as a single line, no max-width. On desktop a long nudge could be 300-400px wide.
-- **Mobile FAB default**: Currently `bottom-5 right-5` (bottom-right corner, 20px from edges).
-
-### Files Modified
-1. `src/components/chat/ChatWidget.tsx` — FAB default position (desktop vs mobile)
-2. `src/components/chat/AvatarThoughtBubble.tsx` — timing, cloud shape, off-white bg, Comic Sans, black border, max-width wrap
-3. `src/pages/Feed.tsx` — default sort order
+### Technical detail
+No database migration needed. No new secrets. Just code edits to two existing Edge Functions and redeployment.
 
