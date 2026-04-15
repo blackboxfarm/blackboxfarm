@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import PublicBubbleMap from "@/components/bubble-map/PublicBubbleMap";
@@ -9,6 +9,13 @@ import { TestimonialCarousel } from "@/components/testimonials/TestimonialCarous
 
 export default function BubblePromo() {
   const { user, loading } = useAuth();
+  const [initialToken, setInitialToken] = useState("");
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token') || urlParams.get('mint');
+    if (tokenParam) setInitialToken(tokenParam.trim());
+  }, []);
 
   // Redirect logged-in users to the full bubblemap, preserving query params
   if (!loading && user) {
@@ -18,7 +25,7 @@ export default function BubblePromo() {
   return (
     <SiteLayout>
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6" data-oracle-hint="1 free deep scan per day — paste a token address to start" data-oracle-zone="bubblepromo-main">
-        <PublicBubbleMap mode="promo" showUpgradePrompt />
+        <PublicBubbleMap mode="promo" showUpgradePrompt initialToken={initialToken || undefined} />
 
         {/* Testimonial Carousel */}
         <div className="max-w-4xl mx-auto">
