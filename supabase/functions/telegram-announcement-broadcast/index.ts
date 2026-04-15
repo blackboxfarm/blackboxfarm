@@ -45,13 +45,16 @@ Deno.serve(async (req) => {
     // If testOnly, just send to @system_reset
     if (testOnly) {
       const result = await sendTgMessage(botToken, SYSTEM_RESET_TG_ID, message);
-      // Log test send
-      await supabase.from("telegram_announcement_log").insert({
+      // Log test send with explicit audience marker
+      const logRes = await supabase.from("telegram_announcement_log").insert({
         message_text: message,
-        audiences,
+        audiences: ["test_system_reset"],
         sent_count: result ? 1 : 0,
         failed_count: result ? 0 : 1,
       });
+      if (logRes.error) {
+        console.error("[announcement] Failed to log test send:", logRes.error);
+      }
       return new Response(JSON.stringify({ sent: result ? 1 : 0, failed: result ? 0 : 1, skipped: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
