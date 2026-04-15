@@ -29,7 +29,7 @@ export function AccountSnapshotWidget() {
         { count: emailVerified },
         { count: with2fa },
         { count: tgLinked },
-        { count: tgRegistered },
+        tgRegisteredRes,
         { count: stripeCustomers },
         { count: solActive },
         { count: channelInstalls },
