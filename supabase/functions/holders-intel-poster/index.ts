@@ -917,7 +917,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
           .replace(/\{seriousPct\}/g, seriousPct.toString().padStart(2))
           .replace(/\{retailPct\}/g, retailPct.toString().padStart(2))
           .replace(/\{dustPct\}/g, dustPctVal.toString().padStart(2))
-          .replace(/\{tweetUrl\}/g, tweetResult.tweetUrl || `Tweet ID: ${tweetResult.tweetId}`)
+          .replace(/\{tweetUrl\}/g, tweetResult.tweetUrl || (tweetResult.tweetId ? `Tweet ID: ${tweetResult.tweetId}` : '(X posting paused)'))
           .replace(/\{healthScore\}/g, String(stats.healthScore || ''))
           .replace(/\{structuralScore\}/g, String(stats.structuralScore ?? ''))
           .replace(/\{activityScore\}/g, String(stats.activityScore ?? ''))
