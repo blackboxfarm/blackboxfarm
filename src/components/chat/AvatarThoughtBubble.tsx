@@ -11,8 +11,8 @@ export function AvatarThoughtBubble({ text, onDone }: AvatarThoughtBubbleProps) 
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('visible'), 50);
-    const t2 = setTimeout(() => setPhase('exit'), 4800);
-    const t3 = setTimeout(onDone, 5200);
+    const t2 = setTimeout(() => setPhase('exit'), 6500);
+    const t3 = setTimeout(onDone, 7000);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onDone]);
 
@@ -25,12 +25,23 @@ export function AvatarThoughtBubble({ text, onDone }: AvatarThoughtBubbleProps) 
         phase === 'exit' && "opacity-0 -translate-y-1 scale-95"
       )}
     >
-      {/* Thought bubble */}
-      <div className="relative bg-background/95 backdrop-blur-sm border border-border/60 rounded-xl px-3 py-1.5 text-xs text-foreground/80 font-medium shadow-lg whitespace-nowrap">
-        {text}
+      {/* Cloud-shaped thought bubble */}
+      <div
+        className="relative max-w-[220px] whitespace-normal bg-[#f5f5f0] border border-black rounded-[20px] px-4 py-2 text-xs text-black font-medium shadow-lg"
+        style={{ fontFamily: "'Comic Sans MS', 'Comic Sans', cursive' " }}
+      >
+        {/* Cloud puffs — decorative circles on corners */}
+        <div className="absolute -top-1.5 left-3 w-4 h-4 rounded-full bg-[#f5f5f0] border border-black" />
+        <div className="absolute -top-1 right-5 w-3 h-3 rounded-full bg-[#f5f5f0] border border-black" />
+        <div className="absolute -top-0.5 left-8 w-3.5 h-3.5 rounded-full bg-[#f5f5f0] border border-black" />
+        <div className="absolute -bottom-1 right-3 w-3 h-3 rounded-full bg-[#f5f5f0] border border-black" />
+        <div className="absolute -bottom-1.5 left-5 w-4 h-4 rounded-full bg-[#f5f5f0] border border-black" />
+        {/* Inner fill to cover puff borders inside the bubble */}
+        <div className="absolute inset-[1px] rounded-[19px] bg-[#f5f5f0] -z-0" />
+        <span className="relative z-10">{text}</span>
         {/* Tail dots */}
-        <div className="absolute -bottom-2 left-4 w-2 h-2 rounded-full bg-background/95 border border-border/60" />
-        <div className="absolute -bottom-4 left-3 w-1.5 h-1.5 rounded-full bg-background/90 border border-border/50" />
+        <div className="absolute -bottom-3 left-4 w-2.5 h-2.5 rounded-full bg-[#f5f5f0] border border-black" />
+        <div className="absolute -bottom-5 left-3 w-1.5 h-1.5 rounded-full bg-[#f5f5f0] border border-black" />
       </div>
     </div>
   );

@@ -39,7 +39,7 @@ type FeedItem = {
   x_community_name: string | null;
 };
 
-type SortField = 'last_activity' | 'symbol' | 'health_grade' | 'freshness_tier';
+type SortField = 'last_activity' | 'symbol' | 'health_grade' | 'freshness_tier' | 'last_top_200_rank';
 type SortDir = 'asc' | 'desc';
 
 const HEALTH_COLORS: Record<string, string> = {
@@ -135,7 +135,7 @@ export default function Feed() {
   const [view, setView] = useState<'summary' | 'grid'>('summary');
   const [expandedMint, setExpandedMint] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<FeedItem | null>(null);
-  const [sortField, setSortField] = useState<SortField>('freshness_tier');
+  const [sortField, setSortField] = useState<SortField>('last_top_200_rank');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [redirectModal, setRedirectModal] = useState<{ type: 'wallet' | 'handle'; value: string } | null>(null);
   const isMobile = useIsMobile();
