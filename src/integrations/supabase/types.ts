@@ -19145,6 +19145,8 @@ export type Database = {
         Args: { retention_days?: number }
         Returns: number
       }
+      count_distinct_tg_users: { Args: never; Returns: number }
+      count_registered_tg_users: { Args: never; Returns: number }
       create_wallet_backup: {
         Args: {
           p_pubkey: string
