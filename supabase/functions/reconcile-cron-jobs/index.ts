@@ -56,12 +56,11 @@ function httpPost(functionName: string, body: string, useServiceRole = false): s
 // ═══════════════════════════════════════════════
 const REQUIRED_CRONS: CronDef[] = [
   // ── HoldersIntel pipeline ──
-  // PAUSED: X account suspended — poster disabled to save cycles
-  // {
-  //   jobname: 'holdersintel-poster-3min',
-  //   schedule: '*/3 * * * *',
-  //   command: httpPost('holders-intel-poster', '{}'),
-  // },
+  {
+    jobname: 'holdersintel-poster-3min',
+    schedule: '*/3 * * * *',
+    command: httpPost('holders-intel-poster', '{}'),
+  },
   {
     jobname: 'holdersintel-dex-scanner-5min',
     schedule: '*/5 * * * *',

@@ -409,12 +409,13 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
   
   const result = await response.json();
   
-  if (!result.success) {
-    throw new Error(result.error || 'Tweet posting failed');
+  if (result.paused) {
+    console.log('[poster] X posting is PAUSED (account suspended) — skipping tweet, continuing pipeline');
+    return { ...result, tweetId: null, tweetUrl: null, skipped: true };
   }
   
-  if (result.paused) {
-    throw new Error('X posting is paused — manualOverride not set or not forwarded');
+  if (!result.success) {
+    throw new Error(result.error || 'Tweet posting failed');
   }
   
   return result;
