@@ -158,7 +158,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               </label>
               <Button size="sm" onClick={handleSend} disabled={isSending || !message.trim()} className="gap-1">
                 {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                {testOnly ? 'Test Send' : 'Broadcast'}
+                Send Message
               </Button>
             </div>
             {lastResult && (
@@ -234,11 +234,11 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               <Button
                 size="sm"
                 onClick={handleSend}
-                disabled={isSending || !message.trim() || selectedAudiences.size === 0}
+                disabled={isSending || !message.trim() || (!testOnly && selectedAudiences.size === 0)}
                 className="gap-1"
               >
                 {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                {testOnly ? 'Test Send' : 'Broadcast'}
+                Send Message
               </Button>
             </div>
 
