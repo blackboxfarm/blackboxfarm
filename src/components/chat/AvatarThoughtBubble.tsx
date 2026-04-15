@@ -29,7 +29,7 @@ export function AvatarThoughtBubble({ text, onDone }: AvatarThoughtBubbleProps) 
       {/* Cloud-shaped thought bubble */}
       <div
         className="relative min-w-[150px] max-w-[520px] whitespace-normal bg-[#f5f5f0] border border-black rounded-[20px] px-4 py-2 text-black font-medium shadow-lg"
-        style={{ fontFamily: "'Comic Sans MS', 'Comic Sans', cursive", fontSize: '11px' }}
+        style={{ fontFamily: "'Comic Neue', 'Comic Sans MS', 'Comic Sans', sans-serif", fontSize: '11px' }}
       >
         {/* Cloud puffs — decorative circles on corners */}
         <div className="absolute -top-1.5 left-3 w-4 h-4 rounded-full bg-[#f5f5f0] border border-black" />
