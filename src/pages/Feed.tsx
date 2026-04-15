@@ -342,12 +342,12 @@ export default function Feed() {
             <Button size="sm" variant="outline" className="gap-2"><ExternalLink className="h-3 w-3" /> {item.x_community_name || 'X Community'}</Button>
           </a>
         )}
-        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(`/holders?token=${item.token_mint}`); }}>
-          <Users className="h-3 w-3" /> Wallet Analysis
-        </Button>
-        <Button size="sm" variant="outline" className="gap-2" onClick={e => { e.stopPropagation(); onClose?.(); navigate(bubblePath); }}>
-          <Compass className="h-3 w-3" /> Bubble Map!
-        </Button>
+        <a href={`/holders?token=${item.token_mint}`} target="_blank" rel="noopener noreferrer">
+          <Button size="sm" variant="outline" className="gap-2"><Users className="h-3 w-3" /> Wallet Analysis</Button>
+        </a>
+        <a href={bubblePath} target="_blank" rel="noopener noreferrer">
+          <Button size="sm" variant="outline" className="gap-2"><Compass className="h-3 w-3" /> Bubble Map!</Button>
+        </a>
       </div>
     );
   }
@@ -580,8 +580,8 @@ export default function Feed() {
               <p>This address wasn't found in our feed. It may be a wallet address — try our <strong>Holder Analysis</strong> tool.</p>
             )}
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => { setRedirectModal(null); navigate('/holders'); }}>Wallet Analysis</Button>
-              <Button size="sm" variant="outline" onClick={() => { setRedirectModal(null); navigate('/bubblemap'); }}>Bubble Map</Button>
+              <a href="/holders" target="_blank" rel="noopener noreferrer"><Button size="sm" onClick={() => setRedirectModal(null)}>Wallet Analysis</Button></a>
+              <a href="/bubblemap" target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline" onClick={() => setRedirectModal(null)}>Bubble Map</Button></a>
             </div>
           </div>
         </DialogContent>
