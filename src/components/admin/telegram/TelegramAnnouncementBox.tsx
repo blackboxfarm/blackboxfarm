@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TelegramAnnouncementBoxProps {
@@ -21,6 +21,13 @@ const AUDIENCE_OPTIONS: { value: AudienceKey; label: string; icon: React.ReactNo
   { value: 'free_only', label: 'Free Users', icon: <Gift className="w-3 h-3" />, desc: 'Registered but not subscribed' },
   { value: 'unregistered', label: 'Unregistered', icon: <UserX className="w-3 h-3" />, desc: 'TG users without a web account' },
 ];
+
+interface RecipientEntry {
+  id: string;
+  telegram_user_id: string;
+  linked_user_id: string | null;
+  delivery_status: string;
+}
 
 interface LogEntry {
   id: string;
@@ -40,15 +47,15 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [activeTab, setActiveTab] = useState<string>('compose');
   const [history, setHistory] = useState<LogEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+  const [recipients, setRecipients] = useState<Record<string, RecipientEntry[]>>({});
+  const [loadingRecipients, setLoadingRecipients] = useState<string | null>(null);
 
   const allSelected = AUDIENCE_OPTIONS.every(o => selectedAudiences.has(o.value));
 
   const toggleAll = () => {
-    if (allSelected) {
-      setSelectedAudiences(new Set());
-    } else {
-      setSelectedAudiences(new Set(AUDIENCE_OPTIONS.map(o => o.value)));
-    }
+    if (allSelected) setSelectedAudiences(new Set());
+    else setSelectedAudiences(new Set(AUDIENCE_OPTIONS.map(o => o.value)));
   };
 
   const toggleOne = (key: AudienceKey) => {
@@ -71,6 +78,27 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
       console.error('Failed to load history:', err);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const loadRecipients = async (announcementId: string) => {
+    if (recipients[announcementId]) {
+      setExpandedEntry(expandedEntry === announcementId ? null : announcementId);
+      return;
+    }
+    setLoadingRecipients(announcementId);
+    setExpandedEntry(announcementId);
+    try {
+      const { data } = await supabase
+        .from('telegram_announcement_recipients')
+        .select('*')
+        .eq('announcement_id', announcementId)
+        .order('created_at', { ascending: true });
+      setRecipients(prev => ({ ...prev, [announcementId]: (data as RecipientEntry[]) || [] }));
+    } catch (err) {
+      console.error('Failed to load recipients:', err);
+    } finally {
+      setLoadingRecipients(null);
     }
   };
 
@@ -128,7 +156,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
     }
   };
 
-  // ─── Hosted view (simple, no audience picker) ───
+  // ─── Hosted view (simple) ───
   if (audience === 'hosted') {
     return (
       <Card className="border-dashed border-yellow-500/30">
@@ -194,7 +222,6 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
           </TabsList>
 
           <TabsContent value="compose">
-            {/* Audience checkboxes */}
             <div className="space-y-2 mb-3">
               <label className="flex items-center gap-2 text-xs cursor-pointer font-medium">
                 <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
@@ -258,7 +285,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
             ) : history.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-6">No broadcasts sent yet</p>
             ) : (
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {history.map(entry => (
                   <div key={entry.id} className="border rounded-md p-2.5 text-xs space-y-1">
                     <div className="flex items-center justify-between">
@@ -272,10 +299,40 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                       </span>
                     </div>
                     <p className="text-muted-foreground line-clamp-2">{entry.message_text}</p>
-                    <div className="flex gap-3">
-                      <span className="text-green-500">✓ {entry.sent_count}</span>
-                      {entry.failed_count > 0 && <span className="text-red-500">✗ {entry.failed_count}</span>}
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-3">
+                        <span className="text-green-500">✓ {entry.sent_count}</span>
+                        {entry.failed_count > 0 && <span className="text-red-500">✗ {entry.failed_count}</span>}
+                      </div>
+                      <button
+                        onClick={() => loadRecipients(entry.id)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors"
+                      >
+                        {loadingRecipients === entry.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : expandedEntry === entry.id ? (
+                          <>Hide recipients <ChevronUp className="w-3 h-3" /></>
+                        ) : (
+                          <>Show recipients <ChevronDown className="w-3 h-3" /></>
+                        )}
+                      </button>
                     </div>
+                    {expandedEntry === entry.id && recipients[entry.id] && (
+                      <div className="mt-1 border-t pt-1 space-y-0.5">
+                        {recipients[entry.id].length === 0 ? (
+                          <p className="text-[10px] text-muted-foreground italic">No recipient data</p>
+                        ) : (
+                          recipients[entry.id].map(r => (
+                            <div key={r.id} className="flex items-center justify-between text-[10px]">
+                              <span className="font-mono text-muted-foreground">TG: {r.telegram_user_id}</span>
+                              <span className={r.delivery_status === 'sent' ? 'text-green-500' : 'text-red-500'}>
+                                {r.delivery_status}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
