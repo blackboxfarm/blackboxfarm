@@ -346,7 +346,9 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                         ) : (
                           recipients[entry.id].map(r => (
                             <div key={r.id} className="flex items-center justify-between text-[10px]">
-                              <span className="font-mono text-muted-foreground">TG: {r.telegram_user_id}</span>
+                              <span className="font-mono text-muted-foreground truncate max-w-[200px]">
+                                {(r as any).display_name || `TG:${r.telegram_user_id}`}
+                              </span>
                               <span className={r.delivery_status === 'sent' ? 'text-green-500' : 'text-red-500'}>
                                 {r.delivery_status}
                               </span>
