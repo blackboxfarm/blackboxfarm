@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { LitmusStrip } from '@/components/feed/LitmusStrip';
 import { useAuth } from '@/hooks/useAuth';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 type FeedItem = {
   token_mint: string;
