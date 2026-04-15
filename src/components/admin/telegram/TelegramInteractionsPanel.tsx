@@ -71,8 +71,8 @@ export function TelegramInteractionsPanel() {
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
 
-    // Fetch all interactions to aggregate unique users client-side
-    const [intRes, memRes, statsRes, joinsRes, leavesRes] = await Promise.all([
+    // Fetch recent interactions for display + separate count queries for accurate stats
+    const [intRes, memRes, statsRes, joinsRes, leavesRes, totalUsersRes, registeredUsersRes] = await Promise.all([
       supabase.from("telegram_bot_interactions").select("*").order("created_at", { ascending: false }).limit(1000),
       supabase.from("telegram_channel_members").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
