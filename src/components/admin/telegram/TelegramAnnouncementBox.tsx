@@ -88,7 +88,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
       ? ['hosted']
       : Array.from(selectedAudiences);
 
-    if (audienceList.length === 0) {
+    if (!testOnly && audienceList.length === 0) {
       toast.error('Select at least one audience');
       return;
     }
