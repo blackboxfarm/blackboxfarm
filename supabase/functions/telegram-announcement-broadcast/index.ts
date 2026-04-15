@@ -18,10 +18,17 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { message, audience, testOnly } = await req.json();
+    const body = await req.json();
+    const { message, testOnly } = body;
+    // Support both single `audience` (string) and multi `audiences` (string[])
+    const audiences: string[] = body.audiences
+      ? body.audiences
+      : body.audience
+        ? [body.audience]
+        : [];
 
-    if (!message || !audience) {
-      return new Response(JSON.stringify({ error: "message and audience required" }), {
+    if (!message || audiences.length === 0) {
+      return new Response(JSON.stringify({ error: "message and audiences required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -38,6 +45,13 @@ Deno.serve(async (req) => {
     // If testOnly, just send to @system_reset
     if (testOnly) {
       const result = await sendTgMessage(botToken, SYSTEM_RESET_TG_ID, message);
+      // Log test send
+      await supabase.from("telegram_announcement_log").insert({
+        message_text: message,
+        audiences,
+        sent_count: result ? 1 : 0,
+        failed_count: result ? 0 : 1,
+      });
       return new Response(JSON.stringify({ sent: result ? 1 : 0, failed: result ? 0 : 1, skipped: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -73,7 +87,7 @@ Deno.serve(async (req) => {
 
     // Get subscriber info if needed
     let subscriberUserIds = new Set<string>();
-    if (["subscribers_only", "free_only", "all_registered"].includes(audience)) {
+    if (audiences.some(a => ["subscribers_only", "free_only", "all_registered"].includes(a))) {
       const { data: subs } = await supabase
         .from("stripe_customers")
         .select("user_id, subscription_status")
@@ -81,44 +95,45 @@ Deno.serve(async (req) => {
       subscriberUserIds = new Set((subs || []).map((s: any) => s.user_id).filter(Boolean));
     }
 
-    // Filter based on audience
-    const targets: string[] = [];
+    // Collect all targets across all audiences (deduplicated)
+    const targetSet = new Set<string>();
     for (const [tgId, info] of userMap) {
       const isHostedAdmin = info.linkedUserId && hostedUserIds.has(info.linkedUserId);
       const isRegistered = !!info.linkedUserId;
       const isSubscriber = info.linkedUserId ? subscriberUserIds.has(info.linkedUserId) : false;
 
-      switch (audience) {
-        case "hosted":
-          if (isHostedAdmin) targets.push(tgId);
-          break;
-        case "accounts":
-        case "all_registered":
-          // All registered users who are NOT hosted admins
-          if (isRegistered && !isHostedAdmin) targets.push(tgId);
-          break;
-        case "subscribers_only":
-          // Subscribed users who are NOT hosted admins
-          if (isRegistered && isSubscriber && !isHostedAdmin) targets.push(tgId);
-          break;
-        case "free_only":
-          // Registered but NOT subscribed, NOT hosted admins
-          if (isRegistered && !isSubscriber && !isHostedAdmin) targets.push(tgId);
-          break;
-        case "unregistered":
-          // TG users with no linked web account, NOT hosted admins
-          if (!isRegistered && !isHostedAdmin) targets.push(tgId);
-          break;
-        default:
-          break;
+      for (const audience of audiences) {
+        let match = false;
+        switch (audience) {
+          case "hosted":
+            if (isHostedAdmin) match = true;
+            break;
+          case "accounts":
+          case "all_registered":
+            if (isRegistered && !isHostedAdmin) match = true;
+            break;
+          case "subscribers_only":
+            if (isRegistered && isSubscriber && !isHostedAdmin) match = true;
+            break;
+          case "free_only":
+            if (isRegistered && !isSubscriber && !isHostedAdmin) match = true;
+            break;
+          case "unregistered":
+            if (!isRegistered && !isHostedAdmin) match = true;
+            break;
+        }
+        if (match) {
+          targetSet.add(tgId);
+          break; // no need to check other audiences for same user
+        }
       }
     }
 
-    console.log(`[announcement] Audience: ${audience}, targets: ${targets.length}`);
+    const targets = Array.from(targetSet);
+    console.log(`[announcement] Audiences: ${audiences.join(', ')}, targets: ${targets.length}`);
 
     let sent = 0;
     let failed = 0;
-    const skipped = 0;
 
     // Rate limit: 1 message per 50ms (20/sec)
     for (const tgId of targets) {
@@ -132,8 +147,20 @@ Deno.serve(async (req) => {
       await new Promise((r) => setTimeout(r, 50));
     }
 
+    // Log to announcement history
+    try {
+      await supabase.from("telegram_announcement_log").insert({
+        message_text: message,
+        audiences,
+        sent_count: sent,
+        failed_count: failed,
+      });
+    } catch (logErr) {
+      console.warn("[announcement] Failed to log broadcast:", logErr);
+    }
+
     return new Response(
-      JSON.stringify({ sent, failed, skipped, totalTargets: targets.length }),
+      JSON.stringify({ sent, failed, skipped: 0, totalTargets: targets.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

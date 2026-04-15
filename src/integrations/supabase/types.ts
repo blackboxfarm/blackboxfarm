@@ -12961,6 +12961,36 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_announcement_log: {
+        Row: {
+          audiences: string[]
+          created_at: string
+          failed_count: number
+          id: string
+          message_text: string
+          sent_by: string | null
+          sent_count: number
+        }
+        Insert: {
+          audiences?: string[]
+          created_at?: string
+          failed_count?: number
+          id?: string
+          message_text: string
+          sent_by?: string | null
+          sent_count?: number
+        }
+        Update: {
+          audiences?: string[]
+          created_at?: string
+          failed_count?: number
+          id?: string
+          message_text?: string
+          sent_by?: string | null
+          sent_count?: number
+        }
+        Relationships: []
+      }
       telegram_announcement_targets: {
         Row: {
           created_at: string | null

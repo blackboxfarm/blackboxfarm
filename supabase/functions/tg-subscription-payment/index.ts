@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { sendAdminSms } from '../_shared/sms-notify.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Keypair } from 'npm:@solana/web3.js@1.87.6';
@@ -195,6 +196,11 @@ serve(withRunLog('tg-subscription-payment', async (req) => {
         }
 
         console.log(`[TG-Sub] Payment confirmed for ${subscription_id}! Expires: ${expiresAt.toISOString()}`);
+
+        // SMS notification for SOL subscription
+        sendAdminSms(
+          `💰 NEW SOL SUBSCRIPTION!\n\n📱 TG User: ${sub.telegram_user_id}\n💎 Paid: ${balanceSol.toFixed(4)} SOL\n🏷️ Tier: Pro (Yearly)\n📅 Expires: ${expiresAt.toLocaleDateString('en-US')}\n👛 Wallet: ${sub.payment_wallet_pubkey.slice(0, 8)}...${sub.payment_wallet_pubkey.slice(-4)}\n🔗 Linked account: ${sub.user_id ? 'Yes' : 'No'}\n⏰ ${new Date().toISOString()}`
+        );
 
         return new Response(JSON.stringify({
           status: 'paid',

@@ -1,4 +1,5 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { sendAdminSms } from '../_shared/sms-notify.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
@@ -208,6 +209,15 @@ serve(withRunLog('stripe-webhook', async (req) => {
           }
         } catch (emailErr) {
           logStep("Failed to send subscriber email", { error: String(emailErr) });
+        }
+
+        // ──────────────────────────────────────────────
+        // 5) SMS notification to admin for new subscriptions
+        // ──────────────────────────────────────────────
+        if (event.type === "customer.subscription.created") {
+          sendAdminSms(
+            `💳 NEW SUBSCRIPTION!\n\n👤 ${customer.name || 'Unknown'}\n📧 ${email}\n🏷️ Tier: ${tierKey.toUpperCase()}\n💰 Amount: ${formattedAmount}\n📅 Expires: ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}\n🔗 Has account: ${!!matchedUser}\n⏰ ${new Date().toISOString()}`
+          );
         }
       } else if (!isActive) {
         await supabase.from("admin_notifications").insert({
