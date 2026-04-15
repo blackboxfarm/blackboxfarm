@@ -3,6 +3,8 @@
  * Called from holders-intel-poster, bagless-holders-report, and manual refresh.
  */
 
+import { DbWriteError } from './db-assert.ts';
+
 export interface SnapshotInput {
   tokenMint: string;
   healthScore: number;
@@ -59,8 +61,9 @@ export async function upsertHealthSnapshot(
     );
 
   if (error) {
-    console.warn(`[snapshot-writer] Failed to upsert snapshot for ${input.tokenMint.slice(0, 8)}: ${error.message}`);
-  } else {
-    console.log(`[snapshot-writer] Wrote snapshot: ${input.healthGrade} ${input.riskEmoji || ''} for ${input.tokenMint.slice(0, 8)} at ${snapshotHour}`);
+    const errMsg = `[snapshot-writer] FAILED to upsert snapshot for ${input.tokenMint.slice(0, 8)}: ${error.message}`;
+    console.error(errMsg);
+    throw new DbWriteError('token_health_snapshots', 'UPSERT', error);
   }
+  console.log(`[snapshot-writer] Wrote snapshot: ${input.healthGrade} ${input.riskEmoji || ''} for ${input.tokenMint.slice(0, 8)} at ${snapshotHour}`);
 }

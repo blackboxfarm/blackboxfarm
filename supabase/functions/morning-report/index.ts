@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from "../_shared/run-logger.ts";
+import { assertUpsert } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1380,7 +1381,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     // ═══════════════════════════════════════════════════════════════
     // SAVE REPORT TO DATABASE
     // ═══════════════════════════════════════════════════════════════
-    const { data: report, error: insertError } = await supabase
+    const report = await assertUpsert(supabase
       .from('morning_reports')
       .upsert({
         report_date: reportDate,
@@ -1418,11 +1419,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         execution_time_ms: executionTimeMs,
       }, { onConflict: 'report_date' })
       .select()
-      .single();
-
-    if (insertError) {
-      console.error('[morning-report] Failed to save report:', insertError);
-    }
+      .single(), 'morning_reports');
 
     // ═══════════════════════════════════════════════════════════════
     // SEND TELEGRAM SUMMARY
