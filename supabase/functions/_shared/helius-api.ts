@@ -67,11 +67,11 @@ export async function parseBuyFromHelius(
   heliusApiKey: string
 ): Promise<HeliusSwapInfo | null> {
   try {
-    const url = `https://api.helius.xyz/v0/transactions/`;
+    const url = `https://api.helius.xyz/v0/transactions/?api-key=${heliusApiKey}`;
     
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': heliusApiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transactions: [signature] }),
       signal: AbortSignal.timeout(15000)
     });
@@ -239,11 +239,11 @@ export async function parseSellFromHelius(
   success: boolean;
 } | null> {
   try {
-    const url = `https://api.helius.xyz/v0/transactions/`;
+    const url = `https://api.helius.xyz/v0/transactions/?api-key=${heliusApiKey}`;
     
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': heliusApiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transactions: [signature] }),
       signal: AbortSignal.timeout(15000)
     });
