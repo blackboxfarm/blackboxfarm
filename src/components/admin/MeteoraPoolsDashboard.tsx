@@ -4,11 +4,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   Waves, RefreshCw, TrendingUp, DollarSign, Droplets, ExternalLink, 
-  Clock, Activity, Plus, Loader2, ArrowUpDown, Coins, BarChart3, Lock
+  Clock, Activity, Plus, Loader2, ArrowUpDown, Coins, BarChart3, Lock, Download
 } from 'lucide-react';
 import { useSolPrice } from '@/hooks/useSolPrice';
 
@@ -232,8 +234,12 @@ function PoolCard({ result, solPrice, formatUsd, formatNumber, timeAgo, onRemove
   timeAgo: (t: number) => string;
   onRemove: () => void;
 }) {
-  const { pool, transactions } = result;
+  const { pool, transactions, wallet } = result;
   const [showTxs, setShowTxs] = useState(false);
+  const [showReclaimDialog, setShowReclaimDialog] = useState(false);
+  const [reclaimSig, setReclaimSig] = useState('');
+  const [reclaimMint, setReclaimMint] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
   const tokenXValue = pool.token_x_amount * pool.token_x.price;
   const tokenYValue = pool.token_y_amount * pool.token_y.price;
@@ -241,6 +247,42 @@ function PoolCard({ result, solPrice, formatUsd, formatNumber, timeAgo, onRemove
   const xPct = totalValue > 0 ? (tokenXValue / totalValue) * 100 : 50;
 
   const feeApr = pool.fee_tvl_ratio['24h'] ? (pool.fee_tvl_ratio['24h'] * 365).toFixed(1) : '0';
+
+  const handleImportReclaim = async () => {
+    const sig = reclaimSig.trim();
+    if (!sig || sig.length < 64) {
+      toast.error('Enter a valid LP withdrawal transaction signature');
+      return;
+    }
+    setIsImporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-lp-reclaim', {
+        body: {
+          signature: sig,
+          pool_address: pool.address,
+          wallet_pubkey: wallet,
+          token_mint: reclaimMint.trim() || undefined,
+        },
+      });
+      if (error) throw new Error(error.message || 'Import failed');
+      if (data?.error) {
+        toast.error(data.message || data.error);
+        return;
+      }
+      const s = data?.summary;
+      toast.success(
+        `Imported ${s?.token || 'token'}: ${Number(s?.quantity || 0).toLocaleString()} tokens @ $${Number(s?.price_usd || 0).toFixed(8)} (= $${Number(s?.reclaimed_value_usd || 0).toFixed(2)})`,
+        { duration: 8000 }
+      );
+      setShowReclaimDialog(false);
+      setReclaimSig('');
+      setReclaimMint('');
+    } catch (err: any) {
+      toast.error(`Import failed: ${err.message}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   return (
     <Card className="overflow-hidden">
@@ -275,6 +317,16 @@ function PoolCard({ result, solPrice, formatUsd, formatNumber, timeAgo, onRemove
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReclaimDialog(true)}
+              className="text-xs gap-1 border-cyan-500/40 text-cyan-500 hover:bg-cyan-500/10"
+              title="Import LP withdrawal as a Reclaimed flip position"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Import LP Withdrawal
+            </Button>
             <a
               href={`https://www.meteora.ag/dammv2/${pool.address}`}
               target="_blank"
@@ -287,6 +339,55 @@ function PoolCard({ result, solPrice, formatUsd, formatNumber, timeAgo, onRemove
           </div>
         </div>
       </CardHeader>
+
+      {/* LP Reclaim Import Dialog */}
+      <Dialog open={showReclaimDialog} onOpenChange={setShowReclaimDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Droplets className="h-5 w-5 text-cyan-500" />
+              Import LP Withdrawal as Reclaimed Position
+            </DialogTitle>
+            <DialogDescription>
+              Paste the transaction signature for the LP dissolution. The system will fetch the returned tokens to wallet
+              <code className="mx-1 text-[10px] bg-muted px-1 py-0.5 rounded">{wallet?.slice(0, 6)}...{wallet?.slice(-4)}</code>
+              and create a synthetic flip position priced at the current token value. SOL returned to the wallet is not tracked as a position.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">LP Withdrawal Tx Signature *</Label>
+              <Input
+                placeholder="5xK...sig"
+                value={reclaimSig}
+                onChange={(e) => setReclaimSig(e.target.value)}
+                className="font-mono text-xs"
+                disabled={isImporting}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Specific Token Mint (optional)</Label>
+              <Input
+                placeholder={`Default: largest non-SOL token returned (${pool.token_x.symbol} or ${pool.token_y.symbol})`}
+                value={reclaimMint}
+                onChange={(e) => setReclaimMint(e.target.value)}
+                className="font-mono text-xs"
+                disabled={isImporting}
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Leave blank to auto-pick the largest non-SOL token transfer in the tx.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowReclaimDialog(false)} disabled={isImporting}>Cancel</Button>
+            <Button onClick={handleImportReclaim} disabled={isImporting || !reclaimSig.trim()}>
+              {isImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              Import as Reclaimed
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CardContent className="space-y-4 pt-4">
         {/* Key Metrics Grid */}
