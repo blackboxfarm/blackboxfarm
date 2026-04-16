@@ -251,8 +251,10 @@ export async function scrapeDexTopPages(): Promise<{ pairs: RankedDexPair[]; hea
       await new Promise(r => setTimeout(r, 5000));
     }
 
+    const startMs = Date.now();
     try {
       const result = await scrapePageMarkdown(source.url, source.wait_ms, 0, source.is_page2);
+      const durationMs = Date.now() - startMs;
       if (result.retried) health.retry_used = true;
       if (!health.providers_used.includes(result.provider)) health.providers_used.push(result.provider);
       (health as any)[`${pageKey}_ok`] = true;
@@ -261,11 +263,22 @@ export async function scrapeDexTopPages(): Promise<{ pairs: RankedDexPair[]; hea
       (health as any)[`${pageKey}_count`] = parsed.length;
       allPairs.push(...parsed);
 
-      // Update source stats in background
+      // Update source stats and log in background
       updateSourceStats(source.id, parsed.length).catch(() => {});
+      logScrapeResult({
+        sourceId: source.id, sourceUrl: source.url, sourceLabel: source.label,
+        success: true, pairCount: parsed.length, provider: result.provider,
+        errorMessage: null, durationMs,
+      }).catch(() => {});
     } catch (e: any) {
+      const durationMs = Date.now() - startMs;
       console.error(`[DexTop200] ${source.label} FAILED:`, e.message);
       (health as any)[`${pageKey}_error`] = e.message;
+      logScrapeResult({
+        sourceId: source.id, sourceUrl: source.url, sourceLabel: source.label,
+        success: false, pairCount: 0, provider: null,
+        errorMessage: e.message, durationMs,
+      }).catch(() => {});
     }
   }
 
