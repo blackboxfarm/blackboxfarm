@@ -3093,23 +3093,46 @@ export function FlipItDashboard() {
     );
   };
 
+  const getEffectiveEntryPrice = (position: FlipPosition) => {
+    const quantity = Number(position.quantity_tokens || 0);
+    const invested = Number(position.buy_amount_usd || 0);
+
+    if (Number.isFinite(quantity) && quantity > 0 && Number.isFinite(invested) && invested > 0) {
+      const derivedEntryPrice = invested / quantity;
+      if (Number.isFinite(derivedEntryPrice) && derivedEntryPrice > 0) {
+        return derivedEntryPrice;
+      }
+    }
+
+    const storedEntryPrice = Number(position.buy_price_usd || 0);
+    return Number.isFinite(storedEntryPrice) && storedEntryPrice > 0 ? storedEntryPrice : null;
+  };
+
+  const getEffectiveTargetPrice = (position: FlipPosition, entryPrice?: number | null) => {
+    const effectiveEntryPrice = entryPrice ?? getEffectiveEntryPrice(position);
+    if (!effectiveEntryPrice || !Number.isFinite(effectiveEntryPrice) || effectiveEntryPrice <= 0) {
+      return null;
+    }
+
+    const multiplier = Number(position.target_multiplier || 0);
+    if (!Number.isFinite(multiplier) || multiplier <= 0) {
+      return null;
+    }
+
+    return effectiveEntryPrice * multiplier;
+  };
+
   const calculateProgress = (position: FlipPosition) => {
     if (position.status !== 'holding') return 0;
 
-    // Use an on-chain consistent entry price when we have quantity:
-    // entryPrice = invested_usd / tokens_received
-    const entryPrice =
-      typeof position.quantity_tokens === 'number' && position.quantity_tokens > 0 && position.buy_amount_usd > 0
-        ? position.buy_amount_usd / position.quantity_tokens
-        : position.buy_price_usd;
-
+    const entryPrice = getEffectiveEntryPrice(position);
     if (typeof entryPrice !== 'number' || !Number.isFinite(entryPrice) || entryPrice <= 0) return 0;
 
     const currentPrice = currentPrices[position.token_mint] ?? entryPrice;
-    const targetPrice = entryPrice * position.target_multiplier;
+    const targetPrice = getEffectiveTargetPrice(position, entryPrice);
+    if (typeof targetPrice !== 'number' || !Number.isFinite(targetPrice) || targetPrice <= entryPrice) return 0;
 
     const progress = ((currentPrice - entryPrice) / (targetPrice - entryPrice)) * 100;
-    // Clamp: 0% minimum (no negative progress), 100% max
     return Math.min(Math.max(progress, 0), 100);
   };
 
@@ -4212,25 +4235,27 @@ export function FlipItDashboard() {
                   // Quantity is sometimes not persisted; derive it from buy_amount_usd / buy_price_usd when needed.
                   // NOTE: For correct on-chain math, we prefer the persisted quantity_tokens from the buy signature.
                   const effectiveQuantityTokens =
-                    position.quantity_tokens ??
-                    (position.buy_price_usd ? position.buy_amount_usd / position.buy_price_usd : null);
+                    typeof position.quantity_tokens === 'number' && Number.isFinite(position.quantity_tokens) && position.quantity_tokens > 0
+                      ? position.quantity_tokens
+                      : (position.buy_price_usd ? position.buy_amount_usd / position.buy_price_usd : null);
 
                   const hasQuantity =
                     typeof effectiveQuantityTokens === 'number' &&
                     Number.isFinite(effectiveQuantityTokens) &&
                     effectiveQuantityTokens > 0;
 
-                  // Use the recorded buy_price_usd which is the actual price at the time of purchase.
-                  // Do NOT recalculate from invested/tokens as that introduces rounding errors.
-                  const effectiveEntryPrice = position.buy_price_usd;
+                  // Always derive entry from invested ÷ verified quantity when available.
+                  // This keeps the displayed buy price aligned with the invested/current value math.
+                  const effectiveEntryPrice = getEffectiveEntryPrice(position);
+                  const effectiveTargetPrice = getEffectiveTargetPrice(position, effectiveEntryPrice);
 
                   const hasCurrentPrice =
                     typeof currentPrice === 'number' && Number.isFinite(currentPrice) && currentPrice > 0;
 
                   // SANITY CHECK: Detect wildly incorrect prices from wrong DexScreener matches
                   // If price changed by more than 10000x from buy price, it's likely a wrong token match
-                  const priceRatio = hasCurrentPrice && effectiveEntryPrice > 0 
-                    ? currentPrice / effectiveEntryPrice 
+                  const priceRatio = hasCurrentPrice && effectiveEntryPrice && effectiveEntryPrice > 0
+                    ? currentPrice / effectiveEntryPrice
                     : 1;
                   const isPriceSane = priceRatio < 10000 && priceRatio > 0.00001; // Allow 10000x up or down
                   const usableCurrentPrice = hasCurrentPrice && isPriceSane ? currentPrice : null;
@@ -4239,9 +4264,6 @@ export function FlipItDashboard() {
                     ? effectiveQuantityTokens * usableCurrentPrice
                     : null;
 
-                  // PnL must match what is displayed: currentValue (shown) vs buy_amount_usd (shown as Invested).
-                  // Deriving from price/entry_price separately leads to contradictions when stored
-                  // buy_price_usd is stale relative to quantity_tokens / buy_amount_usd.
                   const investedUsd =
                     typeof position.buy_amount_usd === 'number' && Number.isFinite(position.buy_amount_usd)
                       ? position.buy_amount_usd
@@ -4255,7 +4277,6 @@ export function FlipItDashboard() {
                     ? (pnlUsd / investedUsd) * 100
                     : null;
 
-                  // Target value
                   const targetValue = position.buy_amount_usd * position.target_multiplier;
                   const targetProfit = position.buy_amount_usd * (position.target_multiplier - 1);
 
@@ -4569,15 +4590,15 @@ export function FlipItDashboard() {
                                 <div className="text-green-500 text-[10px]">
                                   +${targetProfit.toFixed(2)} profit
                                 </div>
-                                {position.target_price_usd && (
+                                {effectiveTargetPrice && (
                                   <div className="text-[10px] text-muted-foreground">
-                                    Target: ${position.target_price_usd.toFixed(8)}
+                                    Target: ${effectiveTargetPrice.toFixed(8)}
                                   </div>
                                 )}
                               </>
                             )}
                           </div>
-                          {position.status === 'holding' && position.buy_price_usd && (
+                          {position.status === 'holding' && effectiveEntryPrice && (
                             <Popover>
                               <PopoverTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-5 w-5">
@@ -4591,7 +4612,7 @@ export function FlipItDashboard() {
                                     variant={position.target_multiplier === 0 ? "default" : "ghost"}
                                     size="sm"
                                     className="w-full justify-between text-orange-400"
-                                    onClick={() => handleUpdateTarget(position.id, 0, position.buy_price_usd!)}
+                                    onClick={() => handleUpdateTarget(position.id, 0, effectiveEntryPrice)}
                                   >
                                     <span>Disabled</span>
                                     <span className="text-muted-foreground text-xs">No auto-sell</span>
@@ -4603,7 +4624,7 @@ export function FlipItDashboard() {
                                       variant={position.target_multiplier === mult ? "default" : "ghost"}
                                       size="sm"
                                       className="w-full justify-between"
-                                      onClick={() => handleUpdateTarget(position.id, mult, position.buy_price_usd!)}
+                                      onClick={() => handleUpdateTarget(position.id, mult, effectiveEntryPrice)}
                                     >
                                       <span>{mult}x</span>
                                       <span className="text-green-500 text-xs">+${(position.buy_amount_usd * (mult - 1)).toFixed(2)}</span>
@@ -4789,7 +4810,7 @@ export function FlipItDashboard() {
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                const entryPrice = position.buy_price_usd || 0;
+                                const entryPrice = effectiveEntryPrice || 0;
                                 const defaultPrice = entryPrice * 1.05;
                                 setEmergencyEditing(prev => ({
                                   ...prev,
@@ -4869,7 +4890,7 @@ export function FlipItDashboard() {
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                const entryPrice = position.buy_price_usd || 0;
+                                const entryPrice = effectiveEntryPrice || 0;
                                 const defaultPriceHigh = entryPrice * 1.10;
                                 const defaultPriceLow = entryPrice * 0.90;
                                 const defaultAmount = position.buy_amount_usd || 10;
