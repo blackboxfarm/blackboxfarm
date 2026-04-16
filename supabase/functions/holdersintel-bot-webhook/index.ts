@@ -4424,6 +4424,9 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
               await handlePayment(dmChatId, telegramUserId, args);
             }
             break;
+          case "/ticket":
+            await handleTicket(dmChatId, telegramUserId, args);
+            break;
           default:
             // Unknown command in DM context — route to AI assistant
             if (message.text) {
