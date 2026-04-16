@@ -1,50 +1,49 @@
 
+The user wants to track LP dissolution events as new "Reclaimed" flip positions. Key insight: no PnL math against original buy — treat the LP collapse moment as a synthetic buy at the prevailing price for the returned token amount.
 
-# Add Scrape History Log & Polling Timer to Dex/CloudFlare Tab
+Let me design this minimally and cleanly.
 
-## What this does
-1. **Scrape History Log** — A new table (`dex_scrape_log`) records every scrape attempt per source URL: success/fail, pair count, provider used, error message, and duration. The admin UI shows this as a scrollable log with color-coded rows (green = success, red = fail).
-2. **Polling Timer Toggle** — A dropdown or input in the admin UI to change how often the `dex-top-200` cron fires (e.g. 15min / 30min / 60min). This updates the `pg_cron` schedule via a small edge function or DB function call.
+## Plan: LP Reclaimed Position Tracking
 
-## Plan
+### Concept
+When a Meteora LP is dissolved, the wallet receives back tokens (e.g. 3M xoin.ai + some SOL). We create a synthetic `flip_positions` row:
+- `quantity_tokens` = exact returned amount from the LP withdrawal tx
+- `buy_price_usd` = token price at the timestamp of the LP withdrawal
+- `buy_amount_usd` = quantity × price (synthetic cost basis = current value at reclaim moment)
+- `created_at` = LP withdrawal tx timestamp
+- New flag `position_source = 'lp_reclaimed'` so the system never tries to reconcile against a real buy tx
+- `entry_verified = true` (on-chain sourced)
+- SOL portion is NOT a position — it just sits in the wallet balance
 
-### 1. Database: `dex_scrape_log` table
-- `id` UUID PK
-- `source_id` UUID FK → `dex_scrape_sources.id` (nullable for fallback sources)
-- `source_url` TEXT (always logged regardless)
-- `source_label` TEXT
-- `success` BOOLEAN
-- `pair_count` INT (0 on failure)
-- `provider` TEXT (e.g. "firecrawl")
-- `error_message` TEXT (null on success)
-- `duration_ms` INT
-- `created_at` TIMESTAMPTZ default now()
-- RLS: super_admin read-only
-- Auto-prune: trigger or scheduled cleanup to keep last 7 days only (storage management)
+### Schema change
+Add to `flip_positions`:
+- `position_source TEXT DEFAULT 'buy'` — values: `'buy' | 'lp_reclaimed' | 'manual'`
+- `lp_pool_address TEXT NULL` — the Meteora pool the tokens came from
+- `lp_withdrawal_signature TEXT NULL` — the dissolution tx signature (also serves as dedup key)
+- Unique index on `lp_withdrawal_signature` where not null (prevents double-import)
 
-### 2. Edge function: log each scrape result
-In `_shared/dex-top-pages.ts`, after each source scrape (success or catch block), insert a row into `dex_scrape_log` with the outcome. Minimal change — just add a `logScrapeResult()` helper next to `updateSourceStats()`.
+### New edge function: `flipit-lp-reclaim`
+Two modes:
+1. **Manual** (admin clicks "Import as Reclaimed Position" on a pool row in Meteora Pools view): admin pastes/selects the withdrawal tx signature, function fetches it via Helius, identifies the SPL token transfer back to the FlipIt wallet, gets the token price at that timestamp via DexScreener/Jupiter, creates the position.
+2. **Auto-detect** (button "Scan for LP Withdrawals"): scans recent FlipIt wallet txs that touch known Meteora pool addresses, finds dissolution events, prompts admin to confirm-and-import each one.
 
-### 3. Admin UI: Scrape History panel
-Add a `ScrapeHistoryLog` component below the existing `ScrapeSourcesManager` in `DexCloudFlareFeed.tsx`:
-- Fetches last 50 rows from `dex_scrape_log` ordered by `created_at DESC`
-- Table: timestamp, source label, success ✅/❌, pairs found, provider, error (truncated), duration
-- Refresh button
-- Simple filter: All / Failures only
+Both use `assertInsert` (per zero-tolerance silent-fails rule).
 
-### 4. Admin UI: Polling interval control
-Add a small control card above or beside the Scrape Sources manager:
-- Shows current cron interval (read from a `site_settings` or `dex_scrape_sources` meta, or a dedicated key in an existing settings table)
-- Dropdown: 15min / 30min / 60min
-- On change: calls `supabase.functions.invoke('dex-top-200', { body: { action: 'update_cron', interval_minutes: N } })` which runs `SELECT cron.schedule(...)` to update the cron
-- Alternatively, store the interval in a `dex_scrape_config` row and have the edge function self-throttle based on it
+### UI changes — `FlipItDashboard.tsx`
+- Position row gets a small badge "LP RECLAIMED" when `position_source = 'lp_reclaimed'`
+- "Invested" label changes to "Reclaimed Value" for these rows
+- PnL still calculates as `currentValue − buy_amount_usd` (so it shows drift since reclaim moment, which is desired behavior — user said "held or displayed as appropriate going forward")
+- The Meteora Pools panel gets a new "Import LP Withdrawal" button per pool
 
-### 5. Cleanup migration
-Add a `cron.schedule` job that runs daily to `DELETE FROM dex_scrape_log WHERE created_at < now() - interval '7 days'` to prevent unbounded growth.
+### Files touched
+- Migration: add 3 columns + unique index to `flip_positions`
+- New: `supabase/functions/flipit-lp-reclaim/index.ts`
+- Edit: `src/components/admin/FlipItDashboard.tsx` (badge + label)
+- Edit: Meteora Pools UI section (add import button + signature input modal)
 
-## Technical notes
-- The log insert uses the existing service-role client already available in `dex-top-pages.ts`
-- Duration tracked with `Date.now()` before/after each `scrapePageMarkdown` call
-- No changes to the scrape logic itself — purely observational logging
-- The cron update requires `pg_cron` extension (already enabled per existing cron jobs)
+### What's NOT included (confirm if needed)
+- Tracking the SOL side of the LP return as a separate "position" — per spec, SOL just lands in wallet balance
+- Computing impermanent loss vs original LP deposit — explicitly out of scope per user ("no relative PnL")
+- Auto-detecting LP withdrawals on a cron — manual import only for v1
 
+Sound right? Send **"Plan Approved"** to build it.
