@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen, BarChart3 } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen, BarChart3, Droplets } from 'lucide-react';
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { detectSocialPlatform } from '@/utils/socialPlatformDetector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -109,6 +109,10 @@ interface FlipPosition {
   bonding_curve_progress: number | null;
   // Sell priority fee (persisted per-position)
   sell_priority_fee_sol: number | null;
+  // LP Reclaimed position tracking
+  position_source?: string | null;
+  lp_pool_address?: string | null;
+  lp_withdrawal_signature?: string | null;
 }
 
 interface SuperAdminWallet {
@@ -5161,6 +5165,12 @@ export function FlipItDashboard() {
                             <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30 text-[9px] px-1 py-0 gap-0.5">
                               <FlaskConical className="h-2.5 w-2.5" />
                               TEST
+                            </Badge>
+                          )}
+                          {position.position_source === 'lp_reclaimed' && (
+                            <Badge variant="outline" className="bg-cyan-500/10 text-cyan-500 border-cyan-500/30 text-[9px] px-1 py-0 gap-0.5">
+                              <Droplets className="h-2.5 w-2.5" />
+                              LP RECLAIMED
                             </Badge>
                           )}
                           {getStatusBadge(position.status)}
