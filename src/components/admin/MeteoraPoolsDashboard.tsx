@@ -80,18 +80,22 @@ export function MeteoraPoolsDashboard() {
   const fetchPools = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('meteora-pools', {
-        body: null,
-        headers: {},
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const session = (await supabase.auth.getSession()).data.session;
+      
+      const url = `${supabaseUrl}/functions/v1/meteora-pools?action=wallet-pools&pool_addresses=${trackedPools.join(',')}`;
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token || anonKey}`,
+          'apikey': anonKey,
+        },
       });
-
-      // Use GET with query params
-      const response = await supabase.functions.invoke('meteora-pools?action=wallet-pools&pool_addresses=' + trackedPools.join(','), {
-        method: 'GET',
-      });
-
-      if (response.error) throw response.error;
-      setPools(response.data?.pools || []);
+      
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setPools(data?.pools || []);
     } catch (err: any) {
       console.error('Failed to fetch pools:', err);
       toast.error('Failed to fetch pool data');
