@@ -1403,21 +1403,43 @@ serve(withRunLog('flipit-execute', async (req) => {
             const onChainBalance = tokenAmount.uiAmount ?? (Number(tokenAmount.amount) / Math.pow(10, tokenAmount.decimals || 6));
             if (!onChainBalance || onChainBalance <= 0) return;
             
+            // CRITICAL: Check for sibling positions — other holdings of the same token
+            // in the same wallet. On-chain balance = sum of ALL positions, not just this one.
+            const { data: siblingPositions } = await supabase
+              .from("flip_positions")
+              .select("id, quantity_tokens")
+              .eq("token_mint", tokenMintForVerify)
+              .eq("wallet_id", position.wallet_id)
+              .eq("status", "holding")
+              .neq("id", positionIdForVerify);
+            
+            const siblingTokens = (siblingPositions || []).reduce(
+              (sum: number, s: any) => sum + Number(s.quantity_tokens || 0), 0
+            );
+            
+            // This position's expected on-chain share = total balance - siblings
+            const thisPositionExpectedBalance = onChainBalance - siblingTokens;
+            
+            if (thisPositionExpectedBalance <= 0) {
+              console.log(`[FAILSAFE] Position ${positionIdForVerify.slice(0, 8)}: on-chain ${onChainBalance} fully accounted by ${siblingPositions?.length || 0} siblings (${siblingTokens}), skipping`);
+              return;
+            }
+            
             const currentQty = Number(currentPos.quantity_tokens || 0);
             
-            // Check if stored quantity is wildly off from on-chain balance
+            // Check if stored quantity is wildly off from expected balance
             // (off by >10x in either direction means decimal bug)
-            const ratio = currentQty > 0 && onChainBalance > 0
-              ? Math.max(currentQty / onChainBalance, onChainBalance / currentQty)
+            const ratio = currentQty > 0 && thisPositionExpectedBalance > 0
+              ? Math.max(currentQty / thisPositionExpectedBalance, thisPositionExpectedBalance / currentQty)
               : Infinity;
             
             if (ratio > 10 || currentQty <= 0) {
               const correctedBuyPrice = (currentPos.buy_amount_usd && currentPos.buy_amount_usd > 0)
-                ? currentPos.buy_amount_usd / onChainBalance
+                ? currentPos.buy_amount_usd / thisPositionExpectedBalance
                 : null;
               
               const updateFields: Record<string, any> = {
-                quantity_tokens: onChainBalance,
+                quantity_tokens: thisPositionExpectedBalance,
                 token_decimals: tokenAmount.decimals,
               };
               if (correctedBuyPrice !== null) {
@@ -1428,7 +1450,7 @@ serve(withRunLog('flipit-execute', async (req) => {
               }
               
               await supabase.from("flip_positions").update(updateFields).eq("id", positionIdForVerify);
-              console.log(`[FAILSAFE] CORRECTED position ${positionIdForVerify.slice(0, 8)}: qty ${currentQty} → ${onChainBalance}, price $${correctedBuyPrice?.toFixed(10)}`);
+              console.log(`[FAILSAFE] CORRECTED position ${positionIdForVerify.slice(0, 8)}: qty ${currentQty} → ${thisPositionExpectedBalance} (on-chain ${onChainBalance} - siblings ${siblingTokens}), price $${correctedBuyPrice?.toFixed(10)}`);
             } else {
               console.log(`[FAILSAFE] Position ${positionIdForVerify.slice(0, 8)} looks correct (ratio ${ratio.toFixed(2)})`);
             }
