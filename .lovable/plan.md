@@ -1,54 +1,49 @@
 
 
-# /ticket Command for Telegram Bot (Pro-only)
+# Make DexScreener Scrape URLs Admin-Configurable
 
-## Overview
-Add a `/ticket` command to the Telegram bot that lets paid subscribers create, update, and check status of support tickets — all from DMs. Also update the /help menu, website command list, and pricing table.
+## Current State
+- Two URLs hard-coded in `supabase/functions/_shared/dex-top-pages.ts`:
+  - `https://dexscreener.com/solana`
+  - `https://dexscreener.com/solana/page-2`
+- No admin UI to add, remove, or reorder scrape targets
+- The `dex-top-200` cron scrapes these pages via Firecrawl every 30 minutes
 
-## Flow Design
+## Plan
 
-```text
-/ticket                    → Show usage + list user's open tickets
-/ticket new <message>      → Create a new ticket (category: "telegram", priority: medium)
-/ticket #123               → Show status + replies for ticket #123
-/ticket #123 <message>     → Add a reply to ticket #123
-```
+### 1. Database table: `dex_scrape_sources`
+Create a new table to store configurable scrape URLs:
+- `id` (UUID PK)
+- `url` (TEXT, the full page URL)
+- `label` (TEXT, e.g. "Solana Page 1")
+- `sort_order` (INT, controls scrape sequence)
+- `is_active` (BOOL, default true)
+- `is_page2` (BOOL, default false — controls longer wait times)
+- `wait_ms` (INT[], retry wait configs e.g. `{3000,5000,8000}`)
+- `last_scraped_at` (TIMESTAMPTZ)
+- `last_pair_count` (INT)
+- `created_at` / `updated_at`
+- RLS: super_admin only
 
-- **Pro-only gate**: Check tier >= pro. Free/auth/x_subscriber get a "upgrade to Pro" nudge.
-- **New ticket**: Inserts into `support_tickets` with user_id, email from profile, name from profile/TG username, category="telegram", subject auto-generated from first ~50 chars.
-- **View ticket**: Queries `support_tickets` + `support_ticket_replies` (non-internal-note only) for that ticket number, shows status and reply thread.
-- **Reply to ticket**: Inserts into `support_ticket_replies` with reply_type='user'. Also fires an `admin_notifications` insert so admins see it.
-- **List open**: Shows all user's tickets (open/in_progress) with ticket numbers and subjects.
+Seed with the two current URLs so nothing breaks.
 
-## Changes
+### 2. Update `_shared/dex-top-pages.ts`
+- Replace hard-coded `DEX_TOP_PAGE_URLS` with a Supabase query to `dex_scrape_sources` (active, ordered by `sort_order`)
+- Use each row's `is_page2` and `wait_ms` fields instead of the current hard-coded wait arrays
+- After each page scrape, update `last_scraped_at` and `last_pair_count` on the row
 
-### 1. Bot webhook — new `handleTicket` function
-**File**: `supabase/functions/holdersintel-bot-webhook/index.ts`
+### 3. Admin UI: Add to Funnel Feeds → Dex/CloudFlare tab
+In the existing `DexCloudFlareFeed` component, add a "Scrape Sources" card:
+- Table showing current URLs, label, active toggle, last scraped, pair count
+- Add URL button (input + label + is_page2 toggle)
+- Delete button per row
+- Drag-to-reorder or sort_order input
 
-- Add `handleTicket(chatId, telegramUserId, args)` function (~120 lines)
-- Tier gate: requires `pro` tier
-- Parse args to determine sub-action (new/view/reply/list)
-- Uses service-role supabase client (already available) to read/write `support_tickets` and `support_ticket_replies`
-- Add `/ticket` case to both switch blocks (DM main switch + group DM redirect)
-- DM-only: group usage redirects to DM
+### 4. No other changes needed
+The `dex-top-200` edge function calls `scrapeDexTopPages()` from the shared module — once that reads from DB instead of the constant, everything downstream (token_lifecycle, Live Feed, holders-intel-scheduler) works automatically.
 
-### 2. /help menu update
-Add `/ticket` under the Pro Intelligence section:
-```
-${check("pro")} /ticket — 🎫 Submit, track & reply to support tickets
-```
-
-### 3. Website TelegramCommandList
-**File**: `src/components/telegram/TelegramCommandList.tsx`
-- Add `{ cmd: "/ticket", desc: "Submit & track support tickets" }` to the Pro group
-
-### 4. Pricing table
-**File**: `src/components/premium/PricingTable.tsx`
-- Add row: `🤖 TG Bot: /ticket` — false for free/auth/xSub, true for pro/dev/enterprise
-
-### 5. Admin notification on new ticket from TG
-When a ticket is created via `/ticket new`, insert into `admin_notifications` with type `new_ticket` so admins are alerted immediately.
-
-## No DB changes needed
-The existing `support_tickets` and `support_ticket_replies` tables already support everything: user_id, category, status, replies with reply_type='user'. Service role bypasses RLS.
+## Technical Notes
+- Migration seeds the two existing URLs so there's zero downtime
+- The edge function already has a Supabase service-role client available
+- Wait configs per-source allow fine-tuning page-2 style delays without code changes
 
