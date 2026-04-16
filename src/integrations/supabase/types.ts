@@ -4084,6 +4084,48 @@ export type Database = {
         }
         Relationships: []
       }
+      dex_scrape_sources: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          is_page2: boolean
+          label: string
+          last_pair_count: number | null
+          last_scraped_at: string | null
+          sort_order: number
+          updated_at: string
+          url: string
+          wait_ms: number[]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_page2?: boolean
+          label?: string
+          last_pair_count?: number | null
+          last_scraped_at?: string | null
+          sort_order?: number
+          updated_at?: string
+          url: string
+          wait_ms?: number[]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_page2?: boolean
+          label?: string
+          last_pair_count?: number | null
+          last_scraped_at?: string | null
+          sort_order?: number
+          updated_at?: string
+          url?: string
+          wait_ms?: number[]
+        }
+        Relationships: []
+      }
       edge_function_registry: {
         Row: {
           category: string | null
