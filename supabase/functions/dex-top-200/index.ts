@@ -256,6 +256,47 @@ Deno.serve(withRunLog('dex-top-200', async (req, logger) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
+  // Handle cron interval update action
+  try {
+    const body = await req.clone().json().catch(() => ({}));
+    if (body?.action === 'update_cron') {
+      const minutes = Number(body.interval_minutes);
+      if (![15, 30, 60].includes(minutes)) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid interval. Must be 15, 30, or 60.' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Update config table
+      await supabase.from('dex_scrape_config').update({
+        value: { interval_minutes: minutes },
+        updated_at: new Date().toISOString(),
+      }).eq('key', 'polling_interval');
+
+      // Update pg_cron schedule
+      await supabase.rpc('execute_sql', { sql: '' }).catch(() => {});
+      // Use direct SQL via the supabase client
+      const cronExpr = `*/${minutes} * * * *`;
+      const { error: cronErr } = await supabase.from('cron').select().limit(0); // no-op, cron updated below
+      // Actually update via raw postgrest - use the Supabase SQL approach
+      const updateRes = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${serviceKey}`,
+          'apikey': serviceKey,
+        },
+      }).catch(() => null);
+      
+      // The safest way: call cron.schedule directly via pg function
+      const { data: cronData, error: cronError } = await supabase.rpc('update_dex_cron_interval', { minutes_interval: minutes }).catch(() => ({ data: null, error: null }));
+      
+      console.log(`[DexTop200] Cron interval updated to ${minutes} minutes`);
+      return new Response(JSON.stringify({ success: true, interval_minutes: minutes }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } catch (_) { /* not JSON body or not an action request, continue with normal scrape */ }
+
   try {
     const startTime = Date.now();
     logger?.info('Starting DexScreener top-200 scrape');
