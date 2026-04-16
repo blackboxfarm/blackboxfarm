@@ -17,6 +17,7 @@ const BlackBoxTab = lazy(() => import("@/components/admin/tabs/BlackBoxTab"));
 const HoldersIntelTab = lazy(() => import("@/components/admin/tabs/HoldersIntelTab"));
 const WhalesMINTSTab = lazy(() => import("@/components/admin/tabs/WhalesMINTSTab"));
 const FlipItDashboard = lazy(() => import("@/components/admin/FlipItDashboard").then(m => ({ default: m.FlipItDashboard })));
+const MeteoraPoolsDashboard = lazy(() => import("@/components/admin/MeteoraPoolsDashboard").then(m => ({ default: m.MeteoraPoolsDashboard })));
 const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramChannelMonitor"));
 const TwitterAccountManager = lazy(() => import("@/components/admin/TwitterAccountManager"));
 const PumpfunMonitorTab = lazy(() => import("@/components/admin/tabs/PumpfunMonitorTab"));
@@ -47,6 +48,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "holders-intel",
   "whales-mints",
   "flipit",
+  "pools",
   "telegram",
   "twitter-accounts",
   "pumpfun-monitor",
@@ -182,6 +184,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="holders-intel" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-violet-500/20">📊 Holders Intel</TabsTrigger>
             <TabsTrigger value="whales-mints" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-teal-500/20">🐋 Whales & MINTS</TabsTrigger>
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
+            <TabsTrigger value="pools" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-cyan-500/20">🌊 Pools</TabsTrigger>
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter</TabsTrigger>
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun</TabsTrigger>
@@ -247,6 +250,14 @@ export default function SuperAdmin() {
             {activeTab === "flipit" && (
               <TabErrorBoundary tabName="FlipIt">
                 <Suspense fallback={<TabLoader />}><FlipItDashboard /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
+
+          <TabsContent value="pools">
+            {activeTab === "pools" && (
+              <TabErrorBoundary tabName="Pools">
+                <Suspense fallback={<TabLoader />}><MeteoraPoolsDashboard /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
