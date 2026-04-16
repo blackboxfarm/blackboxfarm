@@ -1,7 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "npm:@solana/web3.js@1.87.6";
+import nacl from "npm:tweetnacl@1.0.3";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 import { SecureStorage } from "../_shared/encryption.ts";
 import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
@@ -12,8 +12,9 @@ const corsHeaders = {
 };
 
 const HELIUS_RPC = getHeliusRpcUrl();
+const LAMPORTS_PER_SOL = 1_000_000_000;
+const SYSTEM_PROGRAM_ID = new Uint8Array(32); // 11111111111111111111111111111111 = all zeros
 
-// Lightweight JSON-RPC helper — avoids heavy Connection bootstrap
 async function rpc(method: string, params: any[]): Promise<any> {
   const res = await fetch(HELIUS_RPC, {
     method: 'POST',
@@ -23,6 +24,105 @@ async function rpc(method: string, params: any[]): Promise<any> {
   const json = await res.json();
   if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
   return json.result;
+}
+
+// ---- Lightweight Solana transaction builder (no @solana/web3.js needed) ----
+
+function encodeShortVec(length: number): Uint8Array {
+  const bytes: number[] = [];
+  let n = length;
+  while (true) {
+    let b = n & 0x7f;
+    n >>= 7;
+    if (n === 0) { bytes.push(b); break; }
+    bytes.push(b | 0x80);
+  }
+  return new Uint8Array(bytes);
+}
+
+function u64LE(value: number): Uint8Array {
+  const buf = new Uint8Array(8);
+  const dv = new DataView(buf.buffer);
+  dv.setBigUint64(0, BigInt(value), true);
+  return buf;
+}
+
+function concatBytes(...arrs: Uint8Array[]): Uint8Array {
+  const total = arrs.reduce((s, a) => s + a.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrs) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+/**
+ * Build a legacy Solana transfer transaction (single SystemProgram.transfer).
+ * Returns base64-encoded signed transaction.
+ */
+function buildSignedTransfer(
+  fromSecretKey: Uint8Array,   // 64 bytes (ed25519 secret + pubkey)
+  fromPubkey: Uint8Array,      // 32 bytes
+  toPubkey: Uint8Array,        // 32 bytes
+  lamports: number,
+  recentBlockhashB58: string,
+): string {
+  const blockhash = bs58.decode(recentBlockhashB58); // 32 bytes
+
+  // Account keys: [from (signer, writable), to (writable), system program (readonly)]
+  const accountKeys = [fromPubkey, toPubkey, SYSTEM_PROGRAM_ID];
+
+  // Message header: numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts
+  const header = new Uint8Array([1, 0, 1]);
+
+  // Account keys section
+  const accountKeysSection = concatBytes(
+    encodeShortVec(accountKeys.length),
+    ...accountKeys,
+  );
+
+  // Instructions: 1 instruction
+  // Instruction = programIdIndex (u8) + accountsVec + dataVec
+  // SystemProgram.transfer data = u32 LE instruction index (2) + u64 LE lamports
+  const ixData = new Uint8Array(12);
+  const dv = new DataView(ixData.buffer);
+  dv.setUint32(0, 2, true); // transfer = 2
+  ixData.set(u64LE(lamports), 4);
+
+  const ixAccounts = new Uint8Array([0, 1]); // from, to
+  const instruction = concatBytes(
+    new Uint8Array([2]),                    // programIdIndex = 2 (system program)
+    encodeShortVec(ixAccounts.length),
+    ixAccounts,
+    encodeShortVec(ixData.length),
+    ixData,
+  );
+
+  const instructionsSection = concatBytes(
+    encodeShortVec(1),
+    instruction,
+  );
+
+  const message = concatBytes(
+    header,
+    accountKeysSection,
+    blockhash,
+    instructionsSection,
+  );
+
+  // Sign message
+  const signature = nacl.sign.detached(message, fromSecretKey);
+
+  // Final tx = signaturesVec + message
+  const tx = concatBytes(
+    encodeShortVec(1),
+    signature,
+    message,
+  );
+
+  // base64 encode
+  let bin = '';
+  for (let i = 0; i < tx.length; i++) bin += String.fromCharCode(tx[i]);
+  return btoa(bin);
 }
 
 serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
@@ -91,13 +191,22 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
 
     const secretKeyBase58 = await SecureStorage.decryptWalletSecret(wallet.secret_key_encrypted);
     const secretKeyBytes = bs58.decode(secretKeyBase58);
-    const keypair = Keypair.fromSecretKey(secretKeyBytes);
+    if (secretKeyBytes.length !== 64) {
+      return new Response(JSON.stringify({ error: `Invalid secret key length: ${secretKeyBytes.length}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const fromPubkey = secretKeyBytes.slice(32, 64);
+    const fromPubkeyB58 = bs58.encode(fromPubkey);
 
-    console.log(`[flipit-withdrawal] Wallet pubkey: ${wallet.pubkey}`);
+    if (fromPubkeyB58 !== wallet.pubkey) {
+      console.warn(`[flipit-withdrawal] Pubkey mismatch! db=${wallet.pubkey} derived=${fromPubkeyB58}`);
+    }
 
-    // Get balance + recent blockhash in parallel via raw RPC (no heavy Connection)
+    console.log(`[flipit-withdrawal] Wallet pubkey: ${fromPubkeyB58}`);
+
+    // Get balance + recent blockhash in parallel
     const [balanceRes, blockhashRes] = await Promise.all([
-      rpc('getBalance', [keypair.publicKey.toBase58()]),
+      rpc('getBalance', [fromPubkeyB58]),
       rpc('getLatestBlockhash', [{ commitment: 'confirmed' }]),
     ]);
     const balance: number = balanceRes.value;
@@ -111,8 +220,11 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const destination = new PublicKey(destinationAddress);
-    console.log(`[flipit-withdrawal] Destination: ${destinationAddress}`);
+    const toPubkey = bs58.decode(destinationAddress);
+    if (toPubkey.length !== 32) {
+      return new Response(JSON.stringify({ error: "Invalid destination address" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const feeBuffer = 10000;
     let amountToSend: number;
@@ -134,19 +246,13 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: keypair.publicKey,
-        toPubkey: destination,
-        lamports: amountToSend
-      })
+    const base64Tx = buildSignedTransfer(
+      secretKeyBytes,
+      fromPubkey,
+      toPubkey,
+      amountToSend,
+      blockhash,
     );
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = keypair.publicKey;
-    transaction.sign(keypair);
-
-    const rawTx = transaction.serialize();
-    const base64Tx = btoa(String.fromCharCode(...new Uint8Array(rawTx)));
 
     const signature: string = await rpc('sendTransaction', [
       base64Tx,
@@ -156,14 +262,15 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
     console.log(`[flipit-withdrawal] Transaction sent: ${signature}`);
 
     const withdrawnAmount = amountToSend / LAMPORTS_PER_SOL;
+    const destinationB58 = bs58.encode(toPubkey);
 
     await supabase.from("activity_logs").insert({
-      message: `FlipIt wallet withdrawal: ${withdrawnAmount.toFixed(4)} SOL to ${destination.toBase58().slice(0, 8)}...`,
+      message: `FlipIt wallet withdrawal: ${withdrawnAmount.toFixed(4)} SOL to ${destinationB58.slice(0, 8)}...`,
       log_level: "info",
       metadata: {
         wallet_id: walletId,
         amount_sol: withdrawnAmount,
-        destination: destination.toBase58(),
+        destination: destinationB58,
         signature,
         user_id: user.id
       }
@@ -173,7 +280,7 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
       success: true,
       signature,
       amountSol: withdrawnAmount,
-      destination: destination.toBase58(),
+      destination: destinationB58,
       explorerUrl: `https://solscan.io/tx/${signature}`
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
