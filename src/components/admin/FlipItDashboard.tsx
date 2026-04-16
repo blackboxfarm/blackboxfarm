@@ -5112,15 +5112,31 @@ export function FlipItDashboard() {
                       
                       {/* Delete Column */}
                       <TableCell className="px-2 py-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeletePosition(position.id, position.token_symbol)}
-                          title="Delete entry from database"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                            onClick={() => handleReverifyPosition(position.id, position.token_symbol)}
+                            disabled={verifyingPositions.has(position.id) || !position.buy_signature}
+                            title="Re-verify from on-chain (fixes incorrect quantity/price)"
+                          >
+                            {verifyingPositions.has(position.id) ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Shield className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeletePosition(position.id, position.token_symbol)}
+                            title="Delete entry from database"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
