@@ -107,8 +107,9 @@ function isUsableMarkdown(body: string | undefined | null): { usable: boolean; r
 
 // ─── Fallback URLs if DB query fails ────────────────────────────────────
 const FALLBACK_SOURCES: ScrapeSource[] = [
-  { id: 'fallback-1', url: 'https://dexscreener.com/solana', label: 'Solana Page 1', sort_order: 1, is_page2: false, wait_ms: [3000, 5000, 8000] },
-  { id: 'fallback-2', url: 'https://dexscreener.com/solana/page-2', label: 'Solana Page 2', sort_order: 2, is_page2: true, wait_ms: [10000, 15000, 20000] },
+  { id: 'fallback-1', url: 'https://dexscreener.com/new-pairs/solana?rankBy=trendingScoreH6&order=desc&minLiq=1000&maxAge=24&profile=1', label: 'Solana New Pairs Page 1', sort_order: 1, is_page2: false, wait_ms: [3000, 5000, 8000] },
+  { id: 'fallback-2', url: 'https://dexscreener.com/new-pairs/page-2?maxAge=24&minLiq=1000&order=desc&profile=1&rankBy=trendingScoreH6', label: 'Solana New Pairs Page 2', sort_order: 2, is_page2: true, wait_ms: [10000, 15000, 20000] },
+  { id: 'fallback-3', url: 'https://dexscreener.com/new-pairs/page-3?maxAge=24&minLiq=1000&order=desc&profile=1&rankBy=trendingScoreH6', label: 'Solana New Pairs Page 3', sort_order: 3, is_page2: true, wait_ms: [10000, 15000, 20000] },
 ];
 
 async function loadScrapeSources(): Promise<ScrapeSource[]> {
