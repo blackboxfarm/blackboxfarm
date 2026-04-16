@@ -14,6 +14,7 @@ const SurveyManagement = lazy(() => import("@/components/admin/SurveyManagement"
 const SecurityActivityDashboard = lazy(() => import("@/components/admin/SecurityActivityDashboard").then(m => ({ default: m.SecurityActivityDashboard })));
 const WalletBundleReport = lazy(() => import("@/components/admin/WalletBundleReport").then(m => ({ default: m.WalletBundleReport })));
 const FotobombApp = lazy(() => import("@/components/admin/FotobombApp"));
+const AdminWalletRecovery = lazy(() => import("@/components/AdminWalletRecovery").then(m => ({ default: m.AdminWalletRecovery })));
 
 export default function BlackBoxTab() {
   const [activeSubTab, setActiveSubTab] = useState("bundle-analysis");
@@ -32,6 +33,7 @@ export default function BlackBoxTab() {
         <TabsTrigger value="fuct-airdrops">💜 $FUCT Airdrops</TabsTrigger>
         <TabsTrigger value="surveys">📋 Surveys</TabsTrigger>
         <TabsTrigger value="fotobomb">💣 FOTOBOMB</TabsTrigger>
+        <TabsTrigger value="wallet-recovery">🔑 Master Wallets</TabsTrigger>
       </TabsList>
 
       <TabsContent value="bundle-analysis">
@@ -66,6 +68,9 @@ export default function BlackBoxTab() {
       </TabsContent>
       <TabsContent value="fotobomb">
         {activeSubTab === "fotobomb" && <Suspense fallback={<LazyLoader />}><FotobombApp /></Suspense>}
+      </TabsContent>
+      <TabsContent value="wallet-recovery">
+        {activeSubTab === "wallet-recovery" && <Suspense fallback={<LazyLoader />}><AdminWalletRecovery /></Suspense>}
       </TabsContent>
     </Tabs>
   );
