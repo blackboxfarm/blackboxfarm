@@ -266,30 +266,13 @@ Deno.serve(withRunLog('dex-top-200', async (req, logger) => {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      // Update config table
-      await supabase.from('dex_scrape_config').update({
-        value: { interval_minutes: minutes },
-        updated_at: new Date().toISOString(),
-      }).eq('key', 'polling_interval');
-
-      // Update pg_cron schedule
-      await supabase.rpc('execute_sql', { sql: '' }).catch(() => {});
-      // Use direct SQL via the supabase client
-      const cronExpr = `*/${minutes} * * * *`;
-      const { error: cronErr } = await supabase.from('cron').select().limit(0); // no-op, cron updated below
-      // Actually update via raw postgrest - use the Supabase SQL approach
-      const updateRes = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${serviceKey}`,
-          'apikey': serviceKey,
-        },
-      }).catch(() => null);
-      
-      // The safest way: call cron.schedule directly via pg function
-      const { data: cronData, error: cronError } = await supabase.rpc('update_dex_cron_interval', { minutes_interval: minutes }).catch(() => ({ data: null, error: null }));
-      
+      const { error: rpcErr } = await supabase.rpc('update_dex_cron_interval', { minutes_interval: minutes });
+      if (rpcErr) {
+        console.error('[DexTop200] Cron update failed:', rpcErr.message);
+        return new Response(JSON.stringify({ success: false, error: rpcErr.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       console.log(`[DexTop200] Cron interval updated to ${minutes} minutes`);
       return new Response(JSON.stringify({ success: true, interval_minutes: minutes }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
