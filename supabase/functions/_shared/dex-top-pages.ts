@@ -154,6 +154,36 @@ async function updateSourceStats(sourceId: string, pairCount: number) {
   }
 }
 
+async function logScrapeResult(opts: {
+  sourceId: string | null;
+  sourceUrl: string;
+  sourceLabel: string;
+  success: boolean;
+  pairCount: number;
+  provider: string | null;
+  errorMessage: string | null;
+  durationMs: number;
+}) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceKey) return;
+    const supabase = createClient(supabaseUrl, serviceKey);
+    await supabase.from('dex_scrape_log').insert({
+      source_id: opts.sourceId?.startsWith('fallback-') ? null : opts.sourceId,
+      source_url: opts.sourceUrl,
+      source_label: opts.sourceLabel,
+      success: opts.success,
+      pair_count: opts.pairCount,
+      provider: opts.provider,
+      error_message: opts.errorMessage,
+      duration_ms: opts.durationMs,
+    });
+  } catch (e) {
+    console.warn('[DexTop200] Failed to log scrape result:', e);
+  }
+}
+
 async function scrapePageMarkdown(url: string, waitConfigs: number[], configIndex = 0, isPage2 = false): Promise<{ markdown: string; retried: boolean; provider: string }> {
   const waitFor = waitConfigs[configIndex] || waitConfigs[0];
   const attempt = configIndex + 1;
