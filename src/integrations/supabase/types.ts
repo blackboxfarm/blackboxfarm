@@ -4838,6 +4838,8 @@ export type Database = {
           is_on_curve: boolean | null
           is_scalp_position: boolean | null
           is_test_position: boolean | null
+          lp_pool_address: string | null
+          lp_withdrawal_signature: string | null
           moon_bag_dump_threshold_pct: number | null
           moon_bag_enabled: boolean | null
           moon_bag_peak_change_pct: number | null
@@ -4847,6 +4849,7 @@ export type Database = {
           original_quantity_tokens: number | null
           paired_position_id: string | null
           partial_sells: Json | null
+          position_source: string
           position_type: string | null
           price_fetched_at: string | null
           price_source: string | null
@@ -4918,6 +4921,8 @@ export type Database = {
           is_on_curve?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
+          lp_pool_address?: string | null
+          lp_withdrawal_signature?: string | null
           moon_bag_dump_threshold_pct?: number | null
           moon_bag_enabled?: boolean | null
           moon_bag_peak_change_pct?: number | null
@@ -4927,6 +4932,7 @@ export type Database = {
           original_quantity_tokens?: number | null
           paired_position_id?: string | null
           partial_sells?: Json | null
+          position_source?: string
           position_type?: string | null
           price_fetched_at?: string | null
           price_source?: string | null
@@ -4998,6 +5004,8 @@ export type Database = {
           is_on_curve?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
+          lp_pool_address?: string | null
+          lp_withdrawal_signature?: string | null
           moon_bag_dump_threshold_pct?: number | null
           moon_bag_enabled?: boolean | null
           moon_bag_peak_change_pct?: number | null
@@ -5007,6 +5015,7 @@ export type Database = {
           original_quantity_tokens?: number | null
           paired_position_id?: string | null
           partial_sells?: Json | null
+          position_source?: string
           position_type?: string | null
           price_fetched_at?: string | null
           price_source?: string | null
