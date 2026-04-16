@@ -4239,15 +4239,20 @@ export function FlipItDashboard() {
                     ? effectiveQuantityTokens * usableCurrentPrice
                     : null;
 
-                  // PnL based on PRICE CHANGE (not buy_amount_usd which may be inconsistent with stored price)
-                  // PnL$ = tokens × (current_price - entry_price)
-                  // PnL% = (current_price - entry_price) / entry_price × 100
-                  const pnlUsd = hasQuantity && usableCurrentPrice && effectiveEntryPrice > 0
-                    ? effectiveQuantityTokens * (usableCurrentPrice - effectiveEntryPrice)
+                  // PnL must match what is displayed: currentValue (shown) vs buy_amount_usd (shown as Invested).
+                  // Deriving from price/entry_price separately leads to contradictions when stored
+                  // buy_price_usd is stale relative to quantity_tokens / buy_amount_usd.
+                  const investedUsd =
+                    typeof position.buy_amount_usd === 'number' && Number.isFinite(position.buy_amount_usd)
+                      ? position.buy_amount_usd
+                      : null;
+
+                  const pnlUsd = currentValue !== null && investedUsd !== null
+                    ? currentValue - investedUsd
                     : null;
 
-                  const pnlPercent = usableCurrentPrice && effectiveEntryPrice > 0
-                    ? ((usableCurrentPrice - effectiveEntryPrice) / effectiveEntryPrice) * 100
+                  const pnlPercent = pnlUsd !== null && investedUsd && investedUsd > 0
+                    ? (pnlUsd / investedUsd) * 100
                     : null;
 
                   // Target value
