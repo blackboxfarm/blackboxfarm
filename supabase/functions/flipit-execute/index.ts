@@ -1197,7 +1197,41 @@ serve(withRunLog('flipit-execute', async (req) => {
           }
         }
         
-        execLog.log('QUANTITY_RESOLVED', { 
+        // ─── DELTA CORRECTION ───────────────────────────────────────────
+        // If wallet already held tokens of this mint before this buy,
+        // some code paths (accountData, failsafe) may return the TOTAL
+        // wallet balance instead of just what THIS transaction bought.
+        // Subtract the pre-buy balance to get the true delta.
+        if (quantityTokens && preBuyTokenBalance && preBuyTokenBalance !== "0") {
+          const resolvedQty = Number(quantityTokens);
+          const resolvedDecimals = tokenDecimals ?? (tokenMint.endsWith('pump') ? 6 : 9);
+          const preBuyHuman = Number(preBuyTokenBalance) / Math.pow(10, resolvedDecimals);
+          
+          // Only correct if resolved qty looks like it includes the pre-buy balance
+          // (i.e. resolved qty > pre-buy balance AND delta would still be positive)
+          if (preBuyHuman > 0 && resolvedQty > preBuyHuman) {
+            const delta = resolvedQty - preBuyHuman;
+            // Sanity: the delta should be roughly proportional to the SOL spent
+            // If pre-buy was 1M and we got 7.6M, delta = 6.6M (correct)
+            // If pre-buy was 1M and we got 1.5M via swap event, delta = 0.5M (wrong — swap event was already a delta)
+            // Heuristic: if removing pre-buy changes qty by >15%, it was likely a total balance
+            const changeRatio = preBuyHuman / resolvedQty;
+            if (changeRatio > 0.15) {
+              console.log(`DELTA_CORRECTION: qty ${resolvedQty} → ${delta} (subtracted pre-buy ${preBuyHuman}, ratio ${(changeRatio * 100).toFixed(1)}%)`);
+              quantityTokens = String(delta);
+              if (quantityTokensRaw) {
+                const rawDelta = BigInt(quantityTokensRaw) - BigInt(preBuyTokenBalance);
+                if (rawDelta > 0n) {
+                  quantityTokensRaw = rawDelta.toString();
+                }
+              }
+            } else {
+              console.log(`DELTA_CORRECTION_SKIPPED: pre-buy ${preBuyHuman} is only ${(changeRatio * 100).toFixed(1)}% of ${resolvedQty} — likely already a delta`);
+            }
+          }
+        }
+        
+        execLog.log('QUANTITY_RESOLVED', {
           quantityTokens: quantityTokens == null ? null : String(quantityTokens).slice(0, 15),
           quantityTokensRaw: quantityTokensRaw?.slice(0, 15),
           tokenDecimals
