@@ -14,7 +14,7 @@ const SurveyManagement = lazy(() => import("@/components/admin/SurveyManagement"
 const SecurityActivityDashboard = lazy(() => import("@/components/admin/SecurityActivityDashboard").then(m => ({ default: m.SecurityActivityDashboard })));
 const WalletBundleReport = lazy(() => import("@/components/admin/WalletBundleReport").then(m => ({ default: m.WalletBundleReport })));
 const FotobombApp = lazy(() => import("@/components/admin/FotobombApp"));
-const AdminWalletRecovery = lazy(() => import("@/components/AdminWalletRecovery").then(m => ({ default: m.AdminWalletRecovery })));
+const MasterWalletsDashboard = lazy(() => import("@/components/admin/MasterWalletsDashboard").then(m => ({ default: m.MasterWalletsDashboard })));
 
 export default function BlackBoxTab() {
   const [activeSubTab, setActiveSubTab] = useState("bundle-analysis");
@@ -70,7 +70,7 @@ export default function BlackBoxTab() {
         {activeSubTab === "fotobomb" && <Suspense fallback={<LazyLoader />}><FotobombApp /></Suspense>}
       </TabsContent>
       <TabsContent value="wallet-recovery">
-        {activeSubTab === "wallet-recovery" && <Suspense fallback={<LazyLoader />}><AdminWalletRecovery /></Suspense>}
+        {activeSubTab === "wallet-recovery" && <Suspense fallback={<LazyLoader />}><MasterWalletsDashboard /></Suspense>}
       </TabsContent>
     </Tabs>
   );
