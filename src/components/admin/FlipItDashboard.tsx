@@ -1918,6 +1918,39 @@ export function FlipItDashboard() {
     }
   };
 
+  // Re-verify a position from on-chain data (fixes incorrect quantity/price)
+  const [verifyingPositions, setVerifyingPositions] = useState<Set<string>>(new Set());
+  const handleReverifyPosition = async (positionId: string, tokenSymbol: string | null) => {
+    setVerifyingPositions(prev => new Set(prev).add(positionId));
+    try {
+      toast.info(`🔍 Re-verifying ${tokenSymbol || 'position'} from chain...`);
+      const { data, error } = await supabase.functions.invoke('flipit-repair-positions', {
+        body: { action: 'repair_single', positionId, dryRun: false }
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.updated) {
+        const onchain = data.solscan_buy;
+        toast.success(
+          `✅ ${tokenSymbol || 'Position'} re-verified: ${onchain?.tokensReceived?.toLocaleString() || '?'} tokens for ${onchain?.solSpent || '?'} SOL`
+        );
+      } else if (data?.solscan_buy?.error) {
+        toast.error(`Could not parse on-chain: ${data.solscan_buy.error}`);
+      } else {
+        toast.success(`✅ ${tokenSymbol || 'Position'} verified — already correct`);
+      }
+      loadPositions({ silent: true });
+    } catch (err: any) {
+      toast.error(err.message || 'Re-verify failed');
+    } finally {
+      setVerifyingPositions(prev => {
+        const next = new Set(prev);
+        next.delete(positionId);
+        return next;
+      });
+    }
+  };
+
   // Delete a flip position from the database
   const handleDeletePosition = async (positionId: string, tokenSymbol: string | null) => {
     try {
@@ -5079,15 +5112,31 @@ export function FlipItDashboard() {
                       
                       {/* Delete Column */}
                       <TableCell className="px-2 py-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeletePosition(position.id, position.token_symbol)}
-                          title="Delete entry from database"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                            onClick={() => handleReverifyPosition(position.id, position.token_symbol)}
+                            disabled={verifyingPositions.has(position.id) || !position.buy_signature}
+                            title="Re-verify from on-chain (fixes incorrect quantity/price)"
+                          >
+                            {verifyingPositions.has(position.id) ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Shield className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeletePosition(position.id, position.token_symbol)}
+                            title="Delete entry from database"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
