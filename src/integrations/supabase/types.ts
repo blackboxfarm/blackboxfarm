@@ -19672,6 +19672,10 @@ export type Database = {
       }
       track_user_login: { Args: { p_user_id: string }; Returns: undefined }
       unban_user: { Args: { target_user_id: string }; Returns: undefined }
+      update_dex_cron_interval: {
+        Args: { minutes_interval: number }
+        Returns: undefined
+      }
       validate_profile_access: {
         Args: { target_user_id: string }
         Returns: boolean
