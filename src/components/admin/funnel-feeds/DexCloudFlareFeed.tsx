@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Send, CheckCheck } from "lucide-react";
+import { ScrapeSourcesManager } from "./ScrapeSourcesManager";
 import { useToast } from "@/hooks/use-toast";
 
 interface TrendingPair {
@@ -258,6 +259,8 @@ export function DexCloudFlareFeed() {
           </Table>
         </div>
       )}
+
+      <ScrapeSourcesManager />
     </div>
   );
 }
