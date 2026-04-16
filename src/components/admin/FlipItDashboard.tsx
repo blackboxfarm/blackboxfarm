@@ -1498,6 +1498,12 @@ export function FlipItDashboard() {
       return;
     }
 
+    const destination = withdrawDestination.trim();
+    if (!destination) {
+      toast.error('Enter a destination wallet');
+      return;
+    }
+
     // Parse custom amount if provided
     const customAmount = withdrawAmount.trim() ? parseFloat(withdrawAmount) : null;
     if (customAmount !== null && (isNaN(customAmount) || customAmount <= 0)) {
@@ -1505,9 +1511,8 @@ export function FlipItDashboard() {
       return;
     }
 
-    // Validate destination address if provided
-    const destination = withdrawDestination.trim() || null;
-    if (destination && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(destination)) {
+    // Validate destination address
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(destination)) {
       toast.error('Invalid Solana wallet address');
       return;
     }
@@ -1518,7 +1523,7 @@ export function FlipItDashboard() {
         body: { 
           walletId: selectedWallet,
           amount: customAmount, // null means withdraw all
-          destinationAddress: destination // null means find funder
+          destinationAddress: destination
         }
       });
 
@@ -1533,7 +1538,19 @@ export function FlipItDashboard() {
         refreshWalletBalance();
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to withdraw');
+      let msg = err?.message || 'Failed to withdraw';
+
+      try {
+        const ctx = err?.context;
+        if (ctx && typeof ctx.json === 'function') {
+          const payload = await ctx.json();
+          if (payload?.error) msg = String(payload.error);
+        }
+      } catch {
+        // ignore
+      }
+
+      toast.error(msg);
     } finally {
       setIsWithdrawing(false);
     }
@@ -3255,7 +3272,7 @@ export function FlipItDashboard() {
                               <div className="flex items-center gap-2">
                                 <Input
                                   type="text"
-                                  placeholder="Destination wallet (empty = funder)"
+                                  placeholder="Destination wallet (required)"
                                   value={withdrawDestination}
                                   onChange={(e) => setWithdrawDestination(e.target.value)}
                                   className="flex-1 h-8 text-sm font-mono"
@@ -3277,7 +3294,7 @@ export function FlipItDashboard() {
                                   size="sm"
                                   variant="destructive"
                                   onClick={handleWithdraw}
-                                  disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
+                                  disabled={isWithdrawing || !walletBalance || walletBalance < 0.001 || !withdrawDestination.trim()}
                                 >
                                   {isWithdrawing ? (
                                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
