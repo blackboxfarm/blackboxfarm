@@ -1,49 +1,50 @@
 
 
-# Make DexScreener Scrape URLs Admin-Configurable
+# Add Scrape History Log & Polling Timer to Dex/CloudFlare Tab
 
-## Current State
-- Two URLs hard-coded in `supabase/functions/_shared/dex-top-pages.ts`:
-  - `https://dexscreener.com/solana`
-  - `https://dexscreener.com/solana/page-2`
-- No admin UI to add, remove, or reorder scrape targets
-- The `dex-top-200` cron scrapes these pages via Firecrawl every 30 minutes
+## What this does
+1. **Scrape History Log** — A new table (`dex_scrape_log`) records every scrape attempt per source URL: success/fail, pair count, provider used, error message, and duration. The admin UI shows this as a scrollable log with color-coded rows (green = success, red = fail).
+2. **Polling Timer Toggle** — A dropdown or input in the admin UI to change how often the `dex-top-200` cron fires (e.g. 15min / 30min / 60min). This updates the `pg_cron` schedule via a small edge function or DB function call.
 
 ## Plan
 
-### 1. Database table: `dex_scrape_sources`
-Create a new table to store configurable scrape URLs:
-- `id` (UUID PK)
-- `url` (TEXT, the full page URL)
-- `label` (TEXT, e.g. "Solana Page 1")
-- `sort_order` (INT, controls scrape sequence)
-- `is_active` (BOOL, default true)
-- `is_page2` (BOOL, default false — controls longer wait times)
-- `wait_ms` (INT[], retry wait configs e.g. `{3000,5000,8000}`)
-- `last_scraped_at` (TIMESTAMPTZ)
-- `last_pair_count` (INT)
-- `created_at` / `updated_at`
-- RLS: super_admin only
+### 1. Database: `dex_scrape_log` table
+- `id` UUID PK
+- `source_id` UUID FK → `dex_scrape_sources.id` (nullable for fallback sources)
+- `source_url` TEXT (always logged regardless)
+- `source_label` TEXT
+- `success` BOOLEAN
+- `pair_count` INT (0 on failure)
+- `provider` TEXT (e.g. "firecrawl")
+- `error_message` TEXT (null on success)
+- `duration_ms` INT
+- `created_at` TIMESTAMPTZ default now()
+- RLS: super_admin read-only
+- Auto-prune: trigger or scheduled cleanup to keep last 7 days only (storage management)
 
-Seed with the two current URLs so nothing breaks.
+### 2. Edge function: log each scrape result
+In `_shared/dex-top-pages.ts`, after each source scrape (success or catch block), insert a row into `dex_scrape_log` with the outcome. Minimal change — just add a `logScrapeResult()` helper next to `updateSourceStats()`.
 
-### 2. Update `_shared/dex-top-pages.ts`
-- Replace hard-coded `DEX_TOP_PAGE_URLS` with a Supabase query to `dex_scrape_sources` (active, ordered by `sort_order`)
-- Use each row's `is_page2` and `wait_ms` fields instead of the current hard-coded wait arrays
-- After each page scrape, update `last_scraped_at` and `last_pair_count` on the row
+### 3. Admin UI: Scrape History panel
+Add a `ScrapeHistoryLog` component below the existing `ScrapeSourcesManager` in `DexCloudFlareFeed.tsx`:
+- Fetches last 50 rows from `dex_scrape_log` ordered by `created_at DESC`
+- Table: timestamp, source label, success ✅/❌, pairs found, provider, error (truncated), duration
+- Refresh button
+- Simple filter: All / Failures only
 
-### 3. Admin UI: Add to Funnel Feeds → Dex/CloudFlare tab
-In the existing `DexCloudFlareFeed` component, add a "Scrape Sources" card:
-- Table showing current URLs, label, active toggle, last scraped, pair count
-- Add URL button (input + label + is_page2 toggle)
-- Delete button per row
-- Drag-to-reorder or sort_order input
+### 4. Admin UI: Polling interval control
+Add a small control card above or beside the Scrape Sources manager:
+- Shows current cron interval (read from a `site_settings` or `dex_scrape_sources` meta, or a dedicated key in an existing settings table)
+- Dropdown: 15min / 30min / 60min
+- On change: calls `supabase.functions.invoke('dex-top-200', { body: { action: 'update_cron', interval_minutes: N } })` which runs `SELECT cron.schedule(...)` to update the cron
+- Alternatively, store the interval in a `dex_scrape_config` row and have the edge function self-throttle based on it
 
-### 4. No other changes needed
-The `dex-top-200` edge function calls `scrapeDexTopPages()` from the shared module — once that reads from DB instead of the constant, everything downstream (token_lifecycle, Live Feed, holders-intel-scheduler) works automatically.
+### 5. Cleanup migration
+Add a `cron.schedule` job that runs daily to `DELETE FROM dex_scrape_log WHERE created_at < now() - interval '7 days'` to prevent unbounded growth.
 
-## Technical Notes
-- Migration seeds the two existing URLs so there's zero downtime
-- The edge function already has a Supabase service-role client available
-- Wait configs per-source allow fine-tuning page-2 style delays without code changes
+## Technical notes
+- The log insert uses the existing service-role client already available in `dex-top-pages.ts`
+- Duration tracked with `Date.now()` before/after each `scrapePageMarkdown` call
+- No changes to the scrape logic itself — purely observational logging
+- The cron update requires `pg_cron` extension (already enabled per existing cron jobs)
 
