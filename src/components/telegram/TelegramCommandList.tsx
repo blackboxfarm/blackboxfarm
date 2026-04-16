@@ -46,6 +46,7 @@ const COMMAND_GROUPS = [
     commands: [
       { cmd: "/oracle", alias: "/o", desc: "Full developer reputation mesh" },
       { cmd: "/wallet", alias: "/w", desc: "Wallet behavior analysis" },
+      { cmd: "/ticket", desc: "Submit & track support tickets" },
     ],
     tier: "Pro",
     tierClass: "text-yellow-400 border-yellow-400/40",

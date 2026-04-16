@@ -59,6 +59,7 @@ const features: PricingFeature[] = [
   { label: '🤖 TG Bot: /momentum', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
   { label: '🤖 TG Bot: /oracle', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   { label: '🤖 TG Bot: /wallet', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
+  { label: '🤖 TG Bot: /ticket', free: false, auth: false, xSub: false, pro: true, dev: true, enterprise: true },
   { label: '🤖 TG Bot: /alerts', free: false, auth: false, xSub: true, pro: true, dev: true, enterprise: true },
   { label: 'Bot Lookups / Hour', free: '0', auth: '3', xSub: '10', pro: '25', dev: '50', enterprise: '50' },
 ];

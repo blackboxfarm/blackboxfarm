@@ -813,7 +813,8 @@ async function handleHelp(chatId: number, telegramUserId: string) {
   cmds += `*🧠 Pro Intelligence — Pro ★★★*\n` +
     `_Institutional-grade tools. See what nobody else can._\n` +
     `${check("pro")} /oracle (/o) \`CA\` — Deep dev reputation mesh: funding chains, wallet genealogy & cross-token links\n` +
-    `${check("pro")} /wallet (/w) \`ADDR\` — Full wallet forensics: trading patterns, PnL history & behavioral profiling\n`;
+    `${check("pro")} /wallet (/w) \`ADDR\` — Full wallet forensics: trading patterns, PnL history & behavioral profiling\n` +
+    `${check("pro")} /ticket — 🎫 Submit, track & reply to support tickets\n`;
   if (!hasTier(tier, "pro")) {
     cmds += `  _↑ Go Pro at $9.99/mo — the alpha edge that pays for itself_\n`;
   }
@@ -849,6 +850,194 @@ async function handleHelp(chatId: number, telegramUserId: string) {
     TAGLINE;
 
   await sendMessage(chatId, cmds);
+}
+
+// ─── /ticket — Pro-only support ticket management ───
+async function handleTicket(chatId: number, telegramUserId: string, args: string) {
+  const gate = await gateCheck(chatId, telegramUserId, "pro", "/ticket");
+  if (!gate) return;
+
+  const trimmed = args.trim();
+
+  // /ticket new <message> — Create a new ticket
+  if (trimmed.toLowerCase().startsWith("new ")) {
+    const ticketMessage = trimmed.slice(4).trim();
+    if (ticketMessage.length < 5) {
+      await sendMessage(chatId, `🎫 *Create a Ticket*\n\nUsage: \`/ticket new Your issue description here\`\n\n_Minimum 5 characters._`);
+      return;
+    }
+
+    // Get profile info for name/email
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name, email")
+      .eq("id", gate.userId)
+      .maybeSingle();
+
+    const name = profile?.display_name || `TG User ${telegramUserId}`;
+    const email = profile?.email || `tg-${telegramUserId}@telegram.placeholder`;
+    const subject = ticketMessage.slice(0, 50) + (ticketMessage.length > 50 ? "…" : "");
+
+    const { data: ticket, error } = await supabase
+      .from("support_tickets")
+      .insert({
+        user_id: gate.userId,
+        name,
+        email,
+        subject,
+        message: ticketMessage.slice(0, 2000),
+        category: "telegram",
+        priority: "medium",
+        status: "open",
+        metadata: { source: "telegram_bot", telegram_user_id: telegramUserId },
+      })
+      .select("ticket_number")
+      .single();
+
+    if (error || !ticket) {
+      console.error("[bot] ticket create error:", error);
+      await sendMessage(chatId, `❌ Failed to create ticket. Please try again or use [the contact page](https://blackbox.farm/contact).`);
+      return;
+    }
+
+    // Admin notification
+    await supabase.from("admin_notifications").insert({
+      notification_type: "new_ticket",
+      title: `🎫 New TG Ticket #${ticket.ticket_number}`,
+      message: `From ${name}: ${subject}`,
+      metadata: { ticket_number: ticket.ticket_number, user_id: gate.userId, source: "telegram" },
+    });
+
+    await sendMessage(chatId,
+      `✅ *Ticket #${ticket.ticket_number} Created*\n\n` +
+      `📋 Subject: _${subject}_\n` +
+      `📊 Status: Open\n\n` +
+      `Track it: \`/ticket #${ticket.ticket_number}\`\n` +
+      `Reply: \`/ticket #${ticket.ticket_number} Your message\``
+    );
+    return;
+  }
+
+  // /ticket #123 or /ticket #123 <reply>
+  const ticketMatch = trimmed.match(/^#?(\d+)\s*(.*)/s);
+  if (ticketMatch) {
+    const ticketNum = parseInt(ticketMatch[1], 10);
+    const replyText = (ticketMatch[2] || "").trim();
+
+    // Fetch the ticket
+    const { data: ticket } = await supabase
+      .from("support_tickets")
+      .select("id, ticket_number, subject, status, created_at, message")
+      .eq("ticket_number", ticketNum)
+      .eq("user_id", gate.userId)
+      .maybeSingle();
+
+    if (!ticket) {
+      await sendMessage(chatId, `❌ Ticket #${ticketNum} not found or doesn't belong to your account.`);
+      return;
+    }
+
+    // If reply text provided, add a reply
+    if (replyText.length > 0) {
+      if (replyText.length < 3) {
+        await sendMessage(chatId, `⚠️ Reply too short. Minimum 3 characters.`);
+        return;
+      }
+      const { error: replyErr } = await supabase
+        .from("support_ticket_replies")
+        .insert({
+          ticket_id: ticket.id,
+          message: replyText.slice(0, 2000),
+          reply_type: "user",
+          reply_by: gate.userId,
+          is_internal_note: false,
+        });
+
+      if (replyErr) {
+        console.error("[bot] ticket reply error:", replyErr);
+        await sendMessage(chatId, `❌ Failed to add reply. Try again later.`);
+        return;
+      }
+
+      // Reopen if resolved/closed
+      if (ticket.status === "resolved" || ticket.status === "closed") {
+        await supabase
+          .from("support_tickets")
+          .update({ status: "open" })
+          .eq("id", ticket.id);
+      }
+
+      // Admin notification
+      await supabase.from("admin_notifications").insert({
+        notification_type: "ticket_reply",
+        title: `💬 TG Reply on Ticket #${ticket.ticket_number}`,
+        message: replyText.slice(0, 300),
+        metadata: { ticket_number: ticket.ticket_number, ticket_id: ticket.id, user_id: gate.userId, source: "telegram" },
+      });
+
+      await sendMessage(chatId, `✅ Reply added to *Ticket #${ticket.ticket_number}*`);
+      return;
+    }
+
+    // View ticket details + replies
+    const { data: replies } = await supabase
+      .from("support_ticket_replies")
+      .select("message, reply_type, created_at")
+      .eq("ticket_id", ticket.id)
+      .eq("is_internal_note", false)
+      .order("created_at", { ascending: true })
+      .limit(10);
+
+    const statusEmoji: Record<string, string> = {
+      open: "🟡", in_progress: "🔵", resolved: "✅", closed: "⚫",
+    };
+
+    let msg = `🎫 *Ticket #${ticket.ticket_number}*\n\n` +
+      `📋 ${ticket.subject}\n` +
+      `${statusEmoji[ticket.status] || "⚪"} Status: *${ticket.status.replace(/_/g, " ").toUpperCase()}*\n` +
+      `📅 Created: ${new Date(ticket.created_at).toLocaleDateString()}\n`;
+
+    if (replies && replies.length > 0) {
+      msg += `\n━━ *Conversation* ━━\n`;
+      for (const r of replies) {
+        const who = r.reply_type === "admin" ? "🛡 Support" : "👤 You";
+        const date = new Date(r.created_at).toLocaleDateString();
+        msg += `\n${who} _(${date})_:\n${r.message.slice(0, 300)}${r.message.length > 300 ? "…" : ""}\n`;
+      }
+    }
+
+    msg += `\n_Reply: \`/ticket #${ticket.ticket_number} Your message\`_`;
+    await sendMessage(chatId, msg);
+    return;
+  }
+
+  // /ticket (no args) — List open tickets
+  const { data: tickets } = await supabase
+    .from("support_tickets")
+    .select("ticket_number, subject, status, created_at")
+    .eq("user_id", gate.userId)
+    .in("status", ["open", "in_progress"])
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (!tickets || tickets.length === 0) {
+    await sendMessage(chatId,
+      `🎫 *Support Tickets*\n\n` +
+      `You have no open tickets.\n\n` +
+      `Create one: \`/ticket new Your issue here\`\n\n` +
+      `_Pro subscribers get direct support via Telegram._`
+    );
+    return;
+  }
+
+  let msg = `🎫 *Your Open Tickets*\n\n`;
+  for (const t of tickets) {
+    const statusEmoji = t.status === "open" ? "🟡" : "🔵";
+    msg += `${statusEmoji} *#${t.ticket_number}* — ${t.subject}\n`;
+  }
+  msg += `\nView details: \`/ticket #NUMBER\`\nCreate new: \`/ticket new Your issue\``;
+
+  await sendMessage(chatId, msg);
 }
 
 // ─── /feedback — Collect user feedback (open to all) ───
@@ -4235,6 +4424,9 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
               await handlePayment(dmChatId, telegramUserId, args);
             }
             break;
+          case "/ticket":
+            await handleTicket(dmChatId, telegramUserId, args);
+            break;
           default:
             // Unknown command in DM context — route to AI assistant
             if (message.text) {
@@ -4350,6 +4542,13 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             } else {
               await handlePayment(chatId, telegramUserId, args);
             }
+          }
+          break;
+        case "/ticket":
+          if (isGroupChat) {
+            await sendMessage(chatId, `📬 DM me to use /ticket — support tickets are private.`, "Markdown", messageId);
+          } else {
+            await handleTicket(chatId, telegramUserId, args);
           }
           break;
         default: {
