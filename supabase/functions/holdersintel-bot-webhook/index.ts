@@ -4544,6 +4544,13 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             }
           }
           break;
+        case "/ticket":
+          if (isGroupChat) {
+            await sendMessage(chatId, `📬 DM me to use /ticket — support tickets are private.`, "Markdown", messageId);
+          } else {
+            await handleTicket(chatId, telegramUserId, args);
+          }
+          break;
         default: {
           // Auto-detect registration codes
           if (/^BF-[A-Z0-9]{6}$/i.test(sanitized.rawTruncated)) {
