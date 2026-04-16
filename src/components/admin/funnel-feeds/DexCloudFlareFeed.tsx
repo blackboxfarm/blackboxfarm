@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Send, CheckCheck } from "lucide-react";
 import { ScrapeSourcesManager } from "./ScrapeSourcesManager";
+import { ScrapeHistoryLog } from "./ScrapeHistoryLog";
+import { PollingIntervalControl } from "./PollingIntervalControl";
 import { useToast } from "@/hooks/use-toast";
 
 interface TrendingPair {
