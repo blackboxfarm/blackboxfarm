@@ -75,7 +75,7 @@ export function MeteoraPoolsDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [newPoolAddress, setNewPoolAddress] = useState('');
   const [trackedPools, setTrackedPools] = useState<string[]>([DEFAULT_POOL]);
-  const { solPrice } = useSolPrice();
+  const { price: solPrice } = useSolPrice();
 
   const fetchPools = useCallback(async () => {
     setIsLoading(true);
