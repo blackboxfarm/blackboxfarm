@@ -256,6 +256,30 @@ Deno.serve(withRunLog('dex-top-200', async (req, logger) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
+  // Handle cron interval update action
+  try {
+    const body = await req.clone().json().catch(() => ({}));
+    if (body?.action === 'update_cron') {
+      const minutes = Number(body.interval_minutes);
+      if (![15, 30, 60].includes(minutes)) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid interval. Must be 15, 30, or 60.' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { error: rpcErr } = await supabase.rpc('update_dex_cron_interval', { minutes_interval: minutes });
+      if (rpcErr) {
+        console.error('[DexTop200] Cron update failed:', rpcErr.message);
+        return new Response(JSON.stringify({ success: false, error: rpcErr.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      console.log(`[DexTop200] Cron interval updated to ${minutes} minutes`);
+      return new Response(JSON.stringify({ success: true, interval_minutes: minutes }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } catch (_) { /* not JSON body or not an action request, continue with normal scrape */ }
+
   try {
     const startTime = Date.now();
     logger?.info('Starting DexScreener top-200 scrape');

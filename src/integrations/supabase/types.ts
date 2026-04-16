@@ -4084,6 +4084,74 @@ export type Database = {
         }
         Relationships: []
       }
+      dex_scrape_config: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      dex_scrape_log: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          pair_count: number
+          provider: string | null
+          source_id: string | null
+          source_label: string | null
+          source_url: string
+          success: boolean
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          pair_count?: number
+          provider?: string | null
+          source_id?: string | null
+          source_label?: string | null
+          source_url: string
+          success?: boolean
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          pair_count?: number
+          provider?: string | null
+          source_id?: string | null
+          source_label?: string | null
+          source_url?: string
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dex_scrape_log_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "dex_scrape_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dex_scrape_sources: {
         Row: {
           created_at: string
@@ -19604,6 +19672,10 @@ export type Database = {
       }
       track_user_login: { Args: { p_user_id: string }; Returns: undefined }
       unban_user: { Args: { target_user_id: string }; Returns: undefined }
+      update_dex_cron_interval: {
+        Args: { minutes_interval: number }
+        Returns: undefined
+      }
       validate_profile_access: {
         Args: { target_user_id: string }
         Returns: boolean

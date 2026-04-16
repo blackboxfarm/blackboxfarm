@@ -155,6 +155,36 @@ async function updateSourceStats(sourceId: string, pairCount: number) {
   }
 }
 
+async function logScrapeResult(opts: {
+  sourceId: string | null;
+  sourceUrl: string;
+  sourceLabel: string;
+  success: boolean;
+  pairCount: number;
+  provider: string | null;
+  errorMessage: string | null;
+  durationMs: number;
+}) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceKey) return;
+    const supabase = createClient(supabaseUrl, serviceKey);
+    await supabase.from('dex_scrape_log').insert({
+      source_id: opts.sourceId?.startsWith('fallback-') ? null : opts.sourceId,
+      source_url: opts.sourceUrl,
+      source_label: opts.sourceLabel,
+      success: opts.success,
+      pair_count: opts.pairCount,
+      provider: opts.provider,
+      error_message: opts.errorMessage,
+      duration_ms: opts.durationMs,
+    });
+  } catch (e) {
+    console.warn('[DexTop200] Failed to log scrape result:', e);
+  }
+}
+
 async function scrapePageMarkdown(url: string, waitConfigs: number[], configIndex = 0, isPage2 = false): Promise<{ markdown: string; retried: boolean; provider: string }> {
   const waitFor = waitConfigs[configIndex] || waitConfigs[0];
   const attempt = configIndex + 1;
@@ -222,8 +252,10 @@ export async function scrapeDexTopPages(): Promise<{ pairs: RankedDexPair[]; hea
       await new Promise(r => setTimeout(r, 5000));
     }
 
+    const startMs = Date.now();
     try {
       const result = await scrapePageMarkdown(source.url, source.wait_ms, 0, source.is_page2);
+      const durationMs = Date.now() - startMs;
       if (result.retried) health.retry_used = true;
       if (!health.providers_used.includes(result.provider)) health.providers_used.push(result.provider);
       (health as any)[`${pageKey}_ok`] = true;
@@ -232,11 +264,22 @@ export async function scrapeDexTopPages(): Promise<{ pairs: RankedDexPair[]; hea
       (health as any)[`${pageKey}_count`] = parsed.length;
       allPairs.push(...parsed);
 
-      // Update source stats in background
+      // Update source stats and log in background
       updateSourceStats(source.id, parsed.length).catch(() => {});
+      logScrapeResult({
+        sourceId: source.id, sourceUrl: source.url, sourceLabel: source.label,
+        success: true, pairCount: parsed.length, provider: result.provider,
+        errorMessage: null, durationMs,
+      }).catch(() => {});
     } catch (e: any) {
+      const durationMs = Date.now() - startMs;
       console.error(`[DexTop200] ${source.label} FAILED:`, e.message);
       (health as any)[`${pageKey}_error`] = e.message;
+      logScrapeResult({
+        sourceId: source.id, sourceUrl: source.url, sourceLabel: source.label,
+        success: false, pairCount: 0, provider: null,
+        errorMessage: e.message, durationMs,
+      }).catch(() => {});
     }
   }
 

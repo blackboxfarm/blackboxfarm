@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Send, CheckCheck } from "lucide-react";
 import { ScrapeSourcesManager } from "./ScrapeSourcesManager";
+import { ScrapeHistoryLog } from "./ScrapeHistoryLog";
+import { PollingIntervalControl } from "./PollingIntervalControl";
 import { useToast } from "@/hooks/use-toast";
 
 interface TrendingPair {
@@ -180,6 +182,7 @@ export function DexCloudFlareFeed() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
+          <PollingIntervalControl />
           <p className="text-sm text-muted-foreground">
             {pairs.length} trending tokens (Firecrawl Top 200)
             {health && !health.page1_ok && <span className="text-red-400 ml-1">⚠ Page 1 failed</span>}
@@ -261,6 +264,7 @@ export function DexCloudFlareFeed() {
       )}
 
       <ScrapeSourcesManager />
+      <ScrapeHistoryLog />
     </div>
   );
 }
