@@ -5,6 +5,7 @@ import nacl from "npm:tweetnacl@1.0.3";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 import { SecureStorage } from "../_shared/encryption.ts";
 import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { assertInsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -220,7 +221,13 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const toPubkey = bs58.decode(destinationAddress);
+    let toPubkey: Uint8Array;
+    try {
+      toPubkey = bs58.decode(destinationAddress);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid destination address" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     if (toPubkey.length !== 32) {
       return new Response(JSON.stringify({ error: "Invalid destination address" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -264,17 +271,20 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
     const withdrawnAmount = amountToSend / LAMPORTS_PER_SOL;
     const destinationB58 = bs58.encode(toPubkey);
 
-    await supabase.from("activity_logs").insert({
-      message: `FlipIt wallet withdrawal: ${withdrawnAmount.toFixed(4)} SOL to ${destinationB58.slice(0, 8)}...`,
-      log_level: "info",
-      metadata: {
-        wallet_id: walletId,
-        amount_sol: withdrawnAmount,
-        destination: destinationB58,
-        signature,
-        user_id: user.id
-      }
-    });
+    await assertInsert(
+      supabase.from("activity_logs").insert({
+        message: `FlipIt wallet withdrawal: ${withdrawnAmount.toFixed(4)} SOL to ${destinationB58.slice(0, 8)}...`,
+        log_level: "info",
+        metadata: {
+          wallet_id: walletId,
+          amount_sol: withdrawnAmount,
+          destination: destinationB58,
+          signature,
+          user_id: user.id
+        }
+      }),
+      "activity_logs"
+    );
 
     return new Response(JSON.stringify({
       success: true,

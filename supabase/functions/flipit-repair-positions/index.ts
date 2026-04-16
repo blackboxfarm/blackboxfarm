@@ -11,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseBuyFromHelius, parseSellFromHelius } from "../_shared/helius-api.ts";
 import { requireHeliusApiKey } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { assertUpdate } from '../_shared/db-assert.ts';
 enableHeliusTracking('flipit-repair-positions');
 import { parseBuyFromSolscan as parseBuyFromSolscanDirect, parseSellFromSolscan as parseSellFromSolscanDirect } from "../_shared/solscan-api.ts";
 import { fetchSolPrice } from "../_shared/price-resolver.ts";
@@ -115,6 +116,7 @@ serve(withRunLog('flipit-repair-positions', async (req) => {
           id, token_mint, wallet_id, status,
           buy_signature, sell_signature,
           quantity_tokens, buy_amount_usd, buy_price_usd, sell_price_usd,
+          target_multiplier, target_price_usd,
           super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)
         `)
         .eq("id", positionId)
@@ -138,6 +140,7 @@ serve(withRunLog('flipit-repair-positions', async (req) => {
           quantity_tokens: position.quantity_tokens,
           buy_amount_usd: position.buy_amount_usd,
           buy_price_usd: position.buy_price_usd,
+          target_price_usd: position.target_price_usd,
         }
       };
 
@@ -152,31 +155,49 @@ serve(withRunLog('flipit-repair-positions', async (req) => {
         );
 
         if (buyData) {
-          // Only update SOL amount from chain - USD is calculated live in UI
-          // DO NOT use current solPrice for historical USD calculation
+          const existingBuyAmountUsd = Number(position.buy_amount_usd || 0);
+          const fallbackBuyAmountUsd = buyData.solSpent * solPrice;
+          const correctedBuyAmountUsd = existingBuyAmountUsd > 0
+            ? existingBuyAmountUsd
+            : fallbackBuyAmountUsd;
+          const correctedBuyPriceUsd = correctedBuyAmountUsd / buyData.tokensReceived;
+          const targetMultiplier = Number(position.target_multiplier || 0);
+          const correctedTargetPriceUsd = targetMultiplier > 0
+            ? correctedBuyPriceUsd * targetMultiplier
+            : 0;
 
           result.solscan_buy = {
             tokensReceived: buyData.tokensReceived,
             solSpent: buyData.solSpent,
-            platform: buyData.platform
+            platform: buyData.platform,
+            correctedBuyAmountUsd,
+            correctedBuyPriceUsd,
+            correctedTargetPriceUsd,
+            buyAmountUsdSource: existingBuyAmountUsd > 0
+              ? 'existing_buy_amount_usd'
+              : 'verified_sol_spent_x_live_sol_price'
           };
 
           if (!dryRun) {
-            // Only update on-chain truth: SOL spent and tokens received
-            // USD values are NOT updated - they're calculated live in UI
             const updateData: any = {
               quantity_tokens: String(buyData.tokensReceived),
               quantity_tokens_raw: buyData.tokensReceivedRaw,
               token_decimals: buyData.tokenDecimals,
               buy_amount_sol: buyData.solSpent,
+              buy_amount_usd: correctedBuyAmountUsd,
+              buy_price_usd: correctedBuyPriceUsd,
+              target_price_usd: correctedTargetPriceUsd,
               entry_verified: true,
               error_message: null
             };
 
-            await supabase
-              .from("flip_positions")
-              .update(updateData)
-              .eq("id", position.id);
+            await assertUpdate(
+              supabase
+                .from("flip_positions")
+                .update(updateData)
+                .eq("id", position.id),
+              "flip_positions"
+            );
 
             result.updated = true;
             result.updateData = updateData;
