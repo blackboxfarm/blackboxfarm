@@ -15,6 +15,7 @@ import { createExecutionLogger, type ExecutionLogger } from "../_shared/executio
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { runMeshGuard } from '../_shared/blacklist-mesh-guard.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { reconcilePositionBalance, classifySwapError } from '../_shared/flipit-reconcile.ts';
 enableHeliusTracking('flipit-execute');
 
 const corsHeaders = {
@@ -1585,6 +1586,61 @@ serve(withRunLog('flipit-execute', async (req) => {
         return bad("Position is not in holding status");
       }
 
+      // ============================================
+      // PRE-SELL RECONCILIATION: Verify on-chain balance matches DB before swap
+      // Catches: bad quantity_tokens_raw (UI decimal bug), ghost positions, token-2022
+      // ============================================
+      execLog.logPhaseStart('PRE_SELL_RECONCILE');
+      const walletPubkeyForReconcile = position.super_admin_wallets?.pubkey;
+      if (walletPubkeyForReconcile) {
+        const recon = await reconcilePositionBalance({
+          walletPubkey: walletPubkeyForReconcile,
+          tokenMint: position.token_mint,
+          positionId: position.id,
+          storedRaw: position.quantity_tokens_raw,
+          storedUi: position.quantity_tokens,
+          supabase,
+          driftTolerancePct: 1,
+        });
+
+        if (!recon.ok && recon.reason === 'GHOST_POSITION') {
+          await supabase
+            .from("flip_positions")
+            .update({
+              status: "sold",
+              error_message: "Closed as ghost: no on-chain balance found",
+              error_code: "insufficient_balance",
+              sell_executed_at: new Date().toISOString(),
+              ghost_position: true,
+            })
+            .eq("id", positionId);
+          execLog.logPhaseEnd('PRE_SELL_RECONCILE', { ghost: true });
+          return ok({
+            success: true,
+            message: "Position closed as ghost — wallet no longer holds this token",
+            ghost: true,
+          });
+        }
+
+        if (recon.ok) {
+          execLog.logPhaseEnd('PRE_SELL_RECONCILE', {
+            patched: recon.patched,
+            drift: recon.driftDetected,
+            tokenProgram: recon.tokenProgram,
+            onChainUi: recon.onChainUi,
+          });
+          if (recon.patched) {
+            (position as any).quantity_tokens_raw = recon.onChainRaw;
+            (position as any).quantity_tokens = recon.onChainUi;
+          }
+          (position as any).token_program = recon.tokenProgram;
+        } else {
+          execLog.logPhaseEnd('PRE_SELL_RECONCILE', { dasFailed: true, details: recon.details });
+        }
+      } else {
+        execLog.logPhaseEnd('PRE_SELL_RECONCILE', { skipped: 'no wallet pubkey' });
+      }
+
       // Mark as pending sell
       await supabase
         .from("flip_positions")
@@ -1874,6 +1930,9 @@ serve(withRunLog('flipit-execute', async (req) => {
         const errMsg = sellErr.message || String(sellErr);
         console.error("Sell error caught:", errMsg);
 
+        // Classify the error into a structured code for the dashboard + auto-retry logic
+        const classified = classifySwapError(errMsg);
+
         // Check for soft errors returned with error_code from raydium-swap
         const noBalanceCodes = ["NO_BALANCE", "BALANCE_CHECK_FAILED"];
         const noBalanceIndicators = [
@@ -1894,6 +1953,8 @@ serve(withRunLog('flipit-execute', async (req) => {
             .update({
               status: "sold",
               error_message: "Position closed: " + errMsg,
+              error_code: "insufficient_balance",
+              ghost_position: true,
               sell_executed_at: new Date().toISOString(),
             })
             .eq("id", positionId);
@@ -1902,15 +1963,17 @@ serve(withRunLog('flipit-execute', async (req) => {
             success: true,
             message: "Position marked as closed - no tokens to sell",
             error: errMsg,
+            error_code: "insufficient_balance",
           });
         }
 
-        // Revert to holding on other errors
+        // Revert to holding on other errors, attach structured code
         await supabase
           .from("flip_positions")
           .update({
             status: "holding",
             error_message: errMsg,
+            error_code: classified.code,
           })
           .eq("id", positionId);
 
