@@ -115,6 +115,12 @@ interface FlipPosition {
   lp_withdrawal_signature?: string | null;
   // Linked-sell group: shared UUID for chained same-token positions
   sell_group_id?: string | null;
+  // Drift / reconciliation tracking (added by drift sentinel + pre-sell reconciler)
+  error_code?: string | null;
+  needs_reconciliation?: boolean | null;
+  ghost_position?: boolean | null;
+  last_chain_sync_at?: string | null;
+  token_program?: string | null;
 }
 
 interface SuperAdminWallet {
