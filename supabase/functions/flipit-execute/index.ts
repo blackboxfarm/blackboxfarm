@@ -15,6 +15,7 @@ import { createExecutionLogger, type ExecutionLogger } from "../_shared/executio
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { runMeshGuard } from '../_shared/blacklist-mesh-guard.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { reconcilePositionBalance, classifySwapError } from '../_shared/flipit-reconcile.ts';
 enableHeliusTracking('flipit-execute');
 
 const corsHeaders = {
