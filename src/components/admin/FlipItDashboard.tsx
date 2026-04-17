@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen, BarChart3, Droplets } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen, BarChart3, Droplets, Link2, Link2Off } from 'lucide-react';
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { detectSocialPlatform } from '@/utils/socialPlatformDetector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -113,6 +113,8 @@ interface FlipPosition {
   position_source?: string | null;
   lp_pool_address?: string | null;
   lp_withdrawal_signature?: string | null;
+  // Linked-sell group: shared UUID for chained same-token positions
+  sell_group_id?: string | null;
 }
 
 interface SuperAdminWallet {
@@ -2390,27 +2392,135 @@ export function FlipItDashboard() {
 
   const handleForceSell = async (positionId: string, customPriorityFee?: number) => {
     try {
-      const { data, error } = await supabase.functions.invoke('flipit-execute', {
-        body: {
-          action: 'sell',
-          positionId: positionId,
-          slippageBps: slippageBps,
-          priorityFeeMode: priorityFeeMode,
-          customPriorityFee: customPriorityFee // Override with specific SOL amount if provided
-        }
-      });
+      // Check if this position is part of a linked sell-group
+      const triggerPos = positions.find(p => p.id === positionId);
+      const groupId = triggerPos?.sell_group_id;
+      const groupMembers = groupId
+        ? positions.filter(p => p.sell_group_id === groupId && p.status === 'holding')
+        : [triggerPos].filter(Boolean) as FlipPosition[];
 
-      if (error) throw error;
-
-      if (data?.error) {
-        toast.error(data.error);
-      } else {
-        toast.success('Sold!');
-        loadPositions({ silent: true });
-        refreshWalletBalance(); // Auto-refresh wallet balance after sell
+      if (groupId && groupMembers.length > 1) {
+        toast.info(`🔗 Selling ${groupMembers.length} linked positions of ${triggerPos?.token_symbol || 'token'}...`);
       }
+
+      let successCount = 0;
+      let failCount = 0;
+      const failures: string[] = [];
+
+      for (const member of groupMembers) {
+        try {
+          const { data, error } = await supabase.functions.invoke('flipit-execute', {
+            body: {
+              action: 'sell',
+              positionId: member.id,
+              slippageBps: slippageBps,
+              priorityFeeMode: priorityFeeMode,
+              customPriorityFee: customPriorityFee
+            }
+          });
+          if (error) throw error;
+          if (data?.error) {
+            failCount++;
+            failures.push(data.error);
+          } else {
+            successCount++;
+          }
+        } catch (err: any) {
+          failCount++;
+          failures.push(err.message || 'Unknown error');
+        }
+      }
+
+      if (groupId && groupMembers.length > 1) {
+        if (failCount === 0) {
+          toast.success(`✅ Sold ${successCount} linked positions of ${triggerPos?.token_symbol || 'token'}`);
+        } else {
+          toast.warning(`Sold ${successCount}, ${failCount} failed: ${failures[0]}`);
+        }
+      } else {
+        if (successCount > 0) toast.success('Sold!');
+        else if (failures.length > 0) toast.error(failures[0]);
+      }
+
+      loadPositions({ silent: true });
+      refreshWalletBalance();
     } catch (err: any) {
       toast.error(err.message || 'Failed to sell');
+    }
+  };
+
+  // Toggle a position's membership in a linked-sell group (same-token only)
+  const handleToggleSellGroup = async (position: FlipPosition) => {
+    try {
+      const sameMintHoldings = positions.filter(
+        p => p.token_mint === position.token_mint && p.status === 'holding' && p.id !== position.id
+      );
+
+      if (position.sell_group_id) {
+        // Already grouped → leave the group
+        const { error } = await supabase
+          .from('flip_positions')
+          .update({ sell_group_id: null })
+          .eq('id', position.id);
+        if (error) throw error;
+
+        // If only one member remains in the group, dissolve it
+        const remaining = positions.filter(
+          p => p.sell_group_id === position.sell_group_id && p.id !== position.id
+        );
+        if (remaining.length === 1) {
+          await supabase
+            .from('flip_positions')
+            .update({ sell_group_id: null })
+            .eq('id', remaining[0].id);
+        }
+
+        setPositions(prev => prev.map(p =>
+          p.id === position.id ? { ...p, sell_group_id: null } :
+          (remaining.length === 1 && p.id === remaining[0].id) ? { ...p, sell_group_id: null } : p
+        ));
+        toast.success('🔓 Unlinked from sell group');
+        return;
+      }
+
+      // Not yet grouped → find an existing same-mint group OR create one with another same-mint position
+      if (sameMintHoldings.length === 0) {
+        toast.error('Need 2+ positions of the same token to link');
+        return;
+      }
+
+      // Prefer joining an existing group with same mint
+      const existingGroupMember = sameMintHoldings.find(p => p.sell_group_id);
+      if (existingGroupMember?.sell_group_id) {
+        const groupId = existingGroupMember.sell_group_id;
+        const { error } = await supabase
+          .from('flip_positions')
+          .update({ sell_group_id: groupId })
+          .eq('id', position.id);
+        if (error) throw error;
+        setPositions(prev => prev.map(p =>
+          p.id === position.id ? { ...p, sell_group_id: groupId } : p
+        ));
+        const groupSize = positions.filter(p => p.sell_group_id === groupId).length + 1;
+        toast.success(`🔗 Joined sell group (${groupSize} positions linked)`);
+        return;
+      }
+
+      // Create a new group with this position + the most recent same-mint sibling
+      const partner = sameMintHoldings[0];
+      const newGroupId = crypto.randomUUID();
+      const { error } = await supabase
+        .from('flip_positions')
+        .update({ sell_group_id: newGroupId })
+        .in('id', [position.id, partner.id]);
+      if (error) throw error;
+      setPositions(prev => prev.map(p =>
+        (p.id === position.id || p.id === partner.id) ? { ...p, sell_group_id: newGroupId } : p
+      ));
+      toast.success(`🔗 Linked 2 positions of ${position.token_symbol || 'token'}`);
+    } catch (err: any) {
+      console.error('Failed to toggle sell group:', err);
+      toast.error(err.message || 'Failed to update sell group');
     }
   };
 
@@ -4289,7 +4399,10 @@ export function FlipItDashboard() {
                   const isFromRebuy = !!parentRebuyPosition;
 
                     return (
-                      <TableRow key={position.id}>
+                      <TableRow
+                        key={position.id}
+                        className={position.sell_group_id ? 'border-l-2 border-l-cyan-500/60' : ''}
+                      >
                         {/* Socials Column - Stacked Icons */}
                         <TableCell className="px-2 py-1">
                           <div className="flex flex-col items-center gap-0.5">
@@ -4713,6 +4826,45 @@ export function FlipItDashboard() {
                           >
                             {position.tracking_locked ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
                           </Button>
+                          {/* Linked-Sell Group toggle: chains same-token positions for batch sell */}
+                          {(() => {
+                            const sameMintCount = positions.filter(
+                              p => p.token_mint === position.token_mint && p.status === 'holding'
+                            ).length;
+                            const groupSize = position.sell_group_id
+                              ? positions.filter(p => p.sell_group_id === position.sell_group_id).length
+                              : 0;
+                            const canLink = sameMintCount >= 2 || !!position.sell_group_id;
+                            return (
+                              <Button
+                                size="sm"
+                                variant={position.sell_group_id ? "default" : "outline"}
+                                disabled={!canLink}
+                                className={`h-6 px-1.5 p-0 relative ${
+                                  position.sell_group_id
+                                    ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                                    : ''
+                                } ${!canLink ? 'opacity-40' : ''}`}
+                                onClick={() => handleToggleSellGroup(position)}
+                                title={
+                                  position.sell_group_id
+                                    ? `Linked sell group (${groupSize} positions). Click to unlink.`
+                                    : canLink
+                                      ? 'Link to other positions of this token for batch sell'
+                                      : 'Need 2+ positions of the same token to link'
+                                }
+                              >
+                                {position.sell_group_id ? (
+                                  <>
+                                    <Link2 className="h-3 w-3" />
+                                    <span className="ml-0.5 text-[9px] font-bold">{groupSize}</span>
+                                  </>
+                                ) : (
+                                  <Link2Off className="h-3 w-3" />
+                                )}
+                              </Button>
+                            );
+                          })()}
                           <Button
                             size="sm"
                             variant="ghost"

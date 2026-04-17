@@ -1,0 +1,2 @@
+ALTER TABLE public.flip_positions ADD COLUMN IF NOT EXISTS sell_group_id UUID NULL;
+CREATE INDEX IF NOT EXISTS idx_flip_positions_sell_group_id ON public.flip_positions(sell_group_id) WHERE sell_group_id IS NOT NULL;
