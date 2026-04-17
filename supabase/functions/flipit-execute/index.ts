@@ -1586,6 +1586,61 @@ serve(withRunLog('flipit-execute', async (req) => {
         return bad("Position is not in holding status");
       }
 
+      // ============================================
+      // PRE-SELL RECONCILIATION: Verify on-chain balance matches DB before swap
+      // Catches: bad quantity_tokens_raw (UI decimal bug), ghost positions, token-2022
+      // ============================================
+      execLog.logPhaseStart('PRE_SELL_RECONCILE');
+      const walletPubkeyForReconcile = position.super_admin_wallets?.pubkey;
+      if (walletPubkeyForReconcile) {
+        const recon = await reconcilePositionBalance({
+          walletPubkey: walletPubkeyForReconcile,
+          tokenMint: position.token_mint,
+          positionId: position.id,
+          storedRaw: position.quantity_tokens_raw,
+          storedUi: position.quantity_tokens,
+          supabase,
+          driftTolerancePct: 1,
+        });
+
+        if (!recon.ok && recon.reason === 'GHOST_POSITION') {
+          await supabase
+            .from("flip_positions")
+            .update({
+              status: "sold",
+              error_message: "Closed as ghost: no on-chain balance found",
+              error_code: "insufficient_balance",
+              sell_executed_at: new Date().toISOString(),
+              ghost_position: true,
+            })
+            .eq("id", positionId);
+          execLog.logPhaseEnd('PRE_SELL_RECONCILE', { ghost: true });
+          return ok({
+            success: true,
+            message: "Position closed as ghost — wallet no longer holds this token",
+            ghost: true,
+          });
+        }
+
+        if (recon.ok) {
+          execLog.logPhaseEnd('PRE_SELL_RECONCILE', {
+            patched: recon.patched,
+            drift: recon.driftDetected,
+            tokenProgram: recon.tokenProgram,
+            onChainUi: recon.onChainUi,
+          });
+          if (recon.patched) {
+            (position as any).quantity_tokens_raw = recon.onChainRaw;
+            (position as any).quantity_tokens = recon.onChainUi;
+          }
+          (position as any).token_program = recon.tokenProgram;
+        } else {
+          execLog.logPhaseEnd('PRE_SELL_RECONCILE', { dasFailed: true, details: recon.details });
+        }
+      } else {
+        execLog.logPhaseEnd('PRE_SELL_RECONCILE', { skipped: 'no wallet pubkey' });
+      }
+
       // Mark as pending sell
       await supabase
         .from("flip_positions")
