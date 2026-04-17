@@ -4871,6 +4871,7 @@ export type Database = {
           scalp_stop_loss_pct: number | null
           scalp_take_profit_pct: number | null
           sell_executed_at: string | null
+          sell_group_id: string | null
           sell_price_usd: number | null
           sell_priority_fee_sol: number | null
           sell_signature: string | null
@@ -4954,6 +4955,7 @@ export type Database = {
           scalp_stop_loss_pct?: number | null
           scalp_take_profit_pct?: number | null
           sell_executed_at?: string | null
+          sell_group_id?: string | null
           sell_price_usd?: number | null
           sell_priority_fee_sol?: number | null
           sell_signature?: string | null
@@ -5037,6 +5039,7 @@ export type Database = {
           scalp_stop_loss_pct?: number | null
           scalp_take_profit_pct?: number | null
           sell_executed_at?: string | null
+          sell_group_id?: string | null
           sell_price_usd?: number | null
           sell_priority_fee_sol?: number | null
           sell_signature?: string | null
