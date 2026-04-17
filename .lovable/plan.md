@@ -1,49 +1,41 @@
 
-The user wants to track LP dissolution events as new "Reclaimed" flip positions. Key insight: no PnL math against original buy — treat the LP collapse moment as a synthetic buy at the prevailing price for the returned token amount.
-
-Let me design this minimally and cleanly.
-
-## Plan: LP Reclaimed Position Tracking
+## Plan: Linked-Sell Groups for Same-Token Batch Positions
 
 ### Concept
-When a Meteora LP is dissolved, the wallet receives back tokens (e.g. 3M xoin.ai + some SOL). We create a synthetic `flip_positions` row:
-- `quantity_tokens` = exact returned amount from the LP withdrawal tx
-- `buy_price_usd` = token price at the timestamp of the LP withdrawal
-- `buy_amount_usd` = quantity × price (synthetic cost basis = current value at reclaim moment)
-- `created_at` = LP withdrawal tx timestamp
-- New flag `position_source = 'lp_reclaimed'` so the system never tries to reconcile against a real buy tx
-- `entry_verified = true` (on-chain sourced)
-- SOL portion is NOT a position — it just sits in the wallet balance
+Add a **"link" icon** next to the existing Lock icon in the Rating column. Clicking it on 2+ positions of the **same token mint** chains them into a sell-group. When **Sell Now** is hit on any group member, **all linked positions sell together as one combined order**.
+
+### Mechanics
+- **Group key**: a shared `sell_group_id` (UUID) on `flip_positions`. First click on a position → creates a new group with just itself. Click on a second same-mint position → joins the same group. Click on a linked position again → leaves the group (and group is auto-deleted if it drops below 2 members).
+- **Visual**: 
+  - Unlinked → outline link icon
+  - Linked → filled cyan link icon with a small badge showing group size (e.g. "2", "3")
+  - All members of the same group share a subtle cyan left-border on the row so user can visually see the chain
+- **Guardrail**: link icon is disabled (greyed) on positions whose `token_mint` doesn't match any other holding position. Tooltip: "Need 2+ positions of the same token to link."
+- **Sell behavior**: 
+  - "Sell Now" on a linked position sells **every position in the group** (sequentially, same slippage/priority-fee settings)
+  - Each individual position closes with its own PnL row in Completed Flips (no merging of history — keeps audit trail clean)
+  - Toast: "Sold 3 linked positions of $coin.ai"
 
 ### Schema change
-Add to `flip_positions`:
-- `position_source TEXT DEFAULT 'buy'` — values: `'buy' | 'lp_reclaimed' | 'manual'`
-- `lp_pool_address TEXT NULL` — the Meteora pool the tokens came from
-- `lp_withdrawal_signature TEXT NULL` — the dissolution tx signature (also serves as dedup key)
-- Unique index on `lp_withdrawal_signature` where not null (prevents double-import)
+One column on `flip_positions`:
+- `sell_group_id UUID NULL` — null = unlinked. Non-null UUID = member of that group.
+- Index on `(sell_group_id)` for fast group lookups.
 
-### New edge function: `flipit-lp-reclaim`
-Two modes:
-1. **Manual** (admin clicks "Import as Reclaimed Position" on a pool row in Meteora Pools view): admin pastes/selects the withdrawal tx signature, function fetches it via Helius, identifies the SPL token transfer back to the FlipIt wallet, gets the token price at that timestamp via DexScreener/Jupiter, creates the position.
-2. **Auto-detect** (button "Scan for LP Withdrawals"): scans recent FlipIt wallet txs that touch known Meteora pool addresses, finds dissolution events, prompts admin to confirm-and-import each one.
-
-Both use `assertInsert` (per zero-tolerance silent-fails rule).
-
-### UI changes — `FlipItDashboard.tsx`
-- Position row gets a small badge "LP RECLAIMED" when `position_source = 'lp_reclaimed'`
-- "Invested" label changes to "Reclaimed Value" for these rows
-- PnL still calculates as `currentValue − buy_amount_usd` (so it shows drift since reclaim moment, which is desired behavior — user said "held or displayed as appropriate going forward")
-- The Meteora Pools panel gets a new "Import LP Withdrawal" button per pool
+No separate `sell_groups` table needed — the UUID itself is the group identity. Cheaper, simpler.
 
 ### Files touched
-- Migration: add 3 columns + unique index to `flip_positions`
-- New: `supabase/functions/flipit-lp-reclaim/index.ts`
-- Edit: `src/components/admin/FlipItDashboard.tsx` (badge + label)
-- Edit: Meteora Pools UI section (add import button + signature input modal)
+1. **Migration**: add `sell_group_id` column + index to `flip_positions`
+2. **`FlipItDashboard.tsx`**:
+   - Add `Link2` icon import
+   - Add `handleToggleSellGroup(position)` — creates/joins/leaves group with same-mint validation
+   - Modify `handleForceSell` — if `position.sell_group_id`, fetch all group members and sell each one in sequence
+   - Render link icon next to the Lock icon (cyan when grouped, with member-count badge)
+   - Add subtle border-l-2 border-cyan-500/40 on rows where `sell_group_id` is set
+3. **`FlipPosition` interface**: add `sell_group_id: string | null`
 
 ### What's NOT included (confirm if needed)
-- Tracking the SOL side of the LP return as a separate "position" — per spec, SOL just lands in wallet balance
-- Computing impermanent loss vs original LP deposit — explicitly out of scope per user ("no relative PnL")
-- Auto-detecting LP withdrawals on a cron — manual import only for v1
+- Linking across **different tokens** — explicitly blocked, doesn't make trading sense
+- Combining linked sells into a **single Jupiter swap transaction** — would require a custom multi-input swap builder. v1 fires sequential sells (still atomic per-position, just back-to-back). Tell me if you want true single-tx batching later.
+- Auto-linking by heuristic (e.g. "same token bought within 5min") — manual click only
 
-Sound right? Send **"Plan Approved"** to build it.
+**Tap "Plan Approved" to build it.**
