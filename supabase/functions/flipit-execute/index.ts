@@ -1930,6 +1930,9 @@ serve(withRunLog('flipit-execute', async (req) => {
         const errMsg = sellErr.message || String(sellErr);
         console.error("Sell error caught:", errMsg);
 
+        // Classify the error into a structured code for the dashboard + auto-retry logic
+        const classified = classifySwapError(errMsg);
+
         // Check for soft errors returned with error_code from raydium-swap
         const noBalanceCodes = ["NO_BALANCE", "BALANCE_CHECK_FAILED"];
         const noBalanceIndicators = [
@@ -1950,6 +1953,8 @@ serve(withRunLog('flipit-execute', async (req) => {
             .update({
               status: "sold",
               error_message: "Position closed: " + errMsg,
+              error_code: "insufficient_balance",
+              ghost_position: true,
               sell_executed_at: new Date().toISOString(),
             })
             .eq("id", positionId);
@@ -1958,15 +1963,17 @@ serve(withRunLog('flipit-execute', async (req) => {
             success: true,
             message: "Position marked as closed - no tokens to sell",
             error: errMsg,
+            error_code: "insufficient_balance",
           });
         }
 
-        // Revert to holding on other errors
+        // Revert to holding on other errors, attach structured code
         await supabase
           .from("flip_positions")
           .update({
             status: "holding",
             error_message: errMsg,
+            error_code: classified.code,
           })
           .eq("id", positionId);
 
