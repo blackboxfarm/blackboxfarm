@@ -4832,12 +4832,15 @@ export type Database = {
           emergency_sell_status: string | null
           entry_verified: boolean | null
           entry_verified_at: string | null
+          error_code: string | null
           error_message: string | null
+          ghost_position: boolean
           id: string
           is_diamond_hand: boolean | null
           is_on_curve: boolean | null
           is_scalp_position: boolean | null
           is_test_position: boolean | null
+          last_chain_sync_at: string | null
           lp_pool_address: string | null
           lp_withdrawal_signature: string | null
           moon_bag_dump_threshold_pct: number | null
@@ -4846,6 +4849,7 @@ export type Database = {
           moon_bag_peak_price_usd: number | null
           moon_bag_percent: number | null
           moon_bag_quantity_tokens: number | null
+          needs_reconciliation: boolean
           original_quantity_tokens: number | null
           paired_position_id: string | null
           partial_sells: Json | null
@@ -4885,6 +4889,7 @@ export type Database = {
           token_image: string | null
           token_mint: string
           token_name: string | null
+          token_program: string | null
           token_symbol: string | null
           tracking_locked: boolean | null
           twitter_url: string | null
@@ -4916,12 +4921,15 @@ export type Database = {
           emergency_sell_status?: string | null
           entry_verified?: boolean | null
           entry_verified_at?: string | null
+          error_code?: string | null
           error_message?: string | null
+          ghost_position?: boolean
           id?: string
           is_diamond_hand?: boolean | null
           is_on_curve?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
+          last_chain_sync_at?: string | null
           lp_pool_address?: string | null
           lp_withdrawal_signature?: string | null
           moon_bag_dump_threshold_pct?: number | null
@@ -4930,6 +4938,7 @@ export type Database = {
           moon_bag_peak_price_usd?: number | null
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
+          needs_reconciliation?: boolean
           original_quantity_tokens?: number | null
           paired_position_id?: string | null
           partial_sells?: Json | null
@@ -4969,6 +4978,7 @@ export type Database = {
           token_image?: string | null
           token_mint: string
           token_name?: string | null
+          token_program?: string | null
           token_symbol?: string | null
           tracking_locked?: boolean | null
           twitter_url?: string | null
@@ -5000,12 +5010,15 @@ export type Database = {
           emergency_sell_status?: string | null
           entry_verified?: boolean | null
           entry_verified_at?: string | null
+          error_code?: string | null
           error_message?: string | null
+          ghost_position?: boolean
           id?: string
           is_diamond_hand?: boolean | null
           is_on_curve?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
+          last_chain_sync_at?: string | null
           lp_pool_address?: string | null
           lp_withdrawal_signature?: string | null
           moon_bag_dump_threshold_pct?: number | null
@@ -5014,6 +5027,7 @@ export type Database = {
           moon_bag_peak_price_usd?: number | null
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
+          needs_reconciliation?: boolean
           original_quantity_tokens?: number | null
           paired_position_id?: string | null
           partial_sells?: Json | null
@@ -5053,6 +5067,7 @@ export type Database = {
           token_image?: string | null
           token_mint?: string
           token_name?: string | null
+          token_program?: string | null
           token_symbol?: string | null
           tracking_locked?: boolean | null
           twitter_url?: string | null
