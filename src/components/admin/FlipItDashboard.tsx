@@ -3787,13 +3787,27 @@ export function FlipItDashboard() {
               {/* Price info below input - left aligned */}
               <div className="flex items-center gap-2 flex-wrap">
                 {!isLoadingInputToken && inputToken.price !== null && (
-                  <span className="text-sm font-bold text-green-400">
+                  <span className="text-sm font-bold text-green-400 inline-flex items-center gap-1">
                     ${inputToken.price.toFixed(10).replace(/\.?0+$/, '')}
                     {inputToken.source && (
                       <span className="text-xs text-muted-foreground ml-1">
                         ({inputToken.source})
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (tokenAddress.trim().length >= 32) {
+                          fetchInputTokenData(tokenAddress.trim(), true);
+                          toast.info('Refreshing price...');
+                        }
+                      }}
+                      disabled={isLoadingInputToken}
+                      className="ml-1 p-1 rounded hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                      title="Refresh price now"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${isLoadingInputToken ? 'animate-spin' : ''}`} />
+                    </button>
                   </span>
                 )}
                 {inputToken.price !== null && buyAmount && (
