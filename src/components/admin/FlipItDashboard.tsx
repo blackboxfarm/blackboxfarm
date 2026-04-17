@@ -4833,6 +4833,43 @@ export function FlipItDashboard() {
                                 <SelectItem value="0.002">0.002 SOL</SelectItem>
                               </SelectContent>
                             </Select>
+                            {/* Drift / Ghost / Error-code badges from drift-sentinel + pre-sell reconciler */}
+                            {(position.ghost_position || position.needs_reconciliation || position.error_code) && (
+                              <div className="flex flex-col gap-0.5">
+                                {position.ghost_position && (
+                                  <span
+                                    className="text-[9px] font-bold text-orange-400 border border-orange-500/40 rounded px-1 py-0 cursor-help"
+                                    title="On-chain balance is 0 — wallet no longer holds this token. Selling will close as ghost."
+                                  >
+                                    👻 GHOST
+                                  </span>
+                                )}
+                                {position.needs_reconciliation && !position.ghost_position && (
+                                  <span
+                                    className="text-[9px] font-bold text-cyan-400 border border-cyan-500/40 rounded px-1 py-0 cursor-help"
+                                    title="On-chain balance drifted from DB. Pre-sell reconciler will auto-fix at sell time."
+                                  >
+                                    ⚖️ DRIFT
+                                  </span>
+                                )}
+                                {position.error_code && position.error_code !== 'insufficient_balance' && (
+                                  <span
+                                    className="text-[9px] font-bold text-red-400 border border-red-500/40 rounded px-1 py-0 cursor-help"
+                                    title={`Last sell error: ${position.error_code}${
+                                      position.error_code === 'slippage'
+                                        ? ' — try higher slippage'
+                                        : position.error_code === 'no_route'
+                                          ? ' — try smaller size or wait for liquidity'
+                                          : position.error_code === 'program_mismatch'
+                                            ? ' — token-2022 program issue'
+                                            : ''
+                                    }`}
+                                  >
+                                    ⚠️ {position.error_code.toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </TableCell>
