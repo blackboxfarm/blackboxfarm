@@ -2011,25 +2011,43 @@ export function FlipItDashboard() {
     // Re-fetch price using the SAME method as paste (helius-fast-price), not a different source
     const tokenSymbol = inputToken.symbol;
     
+    const priceToastId = toast.loading('Fetching fresh price (can take up to 60s)...', { duration: 90000 });
+    setIsFlipping(true);
     try {
-      toast.info('Fetching fresh price...', { duration: 2000 });
-      const { data: freshPrice, error: priceErr } = await supabase.functions.invoke('helius-fast-price', {
-        body: { tokenMint: tokenAddress.trim() }
-      });
+      // Long-running price fetch — give it up to 90 seconds before we abort
+      const ctrl = new AbortController();
+      const timeoutId = setTimeout(() => ctrl.abort(), 90000);
+
+      let freshPrice: any = null;
+      let priceErr: any = null;
+      try {
+        const res = await supabase.functions.invoke('helius-fast-price', {
+          body: { tokenMint: tokenAddress.trim() },
+        });
+        freshPrice = res.data;
+        priceErr = res.error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const resolvedPrice = freshPrice?.priceUsd || freshPrice?.price;
       if (priceErr || !resolvedPrice) {
+        toast.dismiss(priceToastId);
         toast.error('Failed to fetch fresh price: ' + (freshPrice?.error || priceErr?.message || 'Unknown'));
+        setIsFlipping(false);
         return;
       }
 
       const displayedPrice = resolvedPrice;
       console.log(`[FlipIt] Fresh Helius price for execution: $${displayedPrice}`);
+      toast.dismiss(priceToastId);
 
       await executeFlip(displayedPrice, tokenSymbol);
     } catch (err: any) {
+      toast.dismiss(priceToastId);
       console.error('Fresh price fetch error:', err);
       toast.error('Failed to fetch price: ' + (err.message || 'Unknown error'));
+      setIsFlipping(false);
     }
   };
   
