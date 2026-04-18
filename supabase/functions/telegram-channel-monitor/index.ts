@@ -2798,10 +2798,30 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
 
                 if ((todayPositions || 0) >= flipitMaxDaily) {
                   console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
+                } else if (config.flipit_first_time_only !== false && await (async () => {
+                  // FIRST-TIME-ONLY GUARD: if this channel has already produced a flip_position for this mint, skip.
+                  const { count: priorCount } = await supabase
+                    .from('flip_positions')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('source', 'telegram')
+                    .eq('source_channel_id', config.id)
+                    .eq('token_mint', tokenMint);
+                  if ((priorCount || 0) > 0) {
+                    console.log(`[telegram-channel-monitor] FlipIt: SKIP first_time_only — ${tokenMint} already bought from channel ${config.id}`);
+                    if (callId) {
+                      await supabase
+                        .from('telegram_channel_calls')
+                        .update({ status: 'skipped', skip_reason: `FlipIt skipped: first_time_only — already bought ${tokenMint} from this channel` })
+                        .eq('id', callId);
+                    }
+                    return true;
+                  }
+                  return false;
+                })()) {
+                  // already handled inside the IIFE
                 } else {
                   // FlipIt auto-buy is ON: execute real buys when rules/tier say buy/fantasy_buy.
-                  // IMPORTANT: We DO NOT enforce "first call" or "one position per token" here.
-                  // You can buy the same token multiple times (buy-in-sets behavior).
+                  // first_time_only flag (default true) ensures we don't double-buy the same token from the same channel.
 
                   // ============== PRE-BUY CHECKS FOR REAL MONEY ==============
                   // Only apply pre-buy checks if we have token data - if enrichment failed, proceed anyway

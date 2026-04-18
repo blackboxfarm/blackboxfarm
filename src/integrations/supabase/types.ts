@@ -13654,6 +13654,7 @@ export type Database = {
           flipit_buy_amount_sol: number | null
           flipit_buy_amount_usd: number | null
           flipit_enabled: boolean | null
+          flipit_first_time_only: boolean
           flipit_max_daily_positions: number | null
           flipit_moonbag_enabled: boolean | null
           flipit_moonbag_keep_pct: number | null
@@ -13742,6 +13743,7 @@ export type Database = {
           flipit_buy_amount_sol?: number | null
           flipit_buy_amount_usd?: number | null
           flipit_enabled?: boolean | null
+          flipit_first_time_only?: boolean
           flipit_max_daily_positions?: number | null
           flipit_moonbag_enabled?: boolean | null
           flipit_moonbag_keep_pct?: number | null
@@ -13830,6 +13832,7 @@ export type Database = {
           flipit_buy_amount_sol?: number | null
           flipit_buy_amount_usd?: number | null
           flipit_enabled?: boolean | null
+          flipit_first_time_only?: boolean
           flipit_max_daily_positions?: number | null
           flipit_moonbag_enabled?: boolean | null
           flipit_moonbag_keep_pct?: number | null
