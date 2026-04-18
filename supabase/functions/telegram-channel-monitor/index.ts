@@ -2405,15 +2405,15 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
             // ============================================
             // TRADING MODE DECISION LOG
             // ============================================
-            const tradingMode = config.scalp_mode_enabled 
+            const buyTradingMode = config.scalp_mode_enabled 
               ? (config.scalp_test_mode ? 'SCALP_TEST' : 'SCALP_LIVE')
               : (config.flipit_enabled ? 'FLIPIT' : 'DISABLED');
             
-            console.log(`[telegram-channel-monitor] ⚡ TRADING MODE for "${config.channel_name || config.channel_id}": ${tradingMode}`);
+            console.log(`[telegram-channel-monitor] ⚡ TRADING MODE for "${config.channel_name || config.channel_id}": ${buyTradingMode}`);
             console.log(`[telegram-channel-monitor]    → scalp_mode_enabled: ${config.scalp_mode_enabled}, scalp_test_mode: ${config.scalp_test_mode}`);
             console.log(`[telegram-channel-monitor]    → flipit_enabled: ${config.flipit_enabled}`);
             
-            if (tradingMode === 'DISABLED') {
+            if (buyTradingMode === 'DISABLED') {
               console.log(`[telegram-channel-monitor] ⏭️ No trading mode enabled for this channel, skipping buy execution`);
             }
 
