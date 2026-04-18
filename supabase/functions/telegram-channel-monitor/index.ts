@@ -2887,6 +2887,58 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                     return true;
                   }
 
+                  // ============== LAYER 3: Market-cap floor guard ==============
+                  // Insiders' fresh calls are typically sub-$100k. If the alert message itself contains
+                  // "Market Cap: $XXX(k|m|b)" above the floor (default $500k), it's a known/mooned token
+                  // (e.g. $PUMP, $WIF) — skip the buy. Parses the mcap from the raw message text.
+                  const MCAP_FLOOR_USD = 500_000;
+                  const mcapMatch = (messageText || '').match(/(?:market\s*cap|mcap|mc)\s*[:=]?\s*\$?\s*(\d+(?:[.,]\d+)?)\s*([kKmMbB])?/i);
+                  if (mcapMatch) {
+                    const num = parseFloat(mcapMatch[1].replace(',', '.'));
+                    const unit = (mcapMatch[2] || '').toLowerCase();
+                    const mult = unit === 'b' ? 1e9 : unit === 'm' ? 1e6 : unit === 'k' ? 1e3 : 1;
+                    const mcapUsd = num * mult;
+                    if (Number.isFinite(mcapUsd) && mcapUsd >= MCAP_FLOOR_USD) {
+                      console.log(`[telegram-channel-monitor] FlipIt: SKIP mcap-floor — ${tokenMint} mcap $${mcapUsd.toLocaleString()} >= floor $${MCAP_FLOOR_USD.toLocaleString()} in channel ${config.channel_id}`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({
+                            status: 'skipped',
+                            is_first_call: false,
+                            skip_reason: `FlipIt skipped: mcap $${Math.round(mcapUsd).toLocaleString()} >= floor $${MCAP_FLOOR_USD.toLocaleString()} (likely known/mooned token)`,
+                          })
+                          .eq('id', callId);
+                      }
+                      return true;
+                    }
+                  }
+
+                  // ============== LAYER 4: Known-token blocklist ==============
+                  // Hard-block well-known mooned tokens regardless of message format.
+                  const KNOWN_MOONED_TOKENS = new Set<string>([
+                    'pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn', // $PUMP (Pump.fun token)
+                  ]);
+                  const KNOWN_MOONED_SYMBOLS = new Set<string>([
+                    'PUMP', 'WIF', 'BONK', 'POPCAT', 'MEW', 'SLERF', 'BOME', 'MOTHER', 'PNUT', 'GOAT', 'FARTCOIN', 'CHILLGUY', 'MOODENG', 'PEPE', 'TRUMP', 'MELANIA',
+                  ]);
+                  const symbolMatch = (messageText || '').match(/\$([A-Z][A-Z0-9]{1,15})\b/);
+                  const extractedSymbol = symbolMatch ? symbolMatch[1].toUpperCase() : '';
+                  if (KNOWN_MOONED_TOKENS.has(tokenMint) || (extractedSymbol && KNOWN_MOONED_SYMBOLS.has(extractedSymbol))) {
+                    console.log(`[telegram-channel-monitor] FlipIt: SKIP known-mooned — ${tokenMint} symbol $${extractedSymbol} in channel ${config.channel_id}`);
+                    if (callId) {
+                      await supabase
+                        .from('telegram_channel_calls')
+                        .update({
+                          status: 'skipped',
+                          is_first_call: false,
+                          skip_reason: `FlipIt skipped: known-mooned token ($${extractedSymbol || tokenMint.slice(0, 8)}) — hard blocklist`,
+                        })
+                        .eq('id', callId);
+                    }
+                    return true;
+                  }
+
                   return false;
                 })()) {
                   // already handled inside the IIFE
