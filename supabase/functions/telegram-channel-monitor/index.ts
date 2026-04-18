@@ -1639,13 +1639,31 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
             if (mtError) throw mtError;
 
             if (mtData?.success && Array.isArray(mtData.messages)) {
-              channelMessages = mtData.messages.map((m: any) => ({
-                messageId: String(m.messageId || m.id),
-                text: m.text || '',
-                date: new Date(m.date),
-                callerUsername: m.callerUsername,
-                callerDisplayName: m.callerDisplayName,
-              }));
+              channelMessages = mtData.messages.map((m: any) => {
+                // Telegram dates can arrive as Unix seconds (number), ms (number), or ISO string.
+                // Heuristic: if numeric and < 1e12 it's seconds → multiply by 1000.
+                let dateValue: Date;
+                const raw = m.date;
+                if (typeof raw === 'number') {
+                  dateValue = new Date(raw < 1e12 ? raw * 1000 : raw);
+                } else if (typeof raw === 'string' && /^\d+$/.test(raw)) {
+                  const n = Number(raw);
+                  dateValue = new Date(n < 1e12 ? n * 1000 : n);
+                } else {
+                  dateValue = new Date(raw);
+                }
+                // Final sanity guard: clamp anything beyond year 9999 to "now"
+                if (!Number.isFinite(dateValue.getTime()) || dateValue.getFullYear() > 9999) {
+                  dateValue = new Date();
+                }
+                return {
+                  messageId: String(m.messageId || m.id),
+                  text: m.text || '',
+                  date: dateValue,
+                  callerUsername: m.callerUsername,
+                  callerDisplayName: m.callerDisplayName,
+                };
+              });
               console.log(`[telegram-channel-monitor] MTProto fetched ${channelMessages.length} messages`);
             } else {
               groupWarning = mtData?.error || 'MTProto returned no messages';
@@ -2926,16 +2944,18 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
 
                       console.log(`[telegram-channel-monitor] 🚀 FlipIt: TRIGGERING auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
 
-                      // Prefer SOL amount directly (the user's rule is denominated in SOL).
-                      // Fallback to USD only if SOL not configured.
-                      const buyAmountSolDirect = (config.flipit_buy_amount_sol && config.flipit_buy_amount_sol > 0)
-                        ? Number(config.flipit_buy_amount_sol)
-                        : null;
+                      // flipit-execute REQUIRES buyAmountSol (it rejects USD-only requests).
+                      // Use the channel's configured SOL amount; fallback to 0.1 SOL.
+                      const configuredSol = Number(config.flipit_buy_amount_sol);
+                      const buyAmountSolForFlipIt = (Number.isFinite(configuredSol) && configuredSol > 0)
+                        ? configuredSol
+                        : 0.1;
 
                       const buyRequest: Record<string, unknown> = {
                         walletId,
                         action: 'buy',
                         tokenMint,
+                        buyAmountSol: buyAmountSolForFlipIt,
                         targetMultiplier: flipitSellMultiplier,
                         source: 'telegram',
                         sourceChannelId: config.id,
@@ -2944,11 +2964,8 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                         moonbagSellPct: config.flipit_moonbag_sell_pct ?? 90,
                         moonbagKeepPct: config.flipit_moonbag_keep_pct ?? 10
                       };
-                      if (buyAmountSolDirect !== null) {
-                        buyRequest.buyAmountSol = buyAmountSolDirect;
-                      } else {
-                        buyRequest.buyAmountUsd = flipitBuyAmount;
-                      }
+
+                      console.log(`[telegram-channel-monitor] 🚀 FlipIt: buyAmountSol=${buyAmountSolForFlipIt} SOL (from config.flipit_buy_amount_sol=${config.flipit_buy_amount_sol})`);
 
                       console.log(`[telegram-channel-monitor] 🚀 FlipIt: Invoking flipit-execute with walletId=${walletId.slice(0, 8)}...`);
                       
