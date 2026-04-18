@@ -2856,23 +2856,32 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                   }
 
                   // ============== LAYER 2: Multiplier / follow-up notation guard ==============
-                  // Detect "2x", "ATH", "from 50k to 200k", "called at", multi-rocket etc. — these are pump updates, not fresh calls.
+                  // Detect "2x", "MILESTONE 5X", "ATH", "from 50k to 200k", "called at", multi-rocket etc.
+                  // RATIONALE: If the message contains pump-multiplier notation, the channel must have called the
+                  // token earlier — even if our baseline doesn't have it. Treat as already-seen and skip the buy.
                   const followUpPatterns: { name: string; re: RegExp }[] = [
-                    { name: 'multiplier-x', re: /\b\d+(\.\d+)?\s*x\b/i },
+                    { name: 'milestone-Nx', re: /\bMILESTONE\s+\d+(\.\d+)?\s*x\b/i },
+                    { name: 'multiplier-x', re: /(^|[\s:>\-])\d+(\.\d+)?\s*x\b/i },
                     { name: 'ATH', re: /\b(ATH|all[\s\-\.]?time[\s\-\.]?high)\b/i },
-                    { name: 'pumped-Nx', re: /\b(up|pumped?|did|gained?|went)\s+\d+(\.\d+)?\s*x\b/i },
+                    { name: 'pumped-Nx', re: /\b(up|pumped?|did|gained?|went|hit|reached)\s+\d+(\.\d+)?\s*x\b/i },
                     { name: 'from-to-mcap', re: /\bfrom\s+\$?\d+(\.\d+)?[kKmMbB]?\s+to\s+\$?\d+(\.\d+)?[kKmMbB]?\b/i },
                     { name: 'multi-rocket', re: /🚀{2,}/u },
                     { name: 'multi-chart', re: /📈{2,}/u },
                     { name: 'called-at', re: /\bcalled\s+(at|@|from)\b/i },
+                    { name: 'recap', re: /\b(daily\s+recap|recap\s+\-|premium\s+insiders\s+daily)\b/i },
                   ];
                   const matched = followUpPatterns.find((p) => p.re.test(messageText || ''));
                   if (matched) {
                     console.log(`[telegram-channel-monitor] FlipIt: SKIP follow-up message — ${tokenMint} matched pattern "${matched.name}" in channel ${config.channel_id}`);
                     if (callId) {
+                      // Mark this row as a follow-up (NOT a first call) so future messages treat the mint as seen.
                       await supabase
                         .from('telegram_channel_calls')
-                        .update({ status: 'skipped', skip_reason: `FlipIt skipped: follow-up notation detected (${matched.name})` })
+                        .update({
+                          status: 'skipped',
+                          is_first_call: false,
+                          skip_reason: `FlipIt skipped: follow-up notation detected (${matched.name}) — token treated as previously called`,
+                        })
                         .eq('id', callId);
                     }
                     return true;
