@@ -4947,6 +4947,7 @@ export type Database = {
           entry_verified_at: string | null
           error_code: string | null
           error_message: string | null
+          flipit_moonbag_sell_pct: number | null
           ghost_position: boolean
           id: string
           is_diamond_hand: boolean | null
@@ -5036,6 +5037,7 @@ export type Database = {
           entry_verified_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          flipit_moonbag_sell_pct?: number | null
           ghost_position?: boolean
           id?: string
           is_diamond_hand?: boolean | null
@@ -5125,6 +5127,7 @@ export type Database = {
           entry_verified_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          flipit_moonbag_sell_pct?: number | null
           ghost_position?: boolean
           id?: string
           is_diamond_hand?: boolean | null
