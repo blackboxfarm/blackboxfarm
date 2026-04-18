@@ -94,6 +94,30 @@ export function ChannelTransactionLog() {
     setLoading(false);
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this transaction record? This cannot be undone.")) return;
+    const { error } = await supabase.from("flip_positions").delete().eq("id", id);
+    if (error) {
+      toast.error(`Delete failed: ${error.message}`);
+      return;
+    }
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    toast.success("Transaction deleted");
+  };
+
+  const handleClearAll = async () => {
+    if (rows.length === 0) return;
+    if (!confirm(`Delete ALL ${rows.length} channel transactions shown? This cannot be undone.`)) return;
+    const ids = rows.map((r) => r.id);
+    const { error } = await supabase.from("flip_positions").delete().in("id", ids);
+    if (error) {
+      toast.error(`Clear failed: ${error.message}`);
+      return;
+    }
+    setRows([]);
+    toast.success(`Cleared ${ids.length} transactions`);
+  };
+
   useEffect(() => {
     load();
     const channel = supabase
@@ -117,9 +141,21 @@ export function ChannelTransactionLog() {
           Channel Auto-Buy Transactions
           <Badge variant="outline" className="ml-2 text-[10px]">Last 25</Badge>
         </CardTitle>
-        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearAll}
+            disabled={loading || rows.length === 0}
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            title="Delete all shown transactions"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {loading && rows.length === 0 ? (
