@@ -20,6 +20,7 @@ import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 import { ChannelAutoBuyRules } from './flipit/ChannelAutoBuyRules';
+import { ChannelTransactionLog } from './flipit/ChannelTransactionLog';
 import { MomentumIndicator } from './flipit/MomentumIndicator';
 import { TokenPreviewCard } from './flipit/TokenPreviewCard';
 import { HolderQualityIndicator } from './flipit/HolderQualityIndicator';
@@ -3292,8 +3293,9 @@ export function FlipItDashboard() {
         </CardHeader>
         <CardContent>
           {/* Channel Auto-Buy Rules — first thing under header */}
-          <div className="mb-6">
+          <div className="mb-6 space-y-4">
             <ChannelAutoBuyRules flipitWalletId={selectedWallet || null} />
+            <ChannelTransactionLog />
           </div>
 
           {/* Source Wallet Section */}
