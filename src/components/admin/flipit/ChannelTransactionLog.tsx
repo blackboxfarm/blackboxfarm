@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Receipt, RefreshCw, ExternalLink, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Loader2, Receipt, RefreshCw, ExternalLink, ArrowUpRight, ArrowDownRight, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface FlipRow {
   id: string;
@@ -93,6 +94,30 @@ export function ChannelTransactionLog() {
     setLoading(false);
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this transaction record? This cannot be undone.")) return;
+    const { error } = await supabase.from("flip_positions").delete().eq("id", id);
+    if (error) {
+      toast.error(`Delete failed: ${error.message}`);
+      return;
+    }
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    toast.success("Transaction deleted");
+  };
+
+  const handleClearAll = async () => {
+    if (rows.length === 0) return;
+    if (!confirm(`Delete ALL ${rows.length} channel transactions shown? This cannot be undone.`)) return;
+    const ids = rows.map((r) => r.id);
+    const { error } = await supabase.from("flip_positions").delete().in("id", ids);
+    if (error) {
+      toast.error(`Clear failed: ${error.message}`);
+      return;
+    }
+    setRows([]);
+    toast.success(`Cleared ${ids.length} transactions`);
+  };
+
   useEffect(() => {
     load();
     const channel = supabase
@@ -116,9 +141,21 @@ export function ChannelTransactionLog() {
           Channel Auto-Buy Transactions
           <Badge variant="outline" className="ml-2 text-[10px]">Last 25</Badge>
         </CardTitle>
-        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearAll}
+            disabled={loading || rows.length === 0}
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            title="Delete all shown transactions"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {loading && rows.length === 0 ? (
@@ -140,6 +177,7 @@ export function ChannelTransactionLog() {
                   <th className="text-right py-2 px-2">PnL</th>
                   <th className="text-left py-2 px-2">When</th>
                   <th className="text-left py-2 px-2">Tx</th>
+                  <th className="text-right py-2 px-2 w-10"></th>
                 </tr>
               </thead>
               <tbody>
@@ -233,6 +271,17 @@ export function ChannelTransactionLog() {
                             </a>
                           )}
                         </div>
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(r.id)}
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Delete this record"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </td>
                     </tr>
                   );
