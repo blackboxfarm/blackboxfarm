@@ -1,0 +1,1 @@
+DELETE FROM public.telegram_channel_config WHERE channel_id = '-1003282110418';
