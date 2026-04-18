@@ -177,6 +177,7 @@ export function ChannelTransactionLog() {
                   <th className="text-right py-2 px-2">PnL</th>
                   <th className="text-left py-2 px-2">When</th>
                   <th className="text-left py-2 px-2">Tx</th>
+                  <th className="text-right py-2 px-2 w-10"></th>
                 </tr>
               </thead>
               <tbody>
@@ -270,6 +271,17 @@ export function ChannelTransactionLog() {
                             </a>
                           )}
                         </div>
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(r.id)}
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Delete this record"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </td>
                     </tr>
                   );
