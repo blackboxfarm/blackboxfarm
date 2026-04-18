@@ -68,11 +68,17 @@ export function ChannelAutoBuyRules({ flipitWalletId }: Props) {
     const draft = drafts[c.id];
     if (!draft) return;
     setSavingId(c.id);
-    const update: Record<string, any> = {};
-    if ("flipit_enabled" in draft) update.flipit_enabled = draft.flipit_enabled;
-    if ("flipit_buy_amount_sol" in draft) update.flipit_buy_amount_sol = draft.flipit_buy_amount_sol;
-    if ("flipit_sell_multiplier" in draft) update.flipit_sell_multiplier = draft.flipit_sell_multiplier;
-    if ("flipit_first_time_only" in draft) update.flipit_first_time_only = draft.flipit_first_time_only;
+    const update: {
+      flipit_enabled?: boolean;
+      flipit_buy_amount_sol?: number | null;
+      flipit_sell_multiplier?: number | null;
+      flipit_first_time_only?: boolean;
+      flipit_wallet_id?: string | null;
+    } = {};
+    if ("flipit_enabled" in draft) update.flipit_enabled = draft.flipit_enabled as boolean;
+    if ("flipit_buy_amount_sol" in draft) update.flipit_buy_amount_sol = draft.flipit_buy_amount_sol as number;
+    if ("flipit_sell_multiplier" in draft) update.flipit_sell_multiplier = draft.flipit_sell_multiplier as number;
+    if ("flipit_first_time_only" in draft) update.flipit_first_time_only = draft.flipit_first_time_only as boolean;
     if (draft.flipit_enabled && flipitWalletId && !c.flipit_wallet_id) {
       update.flipit_wallet_id = flipitWalletId;
     }
