@@ -2855,89 +2855,9 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                     return true;
                   }
 
-                  // ============== LAYER 2: Multiplier / follow-up notation guard ==============
-                  // Detect "2x", "MILESTONE 5X", "ATH", "from 50k to 200k", "called at", multi-rocket etc.
-                  // RATIONALE: If the message contains pump-multiplier notation, the channel must have called the
-                  // token earlier — even if our baseline doesn't have it. Treat as already-seen and skip the buy.
-                  const followUpPatterns: { name: string; re: RegExp }[] = [
-                    { name: 'milestone-Nx', re: /\bMILESTONE\s+\d+(\.\d+)?\s*x\b/i },
-                    { name: 'multiplier-x', re: /(^|[\s:>\-])\d+(\.\d+)?\s*x\b/i },
-                    { name: 'ATH', re: /\b(ATH|all[\s\-\.]?time[\s\-\.]?high)\b/i },
-                    { name: 'pumped-Nx', re: /\b(up|pumped?|did|gained?|went|hit|reached)\s+\d+(\.\d+)?\s*x\b/i },
-                    { name: 'from-to-mcap', re: /\bfrom\s+\$?\d+(\.\d+)?[kKmMbB]?\s+to\s+\$?\d+(\.\d+)?[kKmMbB]?\b/i },
-                    { name: 'multi-rocket', re: /🚀{2,}/u },
-                    { name: 'multi-chart', re: /📈{2,}/u },
-                    { name: 'called-at', re: /\bcalled\s+(at|@|from)\b/i },
-                    { name: 'recap', re: /\b(daily\s+recap|recap\s+\-|premium\s+insiders\s+daily)\b/i },
-                  ];
-                  const matched = followUpPatterns.find((p) => p.re.test(messageText || ''));
-                  if (matched) {
-                    console.log(`[telegram-channel-monitor] FlipIt: SKIP follow-up message — ${tokenMint} matched pattern "${matched.name}" in channel ${config.channel_id}`);
-                    if (callId) {
-                      // Mark this row as a follow-up (NOT a first call) so future messages treat the mint as seen.
-                      await supabase
-                        .from('telegram_channel_calls')
-                        .update({
-                          status: 'skipped',
-                          is_first_call: false,
-                          skip_reason: `FlipIt skipped: follow-up notation detected (${matched.name}) — token treated as previously called`,
-                        })
-                        .eq('id', callId);
-                    }
-                    return true;
-                  }
-
-                  // ============== LAYER 3: Market-cap floor guard ==============
-                  // Insiders' fresh calls are typically sub-$100k. If the alert message itself contains
-                  // "Market Cap: $XXX(k|m|b)" above the floor (default $500k), it's a known/mooned token
-                  // (e.g. $PUMP, $WIF) — skip the buy. Parses the mcap from the raw message text.
-                  const MCAP_FLOOR_USD = 500_000;
-                  const mcapMatch = (messageText || '').match(/(?:market\s*cap|mcap|mc)\s*[:=]?\s*\$?\s*(\d+(?:[.,]\d+)?)\s*([kKmMbB])?/i);
-                  if (mcapMatch) {
-                    const num = parseFloat(mcapMatch[1].replace(',', '.'));
-                    const unit = (mcapMatch[2] || '').toLowerCase();
-                    const mult = unit === 'b' ? 1e9 : unit === 'm' ? 1e6 : unit === 'k' ? 1e3 : 1;
-                    const mcapUsd = num * mult;
-                    if (Number.isFinite(mcapUsd) && mcapUsd >= MCAP_FLOOR_USD) {
-                      console.log(`[telegram-channel-monitor] FlipIt: SKIP mcap-floor — ${tokenMint} mcap $${mcapUsd.toLocaleString()} >= floor $${MCAP_FLOOR_USD.toLocaleString()} in channel ${config.channel_id}`);
-                      if (callId) {
-                        await supabase
-                          .from('telegram_channel_calls')
-                          .update({
-                            status: 'skipped',
-                            is_first_call: false,
-                            skip_reason: `FlipIt skipped: mcap $${Math.round(mcapUsd).toLocaleString()} >= floor $${MCAP_FLOOR_USD.toLocaleString()} (likely known/mooned token)`,
-                          })
-                          .eq('id', callId);
-                      }
-                      return true;
-                    }
-                  }
-
-                  // ============== LAYER 4: Known-token blocklist ==============
-                  // Hard-block well-known mooned tokens regardless of message format.
-                  const KNOWN_MOONED_TOKENS = new Set<string>([
-                    'pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn', // $PUMP (Pump.fun token)
-                  ]);
-                  const KNOWN_MOONED_SYMBOLS = new Set<string>([
-                    'PUMP', 'WIF', 'BONK', 'POPCAT', 'MEW', 'SLERF', 'BOME', 'MOTHER', 'PNUT', 'GOAT', 'FARTCOIN', 'CHILLGUY', 'MOODENG', 'PEPE', 'TRUMP', 'MELANIA',
-                  ]);
-                  const symbolMatch = (messageText || '').match(/\$([A-Z][A-Z0-9]{1,15})\b/);
-                  const extractedSymbol = symbolMatch ? symbolMatch[1].toUpperCase() : '';
-                  if (KNOWN_MOONED_TOKENS.has(tokenMint) || (extractedSymbol && KNOWN_MOONED_SYMBOLS.has(extractedSymbol))) {
-                    console.log(`[telegram-channel-monitor] FlipIt: SKIP known-mooned — ${tokenMint} symbol $${extractedSymbol} in channel ${config.channel_id}`);
-                    if (callId) {
-                      await supabase
-                        .from('telegram_channel_calls')
-                        .update({
-                          status: 'skipped',
-                          is_first_call: false,
-                          skip_reason: `FlipIt skipped: known-mooned token ($${extractedSymbol || tokenMint.slice(0, 8)}) — hard blocklist`,
-                        })
-                        .eq('id', callId);
-                    }
-                    return true;
-                  }
+                  // NOTE: Layers 2 (regex follow-up), 3 (mcap floor), and 4 (known-mooned blocklist)
+                  // were intentionally removed per user request. For this channel, ANY first-time-seen
+                  // mint (passed Layer 1a + 1b) triggers a buy — no message-content filtering.
 
                   return false;
                 })()) {
