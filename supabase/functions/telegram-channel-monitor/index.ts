@@ -2799,7 +2799,7 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                 if ((todayPositions || 0) >= flipitMaxDaily) {
                   console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
                 } else if (config.flipit_first_time_only !== false && await (async () => {
-                  // FIRST-TIME-ONLY GUARD: if this channel has already produced a flip_position for this mint, skip.
+                  // ============== LAYER 1a: Already bought by us from this channel ==============
                   const { count: priorCount } = await supabase
                     .from('flip_positions')
                     .select('id', { count: 'exact', head: true })
@@ -2816,6 +2816,50 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                     }
                     return true;
                   }
+
+                  // ============== LAYER 1b: Channel previously called this mint (pre-rule history) ==============
+                  // Look for any prior call for the same channel + token, EXCLUDING the current call row.
+                  let priorCallsQuery = supabase
+                    .from('telegram_channel_calls')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('channel_id', config.channel_id)
+                    .eq('token_mint', tokenMint);
+                  if (callId) priorCallsQuery = priorCallsQuery.neq('id', callId);
+                  const { count: priorCallCount } = await priorCallsQuery;
+                  if ((priorCallCount || 0) > 0) {
+                    console.log(`[telegram-channel-monitor] FlipIt: SKIP first_time_only — ${tokenMint} previously mentioned in channel ${config.channel_id} (${priorCallCount} prior calls)`);
+                    if (callId) {
+                      await supabase
+                        .from('telegram_channel_calls')
+                        .update({ status: 'skipped', skip_reason: `FlipIt skipped: not first mention — ${priorCallCount} prior call(s) in channel history` })
+                        .eq('id', callId);
+                    }
+                    return true;
+                  }
+
+                  // ============== LAYER 2: Multiplier / follow-up notation guard ==============
+                  // Detect "2x", "ATH", "from 50k to 200k", "called at", multi-rocket etc. — these are pump updates, not fresh calls.
+                  const followUpPatterns: { name: string; re: RegExp }[] = [
+                    { name: 'multiplier-x', re: /\b\d+(\.\d+)?\s*x\b/i },
+                    { name: 'ATH', re: /\b(ATH|all[\s\-\.]?time[\s\-\.]?high)\b/i },
+                    { name: 'pumped-Nx', re: /\b(up|pumped?|did|gained?|went)\s+\d+(\.\d+)?\s*x\b/i },
+                    { name: 'from-to-mcap', re: /\bfrom\s+\$?\d+(\.\d+)?[kKmMbB]?\s+to\s+\$?\d+(\.\d+)?[kKmMbB]?\b/i },
+                    { name: 'multi-rocket', re: /🚀{2,}/u },
+                    { name: 'multi-chart', re: /📈{2,}/u },
+                    { name: 'called-at', re: /\bcalled\s+(at|@|from)\b/i },
+                  ];
+                  const matched = followUpPatterns.find((p) => p.re.test(messageText || ''));
+                  if (matched) {
+                    console.log(`[telegram-channel-monitor] FlipIt: SKIP follow-up message — ${tokenMint} matched pattern "${matched.name}" in channel ${config.channel_id}`);
+                    if (callId) {
+                      await supabase
+                        .from('telegram_channel_calls')
+                        .update({ status: 'skipped', skip_reason: `FlipIt skipped: follow-up notation detected (${matched.name})` })
+                        .eq('id', callId);
+                    }
+                    return true;
+                  }
+
                   return false;
                 })()) {
                   // already handled inside the IIFE
