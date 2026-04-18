@@ -2595,6 +2595,45 @@ export type Database = {
         }
         Relationships: []
       }
+      channel_comparison_pairs: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          pair_name: string
+          public_channel_id: string
+          public_channel_name: string | null
+          updated_at: string
+          vip_channel_id: string
+          vip_channel_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          pair_name: string
+          public_channel_id: string
+          public_channel_name?: string | null
+          updated_at?: string
+          vip_channel_id: string
+          vip_channel_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          pair_name?: string
+          public_channel_id?: string
+          public_channel_name?: string | null
+          updated_at?: string
+          vip_channel_id?: string
+          vip_channel_name?: string | null
+        }
+        Relationships: []
+      }
       channel_installations: {
         Row: {
           admin_config: Json
@@ -2639,6 +2678,80 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      channel_pair_comparison_runs: {
+        Row: {
+          ai_summary: string | null
+          ai_verdict: string | null
+          created_at: string
+          id: string
+          is_manual: boolean
+          overlap_tokens: Json
+          pair_id: string
+          public_avg_mcap_at_call: number | null
+          public_call_count: number
+          public_exclusives: Json
+          public_pnl_summary: Json
+          vip_avg_lead_seconds: number | null
+          vip_avg_mcap_at_call: number | null
+          vip_call_count: number
+          vip_exclusives: Json
+          vip_lead_overlap: Json
+          vip_pnl_summary: Json
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          ai_summary?: string | null
+          ai_verdict?: string | null
+          created_at?: string
+          id?: string
+          is_manual?: boolean
+          overlap_tokens?: Json
+          pair_id: string
+          public_avg_mcap_at_call?: number | null
+          public_call_count?: number
+          public_exclusives?: Json
+          public_pnl_summary?: Json
+          vip_avg_lead_seconds?: number | null
+          vip_avg_mcap_at_call?: number | null
+          vip_call_count?: number
+          vip_exclusives?: Json
+          vip_lead_overlap?: Json
+          vip_pnl_summary?: Json
+          window_end: string
+          window_start: string
+        }
+        Update: {
+          ai_summary?: string | null
+          ai_verdict?: string | null
+          created_at?: string
+          id?: string
+          is_manual?: boolean
+          overlap_tokens?: Json
+          pair_id?: string
+          public_avg_mcap_at_call?: number | null
+          public_call_count?: number
+          public_exclusives?: Json
+          public_pnl_summary?: Json
+          vip_avg_lead_seconds?: number | null
+          vip_avg_mcap_at_call?: number | null
+          vip_call_count?: number
+          vip_exclusives?: Json
+          vip_lead_overlap?: Json
+          vip_pnl_summary?: Json
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_pair_comparison_runs_pair_id_fkey"
+            columns: ["pair_id"]
+            isOneToOne: false
+            referencedRelation: "channel_comparison_pairs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       channel_payment_wallets: {
         Row: {

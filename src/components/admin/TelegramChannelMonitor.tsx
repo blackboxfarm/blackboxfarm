@@ -56,7 +56,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { formatDistanceToNow } from 'date-fns';
-import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard, WhaleLeaderboard, TelegramBotApiStatusCard, TelegramInteractionsPanel, ChannelMembersDashboard, TelegramHostedBots, ChannelMemberAudit } from './telegram';
+import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard, WhaleLeaderboard, TelegramBotApiStatusCard, TelegramInteractionsPanel, ChannelMembersDashboard, TelegramHostedBots, ChannelMemberAudit, KoreansComparison } from './telegram';
 import { TelegramAnnouncementBox } from './telegram/TelegramAnnouncementBox';
 import type { TelegramTarget } from './telegram';
 import { TelegramBroadcastToggle } from './TelegramBroadcastToggle';
@@ -1204,6 +1204,9 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
           <TabsTrigger value="hosted" className="flex items-center gap-1">
             🏠 Hosted
           </TabsTrigger>
+          <TabsTrigger value="koreans" className="flex items-center gap-1">
+            🇰🇷 Koreans
+          </TabsTrigger>
         </TabsList>
 
         {/* Signal Analysis - New! */}
@@ -1452,6 +1455,10 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
           <TelegramHostedBots />
           <ChannelMembersDashboard />
           <ChannelMemberAudit />
+        </TabsContent>
+
+        <TabsContent value="koreans" className="space-y-4">
+          <KoreansComparison />
         </TabsContent>
       </Tabs>
     </div>
