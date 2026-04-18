@@ -2866,40 +2866,10 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                   // FlipIt auto-buy is ON: execute real buys when rules/tier say buy/fantasy_buy.
                   // first_time_only flag (default true) ensures we don't double-buy the same token from the same channel.
 
-                  // ============== PRE-BUY CHECKS FOR REAL MONEY ==============
-                  // Only apply pre-buy checks if we have token data - if enrichment failed, proceed anyway
-                  let skipFlipIt = false;
-                  let skipReason = '';
-
-                  // Check 1: Launchpad allowlist (for tokens on bonding curve) - only if we have data
-                  if (currentTokenData?.isOnBondingCurve === true && currentTokenData?.isApprovedLaunchpad === false) {
-                    const launchpadName = currentTokenData?.launchpad || 'unknown';
-                    console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${tokenMint} - Unapproved launchpad: ${launchpadName}`);
-                    skipFlipIt = true;
-                    skipReason = `FlipIt blocked: Unapproved launchpad on bonding curve: ${launchpadName}`;
-                  }
-                  
-                  // Check 2: Liquidity lock for graduated tokens (only if we have explicit data)
-                  if (!skipFlipIt && currentTokenData?.hasGraduated === true && currentTokenData?.isOnBondingCurve === false) {
-                    if (currentTokenData?.liquidityLocked === false) {
-                      console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${tokenMint} - Liquidity NOT LOCKED`);
-                      skipFlipIt = true;
-                      skipReason = 'FlipIt blocked: Graduated token with unlocked liquidity - rug risk';
-                    } else if (currentTokenData?.liquidityLocked === null) {
-                      console.log(`[telegram-channel-monitor] FlipIt: WARNING - Liquidity lock status unknown for ${tokenMint}, proceeding with caution`);
-                    } else {
-                      console.log(`[telegram-channel-monitor] FlipIt: Liquidity check PASSED for ${tokenMint} (${currentTokenData?.liquidityLockPercent || 'unknown'}% locked)`);
-                    }
-                  }
-
-                  if (skipFlipIt) {
-                    if (callId) {
-                      await supabase
-                        .from('telegram_channel_calls')
-                        .update({ status: 'skipped', skip_reason: skipReason })
-                        .eq('id', callId);
-                    }
-                  } else {
+                  // ============== PRE-BUY CHECKS REMOVED PER USER REQUEST ==============
+                  // No launchpad allowlist, no liquidity lock check, no mcap floor, no regex.
+                  // First-time-seen (Layer 1a + 1b above) is the ONLY rule. Just buy.
+                  {
                     // Use configured wallet if set; otherwise fall back to the single active FlipIt wallet.
                     let walletId = config.flipit_wallet_id as string | null;
 
