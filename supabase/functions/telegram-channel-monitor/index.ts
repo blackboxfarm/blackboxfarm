@@ -2926,11 +2926,16 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
 
                       console.log(`[telegram-channel-monitor] 🚀 FlipIt: TRIGGERING auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
 
-                      const buyRequest = {
+                      // Prefer SOL amount directly (the user's rule is denominated in SOL).
+                      // Fallback to USD only if SOL not configured.
+                      const buyAmountSolDirect = (config.flipit_buy_amount_sol && config.flipit_buy_amount_sol > 0)
+                        ? Number(config.flipit_buy_amount_sol)
+                        : null;
+
+                      const buyRequest: Record<string, unknown> = {
                         walletId,
                         action: 'buy',
                         tokenMint,
-                        buyAmountUsd: flipitBuyAmount,
                         targetMultiplier: flipitSellMultiplier,
                         source: 'telegram',
                         sourceChannelId: config.id,
@@ -2939,6 +2944,11 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                         moonbagSellPct: config.flipit_moonbag_sell_pct ?? 90,
                         moonbagKeepPct: config.flipit_moonbag_keep_pct ?? 10
                       };
+                      if (buyAmountSolDirect !== null) {
+                        buyRequest.buyAmountSol = buyAmountSolDirect;
+                      } else {
+                        buyRequest.buyAmountUsd = flipitBuyAmount;
+                      }
 
                       console.log(`[telegram-channel-monitor] 🚀 FlipIt: Invoking flipit-execute with walletId=${walletId.slice(0, 8)}...`);
                       
