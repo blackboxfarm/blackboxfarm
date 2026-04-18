@@ -1,66 +1,94 @@
 
 
-The user is asking a reflective/strategic question — what did we learn from this session's failures and successes, and how do we build a better self-healing system for the FlipIt trading flow.
+## What the user is asking for
 
-This is **not** a build request — it's a planning/diagnostic conversation. Let me synthesize the lessons from this session and propose a concrete monitoring/sync system.
+User added two new TG channels to the monitor:
+- One **VIP / paid** channel
+- One **public (free)** channel
 
-## Session Recap — What Worked vs What Didn't
+…from the *same operator* (or comparable operators). They want to:
+1. **Read messages going forward** from both
+2. **AI-compare the two posting patterns** — what they offer, how, when
+3. Specifically understand **how/when the paid channel gets earlier/better calls** vs the free one (lead-time analysis)
+4. Generate **hourly reports** on offerings and the **PnL outcomes** of the tokens each channel called
+5. Surface it in a **new tab** in the admin Telegram Monitor, named **"Koreans"** (the user typed "Koreans" — I'll use that as the tab label)
 
-### What Worked
-1. **Linked-Sell Groups** — clean schema (single `sell_group_id` column), simple UI (link icon next to lock), sequential sells. Shipped cleanly.
-2. **Manual price refresh button** — small, surgical, immediate user value.
-3. **Extended FLIP IT timeout to 90s** — pragmatic match to real-world Helius latency.
-4. **Manual Solscan/Helius balance reconciliation** — DAS API via `helius-rpc-proxy` correctly returned the true on-chain balance and we patched the DB row.
+## What we already have (no need to build)
 
-### What Didn't Work / Surfaced Hidden Bugs
-1. **Sell failure on $coin.ai** — the *root cause was bad data*, not bad swap code. `quantity_tokens_raw` had a UI decimal (`2032783.49815`) instead of atomic units (`2032783498150`). Jupiter/Raydium were sent a quantity ~1 millionth of the real holding → ROUTE_NOT_FOUND / slippage trip.
-2. **Token-2022 vs SPL detection** — venues failed silently because the program ID wasn't being passed/respected.
-3. **No automatic balance reconciliation** — we only caught the bad quantity because the user complained. The unified monitor was "successfully" pricing a phantom amount.
-4. **Slippage was static** — when a swap reverted with custom error 6024 (slippage), we had no auto-retry escalation.
-5. **"Nothing to monitor, skipping" after a sell** — confirms 1 holding → 0 holdings, but no post-sell sanity check that the wallet actually emptied.
+- `telegram_channel_calls` already captures every call with: `channel_id`, `channel_name`, `token_mint`, `token_symbol`, `raw_message`, `price_at_call`, `market_cap_at_call`, `caller_username`, `message_timestamp`, `created_at`. The new channel `-1003282110418` (Iceds House of Degeneracy) is already producing rows. The second channel `-1003694579312` will start populating once it sees a token call.
+- The monitor pipeline is running and writing to that table — no scraping changes needed.
+- We have token price/PnL infra (`unified-pnl-monitor`, `dex-top-200` cache, `flip_positions`) we can reuse for outcome tracking.
+- Existing Tabs structure in `src/components/admin/TelegramChannelMonitor.tsx` is plug-and-play (one new `<TabsTrigger>` + `<TabsContent>`).
 
-## The Pattern
-Every recent failure traced back to **DB ↔ chain drift**. The DB *thought* it knew the position, but the on-chain truth had moved on (decimals wrong, token-2022 program, balance dust, venue migrated). We'd been treating the DB as authoritative; it isn't.
+## What needs to be built
 
-## Proposed: Sync Sentinel + Pre-Flight Reconciliation
+### 1. New table: `channel_pair_comparison_runs` (hourly snapshots)
+Stores one row per hour per pair with:
+- `pair_id` (FK to a small `channel_comparison_pairs` table that maps the two channels — VIP & Public)
+- `window_start`, `window_end` (the hour analyzed)
+- `vip_call_count`, `public_call_count`
+- `overlap_tokens` (jsonb array of tokens both channels called)
+- `vip_lead_overlap` (jsonb: per overlapping token, seconds VIP posted earlier; negative = public was earlier)
+- `vip_exclusives` / `public_exclusives` (tokens only one side called)
+- `vip_avg_mcap_at_call`, `public_avg_mcap_at_call`
+- `vip_pnl_summary`, `public_pnl_summary` (jsonb with avg multiplier, win rate, best/worst, computed using current price vs `price_at_call`)
+- `ai_summary` (markdown text from Lovable AI Gateway)
+- `ai_verdict` (enum-ish text: `vip_clearly_earlier` | `marginal_edge` | `no_edge` | `public_actually_earlier` | `insufficient_data`)
 
-A small, layered safety net — three things, not a rewrite:
+### 2. New table: `channel_comparison_pairs`
+Tiny config table:
+- `id`, `pair_name`, `vip_channel_id`, `public_channel_id`, `is_active`, `created_at`
 
-### 1. Pre-Sell Reconciliation (highest value)
-Before any sell fires (manual OR group OR auto-TP), `flipit-execute` does a 1-call DAS check:
-- Fetch real on-chain balance for `(walletPubkey, tokenMint)` via `helius-rpc-proxy`
-- If on-chain balance ≠ `quantity_tokens_raw` (tolerance: ±1%), patch the DB row and use the on-chain number
-- If on-chain balance is 0 → mark position `closed_external` (already sold elsewhere), don't attempt swap
-- Detect token program (SPL vs Token-2022) from the asset response and pass it to the swap builder
+User can register the pair from the new tab. (One pair = one VIP + one Public.)
 
-This single check would have prevented today's $coin.ai failure entirely.
+### 3. New edge function: `channel-pair-analyzer` (cron, hourly)
+- For each active pair, look at the last hour of `telegram_channel_calls` for both channel IDs
+- Compute overlap, lead times (per `message_timestamp`), exclusives, mcap stats
+- Pull current prices from `dex-top-200` cache (no API hits) → compute multiplier vs `price_at_call`
+- Send a structured prompt to Lovable AI Gateway (`google/gemini-3-flash-preview`) with the pre-computed numbers — AI writes the human-readable hourly briefing and verdict
+- `assertInsert` into `channel_pair_comparison_runs` (per zero-tolerance silent-fails rule)
+- Schedule via `pg_cron` every hour at :05
 
-### 2. Auto-Escalating Slippage on Specific Errors
-In `flipit-execute`, parse the error code:
-- Custom 6024 (Jupiter slippage) → retry once at 2× slippage (capped at 50%)
-- ROUTE_NOT_FOUND on full size → retry at 50% size, then 25%
-- All venues fail → mark position `sell_failed` with structured `error_code` (not just a string blob), surface a "Retry with higher slippage" button
+### 4. New edge function: `channel-pair-analyze-now`
+- On-demand version (button in the UI) — same logic but accepts `pair_id` + custom window (default 1h, max 24h)
+- Returns the analysis without persisting (or persists as `is_manual=true`) so the user can hit "Analyze Now" without waiting for the cron
 
-### 3. Drift Sentinel (background, every 10 min)
-A new lightweight cron `flipit-drift-sentinel`:
-- For each `holding` position, sample on-chain balance via DAS
-- If drift > 5% → flag `needs_reconciliation = true` and refresh quantity
-- If on-chain balance = 0 but DB says holding → flag `ghost_position = true` (likely sold/transferred outside the system)
-- Surface ghosts/drifted positions in a small dashboard widget so user sees them before clicking Sell
+### 5. New tab: **"🇰🇷 Koreans"** in `TelegramChannelMonitor.tsx`
+- One new `<TabsTrigger value="koreans">` + `<TabsContent>`
+- New component `src/components/admin/telegram/KoreansComparison.tsx`:
+  - **Pair setup card**: dropdown to pick VIP channel + Public channel from existing `telegram_channel_config` rows → save to `channel_comparison_pairs`
+  - **Live stats strip**: last hour calls (VIP vs Public), overlap count, average lead time
+  - **Hourly Reports timeline**: scrollable list of past `channel_pair_comparison_runs`, each card shows verdict badge + AI summary + expandable raw stats
+  - **"Analyze Last Hour Now"** button → calls `channel-pair-analyze-now`
+  - **Lead-time chart**: small bar chart per overlapping token (last 24h) — VIP lead in seconds, color-coded (green = VIP earlier, red = public earlier)
+  - **PnL panel**: side-by-side table — avg multiplier, win rate (>1.5×), best call, worst call, for VIP vs Public
 
-### 4. Structured error_code column
-Today `error_message` is a giant string. Add `error_code` (enum: `slippage`, `no_route`, `insufficient_balance`, `program_mismatch`, `quote_unavailable`, `unknown`) so the UI can show the right hint and the auto-retry logic knows what to do.
+### 6. Wire-up bits
+- Index export in `src/components/admin/telegram/index.ts`
+- Cron schedule SQL (separate from migration — needs project ref + anon key)
+- RLS: super-admin only on both new tables (matches existing admin-data-visibility-policies pattern)
 
-## Files Touched (when approved)
-- Migration: add `error_code TEXT`, `needs_reconciliation BOOL`, `ghost_position BOOL`, `last_chain_sync_at TIMESTAMPTZ` to `flip_positions`
-- `supabase/functions/flipit-execute/index.ts` — add pre-sell reconciliation block + slippage/size escalation
-- `supabase/functions/flipit-drift-sentinel/index.ts` — new function, cron every 10 min
-- `src/components/admin/FlipItDashboard.tsx` — show drift/ghost badges, "Reconcile now" button per row, structured error hints
+## Files touched
 
-## What's NOT in scope (confirm if wanted)
-- Rewriting the swap builder for multi-program (Token-2022) atomic swaps — would touch many venues
-- Replacing the unified monitor — it works; we're adding a sentinel beside it, not replacing
-- Auto-retry on a schedule for `sell_failed` positions — manual button only for v1 (safer)
+**New**
+- `supabase/migrations/<ts>_*.sql` — `channel_comparison_pairs`, `channel_pair_comparison_runs`, RLS, indexes
+- `supabase/functions/channel-pair-analyzer/index.ts` — hourly cron worker
+- `supabase/functions/channel-pair-analyze-now/index.ts` — on-demand
+- `src/components/admin/telegram/KoreansComparison.tsx` — UI
 
-**Tap "Plan Approved" to build it. Or tell me which of the 4 pieces to drop / reorder.**
+**Edited**
+- `src/components/admin/TelegramChannelMonitor.tsx` — add tab trigger + content
+- `src/components/admin/telegram/index.ts` — export new component
+- Cron registration via `psql` insert (separate, needs anon key + project ref)
+
+## Out of scope (confirm if you want any of these)
+- Auto-trading off the VIP signal (just observation/reporting for now)
+- Cross-pair comparison (multiple VIP/Public pairs) — v1 supports multiple pairs but UI shows one at a time
+- Sending the hourly report to Telegram/email — just stored in DB and shown in the tab for now
+- Backfilling historical hours before the pair was registered
+
+## Open question
+You said "VIP paid" and "public" — am I right that you want to **register one pair** (VIP + Public from the same operator), or do you want to compare **all VIP-tagged channels vs all Public-tagged channels** as groups? My plan does the **pair** model (cleaner signal, easier to read). If you want group-mode let me know and I'll restructure.
+
+**Tap "Plan Approved" to build it.** Or tell me which pieces to drop / which channel IDs are the pair.
 
