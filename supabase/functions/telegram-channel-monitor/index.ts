@@ -2778,7 +2778,34 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
             
             // Only run FlipIt if Scalp Mode is NOT enabled (they are mutually exclusive per channel)
             if (config.flipit_enabled && !config.scalp_mode_enabled) {
-              console.log(`[telegram-channel-monitor] 🎯 FlipIt Mode ACTIVE: Processing ${tokenMint} for REAL buy`);
+              // ============== HARD GUARD: Only buy on FIRST CALL ==============
+              // Skip milestone/recap/2X messages — only fire on the very first time a token is mentioned in ANY channel.
+              if (!isFirstCall) {
+                console.log(`[telegram-channel-monitor] ⛔ FlipIt SKIP: ${currentTokenData?.symbol || tokenMint} is NOT a first call (milestone/recap/repeat mention) — refusing to buy`);
+                if (callId) {
+                  await supabase.from('telegram_channel_calls').update({
+                    status: 'skipped',
+                    skip_reason: 'not_first_call_milestone_or_recap',
+                  }).eq('id', callId);
+                }
+                continue;
+              }
+
+              // ============== HARD GUARD: Reject milestone/recap message patterns ==============
+              // Even if first_call somehow slipped through, refuse messages that are clearly recaps.
+              const milestonePatterns = /\b(milestone|hit\s*\d+x|reached\s*\d+x|\d+x\s*(call|gain|profit|done|achieved)|ath|all[\s-]?time[\s-]?high|new\s*ath|pumped|update|recap|previous\s*call|already\s*called|entry\s*mc|current\s*mc)\b/i;
+              if (milestonePatterns.test(messageText)) {
+                console.log(`[telegram-channel-monitor] ⛔ FlipIt SKIP: ${currentTokenData?.symbol || tokenMint} message matches milestone/recap pattern — refusing to buy`);
+                if (callId) {
+                  await supabase.from('telegram_channel_calls').update({
+                    status: 'skipped',
+                    skip_reason: 'milestone_or_recap_message_pattern',
+                  }).eq('id', callId);
+                }
+                continue;
+              }
+
+              console.log(`[telegram-channel-monitor] 🎯 FlipIt Mode ACTIVE: Processing ${tokenMint} for REAL buy (FIRST CALL confirmed)`);
               console.log(`[telegram-channel-monitor] 🎯 FlipIt: fantasy_mode=${config.fantasy_mode}, if false this SHOULD execute a real trade`);
               
               try {
