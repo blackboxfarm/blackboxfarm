@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Receipt, RefreshCw, ExternalLink, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Loader2, Receipt, RefreshCw, ExternalLink, ArrowUpRight, ArrowDownRight, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface FlipRow {
   id: string;
