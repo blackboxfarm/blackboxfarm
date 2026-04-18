@@ -93,10 +93,13 @@ Deno.serve(async (req) => {
     const priceMap: Record<string, number> = {};
     if (allMints.length) {
       const { data: prices } = await supabase
-        .from('dex_token_cache')
-        .select('token_address, price_usd')
-        .in('token_address', allMints);
-      if (prices) for (const p of prices) priceMap[p.token_address] = p.price_usd;
+        .from('token_price_history')
+        .select('token_mint, price_usd, captured_at')
+        .in('token_mint', allMints)
+        .order('captured_at', { ascending: false });
+      if (prices) for (const p of prices) {
+        if (!(p.token_mint in priceMap)) priceMap[p.token_mint] = p.price_usd;
+      }
     }
 
     const computePnl = (firstMap: Map<string, Call>) => {

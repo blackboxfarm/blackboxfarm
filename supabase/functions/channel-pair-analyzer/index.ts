@@ -77,16 +77,19 @@ async function analyzePair(
   const pubAvgMcap = avg(pub.map((c) => c.market_cap_at_call || 0).filter((x) => x > 0));
   const avgLead = leadCount ? leadSum / leadCount : null;
 
-  // PnL: lookup current prices from dex cache for all unique mints
+  // PnL: lookup current prices from token_price_history (most recent per mint)
   const allMints = [...new Set([...vipFirst.keys(), ...pubFirst.keys()])];
-  let priceMap: Record<string, number> = {};
+  const priceMap: Record<string, number> = {};
   if (allMints.length > 0) {
     const { data: prices } = await supabase
-      .from('dex_token_cache')
-      .select('token_address, price_usd')
-      .in('token_address', allMints);
+      .from('token_price_history')
+      .select('token_mint, price_usd, captured_at')
+      .in('token_mint', allMints)
+      .order('captured_at', { ascending: false });
     if (prices) {
-      for (const p of prices) priceMap[p.token_address] = p.price_usd;
+      for (const p of prices) {
+        if (!(p.token_mint in priceMap)) priceMap[p.token_mint] = p.price_usd;
+      }
     }
   }
 
