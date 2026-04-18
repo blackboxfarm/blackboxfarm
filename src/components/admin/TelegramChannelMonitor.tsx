@@ -1204,6 +1204,9 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
           <TabsTrigger value="hosted" className="flex items-center gap-1">
             🏠 Hosted
           </TabsTrigger>
+          <TabsTrigger value="koreans" className="flex items-center gap-1">
+            🇰🇷 Koreans
+          </TabsTrigger>
         </TabsList>
 
         {/* Signal Analysis - New! */}
