@@ -3291,6 +3291,11 @@ export function FlipItDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Channel Auto-Buy Rules — first thing under header */}
+          <div className="mb-6">
+            <ChannelAutoBuyRules flipitWalletId={selectedWallet || null} />
+          </div>
+
           {/* Source Wallet Section */}
           <div className="mb-6 p-4 rounded-lg border border-border bg-card/50">
             <Label className="flex items-center gap-1 mb-3 text-lg">
