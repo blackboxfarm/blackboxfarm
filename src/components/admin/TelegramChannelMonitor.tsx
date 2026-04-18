@@ -1456,6 +1456,10 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
           <ChannelMembersDashboard />
           <ChannelMemberAudit />
         </TabsContent>
+
+        <TabsContent value="koreans" className="space-y-4">
+          <KoreansComparison />
+        </TabsContent>
       </Tabs>
     </div>
   );
