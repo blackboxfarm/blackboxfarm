@@ -119,13 +119,13 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
         <CardTitle className="text-sm flex items-center gap-2">
           <GraduationCap className="h-4 w-4 text-amber-400" />
           <Zap className="h-3.5 w-3.5 text-amber-400" />
-          Graduation Sell — Execution Speed Defaults
+          Graduation Sell — Global Defaults
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
         <div className="text-[11px] text-muted-foreground">
           Applied to every graduation sell unless a position has its own override. Graduation candles are MEV-heavy —
-          higher fees = better fill guarantee.
+          higher fees = better fill guarantee. Moonbag % keeps a portion of tokens after the sell fires.
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
@@ -161,6 +161,21 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
               value={jitoTipSol}
               onChange={e => setJitoTipSol(e.target.value)}
             />
+          </div>
+          <div className="col-span-3">
+            <Label className="text-xs">🌙 Moonbag % (default)</Label>
+            <Input
+              className="h-8 text-xs"
+              type="number"
+              min="0"
+              max="50"
+              step="1"
+              value={moonbagPct}
+              onChange={e => setMoonbagPct(e.target.value)}
+            />
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              0 = sell 100% on grad. 20 = keep 20% as a moonbag for further upside (position becomes a moonbag).
+            </div>
           </div>
         </div>
         <Button onClick={save} disabled={saving} size="sm" className="w-full">
