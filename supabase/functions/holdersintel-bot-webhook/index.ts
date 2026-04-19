@@ -665,6 +665,58 @@ async function handleCallbackQuery(callbackQuery: any) {
       );
       break;
     }
+    default: {
+      // ─── Payment flow callbacks ───
+      if (data.startsWith('pay_verify:')) {
+        const subId = data.slice('pay_verify:'.length);
+        // Pre-flight: ensure the sub still exists for this TG user, then run verify
+        const { data: sub } = await supabase
+          .from('tg_sol_subscriptions')
+          .select('id')
+          .eq('id', subId)
+          .eq('telegram_user_id', telegramUserId)
+          .maybeSingle();
+        if (!sub) {
+          await sendMessage(chatId, `❌ This payment session is no longer active. Use /payment to start a new one.`);
+          break;
+        }
+        await handlePaymentVerify(chatId, telegramUserId, '');
+        break;
+      }
+      if (data.startsWith('pay_refresh:')) {
+        const subId = data.slice('pay_refresh:'.length);
+        const { data: sub } = await supabase
+          .from('tg_sol_subscriptions')
+          .select('id, payment_wallet_pubkey, amount_sol, sol_price_at_order, status, created_at')
+          .eq('id', subId)
+          .eq('telegram_user_id', telegramUserId)
+          .maybeSingle();
+        if (!sub) {
+          await sendMessage(chatId, `❌ Payment session not found. Use /payment to start a new one.`);
+          break;
+        }
+        if (sub.status !== 'pending') {
+          await sendMessage(chatId, `ℹ️ This payment session is *${sub.status}*. Use /payment for a new one or /status to check your tier.`);
+          break;
+        }
+        const ageMs = Date.now() - new Date(sub.created_at).getTime();
+        const remainingSec = Math.max(0, Math.floor((3600_000 - ageMs) / 1000));
+        if (remainingSec === 0) {
+          await sendMessage(chatId, `⏱ This payment wallet has *expired*. Use /payment to generate a new one.`);
+          break;
+        }
+        const minsLeft = Math.floor(remainingSec / 60);
+        const secsLeft = remainingSec % 60;
+        await sendMessage(chatId,
+          `⏱ *Payment wallet still active*\n\n` +
+          `Wallet: \`${sub.payment_wallet_pubkey}\`\n` +
+          `Amount: *${sub.amount_sol} SOL*\n` +
+          `⏳ Time remaining: *${minsLeft}m ${secsLeft}s*\n\n` +
+          `_Once you've sent the payment, tap_ 🔄 _I've sent it on the original message, or use_ /payment verify_._`
+        );
+        break;
+      }
+    }
   }
 }
 
