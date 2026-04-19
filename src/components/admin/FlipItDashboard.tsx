@@ -30,6 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import TweetTemplateEditor from './TweetTemplateEditor';
 import { FlipItNotificationSettings } from './FlipItNotificationSettings';
 import { EditLimitOrderDialog } from './flipit/EditLimitOrderDialog';
+import { GraduationSellControl } from './flipit/GraduationSellControl';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -92,6 +93,18 @@ interface FlipPosition {
   emergency_sell_price_usd: number | null;
   emergency_sell_status: string | null;
   emergency_sell_executed_at: string | null;
+  // Graduation sell fields
+  graduation_sell_enabled?: boolean | null;
+  graduation_sell_trigger_pct?: number | null;
+  graduation_sell_max_capture_pct?: number | null;
+  graduation_sell_min_capture_pct?: number | null;
+  graduation_sell_trail_drop_pct?: number | null;
+  graduation_sell_slippage_bps?: number | null;
+  graduation_sell_status?: string | null;
+  graduation_sell_armed_at?: string | null;
+  graduation_sell_arming_price_usd?: number | null;
+  graduation_sell_peak_price_usd?: number | null;
+  graduation_sell_executed_at?: string | null;
   // Moonbag fields
   moon_bag_enabled: boolean | null;
   moon_bag_percent: number | null;
@@ -4374,6 +4387,7 @@ export function FlipItDashboard() {
                   <TableHead className="px-2 py-1">MB %</TableHead>
                   <TableHead className="px-2 py-1 text-center">STOP-LOSS</TableHead>
                   <TableHead className="px-2 py-1">SL Price</TableHead>
+                  <TableHead className="px-2 py-1 text-center">🎓 GRAD SELL</TableHead>
                   {hasActiveRebuy && (
                     <>
                       <TableHead className="px-2 py-1 text-center">REBUY</TableHead>
