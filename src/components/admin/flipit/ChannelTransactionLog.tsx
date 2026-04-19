@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,19 @@ interface FlipRow {
 
 interface ChannelMap {
   [id: string]: string;
+}
+
+const HIDDEN_LOG_STORAGE_KEY = "flipit-hidden-channel-log-ids";
+
+function readHiddenLogIds(): string[] {
+  try {
+    const raw = localStorage.getItem(HIDDEN_LOG_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 function fmtUsd(v: number | null | undefined) {
@@ -70,6 +83,8 @@ export function ChannelTransactionLog({ onChange }: ChannelTransactionLogProps =
   const [rows, setRows] = useState<FlipRow[]>([]);
   const [channels, setChannels] = useState<ChannelMap>({});
   const [loading, setLoading] = useState(true);
+  const [hiddenIds, setHiddenIds] = useState<string[]>(() => readHiddenLogIds());
+  const hiddenIdsRef = useRef<string[]>(hiddenIds);
 
   const load = async () => {
     setLoading(true);
@@ -89,13 +104,21 @@ export function ChannelTransactionLog({ onChange }: ChannelTransactionLogProps =
     if (pErr) {
       console.error("ChannelTransactionLog load error:", pErr);
     }
-    setRows((positions || []) as FlipRow[]);
+    const hidden = new Set(hiddenIdsRef.current);
+    setRows(((positions || []) as FlipRow[]).filter((row) => !hidden.has(row.id)));
     const map: ChannelMap = {};
     (chans || []).forEach((c: { id: string; channel_name: string | null; channel_username: string | null }) => {
       map[c.id] = c.channel_name || c.channel_username || c.id.slice(0, 8);
     });
     setChannels(map);
     setLoading(false);
+  };
+
+  const hideRows = (ids: string[]) => {
+    if (ids.length === 0) return;
+    setHiddenIds((prev) => Array.from(new Set([...prev, ...ids])));
+    setRows((prev) => prev.filter((row) => !ids.includes(row.id)));
+    onChange?.();
   };
 
   const handleDelete = async (id: string) => {
@@ -106,15 +129,9 @@ export function ChannelTransactionLog({ onChange }: ChannelTransactionLogProps =
       toast.error("This flip is still OPEN. Close/sell it from the Active Flips panel first — log delete is blocked for safety.");
       return;
     }
-    if (!confirm("Hide this CLOSED transaction from the log? (Row will be deleted from DB — only do this for completed/sold flips.)")) return;
-    const { error } = await supabase.from("flip_positions").delete().eq("id", id);
-    if (error) {
-      toast.error(`Delete failed: ${error.message}`);
-      return;
-    }
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    toast.success("Closed transaction removed from log");
-    onChange?.();
+    if (!confirm("Hide this closed transaction from the log display? This will NOT delete the underlying flip.")) return;
+    hideRows([id]);
+    toast.success("Closed transaction hidden from log");
   };
 
   const handleClearAll = async () => {
@@ -127,19 +144,20 @@ export function ChannelTransactionLog({ onChange }: ChannelTransactionLogProps =
       return;
     }
     const msg = skipped > 0
-      ? `Delete ${closedRows.length} CLOSED transaction(s)? ${skipped} OPEN flip(s) will be kept safe. Cannot be undone.`
-      : `Delete ALL ${closedRows.length} closed transactions shown? This cannot be undone.`;
+      ? `Hide ${closedRows.length} closed transaction(s) from the log? ${skipped} open flip(s) will stay visible and nothing will be deleted.`
+      : `Hide all ${closedRows.length} closed transactions shown from this log display? Nothing will be deleted.`;
     if (!confirm(msg)) return;
     const ids = closedRows.map((r) => r.id);
-    const { error } = await supabase.from("flip_positions").delete().in("id", ids);
-    if (error) {
-      toast.error(`Clear failed: ${error.message}`);
-      return;
-    }
-    setRows((prev) => prev.filter((r) => !ids.includes(r.id)));
-    toast.success(`Cleared ${ids.length} closed transaction(s)${skipped > 0 ? ` — ${skipped} open flip(s) preserved` : ""}`);
-    onChange?.();
+    hideRows(ids);
+    toast.success(`Hidden ${ids.length} closed transaction(s)${skipped > 0 ? ` — ${skipped} open flip(s) preserved` : ""}`);
   };
+
+  useEffect(() => {
+    hiddenIdsRef.current = hiddenIds;
+    try {
+      localStorage.setItem(HIDDEN_LOG_STORAGE_KEY, JSON.stringify(hiddenIds));
+    } catch {}
+  }, [hiddenIds]);
 
   useEffect(() => {
     load();
