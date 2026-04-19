@@ -12,12 +12,14 @@ interface Defaults {
   feeMode: string;
   feeMicro: number | null;
   jitoTipSol: string;
+  moonbagPct: string;
 }
 
 const HARD_DEFAULTS: Defaults = {
   feeMode: 'turbo',
   feeMicro: null,
   jitoTipSol: '0.001000',
+  moonbagPct: '0',
 };
 
 export const GraduationSellGlobalDefaults: React.FC = () => {
@@ -26,6 +28,7 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
   const [feeMode, setFeeMode] = useState<string>(HARD_DEFAULTS.feeMode);
   const [feeMicro, setFeeMicro] = useState<string>('');
   const [jitoTipSol, setJitoTipSol] = useState<string>(HARD_DEFAULTS.jitoTipSol);
+  const [moonbagPct, setMoonbagPct] = useState<string>(HARD_DEFAULTS.moonbagPct);
   const [settingsId, setSettingsId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
       const { data, error } = await supabase
         .from('flipit_settings')
         .select(
-          'id, graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default'
+          'id, graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default, graduation_sell_moonbag_pct_default'
         )
         .maybeSingle();
       if (error) {
@@ -53,6 +56,11 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
           data.graduation_sell_jito_tip_lamports_default != null
             ? (data.graduation_sell_jito_tip_lamports_default / 1e9).toFixed(6)
             : HARD_DEFAULTS.jitoTipSol
+        );
+        setMoonbagPct(
+          data.graduation_sell_moonbag_pct_default != null
+            ? String(data.graduation_sell_moonbag_pct_default)
+            : HARD_DEFAULTS.moonbagPct
         );
       }
       setLoaded(true);
@@ -74,6 +82,11 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
     }
     const tipLamports = Math.round(tipSol * 1e9);
 
+    const moonbag = parseFloat(moonbagPct);
+    if (!Number.isFinite(moonbag) || moonbag < 0 || moonbag > 50) {
+      return toast.error('Moonbag % must be 0–50');
+    }
+
     setSaving(true);
     try {
       if (!settingsId) {
@@ -86,6 +99,7 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
           graduation_sell_priority_fee_mode_default: feeMode,
           graduation_sell_priority_fee_micro_lamports_default: microVal,
           graduation_sell_jito_tip_lamports_default: tipLamports,
+          graduation_sell_moonbag_pct_default: moonbag,
         })
         .eq('id', settingsId);
       if (error) throw error;
@@ -105,13 +119,13 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
         <CardTitle className="text-sm flex items-center gap-2">
           <GraduationCap className="h-4 w-4 text-amber-400" />
           <Zap className="h-3.5 w-3.5 text-amber-400" />
-          Graduation Sell — Execution Speed Defaults
+          Graduation Sell — Global Defaults
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
         <div className="text-[11px] text-muted-foreground">
           Applied to every graduation sell unless a position has its own override. Graduation candles are MEV-heavy —
-          higher fees = better fill guarantee.
+          higher fees = better fill guarantee. Moonbag % keeps a portion of tokens after the sell fires.
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
@@ -147,6 +161,21 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
               value={jitoTipSol}
               onChange={e => setJitoTipSol(e.target.value)}
             />
+          </div>
+          <div className="col-span-3">
+            <Label className="text-xs">🌙 Moonbag % (default)</Label>
+            <Input
+              className="h-8 text-xs"
+              type="number"
+              min="0"
+              max="50"
+              step="1"
+              value={moonbagPct}
+              onChange={e => setMoonbagPct(e.target.value)}
+            />
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              0 = sell 100% on grad. 20 = keep 20% as a moonbag for further upside (position becomes a moonbag).
+            </div>
           </div>
         </div>
         <Button onClick={save} disabled={saving} size="sm" className="w-full">

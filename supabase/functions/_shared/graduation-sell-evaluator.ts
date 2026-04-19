@@ -37,6 +37,11 @@ export interface GradSellPosition {
   graduation_sell_priority_fee_mode?: string | null;
   graduation_sell_priority_fee_micro_lamports?: number | null;
   graduation_sell_jito_tip_lamports?: number | null;
+  // Moonbag: % of position to KEEP after grad sell fires (0–50). null/0 = sell 100%.
+  graduation_sell_moonbag_pct?: number | null;
+  // Linked sell-group: positions sharing this id are sold together.
+  sell_group_id?: string | null;
+  quantity_tokens?: number | null;
 }
 
 export interface GradSellPriceMeta {
@@ -209,17 +214,19 @@ export async function evaluateGraduationSell(
       return { positionId: pos.id, action: "noop", reason: "watching" };
     }
 
-    // Resolve execution-speed settings: per-position override → global default → hard default.
+    // Resolve execution-speed + moonbag settings:
+    // per-position override → global default → hard default.
     let globalDefaults: {
       mode: string;
       micro: number | null;
       jitoTip: number;
-    } = { mode: "turbo", micro: null, jitoTip: 1_000_000 };
+      moonbagPct: number;
+    } = { mode: "turbo", micro: null, jitoTip: 1_000_000, moonbagPct: 0 };
     try {
       const { data: settingsRow } = await supabase
         .from("flipit_settings")
         .select(
-          "graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default"
+          "graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default, graduation_sell_moonbag_pct_default"
         )
         .maybeSingle();
       if (settingsRow) {
@@ -227,10 +234,11 @@ export async function evaluateGraduationSell(
           mode: settingsRow.graduation_sell_priority_fee_mode_default ?? "turbo",
           micro: settingsRow.graduation_sell_priority_fee_micro_lamports_default ?? null,
           jitoTip: settingsRow.graduation_sell_jito_tip_lamports_default ?? 1_000_000,
+          moonbagPct: settingsRow.graduation_sell_moonbag_pct_default ?? 0,
         };
       }
     } catch (e) {
-      console.warn(`[grad-sell] could not load global execution-speed defaults:`, e);
+      console.warn(`[grad-sell] could not load global defaults:`, e);
     }
 
     const feeMode =
@@ -239,62 +247,123 @@ export async function evaluateGraduationSell(
       pos.graduation_sell_priority_fee_micro_lamports ?? globalDefaults.micro ?? null;
     const jitoTip =
       pos.graduation_sell_jito_tip_lamports ?? globalDefaults.jitoTip ?? 1_000_000;
+    const moonbagPctRaw =
+      pos.graduation_sell_moonbag_pct ?? globalDefaults.moonbagPct ?? 0;
+    const moonbagPct = Math.max(0, Math.min(50, Number(moonbagPctRaw) || 0));
+    const sellPercent = 100 - moonbagPct; // 100 = full sell, e.g. 80 if moonbag=20
 
-    // Fire sell via flipit-execute (full position).
+    // ---- Build the list of positions to fire on (sell-group fanout) ----
+    // If this position is in a sell_group, fan out to all 'holding' members and
+    // execute the same logic on each. Each member is its own on-chain holding;
+    // we send one tx per row but reuse the same trigger reason and exec params.
+    let groupMembers: Array<{ id: string; token_symbol?: string | null }> = [
+      { id: pos.id, token_symbol: pos.token_symbol },
+    ];
+    if (pos.sell_group_id) {
+      const { data: members, error: gErr } = await supabase
+        .from("flip_positions")
+        .select("id, token_symbol, status")
+        .eq("sell_group_id", pos.sell_group_id)
+        .eq("status", "holding");
+      if (gErr) {
+        console.warn(
+          `[grad-sell] failed to load sell_group ${pos.sell_group_id}:`,
+          gErr.message
+        );
+      } else if (members && members.length > 0) {
+        groupMembers = members.map((m: any) => ({ id: m.id, token_symbol: m.token_symbol }));
+        console.log(
+          `[grad-sell] group ${pos.sell_group_id}: firing on ${groupMembers.length} linked positions`
+        );
+      }
+    }
+
     console.log(
       `[grad-sell] ${pos.id} ${pos.token_symbol ?? ""} FIRING SELL — ${trigger} ` +
         `(arming=${armingPrice}, peak=${newPeak}, current=${currentPrice}, ` +
         `slip=${pos.graduation_sell_slippage_bps}bps, feeMode=${feeMode}, ` +
-        `feeMicro=${feeMicro ?? "preset"}, jitoTip=${jitoTip})`
+        `feeMicro=${feeMicro ?? "preset"}, jitoTip=${jitoTip}, ` +
+        `moonbagPct=${moonbagPct}, sellPct=${sellPercent}, members=${groupMembers.length})`
     );
 
-    let signature: string | undefined;
-    let sellOk = false;
-    try {
-      const { data: sellResult, error: sellErr } = await supabase.functions.invoke(
-        "flipit-execute",
-        {
-          body: {
-            action: "sell",
-            positionId: pos.id,
-            slippageBps: pos.graduation_sell_slippage_bps,
-            priorityFeeMode: feeMode,
-            priorityFeeMicroLamports: feeMicro ?? undefined,
-            jitoTipLamports: jitoTip,
-            reason: `graduation_sell:${trigger}`,
-          },
-        }
-      );
-      if (!sellErr && sellResult?.success) {
-        signature = sellResult.signature ?? sellResult.signatures?.[0];
-        sellOk = true;
-      } else {
-        console.error(
-          `[grad-sell] sell invoke failed for ${pos.id}:`,
-          sellErr?.message ?? JSON.stringify(sellResult)
+    // Execute sells sequentially across group members (one tx per row).
+    let triggerSignature: string | undefined;
+    let triggerOk = false;
+    const memberResults: Array<{ id: string; ok: boolean; signature?: string }> = [];
+    for (const member of groupMembers) {
+      try {
+        const useAction = sellPercent < 100 ? "partial_sell" : "sell";
+        const body: Record<string, unknown> = {
+          action: useAction,
+          positionId: member.id,
+          slippageBps: pos.graduation_sell_slippage_bps,
+          priorityFeeMode: feeMode,
+          priorityFeeMicroLamports: feeMicro ?? undefined,
+          jitoTipLamports: jitoTip,
+          reason: `graduation_sell:${trigger}${pos.sell_group_id ? `:group:${pos.sell_group_id}` : ""}`,
+        };
+        if (useAction === "partial_sell") body.sellPercent = sellPercent;
+
+        const { data: sellResult, error: sellErr } = await supabase.functions.invoke(
+          "flipit-execute",
+          { body }
         );
+        const memberOk = !sellErr && !!sellResult?.success;
+        const memberSig = sellResult?.signature ?? sellResult?.signatures?.[0];
+        memberResults.push({ id: member.id, ok: memberOk, signature: memberSig });
+
+        if (member.id === pos.id) {
+          triggerOk = memberOk;
+          triggerSignature = memberSig;
+        }
+        if (!memberOk) {
+          console.error(
+            `[grad-sell] sell invoke failed for ${member.id}:`,
+            sellErr?.message ?? JSON.stringify(sellResult)
+          );
+        }
+      } catch (e) {
+        console.error(`[grad-sell] sell threw for ${member.id}:`, e);
+        memberResults.push({ id: member.id, ok: false });
+        if (member.id === pos.id) triggerOk = false;
       }
-    } catch (e) {
-      console.error(`[grad-sell] sell threw for ${pos.id}:`, e);
     }
 
-    await dbUpdateOrThrow(
-      supabase,
-      pos.id,
-      {
-        graduation_sell_status: sellOk ? "executed" : "failed",
-        graduation_sell_executed_at: sellOk ? nowIso : null,
+    // Update each member row with its own outcome.
+    for (const r of memberResults) {
+      const newStatus = r.ok
+        ? (moonbagPct > 0 ? "moonbag" : "executed")
+        : "failed";
+      const patch: Record<string, unknown> = {
+        graduation_sell_status: r.ok ? "executed" : "failed",
+        graduation_sell_executed_at: r.ok ? nowIso : null,
         graduation_sell_peak_price_usd: newPeak,
         graduation_sell_last_eval_at: nowIso,
-      },
-      "execute-result"
-    );
+        graduation_sell_sold_pct: r.ok ? sellPercent : null,
+      };
+      // If full sell succeeded → flip the position to executed (engine will close it).
+      // If partial → keep as holding/moonbag for the retained tail.
+      if (r.ok && moonbagPct === 0) {
+        patch.status = "executed";
+      } else if (r.ok && moonbagPct > 0) {
+        patch.status = "moonbag";
+        // Best-effort: derive retained quantity from on-position quantity.
+        // The exact retained qty will be reconciled by the chain-sync job.
+        // Note: pos.quantity_tokens only reflects the trigger row, not each member;
+        // each member's row will be reconciled separately.
+        if (typeof (pos as any).quantity_tokens === "number") {
+          patch.graduation_sell_moonbag_qty_tokens =
+            ((pos as any).quantity_tokens as number) * (moonbagPct / 100);
+        }
+      }
+      await dbUpdateOrThrow(supabase, r.id, patch, "execute-result");
+    }
 
     return {
       positionId: pos.id,
-      action: sellOk ? "executed" : "failed",
+      action: triggerOk ? "executed" : "failed",
       reason: trigger,
-      signature,
+      signature: triggerSignature,
     };
   }
 
