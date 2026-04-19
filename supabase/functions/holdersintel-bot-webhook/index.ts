@@ -665,6 +665,58 @@ async function handleCallbackQuery(callbackQuery: any) {
       );
       break;
     }
+    default: {
+      // ─── Payment flow callbacks ───
+      if (data.startsWith('pay_verify:')) {
+        const subId = data.slice('pay_verify:'.length);
+        // Pre-flight: ensure the sub still exists for this TG user, then run verify
+        const { data: sub } = await supabase
+          .from('tg_sol_subscriptions')
+          .select('id')
+          .eq('id', subId)
+          .eq('telegram_user_id', telegramUserId)
+          .maybeSingle();
+        if (!sub) {
+          await sendMessage(chatId, `❌ This payment session is no longer active. Use /payment to start a new one.`);
+          break;
+        }
+        await handlePaymentVerify(chatId, telegramUserId, '');
+        break;
+      }
+      if (data.startsWith('pay_refresh:')) {
+        const subId = data.slice('pay_refresh:'.length);
+        const { data: sub } = await supabase
+          .from('tg_sol_subscriptions')
+          .select('id, payment_wallet_pubkey, amount_sol, sol_price_at_order, status, created_at')
+          .eq('id', subId)
+          .eq('telegram_user_id', telegramUserId)
+          .maybeSingle();
+        if (!sub) {
+          await sendMessage(chatId, `❌ Payment session not found. Use /payment to start a new one.`);
+          break;
+        }
+        if (sub.status !== 'pending') {
+          await sendMessage(chatId, `ℹ️ This payment session is *${sub.status}*. Use /payment for a new one or /status to check your tier.`);
+          break;
+        }
+        const ageMs = Date.now() - new Date(sub.created_at).getTime();
+        const remainingSec = Math.max(0, Math.floor((3600_000 - ageMs) / 1000));
+        if (remainingSec === 0) {
+          await sendMessage(chatId, `⏱ This payment wallet has *expired*. Use /payment to generate a new one.`);
+          break;
+        }
+        const minsLeft = Math.floor(remainingSec / 60);
+        const secsLeft = remainingSec % 60;
+        await sendMessage(chatId,
+          `⏱ *Payment wallet still active*\n\n` +
+          `Wallet: \`${sub.payment_wallet_pubkey}\`\n` +
+          `Amount: *${sub.amount_sol} SOL*\n` +
+          `⏳ Time remaining: *${minsLeft}m ${secsLeft}s*\n\n` +
+          `_Once you've sent the payment, tap_ 🔄 _I've sent it on the original message, or use_ /payment verify_._`
+        );
+        break;
+      }
+    }
   }
 }
 
@@ -3405,26 +3457,83 @@ async function handlePayment(chatId: number, telegramUserId: string, args: strin
       throw new Error(data.error || 'Failed to create subscription');
     }
 
-    const amountSol = data.amount_sol;
-    const solPriceStr = data.sol_price ? `($${(amountSol * data.sol_price).toFixed(2)} USD)` : '';
-    const existingNote = data.existing ? `\n⚠️ _Using your existing pending payment wallet._` : '';
-
-    await sendMessage(chatId,
-      `💰 *Yearly Pro Subscription — Pay with SOL*\n\n` +
-      `Send exactly *${amountSol} SOL* ${solPriceStr} to:\n\n` +
-      `\`${data.payment_wallet}\`\n\n` +
-      `📋 _Tap the address above to copy it_\n${existingNote}\n` +
-      `✅ This gets you *Pro tier for 1 full year* — all commands unlocked, highest rate limits.\n\n` +
-      `💡 *Cheaper than Stripe!* Our monthly Pro is $9.99/mo ($119.88/yr) or $89.99/yr. SOL payment saves you even more.\n\n` +
-      `⏱ After sending, use:\n` +
-      `/payment verify\n\n` +
-      `_Payment wallet expires in 1 hour if unused._` + TAGLINE
-    );
+    await sendPaymentInstructionsWithQR(chatId, {
+      paymentWallet: data.payment_wallet,
+      amountSol: data.amount_sol,
+      solPrice: data.sol_price,
+      subscriptionId: data.subscription_id,
+      expiresInSec: data.expires_in_sec ?? 3600,
+      isExisting: !!data.existing,
+    });
   } catch (e) {
     console.error('[bot] Payment creation error:', e);
     await sendMessage(chatId,
       `❌ *Error generating payment wallet.*\n\nPlease try again in a moment or subscribe via [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions).` + TAGLINE
     );
+  }
+}
+
+// ─── Helper: Render the payment instructions message with QR code + countdown + buttons ───
+async function sendPaymentInstructionsWithQR(
+  chatId: number,
+  opts: {
+    paymentWallet: string;
+    amountSol: number;
+    solPrice?: number | null;
+    subscriptionId: string;
+    expiresInSec: number;
+    isExisting: boolean;
+  }
+) {
+  const { paymentWallet, amountSol, solPrice, subscriptionId, expiresInSec, isExisting } = opts;
+  const solPriceStr = solPrice ? `($${(amountSol * solPrice).toFixed(2)} USD)` : '';
+  const existingNote = isExisting ? `\n⚠️ _Using your existing pending payment wallet._\n` : '';
+  const expiresAtMs = Date.now() + expiresInSec * 1000;
+  const expiresAtStr = new Date(expiresAtMs).toUTCString().replace('GMT', 'UTC');
+  const minsLeft = Math.max(0, Math.floor(expiresInSec / 60));
+
+  // Solana Pay URI — many wallets render this as a deep link from QR scans
+  const solanaPayUri = `solana:${paymentWallet}?amount=${amountSol}&label=HoldersIntel%20Pro&message=Yearly%20Pro%20Subscription`;
+  // QR via free public service (no key, returns PNG)
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&data=${encodeURIComponent(solanaPayUri)}`;
+
+  const caption =
+    `💰 *Yearly Pro Subscription — Pay with SOL*\n\n` +
+    `📲 *Scan the QR* with any Solana wallet (Phantom, Solflare, Backpack)\n` +
+    `_or_ send manually:\n\n` +
+    `Amount: *${amountSol} SOL* ${solPriceStr}\n` +
+    `Wallet: \`${paymentWallet}\`\n` +
+    `📋 _Tap the address above to copy it_${existingNote}\n` +
+    `⏱ *Expires in ~${minsLeft} min* (at ${expiresAtStr})\n\n` +
+    `✅ Unlocks Pro tier for *1 full year* — all commands, highest limits.\n` +
+    `💡 _Cheaper than Stripe ($89.99/yr)._`;
+
+  const buttons = [
+    [{ text: "🔄 I've sent it — Verify now", callback_data: `pay_verify:${subscriptionId}` }],
+    [{ text: "⏱ Refresh countdown", callback_data: `pay_refresh:${subscriptionId}` }],
+  ];
+
+  // Try sendPhoto with caption first; fall back to plain text if QR service fails
+  try {
+    const res = await fetch(`${TELEGRAM_API}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: qrUrl,
+        caption,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: buttons },
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[bot] sendPhoto QR failed, falling back to text:', errText);
+      await sendMessageWithButtons(chatId, caption + TAGLINE, buttons);
+    }
+  } catch (e) {
+    console.error('[bot] sendPhoto QR exception, falling back to text:', e);
+    await sendMessageWithButtons(chatId, caption + TAGLINE, buttons);
   }
 }
 
@@ -3472,12 +3581,21 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, _args
 
     if (data.status === 'paid') {
       const expiryDate = new Date(data.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+      // ─── 1) Celebration receipt message ───
       await sendMessage(chatId,
-        `🎉 *Payment Confirmed!*\n\n` +
-        `✅ Your *Pro* subscription is now active!\n` +
-        `📅 Valid until: *${expiryDate}*\n\n` +
-        `All Pro commands are now unlocked. Use /help to see everything available.` + TAGLINE
+        `🎉🎊 *PAYMENT CONFIRMED!* 🎊🎉\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `👑 *Welcome to HoldersIntel Pro*\n` +
+        `━━━━━━━━━━━━━━━━━━━\n\n` +
+        `💎 Amount received: *${data.received?.toFixed(4) ?? pendingSub.amount_sol} SOL*\n` +
+        `📅 Pro active until: *${expiryDate}*\n` +
+        `🆔 Payment ID: \`${pendingSub.id.slice(0, 8)}\`\n\n` +
+        `_A welcome message with your unlocked perks is coming next..._` + TAGLINE
       );
+
+      // ─── 2) Welcome-to-Pro DM with perks + action buttons (one-time) ───
+      await sendProWelcomeDM(chatId, expiryDate);
 
       // Send SOL payment receipt email
       try {
@@ -3524,6 +3642,31 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, _args
       `❌ *Error checking payment.* Please try again in a moment.` + TAGLINE
     );
   }
+}
+
+// ─── Pro Welcome DM (sent once on payment confirmation) ───
+async function sendProWelcomeDM(chatId: number, expiryDate: string) {
+  const text =
+    `👑 *Welcome to HoldersIntel Pro*\n\n` +
+    `You've unlocked the full intelligence stack:\n\n` +
+    `🔬 *Unlimited /holders scans* — no daily caps\n` +
+    `🫧 *Full Bubble Map access* — Auto-Spider, KYC root tracing, Find All Tokens\n` +
+    `🛰 *Dev Wallet Alerts* — instant pings when watched creators launch\n` +
+    `🔍 *Deep Spider* — full genealogy traces on demand\n` +
+    `📊 *Export Graph Data* — CSV/JSON downloads\n` +
+    `⚡ *Highest rate limits* across every command\n\n` +
+    `📅 Pro active until: *${expiryDate}*\n\n` +
+    `Try it now 👇`;
+
+  const buttons = [
+    [
+      { text: "🫧 Open Bubble Map", url: "https://blackbox.farm/bubblemap" },
+      { text: "📊 Try /holders", url: "https://t.me/holdersintel_bot?start=holders" },
+    ],
+    [{ text: "📋 See all commands", url: "https://t.me/holdersintel_bot?start=help" }],
+  ];
+
+  await sendMessageWithButtons(chatId, text, buttons);
 }
 
 // ─── AI Conversational Assistant for All Registered Users ───

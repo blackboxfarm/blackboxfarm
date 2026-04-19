@@ -43,6 +43,8 @@ serve(withRunLog('tg-subscription-payment', async (req) => {
             payment_wallet: existing.payment_wallet_pubkey,
             amount_sol: existing.amount_sol,
             existing: true,
+            created_at: existing.created_at,
+            expires_in_sec: Math.max(0, Math.floor((3600_000 - age) / 1000)),
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
         // Expire old pending ones
@@ -113,6 +115,8 @@ serve(withRunLog('tg-subscription-payment', async (req) => {
         payment_wallet: pubkey,
         amount_sol: amountSol,
         sol_price: solPrice,
+        created_at: sub.created_at,
+        expires_in_sec: 3600,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } else if (action === 'check') {
