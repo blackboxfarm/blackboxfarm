@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TelegramAnnouncementBoxProps {
@@ -36,6 +36,7 @@ interface LogEntry {
   sent_count: number;
   failed_count: number;
   created_at: string;
+  resend_of_id?: string | null;
 }
 
 export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxProps) {
@@ -50,6 +51,46 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   const [recipients, setRecipients] = useState<Record<string, RecipientEntry[]>>({});
   const [loadingRecipients, setLoadingRecipients] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  const handleResendToNew = async (entry: LogEntry) => {
+    setResendingId(entry.id);
+    try {
+      // Step 1: dry run for preview count
+      const { data: preview, error: previewErr } = await supabase.functions.invoke(
+        'telegram-announcement-broadcast',
+        { body: { resendOfAnnouncementId: entry.id, dryRun: true } }
+      );
+      if (previewErr) throw previewErr;
+
+      const newCount = preview?.newRecipients ?? 0;
+      const already = preview?.alreadyReceived ?? 0;
+
+      if (newCount === 0) {
+        toast.info(`No new recipients. ${already} users already received this.`);
+        return;
+      }
+
+      if (!confirm(`${newCount} new user(s) match the original audience and haven't received this yet (${already} already got it). Send now?`)) {
+        return;
+      }
+
+      // Step 2: actual send
+      const { data, error } = await supabase.functions.invoke(
+        'telegram-announcement-broadcast',
+        { body: { resendOfAnnouncementId: entry.id } }
+      );
+      if (error) throw error;
+
+      toast.success(`Resent to ${data?.sent ?? 0} new user(s)`);
+      loadHistory();
+    } catch (err: any) {
+      console.error('Resend error:', err);
+      toast.error(err.message || 'Failed to resend');
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const allSelected = AUDIENCE_OPTIONS.every(o => selectedAudiences.has(o.value));
 
@@ -311,7 +352,12 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                 {history.map(entry => (
                   <div key={entry.id} className="border rounded-md p-2.5 text-xs space-y-1">
                     <div className="flex items-center justify-between">
-                      <div className="flex gap-1 flex-wrap">
+                      <div className="flex gap-1 flex-wrap items-center">
+                        {entry.resend_of_id && (
+                          <Badge variant="secondary" className="text-[10px] gap-0.5">
+                            <RotateCw className="w-2.5 h-2.5" /> Resend
+                          </Badge>
+                        )}
                         {(entry.audiences || []).map(a => (
                           <Badge key={a} variant="outline" className="text-[10px]">{a}</Badge>
                         ))}
@@ -321,23 +367,37 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                       </span>
                     </div>
                     <p className="text-muted-foreground line-clamp-2">{entry.message_text}</p>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="flex gap-3">
                         <span className="text-green-500">✓ {entry.sent_count}</span>
                         {entry.failed_count > 0 && <span className="text-red-500">✗ {entry.failed_count}</span>}
                       </div>
-                      <button
-                        onClick={() => loadRecipients(entry.id)}
-                        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors"
-                      >
-                        {loadingRecipients === entry.id ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : expandedEntry === entry.id ? (
-                          <>Hide recipients <ChevronUp className="w-3 h-3" /></>
-                        ) : (
-                          <>Show recipients <ChevronDown className="w-3 h-3" /></>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleResendToNew(entry)}
+                          disabled={resendingId === entry.id}
+                          className="text-[10px] text-yellow-500 hover:text-yellow-400 flex items-center gap-0.5 transition-colors disabled:opacity-50"
+                          title="Send this same message to users who match the audience but haven't received it yet"
+                        >
+                          {resendingId === entry.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <><RotateCw className="w-3 h-3" /> Resend to new only</>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => loadRecipients(entry.id)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors"
+                        >
+                          {loadingRecipients === entry.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : expandedEntry === entry.id ? (
+                            <>Hide <ChevronUp className="w-3 h-3" /></>
+                          ) : (
+                            <>Show <ChevronDown className="w-3 h-3" /></>
+                          )}
+                        </button>
+                      </div>
                     </div>
                     {expandedEntry === entry.id && recipients[entry.id] && (
                       <div className="mt-1 border-t pt-1 space-y-0.5">
