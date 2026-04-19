@@ -2036,6 +2036,8 @@ serve(withRunLog('flipit-execute', async (req) => {
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
+            priorityFeeMicroLamports, // Optional explicit µLamport override (graduation sell)
+            jitoTipLamports, // Optional Jito tip override (graduation sell)
             walletId: position.wallet_id,
           },
         });
