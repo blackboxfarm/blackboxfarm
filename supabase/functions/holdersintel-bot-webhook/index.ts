@@ -3405,26 +3405,83 @@ async function handlePayment(chatId: number, telegramUserId: string, args: strin
       throw new Error(data.error || 'Failed to create subscription');
     }
 
-    const amountSol = data.amount_sol;
-    const solPriceStr = data.sol_price ? `($${(amountSol * data.sol_price).toFixed(2)} USD)` : '';
-    const existingNote = data.existing ? `\n⚠️ _Using your existing pending payment wallet._` : '';
-
-    await sendMessage(chatId,
-      `💰 *Yearly Pro Subscription — Pay with SOL*\n\n` +
-      `Send exactly *${amountSol} SOL* ${solPriceStr} to:\n\n` +
-      `\`${data.payment_wallet}\`\n\n` +
-      `📋 _Tap the address above to copy it_\n${existingNote}\n` +
-      `✅ This gets you *Pro tier for 1 full year* — all commands unlocked, highest rate limits.\n\n` +
-      `💡 *Cheaper than Stripe!* Our monthly Pro is $9.99/mo ($119.88/yr) or $89.99/yr. SOL payment saves you even more.\n\n` +
-      `⏱ After sending, use:\n` +
-      `/payment verify\n\n` +
-      `_Payment wallet expires in 1 hour if unused._` + TAGLINE
-    );
+    await sendPaymentInstructionsWithQR(chatId, {
+      paymentWallet: data.payment_wallet,
+      amountSol: data.amount_sol,
+      solPrice: data.sol_price,
+      subscriptionId: data.subscription_id,
+      expiresInSec: data.expires_in_sec ?? 3600,
+      isExisting: !!data.existing,
+    });
   } catch (e) {
     console.error('[bot] Payment creation error:', e);
     await sendMessage(chatId,
       `❌ *Error generating payment wallet.*\n\nPlease try again in a moment or subscribe via [blackbox.farm/subscriptions](https://blackbox.farm/subscriptions).` + TAGLINE
     );
+  }
+}
+
+// ─── Helper: Render the payment instructions message with QR code + countdown + buttons ───
+async function sendPaymentInstructionsWithQR(
+  chatId: number,
+  opts: {
+    paymentWallet: string;
+    amountSol: number;
+    solPrice?: number | null;
+    subscriptionId: string;
+    expiresInSec: number;
+    isExisting: boolean;
+  }
+) {
+  const { paymentWallet, amountSol, solPrice, subscriptionId, expiresInSec, isExisting } = opts;
+  const solPriceStr = solPrice ? `($${(amountSol * solPrice).toFixed(2)} USD)` : '';
+  const existingNote = isExisting ? `\n⚠️ _Using your existing pending payment wallet._\n` : '';
+  const expiresAtMs = Date.now() + expiresInSec * 1000;
+  const expiresAtStr = new Date(expiresAtMs).toUTCString().replace('GMT', 'UTC');
+  const minsLeft = Math.max(0, Math.floor(expiresInSec / 60));
+
+  // Solana Pay URI — many wallets render this as a deep link from QR scans
+  const solanaPayUri = `solana:${paymentWallet}?amount=${amountSol}&label=HoldersIntel%20Pro&message=Yearly%20Pro%20Subscription`;
+  // QR via free public service (no key, returns PNG)
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&data=${encodeURIComponent(solanaPayUri)}`;
+
+  const caption =
+    `💰 *Yearly Pro Subscription — Pay with SOL*\n\n` +
+    `📲 *Scan the QR* with any Solana wallet (Phantom, Solflare, Backpack)\n` +
+    `_or_ send manually:\n\n` +
+    `Amount: *${amountSol} SOL* ${solPriceStr}\n` +
+    `Wallet: \`${paymentWallet}\`\n` +
+    `📋 _Tap the address above to copy it_${existingNote}\n` +
+    `⏱ *Expires in ~${minsLeft} min* (at ${expiresAtStr})\n\n` +
+    `✅ Unlocks Pro tier for *1 full year* — all commands, highest limits.\n` +
+    `💡 _Cheaper than Stripe ($89.99/yr)._`;
+
+  const buttons = [
+    [{ text: "🔄 I've sent it — Verify now", callback_data: `pay_verify:${subscriptionId}` }],
+    [{ text: "⏱ Refresh countdown", callback_data: `pay_refresh:${subscriptionId}` }],
+  ];
+
+  // Try sendPhoto with caption first; fall back to plain text if QR service fails
+  try {
+    const res = await fetch(`${TELEGRAM_API}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: qrUrl,
+        caption,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: buttons },
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[bot] sendPhoto QR failed, falling back to text:', errText);
+      await sendMessageWithButtons(chatId, caption + TAGLINE, buttons);
+    }
+  } catch (e) {
+    console.error('[bot] sendPhoto QR exception, falling back to text:', e);
+    await sendMessageWithButtons(chatId, caption + TAGLINE, buttons);
   }
 }
 
