@@ -296,6 +296,30 @@ serve(withRunLog('flipit-unified-monitor', async (req) => {
       }
     }
 
+    // 4b. Graduation Sell evaluator — captures the post-bonding-curve Raydium spike.
+    // Uses bonding curve % from this batch's market data signals; the evaluator
+    // is tolerant of missing prices (transitions when it can, ticks otherwise).
+    const gradEligible = (holdingPositions || []).filter(p => p.graduation_sell_enabled === true);
+    results.graduationSellMonitor.checked = gradEligible.length;
+    for (const pos of gradEligible) {
+      const meta: GradSellPriceMeta = {
+        price: prices[pos.token_mint] ?? 0,
+        // We don't have a 'source' or isOnCurve from this batch's lightweight fetch,
+        // so we rely on the position's own is_on_curve flag (refreshed elsewhere).
+        bondingCurveProgress: pos.bonding_curve_progress ?? undefined,
+      };
+      try {
+        const r = await evaluateGraduationSell(supabase, pos as any, prices[pos.token_mint], meta);
+        if (r.action === 'armed') results.graduationSellMonitor.armed.push(pos.id);
+        else if (r.action === 'watching') results.graduationSellMonitor.watching.push(pos.id);
+        else if (r.action === 'executed') results.graduationSellMonitor.executed.push(pos.id);
+        else if (r.action === 'failed') results.graduationSellMonitor.failed.push(pos.id);
+      } catch (e) {
+        console.error(`[grad-sell] evaluator threw for ${pos.id}:`, e);
+        results.graduationSellMonitor.failed.push(pos.id);
+      }
+    }
+
     // 5. Check rebuy conditions
     results.rebuyMonitor.checked = rebuyPositions?.length || 0;
     
