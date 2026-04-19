@@ -33,6 +33,10 @@ export interface GradSellPosition {
   graduation_sell_armed_at?: string | null;
   graduation_sell_arming_price_usd?: number | null;
   graduation_sell_peak_price_usd?: number | null;
+  // Per-position execution-speed overrides (nullable → fall back to global flipit_settings)
+  graduation_sell_priority_fee_mode?: string | null;
+  graduation_sell_priority_fee_micro_lamports?: number | null;
+  graduation_sell_jito_tip_lamports?: number | null;
 }
 
 export interface GradSellPriceMeta {
@@ -205,10 +209,43 @@ export async function evaluateGraduationSell(
       return { positionId: pos.id, action: "noop", reason: "watching" };
     }
 
+    // Resolve execution-speed settings: per-position override → global default → hard default.
+    let globalDefaults: {
+      mode: string;
+      micro: number | null;
+      jitoTip: number;
+    } = { mode: "turbo", micro: null, jitoTip: 1_000_000 };
+    try {
+      const { data: settingsRow } = await supabase
+        .from("flipit_settings")
+        .select(
+          "graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default"
+        )
+        .maybeSingle();
+      if (settingsRow) {
+        globalDefaults = {
+          mode: settingsRow.graduation_sell_priority_fee_mode_default ?? "turbo",
+          micro: settingsRow.graduation_sell_priority_fee_micro_lamports_default ?? null,
+          jitoTip: settingsRow.graduation_sell_jito_tip_lamports_default ?? 1_000_000,
+        };
+      }
+    } catch (e) {
+      console.warn(`[grad-sell] could not load global execution-speed defaults:`, e);
+    }
+
+    const feeMode =
+      pos.graduation_sell_priority_fee_mode ?? globalDefaults.mode ?? "turbo";
+    const feeMicro =
+      pos.graduation_sell_priority_fee_micro_lamports ?? globalDefaults.micro ?? null;
+    const jitoTip =
+      pos.graduation_sell_jito_tip_lamports ?? globalDefaults.jitoTip ?? 1_000_000;
+
     // Fire sell via flipit-execute (full position).
     console.log(
       `[grad-sell] ${pos.id} ${pos.token_symbol ?? ""} FIRING SELL — ${trigger} ` +
-        `(arming=${armingPrice}, peak=${newPeak}, current=${currentPrice}, slip=${pos.graduation_sell_slippage_bps}bps)`
+        `(arming=${armingPrice}, peak=${newPeak}, current=${currentPrice}, ` +
+        `slip=${pos.graduation_sell_slippage_bps}bps, feeMode=${feeMode}, ` +
+        `feeMicro=${feeMicro ?? "preset"}, jitoTip=${jitoTip})`
     );
 
     let signature: string | undefined;
@@ -221,7 +258,9 @@ export async function evaluateGraduationSell(
             action: "sell",
             positionId: pos.id,
             slippageBps: pos.graduation_sell_slippage_bps,
-            priorityFeeMode: "high",
+            priorityFeeMode: feeMode,
+            priorityFeeMicroLamports: feeMicro ?? undefined,
+            jitoTipLamports: jitoTip,
             reason: `graduation_sell:${trigger}`,
           },
         }
