@@ -5129,6 +5129,18 @@ export function FlipItDashboard() {
                           </div>
                         )}
                       </TableCell>
+
+                      {/* Graduation Sell control */}
+                      <TableCell className="px-2 py-1 text-center">
+                        {position.status === 'holding' && (
+                          <GraduationSellControl
+                            positionId={position.id}
+                            position={position}
+                            currentPrice={currentPrices[position.token_mint]}
+                            onSaved={() => loadPositions({ silent: true })}
+                          />
+                        )}
+                      </TableCell>
                       
                       {/* Rebuy Columns - only show if any position has rebuy */}
                       {hasActiveRebuy && (
