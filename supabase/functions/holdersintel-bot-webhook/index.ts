@@ -4449,10 +4449,8 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             await handleTicket(dmChatId, telegramUserId, args);
             break;
           default:
-            // Unknown command in DM context — route to AI assistant
-            if (message.text) {
-              await handleAiFreeChat(dmChatId, telegramUserId, sanitized.rawTruncated, username);
-            }
+            // Should be unreachable — KNOWN_GROUP_REDIRECT_COMMANDS gate ensures
+            // only listed commands enter this switch. Stay silent if it ever happens.
             break;
         }
       } catch (dmErr) {
