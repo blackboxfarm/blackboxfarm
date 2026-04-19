@@ -20,12 +20,41 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json();
-    const { message, testOnly } = body;
-    const audiences: string[] = body.audiences
+    const { testOnly, resendOfAnnouncementId, dryRun } = body;
+    let { message } = body;
+    let audiences: string[] = body.audiences
       ? body.audiences
       : body.audience
         ? [body.audience]
         : [];
+
+    // ─── Resend mode: hydrate message + audiences from original log ───
+    let alreadySentTgIds = new Set<string>();
+    if (resendOfAnnouncementId) {
+      const { data: original, error: origErr } = await supabase
+        .from("telegram_announcement_log")
+        .select("message_text, audiences")
+        .eq("id", resendOfAnnouncementId)
+        .single();
+
+      if (origErr || !original) {
+        return new Response(JSON.stringify({ error: "Original announcement not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      message = original.message_text;
+      audiences = original.audiences || [];
+
+      const { data: prevRecipients } = await supabase
+        .from("telegram_announcement_recipients")
+        .select("telegram_user_id")
+        .eq("announcement_id", resendOfAnnouncementId)
+        .eq("delivery_status", "sent");
+
+      alreadySentTgIds = new Set((prevRecipients || []).map((r: any) => r.telegram_user_id));
+    }
 
     if (!message || (!testOnly && audiences.length === 0)) {
       return new Response(JSON.stringify({ error: "message and audiences required" }), {
@@ -146,8 +175,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    const targets = Array.from(targetMap.entries());
+    let targets = Array.from(targetMap.entries());
+    if (resendOfAnnouncementId && alreadySentTgIds.size > 0) {
+      const before = targets.length;
+      targets = targets.filter(([tgId]) => !alreadySentTgIds.has(tgId));
+      console.log(`[announcement] Resend filter: ${before} eligible -> ${targets.length} new (${alreadySentTgIds.size} already received)`);
+    }
     console.log(`[announcement] Audiences: ${audiences.join(', ')}, targets: ${targets.length}`);
+
+    // ─── Dry run: return count without sending ───
+    if (dryRun) {
+      return new Response(
+        JSON.stringify({ newRecipients: targets.length, alreadyReceived: alreadySentTgIds.size }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // ─── Create announcement log entry first ───
     const { data: logEntry, error: logCreateErr } = await supabase
@@ -157,6 +199,7 @@ Deno.serve(async (req) => {
         audiences,
         sent_count: 0,
         failed_count: 0,
+        resend_of_id: resendOfAnnouncementId || null,
       })
       .select("id")
       .single();
