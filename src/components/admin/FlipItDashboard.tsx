@@ -3232,6 +3232,9 @@ export function FlipItDashboard() {
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode; label?: string; className?: string }> = {
       pending_buy: { variant: 'secondary', icon: <Loader2 className="w-3 h-3 animate-spin" /> },
+      bought: { variant: 'default', icon: <Clock className="w-3 h-3" />, label: 'holding' },
+      open: { variant: 'default', icon: <Clock className="w-3 h-3" />, label: 'holding' },
+      active: { variant: 'default', icon: <Clock className="w-3 h-3" />, label: 'holding' },
       holding: { variant: 'default', icon: <Clock className="w-3 h-3" /> },
       pending_sell: { variant: 'secondary', icon: <Loader2 className="w-3 h-3 animate-spin" /> },
       sold: { variant: 'outline', icon: <CheckCircle2 className="w-3 h-3 text-green-500" /> },
@@ -3297,7 +3300,8 @@ export function FlipItDashboard() {
     return Math.min(Math.max(progress, 0), 100);
   };
 
-  const activePositions = positions.filter(p => ['pending_buy', 'holding', 'pending_sell'].includes(p.status));
+  const activeStatuses = ['pending_buy', 'holding', 'pending_sell', 'bought', 'open', 'active'];
+  const activePositions = positions.filter((p) => activeStatuses.includes(p.status));
   // Check if any active position has rebuy enabled (to conditionally show rebuy columns)
   const hasActiveRebuy = activePositions.some(p => p.rebuy_enabled || Object.keys(rebuyEditing).some(id => rebuyEditing[id]?.enabled && activePositions.some(ap => ap.id === id)));
   // Completed positions section removed for performance - was loading dead tokens
