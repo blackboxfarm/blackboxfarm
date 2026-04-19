@@ -175,8 +175,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    const targets = Array.from(targetMap.entries());
+    let targets = Array.from(targetMap.entries());
+    if (resendOfAnnouncementId && alreadySentTgIds.size > 0) {
+      const before = targets.length;
+      targets = targets.filter(([tgId]) => !alreadySentTgIds.has(tgId));
+      console.log(`[announcement] Resend filter: ${before} eligible -> ${targets.length} new (${alreadySentTgIds.size} already received)`);
+    }
     console.log(`[announcement] Audiences: ${audiences.join(', ')}, targets: ${targets.length}`);
+
+    // ─── Dry run: return count without sending ───
+    if (dryRun) {
+      return new Response(
+        JSON.stringify({ newRecipients: targets.length, alreadyReceived: alreadySentTgIds.size }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // ─── Create announcement log entry first ───
     const { data: logEntry, error: logCreateErr } = await supabase
@@ -186,6 +199,7 @@ Deno.serve(async (req) => {
         audiences,
         sent_count: 0,
         failed_count: 0,
+        resend_of_id: resendOfAnnouncementId || null,
       })
       .select("id")
       .single();
