@@ -30,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
+import { InlineImageManagerModal } from './InlineImageManagerModal';
 import { format } from 'date-fns';
 
 interface Briefing {
@@ -232,6 +233,7 @@ function IntelBriefingsArticlesManager() {
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [cropMode, setCropMode] = useState<'hero' | 'inline'>('hero');
   const [showCrop, setShowCrop] = useState(false);
+  const [showImageManager, setShowImageManager] = useState(false);
 
   // Fetch all briefings
   const { data: briefings = [], isLoading } = useQuery({
@@ -939,6 +941,15 @@ function IntelBriefingsArticlesManager() {
               articleContent={form.content_md}
               articleTitle={form.title}
             />
+            {(() => {
+              const inlineCount = (form.content_md.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
+              if (inlineCount === 0) return null;
+              return (
+                <Button variant="outline" size="sm" onClick={() => setShowImageManager(true)}>
+                  <ImageIcon className="h-4 w-4 mr-2" /> Manage Images ({inlineCount})
+                </Button>
+              );
+            })()}
             <input ref={fileInputRef} type="file" accept=".md,.txt,.markdown" className="hidden" onChange={handleMdUpload} />
             {editingId && (
               <Button variant="outline" size="sm" onClick={() => setShowRevisions(!showRevisions)}>
@@ -1026,6 +1037,15 @@ function IntelBriefingsArticlesManager() {
           title={cropMode === 'hero' ? 'Crop Hero Image' : 'Crop Inline Image'}
         />
       )}
+
+      {/* Inline Image Manager */}
+      <InlineImageManagerModal
+        open={showImageManager}
+        onOpenChange={setShowImageManager}
+        contentMd={form.content_md}
+        articleTitle={form.title}
+        onApply={(newMd) => setForm(f => ({ ...f, content_md: newMd }))}
+      />
     </div>
   );
 }
