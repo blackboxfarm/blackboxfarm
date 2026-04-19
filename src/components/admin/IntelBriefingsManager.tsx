@@ -30,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
+import { InlineImageManagerModal } from './InlineImageManagerModal';
 import { format } from 'date-fns';
 
 interface Briefing {
