@@ -3316,7 +3316,7 @@ export function FlipItDashboard() {
           {/* Channel Auto-Buy Rules — first thing under header */}
           <div className="mb-6 space-y-4">
             <ChannelAutoBuyRules flipitWalletId={selectedWallet || null} />
-            <ChannelTransactionLog />
+            <ChannelTransactionLog onChange={() => loadPositions({ silent: true })} />
           </div>
 
           {/* Source Wallet Section */}
@@ -4340,6 +4340,26 @@ export function FlipItDashboard() {
                 >
                   <RefreshCw className={`h-3 w-3 ${isManualRefreshing ? 'animate-spin' : ''}`} />
                   Check Socials
+                </Button>
+                {/* Force resync from DB — guaranteed reload, no on-chain calls */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs gap-1"
+                  onClick={async () => {
+                    setIsManualRefreshing(true);
+                    try {
+                      await loadPositions({ silent: true });
+                      toast.success('Active Flips resynced from database');
+                    } finally {
+                      setIsManualRefreshing(false);
+                    }
+                  }}
+                  disabled={isManualRefreshing}
+                  title="Force reload Active Flips from database (no on-chain calls)"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isManualRefreshing ? 'animate-spin' : ''}`} />
+                  Resync
                 </Button>
               </div>
               {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length > 0 && (
