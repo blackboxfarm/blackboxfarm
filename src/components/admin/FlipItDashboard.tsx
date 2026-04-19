@@ -389,6 +389,8 @@ export function FlipItDashboard() {
     phantomCount: number;
     cleanedCount: number;
     validCount: number;
+    importedCount?: number;
+    backfilledCount?: number;
     timestamp: string;
   } | null>(null);
 
@@ -2364,6 +2366,8 @@ export function FlipItDashboard() {
         phantomCount: data?.phantomCount || 0,
         cleanedCount: data?.cleanedCount || 0,
         validCount: data?.validCount || 0,
+        importedCount: data?.importedCount || 0,
+        backfilledCount: data?.backfilledCount || 0,
         timestamp: new Date().toISOString()
       });
 
@@ -5538,6 +5542,8 @@ export function FlipItDashboard() {
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
                   <span>
                     Last sync: {lastSyncResult.validCount} valid, {lastSyncResult.phantomCount} phantom
+                    {lastSyncResult.importedCount ? `, ${lastSyncResult.importedCount} rebuilt` : ''}
+                    {lastSyncResult.backfilledCount ? `, ${lastSyncResult.backfilledCount} corrected` : ''}
                     {lastSyncResult.cleanedCount > 0 && `, ${lastSyncResult.cleanedCount} cleaned`}
                   </span>
                   <span className="text-[10px]">
