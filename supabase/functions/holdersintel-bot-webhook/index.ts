@@ -4340,8 +4340,29 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     // Commands that are allowed to reply publicly in groups
     const GROUP_PUBLIC_COMMANDS = ['/start', '/help', '/register', '/status', '/quick', '/q', '/alerts', '/ca'];
 
-    // If in a group chat, check admin_only_commands config and redirect non-public commands to DM
-    if (isGroupChat && command.startsWith('/') && !GROUP_PUBLIC_COMMANDS.includes(command)) {
+    // Allow-list of commands WE own that should be redirected from group → DM.
+    // Anything not in this list (e.g. /pnl, /lb, /buy from Phanes/BonkBot/etc.)
+    // is silently ignored in groups so other bots can answer.
+    const KNOWN_GROUP_REDIRECT_COMMANDS = [
+      '/dev', '/d',
+      '/insiders', '/i',
+      '/concentration', '/con',
+      '/compare', '/cmp',
+      '/holders',
+      '/ai',
+      '/momentum', '/m', '/mom',
+      '/oracle', '/o',
+      '/wallet', '/w',
+      '/add',
+      '/channels', '/ch',
+      '/config',
+      '/payment', '/pay',
+      '/ticket',
+    ];
+
+    // If in a group chat, redirect ONLY known commands to DM. Unknown slash
+    // commands fall through to the lower switch's default (silent for groups).
+    if (isGroupChat && KNOWN_GROUP_REDIRECT_COMMANDS.includes(command)) {
       // Check if admin_only_commands is enabled — if so, only group admins can use commands
       try {
         const { data: groupInst } = await supabase
