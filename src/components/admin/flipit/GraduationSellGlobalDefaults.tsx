@@ -12,12 +12,14 @@ interface Defaults {
   feeMode: string;
   feeMicro: number | null;
   jitoTipSol: string;
+  moonbagPct: string;
 }
 
 const HARD_DEFAULTS: Defaults = {
   feeMode: 'turbo',
   feeMicro: null,
   jitoTipSol: '0.001000',
+  moonbagPct: '0',
 };
 
 export const GraduationSellGlobalDefaults: React.FC = () => {
@@ -26,6 +28,7 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
   const [feeMode, setFeeMode] = useState<string>(HARD_DEFAULTS.feeMode);
   const [feeMicro, setFeeMicro] = useState<string>('');
   const [jitoTipSol, setJitoTipSol] = useState<string>(HARD_DEFAULTS.jitoTipSol);
+  const [moonbagPct, setMoonbagPct] = useState<string>(HARD_DEFAULTS.moonbagPct);
   const [settingsId, setSettingsId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
       const { data, error } = await supabase
         .from('flipit_settings')
         .select(
-          'id, graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default'
+          'id, graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default, graduation_sell_moonbag_pct_default'
         )
         .maybeSingle();
       if (error) {
@@ -53,6 +56,11 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
           data.graduation_sell_jito_tip_lamports_default != null
             ? (data.graduation_sell_jito_tip_lamports_default / 1e9).toFixed(6)
             : HARD_DEFAULTS.jitoTipSol
+        );
+        setMoonbagPct(
+          data.graduation_sell_moonbag_pct_default != null
+            ? String(data.graduation_sell_moonbag_pct_default)
+            : HARD_DEFAULTS.moonbagPct
         );
       }
       setLoaded(true);
@@ -74,6 +82,11 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
     }
     const tipLamports = Math.round(tipSol * 1e9);
 
+    const moonbag = parseFloat(moonbagPct);
+    if (!Number.isFinite(moonbag) || moonbag < 0 || moonbag > 50) {
+      return toast.error('Moonbag % must be 0–50');
+    }
+
     setSaving(true);
     try {
       if (!settingsId) {
@@ -86,6 +99,7 @@ export const GraduationSellGlobalDefaults: React.FC = () => {
           graduation_sell_priority_fee_mode_default: feeMode,
           graduation_sell_priority_fee_micro_lamports_default: microVal,
           graduation_sell_jito_tip_lamports_default: tipLamports,
+          graduation_sell_moonbag_pct_default: moonbag,
         })
         .eq('id', settingsId);
       if (error) throw error;
