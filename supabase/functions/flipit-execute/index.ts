@@ -1782,6 +1782,8 @@ serve(withRunLog('flipit-execute', async (req) => {
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
+            priorityFeeMicroLamports, // Optional explicit µLamport override (graduation sell)
+            jitoTipLamports, // Optional Jito tip override (graduation sell — applies if Jito enabled globally)
             walletId: position.wallet_id, // Pass wallet ID for direct DB lookup
             unwrapSol: true, // CRITICAL: Unwrap WSOL to native SOL to prevent stranded wrapped SOL
           },
