@@ -941,6 +941,15 @@ function IntelBriefingsArticlesManager() {
               articleContent={form.content_md}
               articleTitle={form.title}
             />
+            {(() => {
+              const inlineCount = (form.content_md.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
+              if (inlineCount === 0) return null;
+              return (
+                <Button variant="outline" size="sm" onClick={() => setShowImageManager(true)}>
+                  <ImageIcon className="h-4 w-4 mr-2" /> Manage Images ({inlineCount})
+                </Button>
+              );
+            })()}
             <input ref={fileInputRef} type="file" accept=".md,.txt,.markdown" className="hidden" onChange={handleMdUpload} />
             {editingId && (
               <Button variant="outline" size="sm" onClick={() => setShowRevisions(!showRevisions)}>
