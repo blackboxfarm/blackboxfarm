@@ -1037,6 +1037,15 @@ function IntelBriefingsArticlesManager() {
           title={cropMode === 'hero' ? 'Crop Hero Image' : 'Crop Inline Image'}
         />
       )}
+
+      {/* Inline Image Manager */}
+      <InlineImageManagerModal
+        open={showImageManager}
+        onOpenChange={setShowImageManager}
+        contentMd={form.content_md}
+        articleTitle={form.title}
+        onApply={(newMd) => setForm(f => ({ ...f, content_md: newMd }))}
+      />
     </div>
   );
 }
