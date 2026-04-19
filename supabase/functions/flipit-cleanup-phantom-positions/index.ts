@@ -1,7 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { getHeliusApiKey, getHeliusRestJson, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { parseBuyFromHelius } from '../_shared/helius-api.ts';
 import { fetchSolPrice } from '../_shared/price-resolver.ts';
 import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
@@ -127,13 +127,61 @@ async function getOnChainHoldings(walletPubkey: string): Promise<Map<string, OnC
 }
 
 async function fetchWalletHistory(walletPubkey: string): Promise<HistoryTx[]> {
-  const historyUrl = getHeliusRestUrl(`/v0/addresses/${walletPubkey}/transactions`, { limit: String(HISTORY_LIMIT) });
-  const res = await fetch(historyUrl, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch wallet history: ${res.status}`);
+  try {
+    const txs = await getHeliusRestJson<HistoryTx[]>(`/v0/addresses/${walletPubkey}/transactions`, {
+      extraParams: { limit: String(HISTORY_LIMIT) },
+      timeoutMs: 15000,
+    });
+    return Array.isArray(txs) ? txs : [];
+  } catch (error) {
+    console.warn(`[flipit-cleanup] Wallet history fetch failed for ${walletPubkey.slice(0, 8)}…; continuing without history`, error);
+    return [];
   }
-  const txs = await res.json();
-  return Array.isArray(txs) ? txs : [];
+}
+
+function buildRecoveredHoldingInsert(args: {
+  walletId: string;
+  tokenMint: string;
+  holding: OnChainHolding;
+  tokenMeta: TokenMetadataRow;
+  buySignature: string | null;
+  buyExecutedAt: string | null;
+  buyAmountSol: number | null;
+  buyAmountUsd: number | null;
+  buyPriceUsd: number | null;
+  entryVerified: boolean;
+}) {
+  const targetMultiplier = DEFAULT_TARGET_MULTIPLIER;
+  const targetPriceUsd = args.buyPriceUsd && args.buyPriceUsd > 0 ? args.buyPriceUsd * targetMultiplier : null;
+
+  return {
+    wallet_id: args.walletId,
+    token_mint: args.tokenMint,
+    token_symbol: args.tokenMeta.symbol,
+    token_name: args.tokenMeta.name,
+    token_image: args.tokenMeta.image,
+    buy_amount_usd: args.buyAmountUsd,
+    buy_amount_sol: args.buyAmountSol,
+    buy_price_usd: args.buyPriceUsd,
+    quantity_tokens: args.holding.uiAmount,
+    quantity_tokens_raw: args.holding.rawAmount,
+    token_decimals: args.holding.decimals,
+    buy_signature: args.buySignature,
+    buy_executed_at: args.buyExecutedAt,
+    target_multiplier: targetMultiplier,
+    target_price_usd: targetPriceUsd,
+    status: 'holding',
+    source: 'chain_sync',
+    is_test_position: false,
+    entry_verified: args.entryVerified,
+    entry_verified_at: new Date().toISOString(),
+    ghost_position: false,
+    needs_reconciliation: false,
+    last_chain_sync_at: new Date().toISOString(),
+    error_message: args.entryVerified
+      ? null
+      : 'Recovered from live on-chain wallet balance; original buy transaction could not be reconstructed automatically.',
+  };
 }
 
 function findBuySignatureForMint(transactions: HistoryTx[], tokenMint: string, walletPubkey: string): string | null {
@@ -303,79 +351,56 @@ serve(withRunLog('flipit-cleanup-phantom-positions', async (req) => {
     for (const [tokenMint, holding] of actualHoldings.entries()) {
       if (knownActiveMints.has(tokenMint)) continue;
 
-      const buySignature = findBuySignatureForMint(transactions, tokenMint, wallet.pubkey);
-      if (!buySignature) {
-        results.push({
-          type: 'missing_live_holding',
-          tokenMint,
-          actualBalance: holding.uiAmount,
-          imported: false,
-          reason: 'No buy signature found in recent wallet history',
-        });
-        continue;
-      }
-
-      const parsedBuy = await parseBuyFromHelius(buySignature, tokenMint, wallet.pubkey, heliusApiKey);
-      if (!parsedBuy || parsedBuy.tokensReceived <= 0) {
-        results.push({
-          type: 'missing_live_holding',
-          tokenMint,
-          actualBalance: holding.uiAmount,
-          imported: false,
-          reason: 'Failed to parse buy transaction from Helius',
-          buySignature,
-        });
-        continue;
-      }
-
       const tokenMeta = await fetchTokenMetadata(tokenMint);
-      const buyAmountUsd = parsedBuy.solSpent * solPrice;
-      const buyPriceUsd = buyAmountUsd / parsedBuy.tokensReceived;
-      const targetMultiplier = DEFAULT_TARGET_MULTIPLIER;
-      const targetPriceUsd = buyPriceUsd * targetMultiplier;
+      const buySignature = findBuySignatureForMint(transactions, tokenMint, wallet.pubkey);
+      const historyTx = buySignature ? transactions.find((tx) => tx.signature === buySignature) ?? null : null;
+      const parsedBuy = buySignature
+        ? await parseBuyFromHelius(buySignature, tokenMint, wallet.pubkey, heliusApiKey)
+        : null;
+      const buyAmountUsd = parsedBuy?.solSpent ? parsedBuy.solSpent * solPrice : null;
+      const buyPriceUsd = parsedBuy?.tokensReceived && buyAmountUsd
+        ? buyAmountUsd / parsedBuy.tokensReceived
+        : null;
+      const recoveredWithoutHistory = !parsedBuy;
 
       const importPreview = {
         tokenMint,
         tokenSymbol: tokenMeta.symbol,
         actualBalance: holding.uiAmount,
         buySignature,
-        buyAmountSol: parsedBuy.solSpent,
+        buyAmountSol: parsedBuy?.solSpent ?? null,
         buyAmountUsd,
         buyPriceUsd,
+        entryVerified: !!parsedBuy,
+        recoveryMode: recoveredWithoutHistory ? 'live_balance_only' : 'verified_buy_history',
         imported: !dryRun,
       };
-      results.push({ type: 'imported_live_holding', ...importPreview });
+      results.push({
+        type: recoveredWithoutHistory ? 'recovered_live_holding' : 'imported_live_holding',
+        ...importPreview,
+      });
 
       if (dryRun) continue;
 
       const inserted = await assertInsert(
         supabase
           .from('flip_positions')
-          .insert({
-            wallet_id: walletId,
-            token_mint: tokenMint,
-            token_symbol: tokenMeta.symbol,
-            token_name: tokenMeta.name,
-            token_image: tokenMeta.image,
-            buy_amount_usd: buyAmountUsd,
-            buy_amount_sol: parsedBuy.solSpent,
-            buy_price_usd: buyPriceUsd,
-            quantity_tokens: holding.uiAmount,
-            quantity_tokens_raw: holding.rawAmount,
-            token_decimals: holding.decimals,
-            buy_signature: buySignature,
-            buy_executed_at: parsedBuy.timestamp ? new Date(parsedBuy.timestamp * 1000).toISOString() : new Date().toISOString(),
-            target_multiplier: targetMultiplier,
-            target_price_usd: targetPriceUsd,
-            status: 'holding',
-            source: 'chain_sync',
-            is_test_position: false,
-            entry_verified: true,
-            entry_verified_at: new Date().toISOString(),
-            ghost_position: false,
-            needs_reconciliation: false,
-            last_chain_sync_at: new Date().toISOString(),
-          })
+          .insert(buildRecoveredHoldingInsert({
+            walletId,
+            tokenMint,
+            holding,
+            tokenMeta,
+            buySignature,
+            buyExecutedAt: parsedBuy?.timestamp
+              ? new Date(parsedBuy.timestamp * 1000).toISOString()
+              : historyTx?.timestamp
+                ? new Date(historyTx.timestamp * 1000).toISOString()
+                : null,
+            buyAmountSol: parsedBuy?.solSpent ?? null,
+            buyAmountUsd,
+            buyPriceUsd,
+            entryVerified: !!parsedBuy,
+          }))
           .select('id, token_mint, token_symbol, buy_signature')
           .single(),
         'flip_positions'
