@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
+import { evaluateGraduationSell, type GradSellPriceMeta } from '../_shared/graduation-sell-evaluator.ts';
 enableHeliusTracking('flipit-unified-monitor');
 
 const corsHeaders = {
@@ -168,6 +169,7 @@ serve(withRunLog('flipit-unified-monitor', async (req) => {
       limitOrderMonitor: { checked: 0, executed: [] as string[], expired: 0 },
       stuckRecovery: { checked: 0, reset: [] as string[] },
       dexStatusRefresh: { checked: 0, updated: [] as string[] },
+      graduationSellMonitor: { checked: 0, armed: [] as string[], watching: [] as string[], executed: [] as string[], failed: [] as string[] },
     };
 
     // 0. STUCK POSITION RECOVERY - Reset positions stuck in pending_sell/pending_buy for > 3 minutes
