@@ -233,6 +233,7 @@ function IntelBriefingsArticlesManager() {
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [cropMode, setCropMode] = useState<'hero' | 'inline'>('hero');
   const [showCrop, setShowCrop] = useState(false);
+  const [showImageManager, setShowImageManager] = useState(false);
 
   // Fetch all briefings
   const { data: briefings = [], isLoading } = useQuery({
