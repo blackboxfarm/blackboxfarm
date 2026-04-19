@@ -20,12 +20,41 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json();
-    const { message, testOnly } = body;
-    const audiences: string[] = body.audiences
+    const { testOnly, resendOfAnnouncementId, dryRun } = body;
+    let { message } = body;
+    let audiences: string[] = body.audiences
       ? body.audiences
       : body.audience
         ? [body.audience]
         : [];
+
+    // ─── Resend mode: hydrate message + audiences from original log ───
+    let alreadySentTgIds = new Set<string>();
+    if (resendOfAnnouncementId) {
+      const { data: original, error: origErr } = await supabase
+        .from("telegram_announcement_log")
+        .select("message_text, audiences")
+        .eq("id", resendOfAnnouncementId)
+        .single();
+
+      if (origErr || !original) {
+        return new Response(JSON.stringify({ error: "Original announcement not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      message = original.message_text;
+      audiences = original.audiences || [];
+
+      const { data: prevRecipients } = await supabase
+        .from("telegram_announcement_recipients")
+        .select("telegram_user_id")
+        .eq("announcement_id", resendOfAnnouncementId)
+        .eq("delivery_status", "sent");
+
+      alreadySentTgIds = new Set((prevRecipients || []).map((r: any) => r.telegram_user_id));
+    }
 
     if (!message || (!testOnly && audiences.length === 0)) {
       return new Response(JSON.stringify({ error: "message and audiences required" }), {

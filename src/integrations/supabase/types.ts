@@ -13221,6 +13221,7 @@ export type Database = {
           failed_count: number
           id: string
           message_text: string
+          resend_of_id: string | null
           sent_by: string | null
           sent_count: number
         }
@@ -13230,6 +13231,7 @@ export type Database = {
           failed_count?: number
           id?: string
           message_text: string
+          resend_of_id?: string | null
           sent_by?: string | null
           sent_count?: number
         }
@@ -13239,10 +13241,19 @@ export type Database = {
           failed_count?: number
           id?: string
           message_text?: string
+          resend_of_id?: string | null
           sent_by?: string | null
           sent_count?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "telegram_announcement_log_resend_of_id_fkey"
+            columns: ["resend_of_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_announcement_log"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       telegram_announcement_recipients: {
         Row: {

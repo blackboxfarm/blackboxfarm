@@ -1,0 +1,2 @@
+ALTER TABLE public.telegram_announcement_log ADD COLUMN IF NOT EXISTS resend_of_id uuid REFERENCES public.telegram_announcement_log(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_telegram_announcement_log_resend_of_id ON public.telegram_announcement_log(resend_of_id);
