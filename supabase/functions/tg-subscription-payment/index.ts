@@ -113,6 +113,8 @@ serve(withRunLog('tg-subscription-payment', async (req) => {
         payment_wallet: pubkey,
         amount_sol: amountSol,
         sol_price: solPrice,
+        created_at: sub.created_at,
+        expires_in_sec: 3600,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } else if (action === 'check') {
