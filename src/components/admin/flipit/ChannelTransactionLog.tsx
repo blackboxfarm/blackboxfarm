@@ -62,7 +62,11 @@ function pnl(row: FlipRow): { usd: number | null; pct: number | null } {
   return { usd: null, pct: null };
 }
 
-export function ChannelTransactionLog() {
+interface ChannelTransactionLogProps {
+  onChange?: () => void;
+}
+
+export function ChannelTransactionLog({ onChange }: ChannelTransactionLogProps = {}) {
   const [rows, setRows] = useState<FlipRow[]>([]);
   const [channels, setChannels] = useState<ChannelMap>({});
   const [loading, setLoading] = useState(true);
@@ -110,6 +114,7 @@ export function ChannelTransactionLog() {
     }
     setRows((prev) => prev.filter((r) => r.id !== id));
     toast.success("Closed transaction removed from log");
+    onChange?.();
   };
 
   const handleClearAll = async () => {
@@ -133,6 +138,7 @@ export function ChannelTransactionLog() {
     }
     setRows((prev) => prev.filter((r) => !ids.includes(r.id)));
     toast.success(`Cleared ${ids.length} closed transaction(s)${skipped > 0 ? ` — ${skipped} open flip(s) preserved` : ""}`);
+    onChange?.();
   };
 
   useEffect(() => {
