@@ -3230,19 +3230,26 @@ export function FlipItDashboard() {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
+    const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode; label?: string; className?: string }> = {
       pending_buy: { variant: 'secondary', icon: <Loader2 className="w-3 h-3 animate-spin" /> },
       holding: { variant: 'default', icon: <Clock className="w-3 h-3" /> },
       pending_sell: { variant: 'secondary', icon: <Loader2 className="w-3 h-3 animate-spin" /> },
       sold: { variant: 'outline', icon: <CheckCircle2 className="w-3 h-3 text-green-500" /> },
-      failed: { variant: 'destructive', icon: <XCircle className="w-3 h-3" /> }
+      executed: { variant: 'outline', icon: <CheckCircle2 className="w-3 h-3 text-green-500" /> },
+      failed: { variant: 'destructive', icon: <XCircle className="w-3 h-3" /> },
+      moonbag: {
+        variant: 'outline',
+        icon: <span className="text-xs leading-none">🌙</span>,
+        label: 'moonbag',
+        className: 'border-amber-500/60 bg-amber-500/10 text-amber-300',
+      },
     };
 
     const config = statusConfig[status] || statusConfig.pending_buy;
     return (
-      <Badge variant={config.variant} className="gap-1">
+      <Badge variant={config.variant} className={`gap-1 ${config.className ?? ''}`}>
         {config.icon}
-        {status.replace('_', ' ')}
+        {config.label ?? status.replace('_', ' ')}
       </Badge>
     );
   };
