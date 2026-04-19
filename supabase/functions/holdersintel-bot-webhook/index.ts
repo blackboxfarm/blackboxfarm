@@ -3529,12 +3529,21 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, _args
 
     if (data.status === 'paid') {
       const expiryDate = new Date(data.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+      // ─── 1) Celebration receipt message ───
       await sendMessage(chatId,
-        `🎉 *Payment Confirmed!*\n\n` +
-        `✅ Your *Pro* subscription is now active!\n` +
-        `📅 Valid until: *${expiryDate}*\n\n` +
-        `All Pro commands are now unlocked. Use /help to see everything available.` + TAGLINE
+        `🎉🎊 *PAYMENT CONFIRMED!* 🎊🎉\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `👑 *Welcome to HoldersIntel Pro*\n` +
+        `━━━━━━━━━━━━━━━━━━━\n\n` +
+        `💎 Amount received: *${data.received?.toFixed(4) ?? pendingSub.amount_sol} SOL*\n` +
+        `📅 Pro active until: *${expiryDate}*\n` +
+        `🆔 Payment ID: \`${pendingSub.id.slice(0, 8)}\`\n\n` +
+        `_A welcome message with your unlocked perks is coming next..._` + TAGLINE
       );
+
+      // ─── 2) Welcome-to-Pro DM with perks + action buttons (one-time) ───
+      await sendProWelcomeDM(chatId, expiryDate);
 
       // Send SOL payment receipt email
       try {
