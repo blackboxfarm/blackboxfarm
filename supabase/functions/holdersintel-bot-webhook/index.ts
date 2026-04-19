@@ -3592,7 +3592,31 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, _args
   }
 }
 
-// ─── AI Conversational Assistant for All Registered Users ───
+// ─── Pro Welcome DM (sent once on payment confirmation) ───
+async function sendProWelcomeDM(chatId: number, expiryDate: string) {
+  const text =
+    `👑 *Welcome to HoldersIntel Pro*\n\n` +
+    `You've unlocked the full intelligence stack:\n\n` +
+    `🔬 *Unlimited /holders scans* — no daily caps\n` +
+    `🫧 *Full Bubble Map access* — Auto-Spider, KYC root tracing, Find All Tokens\n` +
+    `🛰 *Dev Wallet Alerts* — instant pings when watched creators launch\n` +
+    `🔍 *Deep Spider* — full genealogy traces on demand\n` +
+    `📊 *Export Graph Data* — CSV/JSON downloads\n` +
+    `⚡ *Highest rate limits* across every command\n\n` +
+    `📅 Pro active until: *${expiryDate}*\n\n` +
+    `Try it now 👇`;
+
+  const buttons = [
+    [
+      { text: "🫧 Open Bubble Map", url: "https://blackbox.farm/bubblemap" },
+      { text: "📊 Try /holders", url: "https://t.me/holdersintel_bot?start=holders" },
+    ],
+    [{ text: "📋 See all commands", url: "https://t.me/holdersintel_bot?start=help" }],
+  ];
+
+  await sendMessageWithButtons(chatId, text, buttons);
+}
+
 const aiChatRateMap = new Map<string, number[]>();
 
 // ─── AI Memory & Context for TG ───
