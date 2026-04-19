@@ -95,27 +95,44 @@ export function ChannelTransactionLog() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this transaction record? This cannot be undone.")) return;
+    const row = rows.find((r) => r.id === id);
+    // Safety: never delete an OPEN/HOLDING position from the log — it would nuke an active flip
+    const isOpen = row && !row.sell_executed_at && (row.status === "open" || row.status === "holding" || row.status === "active" || row.status === "bought");
+    if (isOpen) {
+      toast.error("This flip is still OPEN. Close/sell it from the Active Flips panel first — log delete is blocked for safety.");
+      return;
+    }
+    if (!confirm("Hide this CLOSED transaction from the log? (Row will be deleted from DB — only do this for completed/sold flips.)")) return;
     const { error } = await supabase.from("flip_positions").delete().eq("id", id);
     if (error) {
       toast.error(`Delete failed: ${error.message}`);
       return;
     }
     setRows((prev) => prev.filter((r) => r.id !== id));
-    toast.success("Transaction deleted");
+    toast.success("Closed transaction removed from log");
   };
 
   const handleClearAll = async () => {
     if (rows.length === 0) return;
-    if (!confirm(`Delete ALL ${rows.length} channel transactions shown? This cannot be undone.`)) return;
-    const ids = rows.map((r) => r.id);
+    // Only purge CLOSED rows — never touch open/holding flips
+    const closedRows = rows.filter((r) => !!r.sell_executed_at && r.status !== "open" && r.status !== "holding" && r.status !== "active" && r.status !== "bought");
+    const skipped = rows.length - closedRows.length;
+    if (closedRows.length === 0) {
+      toast.error("No closed transactions to clear — all shown rows are still OPEN flips. Sell them first.");
+      return;
+    }
+    const msg = skipped > 0
+      ? `Delete ${closedRows.length} CLOSED transaction(s)? ${skipped} OPEN flip(s) will be kept safe. Cannot be undone.`
+      : `Delete ALL ${closedRows.length} closed transactions shown? This cannot be undone.`;
+    if (!confirm(msg)) return;
+    const ids = closedRows.map((r) => r.id);
     const { error } = await supabase.from("flip_positions").delete().in("id", ids);
     if (error) {
       toast.error(`Clear failed: ${error.message}`);
       return;
     }
-    setRows([]);
-    toast.success(`Cleared ${ids.length} transactions`);
+    setRows((prev) => prev.filter((r) => !ids.includes(r.id)));
+    toast.success(`Cleared ${ids.length} closed transaction(s)${skipped > 0 ? ` — ${skipped} open flip(s) preserved` : ""}`);
   };
 
   useEffect(() => {
