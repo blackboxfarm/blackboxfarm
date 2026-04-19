@@ -4949,6 +4949,18 @@ export type Database = {
           error_message: string | null
           flipit_moonbag_sell_pct: number | null
           ghost_position: boolean
+          graduation_sell_armed_at: string | null
+          graduation_sell_arming_price_usd: number | null
+          graduation_sell_enabled: boolean
+          graduation_sell_executed_at: string | null
+          graduation_sell_last_eval_at: string | null
+          graduation_sell_max_capture_pct: number
+          graduation_sell_min_capture_pct: number
+          graduation_sell_peak_price_usd: number | null
+          graduation_sell_slippage_bps: number
+          graduation_sell_status: string
+          graduation_sell_trail_drop_pct: number
+          graduation_sell_trigger_pct: number
           id: string
           is_diamond_hand: boolean | null
           is_on_curve: boolean | null
@@ -5039,6 +5051,18 @@ export type Database = {
           error_message?: string | null
           flipit_moonbag_sell_pct?: number | null
           ghost_position?: boolean
+          graduation_sell_armed_at?: string | null
+          graduation_sell_arming_price_usd?: number | null
+          graduation_sell_enabled?: boolean
+          graduation_sell_executed_at?: string | null
+          graduation_sell_last_eval_at?: string | null
+          graduation_sell_max_capture_pct?: number
+          graduation_sell_min_capture_pct?: number
+          graduation_sell_peak_price_usd?: number | null
+          graduation_sell_slippage_bps?: number
+          graduation_sell_status?: string
+          graduation_sell_trail_drop_pct?: number
+          graduation_sell_trigger_pct?: number
           id?: string
           is_diamond_hand?: boolean | null
           is_on_curve?: boolean | null
@@ -5129,6 +5153,18 @@ export type Database = {
           error_message?: string | null
           flipit_moonbag_sell_pct?: number | null
           ghost_position?: boolean
+          graduation_sell_armed_at?: string | null
+          graduation_sell_arming_price_usd?: number | null
+          graduation_sell_enabled?: boolean
+          graduation_sell_executed_at?: string | null
+          graduation_sell_last_eval_at?: string | null
+          graduation_sell_max_capture_pct?: number
+          graduation_sell_min_capture_pct?: number
+          graduation_sell_peak_price_usd?: number | null
+          graduation_sell_slippage_bps?: number
+          graduation_sell_status?: string
+          graduation_sell_trail_drop_pct?: number
+          graduation_sell_trigger_pct?: number
           id?: string
           is_diamond_hand?: boolean | null
           is_on_curve?: boolean | null
