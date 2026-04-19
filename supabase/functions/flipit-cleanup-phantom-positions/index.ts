@@ -2,6 +2,10 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getHeliusRpcUrl } from '../_shared/helius-client.ts';
+import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { parseBuyFromHelius } from '../_shared/helius-api.ts';
+import { fetchSolPrice } from '../_shared/price-resolver.ts';
+import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +24,19 @@ function bad(message: string, status = 400) {
 }
 
 const DUST_THRESHOLD = 1;
+
+interface OnChainHolding {
+  mint: string;
+  uiAmount: number;
+  rawAmount: string;
+  decimals: number;
+}
+
+interface TokenMetadataRow {
+  symbol: string | null;
+  name: string | null;
+  image: string | null;
+}
 
 /**
  * Fetch all fungible token holdings via Helius DAS API (getAssetsByOwner).
