@@ -1,48 +1,65 @@
 
 
-User is asking whether the elevated graduation-fee settings I proposed are configured per-position (in the GRAD popover on each token row) or globally from the main Flipit settings row at the top of the dashboard.
+## Answer first (no changes yet)
 
-Answer: in my proposed plan they live **per-position inside the GRAD popover** — same place as trigger %, max capture %, trail drop, etc. That keeps each position self-contained and lets you tune fees by token (a low-mcap grad with heavy MEV competition might warrant a 0.005 SOL tip, while a quieter one is fine at 0.001).
+### Q1 — Does Graduation Sell work with a moonbag?
+**Not wired yet.** The current evaluator calls `flipit-execute` with `action: "sell"` and **no `sellPercent`** — meaning it dumps **100% of the position** when triggered. The infrastructure for partial sells exists (`action: "partial_sell"` + `sellPercent` is already used by the scalp engine, and `flip_positions` already has `moon_bag_quantity_tokens`, `moon_bag_percent`, `scalp_stage`), but the graduation evaluator doesn't use any of it.
 
-But there's a fair argument for a **global default** too — you don't want to set turbo fees on every new position manually. So the cleanest pattern is **both**:
+### Q2 — Can I link two 1-SOL entries into one position?
+**No, not wired.** Each Flipit buy creates an independent row in `flip_positions`. There are no `parent_position_id`, `linked_position_id`, or `position_group_id` columns. Two 1-SOL buys on the same token are two separate positions with their own GRAD SELL settings, their own arming prices, and their own sell triggers.
 
-## Plan (refined)
+---
 
-### Where the settings live
+## Plan to wire both
 
-**Global defaults** — `flipit_settings` table (one new row group):
-- `graduation_sell_priority_fee_mode_default` ('turbo')
-- `graduation_sell_priority_fee_micro_lamports_default` (null = preset)
-- `graduation_sell_jito_tip_lamports_default` (1,000,000 = 0.001 SOL)
+### Part A — Moonbag support for Graduation Sell
 
-Set once in the **Flipit Settings panel** at the top of `/super-admin` Flipit dashboard. Applied automatically to every new position when graduation sell is enabled.
+**DB migration** (3 columns on `flip_positions`):
+- `graduation_sell_moonbag_pct` numeric default 0 — % of position to KEEP after grad sell fires (0 = sell all, 20 = keep 20% as moonbag)
+- `graduation_sell_sold_pct` numeric — actual % sold (audit trail)
+- `graduation_sell_moonbag_qty_tokens` numeric — token count retained
 
-**Per-position overrides** — `flip_positions` columns (from previous plan):
-- `graduation_sell_priority_fee_mode` (nullable — falls back to global)
-- `graduation_sell_priority_fee_micro_lamports` (nullable)
-- `graduation_sell_jito_tip_lamports` (nullable)
+**Global default** on `flipit_settings`:
+- `graduation_sell_moonbag_pct_default` numeric default 0
 
-Edited in the **GRAD popover** on each row. Empty = use global default.
+**Logic** — `_shared/graduation-sell-evaluator.ts`:
+- Resolve `moonbagPct = pos.graduation_sell_moonbag_pct ?? settings.graduation_sell_moonbag_pct_default ?? 0`
+- If `moonbagPct > 0`: invoke `action: "partial_sell"` with `sellPercent: 100 - moonbagPct`, then update position to `status: 'moonbag'` and record retained quantity
+- If `moonbagPct === 0`: keep current full-sell behavior
 
-### Resolution logic in `graduation-sell-evaluator.ts`
-```
-const feeMode = pos.graduation_sell_priority_fee_mode ?? settings.graduation_sell_priority_fee_mode_default ?? 'turbo';
-const jitoTip  = pos.graduation_sell_jito_tip_lamports ?? settings.graduation_sell_jito_tip_lamports_default ?? 1_000_000;
-```
+**UI** — `GraduationSellControl.tsx` + `GraduationSellGlobalDefaults.tsx`:
+- New "Moonbag %" input (0–50, default 0) with helper text: "Keep this % of tokens after grad sell fires for potential further upside"
 
-### UI changes
-1. **`FlipItSettingsPanel`** (or wherever global Flipit settings live) — new "Graduation Sell Defaults" subsection with the 3 fields.
-2. **`GraduationSellControl.tsx`** popover — new "Execution Speed" section with:
-   - "Use global defaults" toggle (default ON)
-   - When toggled OFF → show priority fee preset + Jito tip inputs
-   - Inline display of the resolved values either way: "Will use: Turbo + 0.001 SOL Jito tip (~$0.34)"
+### Part B — Link multiple positions on the same token
+
+**DB migration** (1 column on `flip_positions`):
+- `position_group_id` uuid nullable — positions sharing this ID are treated as one logical position
+
+**UI — `FlipItDashboard.tsx`**:
+- Detect when same `wallet_id + token_mint` has 2+ holding positions
+- Show a "🔗 Link" button on those rows
+- Clicking opens a small picker: "Link with: [other position dropdown]" → assigns same `position_group_id` to both
+- Linked positions render as a single combined row in the table with summed quantity/cost basis, weighted-avg buy price, and **shared GRAD SELL settings** (settings stored on the lowest-id row in the group; UI edits propagate to all members)
+
+**Logic — `graduation-sell-evaluator.ts`**:
+- When evaluating, group positions by `position_group_id` (positions with NULL group_id stay independent)
+- For a group: use the master row's settings, sum quantities, compute weighted-avg arming price
+- When firing the sell: invoke `flipit-execute` once per member position with the same `sellPercent` (since each row is its own on-chain holding) — OR add a new `action: "sell_group"` to `flipit-execute` that loops internally
+
+**Recommended approach**: keep it simple — sell each member sequentially in the evaluator (one transaction per position), then mark all as executed together. No changes to `flipit-execute` needed.
 
 ### Files
-- 1 migration: 3 columns on `flipit_settings` + 3 nullable columns on `flip_positions`
-- `_shared/graduation-sell-evaluator.ts` — read settings, resolve fees, pass to `flipit-execute`
-- `flipit-execute/index.ts` — accept per-call fee overrides
-- `GraduationSellControl.tsx` — execution speed UI
-- `FlipItSettingsPanel.tsx` (or equivalent) — global defaults UI
+- 1 migration (4 columns total)
+- `_shared/graduation-sell-evaluator.ts` — moonbag logic + group handling
+- `flipit-unified-monitor/index.ts` — group-aware position fetching
+- `GraduationSellControl.tsx` — moonbag % input
+- `GraduationSellGlobalDefaults.tsx` — moonbag default
+- `FlipItDashboard.tsx` — Link button + grouped row rendering
 
-Backwards compatible. Defaults fire automatically on new positions; you can override per-token when you want to tune.
+### Open question
+For linked positions, do you want:
+- **A:** Both positions share ONE GRAD SELL config (edit once, applies to both — simpler, what's described above)
+- **B:** Each keeps its own GRAD SELL config but they execute together when ANY trigger fires (more flexible, more complex)
+
+Default in plan is **A**.
 
