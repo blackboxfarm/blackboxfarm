@@ -4957,10 +4957,13 @@ export type Database = {
           graduation_sell_last_eval_at: string | null
           graduation_sell_max_capture_pct: number
           graduation_sell_min_capture_pct: number
+          graduation_sell_moonbag_pct: number
+          graduation_sell_moonbag_qty_tokens: number | null
           graduation_sell_peak_price_usd: number | null
           graduation_sell_priority_fee_micro_lamports: number | null
           graduation_sell_priority_fee_mode: string | null
           graduation_sell_slippage_bps: number
+          graduation_sell_sold_pct: number | null
           graduation_sell_status: string
           graduation_sell_trail_drop_pct: number
           graduation_sell_trigger_pct: number
@@ -4982,6 +4985,7 @@ export type Database = {
           original_quantity_tokens: number | null
           paired_position_id: string | null
           partial_sells: Json | null
+          position_group_id: string | null
           position_source: string
           position_type: string | null
           price_fetched_at: string | null
@@ -5062,10 +5066,13 @@ export type Database = {
           graduation_sell_last_eval_at?: string | null
           graduation_sell_max_capture_pct?: number
           graduation_sell_min_capture_pct?: number
+          graduation_sell_moonbag_pct?: number
+          graduation_sell_moonbag_qty_tokens?: number | null
           graduation_sell_peak_price_usd?: number | null
           graduation_sell_priority_fee_micro_lamports?: number | null
           graduation_sell_priority_fee_mode?: string | null
           graduation_sell_slippage_bps?: number
+          graduation_sell_sold_pct?: number | null
           graduation_sell_status?: string
           graduation_sell_trail_drop_pct?: number
           graduation_sell_trigger_pct?: number
@@ -5087,6 +5094,7 @@ export type Database = {
           original_quantity_tokens?: number | null
           paired_position_id?: string | null
           partial_sells?: Json | null
+          position_group_id?: string | null
           position_source?: string
           position_type?: string | null
           price_fetched_at?: string | null
@@ -5167,10 +5175,13 @@ export type Database = {
           graduation_sell_last_eval_at?: string | null
           graduation_sell_max_capture_pct?: number
           graduation_sell_min_capture_pct?: number
+          graduation_sell_moonbag_pct?: number
+          graduation_sell_moonbag_qty_tokens?: number | null
           graduation_sell_peak_price_usd?: number | null
           graduation_sell_priority_fee_micro_lamports?: number | null
           graduation_sell_priority_fee_mode?: string | null
           graduation_sell_slippage_bps?: number
+          graduation_sell_sold_pct?: number | null
           graduation_sell_status?: string
           graduation_sell_trail_drop_pct?: number
           graduation_sell_trigger_pct?: number
@@ -5192,6 +5203,7 @@ export type Database = {
           original_quantity_tokens?: number | null
           paired_position_id?: string | null
           partial_sells?: Json | null
+          position_group_id?: string | null
           position_source?: string
           position_type?: string | null
           price_fetched_at?: string | null
@@ -5360,6 +5372,7 @@ export type Database = {
           block_tokens_with_tax: boolean | null
           created_at: string
           graduation_sell_jito_tip_lamports_default: number
+          graduation_sell_moonbag_pct_default: number
           graduation_sell_priority_fee_micro_lamports_default: number | null
           graduation_sell_priority_fee_mode_default: string
           id: string
@@ -5378,6 +5391,7 @@ export type Database = {
           block_tokens_with_tax?: boolean | null
           created_at?: string
           graduation_sell_jito_tip_lamports_default?: number
+          graduation_sell_moonbag_pct_default?: number
           graduation_sell_priority_fee_micro_lamports_default?: number | null
           graduation_sell_priority_fee_mode_default?: string
           id?: string
@@ -5396,6 +5410,7 @@ export type Database = {
           block_tokens_with_tax?: boolean | null
           created_at?: string
           graduation_sell_jito_tip_lamports_default?: number
+          graduation_sell_moonbag_pct_default?: number
           graduation_sell_priority_fee_micro_lamports_default?: number | null
           graduation_sell_priority_fee_mode_default?: string
           id?: string
