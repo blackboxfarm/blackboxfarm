@@ -25,6 +25,7 @@ export interface GraduationSellSettings {
   graduation_sell_priority_fee_mode?: string | null;
   graduation_sell_priority_fee_micro_lamports?: number | null;
   graduation_sell_jito_tip_lamports?: number | null;
+  graduation_sell_moonbag_pct?: number | null;
   bonding_curve_progress?: number | null;
 }
 
@@ -41,6 +42,7 @@ const DEFAULTS = {
   minCapture: 0,
   trailDrop: 15,
   slippage: 2500,
+  moonbag: 0,
 };
 
 const FALLBACK_GLOBAL = {
@@ -73,6 +75,7 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
   const [minCap, setMinCap] = useState<string>(String(position.graduation_sell_min_capture_pct ?? DEFAULTS.minCapture));
   const [trailDrop, setTrailDrop] = useState<string>(String(position.graduation_sell_trail_drop_pct ?? DEFAULTS.trailDrop));
   const [slippage, setSlippage] = useState<string>(String(position.graduation_sell_slippage_bps ?? DEFAULTS.slippage));
+  const [moonbag, setMoonbag] = useState<string>(String(position.graduation_sell_moonbag_pct ?? DEFAULTS.moonbag));
 
   // Execution speed (per-position overrides). Empty/null = inherit from global flipit_settings.
   const hasOverrides =
@@ -132,6 +135,7 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
     const mnNum = parseFloat(minCap);
     const tdNum = parseFloat(trailDrop);
     const slNum = parseInt(slippage, 10);
+    const mbNum = parseFloat(moonbag);
 
     if (enabled) {
       if (!Number.isFinite(tNum) || tNum < 90 || tNum > 100) return toast.error('Trigger % must be 90–100');
@@ -139,6 +143,7 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
       if (!Number.isFinite(mnNum) || mnNum < 0 || mnNum > 100) return toast.error('Min capture floor must be 0–100');
       if (!Number.isFinite(tdNum) || tdNum < 1 || tdNum > 90) return toast.error('Trail drop % must be 1–90');
       if (!Number.isFinite(slNum) || slNum < 100 || slNum > 9000) return toast.error('Slippage must be 100–9000 bps');
+      if (!Number.isFinite(mbNum) || mbNum < 0 || mbNum > 50) return toast.error('Moonbag % must be 0–50');
     }
 
     // Validate execution speed overrides only when not using global.
@@ -166,6 +171,7 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
         graduation_sell_min_capture_pct: mnNum,
         graduation_sell_trail_drop_pct: tdNum,
         graduation_sell_slippage_bps: slNum,
+        graduation_sell_moonbag_pct: mbNum,
         // Execution speed overrides — null means "inherit global"
         graduation_sell_priority_fee_mode: useGlobal ? null : feeMode,
         graduation_sell_priority_fee_micro_lamports: useGlobal ? null : feeMicroVal,
@@ -279,6 +285,22 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
               <Label className="text-[10px]">Slippage (bps) — graduation candles need wide tolerance</Label>
               <Input className="h-7 text-xs" type="number" value={slippage} onChange={e => setSlippage(e.target.value)} disabled={!enabled} />
               <div className="text-[9px] text-muted-foreground mt-0.5">2500 = 25%</div>
+            </div>
+            <div className="col-span-2">
+              <Label className="text-[10px]">🌙 Moonbag % (keep after grad sell)</Label>
+              <Input
+                className="h-7 text-xs"
+                type="number"
+                min="0"
+                max="50"
+                step="1"
+                value={moonbag}
+                onChange={e => setMoonbag(e.target.value)}
+                disabled={!enabled}
+              />
+              <div className="text-[9px] text-muted-foreground mt-0.5">
+                0 = sell 100%. 20 = keep 20% of tokens for further upside (status → moonbag).
+              </div>
             </div>
           </div>
 
