@@ -3617,6 +3617,7 @@ async function sendProWelcomeDM(chatId: number, expiryDate: string) {
   await sendMessageWithButtons(chatId, text, buttons);
 }
 
+// ─── AI Conversational Assistant for All Registered Users ───
 const aiChatRateMap = new Map<string, number[]>();
 
 // ─── AI Memory & Context for TG ───
