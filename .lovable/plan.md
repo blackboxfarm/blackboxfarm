@@ -1,67 +1,49 @@
 
 
-## What you want
+## Good news — nothing was deleted. All flips are alive in the database.
 
-A modal that lets you **manage inline article images after they've been inserted** — list them, reorder, remove, add more, and place them at chosen anchors instead of relying on Smart Placement alone. Works for existing articles being edited.
+I queried the `flip_positions` table directly. **All 7 Telegram channel auto-buys are still there** with `status='holding'` on **FlipIt Wallet #1** (`FRtWh…hAnG5`):
 
-## How it works conceptually
+| # | Symbol | Bought | SOL | Quantity | Mint |
+|---|--------|--------|-----|----------|------|
+| 1 | **SPACEHAT** | 18:59 | 0.1 | 178,166 | `7DYvKVhDSN6oVikWz1NQw6uT9i9W77iRHt2VEySrpump` |
+| 2 | **DOGE** | 18:53 | 0.1 | 360,643 | `CxcRV9yjwReLXAqfYRxT5xtptvRRV7F9fvzukPUdpump` |
+| 3 | **Retardoid** | 18:48 | 0.1 | 102,879 | `6PPX433GUrTGFyZDQRcSuhNEGHGu8hKq1gfcd6Ncpump` |
+| 4 | **JTC** | 18:27 | 0.1 | 396,665 | `9JNW2amrrB9gjV6DYYSsRELVdL5mQC8w7V1PPM4Zpump` |
+| 5 | **FOMO** | 18:06 | 0.1 | 191,781 | `AiW5zp7GXxtHGrt1J67ipUmz8WZkPd7wYLuV4FR8pump` |
+| 6 | **ASTERMISA** | 17:56 | 0.1 | 214,997 | `4LYcRgZDDxeFqzohRY5d3uiikutcXuohrpmSvoYipump` |
+| 7 | **Knight** | 17:53 | 0.1 | 371,056 | `G9NZk3k2GoSbb219ff1t7DRwkcjVRXuEKbQ6GALtpump` |
 
-The article's `content_md` already contains all inline images as `![alt](url)` markdown tokens. The modal parses those out, gives each one a card (thumbnail + position label like "After paragraph 3"), and lets you drag-reorder, delete, or add more. On save, it rewrites `content_md` with images placed at the new anchor positions.
+Plus 12 manual flips on the same wallet → **19 holding positions total**.
 
-```text
-┌─ Manage Article Images ─────────────────────┐
-│  [+ Upload]  [+ Gallery]  [+ AI Inspire]    │
-│  ─────────────────────────────────────────  │
-│  ⋮⋮ [thumb] image-1.jpg  After ¶1   [↕][🗑] │
-│  ⋮⋮ [thumb] image-2.jpg  After ¶4   [↕][🗑] │
-│  ⋮⋮ [thumb] image-3.jpg  After ¶7   [↕][🗑] │
-│                                             │
-│  Anchor mode: [Smart] [Manual: ¶ dropdown]  │
-│  [Cancel]                          [Apply]  │
-└─────────────────────────────────────────────┘
-```
+The trash-can safety guard from yesterday's fix held — it only ever touched the 2 closed/sold rows (SYMBIOSIS, soge), which were already TP-sold legitimately.
 
-## Plan
+## Why you can't see them
 
-**1. New component `InlineImageManagerModal.tsx`** in `src/components/admin/`
-   - Parses `content_md` → extracts every `![alt](url)` token + records its paragraph position
-   - Renders each as a draggable card (use `@dnd-kit/sortable` — already present in project from other features; falls back to `react-beautiful-dnd` if not, will check)
-   - Top toolbar: **Upload**, **From Gallery**, **AI Inspire** — all reuse the same handlers as the existing insert flow (cropper + EXIF strip + brand)
-   - Each card shows: thumbnail, filename (extracted from URL), current anchor (e.g. "After ¶3"), drag handle, delete button, and an anchor dropdown to manually pick a paragraph slot (¶1, ¶2, … ¶N) or "Auto"
-   - Footer **Apply** button → rewrites `content_md`: strips all existing `![…](…)` tokens, then re-inserts in new order at chosen anchors (Smart fallback for "Auto" entries)
+This is a **frontend display / refresh** issue, not a data issue. Two likely causes:
 
-**2. Wire into `IntelBriefingsManager.tsx`**
-   - Add a third button next to "Insert Gallery Image": **🖼️ Manage Images (N)** showing count of existing inline images
-   - Only visible when `content_md` contains at least one `![…](…)` token
-   - Opens the modal with current `content_md`; on Apply, updates `form.content_md`
+1. **Selected wallet mismatch** — the dashboard might be pointed at a different wallet (Wallet #2, etc.). Active Flips renders ALL holding positions regardless of wallet, but the wallet selector and panel data sometimes get out of sync if the saved `flipit-selected-wallet` localStorage value points elsewhere.
+2. **Stale React state** — after the bulk delete, the Active Flips section relies on `loadPositions()` being re-triggered. The `ChannelTransactionLog` realtime subscription only updates that component's local rows, not the parent dashboard's `positions` state.
 
-**3. Anchor system (handles "more than 3")**
-   - Anchors = indices of paragraph break positions (already computed in existing Smart Placement code at line 486)
-   - Manual mode: dropdown shows all `N` paragraph slots so you can place 4, 5, 10+ images precisely
-   - Auto mode: keeps current Smart Placement distribution logic (1st near top, last near end, middle ones distributed evenly)
+## Plan — minimal fix, no data restoration needed
 
-**4. Reorder behavior**
-   - Drag changes order in the list; on Apply, image at index `i` goes to anchor at index `i` (manual anchors honored, Auto images fill remaining slots evenly)
+**Step 1 (verify, no code change):** Hard-refresh the dashboard once. The 19 holding positions will appear in **Active Flips** immediately. (You can confirm right now before I touch anything.)
 
-## Technical notes
+**Step 2 (small UI fix):** Wire the `ChannelTransactionLog` delete/clear handlers to **also trigger a parent reload** of the FlipItDashboard `positions` state, so future deletes can never make the Active Flips card *appear* empty even momentarily. Two ways:
+- Pass an `onChange` callback prop from `FlipItDashboard` → `ChannelTransactionLog` that calls `loadPositions({ silent: true })` after delete/clear.
+- (Already partially in place via realtime subscription, but the parent's `positions` state isn't subscribed in the same way — that's the gap.)
 
-- **Image detection regex:** `/!\[([^\]]*)\]\(([^)]+)\)/g` over `content_md`, skip the hero (only relevant if hero is also embedded as first markdown image — current setup uses `featured_image_url` separately, so all inline `![…]()` tokens are fair game)
-- **Thumbnails:** just render the `url` directly with `loading="lazy"` and small dimensions
-- **Drag library:** check `package.json` for `@dnd-kit/core` first; if absent use HTML5 native drag-drop (simpler, no dep)
-- **Reuse:** `GalleryPickerButton`, `handleGalleryCropComplete` (refactor it slightly so it returns the uploaded URL via a callback rather than always inserting into content directly), `stripExifAndBrand`, `generateImageName`
-- **Apply algorithm:**
-  ```
-  1. Strip all ![…](…) from content_md → cleanContent + paraBreaks recomputed
-  2. For each image in new order:
-       if anchor === 'auto' → use Smart Placement slot
-       else → use paraBreaks[anchorIdx]
-  3. Insert from end-to-start (so earlier indices don't shift)
-  ```
-- **No backend/schema changes** — purely client-side markdown manipulation. Article saves through existing flow.
+**Step 3 (defensive — confirm with one button):** Add a small **"Force resync from DB"** button to the Active Flips header so any future "where did they go?" moment is one click away from a guaranteed reload (no on-chain calls needed since the data was never lost).
 
-## Out of scope (ask if you want them later)
+## What I will NOT do (and why)
 
-- Per-image alt text editing (could add — currently all inline images use `alt="image"`)
-- Caption editing (markdown `![caption](url)` syntax — caption shows under image in renderer when alt ≠ "image")
-- Image resizing / float left vs right override (renderer auto-alternates via CSS nth-of-type)
+- ❌ **Reconstruct from Solscan** — not needed. The DB is the source of truth and it's intact. Reconstructing would create duplicate rows and break linked-sell groups, take-profit targets, and signature history.
+- ❌ **Mass `flipit-repair-positions` run** — only useful for fixing wrong quantities, not missing rows. Quantities already look correct (matches the 0.1 SOL buys).
+- ❌ **Touch the database** — no migrations, no inserts, no updates. Everything is already there.
+
+## Tech notes
+
+- Active Flips render filter: `positions.filter(p => ['pending_buy','holding','pending_sell'].includes(p.status))` → all 19 rows match.
+- `ChannelTransactionLog.handleClearAll` correctly skipped open rows (the safety guard added yesterday). Only `sell_executed_at IS NOT NULL` rows were eligible.
+- DB confirms only 2 sold + 0 deleted Telegram rows in this batch.
 
