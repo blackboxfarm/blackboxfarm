@@ -87,7 +87,7 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
 
     setSaving(true);
     try {
-      const patch: Record<string, unknown> = {
+      const basePatch = {
         graduation_sell_enabled: enabled,
         graduation_sell_trigger_pct: tNum,
         graduation_sell_max_capture_pct: mxNum,
@@ -95,18 +95,18 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
         graduation_sell_trail_drop_pct: tdNum,
         graduation_sell_slippage_bps: slNum,
       };
-      if (!enabled) {
-        patch.graduation_sell_status = 'disabled';
-        patch.graduation_sell_armed_at = null;
-        patch.graduation_sell_arming_price_usd = null;
-        patch.graduation_sell_peak_price_usd = null;
-      } else if (status === 'disabled') {
-        patch.graduation_sell_status = 'disabled';
-      }
+      const resetPatch = !enabled
+        ? {
+            graduation_sell_status: 'disabled',
+            graduation_sell_armed_at: null,
+            graduation_sell_arming_price_usd: null,
+            graduation_sell_peak_price_usd: null,
+          }
+        : {};
 
       const { error } = await supabase
         .from('flip_positions')
-        .update(patch)
+        .update({ ...basePatch, ...resetPatch })
         .eq('id', positionId);
       if (error) throw error;
       toast.success(enabled ? '🎓 Graduation Sell armed' : 'Graduation Sell disabled');
