@@ -2368,22 +2368,26 @@ export function FlipItDashboard() {
       });
 
       if (dryRun) {
-        if (data?.phantomCount > 0) {
+        const imported = data?.importedCount || 0;
+        if (data?.phantomCount > 0 || imported > 0) {
           toast.info(
-            `Found ${data.phantomCount} phantom position(s) in ${activeWallet.label} with no on-chain tokens. Click "Sync & Clean" to mark them as sold.`,
-            { duration: 8000 }
+            `${activeWallet.label}: ${data?.phantomCount || 0} phantom, ${imported} missing live holding(s) ready to rebuild. Click "Sync & Clean" to apply.`,
+            { duration: 9000 }
           );
         } else {
           toast.success(`${activeWallet.label} is fully in sync with on-chain data!`);
         }
       } else {
-        if (data?.cleanedCount > 0) {
-          toast.success(`Cleaned ${data.cleanedCount} phantom position(s) in ${activeWallet.label}. Reloading...`);
+        const cleaned = data?.cleanedCount || 0;
+        const imported = data?.importedCount || 0;
+        const backfilled = data?.backfilledCount || 0;
+        if (cleaned > 0 || imported > 0 || backfilled > 0) {
+          toast.success(`Synced ${activeWallet.label}: ${imported} rebuilt, ${backfilled} corrected, ${cleaned} cleaned. Reloading...`);
           await loadPositions({ silent: false });
         } else if (data?.phantomCount > 0) {
           toast.info(`Found ${data.phantomCount} phantom positions in ${activeWallet.label} but none were cleaned (check logs)`);
         } else {
-          toast.success(`${activeWallet.label} is in sync - nothing to clean`);
+          toast.success(`${activeWallet.label} is in sync - nothing to fix`);
         }
       }
     } catch (err: any) {
