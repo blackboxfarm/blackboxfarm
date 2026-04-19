@@ -554,7 +554,7 @@ serve(withRunLog('flipit-execute', async (req) => {
       return ok({ ok: true, skipped: 'no active flipit action requested' });
     }
 
-    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, priorityFeeMicroLamports, jitoTipLamports, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -1782,6 +1782,8 @@ serve(withRunLog('flipit-execute', async (req) => {
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
+            priorityFeeMicroLamports, // Optional explicit µLamport override (graduation sell)
+            jitoTipLamports, // Optional Jito tip override (graduation sell — applies if Jito enabled globally)
             walletId: position.wallet_id, // Pass wallet ID for direct DB lookup
             unwrapSol: true, // CRITICAL: Unwrap WSOL to native SOL to prevent stranded wrapped SOL
           },
@@ -2034,6 +2036,8 @@ serve(withRunLog('flipit-execute', async (req) => {
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
+            priorityFeeMicroLamports, // Optional explicit µLamport override (graduation sell)
+            jitoTipLamports, // Optional Jito tip override (graduation sell)
             walletId: position.wallet_id,
           },
         });

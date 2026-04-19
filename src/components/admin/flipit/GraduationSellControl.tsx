@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { GraduationCap, Activity, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { GraduationCap, Activity, CheckCircle2, AlertTriangle, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -21,6 +22,9 @@ export interface GraduationSellSettings {
   graduation_sell_arming_price_usd?: number | null;
   graduation_sell_peak_price_usd?: number | null;
   graduation_sell_executed_at?: string | null;
+  graduation_sell_priority_fee_mode?: string | null;
+  graduation_sell_priority_fee_micro_lamports?: number | null;
+  graduation_sell_jito_tip_lamports?: number | null;
   bonding_curve_progress?: number | null;
 }
 
@@ -37,6 +41,12 @@ const DEFAULTS = {
   minCapture: 0,
   trailDrop: 15,
   slippage: 2500,
+};
+
+const FALLBACK_GLOBAL = {
+  feeMode: 'turbo' as const,
+  feeMicro: null as number | null,
+  jitoTip: 1_000_000, // 0.001 SOL
 };
 
 function statusBadge(status?: string | null) {
@@ -64,11 +74,57 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
   const [trailDrop, setTrailDrop] = useState<string>(String(position.graduation_sell_trail_drop_pct ?? DEFAULTS.trailDrop));
   const [slippage, setSlippage] = useState<string>(String(position.graduation_sell_slippage_bps ?? DEFAULTS.slippage));
 
+  // Execution speed (per-position overrides). Empty/null = inherit from global flipit_settings.
+  const hasOverrides =
+    position.graduation_sell_priority_fee_mode != null ||
+    position.graduation_sell_priority_fee_micro_lamports != null ||
+    position.graduation_sell_jito_tip_lamports != null;
+  const [useGlobal, setUseGlobal] = useState<boolean>(!hasOverrides);
+  const [feeMode, setFeeMode] = useState<string>(position.graduation_sell_priority_fee_mode ?? FALLBACK_GLOBAL.feeMode);
+  const [feeMicro, setFeeMicro] = useState<string>(
+    position.graduation_sell_priority_fee_micro_lamports != null
+      ? String(position.graduation_sell_priority_fee_micro_lamports)
+      : ''
+  );
+  const [jitoTipSol, setJitoTipSol] = useState<string>(
+    position.graduation_sell_jito_tip_lamports != null
+      ? (position.graduation_sell_jito_tip_lamports / 1e9).toFixed(6)
+      : (FALLBACK_GLOBAL.jitoTip / 1e9).toFixed(6)
+  );
+
+  // Live global defaults fetched on open so user sees the actual fallback values.
+  const [globalDefaults, setGlobalDefaults] = useState(FALLBACK_GLOBAL);
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const { data } = await supabase
+        .from('flipit_settings')
+        .select(
+          'graduation_sell_priority_fee_mode_default, graduation_sell_priority_fee_micro_lamports_default, graduation_sell_jito_tip_lamports_default'
+        )
+        .maybeSingle();
+      if (data) {
+        setGlobalDefaults({
+          feeMode: (data.graduation_sell_priority_fee_mode_default as any) ?? FALLBACK_GLOBAL.feeMode,
+          feeMicro: data.graduation_sell_priority_fee_micro_lamports_default ?? null,
+          jitoTip: data.graduation_sell_jito_tip_lamports_default ?? FALLBACK_GLOBAL.jitoTip,
+        });
+      }
+    })();
+  }, [open]);
+
   const status = position.graduation_sell_status ?? 'disabled';
   const isActive = !!position.graduation_sell_enabled && status !== 'disabled' && status !== 'executed' && status !== 'failed';
   const arming = position.graduation_sell_arming_price_usd;
   const peak = position.graduation_sell_peak_price_usd;
   const captureX = arming && currentPrice ? currentPrice / arming : null;
+
+  // Resolved values used at execution time.
+  const resolvedFeeMode = useGlobal ? globalDefaults.feeMode : feeMode;
+  const resolvedJitoTipSol = useGlobal
+    ? (globalDefaults.jitoTip / 1e9).toFixed(6)
+    : jitoTipSol;
+  const resolvedFeeMicro = useGlobal ? globalDefaults.feeMicro : (feeMicro ? parseInt(feeMicro, 10) : null);
 
   const save = async () => {
     const tNum = parseFloat(trigger);
@@ -85,15 +141,35 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
       if (!Number.isFinite(slNum) || slNum < 100 || slNum > 9000) return toast.error('Slippage must be 100–9000 bps');
     }
 
+    // Validate execution speed overrides only when not using global.
+    let feeMicroVal: number | null = null;
+    let jitoTipLamportsVal: number | null = null;
+    if (enabled && !useGlobal) {
+      if (feeMicro.trim() !== '') {
+        const n = parseInt(feeMicro, 10);
+        if (!Number.isFinite(n) || n < 5_000 || n > 2_000_000)
+          return toast.error('Priority fee µLamports must be 5,000–2,000,000');
+        feeMicroVal = n;
+      }
+      const tipSol = parseFloat(jitoTipSol);
+      if (!Number.isFinite(tipSol) || tipSol < 0 || tipSol > 0.05)
+        return toast.error('Jito tip must be 0–0.05 SOL');
+      jitoTipLamportsVal = Math.round(tipSol * 1e9);
+    }
+
     setSaving(true);
     try {
-      const basePatch = {
+      const basePatch: Record<string, unknown> = {
         graduation_sell_enabled: enabled,
         graduation_sell_trigger_pct: tNum,
         graduation_sell_max_capture_pct: mxNum,
         graduation_sell_min_capture_pct: mnNum,
         graduation_sell_trail_drop_pct: tdNum,
         graduation_sell_slippage_bps: slNum,
+        // Execution speed overrides — null means "inherit global"
+        graduation_sell_priority_fee_mode: useGlobal ? null : feeMode,
+        graduation_sell_priority_fee_micro_lamports: useGlobal ? null : feeMicroVal,
+        graduation_sell_jito_tip_lamports: useGlobal ? null : jitoTipLamportsVal,
       };
       const resetPatch = !enabled
         ? {
@@ -133,7 +209,7 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
             GRAD
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 p-3 space-y-2.5" align="end">
+        <PopoverContent className="w-96 p-3 space-y-2.5" align="end">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold flex items-center gap-1.5">
@@ -203,6 +279,71 @@ export const GraduationSellControl: React.FC<Props> = ({ positionId, position, c
               <Label className="text-[10px]">Slippage (bps) — graduation candles need wide tolerance</Label>
               <Input className="h-7 text-xs" type="number" value={slippage} onChange={e => setSlippage(e.target.value)} disabled={!enabled} />
               <div className="text-[9px] text-muted-foreground mt-0.5">2500 = 25%</div>
+            </div>
+          </div>
+
+          {/* Execution Speed */}
+          <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-300">
+                <Zap className="h-3 w-3" />
+                Execution Speed
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-[9px] text-muted-foreground">Use global defaults</Label>
+                <Switch checked={useGlobal} onCheckedChange={setUseGlobal} disabled={!enabled} />
+              </div>
+            </div>
+
+            {!useGlobal && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px]">Priority fee preset</Label>
+                  <Select value={feeMode} onValueChange={setFeeMode} disabled={!enabled}>
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="medium">Medium (~0.0005 SOL)</SelectItem>
+                      <SelectItem value="high">High (~0.001 SOL)</SelectItem>
+                      <SelectItem value="turbo">Turbo (~0.0075 SOL)</SelectItem>
+                      <SelectItem value="ultra">Ultra (~0.009 SOL)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Custom µLamports (opt.)</Label>
+                  <Input
+                    className="h-7 text-xs"
+                    type="number"
+                    placeholder="overrides preset"
+                    value={feeMicro}
+                    onChange={e => setFeeMicro(e.target.value)}
+                    disabled={!enabled}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-[10px]">Jito tip (SOL) — applies if Jito bundles enabled</Label>
+                  <Input
+                    className="h-7 text-xs"
+                    type="number"
+                    step="0.0001"
+                    value={jitoTipSol}
+                    onChange={e => setJitoTipSol(e.target.value)}
+                    disabled={!enabled}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="text-[9px] text-muted-foreground font-mono leading-snug">
+              Will use: <span className="text-foreground">{resolvedFeeMode}</span>
+              {resolvedFeeMicro != null && <> + <span className="text-foreground">{resolvedFeeMicro.toLocaleString()} µLamports</span></>}
+              {' '}+ Jito tip <span className="text-foreground">{resolvedJitoTipSol} SOL</span>
+              {useGlobal && <span className="ml-1 opacity-70">(global default)</span>}
+            </div>
+            <div className="text-[9px] text-amber-300/80 leading-snug">
+              ⚠ Graduation candles are highly competitive. Higher fees = better fill guarantee.
             </div>
           </div>
 

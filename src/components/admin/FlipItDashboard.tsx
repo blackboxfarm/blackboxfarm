@@ -31,6 +31,7 @@ import TweetTemplateEditor from './TweetTemplateEditor';
 import { FlipItNotificationSettings } from './FlipItNotificationSettings';
 import { EditLimitOrderDialog } from './flipit/EditLimitOrderDialog';
 import { GraduationSellControl } from './flipit/GraduationSellControl';
+import { GraduationSellGlobalDefaults } from './flipit/GraduationSellGlobalDefaults';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -5655,6 +5656,11 @@ export function FlipItDashboard() {
       {/* Telegram Notification Settings */}
       <div className="mb-6">
         <FlipItNotificationSettings />
+      </div>
+
+      {/* Graduation Sell — Global Execution Speed Defaults */}
+      <div className="mb-6">
+        <GraduationSellGlobalDefaults />
       </div>
 
       {/* Tweet Templates Section - moved below Active Flips */}
