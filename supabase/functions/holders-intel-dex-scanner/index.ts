@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { obfuscateTicker } from '../_shared/ticker-obfuscator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -220,8 +221,9 @@ async function broadcastDexAlert(supabase: any, trigger: DetectedTrigger): Promi
 
     const triggerConfig = TRIGGER_CONFIGS[trigger.triggerType];
     const boostLabel = trigger.boostCount ? ` (${trigger.boostCount}x)` : '';
+    const safeTicker = obfuscateTicker(trigger.symbol);
     const message = `🚀${triggerConfig.comment}${boostLabel}\n` +
-      `$ ${trigger.symbol} (${trigger.name})\n` +
+      `${safeTicker} (${trigger.name})\n` +
       `CA: \`${trigger.tokenMint}\``;
 
     const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
