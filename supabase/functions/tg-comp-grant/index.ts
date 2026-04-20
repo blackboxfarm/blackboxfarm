@@ -132,18 +132,18 @@ serve(async (req) => {
     let dmError: string | null = null;
 
     if (botToken) {
-      const greeting = display_name ? `Hey ${display_name}! 👋` : 'Hey! 👋';
+      const greeting = display_name ? `Hey ${display_name}!` : 'Hey!';
       const text =
         custom_message ||
-        `${greeting}\n\n🎉 *Your HoldersIntel Pro account is now active!*\n\n` +
-        `✅ Tier: *Pro*\n` +
-        `📅 Valid until: *${expiresAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}*\n\n` +
-        `You now have full access to:\n` +
-        `• Unlimited /holders reports with deep dev forensics\n` +
-        `• /dev wallet genealogy + KYC root tracing\n` +
-        `• Bubble Map premium tier on blackbox.farm\n` +
-        `• Live Allstar mint alerts\n\n` +
-        `Type /help to see everything you can do. Welcome aboard! 🚀`;
+        `${greeting} 👋\n\n` +
+        `Good news — I just hooked you up with a full *Pro* account on HoldersIntel, on the house. ` +
+        `It's good for a year (until *${expiresAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}*), no payment needed.\n\n` +
+        `You can already start using everything right here in this chat:\n` +
+        `• \`/holders <CA>\` — full holder + dev forensics\n` +
+        `• \`/dev <CA>\` — wallet genealogy + KYC root\n` +
+        `• Just paste a contract address and I'll auto-run the report\n\n` +
+        `If you also want the web dashboard + Bubble Map premium, head to *blackbox.farm*, sign up with any email, then come back here and send \`/link\` — I'll walk you through tying the two accounts together (takes ~15 seconds).\n\n` +
+        `Either way you're all set. Type \`/help\` anytime to see the full command list. Welcome in 🚀`;
 
       try {
         const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
