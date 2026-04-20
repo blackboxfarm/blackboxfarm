@@ -335,22 +335,30 @@ function FunctionRow({
   onToggle,
   dayStart,
   dayEnd,
+  toggle,
 }: {
   row: RegistryEntry & { stats: RunStats };
   isExpanded: boolean;
   onToggle: () => void;
   dayStart: string;
   dayEnd: string;
+  toggle?: any;
 }) {
   const { stats } = row;
   const rate = stats.total > 0 ? Math.round((stats.successes / stats.total) * 100) : -1;
   const cat = row.category || 'general';
   const isPrimary = (row.priority_tier || 'legacy') === 'primary';
+  const isDisabled = toggle?.enabled === false;
 
   return (
     <>
       <TableRow
-        className={cn("cursor-pointer", stats.failures > 0 && "bg-red-500/5", !isPrimary && "opacity-60")}
+        className={cn(
+          "cursor-pointer",
+          stats.failures > 0 && "bg-red-500/5",
+          !isPrimary && "opacity-60",
+          isDisabled && "opacity-40 bg-red-950/10"
+        )}
         onClick={onToggle}
       >
         <TableCell compact>
@@ -400,10 +408,13 @@ function FunctionRow({
         <TableCell compact className="text-right font-mono hidden sm:table-cell">
           {stats.avg_duration > 0 ? `${stats.avg_duration}` : '—'}
         </TableCell>
+        <TableCell compact className="text-center">
+          <FunctionEnabledToggle functionName={row.function_name} toggle={toggle} />
+        </TableCell>
       </TableRow>
       {isExpanded && (
         <TableRow>
-          <TableCell compact colSpan={8} className="p-0">
+          <TableCell compact colSpan={9} className="p-0">
             <ExpandedRunDetails functionName={row.function_name} dayStart={dayStart} dayEnd={dayEnd} />
           </TableCell>
         </TableRow>
