@@ -5,6 +5,7 @@ import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 import { withRunLog } from "../_shared/run-logger.ts";
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 import { upsertHealthSnapshot } from "../_shared/snapshot-writer.ts";
+import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,8 +18,8 @@ const TWITTER_HANDLE = 'HoldersIntel';
 const MIN_HOLDERS = 50;
 const SKIP_GRADES: string[] = ['F', 'D-', 'D', 'D+']; // Block low-grade tokens from public posting
 
-// Fallback template if DB fetch fails
-const FALLBACK_TEMPLATE = `🔍 $\{TICKER} Holder Analysis
+// Fallback template if DB fetch fails — {TICKER} is obfuscated by processTemplate
+const FALLBACK_TEMPLATE = `🔍 {TICKER} Holder Analysis
 
 📊 {TOTAL_WALLETS} Total | ✅ {REAL_HOLDERS} Real
 {DUST_PERCENTAGE}% Dust | Health: {HEALTH_GRADE}
@@ -220,6 +221,10 @@ async function fetchAISummary(
 
 function processTemplate(template: string, data: any): string {
   const tickerUpper = (data.symbol || 'TOKEN').toUpperCase();
+  // Telegram thin-formatting protocol: strip $ cashtag and interleave U+200B
+  // between letters so external bots (e.g. Rick, Maestro) cannot match the symbol
+  // and trigger reply-chain loops. See mem://features/telegram-bot/thin-formatting-protocol.
+  const tickerSafe = obfuscateTicker(tickerUpper);
   const rawName = data.name || data.tokenName || 'Unknown';
   // Sanitize URL-like names to prevent Twitter hijacking the OG preview
   const tokenName = sanitizeUrlLikeName(rawName);
@@ -238,8 +243,8 @@ function processTemplate(template: string, data: any): string {
   const website = data.website || 'N/A';
   
   return template
-    .replace(/\{TICKER\}/g, `$ ${tickerUpper}`)
-    .replace(/\{ticker\}/g, tickerUpper)
+    .replace(/\{TICKER\}/g, tickerSafe)
+    .replace(/\{ticker\}/g, tickerSafe)
     .replace(/\{NAME\}/g, tokenName)
     .replace(/\{name\}/g, tokenName)
     .replace(/\{comment1\}/g, comment1)
