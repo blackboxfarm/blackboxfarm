@@ -261,121 +261,19 @@ export function CampaignCreatorSecurityView({ userId }: { userId: string }) {
   );
 }
 
-// View for super admin showing system-wide security
+// View for super admin — points to the real Security Activity dashboard.
+// The previous mock dashboard (hardcoded "98.5% / 47 / 156" stats and fake
+// IP 192.168.1.100 alerts) was removed because none of it was wired to data.
 export function SuperAdminSecurityView() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">System Security Overview</h2>
-        <Badge variant="outline" className="bg-red-100 text-red-800">Super Admin</Badge>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="text-sm text-muted-foreground">Security Score</div>
-          <div className="text-2xl font-bold text-green-600">98.5%</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-sm text-muted-foreground">Active Threats</div>
-          <div className="text-2xl font-bold text-red-600">2</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-sm text-muted-foreground">Failed Logins (24h)</div>
-          <div className="text-2xl font-bold">47</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-sm text-muted-foreground">Security Events</div>
-          <div className="text-2xl font-bold">156</div>
-        </Card>
-      </div>
-
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Critical Security Alerts</h3>
-        <div className="space-y-3">
-          <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg">
-            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
-            <div className="flex-1">
-              <div className="font-medium">Suspicious Login Pattern Detected</div>
-              <div className="text-sm text-muted-foreground">Multiple failed attempts from IP 192.168.1.100</div>
-              <div className="text-xs text-muted-foreground">5 minutes ago</div>
-            </div>
-            <Button variant="outline" size="sm">Investigate</Button>
-          </div>
-          <div className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-            <div className="flex-1">
-              <div className="font-medium">Rate Limit Threshold Reached</div>
-              <div className="text-sm text-muted-foreground">User ID: 123456789 exceeded API limits</div>
-              <div className="text-xs text-muted-foreground">1 hour ago</div>
-            </div>
-            <Button variant="outline" size="sm">Review</Button>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4">System Health</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span>Database Security</span>
-              <Badge className="bg-green-100 text-green-800">Healthy</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>API Gateway</span>
-              <Badge className="bg-green-100 text-green-800">Healthy</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Authentication Service</span>
-              <Badge className="bg-green-100 text-green-800">Healthy</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Encryption Service</span>
-              <Badge className="bg-yellow-100 text-yellow-800">Warning</Badge>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4">User Security Stats</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span>2FA Enabled Users</span>
-              <span className="font-medium">89.2%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Strong Passwords</span>
-              <span className="font-medium">94.1%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Verified Emails</span>
-              <span className="font-medium">76.8%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Active Sessions</span>
-              <span className="font-medium">1,247</span>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Security Actions</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <Button variant="outline" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            Run Security Scan
-          </Button>
-          <Button variant="outline" className="flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Review Access Logs
-          </Button>
-          <Button variant="outline" className="flex items-center gap-2">
-            <Eye className="h-4 w-4" />
-            Monitor Sessions
-          </Button>
-        </div>
-      </Card>
-    </div>
+    <Card className="p-8 text-center space-y-3">
+      <Shield className="h-10 w-10 text-primary mx-auto" />
+      <h2 className="text-2xl font-bold">System Security</h2>
+      <p className="text-muted-foreground max-w-lg mx-auto">
+        Open the <strong>Security Activity</strong> tab for the real, live event
+        timeline (audit log, 2FA changes, account lockdowns, SMS alerts).
+      </p>
+      <Badge variant="outline">Super Admin</Badge>
+    </Card>
   );
 }
