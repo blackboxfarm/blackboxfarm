@@ -96,10 +96,10 @@ Deno.serve(withRunLog('calculate-developer-integrity', async (req) => {
         // Clamp to 0-100
         score = Math.max(0, Math.min(100, score));
 
-        // Determine trust level
+        // Determine trust level (must match developer_profiles_trust_level_check:
+        // trusted | neutral | suspicious | scammer | blacklisted)
         let trustLevel = 'neutral';
         if (score >= 80) trustLevel = 'trusted';
-        else if (score >= 60) trustLevel = 'verified';
         else if (score < 40) trustLevel = 'suspicious';
         if (rugPulls > 0 || score < 20) trustLevel = 'scammer';
 

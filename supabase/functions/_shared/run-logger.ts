@@ -97,34 +97,22 @@ export function createRunLogger(
         }
       }
 
-      const { data: updatedRow, error: updateError } = await supabase.from('edge_function_runs').update({
+      // Single upsert path with onConflict: 'id' avoids the duplicate-key race
+      // between the fire-and-forget INSERT and this completion write.
+      const { error: upsertError } = await supabase.from('edge_function_runs').upsert({
+        id: runId,
+        function_name: functionName,
+        invocation_source: invocationSource,
+        started_at: startedAt,
         finished_at: new Date().toISOString(),
         duration_ms: durationMs,
         status,
         error_message: errorMessage?.slice(0, 2000),
         metadata: finalMeta,
-      }).eq('id', runId).select('id').maybeSingle();
+      }, { onConflict: 'id' });
 
-      if (updateError) {
-        throw updateError;
-      }
-
-      if (!updatedRow) {
-        const { error: upsertError } = await supabase.from('edge_function_runs').upsert({
-          id: runId,
-          function_name: functionName,
-          invocation_source: invocationSource,
-          started_at: startedAt,
-          finished_at: new Date().toISOString(),
-          duration_ms: durationMs,
-          status,
-          error_message: errorMessage?.slice(0, 2000),
-          metadata: finalMeta,
-        });
-
-        if (upsertError) {
-          throw upsertError;
-        }
+      if (upsertError) {
+        throw upsertError;
       }
     } catch (e) {
       console.warn(`[RunLogger] update failed:`, e);
