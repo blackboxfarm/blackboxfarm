@@ -16,6 +16,7 @@ import { Flame, RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Clock, 
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { detectSocialPlatform } from '@/utils/socialPlatformDetector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
