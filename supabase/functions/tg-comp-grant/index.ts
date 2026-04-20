@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { telegram_user_id, display_name, custom_message, dry_run } = await req.json();
+    const { telegram_user_id, display_name, custom_message, dry_run, promo_code } = await req.json();
 
     if (!telegram_user_id || typeof telegram_user_id !== 'string') {
       return new Response(JSON.stringify({ error: 'telegram_user_id (string) required' }), {
@@ -49,6 +49,62 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, dry_run: true, telegram_user_id }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Optional: tester program promo code (e.g. DM10) — track redemption + bump counter
+    let promoInfo: { code: string; trial_days: number; tier: string; expires_at: string } | null = null;
+    if (promo_code && typeof promo_code === 'string') {
+      const code = promo_code.trim().toUpperCase();
+      const { data: promo, error: promoErr } = await supabase
+        .from('promo_codes')
+        .select('id, code, max_uses, current_uses, trial_duration_days, tier_granted, source_label, is_active')
+        .eq('code', code)
+        .maybeSingle();
+      if (promoErr) throw new Error(`Promo lookup failed: ${promoErr.message}`);
+      if (!promo) throw new Error(`Promo code "${code}" not found`);
+      if (!promo.is_active) throw new Error(`Promo code "${code}" is inactive`);
+      if (promo.current_uses >= promo.max_uses) throw new Error(`Promo code "${code}" is fully redeemed (${promo.current_uses}/${promo.max_uses})`);
+
+      // Skip if this TG user already redeemed an active promo
+      const { data: existingRedemption } = await supabase
+        .from('promo_redemptions')
+        .select('id, expires_at')
+        .eq('telegram_user_id', telegram_user_id)
+        .eq('is_active', true)
+        .gte('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (!existingRedemption) {
+        const promoExpires = new Date(Date.now() + promo.trial_duration_days * 24 * 60 * 60 * 1000);
+        const { error: redErr } = await supabase.from('promo_redemptions').insert({
+          promo_code_id: promo.id,
+          telegram_user_id,
+          expires_at: promoExpires.toISOString(),
+          is_active: true,
+          source_label: promo.source_label || `Manual grant — ${code}`,
+        });
+        if (redErr) throw new Error(`Failed inserting promo_redemption: ${redErr.message}`);
+
+        const { error: bumpErr } = await supabase
+          .from('promo_codes')
+          .update({ current_uses: promo.current_uses + 1, updated_at: new Date().toISOString() })
+          .eq('id', promo.id);
+        if (bumpErr) throw new Error(`Failed bumping promo counter: ${bumpErr.message}`);
+
+        promoInfo = {
+          code,
+          trial_days: promo.trial_duration_days,
+          tier: promo.tier_granted,
+          expires_at: promoExpires.toISOString(),
+        };
+      } else {
+        promoInfo = {
+          code,
+          trial_days: promo.trial_duration_days,
+          tier: promo.tier_granted,
+          expires_at: existingRedemption.expires_at,
+        };
+      }
     }
 
     // Check for existing active comp/paid sub
