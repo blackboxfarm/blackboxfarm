@@ -13,9 +13,20 @@ import { format } from "date-fns";
 // ── Unified Security Event Timeline ──
 function SecurityTimeline() {
   const [searchUser, setSearchUser] = useState("");
+  const [showNoise, setShowNoise] = useState(false);
+
+  // Meaningful security event types (everything else is generic CRUD noise)
+  const SECURITY_EVENTS = [
+    "2FA_ENABLED", "2FA_DISABLED",
+    "LOCKDOWN", "LOCKDOWN_RELEASED",
+    "LOGIN_ANOMALY", "PASSWORD_CHANGE",
+    "EMAIL_CHANGE", "PHONE_CHANGE", "SESSION_KILL",
+    "INSERT_SENSITIVE_DATA", "UPDATE_SENSITIVE_DATA",
+    "INSERT_WALLET_BACKUP",
+  ];
 
   const { data: auditLogs, isLoading: auditLoading, refetch: refetchAudit } = useQuery({
-    queryKey: ["security-audit-logs", searchUser],
+    queryKey: ["security-audit-logs", searchUser, showNoise],
     queryFn: async () => {
       let q = supabase
         .from("security_audit_log")
@@ -24,6 +35,9 @@ function SecurityTimeline() {
         .limit(100);
       if (searchUser.trim()) {
         q = q.eq("user_id", searchUser.trim());
+      }
+      if (!showNoise) {
+        q = q.in("event_type", SECURITY_EVENTS);
       }
       const { data, error } = await q;
       if (error) throw error;
@@ -36,7 +50,9 @@ function SecurityTimeline() {
     "2FA_ENABLED": "🔐", "2FA_DISABLED": "⚠️",
     LOGIN_ANOMALY: "🚨", PASSWORD_CHANGE: "🔑",
     EMAIL_CHANGE: "📧", PHONE_CHANGE: "📱",
-    SESSION_KILL: "💀", LOCKDOWN: "🔒",
+    SESSION_KILL: "💀", LOCKDOWN: "🔒", LOCKDOWN_RELEASED: "🔓",
+    INSERT_SENSITIVE_DATA: "🔏", UPDATE_SENSITIVE_DATA: "🔏",
+    INSERT_WALLET_BACKUP: "💾",
   };
 
   return (
@@ -50,9 +66,19 @@ function SecurityTimeline() {
             </CardTitle>
             <CardDescription>All security-related changes across all users</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetchAudit()}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={showNoise ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowNoise((v) => !v)}
+              title="Toggle generic CRUD events (noisy)"
+            >
+              {showNoise ? "All events" : "Security only"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => refetchAudit()}>
+              <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+            </Button>
+          </div>
         </div>
         <Input
           placeholder="Filter by user ID..."
