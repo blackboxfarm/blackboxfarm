@@ -4188,6 +4188,59 @@ export function FlipItDashboard() {
                           <span className="text-amber-500">${order.buy_price_max_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
                         </div>
                       )}
+                      {(() => {
+                        const live = currentPrices[order.token_mint];
+                        if (live == null || !isFinite(live) || live <= 0) {
+                          return (
+                            <div className="mt-1 text-[10px] text-muted-foreground italic">
+                              Live: waiting for next fetch…
+                            </div>
+                          );
+                        }
+                        const inRange = order.monitoring_mode !== 'deep'
+                          && live >= order.buy_price_min_usd
+                          && live <= order.buy_price_max_usd;
+                        const below = order.monitoring_mode !== 'deep' && live < order.buy_price_min_usd;
+                        const above = order.monitoring_mode !== 'deep' && live > order.buy_price_max_usd;
+                        const color = inRange
+                          ? 'text-emerald-500'
+                          : below
+                          ? 'text-sky-400'
+                          : above
+                          ? 'text-rose-400'
+                          : 'text-foreground';
+                        const distanceLabel = (() => {
+                          if (order.monitoring_mode === 'deep') return null;
+                          if (inRange) return 'in trigger range';
+                          const target = below ? order.buy_price_min_usd : order.buy_price_max_usd;
+                          const pct = ((live - target) / target) * 100;
+                          return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% vs ${below ? 'min' : 'max'}`;
+                        })();
+                        return (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="mt-1 inline-flex items-center gap-1 cursor-help">
+                                  <Activity className={`h-3 w-3 ${color} animate-pulse`} />
+                                  <span className={`font-mono text-[11px] ${color}`}>
+                                    Live ${live.toFixed(10).replace(/\.?0+$/, '')}
+                                  </span>
+                                  {distanceLabel && (
+                                    <span className="text-[10px] text-muted-foreground">({distanceLabel})</span>
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                Latest fetched USD price from the unified monitor.
+                                {lastLimitOrderCheck && (
+                                  <> Last update: {new Date(lastLimitOrderCheck).toLocaleTimeString()}.</>
+                                )}
+                                {' '}Auto-buy fires when price enters the green→amber range (Tight) or the volume trigger is met (Deep).
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <span className="font-mono">{order.buy_amount_sol.toFixed(4)} SOL</span>
