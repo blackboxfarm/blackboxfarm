@@ -161,16 +161,40 @@ export function ChannelTransactionLog({ onChange }: ChannelTransactionLogProps =
 
   useEffect(() => {
     load();
-    const channel = supabase
-      .channel("channel-tx-log")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "flip_positions" },
-        () => load()
-      )
-      .subscribe();
+
+    // Only subscribe to realtime when at least one channel has auto-buy enabled.
+    // Otherwise the table is dormant and there's nothing to watch — avoids
+    // pointless reloads on every unrelated flip_positions write.
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+
+    (async () => {
+      const { data: activeRules } = await supabase
+        .from("telegram_channel_config")
+        .select("id")
+        .eq("is_active", true)
+        .eq("flipit_enabled", true)
+        .limit(1);
+
+      if (cancelled || !activeRules || activeRules.length === 0) return;
+
+      const channel = supabase
+        .channel("channel-tx-log")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "flip_positions", filter: "source=eq.telegram" },
+          () => load()
+        )
+        .subscribe();
+
+      cleanup = () => {
+        supabase.removeChannel(channel);
+      };
+    })();
+
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      cleanup?.();
     };
   }, []);
 
