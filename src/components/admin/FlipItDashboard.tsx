@@ -4844,7 +4844,7 @@ export function FlipItDashboard() {
                                       onClick={() => handleUpdateTarget(position.id, mult, effectiveEntryPrice)}
                                     >
                                       <span>{mult}x</span>
-                                      <span className="text-green-500 text-xs">+${(position.buy_amount_usd * (mult - 1)).toFixed(2)}</span>
+                                      <span className="text-green-500 text-xs">+${((position.buy_amount_usd ?? 0) * (mult - 1)).toFixed(2)}</span>
                                     </Button>
                                   ))}
                                 </div>
@@ -5634,7 +5634,7 @@ export function FlipItDashboard() {
                             
                             {/* Invested */}
                             <TableCell compact>
-                              <span className="font-mono text-xs">${position.buy_amount_usd.toFixed(2)}</span>
+                              <span className="font-mono text-xs">${(position.buy_amount_usd ?? 0).toFixed(2)}</span>
                             </TableCell>
                             
                             {/* Sold For */}
