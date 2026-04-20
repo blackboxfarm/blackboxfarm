@@ -1093,7 +1093,10 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           console.log(`💰 SOLD 100%: ${position.token_symbol} | +${realizedPnlSol.toFixed(4)} SOL (${realizedPnlPercent.toFixed(1)}%)`);
 
           // Notify: admin_notifications + Telegram
-          const targetMsg = `🎯 Fantasy TARGET HIT: $${position.token_symbol}\n` +
+          // Telegram thin-formatting protocol: strip $ and interleave U+200B
+          // so external bots can't match the cashtag and trigger reply chains.
+          const safeTicker = obfuscateTicker(position.token_symbol);
+          const targetMsg = `🎯 Fantasy TARGET HIT: ${safeTicker}\n` +
             `🚀 Exit: $${currentPriceUsd.toFixed(8)} (${multiplier.toFixed(2)}x)\n` +
             `💰 P&L: +${realizedPnlSol.toFixed(4)} SOL (+${realizedPnlPercent.toFixed(1)}%)\n` +
             `📊 Entry was: $${position.entry_price_usd.toFixed(8)}\n` +
