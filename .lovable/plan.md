@@ -1,49 +1,68 @@
 
 
-## Good news — nothing was deleted. All flips are alive in the database.
+## Project Health Audit — Last 48 Hours
 
-I queried the `flip_positions` table directly. **All 7 Telegram channel auto-buys are still there** with `status='holding'` on **FlipIt Wallet #1** (`FRtWh…hAnG5`):
+I went through the edge function run table, Postgres error log, and individual function logs. Here is what's actually going wrong, ranked by severity.
 
-| # | Symbol | Bought | SOL | Quantity | Mint |
-|---|--------|--------|-----|----------|------|
-| 1 | **SPACEHAT** | 18:59 | 0.1 | 178,166 | `7DYvKVhDSN6oVikWz1NQw6uT9i9W77iRHt2VEySrpump` |
-| 2 | **DOGE** | 18:53 | 0.1 | 360,643 | `CxcRV9yjwReLXAqfYRxT5xtptvRRV7F9fvzukPUdpump` |
-| 3 | **Retardoid** | 18:48 | 0.1 | 102,879 | `6PPX433GUrTGFyZDQRcSuhNEGHGu8hKq1gfcd6Ncpump` |
-| 4 | **JTC** | 18:27 | 0.1 | 396,665 | `9JNW2amrrB9gjV6DYYSsRELVdL5mQC8w7V1PPM4Zpump` |
-| 5 | **FOMO** | 18:06 | 0.1 | 191,781 | `AiW5zp7GXxtHGrt1J67ipUmz8WZkPd7wYLuV4FR8pump` |
-| 6 | **ASTERMISA** | 17:56 | 0.1 | 214,997 | `4LYcRgZDDxeFqzohRY5d3uiikutcXuohrpmSvoYipump` |
-| 7 | **Knight** | 17:53 | 0.1 | 371,056 | `G9NZk3k2GoSbb219ff1t7DRwkcjVRXuEKbQ6GALtpump` |
+---
 
-Plus 12 manual flips on the same wallet → **19 holding positions total**.
+### 🔴 Tier 1 — Active functional bugs (need fixing)
 
-The trash-can safety guard from yesterday's fix held — it only ever touched the 2 closed/sold rows (SYMBIOSIS, soge), which were already TP-sold legitimately.
+| # | Function | Errors | Root cause | Impact |
+|---|---|---|---|---|
+| 1 | **`flipit-execute`** | 285 (70% of API calls) | All failing with `"buyAmountSol required"` after 226ms — a caller is invoking the buy endpoint without the SOL amount field | Failed buys from web/admin UI. Telegram path works (only 7/58 fail there). |
+| 2 | **`oracle-historical-backfill`** | 96 (100% fail rate) | `duplicate key value violates unique constraint "oracle_backfill_jobs_target_date_key"` — function tries to insert a job for a date already done; no upsert / no skip-if-exists | Cron runs every 15 min and **always fails**. Dead loop. |
+| 3 | **`x-community-enricher`** | 80 (100% fail rate, holders-intel-poster cron) | HTTP 400 on every call; only "RunLogger insert" warnings visible — actual failure cause not being logged before throw | Silent feature breakage. Communities never enriched. |
+| 4 | **`telegram-mtproto-auth`** | 109 / ~12k (0.9%) | HTTP 500 occurring ~once every 3-5 min — likely upstream Telegram MTProto session glitch | Intermittent member-audit failures |
+| 5 | **`telegram-channel-monitor`** | 263 / ~11k (~2.4%) | HTTP 429 — Telegram rate-limit being hit by the 4-shard 15-second cron | Some Telegram channel updates missed |
+| 6 | **`raydium-swap`** | 56 / 229 (24%) | HTTP 400 (last seen yesterday 19:31) | Swap failures, smaller volume |
+| 7 | **`bagless-holders-report`** | 20 (2.3%) | HTTP 500 | Small leak, mostly OK |
+| 8 | **`stripe-webhook`** | 10 HTTP 500 | No log retained; could be signature verification or downstream DB | Payment events possibly dropped |
+| 9 | **`check-subscription`** | 12 HTTP 500 | Same as above — no log body | Subscription gate may flicker |
 
-## Why you can't see them
+---
 
-This is a **frontend display / refresh** issue, not a data issue. Two likely causes:
+### 🟠 Tier 2 — Database errors (unrelated to the function 4xx/5xx)
 
-1. **Selected wallet mismatch** — the dashboard might be pointed at a different wallet (Wallet #2, etc.). Active Flips renders ALL holding positions regardless of wallet, but the wallet selector and panel data sometimes get out of sync if the saved `flipit-selected-wallet` localStorage value points elsewhere.
-2. **Stale React state** — after the bulk delete, the Active Flips section relies on `loadPositions()` being re-triggered. The `ChannelTransactionLog` realtime subscription only updates that component's local rows, not the parent dashboard's `positions` state.
+From `postgres_logs`, last 48h, ranked:
 
-## Plan — minimal fix, no data restoration needed
+| Count | Error | Where |
+|---|---|---|
+| **606** | `duplicate key value violates unique constraint "edge_function_runs_pkey"` | `_shared/run-logger.ts` — race between fire-and-forget INSERT and the UPDATE/UPSERT on completion. Cosmetic, but pollutes logs. |
+| 49 | `invalid input syntax for type uuid: "undefined"` | Some caller is passing the literal string `"undefined"` as a UUID parameter |
+| 17 | `dev_wallet_reputation_trust_level_check` violated | Code is trying to insert a `trust_level` value not allowed by the CHECK constraint |
+| 18 | `invalid input syntax for type json` | Malformed JSON being inserted somewhere |
+| 7 | `column kol_wallets.kol_tier does not exist` | Stale code referencing a removed/renamed column |
+| 7 | `column pumpfun_blacklist.wallet_address does not exist` | Same — stale schema reference |
+| 7 | `column token_search_results.holder_count does not exist` | Same |
+| 7 | `column "COALESCE" does not exist` | A SQL string is missing parentheses — `COALESCE` parsed as identifier |
+| 7 | RLS denial on `premium_feature_views` | Insert policy missing for the role attempting it |
+| 4 | `null value in "first_seen_at" of token_lifecycle` | Insert path not setting required field |
+| 3 | RLS denial on `holders_page_visits` | Same RLS issue pattern |
+| 1 | `developer_profiles.master_wallet does not exist` | Stale reference |
 
-**Step 1 (verify, no code change):** Hard-refresh the dashboard once. The 19 holding positions will appear in **Active Flips** immediately. (You can confirm right now before I touch anything.)
+---
 
-**Step 2 (small UI fix):** Wire the `ChannelTransactionLog` delete/clear handlers to **also trigger a parent reload** of the FlipItDashboard `positions` state, so future deletes can never make the Active Flips card *appear* empty even momentarily. Two ways:
-- Pass an `onChange` callback prop from `FlipItDashboard` → `ChannelTransactionLog` that calls `loadPositions({ silent: true })` after delete/clear.
-- (Already partially in place via realtime subscription, but the parent's `positions` state isn't subscribed in the same way — that's the gap.)
+### 🟢 Tier 3 — Healthy
 
-**Step 3 (defensive — confirm with one button):** Add a small **"Force resync from DB"** button to the Active Flips header so any future "where did they go?" moment is one click away from a guaranteed reload (no on-chain calls needed since the data was never lost).
+These ran 100% green over 48h: `sol-price`, `wallet-genealogy-scanner`, `flipit-notify`, `flipit-tweet`, `admin-notify`, `holders-intel-poster`, `holders-intel-scheduler`, `harvest-token-socials`, `dex-paid-checker`, `funnel-feed-scanner`, `post-share-card-twitter`, `search-surge-scanner`, `solscan-creator-lookup`, `promo-poster`. The core trading + intel pipeline is solid.
 
-## What I will NOT do (and why)
+---
 
-- ❌ **Reconstruct from Solscan** — not needed. The DB is the source of truth and it's intact. Reconstructing would create duplicate rows and break linked-sell groups, take-profit targets, and signature history.
-- ❌ **Mass `flipit-repair-positions` run** — only useful for fixing wrong quantities, not missing rows. Quantities already look correct (matches the 0.1 SOL buys).
-- ❌ **Touch the database** — no migrations, no inserts, no updates. Everything is already there.
+### Recommended fix order (when you give the go-ahead)
 
-## Tech notes
+1. **`flipit-execute` "buyAmountSol required"** — find the caller, add the missing field. Highest impact (real failed buys).
+2. **`oracle-historical-backfill` duplicate key** — change INSERT to `ON CONFLICT (target_date) DO NOTHING`. One-line fix, kills 96 errors/day.
+3. **`x-community-enricher` HTTP 400** — wire the actual error message into RunLogger before throwing so we can see *why* it 400s. Then fix.
+4. **Stale-column SQL** (`kol_tier`, `pumpfun_blacklist.wallet_address`, `token_search_results.holder_count`, `developer_profiles.master_wallet`, the `COALESCE` typo) — grep the codebase for each and remove/rename.
+5. **`run-logger.ts` duplicate-key noise** — either change the upsert path to `onConflict: 'id'` or skip the second insert when the first already succeeded. Cosmetic but 606 errors/day.
+6. **`trust_level` CHECK violation** — find the writer, align value with allowed enum. 17 errors/day.
+7. **RLS on `premium_feature_views` and `holders_page_visits`** — add the missing INSERT policy or fix the calling auth context.
+8. **`stripe-webhook` / `check-subscription` 500s** — add structured error logging via `withRunLog` so the next failure surfaces the cause.
+9. **`telegram-channel-monitor` 429s** — slow one of the 4 shards or stagger the 15-second cadence.
+10. **`telegram-mtproto-auth` 500s** — wrap in retry + log Telegram error code.
 
-- Active Flips render filter: `positions.filter(p => ['pending_buy','holding','pending_sell'].includes(p.status))` → all 19 rows match.
-- `ChannelTransactionLog.handleClearAll` correctly skipped open rows (the safety guard added yesterday). Only `sell_executed_at IS NOT NULL` rows were eligible.
-- DB confirms only 2 sold + 0 deleted Telegram rows in this batch.
+### Out of scope unless you want it
+- The `dex-top-200` 502 from yesterday was a one-off (1/95 runs) — ignore.
+- Collation version warnings on `template1`/`postgres` — Supabase platform thing, not actionable from our side.
 
