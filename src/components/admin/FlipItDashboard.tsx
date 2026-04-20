@@ -4332,18 +4332,29 @@ export function FlipItDashboard() {
                         >
                           <Pencil className="h-3 w-3" />
                         </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleBuyNowLimitOrder(order)}
-                          disabled={isExecutingLimitOrder === order.id || !selectedWallet}
-                          className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 h-8 px-2"
-                        >
-                          {isExecutingLimitOrder === order.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Rocket className="h-3 w-3" />
-                          )}
-                        </Button>
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                onClick={() => handleBuyNowLimitOrder(order)}
+                                disabled={isExecutingLimitOrder === order.id || !selectedWallet}
+                                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 h-8 px-2"
+                              >
+                                {isExecutingLimitOrder === order.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Rocket className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              <strong>Buy Now</strong> — bypass the limit-order trigger and execute the configured
+                              {' '}{order.buy_amount_sol.toFixed(4)} SOL buy immediately at the current market price.
+                              The auto-trigger keeps watching the live price shown in the Price Range column.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <Button
                           size="sm"
                           variant="destructive"
