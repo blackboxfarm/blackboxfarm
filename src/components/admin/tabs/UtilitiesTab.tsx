@@ -7,9 +7,6 @@ import { IntelligenceFeatureToggles } from '@/components/admin/IntelligenceFeatu
 import { ReputationBackfillPanel } from '@/components/admin/ReputationBackfillPanel';
 import { SocialLinksBackfillPanel } from '@/components/admin/SocialLinksBackfillPanel';
 import { VigilStatusPanel } from '@/components/admin/VigilStatusPanel';
-import { CompProGrantPanel } from '@/components/admin/CompProGrantPanel';
-
-// Lazy load each utility component
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
 const HoldersResourceDashboard = lazy(() => import("@/components/admin/HoldersResourceDashboard").then(m => ({ default: m.HoldersResourceDashboard })));
 const SolPriceAnalytics = lazy(() => import("@/components/admin/SolPriceAnalytics").then(m => ({ default: m.SolPriceAnalytics })));
@@ -29,7 +26,6 @@ export default function UtilitiesTab() {
 
   return (
     <div className="space-y-4">
-      <CompProGrantPanel />
       <ReputationBackfillPanel />
       <SocialLinksBackfillPanel />
       <VigilStatusPanel />
