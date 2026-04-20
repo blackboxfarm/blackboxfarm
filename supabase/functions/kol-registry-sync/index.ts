@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from "../_shared/run-logger.ts";
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -89,7 +90,12 @@ function parseLeaderboardData(html: string): ParsedKOL[] {
 
 Deno.serve(withRunLog('kol-registry-sync', async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders }
+  if (!await isFunctionEnabled('kol-registry-sync')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  });
   }
 
   const startTime = Date.now();

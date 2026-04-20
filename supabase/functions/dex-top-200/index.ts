@@ -3,6 +3,7 @@ import { createApiLogger } from '../_shared/api-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { scrapeDexTopPages } from "../_shared/dex-top-pages.ts";
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -249,7 +250,12 @@ async function autoQueueNewTokens(supabase: any, finalTokens: any[]): Promise<nu
 
 Deno.serve(withRunLog('dex-top-200', async (req, logger) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders }
+  if (!await isFunctionEnabled('dex-top-200')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  });
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

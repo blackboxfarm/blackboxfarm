@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { obfuscateTicker } from '../_shared/ticker-obfuscator.ts';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -265,7 +266,12 @@ function delay(ms: number): Promise<void> {
 
 Deno.serve(withRunLog('holders-intel-dex-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders }
+  if (!await isFunctionEnabled('holders-intel-dex-scanner')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  });
   }
 
   const startTime = Date.now();

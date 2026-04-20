@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from "../_shared/run-logger.ts";
 import { assertUpsert } from "../_shared/db-assert.ts";
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,7 +40,12 @@ function getEdgeFunctionPurpose(functionName: string): string {
 
 Deno.serve(withRunLog('morning-report', async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders }
+  if (!await isFunctionEnabled('morning-report')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  });
   }
 
   const startTime = Date.now();

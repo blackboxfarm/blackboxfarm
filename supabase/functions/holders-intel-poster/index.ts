@@ -6,6 +6,7 @@ import { withRunLog } from "../_shared/run-logger.ts";
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 import { upsertHealthSnapshot } from "../_shared/snapshot-writer.ts";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -428,7 +429,12 @@ async function postTweet(tweetText: string, supabaseUrl: string, anonKey: string
 
 Deno.serve(withRunLog('holders-intel-poster', async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders }
+  if (!await isFunctionEnabled('holders-intel-poster')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  });
   }
 
   const startTime = Date.now();

@@ -4,6 +4,7 @@ import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -97,7 +98,12 @@ interface FunnelSource {
 
 Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders }
+  if (!await isFunctionEnabled('funnel-feed-scanner')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  });
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
