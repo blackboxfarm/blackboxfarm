@@ -245,8 +245,11 @@ serve(withRunLog('stripe-webhook', async (req) => {
       }
     }
   } catch (err) {
-    logStep("Processing error", { error: String(err) });
-    return new Response("Processing error", { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    logStep("Processing error", { error: message, stack });
+    // Throw so withRunLog records the actual cause in edge_function_runs.
+    throw new Error(`stripe-webhook processing failed: ${message}`);
   }
 
   return new Response(JSON.stringify({ received: true }), {

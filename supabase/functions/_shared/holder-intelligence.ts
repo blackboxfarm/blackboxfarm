@@ -126,7 +126,7 @@ export async function fetchHistoricalDelta(
   try {
     const { data, error } = await supabase
       .from('token_search_results')
-      .select('created_at, holder_count, health_score, top5_concentration, tier_dust, tier_retail, tier_serious, tier_whale')
+      .select('created_at, health_score, top5_concentration, tier_dust, tier_retail, tier_serious, tier_whale')
       .eq('token_mint', tokenMint)
       .order('created_at', { ascending: false })
       .limit(1);
@@ -243,8 +243,7 @@ export async function detectSocialChanges(
 export interface KOLMatch {
   wallet_address: string;
   twitter_handle: string | null;
-  kol_tier: string | null;
-  trust_score: number | null;
+  sns_name: string | null;
   is_active: boolean;
 }
 
@@ -261,7 +260,7 @@ export async function matchKOLWallets(
   try {
     const { data, error } = await supabase
       .from('kol_wallets')
-      .select('wallet_address, twitter_handle, kol_tier, trust_score, is_active')
+      .select('wallet_address, twitter_handle, sns_name, is_active')
       .in('wallet_address', holderAddresses)
       .eq('is_active', true);
 

@@ -414,7 +414,20 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
       }, { onConflict: 'community_id' });
 
       if (upsertError) {
-        console.error('Failed to upsert community:', upsertError);
+        console.error('[x-community-enricher] Failed to upsert community:', JSON.stringify({
+          message: upsertError.message,
+          details: upsertError.details,
+          hint: upsertError.hint,
+          code: upsertError.code,
+        }));
+        // Surface the real cause instead of silently returning 400 later.
+        return new Response(JSON.stringify({
+          error: `Community upsert failed: ${upsertError.message}`,
+          code: upsertError.code,
+          details: upsertError.details,
+          hint: upsertError.hint,
+          communityId,
+        }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       const allUsernames = [...communityData.adminUsernames, ...communityData.moderatorUsernames];

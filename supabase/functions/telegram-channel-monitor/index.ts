@@ -2701,11 +2701,16 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                     // ============== LIVE MODE: REAL SCALP BUY ==============
                     console.log(`[telegram-channel-monitor] SCALP LIVE MODE: Triggering buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${scalpBuyAmount}`);
 
+                    // flipit-execute requires buyAmountSol (USD-only is rejected). Convert here.
+                    const scalpSolPrice = await fetchSolPriceForConversion();
+                    const scalpBuyAmountSol = scalpSolPrice > 0 ? (scalpBuyAmount / scalpSolPrice) : 0;
+
                     const buyRequest = {
                       walletId,
                       action: 'buy',
                       tokenMint,
                       buyAmountUsd: scalpBuyAmount,
+                      buyAmountSol: scalpBuyAmountSol,
                       targetMultiplier: 1 + (config.scalp_take_profit_pct || 50) / 100,
                       source: 'telegram_scalp',
                       sourceChannelId: config.id,
@@ -3038,12 +3043,18 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                 const diamondMinPeakX = config.kingkong_diamond_min_peak_x || 5;
                 const diamondMaxHoldHours = config.kingkong_diamond_max_hold_hours || 24;
 
+                // flipit-execute requires buyAmountSol — convert USD to SOL once for both legs.
+                const kkSolPrice = await fetchSolPriceForConversion();
+                const quickAmountSol = kkSolPrice > 0 ? (quickAmount / kkSolPrice) : 0;
+                const diamondAmountSol = kkSolPrice > 0 ? (diamondAmount / kkSolPrice) : 0;
+
                 // POSITION 1: Quick Flip
                 const quickFlipRequest = {
                   walletId,
                   action: 'buy',
                   tokenMint,
                   buyAmountUsd: quickAmount,
+                  buyAmountSol: quickAmountSol,
                   targetMultiplier: quickMultiplier,
                   source: 'telegram_kingkong_quick',
                   sourceChannelId: config.id,
@@ -3057,6 +3068,7 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                   action: 'buy',
                   tokenMint,
                   buyAmountUsd: diamondAmount,
+                  buyAmountSol: diamondAmountSol,
                   targetMultiplier: 999,  // No fixed target - trailing stop only
                   source: 'telegram_kingkong_diamond',
                   sourceChannelId: config.id,
@@ -3159,12 +3171,16 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                     console.log(`[telegram-channel-monitor] Legacy FlipIt: SKIPPING - Liquidity NOT LOCKED`);
                   } else {
                     try {
+                      const legacyUsd = currentRuleResult.buyAmount;
+                      const legacySolPrice = await fetchSolPriceForConversion();
+                      const legacyBuyAmountSol = legacySolPrice > 0 ? (legacyUsd / legacySolPrice) : 0;
                       await supabase.functions.invoke('flipit-execute', {
                         body: {
                           walletId: config.flipit_wallet_id,
                           action: 'buy',
                           tokenMint,
-                          buyAmountUsd: currentRuleResult.buyAmount,
+                          buyAmountUsd: legacyUsd,
+                          buyAmountSol: legacyBuyAmountSol,
                           targetMultiplier: currentRuleResult.sellTarget,
                           stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
                         }

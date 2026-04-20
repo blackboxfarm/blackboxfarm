@@ -86,7 +86,8 @@ serve(withRunLog('check-subscription', async (req) => {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
+    const stack = error instanceof Error ? error.stack : undefined;
+    logStep("ERROR", { message: errorMessage, stack });
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
