@@ -137,21 +137,45 @@ Deno.serve(withRunLog('oracle-historical-backfill', async (req) => {
       }
 
       // Create new job
+      const targetDateStr = nextDate.toISOString().split('T')[0];
       const { data: newJob, error: insertError } = await supabase
         .from('oracle_backfill_jobs')
-        .insert({
-          target_date: nextDate.toISOString().split('T')[0],
-          status: 'pending'
-        })
+        .upsert(
+          { target_date: targetDateStr, status: 'pending' },
+          { onConflict: 'target_date', ignoreDuplicates: true }
+        )
         .select()
-        .single();
+        .maybeSingle();
 
       if (insertError) {
         console.error('[Backfill] Error creating job:', insertError);
         throw insertError;
       }
 
-      pendingJob = newJob;
+      if (!newJob) {
+        // Row already existed (ignored by upsert) — fetch it
+        const { data: existingJob } = await supabase
+          .from('oracle_backfill_jobs')
+          .select('*')
+          .eq('target_date', targetDateStr)
+          .maybeSingle();
+
+        if (!existingJob || existingJob.status !== 'pending') {
+          // Already processed — nothing to do this run
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: `Date ${targetDateStr} already processed (status=${existingJob?.status || 'unknown'})`,
+              results: []
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+          );
+        }
+
+        pendingJob = existingJob;
+      } else {
+        pendingJob = newJob;
+      }
     }
 
     // Process the pending job

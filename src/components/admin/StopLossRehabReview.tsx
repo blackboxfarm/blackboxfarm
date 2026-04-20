@@ -178,7 +178,7 @@ export default function StopLossRehabReview() {
             await (supabase
               .from('pumpfun_blacklist' as any)
               .update({ is_active: false } as any)
-              .eq('wallet_address', pos.creator_wallet)
+              .eq('identifier', pos.creator_wallet)
               .eq('is_active', true) as any);
 
             toast.success(`Dev ${pos.creator_wallet.slice(0, 8)}... un-blacklisted (losses: ${newLossCount}, rugs: ${newRugged})`);
