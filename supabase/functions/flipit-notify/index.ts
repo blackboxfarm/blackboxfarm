@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { obfuscateTicker } from '../_shared/ticker-obfuscator.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,9 +60,10 @@ function formatBuyMessage(params: NotifyParams): string {
   const shortMint = tokenMint.slice(0, 8) + '...' + tokenMint.slice(-4);
   const shortWallet = walletAddress ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4) : 'N/A';
   const shortSig = txSignature ? txSignature.slice(0, 12) + '...' : 'Pending';
-  
+  const safeTicker = obfuscateTicker(tokenSymbol);
+
   let msg = `🟢 *FLIPIT BUY EXECUTED*\n\n`;
-  msg += `📊 *Token:* ${tokenSymbol}${tokenName ? ` (${tokenName})` : ''}\n`;
+  msg += `📊 *Token:* ${safeTicker}${tokenName ? ` (${tokenName})` : ''}\n`;
   msg += `🔗 \`${shortMint}\`\n\n`;
   
   msg += `💰 *Trade Details:*\n`;
@@ -131,9 +133,10 @@ function formatSellMessage(params: NotifyParams): string {
   const entryValue = buyAmountSol || buyAmountUsd || 0;
   const exitValue = sellAmountSol || sellAmountUsd || 0;
   const xReturn = entryValue > 0 ? (exitValue / entryValue) : 0;
-  
+  const safeTicker = obfuscateTicker(tokenSymbol);
+
   let msg = `${emoji} *FLIPIT SELL EXECUTED*\n\n`;
-  msg += `📊 *Token:* ${tokenSymbol}${tokenName ? ` (${tokenName})` : ''}\n`;
+  msg += `📊 *Token:* ${safeTicker}${tokenName ? ` (${tokenName})` : ''}\n`;
   msg += `🔗 \`${shortMint}\`\n\n`;
   
   msg += `${profitEmoji} *P&L Summary:*\n`;

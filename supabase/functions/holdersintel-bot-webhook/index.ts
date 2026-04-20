@@ -6,6 +6,7 @@ import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts";
 import { sanitizeTelegramInput, isInputSafeToProcess } from "../_shared/telegram-input-sanitizer.ts";
+import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -2890,12 +2891,9 @@ async function handleAlerts(chatId: number, telegramUserId: string, args: string
   );
 }
 
-// ─── Obfuscate ticker symbols to prevent other bots from matching ───
-function obfuscateTicker(s: string): string {
-  if (s.length <= 2) return s;
-  const mid = Math.floor(s.length / 2);
-  return s.slice(0, mid) + '\u200B' + s.slice(mid);
-}
+// obfuscateTicker imported from _shared/ticker-obfuscator.ts (thin-formatting protocol).
+// Strips $ cashtag and interleaves U+200B between every letter so external bots
+// (Rick, Maestro, etc.) cannot match the symbol and trigger reply-chain loops.
 
 // ─── Group Chat Auto-Scan: detect pasted CAs and fire mini /risk ───
 async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: string, replyToMsgId?: number) {
