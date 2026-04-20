@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, lazy, Suspense } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2, Eye, MessageSquare, ClipboardList, Users, BarChart3 } from "lucide-react";
+import { Plus, Trash2, Eye, MessageSquare, ClipboardList, Users, BarChart3, Gift } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LazyLoader } from '@/components/ui/lazy-loader';
+
+// Lazy load Comp Pro Grant panel
+const CompProGrantPanel = lazy(() => import("@/components/admin/CompProGrantPanel").then(m => ({ default: m.CompProGrantPanel })));
 
 // ─── Promo Codes Sub-Tab ───
 function PromoCodesSection() {
@@ -312,16 +316,25 @@ function QuestionnairesSection() {
 
 // ─── Main Testers Tab ───
 export default function TestersTab() {
+  const [activeSubTab, setActiveSubTab] = useState("grant");
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">🧪 Tester Program</h2>
-      <Tabs defaultValue="codes" className="w-full">
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
         <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1">
+          <TabsTrigger value="grant"><Gift className="h-4 w-4 mr-1" />Grant Pro</TabsTrigger>
           <TabsTrigger value="codes">🎟️ Promo Codes</TabsTrigger>
           <TabsTrigger value="testers">👥 Active Testers</TabsTrigger>
           <TabsTrigger value="feedback">💬 Feedback</TabsTrigger>
           <TabsTrigger value="questionnaires">📋 Questionnaires</TabsTrigger>
         </TabsList>
+        <TabsContent value="grant">
+          {activeSubTab === "grant" && (
+            <Suspense fallback={<LazyLoader />}>
+              <CompProGrantPanel />
+            </Suspense>
+          )}
+        </TabsContent>
         <TabsContent value="codes"><PromoCodesSection /></TabsContent>
         <TabsContent value="testers"><ActiveTestersSection /></TabsContent>
         <TabsContent value="feedback"><FeedbackInboxSection /></TabsContent>
