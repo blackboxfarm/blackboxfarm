@@ -238,8 +238,8 @@ serve(async (req) => {
     // Admin notification log
     await supabase.from('admin_notifications').insert({
       notification_type: 'comp_grant',
-      title: '🎁 Comp Pro Granted',
-      message: `Granted yearly Pro to TG ${telegram_user_id}${display_name ? ` (${display_name})` : ''}. DM: ${dmStatus}${dmError ? ` (${dmError})` : ''}.`,
+      title: promoInfo ? `🎟️ Tester Grant (${promoInfo.code})` : '🎁 Comp Pro Granted',
+      message: `Granted yearly Pro to TG ${telegram_user_id}${display_name ? ` (${display_name})` : ''}${promoInfo ? ` via ${promoInfo.code}` : ''}. DM: ${dmStatus}${dmError ? ` (${dmError})` : ''}.`,
       metadata: {
         telegram_user_id,
         display_name,
@@ -249,6 +249,7 @@ serve(async (req) => {
         dm_status: dmStatus,
         dm_error: dmError,
         granted_by: userRes.user.id,
+        promo: promoInfo,
       },
     });
 
@@ -261,6 +262,7 @@ serve(async (req) => {
         linked_user_id: link?.linked_user_id || null,
         dm_status: dmStatus,
         dm_error: dmError,
+        promo: promoInfo,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
