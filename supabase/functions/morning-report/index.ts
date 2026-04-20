@@ -415,27 +415,38 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         const totalEstMb = bigTables.reduce((s, t) => s + t.est_size_mb, 0);
         const totalRows = bigTables.reduce((s, t) => s + t.rows, 0);
 
+        // Plan limit is configurable via env. Default = Supabase Pro (8 GB).
+        // Set DB_PLAN_LIMIT_MB to override (e.g. 500 for Free, 8192 for Pro, 16384 for upgraded).
+        const planLimitMb = Number(Deno.env.get('DB_PLAN_LIMIT_MB') ?? '8192');
+        const warnPctRaw = Number(Deno.env.get('DB_WARN_PCT') ?? '50');
+        const critPctRaw = Number(Deno.env.get('DB_CRIT_PCT') ?? '80');
+        const warnPct = isFinite(warnPctRaw) ? warnPctRaw : 50;
+        const critPct = isFinite(critPctRaw) ? critPctRaw : 80;
+        const usagePct = planLimitMb > 0 ? Math.round((totalEstMb / planLimitMb) * 100) : 0;
+
         dbSizeInfo = {
           total_size_mb: Math.round(totalEstMb),
           total_rows: totalRows,
           top_tables: bigTables.slice(0, 15),
           is_estimate: true,
-          plan_limit_mb: 500, // Supabase free tier = 500MB
-          usage_pct: Math.round((totalEstMb / 500) * 100),
+          plan_limit_mb: planLimitMb,
+          usage_pct: usagePct,
+          warn_pct: warnPct,
+          crit_pct: critPct,
         };
 
-        if (totalEstMb > 400) {
+        if (usagePct >= critPct) {
           alerts.push({
             level: 'critical',
             category: 'database_size',
-            title: `Database ~${Math.round(totalEstMb)}MB estimated (80%+ of 500MB limit)`,
+            title: `Database ~${Math.round(totalEstMb)}MB estimated (${usagePct}% of ${planLimitMb}MB limit)`,
             detail: `Top table: ${bigTables[0]?.name} (${bigTables[0]?.rows.toLocaleString()} rows). Consider pruning old api_usage_log, activity_logs, or arb_ tables.`,
           });
-        } else if (totalEstMb > 250) {
+        } else if (usagePct >= warnPct) {
           alerts.push({
             level: 'warning',
             category: 'database_size',
-            title: `Database ~${Math.round(totalEstMb)}MB estimated (50%+ of limit)`,
+            title: `Database ~${Math.round(totalEstMb)}MB estimated (${usagePct}% of ${planLimitMb}MB limit)`,
             detail: `Top table: ${bigTables[0]?.name} (${bigTables[0]?.rows.toLocaleString()} rows)`,
           });
         }
