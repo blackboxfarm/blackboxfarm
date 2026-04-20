@@ -5689,6 +5689,51 @@ export type Database = {
         }
         Relationships: []
       }
+      function_toggles: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          disabled_at: string | null
+          disabled_by: string | null
+          disabled_reason: string | null
+          enabled: boolean
+          function_name: string
+          last_skipped_at: string | null
+          skip_count_24h: number
+          skip_count_reset_at: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          disabled_at?: string | null
+          disabled_by?: string | null
+          disabled_reason?: string | null
+          enabled?: boolean
+          function_name: string
+          last_skipped_at?: string | null
+          skip_count_24h?: number
+          skip_count_reset_at?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          disabled_at?: string | null
+          disabled_by?: string | null
+          disabled_reason?: string | null
+          enabled?: boolean
+          function_name?: string
+          last_skipped_at?: string | null
+          skip_count_24h?: number
+          skip_count_reset_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       funnel_feed_bot_state: {
         Row: {
           id: number
@@ -19882,6 +19927,10 @@ export type Database = {
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
+      record_function_skip: {
+        Args: { p_function_name: string }
+        Returns: undefined
+      }
       refresh_buyer_intent_signals: { Args: never; Returns: undefined }
       refresh_master_token_directory: { Args: never; Returns: undefined }
       refresh_mesh_summary: { Args: never; Returns: undefined }
