@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { PUMPFUN_API_BASE, PUMPFUN_HEADERS } from '../_shared/pumpfun-api.ts';
 import { getHeliusApiKey } from '../_shared/helius-client.ts';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -309,6 +310,11 @@ async function fetchHeliusUrls(mint: string, apiKey: string): Promise<string[]> 
 // ─── MAIN FUNCTION ───
 
 Deno.serve(withRunLog('backfill-x-communities', async (req) => {
+  if (!await isFunctionEnabled('backfill-x-communities')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

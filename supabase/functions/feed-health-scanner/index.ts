@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,6 +23,11 @@ const corsHeaders = {
  * Helius cost: ~5-10 credits per token = ~1,800-3,600 credits/day (~55k-110k/month)
  */
 Deno.serve(withRunLog('feed-health-scanner', async (req) => {
+  if (!await isFunctionEnabled('feed-health-scanner')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

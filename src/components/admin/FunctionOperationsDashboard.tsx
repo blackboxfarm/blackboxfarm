@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { FunctionEnabledToggle, useFunctionToggles } from './function-table/FunctionEnabledToggle';
 
 interface RegistryEntry {
   function_name: string;
@@ -75,6 +76,9 @@ export function FunctionOperationsDashboard() {
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
   const dayStart = `${dateStr}T00:00:00.000Z`;
   const dayEnd = `${dateStr}T23:59:59.999Z`;
+
+  // Function toggles (enabled/disabled state per function)
+  const { data: toggles = {} } = useFunctionToggles();
 
   // Fetch registry
   const { data: registry = [] } = useQuery({
@@ -279,16 +283,17 @@ export function FunctionOperationsDashboard() {
               <TableHead compact className="text-right w-20">❌</TableHead>
               <TableHead compact className="w-28">Rate</TableHead>
               <TableHead compact className="text-right w-20 hidden sm:table-cell">Avg ms</TableHead>
+              <TableHead compact className="w-24 text-center">Enabled</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {runsLoading ? (
               <TableRow>
-                <TableCell compact colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
+                <TableCell compact colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
               </TableRow>
             ) : mergedRows.length === 0 ? (
               <TableRow>
-                <TableCell compact colSpan={8} className="text-center py-8 text-muted-foreground">No functions found</TableCell>
+                <TableCell compact colSpan={9} className="text-center py-8 text-muted-foreground">No functions found</TableCell>
               </TableRow>
             ) : mergedRows.map((row) => (
               <FunctionRow
@@ -298,6 +303,7 @@ export function FunctionOperationsDashboard() {
                 onToggle={() => setExpandedRow(expandedRow === row.function_name ? null : row.function_name)}
                 dayStart={dayStart}
                 dayEnd={dayEnd}
+                toggle={toggles[row.function_name]}
               />
             ))}
           </TableBody>
@@ -329,22 +335,30 @@ function FunctionRow({
   onToggle,
   dayStart,
   dayEnd,
+  toggle,
 }: {
   row: RegistryEntry & { stats: RunStats };
   isExpanded: boolean;
   onToggle: () => void;
   dayStart: string;
   dayEnd: string;
+  toggle?: any;
 }) {
   const { stats } = row;
   const rate = stats.total > 0 ? Math.round((stats.successes / stats.total) * 100) : -1;
   const cat = row.category || 'general';
   const isPrimary = (row.priority_tier || 'legacy') === 'primary';
+  const isDisabled = toggle?.enabled === false;
 
   return (
     <>
       <TableRow
-        className={cn("cursor-pointer", stats.failures > 0 && "bg-red-500/5", !isPrimary && "opacity-60")}
+        className={cn(
+          "cursor-pointer",
+          stats.failures > 0 && "bg-red-500/5",
+          !isPrimary && "opacity-60",
+          isDisabled && "opacity-40 bg-red-950/10"
+        )}
         onClick={onToggle}
       >
         <TableCell compact>
@@ -394,10 +408,13 @@ function FunctionRow({
         <TableCell compact className="text-right font-mono hidden sm:table-cell">
           {stats.avg_duration > 0 ? `${stats.avg_duration}` : '—'}
         </TableCell>
+        <TableCell compact className="text-center">
+          <FunctionEnabledToggle functionName={row.function_name} toggle={toggle} />
+        </TableCell>
       </TableRow>
       {isExpanded && (
         <TableRow>
-          <TableCell compact colSpan={8} className="p-0">
+          <TableCell compact colSpan={9} className="p-0">
             <ExpandedRunDetails functionName={row.function_name} dayStart={dayStart} dayEnd={dayEnd} />
           </TableCell>
         </TableRow>

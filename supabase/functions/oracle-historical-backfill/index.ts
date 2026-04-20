@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,6 +77,11 @@ function extractTokensFromHtml(html: string): string[] {
 }
 
 Deno.serve(withRunLog('oracle-historical-backfill', async (req) => {
+  if (!await isFunctionEnabled('oracle-historical-backfill')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

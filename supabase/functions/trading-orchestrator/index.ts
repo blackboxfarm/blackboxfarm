@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from "../_shared/run-logger.ts";
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,6 +20,11 @@ const TRADING_FUNCTIONS = [
 ];
 
 Deno.serve(withRunLog('trading-orchestrator', async (req) => {
+  if (!await isFunctionEnabled('trading-orchestrator')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

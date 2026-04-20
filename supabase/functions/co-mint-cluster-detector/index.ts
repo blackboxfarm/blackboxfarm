@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,6 +8,11 @@ const corsHeaders = {
 };
 
 Deno.serve(withRunLog('co-mint-cluster-detector', async (req, logger) => {
+  if (!await isFunctionEnabled('co-mint-cluster-detector')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

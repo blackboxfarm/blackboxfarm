@@ -1,6 +1,7 @@
 // Hourly cron worker: compares VIP vs Public channel posting patterns
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { assertInsert } from '../_shared/db-assert.ts';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -190,6 +191,11 @@ async function analyzePair(
 }
 
 Deno.serve(async (req) => {
+  if (!await isFunctionEnabled('channel-pair-analyzer')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
     const supabase = createClient(

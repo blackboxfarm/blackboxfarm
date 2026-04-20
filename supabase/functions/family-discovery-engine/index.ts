@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getHeliusRpcUrl, redactHeliusSecrets } from '../_shared/helius-client.ts';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -118,6 +119,11 @@ function analyzeTransaction(tx: any, seedWallet: string): Evidence[] {
 }
 
 Deno.serve(withRunLog('family-discovery-engine', async (req) => {
+  if (!await isFunctionEnabled('family-discovery-engine')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {

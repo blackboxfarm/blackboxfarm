@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 enableHeliusTracking('developer-wallet-rescan');
 
 const corsHeaders = {
@@ -277,6 +278,11 @@ async function sendMintAlert(
 }
 
 Deno.serve(withRunLog('developer-wallet-rescan', async (req) => {
+  if (!await isFunctionEnabled('developer-wallet-rescan')) {
+    return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+    });
+  }
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
