@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { broadcastToBlackBox } from '../_shared/telegram-broadcast.ts';
 import { getSolPriceQuick } from '../_shared/sol-price-fetcher.ts';
+import { obfuscateTicker } from '../_shared/ticker-obfuscator.ts';
 enableHeliusTracking('pumpfun-fantasy-sell-monitor');
 
 /**
