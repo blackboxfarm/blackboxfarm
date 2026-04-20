@@ -17,6 +17,7 @@ interface GrantResult {
   linked_user_id?: string | null;
   dm_status?: 'sent' | 'failed' | 'no_token';
   dm_error?: string | null;
+  promo?: { code: string; trial_days: number; tier: string; expires_at: string } | null;
   error?: string;
 }
 
@@ -24,6 +25,7 @@ export function CompProGrantPanel() {
   const [tgId, setTgId] = useState('7112908136');
   const [name, setName] = useState('Mike');
   const [customMsg, setCustomMsg] = useState('');
+  const [promoCode, setPromoCode] = useState('DM10');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GrantResult | null>(null);
 
@@ -40,6 +42,7 @@ export function CompProGrantPanel() {
           telegram_user_id: tgId.trim(),
           display_name: name.trim() || undefined,
           custom_message: customMsg.trim() || undefined,
+          promo_code: promoCode.trim() || undefined,
         },
       });
       if (error) throw error;
@@ -96,6 +99,16 @@ export function CompProGrantPanel() {
               placeholder="e.g. Mike"
             />
           </div>
+        </div>
+        <div>
+          <Label htmlFor="promo-code">Tester Promo Code (optional)</Label>
+          <Input
+            id="promo-code"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+            placeholder="e.g. DM10 — tracks redemption + bumps counter"
+            className="font-mono"
+          />
         </div>
         <div>
           <Label htmlFor="custom-msg">Custom DM Message (optional — overrides default)</Label>
