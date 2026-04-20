@@ -1979,7 +1979,16 @@ serve(withRunLog('flipit-execute', async (req) => {
           })
           .eq("id", positionId);
 
-        return bad("Sell failed: " + errMsg);
+        // Return 200 with structured error so the UI doesn't crash with a blank screen.
+        // Position has been reverted to "holding" — user can retry. The dashboard reads
+        // `error_code` + `error` from this payload to show a friendly message.
+        return ok({
+          success: false,
+          error: "Sell failed: " + errMsg,
+          error_code: classified.code || "SWAP_FAILED",
+          retryable: true,
+          positionId,
+        });
       }
     }
 
