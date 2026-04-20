@@ -5634,7 +5634,7 @@ export function FlipItDashboard() {
                             
                             {/* Invested */}
                             <TableCell compact>
-                              <span className="font-mono text-xs">${position.buy_amount_usd.toFixed(2)}</span>
+                              <span className="font-mono text-xs">${(position.buy_amount_usd ?? 0).toFixed(2)}</span>
                             </TableCell>
                             
                             {/* Sold For */}
