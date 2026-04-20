@@ -101,6 +101,16 @@ export function CompProGrantPanel() {
           </div>
         </div>
         <div>
+          <Label htmlFor="promo-code">Tester Promo Code (optional)</Label>
+          <Input
+            id="promo-code"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+            placeholder="e.g. DM10 — tracks redemption + bumps counter"
+            className="font-mono"
+          />
+        </div>
+        <div>
           <Label htmlFor="custom-msg">Custom DM Message (optional — overrides default)</Label>
           <Textarea
             id="custom-msg"
