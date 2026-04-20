@@ -1,68 +1,89 @@
 
 
-## Project Health Audit — Last 48 Hours
+## Plan — Function Toggle System (function-level only, cron-driven)
 
-I went through the edge function run table, Postgres error log, and individual function logs. Here is what's actually going wrong, ranked by severity.
+Build a runtime kill switch for the ~30 cron-driven edge functions. Toggle from the existing Function Table view. No source rewriting, no cron unscheduling — just a clean early-return guard.
 
----
+### What gets built
 
-### 🔴 Tier 1 — Active functional bugs (need fixing)
-
-| # | Function | Errors | Root cause | Impact |
-|---|---|---|---|---|
-| 1 | **`flipit-execute`** | 285 (70% of API calls) | All failing with `"buyAmountSol required"` after 226ms — a caller is invoking the buy endpoint without the SOL amount field | Failed buys from web/admin UI. Telegram path works (only 7/58 fail there). |
-| 2 | **`oracle-historical-backfill`** | 96 (100% fail rate) | `duplicate key value violates unique constraint "oracle_backfill_jobs_target_date_key"` — function tries to insert a job for a date already done; no upsert / no skip-if-exists | Cron runs every 15 min and **always fails**. Dead loop. |
-| 3 | **`x-community-enricher`** | 80 (100% fail rate, holders-intel-poster cron) | HTTP 400 on every call; only "RunLogger insert" warnings visible — actual failure cause not being logged before throw | Silent feature breakage. Communities never enriched. |
-| 4 | **`telegram-mtproto-auth`** | 109 / ~12k (0.9%) | HTTP 500 occurring ~once every 3-5 min — likely upstream Telegram MTProto session glitch | Intermittent member-audit failures |
-| 5 | **`telegram-channel-monitor`** | 263 / ~11k (~2.4%) | HTTP 429 — Telegram rate-limit being hit by the 4-shard 15-second cron | Some Telegram channel updates missed |
-| 6 | **`raydium-swap`** | 56 / 229 (24%) | HTTP 400 (last seen yesterday 19:31) | Swap failures, smaller volume |
-| 7 | **`bagless-holders-report`** | 20 (2.3%) | HTTP 500 | Small leak, mostly OK |
-| 8 | **`stripe-webhook`** | 10 HTTP 500 | No log retained; could be signature verification or downstream DB | Payment events possibly dropped |
-| 9 | **`check-subscription`** | 12 HTTP 500 | Same as above — no log body | Subscription gate may flicker |
-
----
-
-### 🟠 Tier 2 — Database errors (unrelated to the function 4xx/5xx)
-
-From `postgres_logs`, last 48h, ranked:
-
-| Count | Error | Where |
+**1. New table: `function_toggles`**
+| column | type | notes |
 |---|---|---|
-| **606** | `duplicate key value violates unique constraint "edge_function_runs_pkey"` | `_shared/run-logger.ts` — race between fire-and-forget INSERT and the UPDATE/UPSERT on completion. Cosmetic, but pollutes logs. |
-| 49 | `invalid input syntax for type uuid: "undefined"` | Some caller is passing the literal string `"undefined"` as a UUID parameter |
-| 17 | `dev_wallet_reputation_trust_level_check` violated | Code is trying to insert a `trust_level` value not allowed by the CHECK constraint |
-| 18 | `invalid input syntax for type json` | Malformed JSON being inserted somewhere |
-| 7 | `column kol_wallets.kol_tier does not exist` | Stale code referencing a removed/renamed column |
-| 7 | `column pumpfun_blacklist.wallet_address does not exist` | Same — stale schema reference |
-| 7 | `column token_search_results.holder_count does not exist` | Same |
-| 7 | `column "COALESCE" does not exist` | A SQL string is missing parentheses — `COALESCE` parsed as identifier |
-| 7 | RLS denial on `premium_feature_views` | Insert policy missing for the role attempting it |
-| 4 | `null value in "first_seen_at" of token_lifecycle` | Insert path not setting required field |
-| 3 | RLS denial on `holders_page_visits` | Same RLS issue pattern |
-| 1 | `developer_profiles.master_wallet does not exist` | Stale reference |
+| `function_name` | text PK | matches edge function name |
+| `enabled` | boolean default true | the switch |
+| `disabled_reason` | text | optional note |
+| `disabled_at` | timestamptz | audit |
+| `disabled_by` | uuid | super_admin user id |
+| `last_skipped_at` | timestamptz | updated when guard fires |
+| `skip_count_24h` | int default 0 | reset daily |
 
----
+RLS: super-admin read/write only. Anon read of `enabled` field allowed (so the guard works without auth overhead).
 
-### 🟢 Tier 3 — Healthy
+**2. Shared guard: `supabase/functions/_shared/function-toggle.ts`**
+```typescript
+export async function isFunctionEnabled(name: string): Promise<boolean>
+```
+- 60-second in-memory cache per function instance
+- Default to `true` if table row missing or DB unreachable (fail-open — never break a job because the toggle table is down)
+- On `false`, increments `skip_count_24h` and updates `last_skipped_at`
 
-These ran 100% green over 48h: `sol-price`, `wallet-genealogy-scanner`, `flipit-notify`, `flipit-tweet`, `admin-notify`, `holders-intel-poster`, `holders-intel-scheduler`, `harvest-token-socials`, `dex-paid-checker`, `funnel-feed-scanner`, `post-share-card-twitter`, `search-surge-scanner`, `solscan-creator-lookup`, `promo-poster`. The core trading + intel pipeline is solid.
+**3. Guard added to ~30 cron-driven functions** (3 lines at top of each):
+```typescript
+import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+if (!await isFunctionEnabled('function-name-here')) {
+  return new Response(JSON.stringify({ skipped: 'disabled' }), { status: 200 });
+}
+```
 
----
+Functions covered (the cron-driven ones from the audit):
+- HoldersIntel core: `holdersintel-orchestrator`, `holders-intel-poster`, `holders-intel-dex-scanner`, `dex-top-200`, `funnel-feed-scanner`, `feed-health-scanner`, `harvest-token-socials-backfill`, `ath-24h-backfill`, `morning-report`, `phanes-x-backfill`, `hunter-tweet-scrape`, `daily-twitter-profile-refresh`
+- Oracle/forensics: `oracle-hourly-scan`, `oracle-auto-classifier`, `oracle-historical-backfill`, `family-discovery-engine`, `family-mint-monitor-p1`, `family-mint-monitor-all`, `dev-behavior-scorer`, `developer-integrity`, `developer-wallet-rescan`, `audit-creator-integrity`, `allstar-promotion-engine`, `co-mint-cluster-detector`, `token-fingerprint-scanner`, `token-autopsy`, `backfill-genealogy-drip`, `backfill-x-communities`, `mesh-backfill`, `refresh-mesh-summary`
+- Telegram: `telegram-channel-monitor`
+- Trading: `trading-orchestrator`, `pumpfun-orchestrator`, `backcheck-stop-loss`, `backcheck-rejected`
+- Email/lifecycle: `process-reactivation-emails`, `prune-pending-reactivation-emails`, `prune-email-tracking-events`, `auto-suspend-unverified-7d`, `sol-renewal-reminder`
+- Maintenance: `database-housekeeping`, `prune-dex-scrape-log`, `system-health-audit`, `kol-registry-sync`, `daily-kol-leaderboard-refresh`, `channel-pair-analyzer`
 
-### Recommended fix order (when you give the go-ahead)
+**4. UI integration in the existing Function Table view**
+Find the table currently shown on the SuperAdmin screenshot and add:
+- A new **"Enabled"** column with an inline shadcn `Switch` per row
+- Click toggle → opens small popover for optional "reason" → writes to `function_toggles`
+- Visual: disabled rows get muted opacity + "DISABLED" badge
+- Hover tooltip shows `disabled_reason` + `disabled_at` + skip count
 
-1. **`flipit-execute` "buyAmountSol required"** — find the caller, add the missing field. Highest impact (real failed buys).
-2. **`oracle-historical-backfill` duplicate key** — change INSERT to `ON CONFLICT (target_date) DO NOTHING`. One-line fix, kills 96 errors/day.
-3. **`x-community-enricher` HTTP 400** — wire the actual error message into RunLogger before throwing so we can see *why* it 400s. Then fix.
-4. **Stale-column SQL** (`kol_tier`, `pumpfun_blacklist.wallet_address`, `token_search_results.holder_count`, `developer_profiles.master_wallet`, the `COALESCE` typo) — grep the codebase for each and remove/rename.
-5. **`run-logger.ts` duplicate-key noise** — either change the upsert path to `onConflict: 'id'` or skip the second insert when the first already succeeded. Cosmetic but 606 errors/day.
-6. **`trust_level` CHECK violation** — find the writer, align value with allowed enum. 17 errors/day.
-7. **RLS on `premium_feature_views` and `holders_page_visits`** — add the missing INSERT policy or fix the calling auth context.
-8. **`stripe-webhook` / `check-subscription` 500s** — add structured error logging via `withRunLog` so the next failure surfaces the cause.
-9. **`telegram-channel-monitor` 429s** — slow one of the 4 shards or stagger the 15-second cadence.
-10. **`telegram-mtproto-auth` 500s** — wrap in retry + log Telegram error code.
+### What the user sees
 
-### Out of scope unless you want it
-- The `dex-top-200` 502 from yesterday was a one-off (1/95 runs) — ignore.
-- Collation version warnings on `template1`/`postgres` — Supabase platform thing, not actionable from our side.
+```text
+┌────────────────────────────────┬──────┬─────┬────────┬─────────┐
+│ Function                       │ Runs │ Err │ Avg ms │ Enabled │
+├────────────────────────────────┼──────┼─────┼────────┼─────────┤
+│ telegram-channel-monitor       │  979 │  20 │  3695  │   ◉ ON  │
+│ phanes-x-backfill              │   45 │   0 │  2100  │   ◉ ON  │
+│ holdersintel-surge-scanner     │    0 │   0 │    -   │   ○ OFF │ ← greyed
+└────────────────────────────────┴──────┴─────┴────────┴─────────┘
+```
+
+### Behavior notes
+
+- **Cron keeps firing** when off — function exits in ~50ms (negligible)
+- **Fail-open**: if `function_toggles` query fails, function runs normally. Never block jobs because of toggle infrastructure.
+- **Audit trail**: every flip logs to `admin_notifications` (who, when, what, why)
+- **No source mutation, no redeploys, instant on/off**
+- **Sub-feature toggles**: same table supports them later via `feature_name` column if you ever want one — added by hand only when you ask
+
+### Out of scope (explicitly NOT building)
+
+- Auto-detection or auto-commenting of internal function calls
+- Source rewriting from the UI
+- Toggling the ~110 non-cron edge functions (user-facing API endpoints, webhooks, etc.) — they'd add unnecessary DB checks to every request
+
+### Files
+
+**New:**
+- `supabase/functions/_shared/function-toggle.ts`
+- `src/components/admin/function-table/FunctionEnabledToggle.tsx`
+- migration: create `function_toggles` table + RLS
+
+**Modified:**
+- The existing Function Table component in SuperAdmin (add Enabled column)
+- ~30 edge functions (3-line guard added at top of each)
 
