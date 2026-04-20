@@ -39,13 +39,13 @@ function getEdgeFunctionPurpose(functionName: string): string {
 }
 
 Deno.serve(withRunLog('morning-report', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('morning-report')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   const startTime = Date.now();

@@ -72,13 +72,13 @@ async function fetchAth24h(tokenMint: string): Promise<number | null> {
 }
 
 Deno.serve(withRunLog('ath-24h-backfill', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('ath-24h-backfill')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {

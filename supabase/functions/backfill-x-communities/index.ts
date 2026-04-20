@@ -310,13 +310,13 @@ async function fetchHeliusUrls(mint: string, apiKey: string): Promise<string[]> 
 // ─── MAIN FUNCTION ───
 
 Deno.serve(withRunLog('backfill-x-communities', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('backfill-x-communities')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {

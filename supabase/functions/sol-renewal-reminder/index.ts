@@ -10,13 +10,13 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('sol-renewal-reminder')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);

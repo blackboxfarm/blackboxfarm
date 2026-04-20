@@ -20,13 +20,13 @@ const TRADING_FUNCTIONS = [
 ];
 
 Deno.serve(withRunLog('trading-orchestrator', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('trading-orchestrator')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   const startTime = Date.now();

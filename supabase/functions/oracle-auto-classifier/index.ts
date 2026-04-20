@@ -68,13 +68,13 @@ function generateRecommendation(score: number, stats: ClassificationResult['stat
 }
 
 Deno.serve(withRunLog('oracle-auto-classifier', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('oracle-auto-classifier')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {

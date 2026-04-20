@@ -89,13 +89,13 @@ function parseLeaderboardData(html: string): ParsedKOL[] {
 }
 
 Deno.serve(withRunLog('kol-registry-sync', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('kol-registry-sync')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   const startTime = Date.now();

@@ -11,13 +11,13 @@ const corsHeaders = {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 Deno.serve(withRunLog('audit-creator-integrity', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('audit-creator-integrity')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {

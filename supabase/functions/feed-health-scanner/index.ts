@@ -23,13 +23,13 @@ const corsHeaders = {
  * Helius cost: ~5-10 credits per token = ~1,800-3,600 credits/day (~55k-110k/month)
  */
 Deno.serve(withRunLog('feed-health-scanner', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('feed-health-scanner')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {

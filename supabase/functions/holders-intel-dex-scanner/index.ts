@@ -265,13 +265,13 @@ function delay(ms: number): Promise<void> {
 }
 
 Deno.serve(withRunLog('holders-intel-dex-scanner', async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders }
   if (!await isFunctionEnabled('holders-intel-dex-scanner')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
-  });
+  }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   const startTime = Date.now();
