@@ -66,9 +66,19 @@ function SecurityTimeline() {
             </CardTitle>
             <CardDescription>All security-related changes across all users</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetchAudit()}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={showNoise ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowNoise((v) => !v)}
+              title="Toggle generic CRUD events (noisy)"
+            >
+              {showNoise ? "All events" : "Security only"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => refetchAudit()}>
+              <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+            </Button>
+          </div>
         </div>
         <Input
           placeholder="Filter by user ID..."
