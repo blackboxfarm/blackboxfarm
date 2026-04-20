@@ -16,6 +16,7 @@ import { Flame, RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Clock, 
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { detectSocialPlatform } from '@/utils/socialPlatformDetector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
@@ -4187,6 +4188,59 @@ export function FlipItDashboard() {
                           <span className="text-amber-500">${order.buy_price_max_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
                         </div>
                       )}
+                      {(() => {
+                        const live = currentPrices[order.token_mint];
+                        if (live == null || !isFinite(live) || live <= 0) {
+                          return (
+                            <div className="mt-1 text-[10px] text-muted-foreground italic">
+                              Live: waiting for next fetch…
+                            </div>
+                          );
+                        }
+                        const inRange = order.monitoring_mode !== 'deep'
+                          && live >= order.buy_price_min_usd
+                          && live <= order.buy_price_max_usd;
+                        const below = order.monitoring_mode !== 'deep' && live < order.buy_price_min_usd;
+                        const above = order.monitoring_mode !== 'deep' && live > order.buy_price_max_usd;
+                        const color = inRange
+                          ? 'text-emerald-500'
+                          : below
+                          ? 'text-sky-400'
+                          : above
+                          ? 'text-rose-400'
+                          : 'text-foreground';
+                        const distanceLabel = (() => {
+                          if (order.monitoring_mode === 'deep') return null;
+                          if (inRange) return 'in trigger range';
+                          const target = below ? order.buy_price_min_usd : order.buy_price_max_usd;
+                          const pct = ((live - target) / target) * 100;
+                          return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% vs ${below ? 'min' : 'max'}`;
+                        })();
+                        return (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="mt-1 inline-flex items-center gap-1 cursor-help">
+                                  <Activity className={`h-3 w-3 ${color} animate-pulse`} />
+                                  <span className={`font-mono text-[11px] ${color}`}>
+                                    Live ${live.toFixed(10).replace(/\.?0+$/, '')}
+                                  </span>
+                                  {distanceLabel && (
+                                    <span className="text-[10px] text-muted-foreground">({distanceLabel})</span>
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                Latest fetched USD price from the unified monitor.
+                                {lastLimitOrderCheck && (
+                                  <> Last update: {new Date(lastLimitOrderCheck).toLocaleTimeString()}.</>
+                                )}
+                                {' '}Auto-buy fires when price enters the green→amber range (Tight) or the volume trigger is met (Deep).
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <span className="font-mono">{order.buy_amount_sol.toFixed(4)} SOL</span>
@@ -4278,18 +4332,29 @@ export function FlipItDashboard() {
                         >
                           <Pencil className="h-3 w-3" />
                         </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleBuyNowLimitOrder(order)}
-                          disabled={isExecutingLimitOrder === order.id || !selectedWallet}
-                          className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 h-8 px-2"
-                        >
-                          {isExecutingLimitOrder === order.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Rocket className="h-3 w-3" />
-                          )}
-                        </Button>
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                onClick={() => handleBuyNowLimitOrder(order)}
+                                disabled={isExecutingLimitOrder === order.id || !selectedWallet}
+                                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 h-8 px-2"
+                              >
+                                {isExecutingLimitOrder === order.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Rocket className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              <strong>Buy Now</strong> — bypass the limit-order trigger and execute the configured
+                              {' '}{order.buy_amount_sol.toFixed(4)} SOL buy immediately at the current market price.
+                              The auto-trigger keeps watching the live price shown in the Price Range column.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <Button
                           size="sm"
                           variant="destructive"
