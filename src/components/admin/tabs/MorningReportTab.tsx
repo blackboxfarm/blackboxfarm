@@ -572,7 +572,9 @@ function ReportView({ report }: { report: MorningReport }) {
               {(() => {
                 const db = (report as any).db_size_info;
                 const usagePct = db.usage_pct || 0;
-                const barColor = usagePct >= 80 ? 'bg-destructive' : usagePct >= 50 ? 'bg-yellow-500' : 'bg-green-500';
+                const critPct = db.crit_pct ?? 80;
+                const warnPct = db.warn_pct ?? 50;
+                const barColor = usagePct >= critPct ? 'bg-destructive' : usagePct >= warnPct ? 'bg-yellow-500' : 'bg-green-500';
                 return (
                   <div className="space-y-3">
                     <div className="flex items-center gap-4">
