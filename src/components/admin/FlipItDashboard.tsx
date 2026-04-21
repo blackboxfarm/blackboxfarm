@@ -194,6 +194,8 @@ interface InputTokenData {
   lastFetched: string | null;
   source: 'token-metadata' | 'raydium-quote' | 'dexscreener' | 'preflight' | 'pumpfun' | 'jupiter' | 'bonding_curve' | string | null;
   creatorWallet: string | null;
+  isOnCurve?: boolean;
+  venueHint?: string | null;
 }
 
 interface BlacklistWarning {
@@ -265,7 +267,9 @@ export function FlipItDashboard() {
     telegramUrl: null,
     lastFetched: null,
     source: null,
-    creatorWallet: null
+    creatorWallet: null,
+    isOnCurve: false,
+    venueHint: null,
   });
   const [isLoadingInputToken, setIsLoadingInputToken] = useState(false);
   const inputFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -326,7 +330,9 @@ export function FlipItDashboard() {
     telegramUrl: null,
     lastFetched: null,
     source: null,
-    creatorWallet: null
+    creatorWallet: null,
+    isOnCurve: false,
+    venueHint: null,
   });
   
   // SOL price for USD conversion
