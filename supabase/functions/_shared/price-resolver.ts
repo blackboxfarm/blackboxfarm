@@ -719,6 +719,24 @@ async function fetchJupiterPrice(tokenMint: string): Promise<PriceResult | null>
   }
 }
 
+function pickPreferredGraduatedPrice(
+  tokenMint: string,
+  dexResult: DexScreenerResult | null,
+  jupResult: PriceResult | null
+): PriceResult | null {
+  if (jupResult) {
+    console.log(`[${tokenMint.slice(0, 8)}] Graduated selector chose Jupiter: $${jupResult.price.toFixed(10)}`);
+    return jupResult;
+  }
+
+  if (dexResult) {
+    console.log(`[${tokenMint.slice(0, 8)}] Graduated selector fell back to DexScreener: $${dexResult.price.toFixed(10)}`);
+    return dexResult;
+  }
+
+  return null;
+}
+
 // ============================================
 // MAIN PRICE RESOLVER
 // ============================================
@@ -775,8 +793,7 @@ export async function resolvePrice(
       fetchJupiterPrice(tokenMint)
     ]);
 
-    // Prefer DexScreener (more accurate for graduated tokens), fall back to Jupiter
-    const result = dexResult || jupResult;
+    const result = pickPreferredGraduatedPrice(tokenMint, dexResult, jupResult);
     if (result) {
       console.log(`[${tokenMint.slice(0, 8)}] Fast-path hit: $${result.price.toFixed(10)} from ${result.source}`);
       priceCache.set(tokenMint, { result, timestamp: Date.now() });
@@ -829,7 +846,7 @@ export async function resolvePrice(
         fetchDexScreenerPrice(tokenMint),
         fetchJupiterPrice(tokenMint)
       ]);
-      const graduatedResult = dexResult || jupResult;
+      const graduatedResult = pickPreferredGraduatedPrice(tokenMint, dexResult, jupResult);
       if (graduatedResult) {
         priceCache.set(tokenMint, { result: graduatedResult, timestamp: Date.now() });
         return graduatedResult;
@@ -855,7 +872,7 @@ export async function resolvePrice(
         fetchDexScreenerPrice(tokenMint),
         fetchJupiterPrice(tokenMint)
       ]);
-      const graduatedResult = dexResult || jupResult;
+      const graduatedResult = pickPreferredGraduatedPrice(tokenMint, dexResult, jupResult);
       if (graduatedResult) {
         priceCache.set(tokenMint, { result: graduatedResult, timestamp: Date.now() });
         return graduatedResult;
@@ -1074,24 +1091,17 @@ export async function resolvePrice(
     }
   }
 
-  // STEP 5: Try DexScreener (best for graduated tokens)
-  console.log(`[${tokenMint.slice(0, 8)}] Trying DexScreener`);
-  const dexResult = await fetchDexScreenerPrice(tokenMint);
-  
-  if (dexResult) {
-    console.log(`[${tokenMint.slice(0, 8)}] DexScreener: $${dexResult.price.toFixed(10)}`);
-    priceCache.set(tokenMint, { result: dexResult, timestamp: Date.now() });
-    return dexResult;
-  }
+  // STEP 5: Graduated fallback - query both and prefer Jupiter execution price
+  console.log(`[${tokenMint.slice(0, 8)}] Trying graduated fallbacks: Jupiter + DexScreener`);
+  const [dexResult, jupResult] = await Promise.all([
+    fetchDexScreenerPrice(tokenMint),
+    fetchJupiterPrice(tokenMint)
+  ]);
 
-  // STEP 6: Jupiter fallback
-  console.log(`[${tokenMint.slice(0, 8)}] Trying Jupiter (fallback)`);
-  const jupResult = await fetchJupiterPrice(tokenMint);
-  
-  if (jupResult) {
-    console.log(`[${tokenMint.slice(0, 8)}] Jupiter: $${jupResult.price.toFixed(10)}`);
-    priceCache.set(tokenMint, { result: jupResult, timestamp: Date.now() });
-    return jupResult;
+  const graduatedFallback = pickPreferredGraduatedPrice(tokenMint, dexResult, jupResult);
+  if (graduatedFallback) {
+    priceCache.set(tokenMint, { result: graduatedFallback, timestamp: Date.now() });
+    return graduatedFallback;
   }
 
   console.log(`[${tokenMint.slice(0, 8)}] No price found from any source`);

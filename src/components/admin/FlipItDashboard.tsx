@@ -1080,11 +1080,15 @@ export function FlipItDashboard() {
       try {
         const priceStart = Date.now();
         console.log(`[fetchInputTokenData] 🚀 Fetching live price for ${mint.slice(0, 8)}... (helius-fast-price)`);
+        const displaySolAmount = (() => {
+          const parsed = Number.parseFloat(buyAmount);
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.1;
+        })();
 
         // ALWAYS use helius-fast-price for paste/display — it has a pump.fun bonding curve fallback built in
         // and returns in ~200-400ms. flipit-preflight is reserved for the execute-time backstop only.
         const pricePromise = supabase.functions.invoke('helius-fast-price', {
-          body: { tokenMint: mint }
+          body: { tokenMint: mint, solAmount: displaySolAmount }
         });
 
         const [priceResult, fastBlacklistHit] = await Promise.all([
@@ -2049,7 +2053,7 @@ export function FlipItDashboard() {
     try {
       // Single price path: helius-fast-price (fast, ~250ms, handles curve + jupiter tokens).
       const fetchPromise = supabase.functions.invoke('helius-fast-price', {
-        body: { tokenMint: tokenAddress.trim() },
+          body: { tokenMint: tokenAddress.trim(), solAmount: parsedAmount },
       });
       const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
         setTimeout(() => resolve({ data: null, error: { message: 'TIMEOUT_4S' } }), 4000)

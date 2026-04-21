@@ -4,6 +4,7 @@ import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { computeBondingCurvePrice, fetchBondingCurveState, resolvePrice } from '../_shared/price-resolver.ts';
+import { getVenueAwareQuote } from '../_shared/venue-aware-quote.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 enableHeliusTracking('helius-fast-price');
@@ -25,7 +26,7 @@ serve(withRunLog('helius-fast-price', async (req) => {
   const startTime = Date.now();
 
   try {
-    const { tokenMint } = await req.json();
+    const { tokenMint, solAmount, walletPubkey, slippageBps = 500 } = await req.json();
 
     if (!tokenMint || tokenMint.length < 32) {
       return new Response(
@@ -34,8 +35,59 @@ serve(withRunLog('helius-fast-price', async (req) => {
       );
     }
 
+    const quoteSolAmount = Number.isFinite(Number(solAmount)) && Number(solAmount) > 0
+      ? Number(solAmount)
+      : 0.1;
+    const quoteLamports = Math.floor(quoteSolAmount * 1e9);
+
     const heliusApiKey = requireHeliusApiKey(); // Throws if not configured
     const url = getHeliusRpcUrl();
+
+    try {
+      const venueQuote = await getVenueAwareQuote(
+        tokenMint,
+        quoteLamports,
+        walletPubkey || 'helius-fast-price',
+        {
+          heliusApiKey,
+          slippageBps,
+        }
+      );
+
+      if (venueQuote?.executablePriceUsd && venueQuote.executablePriceUsd > 0) {
+        const venueHint = venueQuote.isOnCurve
+          ? (venueQuote.venue === 'pumpfun'
+              ? 'pumpfun_curve'
+              : venueQuote.venue === 'bags_fm'
+                ? 'bags_fm'
+                : venueQuote.venue === 'bonk_fun'
+                  ? 'bonk_fun'
+                  : undefined)
+          : 'dex';
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            price: venueQuote.executablePriceUsd,
+            executablePriceUsd: venueQuote.executablePriceUsd,
+            currency: 'USD',
+            source: venueQuote.source,
+            venue: venueQuote.venue,
+            venueHint,
+            isOnCurve: venueQuote.isOnCurve,
+            solAmount: quoteSolAmount,
+            tokensOut: venueQuote.tokensOut,
+            solSpent: venueQuote.solSpent,
+            priceImpactPct: venueQuote.priceImpactPct,
+            confidence: venueQuote.confidence,
+            latencyMs: Date.now() - startTime,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (venueQuoteErr) {
+      console.log(`[helius-fast-price] venue-aware quote failed: ${(venueQuoteErr as Error).message}`);
+    }
 
     try {
       const resolved = await resolvePrice(tokenMint, {
