@@ -15,34 +15,40 @@ const corsHeaders = {
 };
 
 const BAD_TIERS = new Set(['bad_actor', 'suspicious', 'rugger']);
+const BAD_TRUST_LEVELS = new Set(['rugger', 'serial_rugger', 'scammer', 'blacklisted']);
 
 async function resolveCreator(supabase: any, mint: string): Promise<string | null> {
-  // Try token_lifecycle first
   const { data: lc } = await supabase
     .from('token_lifecycle')
     .select('creator_wallet')
     .eq('token_mint', mint)
     .maybeSingle();
-  if (lc?.creator_wallet) return lc.creator_wallet;
-
-  // Try developer_genealogy
-  const { data: dg } = await supabase
-    .from('developer_genealogy')
-    .select('master_wallet')
-    .eq('token_mint', mint)
-    .maybeSingle();
-  if (dg?.master_wallet) return dg.master_wallet;
-
-  return null;
+  return lc?.creator_wallet || null;
 }
 
-async function getCreatorRiskTier(supabase: any, wallet: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('dev_behavior_scores')
-    .select('risk_tier')
-    .eq('developer_wallet', wallet)
-    .maybeSingle();
-  return data?.risk_tier || null;
+interface CreatorRisk {
+  riskTier: string | null;
+  trustLevel: string | null;
+  tokensRugged: number;
+  autoBlacklisted: boolean;
+  isRug: boolean;
+}
+
+async function getCreatorRisk(supabase: any, wallet: string): Promise<CreatorRisk> {
+  const [{ data: bs }, { data: rep }] = await Promise.all([
+    supabase.from('dev_behavior_scores').select('risk_tier').eq('wallet_address', wallet).maybeSingle(),
+    supabase.from('dev_wallet_reputation').select('trust_level, tokens_rugged, auto_blacklisted').eq('wallet_address', wallet).maybeSingle(),
+  ]);
+  const riskTier = bs?.risk_tier || null;
+  const trustLevel = rep?.trust_level || null;
+  const tokensRugged = rep?.tokens_rugged || 0;
+  const autoBlacklisted = !!rep?.auto_blacklisted;
+  const isRug =
+    (riskTier && BAD_TIERS.has(riskTier)) ||
+    (trustLevel && BAD_TRUST_LEVELS.has(trustLevel)) ||
+    tokensRugged > 0 ||
+    autoBlacklisted;
+  return { riskTier, trustLevel, tokensRugged, autoBlacklisted, isRug: !!isRug };
 }
 
 serve(async (req) => {
@@ -92,16 +98,22 @@ serve(async (req) => {
           continue;
         }
 
-        // Check risk tier
-        const tier = await getCreatorRiskTier(supabase, creator);
-        if (tier && BAD_TIERS.has(tier)) {
+        // Check risk
+        const risk = await getCreatorRisk(supabase, creator);
+        if (risk.isRug) {
           await supabase
             .from('telegram_insider_token_lifecycle')
             .update({
-              creator_risk_tier: tier,
+              creator_risk_tier: risk.riskTier,
               mesh_promotion_status: 'rejected_rug',
               is_rugged: true,
-              mesh_promotion_reason: `Creator risk_tier=${tier}`,
+              rug_evidence: {
+                risk_tier: risk.riskTier,
+                trust_level: risk.trustLevel,
+                tokens_rugged: risk.tokensRugged,
+                auto_blacklisted: risk.autoBlacklisted,
+              },
+              mesh_promotion_reason: `Rug pattern: tier=${risk.riskTier} trust=${risk.trustLevel} rugged=${risk.tokensRugged} blacklisted=${risk.autoBlacklisted}`,
             })
             .eq('id', c.id);
           skippedRug++;
@@ -113,29 +125,29 @@ serve(async (req) => {
           continue;
         }
 
-        // Upsert into reputation_mesh as good actor
-        const reason = `Insiders channel ${c.peak_multiplier}x token (${c.token_symbol || c.token_mint.slice(0, 8)}) — no rug pattern detected`;
+        // Upsert into reputation_mesh — link wallet → token, relationship=good_actor
+        const reason = `Insiders channel ${c.peak_multiplier}x token (${c.token_symbol || c.token_mint.slice(0, 8)}) — no rug pattern`;
 
         const { error: meshErr } = await supabase
           .from('reputation_mesh')
-          .upsert({
-            entity_type: 'wallet',
-            entity_id: creator,
-            tier: 'good_actor',
-            confidence: 0.7,
+          .insert({
+            source_type: 'wallet',
+            source_id: creator,
+            linked_type: 'token',
+            linked_id: c.token_mint,
+            relationship: 'good_actor_creator',
+            confidence: Math.min(100, Math.round(50 + c.peak_multiplier * 5)),
             evidence: {
               source: 'insiders_lifecycle_promoter',
-              token_mint: c.token_mint,
               token_symbol: c.token_symbol,
               peak_multiplier: c.peak_multiplier,
               peak_market_cap: c.peak_market_cap,
               first_called_at: c.first_called_at,
-              promoted_at: new Date().toISOString(),
             },
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'entity_type,entity_id' });
+            discovered_via: 'insiders_lifecycle_promoter',
+          });
 
-        if (meshErr) {
+        if (meshErr && !/duplicate key/i.test(meshErr.message || '')) {
           console.error('[insiders-mesh-promoter] mesh upsert error:', meshErr);
           errors.push(`${c.token_mint}: ${meshErr.message}`);
           continue;
@@ -144,7 +156,7 @@ serve(async (req) => {
         await supabase
           .from('telegram_insider_token_lifecycle')
           .update({
-            creator_risk_tier: tier,
+            creator_risk_tier: risk.riskTier,
             mesh_promotion_status: 'promoted',
             mesh_promoted_at: new Date().toISOString(),
             mesh_promotion_reason: reason,
