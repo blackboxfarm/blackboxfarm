@@ -142,14 +142,17 @@ serve(withRunLog('helius-fast-price', async (req) => {
             }
             
             if (solPriceUsd <= 0) {
-              // Quick SOL price from CoinGecko
+              // Use shared SOL price cache (5-min staleness guard) instead of inline CoinGecko call.
               try {
-                const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-                if (cgRes.ok) {
-                  const cgData = await cgRes.json();
-                  solPriceUsd = cgData?.solana?.usd || 0;
+                const supabaseUrl = Deno.env.get('SUPABASE_URL');
+                const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+                if (supabaseUrl && serviceKey) {
+                  const sb = createClient(supabaseUrl, serviceKey);
+                  solPriceUsd = await getSolPriceFromCache(sb);
                 }
-              } catch {}
+              } catch (solErr) {
+                console.log(`[helius-fast-price] SOL price cache lookup failed: ${(solErr as Error).message}`);
+              }
             }
             
             const priceUsd = priceSol * solPriceUsd;
