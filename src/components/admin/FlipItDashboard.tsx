@@ -2256,6 +2256,7 @@ export function FlipItDashboard() {
       // Execute with 20% slippage for fast dips
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
         body: {
+          action: 'buy',
           tokenMint: order.token_mint,
           buyAmountSol: order.buy_amount_sol,
           targetMultiplier: order.target_multiplier,
@@ -2267,7 +2268,9 @@ export function FlipItDashboard() {
 
       if (error) throw error;
 
-      if (data?.success) {
+      // flipit-execute returns { success: true, position: {...} } on real buys,
+      // or { ok: true, skipped: '...' } if action was missing (legacy bug).
+      if (data?.success || data?.position?.id) {
         // Cancel the limit order since we executed it manually
         await supabase
           .from('flip_limit_orders')
@@ -2279,7 +2282,7 @@ export function FlipItDashboard() {
         loadPositions({ silent: true });
         refreshWalletBalance(); // Auto-refresh wallet balance after buy
       } else {
-        throw new Error(data?.error || 'Failed to execute buy');
+        throw new Error(data?.error || data?.skipped || 'Failed to execute buy');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to execute buy now');

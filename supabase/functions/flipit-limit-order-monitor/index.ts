@@ -326,11 +326,19 @@ Your limit order conditions have been met. This is an alert-only notification - 
               action: "buy",
               tokenMint: order.token_mint,
               walletId: order.wallet_id,
+              // CRITICAL: flipit-execute requires buyAmountSol (SOL is the
+              // canonical input on-chain). Passing only buyAmountUsd caused
+              // every triggered limit order to fail with
+              // "buyAmountSol is required and must be positive".
+              buyAmountSol: buy_amount_sol,
               buyAmountUsd: buyAmountUsd,
               // Use the trigger price as the protected "display" price
               displayPriceUsd: currentPrice,
               targetMultiplier: target_multiplier,
-              slippageBps: slippage_bps,
+              // Auto-triggered limit orders frequently fire during fast dips.
+              // Enforce a minimum of 15% slippage so we don't fail to fill on
+              // a moving market. Honor higher user-configured slippage.
+              slippageBps: Math.max(Number(slippage_bps) || 0, 1500),
               priorityFeeMode: priority_fee_mode,
             }
           });
