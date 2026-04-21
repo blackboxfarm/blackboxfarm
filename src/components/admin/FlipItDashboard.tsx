@@ -2052,10 +2052,11 @@ export function FlipItDashboard() {
     const cachedAt = inputToken.lastFetched ? new Date(inputToken.lastFetched).getTime() : 0;
     const cacheAgeMs = Date.now() - cachedAt;
     const CACHE_FRESH_MS = 5000;
-    const isCurveToken = !!inputToken.isOnCurve || inputToken.venueHint === 'pumpfun_curve';
 
     // FAST PATH: cached price < 5s old → skip blocking re-fetch, fire background refresh, execute now.
-    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS && !isCurveToken) {
+    // Applies to ALL tokens including curve tokens — backend trade-guard re-quotes at actual size anyway,
+    // so a second front-end quote is pure latency (and causes triple-quote drift for curve tokens).
+    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS) {
       console.log(`[FlipIt] Using cached price $${cachedPrice} (age ${cacheAgeMs}ms) — instant flip`);
       // Background refresh for log freshness, NOT awaited
       supabase.functions.invoke('helius-fast-price', {
@@ -2070,17 +2071,10 @@ export function FlipItDashboard() {
     setIsFlipping(true);
     const priceToastId = toast.loading('Fetching fresh price...', { duration: 5000 });
     try {
-      const fetchPromise = isCurveToken
-        ? supabase.functions.invoke('flipit-preflight', {
-            body: {
-              tokenMint: tokenAddress.trim(),
-              solAmount: Math.max(parsedAmount, 0.01),
-              slippageBps,
-            },
-          })
-        : supabase.functions.invoke('helius-fast-price', {
-            body: { tokenMint: tokenAddress.trim() },
-          });
+      // Single price path: helius-fast-price (fast, ~250ms, handles curve + jupiter tokens).
+      const fetchPromise = supabase.functions.invoke('helius-fast-price', {
+        body: { tokenMint: tokenAddress.trim() },
+      });
       const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
         setTimeout(() => resolve({ data: null, error: { message: 'TIMEOUT_4S' } }), 4000)
       );
@@ -2103,7 +2097,7 @@ export function FlipItDashboard() {
         return;
       }
 
-      console.log(`[FlipIt] Fresh execution price: $${resolvedPrice} (curve=${isCurveToken})`);
+      console.log(`[FlipIt] Fresh execution price: $${resolvedPrice}`);
       await executeFlip(resolvedPrice, tokenSymbol);
     } catch (err: any) {
       toast.dismiss(priceToastId);
