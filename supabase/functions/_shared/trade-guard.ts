@@ -701,12 +701,28 @@ export async function validateBuyQuote(
     ? ((executablePrice - displayPriceUsd) / displayPriceUsd) * 100
     : 0;
   
+  // ========================================================
   // Extreme premium sanity check
-  // For BUYS: negative deviation means executable price is LOWER = user gets MORE tokens = GOOD
-  // Only block if executable is HIGHER (user overpaying) or if deviation is suspiciously large in either direction (>500%)
+  // ========================================================
+  // For BUYS: negative deviation means executable price is LOWER = user gets MORE tokens = GOOD.
+  //
+  // Curve-token reality: when the UI shows a probe price (e.g. 0.01 SOL) and execution is 0.5 SOL,
+  // natural bonding-curve price impact can easily push the deviation past 90% — that's REAL, not a
+  // quote error. For on-curve tokens (pumpfun/bags_fm/bonk_fun) we trust `priceImpactPct` (which
+  // already accounts for trade size) and the user's chosen slippage, instead of display-vs-executable.
+  //
+  // When `displayPriceIsExecutable` is set, the caller told us the display price came from the
+  // same executable path — skip the deviation check entirely.
+  const isCurveVenue = venueUsed === 'pumpfun' || venueUsed === 'bags_fm' || venueUsed === 'bonk_fun';
+  const skipDeviationCheck = displayPriceIsExecutable || isCurveVenue;
+
   const isFavorableDeviation = premiumPct < 0; // executable cheaper than display
-  const deviationThreshold = isFavorableDeviation ? 500 : 90; // allow larger favorable deviations
-  
+  // For non-curve, non-executable-display cases: 90% adverse / 500% favorable (sanity cap only).
+  // For curve/executable-display cases: only the 500% hard garbage cap in either direction.
+  const deviationThreshold = skipDeviationCheck
+    ? 500
+    : (isFavorableDeviation ? 500 : 90);
+
   if (Math.abs(premiumPct) > deviationThreshold) {
     console.error(`[TradeGuard] ❌ BLOCKED: Extreme price deviation (${premiumPct.toFixed(1)}%, threshold: ${deviationThreshold}%) - quote likely garbage`);
     return {
@@ -717,12 +733,13 @@ export async function validateBuyQuote(
       priceImpactPct,
       outputTokens: tokensDecimal,
       solPrice: solPriceUsed,
-      blockReason: `EXTREME_DEVIATION: Price deviation is ${Math.abs(premiumPct).toFixed(0)}% which indicates a quote error or extreme volatility. Display: $${displayPriceUsd.toFixed(10)}, Executable: $${executablePrice.toFixed(10)} (venue: ${venueUsed})`,
+      blockReason: `EXTREME_DEVIATION: Price deviation is ${Math.abs(premiumPct).toFixed(0)}% which indicates a quote error. Display: $${displayPriceUsd.toFixed(10)}, Executable: $${executablePrice.toFixed(10)} (venue: ${venueUsed})`,
     };
   }
-  
-  // Log favorable deviations as info, not error
-  if (isFavorableDeviation && Math.abs(premiumPct) > 50) {
+
+  if (skipDeviationCheck && Math.abs(premiumPct) > 50) {
+    console.log(`[TradeGuard] ℹ️ Large deviation ${premiumPct.toFixed(1)}% allowed (curveVenue=${isCurveVenue}, displayPriceIsExecutable=${displayPriceIsExecutable}) — using priceImpact + slippage as the guard instead.`);
+  } else if (isFavorableDeviation && Math.abs(premiumPct) > 50) {
     console.log(`[TradeGuard] ℹ️ Large favorable deviation (${premiumPct.toFixed(1)}%) - executable price is cheaper than display. Allowing trade.`);
   }
   
