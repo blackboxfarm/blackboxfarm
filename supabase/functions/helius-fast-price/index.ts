@@ -3,6 +3,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 enableHeliusTracking('helius-fast-price');
 
 const corsHeaders = {
