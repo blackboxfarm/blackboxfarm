@@ -38,6 +38,34 @@ serve(withRunLog('helius-fast-price', async (req) => {
     const url = getHeliusRpcUrl();
 
     try {
+      const resolved = await resolvePrice(tokenMint, {
+        forceFresh: true,
+        heliusApiKey,
+      });
+
+      if (resolved?.price && resolved.price > 0) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            price: resolved.price,
+            currency: 'USD',
+            source: resolved.source,
+            venueHint: resolved.isOnCurve ? 'pumpfun_curve' : 'pumpfun_graduated',
+            isOnCurve: resolved.isOnCurve,
+            latencyMs: Date.now() - startTime,
+            bondingCurveProgress: resolved.bondingCurveProgress ?? null,
+            pairAddress: resolved.pairAddress ?? null,
+            virtualSolReserves: resolved.virtualSolReserves ?? null,
+            virtualTokenReserves: resolved.virtualTokenReserves ?? null,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (resolvedErr) {
+      console.log(`[helius-fast-price] resolvePrice failed: ${(resolvedErr as Error).message}`);
+    }
+
+    try {
       const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
       if (curveState?.isOnCurve) {
         let solPriceUsd = 0;
