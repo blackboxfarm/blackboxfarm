@@ -1380,10 +1380,16 @@ export function FlipItDashboard() {
       return;
     }
 
-    // Debounce: wait 500ms after user stops typing - FETCH ONCE
-    inputFetchTimeoutRef.current = setTimeout(() => {
+    // FAST PATH: full-length Solana mint (43-44 chars) → fire IMMEDIATELY, no debounce.
+    // Tiny 150ms debounce only while user is mid-typing (length < 43).
+    const isFullMint = mint.length === 43 || mint.length === 44;
+    if (isFullMint) {
       fetchInputTokenDataRef.current(mint, false);
-    }, 500);
+    } else {
+      inputFetchTimeoutRef.current = setTimeout(() => {
+        fetchInputTokenDataRef.current(mint, false);
+      }, 150);
+    }
 
     return () => {
       if (inputFetchTimeoutRef.current) {
