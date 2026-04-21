@@ -174,8 +174,12 @@ Deno.serve(withRunLog('token-fingerprint-scanner', async (req, logger) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    logger?.error('Fatal error', String(err));
-    return new Response(JSON.stringify({ error: String(err) }), {
+    const detail = err instanceof Error
+      ? `${err.name}: ${err.message}\n${err.stack ?? ''}`
+      : (() => { try { return JSON.stringify(err); } catch { return String(err); } })();
+    logger?.error('Fatal error', detail);
+    console.error('[token-fingerprint-scanner] fatal:', detail);
+    return new Response(JSON.stringify({ error: detail }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
