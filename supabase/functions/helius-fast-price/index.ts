@@ -65,6 +65,64 @@ serve(withRunLog('helius-fast-price', async (req) => {
       const tokenInfo = data.result?.token_info;
       const priceInfo = tokenInfo?.price_info;
       const pricePerToken = priceInfo?.price_per_token;
+      const isPumpMint = tokenMint.endsWith('pump');
+
+      if (isPumpMint) {
+        try {
+          const pumpData = await fetchPumpFunCoin(tokenMint, 'helius-fast-price');
+          const isOnCurve = pumpData && !pumpData.complete && !pumpData.raydium_pool;
+          const vSol = pumpData?.virtual_sol_reserves;
+          const vToken = pumpData?.virtual_token_reserves;
+
+          if (isOnCurve && vSol && vToken && vToken > 0) {
+            let solPriceUsd = 0;
+            if (pumpData.usd_market_cap && pumpData.market_cap) {
+              solPriceUsd = pumpData.usd_market_cap / pumpData.market_cap;
+            }
+
+            if (solPriceUsd <= 0) {
+              try {
+                const supabaseUrl = Deno.env.get('SUPABASE_URL');
+                const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+                if (supabaseUrl && serviceKey) {
+                  const sb = createClient(supabaseUrl, serviceKey);
+                  solPriceUsd = await getSolPriceFromCache(sb);
+                }
+              } catch (solErr) {
+                console.log(`[helius-fast-price] SOL price cache lookup failed: ${(solErr as Error).message}`);
+              }
+            }
+
+            const priceSol = (vSol / 1e9) / (vToken / 1e6);
+            const priceUsd = priceSol * solPriceUsd;
+
+            if (priceUsd > 0) {
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  price: priceUsd,
+                  priceSol,
+                  currency: 'USD',
+                  source: 'pumpfun_bonding_curve',
+                  venueHint: 'pumpfun_curve',
+                  isOnCurve: true,
+                  latencyMs: Date.now() - startTime,
+                  symbol: pumpData.symbol || data.result?.content?.metadata?.symbol || null,
+                  name: pumpData.name || data.result?.content?.metadata?.name || null,
+                  image: pumpData.image_uri || data.result?.content?.links?.image || null,
+                  decimals: pumpData.decimals || tokenInfo?.decimals || null,
+                  supply: tokenInfo?.supply || null,
+                  bondingCurveProgress: pumpData.bonding_curve_progress || null,
+                  marketCapUsd: pumpData.usd_market_cap || null
+                }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+          }
+        } catch (pumpCurveErr) {
+          console.log(`[helius-fast-price] Pump-first curve check failed: ${(pumpCurveErr as Error).message}`);
+        }
+      }
 
       if (pricePerToken && pricePerToken > 0) {
         const content = data.result?.content;
@@ -108,6 +166,7 @@ serve(withRunLog('helius-fast-price', async (req) => {
             price: pricePerToken,
             currency: priceInfo?.currency || 'USDC',
             source: 'helius_getAsset',
+            isOnCurve: false,
             heliusPrice: pricePerToken,
             latencyMs: Date.now() - startTime,
             symbol: metadata?.symbol || null,
@@ -167,6 +226,8 @@ serve(withRunLog('helius-fast-price', async (req) => {
                   priceSol,
                   currency: 'USD',
                   source: 'pumpfun_bonding_curve',
+                    venueHint: 'pumpfun_curve',
+                    isOnCurve: true,
                   latencyMs: Date.now() - startTime,
                   symbol: pumpData.symbol || data.result?.content?.metadata?.symbol || null,
                   name: pumpData.name || data.result?.content?.metadata?.name || null,
