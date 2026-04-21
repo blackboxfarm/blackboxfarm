@@ -744,24 +744,18 @@ export function FlipItDashboard() {
     }
   }, [limitOrders, isLimitOrderMonitoring]);
 
-  // Limit order monitoring poll (every 2 seconds for fast dips)
+  // Limit order monitoring poll (every 2 seconds for fast dips).
+  // Uses useVisibleInterval → pauses while tab hidden, and is gated on a memoized
+  // `hasWatching` boolean instead of the full `limitOrders` array so the interval
+  // doesn't tear down/rebuild on every array identity change.
+  const limitOrderPollEnabled = limitOrderMonitorEnabled && hasLimitOrderWatching;
   useEffect(() => {
-    if (!limitOrderMonitorEnabled) return;
-
-    const hasWatching = limitOrders.some((o) => o.status === 'watching');
-    if (!hasWatching) return;
-
-    setLimitOrderCountdown(2);
-    limitOrderCountdownRef.current = 2;
-
-    const id = setInterval(() => {
-      void handleLimitOrderCheck();
-    }, 2000);
-
-    return () => {
-      clearInterval(id);
-    };
-  }, [limitOrderMonitorEnabled, limitOrders, handleLimitOrderCheck]);
+    if (limitOrderPollEnabled) {
+      setLimitOrderCountdown(2);
+      limitOrderCountdownRef.current = 2;
+    }
+  }, [limitOrderPollEnabled]);
+  useVisibleInterval(() => { void handleLimitOrderCheck(); }, 2000, limitOrderPollEnabled);
 
   // Real-time subscription to limit orders
   useEffect(() => {
