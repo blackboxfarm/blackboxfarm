@@ -3,6 +3,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 enableHeliusTracking('helius-fast-price');
 
 const corsHeaders = {
@@ -35,7 +37,8 @@ serve(withRunLog('helius-fast-price', async (req) => {
     const url = getHeliusRpcUrl();
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    // Tightened: 1.5s. If Helius doesn't answer in 1.5s, fall through to pump.fun curve.
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
 
     try {
       const response = await fetch(url, {
@@ -66,44 +69,45 @@ serve(withRunLog('helius-fast-price', async (req) => {
       if (pricePerToken && pricePerToken > 0) {
         const content = data.result?.content;
         const metadata = content?.metadata;
-        
-        let finalPrice = pricePerToken;
-        let priceSource = 'helius_getAsset';
-        
+
+        // INSTANT RETURN: Helius price is good — return it now.
+        // DexScreener cross-check moved to background (non-blocking) for monitoring only.
         try {
-          const dexController = new AbortController();
-          const dexTimeoutId = setTimeout(() => dexController.abort(), 2000);
-          
-          const dexRes = await fetch(
-            `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
-            { signal: dexController.signal }
-          );
-          clearTimeout(dexTimeoutId);
-          
-          if (dexRes.ok) {
-            const dexData = await dexRes.json();
-            const dexPrice = parseFloat(dexData?.pairs?.[0]?.priceUsd);
-            
-            if (dexPrice > 0) {
-              const deviation = Math.abs(pricePerToken - dexPrice) / dexPrice;
-              
-              if (deviation > 0.05) {
-                console.log(`[helius-fast-price] Price deviation ${(deviation * 100).toFixed(1)}% - Helius: $${pricePerToken}, DexScreener: $${dexPrice}. Using DexScreener.`);
-                finalPrice = dexPrice;
-                priceSource = 'dexscreener_validated';
+          // @ts-ignore — EdgeRuntime is available in Supabase Edge runtime
+          const waitUntil = (globalThis as any).EdgeRuntime?.waitUntil;
+          if (typeof waitUntil === 'function') {
+            waitUntil((async () => {
+              try {
+                const dexController = new AbortController();
+                const dexTimeoutId = setTimeout(() => dexController.abort(), 2500);
+                const dexRes = await fetch(
+                  `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+                  { signal: dexController.signal }
+                );
+                clearTimeout(dexTimeoutId);
+                if (dexRes.ok) {
+                  const dexData = await dexRes.json();
+                  const dexPrice = parseFloat(dexData?.pairs?.[0]?.priceUsd);
+                  if (dexPrice > 0) {
+                    const deviation = Math.abs(pricePerToken - dexPrice) / dexPrice;
+                    if (deviation > 0.05) {
+                      console.log(`[helius-fast-price] BG deviation ${(deviation * 100).toFixed(1)}% - Helius: $${pricePerToken}, DexScreener: $${dexPrice} (logged only, response already sent)`);
+                    }
+                  }
+                }
+              } catch (bgErr) {
+                console.log(`[helius-fast-price] BG DexScreener cross-check failed: ${redactHeliusSecrets((bgErr as Error).message)}`);
               }
-            }
+            })());
           }
-        } catch (dexErr) {
-          console.log(`[helius-fast-price] DexScreener validation skipped: ${redactHeliusSecrets((dexErr as Error).message)}`);
-        }
-        
+        } catch { /* waitUntil not available, skip silently */ }
+
         return new Response(
           JSON.stringify({
             success: true,
-            price: finalPrice,
+            price: pricePerToken,
             currency: priceInfo?.currency || 'USDC',
-            source: priceSource,
+            source: 'helius_getAsset',
             heliusPrice: pricePerToken,
             latencyMs: Date.now() - startTime,
             symbol: metadata?.symbol || null,
@@ -138,14 +142,17 @@ serve(withRunLog('helius-fast-price', async (req) => {
             }
             
             if (solPriceUsd <= 0) {
-              // Quick SOL price from CoinGecko
+              // Use shared SOL price cache (5-min staleness guard) instead of inline CoinGecko call.
               try {
-                const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-                if (cgRes.ok) {
-                  const cgData = await cgRes.json();
-                  solPriceUsd = cgData?.solana?.usd || 0;
+                const supabaseUrl = Deno.env.get('SUPABASE_URL');
+                const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+                if (supabaseUrl && serviceKey) {
+                  const sb = createClient(supabaseUrl, serviceKey);
+                  solPriceUsd = await getSolPriceFromCache(sb);
                 }
-              } catch {}
+              } catch (solErr) {
+                console.log(`[helius-fast-price] SOL price cache lookup failed: ${(solErr as Error).message}`);
+              }
             }
             
             const priceUsd = priceSol * solPriceUsd;
