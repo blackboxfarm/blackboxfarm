@@ -207,6 +207,11 @@ interface BlacklistWarning {
   teamId?: string | null;
 }
 
+const isExecutableDisplayPrice = (source: string | null, isOnCurve?: boolean) => {
+  if (isOnCurve) return true;
+  return source === 'preflight' || source === 'pumpfun_bonding_curve' || source === 'pumpfun_curve';
+};
+
 export function FlipItDashboard() {
   const isPreviewAdmin = usePreviewSuperAdmin();
   const navigate = useNavigate();
@@ -2022,17 +2027,19 @@ export function FlipItDashboard() {
     const cacheAgeMs = Date.now() - cachedAt;
     const CACHE_FRESH_MS = 5000;
 
-    // FAST PATH: cached price < 5s old → skip blocking re-fetch, fire background refresh, execute now.
-    // Applies to ALL tokens including curve tokens — backend trade-guard re-quotes at actual size anyway,
-    // so a second front-end quote is pure latency (and causes triple-quote drift for curve tokens).
-    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS) {
+    const cachedPriceIsExecutable = isExecutableDisplayPrice(inputToken.source, inputToken.isOnCurve);
+
+    // FAST PATH: only trust the cached UI price when it came from an executable curve path.
+    // Graduated/AMM tokens still get a quick refresh right before buy so the displayed price and
+    // execution path stay aligned.
+    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS && cachedPriceIsExecutable) {
       console.log(`[FlipIt] Using cached price $${cachedPrice} (age ${cacheAgeMs}ms) — instant flip`);
       // Background refresh for log freshness, NOT awaited
       supabase.functions.invoke('helius-fast-price', {
         body: { tokenMint: tokenAddress.trim() },
       }).catch(() => { /* non-blocking */ });
       setIsFlipping(true);
-      await executeFlip(cachedPrice, tokenSymbol);
+      await executeFlip(cachedPrice, tokenSymbol, cachedPriceIsExecutable);
       return;
     }
 
@@ -2058,7 +2065,7 @@ export function FlipItDashboard() {
       if (!resolvedPrice) {
         if (cachedPrice) {
           console.warn(`[FlipIt] Fresh fetch failed (${priceErr?.message}), proceeding with cached $${cachedPrice}`);
-          await executeFlip(cachedPrice, tokenSymbol);
+          await executeFlip(cachedPrice, tokenSymbol, cachedPriceIsExecutable);
           return;
         }
         toast.error('Failed to fetch price: ' + (freshPrice?.error || priceErr?.message || 'No price'));
@@ -2066,14 +2073,15 @@ export function FlipItDashboard() {
         return;
       }
 
-      console.log(`[FlipIt] Fresh execution price: $${resolvedPrice}`);
-      await executeFlip(resolvedPrice, tokenSymbol);
+      const freshPriceIsExecutable = isExecutableDisplayPrice(freshPrice?.source ?? null, freshPrice?.isOnCurve);
+      console.log(`[FlipIt] Fresh execution price: $${resolvedPrice} (source=${freshPrice?.source || 'unknown'}, executableDisplay=${freshPriceIsExecutable})`);
+      await executeFlip(resolvedPrice, tokenSymbol, freshPriceIsExecutable);
     } catch (err: any) {
       toast.dismiss(priceToastId);
       // Last-resort fallback to cache
       if (cachedPrice) {
         console.warn(`[FlipIt] Price fetch threw (${err.message}), proceeding with cached $${cachedPrice}`);
-        await executeFlip(cachedPrice, tokenSymbol);
+        await executeFlip(cachedPrice, tokenSymbol, cachedPriceIsExecutable);
         return;
       }
       console.error('Fresh price fetch error:', err);
@@ -2083,7 +2091,7 @@ export function FlipItDashboard() {
   };
   
   // Execute the actual flip (separated for confirmation dialog flow)
-  const executeFlip = async (requestedPrice: number | null, tokenSymbol: string | null) => {
+  const executeFlip = async (requestedPrice: number | null, tokenSymbol: string | null, displayPriceIsExecutable = false) => {
     setIsFlipping(true);
     
     const parsedAmount = parseFloat(buyAmount);
@@ -2102,10 +2110,9 @@ export function FlipItDashboard() {
           buyAmountSol: amountInSol,
           // CRITICAL: pass the preflight-verified price for Trade Guard validation
           displayPriceUsd: requestedPrice,
-          // The UI price came from helius-fast-price (real executable on-curve/Helius price),
-          // NOT a stale aggregator display price. Tell trade-guard to skip the display-vs-executable
-          // deviation check (which was causing false EXTREME_DEVIATION blocks on curve tokens).
-          displayPriceIsExecutable: true,
+          // Only skip display-vs-executable deviation checks when the UI price actually came from an
+          // executable quote path (curve/preflight). Graduated tokens still need the backend guard.
+          displayPriceIsExecutable,
           isOnCurve: inputToken.isOnCurve,
           venueHint: inputToken.venueHint,
           targetMultiplier: targetMultiplier,
