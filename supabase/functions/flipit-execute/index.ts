@@ -554,7 +554,7 @@ serve(withRunLog('flipit-execute', async (req) => {
       return ok({ ok: true, skipped: 'no active flipit action requested' });
     }
 
-    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, priorityFeeMicroLamports, jitoTipLamports, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, displayPriceIsExecutable, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, priorityFeeMicroLamports, jitoTipLamports, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -905,7 +905,12 @@ serve(withRunLog('flipit-execute', async (req) => {
           tradeGuardConfig,
           {
             slippageBps: effectiveSlippage,
-            walletPubkey: wallet.pubkey
+            walletPubkey: wallet.pubkey,
+            // If the UI price already came from an executable pricing path (helius-fast-price curve
+            // fallback or preflight), do NOT run the display-vs-executable deviation check — it will
+            // false-positive on thin curves where a 0.01 SOL probe vs a 0.5 SOL real buy can
+            // legitimately differ by >90%. Tax + price impact + slippage still enforced.
+            displayPriceIsExecutable: !!displayPriceIsExecutable,
           }
         );
         

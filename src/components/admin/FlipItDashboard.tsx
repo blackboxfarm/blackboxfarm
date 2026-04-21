@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
+import { useVisibleInterval } from '@/hooks/useVisibleInterval';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 import { ChannelAutoBuyRules } from './flipit/ChannelAutoBuyRules';
 import { ChannelTransactionLog } from './flipit/ChannelTransactionLog';
@@ -698,47 +699,21 @@ export function FlipItDashboard() {
     }
   }, []);
 
-  // CONSOLIDATED SINGLE POLLING INTERVAL - replaces 4 separate intervals
-  useEffect(() => {
-    // Only run if at least one monitor type is enabled
-    if (!autoRefreshEnabled && !rebuyMonitorEnabled && !emergencyMonitorEnabled && !limitOrderMonitorEnabled) {
-      return;
-    }
+  // CONSOLIDATED SINGLE POLLING INTERVAL - replaces 4 separate intervals.
+  // Uses useVisibleInterval so polling AUTOMATICALLY PAUSES when the tab is hidden
+  // (big browser CPU win — was previously hammering the network at 5s even when minimized).
+  const anyMonitorEnabled = autoRefreshEnabled || rebuyMonitorEnabled || emergencyMonitorEnabled || limitOrderMonitorEnabled;
+  const hasHoldings = positions.some(p => p.status === 'holding');
+  const hasRebuyWatching = positions.some(p => p.rebuy_status === 'watching');
+  const hasEmergencyWatching = positions.some(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
+  const hasLimitOrderWatching = limitOrders.some(o => o.status === 'watching');
+  const anythingToMonitor = hasHoldings || hasRebuyWatching || hasEmergencyWatching || hasLimitOrderWatching;
+  const unifiedMonitorEnabled = anyMonitorEnabled && anythingToMonitor;
+  // Poll at 5s when actively watching, 10s when idle (shouldn't run at all when nothing to watch,
+  // but 10s is the floor in case a brief state flicker hits).
+  const unifiedIntervalMs = anythingToMonitor ? 5000 : 10000;
 
-    const hasHoldings = positions.some(p => p.status === 'holding');
-    const hasRebuyWatching = positions.some(p => p.rebuy_status === 'watching');
-    const hasEmergencyWatching = positions.some(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
-    const hasLimitOrderWatching = limitOrders.some(o => o.status === 'watching');
-
-    // Skip if nothing to monitor
-    if (!hasHoldings && !hasRebuyWatching && !hasEmergencyWatching && !hasLimitOrderWatching) {
-      console.log('[FlipIt] No active positions/orders to monitor');
-      return;
-    }
-
-    console.log('[FlipIt] Starting unified monitor interval (5s)');
-    
-    // Run immediately on mount
-    handleUnifiedMonitor();
-    
-    // Then run every 5 seconds (compromise between 2s limit orders and 15s price check)
-    const intervalId = setInterval(() => {
-      handleUnifiedMonitor();
-    }, 5000);
-
-    return () => {
-      console.log('[FlipIt] Clearing unified monitor interval');
-      clearInterval(intervalId);
-    };
-  }, [
-    autoRefreshEnabled, 
-    rebuyMonitorEnabled, 
-    emergencyMonitorEnabled, 
-    limitOrderMonitorEnabled,
-    positions.length, // Only re-run effect when position count changes
-    limitOrders.length, // Only re-run effect when order count changes
-    handleUnifiedMonitor
-  ]);
+  useVisibleInterval(handleUnifiedMonitor, unifiedIntervalMs, unifiedMonitorEnabled);
 
   // Limit order monitoring handler
   const handleLimitOrderCheck = useCallback(async () => {
@@ -769,24 +744,18 @@ export function FlipItDashboard() {
     }
   }, [limitOrders, isLimitOrderMonitoring]);
 
-  // Limit order monitoring poll (every 2 seconds for fast dips)
+  // Limit order monitoring poll (every 2 seconds for fast dips).
+  // Uses useVisibleInterval → pauses while tab hidden, and is gated on a memoized
+  // `hasWatching` boolean instead of the full `limitOrders` array so the interval
+  // doesn't tear down/rebuild on every array identity change.
+  const limitOrderPollEnabled = limitOrderMonitorEnabled && hasLimitOrderWatching;
   useEffect(() => {
-    if (!limitOrderMonitorEnabled) return;
-
-    const hasWatching = limitOrders.some((o) => o.status === 'watching');
-    if (!hasWatching) return;
-
-    setLimitOrderCountdown(2);
-    limitOrderCountdownRef.current = 2;
-
-    const id = setInterval(() => {
-      void handleLimitOrderCheck();
-    }, 2000);
-
-    return () => {
-      clearInterval(id);
-    };
-  }, [limitOrderMonitorEnabled, limitOrders, handleLimitOrderCheck]);
+    if (limitOrderPollEnabled) {
+      setLimitOrderCountdown(2);
+      limitOrderCountdownRef.current = 2;
+    }
+  }, [limitOrderPollEnabled]);
+  useVisibleInterval(() => { void handleLimitOrderCheck(); }, 2000, limitOrderPollEnabled);
 
   // Real-time subscription to limit orders
   useEffect(() => {
@@ -1104,21 +1073,14 @@ export function FlipItDashboard() {
       })();
 
       try {
-        const isPumpMint = mint.endsWith('pump');
         const priceStart = Date.now();
-        console.log(`[fetchInputTokenData] 🚀 Fetching live price for ${mint.slice(0, 8)}... pumpMint=${isPumpMint}`);
+        console.log(`[fetchInputTokenData] 🚀 Fetching live price for ${mint.slice(0, 8)}... (helius-fast-price)`);
 
-        const pricePromise = isPumpMint
-          ? supabase.functions.invoke('flipit-preflight', {
-              body: {
-                tokenMint: mint,
-                solAmount: 0.01,
-                slippageBps: 500,
-              }
-            })
-          : supabase.functions.invoke('helius-fast-price', {
-              body: { tokenMint: mint }
-            });
+        // ALWAYS use helius-fast-price for paste/display — it has a pump.fun bonding curve fallback built in
+        // and returns in ~200-400ms. flipit-preflight is reserved for the execute-time backstop only.
+        const pricePromise = supabase.functions.invoke('helius-fast-price', {
+          body: { tokenMint: mint }
+        });
 
         const [priceResult, fastBlacklistHit] = await Promise.all([
           pricePromise,
@@ -1130,36 +1092,9 @@ export function FlipItDashboard() {
         console.log(`[fetchInputTokenData] Price responder latency ${latencyMs}ms`);
 
         if (!priceError && priceData?.success) {
-          if (isPumpMint && priceData?.executablePriceUsd > 0) {
-            executablePrice = priceData.executablePriceUsd;
-            priceSource = priceData.source || priceData.venueHint || 'preflight';
-            quickSymbol = priceData.symbol || null;
-            quickName = priceData.name || null;
-
-            setInputToken({
-              mint,
-              symbol: quickSymbol,
-              name: quickName,
-              price: executablePrice,
-              image: quickImage,
-              marketCap: null,
-              liquidity: null,
-              holders: null,
-              dexStatus: null,
-              twitterUrl: null,
-              websiteUrl: null,
-              telegramUrl: null,
-              lastFetched: new Date().toISOString(),
-              source: priceSource,
-              creatorWallet: null,
-              isOnCurve: !!priceData.isOnCurve,
-              venueHint: priceData.venueHint || null,
-            });
-
-            toast.success(`Live price: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (${priceData.venue || 'pump.fun'})`);
-          } else if (!isPumpMint && priceData?.price > 0) {
+          if (priceData?.price > 0) {
             executablePrice = priceData.price;
-            priceSource = priceData.source || 'helius_getAsset';
+            priceSource = priceData.source || priceData.venueHint || 'helius_getAsset';
             quickSymbol = priceData.symbol || null;
             quickName = priceData.name || null;
             quickImage = priceData.image || null;
@@ -1180,12 +1115,13 @@ export function FlipItDashboard() {
               lastFetched: new Date().toISOString(),
               source: priceSource,
               creatorWallet: null,
-              isOnCurve: false,
-              venueHint: null,
+              isOnCurve: !!priceData.isOnCurve,
+              venueHint: priceData.venueHint || null,
             });
 
             const displaySymbol = quickSymbol || 'Token';
-            toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (Helius)`);
+            const venueLabel = priceData.isOnCurve ? 'pump.fun curve' : 'Helius';
+            toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (${venueLabel})`);
           }
 
           if (fastBlacklistHit) {
@@ -2085,10 +2021,11 @@ export function FlipItDashboard() {
     const cachedAt = inputToken.lastFetched ? new Date(inputToken.lastFetched).getTime() : 0;
     const cacheAgeMs = Date.now() - cachedAt;
     const CACHE_FRESH_MS = 5000;
-    const isCurveToken = !!inputToken.isOnCurve || inputToken.venueHint === 'pumpfun_curve';
 
     // FAST PATH: cached price < 5s old → skip blocking re-fetch, fire background refresh, execute now.
-    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS && !isCurveToken) {
+    // Applies to ALL tokens including curve tokens — backend trade-guard re-quotes at actual size anyway,
+    // so a second front-end quote is pure latency (and causes triple-quote drift for curve tokens).
+    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS) {
       console.log(`[FlipIt] Using cached price $${cachedPrice} (age ${cacheAgeMs}ms) — instant flip`);
       // Background refresh for log freshness, NOT awaited
       supabase.functions.invoke('helius-fast-price', {
@@ -2103,17 +2040,10 @@ export function FlipItDashboard() {
     setIsFlipping(true);
     const priceToastId = toast.loading('Fetching fresh price...', { duration: 5000 });
     try {
-      const fetchPromise = isCurveToken
-        ? supabase.functions.invoke('flipit-preflight', {
-            body: {
-              tokenMint: tokenAddress.trim(),
-              solAmount: Math.max(parsedAmount, 0.01),
-              slippageBps,
-            },
-          })
-        : supabase.functions.invoke('helius-fast-price', {
-            body: { tokenMint: tokenAddress.trim() },
-          });
+      // Single price path: helius-fast-price (fast, ~250ms, handles curve + jupiter tokens).
+      const fetchPromise = supabase.functions.invoke('helius-fast-price', {
+        body: { tokenMint: tokenAddress.trim() },
+      });
       const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
         setTimeout(() => resolve({ data: null, error: { message: 'TIMEOUT_4S' } }), 4000)
       );
@@ -2136,7 +2066,7 @@ export function FlipItDashboard() {
         return;
       }
 
-      console.log(`[FlipIt] Fresh execution price: $${resolvedPrice} (curve=${isCurveToken})`);
+      console.log(`[FlipIt] Fresh execution price: $${resolvedPrice}`);
       await executeFlip(resolvedPrice, tokenSymbol);
     } catch (err: any) {
       toast.dismiss(priceToastId);
@@ -2172,6 +2102,10 @@ export function FlipItDashboard() {
           buyAmountSol: amountInSol,
           // CRITICAL: pass the preflight-verified price for Trade Guard validation
           displayPriceUsd: requestedPrice,
+          // The UI price came from helius-fast-price (real executable on-curve/Helius price),
+          // NOT a stale aggregator display price. Tell trade-guard to skip the display-vs-executable
+          // deviation check (which was causing false EXTREME_DEVIATION blocks on curve tokens).
+          displayPriceIsExecutable: true,
           isOnCurve: inputToken.isOnCurve,
           venueHint: inputToken.venueHint,
           targetMultiplier: targetMultiplier,
