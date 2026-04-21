@@ -2085,9 +2085,10 @@ export function FlipItDashboard() {
     const cachedAt = inputToken.lastFetched ? new Date(inputToken.lastFetched).getTime() : 0;
     const cacheAgeMs = Date.now() - cachedAt;
     const CACHE_FRESH_MS = 5000;
+    const isCurveToken = !!inputToken.isOnCurve || inputToken.venueHint === 'pumpfun_curve';
 
     // FAST PATH: cached price < 5s old → skip blocking re-fetch, fire background refresh, execute now.
-    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS) {
+    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS && !isCurveToken) {
       console.log(`[FlipIt] Using cached price $${cachedPrice} (age ${cacheAgeMs}ms) — instant flip`);
       // Background refresh for log freshness, NOT awaited
       supabase.functions.invoke('helius-fast-price', {
@@ -2102,16 +2103,24 @@ export function FlipItDashboard() {
     setIsFlipping(true);
     const priceToastId = toast.loading('Fetching fresh price...', { duration: 5000 });
     try {
-      const fetchPromise = supabase.functions.invoke('helius-fast-price', {
-        body: { tokenMint: tokenAddress.trim() },
-      });
+      const fetchPromise = isCurveToken
+        ? supabase.functions.invoke('flipit-preflight', {
+            body: {
+              tokenMint: tokenAddress.trim(),
+              solAmount: Math.max(parsedAmount, 0.01),
+              slippageBps,
+            },
+          })
+        : supabase.functions.invoke('helius-fast-price', {
+            body: { tokenMint: tokenAddress.trim() },
+          });
       const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
         setTimeout(() => resolve({ data: null, error: { message: 'TIMEOUT_4S' } }), 4000)
       );
       const res: any = await Promise.race([fetchPromise, timeoutPromise]);
       const freshPrice = res?.data;
       const priceErr = res?.error;
-      const resolvedPrice = freshPrice?.priceUsd || freshPrice?.price;
+      const resolvedPrice = freshPrice?.executablePriceUsd || freshPrice?.priceUsd || freshPrice?.price;
 
       toast.dismiss(priceToastId);
 
@@ -2127,7 +2136,7 @@ export function FlipItDashboard() {
         return;
       }
 
-      console.log(`[FlipIt] Fresh Helius price for execution: $${resolvedPrice}`);
+      console.log(`[FlipIt] Fresh execution price: $${resolvedPrice} (curve=${isCurveToken})`);
       await executeFlip(resolvedPrice, tokenSymbol);
     } catch (err: any) {
       toast.dismiss(priceToastId);
