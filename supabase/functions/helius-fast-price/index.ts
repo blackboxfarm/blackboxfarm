@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { resolvePrice } from '../_shared/price-resolver.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 enableHeliusTracking('helius-fast-price');
@@ -33,8 +34,37 @@ serve(withRunLog('helius-fast-price', async (req) => {
       );
     }
 
-    requireHeliusApiKey(); // Throws if not configured
+    const heliusApiKey = requireHeliusApiKey(); // Throws if not configured
     const url = getHeliusRpcUrl();
+
+    if (tokenMint.endsWith('pump')) {
+      try {
+        const resolved = await resolvePrice(tokenMint, {
+          forceFresh: true,
+          heliusApiKey,
+          venueHint: 'pumpfun_curve',
+        });
+
+        if (resolved?.price && resolved.price > 0) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              price: resolved.price,
+              currency: 'USD',
+              source: resolved.source,
+              venueHint: resolved.isOnCurve ? 'pumpfun_curve' : 'pumpfun_graduated',
+              isOnCurve: resolved.isOnCurve,
+              latencyMs: Date.now() - startTime,
+              bondingCurveProgress: resolved.bondingCurveProgress ?? null,
+              pairAddress: resolved.pairAddress ?? null,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } catch (resolvedErr) {
+        console.log(`[helius-fast-price] resolvePrice failed for pump mint: ${(resolvedErr as Error).message}`);
+      }
+    }
     
     const controller = new AbortController();
     // Tightened: 1.5s. If Helius doesn't answer in 1.5s, fall through to pump.fun curve.
