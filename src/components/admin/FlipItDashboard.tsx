@@ -699,47 +699,21 @@ export function FlipItDashboard() {
     }
   }, []);
 
-  // CONSOLIDATED SINGLE POLLING INTERVAL - replaces 4 separate intervals
-  useEffect(() => {
-    // Only run if at least one monitor type is enabled
-    if (!autoRefreshEnabled && !rebuyMonitorEnabled && !emergencyMonitorEnabled && !limitOrderMonitorEnabled) {
-      return;
-    }
+  // CONSOLIDATED SINGLE POLLING INTERVAL - replaces 4 separate intervals.
+  // Uses useVisibleInterval so polling AUTOMATICALLY PAUSES when the tab is hidden
+  // (big browser CPU win — was previously hammering the network at 5s even when minimized).
+  const anyMonitorEnabled = autoRefreshEnabled || rebuyMonitorEnabled || emergencyMonitorEnabled || limitOrderMonitorEnabled;
+  const hasHoldings = positions.some(p => p.status === 'holding');
+  const hasRebuyWatching = positions.some(p => p.rebuy_status === 'watching');
+  const hasEmergencyWatching = positions.some(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
+  const hasLimitOrderWatching = limitOrders.some(o => o.status === 'watching');
+  const anythingToMonitor = hasHoldings || hasRebuyWatching || hasEmergencyWatching || hasLimitOrderWatching;
+  const unifiedMonitorEnabled = anyMonitorEnabled && anythingToMonitor;
+  // Poll at 5s when actively watching, 10s when idle (shouldn't run at all when nothing to watch,
+  // but 10s is the floor in case a brief state flicker hits).
+  const unifiedIntervalMs = anythingToMonitor ? 5000 : 10000;
 
-    const hasHoldings = positions.some(p => p.status === 'holding');
-    const hasRebuyWatching = positions.some(p => p.rebuy_status === 'watching');
-    const hasEmergencyWatching = positions.some(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
-    const hasLimitOrderWatching = limitOrders.some(o => o.status === 'watching');
-
-    // Skip if nothing to monitor
-    if (!hasHoldings && !hasRebuyWatching && !hasEmergencyWatching && !hasLimitOrderWatching) {
-      console.log('[FlipIt] No active positions/orders to monitor');
-      return;
-    }
-
-    console.log('[FlipIt] Starting unified monitor interval (5s)');
-    
-    // Run immediately on mount
-    handleUnifiedMonitor();
-    
-    // Then run every 5 seconds (compromise between 2s limit orders and 15s price check)
-    const intervalId = setInterval(() => {
-      handleUnifiedMonitor();
-    }, 5000);
-
-    return () => {
-      console.log('[FlipIt] Clearing unified monitor interval');
-      clearInterval(intervalId);
-    };
-  }, [
-    autoRefreshEnabled, 
-    rebuyMonitorEnabled, 
-    emergencyMonitorEnabled, 
-    limitOrderMonitorEnabled,
-    positions.length, // Only re-run effect when position count changes
-    limitOrders.length, // Only re-run effect when order count changes
-    handleUnifiedMonitor
-  ]);
+  useVisibleInterval(handleUnifiedMonitor, unifiedIntervalMs, unifiedMonitorEnabled);
 
   // Limit order monitoring handler
   const handleLimitOrderCheck = useCallback(async () => {
