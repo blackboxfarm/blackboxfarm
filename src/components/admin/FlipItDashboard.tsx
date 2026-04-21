@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
+import { useVisibleInterval } from '@/hooks/useVisibleInterval';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 import { ChannelAutoBuyRules } from './flipit/ChannelAutoBuyRules';
 import { ChannelTransactionLog } from './flipit/ChannelTransactionLog';
