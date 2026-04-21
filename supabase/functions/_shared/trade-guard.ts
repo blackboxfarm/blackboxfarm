@@ -764,7 +764,8 @@ export async function validateBuyQuote(
   };
   
   // Check price premium
-  if (premiumPct > cfg.maxPricePremiumPct) {
+  // Skip for curve venues / executable-display cases — priceImpactPct + slippage are the real guard there.
+  if (!skipDeviationCheck && premiumPct > cfg.maxPricePremiumPct) {
     result.isValid = false;
     result.blockReason = `PRICE_PREMIUM_EXCEEDED: Executable price is ${premiumPct.toFixed(1)}% above display price (max: ${cfg.maxPricePremiumPct}%). This usually means thin liquidity or fast price movement.`;
     console.error(`[TradeGuard] ❌ BLOCKED: ${result.blockReason}`);
