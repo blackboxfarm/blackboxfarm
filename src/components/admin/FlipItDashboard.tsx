@@ -2172,6 +2172,8 @@ export function FlipItDashboard() {
           buyAmountSol: amountInSol,
           // CRITICAL: pass the preflight-verified price for Trade Guard validation
           displayPriceUsd: requestedPrice,
+          isOnCurve: inputToken.isOnCurve,
+          venueHint: inputToken.venueHint,
           targetMultiplier: targetMultiplier,
           slippageBps: slippageBps,
           priorityFeeMode: priorityFeeMode
