@@ -1104,21 +1104,14 @@ export function FlipItDashboard() {
       })();
 
       try {
-        const isPumpMint = mint.endsWith('pump');
         const priceStart = Date.now();
-        console.log(`[fetchInputTokenData] 🚀 Fetching live price for ${mint.slice(0, 8)}... pumpMint=${isPumpMint}`);
+        console.log(`[fetchInputTokenData] 🚀 Fetching live price for ${mint.slice(0, 8)}... (helius-fast-price)`);
 
-        const pricePromise = isPumpMint
-          ? supabase.functions.invoke('flipit-preflight', {
-              body: {
-                tokenMint: mint,
-                solAmount: 0.01,
-                slippageBps: 500,
-              }
-            })
-          : supabase.functions.invoke('helius-fast-price', {
-              body: { tokenMint: mint }
-            });
+        // ALWAYS use helius-fast-price for paste/display — it has a pump.fun bonding curve fallback built in
+        // and returns in ~200-400ms. flipit-preflight is reserved for the execute-time backstop only.
+        const pricePromise = supabase.functions.invoke('helius-fast-price', {
+          body: { tokenMint: mint }
+        });
 
         const [priceResult, fastBlacklistHit] = await Promise.all([
           pricePromise,
@@ -1130,36 +1123,9 @@ export function FlipItDashboard() {
         console.log(`[fetchInputTokenData] Price responder latency ${latencyMs}ms`);
 
         if (!priceError && priceData?.success) {
-          if (isPumpMint && priceData?.executablePriceUsd > 0) {
-            executablePrice = priceData.executablePriceUsd;
-            priceSource = priceData.source || priceData.venueHint || 'preflight';
-            quickSymbol = priceData.symbol || null;
-            quickName = priceData.name || null;
-
-            setInputToken({
-              mint,
-              symbol: quickSymbol,
-              name: quickName,
-              price: executablePrice,
-              image: quickImage,
-              marketCap: null,
-              liquidity: null,
-              holders: null,
-              dexStatus: null,
-              twitterUrl: null,
-              websiteUrl: null,
-              telegramUrl: null,
-              lastFetched: new Date().toISOString(),
-              source: priceSource,
-              creatorWallet: null,
-              isOnCurve: !!priceData.isOnCurve,
-              venueHint: priceData.venueHint || null,
-            });
-
-            toast.success(`Live price: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (${priceData.venue || 'pump.fun'})`);
-          } else if (!isPumpMint && priceData?.price > 0) {
+          if (priceData?.price > 0) {
             executablePrice = priceData.price;
-            priceSource = priceData.source || 'helius_getAsset';
+            priceSource = priceData.source || priceData.venueHint || 'helius_getAsset';
             quickSymbol = priceData.symbol || null;
             quickName = priceData.name || null;
             quickImage = priceData.image || null;
@@ -1180,12 +1146,13 @@ export function FlipItDashboard() {
               lastFetched: new Date().toISOString(),
               source: priceSource,
               creatorWallet: null,
-              isOnCurve: false,
-              venueHint: null,
+              isOnCurve: !!priceData.isOnCurve,
+              venueHint: priceData.venueHint || null,
             });
 
             const displaySymbol = quickSymbol || 'Token';
-            toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (Helius)`);
+            const venueLabel = priceData.isOnCurve ? 'pump.fun curve' : 'Helius';
+            toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (${venueLabel})`);
           }
 
           if (fastBlacklistHit) {
