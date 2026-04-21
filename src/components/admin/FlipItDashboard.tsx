@@ -1104,72 +1104,106 @@ export function FlipItDashboard() {
       })();
 
       try {
-        console.log(`[fetchInputTokenData] 🚀 HELIUS FIRST: Fetching price for ${mint.slice(0, 8)}...`);
-        const heliusStart = Date.now();
-        
-        // Run Helius price + fast blacklist in parallel
-        const [heliusResult, fastBlacklistHit] = await Promise.all([
-          supabase.functions.invoke('helius-fast-price', {
-            body: { tokenMint: mint }
-          }),
+        const isPumpMint = mint.endsWith('pump');
+        const priceStart = Date.now();
+        console.log(`[fetchInputTokenData] 🚀 Fetching live price for ${mint.slice(0, 8)}... pumpMint=${isPumpMint}`);
+
+        const pricePromise = isPumpMint
+          ? supabase.functions.invoke('flipit-preflight', {
+              body: {
+                tokenMint: mint,
+                solAmount: 0.01,
+                slippageBps: 500,
+              }
+            })
+          : supabase.functions.invoke('helius-fast-price', {
+              body: { tokenMint: mint }
+            });
+
+        const [priceResult, fastBlacklistHit] = await Promise.all([
+          pricePromise,
           fastBlacklistPromise
         ]);
-        
-        const { data: heliusData, error: heliusError } = heliusResult;
 
-        const heliusLatency = Date.now() - heliusStart;
-        console.log(`[fetchInputTokenData] Helius responded in ${heliusLatency}ms`);
+        const latencyMs = Date.now() - priceStart;
+        const { data: priceData, error: priceError } = priceResult as { data: any; error: any };
+        console.log(`[fetchInputTokenData] Price responder latency ${latencyMs}ms`);
 
-        if (!heliusError && heliusData?.success && heliusData?.price > 0) {
-          executablePrice = heliusData.price;
-          priceSource = 'helius_getAsset';
-          quickSymbol = heliusData.symbol || null;
-          quickName = heliusData.name || null;
-          quickImage = heliusData.image || null;
-          
-          console.log(`[fetchInputTokenData] ✅ HELIUS PRICE: $${executablePrice} (${heliusLatency}ms)`);
-          
-          // IMMEDIATELY show price - don't wait for metadata!
-          setInputToken({
-            mint: mint,
-            symbol: quickSymbol,
-            name: quickName,
-            price: executablePrice,
-            image: quickImage,
-            marketCap: null,
-            liquidity: null,
-            holders: null,
-            dexStatus: null,
-            twitterUrl: null,
-            websiteUrl: null,
-            telegramUrl: null,
-            lastFetched: new Date().toISOString(),
-            source: priceSource,
-            creatorWallet: null
-          });
+        if (!priceError && priceData?.success) {
+          if (isPumpMint && priceData?.executablePriceUsd > 0) {
+            executablePrice = priceData.executablePriceUsd;
+            priceSource = priceData.source || priceData.venueHint || 'preflight';
+            quickSymbol = priceData.symbol || null;
+            quickName = priceData.name || null;
 
-          // Show success toast with price
-          const displaySymbol = quickSymbol || 'Token';
-          toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (Helius)`);
-          
-          // If fast blacklist hit, warn user immediately
+            setInputToken({
+              mint,
+              symbol: quickSymbol,
+              name: quickName,
+              price: executablePrice,
+              image: quickImage,
+              marketCap: null,
+              liquidity: null,
+              holders: null,
+              dexStatus: null,
+              twitterUrl: null,
+              websiteUrl: null,
+              telegramUrl: null,
+              lastFetched: new Date().toISOString(),
+              source: priceSource,
+              creatorWallet: null,
+              isOnCurve: !!priceData.isOnCurve,
+              venueHint: priceData.venueHint || null,
+            });
+
+            toast.success(`Live price: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (${priceData.venue || 'pump.fun'})`);
+          } else if (!isPumpMint && priceData?.price > 0) {
+            executablePrice = priceData.price;
+            priceSource = priceData.source || 'helius_getAsset';
+            quickSymbol = priceData.symbol || null;
+            quickName = priceData.name || null;
+            quickImage = priceData.image || null;
+
+            setInputToken({
+              mint: mint,
+              symbol: quickSymbol,
+              name: quickName,
+              price: executablePrice,
+              image: quickImage,
+              marketCap: null,
+              liquidity: null,
+              holders: null,
+              dexStatus: null,
+              twitterUrl: null,
+              websiteUrl: null,
+              telegramUrl: null,
+              lastFetched: new Date().toISOString(),
+              source: priceSource,
+              creatorWallet: null,
+              isOnCurve: false,
+              venueHint: null,
+            });
+
+            const displaySymbol = quickSymbol || 'Token';
+            toast.success(`${displaySymbol}: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (Helius)`);
+          }
+
           if (fastBlacklistHit) {
             toast.error('🚨 BLACKLISTED TOKEN - Do NOT buy!', { duration: 10000 });
           }
         } else {
-          console.log(`[fetchInputTokenData] Helius no price: ${heliusData?.error || 'unknown'}`);
+          console.log(`[fetchInputTokenData] Live price unavailable: ${priceData?.error || priceError?.message || 'unknown'}`);
         }
-      } catch (heliusErr) {
-        console.warn('[fetchInputTokenData] Helius fast-price failed:', heliusErr);
+      } catch (priceFetchErr) {
+        console.warn('[fetchInputTokenData] Live price fetch failed:', priceFetchErr);
       }
 
       // ===========================================
-      // STEP 2: If Helius failed, try flipit-preflight
-      // This is slower but handles bonding curves etc.
+      // STEP 2: If still no price, try flipit-preflight
       // ===========================================
       if (executablePrice === null) {
         try {
-          console.log(`[fetchInputTokenData] Helius failed, trying flipit-preflight...`);
+          console.log(`[fetchInputTokenData] No instant price, trying flipit-preflight...`);
           const { data: preflightData, error: preflightError } = await supabase.functions.invoke('flipit-preflight', {
             body: {
               tokenMint: mint,
@@ -1181,14 +1215,15 @@ export function FlipItDashboard() {
           if (!preflightError && preflightData?.success && preflightData?.executablePriceUsd) {
             executablePrice = preflightData.executablePriceUsd;
             priceSource = preflightData.source || 'preflight';
-            
-            // Update state with price
+
             setInputToken(prev => ({
               ...prev,
               mint: mint,
               price: executablePrice,
               source: priceSource,
-              lastFetched: new Date().toISOString()
+              lastFetched: new Date().toISOString(),
+              isOnCurve: !!preflightData.isOnCurve,
+              venueHint: preflightData.venueHint || null,
             }));
 
             toast.success(`Price: $${executablePrice.toFixed(10).replace(/\.?0+$/, '')} (${preflightData.venue || 'preflight'})`);
