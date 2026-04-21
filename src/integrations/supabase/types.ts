@@ -14544,6 +14544,102 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_insider_token_lifecycle: {
+        Row: {
+          built_at: string
+          channel_name: string
+          created_at: string
+          creator_resolved_at: string | null
+          creator_risk_tier: string | null
+          creator_wallet: string | null
+          entry_market_cap: number | null
+          entry_mc_text: string | null
+          first_call_message_id: number | null
+          first_called_at: string
+          id: string
+          is_rugged: boolean
+          last_milestone_at: string | null
+          lifespan_minutes: number | null
+          mesh_promoted_at: string | null
+          mesh_promotion_reason: string | null
+          mesh_promotion_status: string
+          metadata: Json | null
+          milestone_count: number
+          milestone_timeline: Json
+          peak_market_cap: number | null
+          peak_multiplier: number
+          peak_reached_at: string | null
+          raw_alert_message: string | null
+          rug_evidence: Json | null
+          token_mint: string
+          token_symbol: string | null
+          total_messages: number
+          updated_at: string
+        }
+        Insert: {
+          built_at?: string
+          channel_name?: string
+          created_at?: string
+          creator_resolved_at?: string | null
+          creator_risk_tier?: string | null
+          creator_wallet?: string | null
+          entry_market_cap?: number | null
+          entry_mc_text?: string | null
+          first_call_message_id?: number | null
+          first_called_at: string
+          id?: string
+          is_rugged?: boolean
+          last_milestone_at?: string | null
+          lifespan_minutes?: number | null
+          mesh_promoted_at?: string | null
+          mesh_promotion_reason?: string | null
+          mesh_promotion_status?: string
+          metadata?: Json | null
+          milestone_count?: number
+          milestone_timeline?: Json
+          peak_market_cap?: number | null
+          peak_multiplier?: number
+          peak_reached_at?: string | null
+          raw_alert_message?: string | null
+          rug_evidence?: Json | null
+          token_mint: string
+          token_symbol?: string | null
+          total_messages?: number
+          updated_at?: string
+        }
+        Update: {
+          built_at?: string
+          channel_name?: string
+          created_at?: string
+          creator_resolved_at?: string | null
+          creator_risk_tier?: string | null
+          creator_wallet?: string | null
+          entry_market_cap?: number | null
+          entry_mc_text?: string | null
+          first_call_message_id?: number | null
+          first_called_at?: string
+          id?: string
+          is_rugged?: boolean
+          last_milestone_at?: string | null
+          lifespan_minutes?: number | null
+          mesh_promoted_at?: string | null
+          mesh_promotion_reason?: string | null
+          mesh_promotion_status?: string
+          metadata?: Json | null
+          milestone_count?: number
+          milestone_timeline?: Json
+          peak_market_cap?: number | null
+          peak_multiplier?: number
+          peak_reached_at?: string | null
+          raw_alert_message?: string | null
+          rug_evidence?: Json | null
+          token_mint?: string
+          token_symbol?: string | null
+          total_messages?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       telegram_link_codes: {
         Row: {
           created_at: string
