@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, requireHeliusApiKey, redactHeliusSecrets } from '../_shared/helius-client.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
-import { resolvePrice } from '../_shared/price-resolver.ts';
+import { computeBondingCurvePrice, fetchBondingCurveState, resolvePrice } from '../_shared/price-resolver.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
 enableHeliusTracking('helius-fast-price');
@@ -36,6 +36,47 @@ serve(withRunLog('helius-fast-price', async (req) => {
 
     const heliusApiKey = requireHeliusApiKey(); // Throws if not configured
     const url = getHeliusRpcUrl();
+
+    try {
+      const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
+      if (curveState?.isOnCurve) {
+        let solPriceUsd = 0;
+
+        try {
+          const supabaseUrl = Deno.env.get('SUPABASE_URL');
+          const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+          if (supabaseUrl && serviceKey) {
+            const sb = createClient(supabaseUrl, serviceKey);
+            solPriceUsd = await getSolPriceFromCache(sb);
+          }
+        } catch (solErr) {
+          console.log(`[helius-fast-price] SOL price cache lookup failed during on-chain curve probe: ${(solErr as Error).message}`);
+        }
+
+        if (solPriceUsd > 0) {
+          const priceUsd = computeBondingCurvePrice(curveState, solPriceUsd);
+          if (priceUsd > 0) {
+            return new Response(
+              JSON.stringify({
+                success: true,
+                price: priceUsd,
+                currency: 'USD',
+                source: 'pumpfun_curve',
+                venueHint: 'pumpfun_curve',
+                isOnCurve: true,
+                latencyMs: Date.now() - startTime,
+                bondingCurveProgress: curveState.progress,
+                virtualSolReserves: Number(curveState.virtualSolReserves),
+                virtualTokenReserves: Number(curveState.virtualTokenReserves),
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+      }
+    } catch (curveProbeErr) {
+      console.log(`[helius-fast-price] Generic on-chain pump.fun curve probe failed: ${(curveProbeErr as Error).message}`);
+    }
 
     if (tokenMint.endsWith('pump')) {
       try {
