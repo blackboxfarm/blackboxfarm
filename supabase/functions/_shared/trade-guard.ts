@@ -531,10 +531,19 @@ export async function validateBuyQuote(
   options: {
     slippageBps?: number;
     walletPubkey?: string;
+    /**
+     * When true, the caller is telling us that `displayPriceUsd` already came from the
+     * same executable pricing path we're about to re-quote (e.g. helius-fast-price's
+     * pump.fun bonding-curve fallback). In that case, the display-vs-executable deviation
+     * check becomes apples-to-apples of two different trade sizes and produces false
+     * EXTREME_DEVIATION blocks on thin curves. Skip the deviation check but keep
+     * tax / price-impact / slippage protections.
+     */
+    displayPriceIsExecutable?: boolean;
   } = {}
 ): Promise<QuoteValidation> {
   const cfg = { ...DEFAULT_CONFIG, ...config };
-  const { slippageBps = 500, walletPubkey } = options;
+  const { slippageBps = 500, walletPubkey, displayPriceIsExecutable = false } = options;
   
   // If validation is disabled, always pass
   if (!cfg.requireQuoteCheck) {
