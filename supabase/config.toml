@@ -531,3 +531,18 @@ verify_jwt = false
 
 [functions.send-ticket-reply]
 verify_jwt = false
+
+[functions.token-fingerprint-scanner]
+verify_jwt = false
+
+[functions.co-mint-cluster-detector]
+verify_jwt = false
+
+[functions.social-links-backfill]
+verify_jwt = false
+
+[functions.scammer-blacklist-promoter]
+verify_jwt = false
+
+[functions.trusted-whitelist-promoter]
+verify_jwt = false
