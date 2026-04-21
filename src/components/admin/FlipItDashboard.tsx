@@ -2133,6 +2133,10 @@ export function FlipItDashboard() {
           buyAmountSol: amountInSol,
           // CRITICAL: pass the preflight-verified price for Trade Guard validation
           displayPriceUsd: requestedPrice,
+          // The UI price came from helius-fast-price (real executable on-curve/Helius price),
+          // NOT a stale aggregator display price. Tell trade-guard to skip the display-vs-executable
+          // deviation check (which was causing false EXTREME_DEVIATION blocks on curve tokens).
+          displayPriceIsExecutable: true,
           isOnCurve: inputToken.isOnCurve,
           venueHint: inputToken.venueHint,
           targetMultiplier: targetMultiplier,
