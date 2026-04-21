@@ -2039,43 +2039,63 @@ export function FlipItDashboard() {
       return;
     }
 
-    // Re-fetch price using the SAME method as paste (helius-fast-price), not a different source
     const tokenSymbol = inputToken.symbol;
-    
-    const priceToastId = toast.loading('Fetching fresh price (can take up to 60s)...', { duration: 90000 });
+    const cachedPrice = inputToken.price;
+    const cachedAt = inputToken.lastFetched ? new Date(inputToken.lastFetched).getTime() : 0;
+    const cacheAgeMs = Date.now() - cachedAt;
+    const CACHE_FRESH_MS = 5000;
+
+    // FAST PATH: cached price < 5s old → skip blocking re-fetch, fire background refresh, execute now.
+    if (cachedPrice && cacheAgeMs < CACHE_FRESH_MS) {
+      console.log(`[FlipIt] Using cached price $${cachedPrice} (age ${cacheAgeMs}ms) — instant flip`);
+      // Background refresh for log freshness, NOT awaited
+      supabase.functions.invoke('helius-fast-price', {
+        body: { tokenMint: tokenAddress.trim() },
+      }).catch(() => { /* non-blocking */ });
+      setIsFlipping(true);
+      await executeFlip(cachedPrice, tokenSymbol);
+      return;
+    }
+
+    // SLOW PATH: stale or missing cache → 4s hard timeout, fall back to cache if it exists.
     setIsFlipping(true);
+    const priceToastId = toast.loading('Fetching fresh price...', { duration: 5000 });
     try {
-      // Long-running price fetch — give it up to 90 seconds before we abort
-      const ctrl = new AbortController();
-      const timeoutId = setTimeout(() => ctrl.abort(), 90000);
-
-      let freshPrice: any = null;
-      let priceErr: any = null;
-      try {
-        const res = await supabase.functions.invoke('helius-fast-price', {
-          body: { tokenMint: tokenAddress.trim() },
-        });
-        freshPrice = res.data;
-        priceErr = res.error;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
+      const fetchPromise = supabase.functions.invoke('helius-fast-price', {
+        body: { tokenMint: tokenAddress.trim() },
+      });
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'TIMEOUT_4S' } }), 4000)
+      );
+      const res: any = await Promise.race([fetchPromise, timeoutPromise]);
+      const freshPrice = res?.data;
+      const priceErr = res?.error;
       const resolvedPrice = freshPrice?.priceUsd || freshPrice?.price;
-      if (priceErr || !resolvedPrice) {
-        toast.dismiss(priceToastId);
-        toast.error('Failed to fetch fresh price: ' + (freshPrice?.error || priceErr?.message || 'Unknown'));
+
+      toast.dismiss(priceToastId);
+
+      // If fetch failed/timed out but we have ANY cached price, use it instead of failing
+      if (!resolvedPrice) {
+        if (cachedPrice) {
+          console.warn(`[FlipIt] Fresh fetch failed (${priceErr?.message}), proceeding with cached $${cachedPrice}`);
+          await executeFlip(cachedPrice, tokenSymbol);
+          return;
+        }
+        toast.error('Failed to fetch price: ' + (freshPrice?.error || priceErr?.message || 'No price'));
         setIsFlipping(false);
         return;
       }
 
-      const displayedPrice = resolvedPrice;
-      console.log(`[FlipIt] Fresh Helius price for execution: $${displayedPrice}`);
-      toast.dismiss(priceToastId);
-
-      await executeFlip(displayedPrice, tokenSymbol);
+      console.log(`[FlipIt] Fresh Helius price for execution: $${resolvedPrice}`);
+      await executeFlip(resolvedPrice, tokenSymbol);
     } catch (err: any) {
       toast.dismiss(priceToastId);
+      // Last-resort fallback to cache
+      if (cachedPrice) {
+        console.warn(`[FlipIt] Price fetch threw (${err.message}), proceeding with cached $${cachedPrice}`);
+        await executeFlip(cachedPrice, tokenSymbol);
+        return;
+      }
       console.error('Fresh price fetch error:', err);
       toast.error('Failed to fetch price: ' + (err.message || 'Unknown error'));
       setIsFlipping(false);
