@@ -181,6 +181,39 @@ export default function InsidersLifecycleTab() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [drillDown, setDrillDown] = useState<LifecycleRow | null>(null);
+  const [rowActioning, setRowActioning] = useState<string | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
+
+  const handleRowAction = async (
+    tokenMint: string,
+    action: 'promote' | 'reconsider' | 'reject' | 'override_promote',
+    reason?: string,
+  ) => {
+    setRowActioning(tokenMint + ':' + action);
+    try {
+      const { data, error } = await supabase.functions.invoke('insiders-mesh-row-action', {
+        body: { token_mint: tokenMint, action, reason },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'action failed');
+      toast.success(`${action.replace('_', ' ')} → ${data.new_status}`);
+      await fetchRows();
+      // If drill-down is open for this token, refresh that view too
+      if (drillDown?.token_mint === tokenMint) {
+        const { data: r } = await supabase
+          .from('telegram_insider_token_lifecycle')
+          .select('*')
+          .eq('token_mint', tokenMint)
+          .maybeSingle();
+        if (r) setDrillDown(r as any);
+      }
+      setOverrideReason("");
+    } catch (e: any) {
+      toast.error('Action failed: ' + (e?.message || String(e)));
+    } finally {
+      setRowActioning(null);
+    }
+  };
 
   const fetchRows = async () => {
     setLoading(true);
