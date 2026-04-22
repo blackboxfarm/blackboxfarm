@@ -310,6 +310,9 @@ export default function InsidersLifecycleTab() {
 
   return (
     <div className="space-y-6">
+      {/* Hypothetical $X-per-call PnL simulator */}
+      <HypotheticalPnlPanel rows={rows} />
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total tokens</div><div className="text-2xl font-bold">{summary.total}</div></CardContent></Card>
@@ -423,6 +426,7 @@ export default function InsidersLifecycleTab() {
                     <TableHead className="text-right">Peak MC</TableHead>
                     <TableHead>Lifespan</TableHead>
                     <TableHead>Mesh</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
