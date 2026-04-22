@@ -101,6 +101,7 @@ serve(async (req) => {
     let skippedRug = 0;
     let skippedAlready = 0;
     let creatorMissing = 0;
+    let devHistoryWarning = 0;
     const errors: string[] = [];
 
     for (const c of candidates || []) {
@@ -122,22 +123,47 @@ serve(async (req) => {
           continue;
         }
 
-        // Check risk
-        const risk = await getCreatorRisk(supabase, creator);
-        if (risk.isRug) {
+        // Two-tier evaluation: this-token rug vs dev-history rug
+        const [risk, thisToken] = await Promise.all([
+          getCreatorRisk(supabase, creator),
+          getThisTokenRug(supabase, c.token_mint),
+        ]);
+
+        const trace = {
+          creator_wallet: creator,
+          dev_history: {
+            risk_tier: risk.riskTier,
+            trust_level: risk.trustLevel,
+            tokens_rugged: risk.tokensRugged,
+            auto_blacklisted: risk.autoBlacklisted,
+            has_history_rug: risk.devHistoryRug,
+          },
+          this_token: {
+            death_cause: thisToken.deathCause,
+            autopsy_notes: thisToken.autopsyNotes,
+            market_cap: thisToken.marketCap,
+            is_rug: thisToken.isRug,
+          },
+          peak_multiplier: c.peak_multiplier,
+          evaluated_at: new Date().toISOString(),
+        };
+
+        // HARD REJECT only if THIS token has its own rug evidence
+        if (thisToken.isRug) {
           await supabase
             .from('telegram_insider_token_lifecycle')
             .update({
               creator_risk_tier: risk.riskTier,
               mesh_promotion_status: 'rejected_rug',
               is_rugged: true,
+              dev_history_warning: risk.devHistoryRug,
+              mesh_decision_trace: { ...trace, decision: 'rejected_rug', reason: 'this_token_rug' },
               rug_evidence: {
-                risk_tier: risk.riskTier,
-                trust_level: risk.trustLevel,
-                tokens_rugged: risk.tokensRugged,
-                auto_blacklisted: risk.autoBlacklisted,
+                death_cause: thisToken.deathCause,
+                autopsy_notes: thisToken.autopsyNotes,
+                market_cap: thisToken.marketCap,
               },
-              mesh_promotion_reason: `Rug pattern: tier=${risk.riskTier} trust=${risk.trustLevel} rugged=${risk.tokensRugged} blacklisted=${risk.autoBlacklisted}`,
+              mesh_promotion_reason: `THIS token rugged: death_cause=${thisToken.deathCause}`,
             })
             .eq('id', c.id);
           skippedRug++;
@@ -149,8 +175,12 @@ serve(async (req) => {
           continue;
         }
 
-        // Upsert into reputation_mesh — link wallet → token, relationship=good_actor
-        const reason = `Insiders channel ${c.peak_multiplier}x token (${c.token_symbol || c.token_mint.slice(0, 8)}) — no rug pattern`;
+        // Promote — but flag amber if dev has prior rug history on OTHER tokens
+        const baseLabel = `${c.peak_multiplier}x token (${c.token_symbol || c.token_mint.slice(0, 8)})`;
+        const reason = risk.devHistoryRug
+          ? `Insiders channel ${baseLabel} — promoted with ⚠ dev history (prior rug on different token; this token clean)`
+          : `Insiders channel ${baseLabel} — clean dev, no rug pattern`;
+        if (risk.devHistoryRug) devHistoryWarning++;
 
         const { error: meshErr } = await supabase
           .from('reputation_mesh')
@@ -159,14 +189,15 @@ serve(async (req) => {
             source_id: creator,
             linked_type: 'token',
             linked_id: c.token_mint,
-            relationship: 'good_actor_creator',
-            confidence: Math.min(100, Math.round(50 + c.peak_multiplier * 5)),
+            relationship: risk.devHistoryRug ? 'recovering_actor_creator' : 'good_actor_creator',
+            confidence: Math.min(100, Math.round((risk.devHistoryRug ? 30 : 50) + c.peak_multiplier * 5)),
             evidence: {
               source: 'insiders_lifecycle_promoter',
               token_symbol: c.token_symbol,
               peak_multiplier: c.peak_multiplier,
               peak_market_cap: c.peak_market_cap,
               first_called_at: c.first_called_at,
+              dev_history_warning: risk.devHistoryRug,
             },
             discovered_via: 'insiders_lifecycle_promoter',
           });
@@ -184,6 +215,12 @@ serve(async (req) => {
             mesh_promotion_status: 'promoted',
             mesh_promoted_at: new Date().toISOString(),
             mesh_promotion_reason: reason,
+            dev_history_warning: risk.devHistoryRug,
+            mesh_decision_trace: {
+              ...trace,
+              decision: 'promoted',
+              reason: risk.devHistoryRug ? 'clean_token_with_dev_history' : 'clean_dev_clean_token',
+            },
           })
           .eq('id', c.id);
 
@@ -199,6 +236,7 @@ serve(async (req) => {
         success: true,
         candidates: candidates?.length || 0,
         promoted,
+        promoted_with_dev_history: devHistoryWarning,
         skipped_rug: skippedRug,
         skipped_already_promoted: skippedAlready,
         skipped_no_creator: creatorMissing,
