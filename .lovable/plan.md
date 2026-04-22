@@ -1,86 +1,103 @@
 
 
-# Insiders Lifecycle — Honest Reporting & Mesh Transparency
+# Three-Part Build: Hypothetical PnL + Per-Row Mesh Controls + Mesh Verdict Editor
 
-Four upgrades to the Insiders Lifecycle tab that make the data fully honest and the mesh-promotion logic transparent.
+## Part 1 — "$10 Per Call" Hypothetical PnL Simulator
 
-## What you'll get
+A new collapsible section at the top of the **Insiders Lifecycle** tab.
 
-### 1. "Saddev / Poor Launch" category (the 425 missing tokens)
-- Add a new summary card: **Never hit 2x** (currently 425 of 633 tokens — the silent majority).
-- Add filter options: `< 2x (saddev)`, `Dud (1 milestone only)`, `Dead on arrival (no milestone)`.
-- Default min-X dropdown gains a `≥ 1x (show all)` option so duds become visible.
-- New badge column: tokens with `peak_multiplier < 2` get a grey **"Saddev"** badge so they're scannable.
+### What the numbers show right now (live preview from your DB)
 
-### 2. Export to CSV
-- New **Export CSV** button (top-right of controls). Exports the *currently filtered* view.
-- Columns: First called, Symbol, Mint (full), Entry MC, Peak X, Peak MC, Lifespan minutes, Milestones, Creator wallet, Mesh status, Mesh reason.
-
-### 3. Fix the MAGA false-rug + make Mesh logic visible
-
-**The bug:** MAGA's creator wallet has `trust_level='scammer'` and `tokens_rugged=1` in `dev_wallet_reputation` — flagged for a *previous* token. The promoter then marks **every** token that wallet ever touched as "rug". That's why MAGA (a 131x performer still pumping) shows as Rug.
-
-**The fix — two-tier evaluation:**
-
-| Rug Signal Found On | New Treatment |
+| Metric | Value |
 |---|---|
-| **This token itself** (autopsy = rug, scam flag, LP pulled) | Hard `Rug` (red) — keep current behavior |
-| **Different token by same dev** (history-only) | New `⚠ Dev History` (amber) — *still mesh-eligible* if peak ≥3x, with an audit note |
-| **No rug pattern** | Promote to mesh as good actor |
+| Tokens with usable entry+peak data | **191** of 636 |
+| Total spent ($10 each, ATH-sell strategy) | **$1,910** |
+| Total returned at peak MC | **$13,648** |
+| **Net PnL** | **+$11,738 (+614%)** |
+| Best winner contribution | $MAGA at 131x = ~$1,310 from $10 |
+| Tokens with no entry MC (excluded) | 57 |
+| Tokens that would lose ($10 → less) | counted as full $10 loss if peak < entry |
 
-So MAGA becomes `⚠ Dev History` (not blocked), still promotable, with a clickable explanation: *"Creator's prior token X rugged — but THIS token shows no rug signals (no LP pull, no autopsy flag, still trading)."*
+### UI: "Hypothetical $10 Per Call" card
 
-**Mesh transparency in the row pop-up:**
-- New **"Mesh Decision"** section on every drill-down showing the full reasoning chain:
-  - Creator wallet (full + Solscan link)
-  - Creator's prior history (tokens_rugged, trust_level, # of prior calls in insiders)
-  - This token's own death signals (autopsy, LP, mcap)
-  - Final decision + plain-English reason
-- New **"Reconsider"** button (super-admin only) on rejected tokens — re-runs evaluation with current data.
+- **Bet size input** (default $10, slider 1–1000)
+- **Sell strategy dropdown:** Sell at peak ATH (default) | Sell at 2x | Sell at 5x or peak | Hold to current MC
+- **4 KPI tiles:** Total Spent · Total Returned · Net PnL ($) · ROI (%)
+- **Cumulative chart** (Recharts AreaChart, dual line):
+  - X-axis: time (daily buckets of `first_called_at`)
+  - Line A (red, area): cumulative spent
+  - Line B (green, area): cumulative returned at sell strategy
+  - Tooltip: # tokens that day, day's PnL, running PnL
+- **Bar chart:** Daily PnL per day (green bars = profit days, red = loss days)
+- **Top 10 winners table:** symbol, entry MC, peak MC, multiplier, $ profit
+- **Worst 10 duds table:** same columns
+- **"Tokens excluded from PnL"** badge with hover-card listing why (no entry MC, no peak data)
+- **Export PnL CSV** button (per-token: bet, return, profit, sell trigger)
 
-### 4. Fix the "0m lifespan" mystery + explain "Promote ≥3x to Mesh"
+All math is computed client-side from rows already loaded — no new edge function, no new table, instant.
 
-**Lifespan = 0m cause:** Several historical milestones in `telegram_channel_calls` share the exact same `created_at` (bulk-import artifact). The builder uses `created_at` when `message_timestamp` is null, so milestones collapse to one timestamp.
+## Part 2 — Per-Row "Promote / Reject / Reconsider" Buttons
 
-**Fix:** Builder prefers `message_timestamp` always; when missing, derives lifespan from the *spread* of `created_at` only if more than 60 seconds apart. If all timestamps collapse, surface lifespan as `unknown` (not `0m`) with a tooltip: *"Original Telegram timestamps not preserved on this batch."*
+Added to the **Actions** column in the lifecycle table (super-admin only).
 
-**"Promote ≥3x to Mesh" — what it does (made visible in UI):**
-Add an info button next to the button with this hover-card explanation:
-> Scans every Insiders token with peak ≥3x. For each, looks up the creator wallet, checks for rug signals on **this specific token**, and if clean writes a `good_actor_creator` record into `reputation_mesh` (the global trust graph used by the bubble map, /dev report, and trading guards). Wallets with rug history on *other* tokens get an amber "Dev History" tag but stay eligible — only this-token rugs are hard-rejected.
+| Button | Shown when | Action |
+|---|---|---|
+| **Promote** | `mesh_promotion_status` is `not_eligible` or `pending` | Calls `insiders-mesh-promoter` with `{ token_mint }` to evaluate just this token |
+| **Reconsider** | `mesh_promotion_status` is `rejected_rug` or already `promoted` | Re-runs evaluation with current data; can flip the verdict |
+| **Reject** | `mesh_promotion_status` is `promoted` | Marks token as manually rejected, removes its `good_actor_creator` row from `reputation_mesh` |
+| **Override → Promote** | `mesh_promotion_status` is `rejected_rug` | Force-promote with mandatory reason (admin override, written into `mesh_decision_trace.manual_override`) |
 
-## How tokens & devs enter the Mesh (your last question, in plain English)
+All four wired to a single new edge function: **`insiders-mesh-row-action`**:
+- Verifies `is_super_admin`
+- Accepts `{ token_mint, action: 'promote'|'reconsider'|'reject'|'override_promote', reason? }`
+- Writes back: `mesh_promotion_status`, `mesh_promotion_reason`, `mesh_decision_trace` (with `manual_action_by`, `manual_action_at`, `manual_reason`)
+- For `promote`/`override_promote`: upserts row into `reputation_mesh` with `discovered_via='insiders_manual_admin'`
+- For `reject`: deletes matching `reputation_mesh` row
+- Toast confirms result, table re-fetches
 
-```text
-                    ┌─────────────────────────────────┐
-                    │  reputation_mesh (the graph)    │
-                    └────────────────▲────────────────┘
-                                     │
-   ┌─────────────────┬───────────────┼──────────────┬──────────────────┐
-   │                 │               │              │                  │
-universal-mesh-   insiders-mesh-  social-      allstar-          oracle-unified-
-feeder (cron)    promoter        discovery    promotion         lookup
-                 (this button)   -engine      -engine
-   │                 │               │              │                  │
-every analyzed   ≥3x insiders    Twitter/web   devs w/ ATH        every /dev or
-token + dev      calls + clean   socials per   ≥$100k auto-       /holders runs
-auto-indexed     dev history     token         flagged star       index dev+token
-```
+Inline placement: small icon-buttons (✓ Promote, ↻ Reconsider, ✕ Reject) in a new Actions column. The drill-down dialog also gets a full-width version with the reason textarea for overrides.
 
-Five independent feeders all write into one table: `reputation_mesh`. Each row says *"source X has relationship Y with target Z, evidence = ..."*. The bubble map, trading guards, and Telegram bot all read from this single graph.
+## Part 3 — Mesh Verdict Editor (`OracleMeshViewer`)
+
+A generic editor for any row in `reputation_mesh`, accessible from the existing **Oracle → Mesh Viewer** tab.
+
+### What changes
+
+Each mesh row gets an **Edit** pencil icon (super-admin only) that opens a `MeshVerdictEditorDialog`:
+
+- **Display (read-only):** source_type/id, linked_type/id, discovered_via, discovered_at
+- **Editable fields:**
+  - `relationship` — dropdown of known relationships (`created_token`, `good_actor_creator`, `confirmed_bad`, `funded_by`, `recovering_actor_creator`, etc.) + free-text "custom"
+  - `confidence` — slider 0–100
+  - `evidence` (JSON) — JSON textarea with validate-on-save, plus a "Add admin note" helper that appends `{ admin_notes: [...], last_edited_by, last_edited_at }`
+- **Buttons:** Save · Delete row (red, requires confirm) · Cancel
+
+### Backend
+
+New edge function **`mesh-verdict-edit`**:
+- Verifies `is_super_admin`
+- Accepts `{ id, action: 'update'|'delete', relationship?, confidence?, evidence? }`
+- Validates JSON, clamps confidence 0–100
+- Writes audit trail into `evidence.admin_notes[]` with timestamp + admin user_id
+- Returns updated row
+
+No schema migration needed — `evidence jsonb` already holds arbitrary structure.
 
 ## Technical Details
 
+**Files created:**
+- `supabase/functions/insiders-mesh-row-action/index.ts`
+- `supabase/functions/mesh-verdict-edit/index.ts`
+- `src/components/admin/HypotheticalPnlPanel.tsx` (the $10-per-call simulator)
+- `src/components/admin/oracle/MeshVerdictEditorDialog.tsx`
+
 **Files modified:**
-- `src/components/admin/tabs/InsidersLifecycleTab.tsx` — new card, new filters, CSV export, mesh-decision section in drill-down, info button.
-- `supabase/functions/insiders-mesh-promoter/index.ts` — split rug check into `thisTokenRug` vs `devHistoryRug`; only hard-reject on `thisTokenRug`; persist a structured `mesh_decision_trace` JSON.
-- `supabase/functions/insiders-lifecycle-builder/index.ts` — prefer `message_timestamp`, fall back smartly, mark unknown lifespans as null (not 0).
+- `src/components/admin/tabs/InsidersLifecycleTab.tsx` — mounts `<HypotheticalPnlPanel rows={rows} />` at top, adds Actions column with per-row buttons, adds override section in drill-down dialog
+- `src/components/admin/oracle/OracleMeshViewer.tsx` — adds Edit pencil per row, mounts the editor dialog
 
-**DB migration:**
-- New nullable columns on `telegram_insider_token_lifecycle`:
-  - `dev_history_warning boolean` (amber flag for prior-rug devs whose current token is clean)
-  - `mesh_decision_trace jsonb` (full reasoning chain for the drill-down)
-- One-shot UPDATE that re-classifies the ~14 existing `rejected_rug` rows: those whose current token has no own-token rug evidence get reclassified to `not_eligible` + `dev_history_warning=true`.
-- Re-run the builder once after deploy to recompute lifespans for the bulk-imported batch.
+**No DB migration required** (Part 1 is pure client compute, Parts 2–3 reuse existing columns).
 
-**No breaking changes** — everything is additive. The CSV export uses native browser blob download (no new deps).
+**Recharts** (already installed, used by `AnalyticsTab.tsx`) powers the PnL charts.
+
+**Security:** Both new edge functions gate on `supabase.rpc('is_super_admin', { _user_id })` — same pattern as `admin-stripe-customer-details`.
 
