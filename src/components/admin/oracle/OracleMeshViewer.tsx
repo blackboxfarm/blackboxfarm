@@ -295,6 +295,15 @@ const OracleMeshViewer = () => {
                           <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">
                             {formatDistanceToNow(new Date(link.discovered_at), { addSuffix: true })}
                           </span>
+                          {isSuperAdmin && (
+                            <Button
+                              size="sm" variant="ghost" className="h-6 w-6 p-0 flex-shrink-0"
+                              onClick={() => setEditingRow(link)}
+                              title="Edit verdict"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -321,6 +330,13 @@ const OracleMeshViewer = () => {
           </CardContent>
         </Card>
       )}
+
+      <MeshVerdictEditorDialog
+        row={editingRow}
+        open={!!editingRow}
+        onOpenChange={(o) => !o && setEditingRow(null)}
+        onSaved={() => refetch()}
+      />
     </div>
   );
 };
