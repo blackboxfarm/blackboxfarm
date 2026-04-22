@@ -633,6 +633,57 @@ export default function InsidersLifecycleTab() {
                     {drillDown.mesh_promotion_reason || "No decision recorded yet. Run \"Promote ≥3x to Mesh\" to evaluate."}
                   </div>
                 )}
+
+                {/* Manual admin actions */}
+                <div className="mt-4 pt-3 border-t space-y-2">
+                  <div className="text-xs font-semibold flex items-center gap-1">
+                    <ShieldAlert className="h-3.5 w-3.5" /> Admin actions
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(drillDown.mesh_promotion_status === 'not_eligible' || drillDown.mesh_promotion_status === 'pending') && (
+                      <Button size="sm" variant="default" disabled={!!rowActioning}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'promote')}>
+                        <Check className="h-3.5 w-3.5 mr-1" /> Promote
+                      </Button>
+                    )}
+                    {(drillDown.mesh_promotion_status === 'rejected_rug' || drillDown.mesh_promotion_status === 'promoted' || drillDown.mesh_promotion_status === 'manually_rejected') && (
+                      <Button size="sm" variant="outline" disabled={!!rowActioning}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'reconsider')}>
+                        <RotateCw className="h-3.5 w-3.5 mr-1" /> Reconsider
+                      </Button>
+                    )}
+                    {drillDown.mesh_promotion_status === 'promoted' && (
+                      <Button size="sm" variant="destructive" disabled={!!rowActioning}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'reject')}>
+                        <X className="h-3.5 w-3.5 mr-1" /> Remove from Mesh
+                      </Button>
+                    )}
+                  </div>
+
+                  {drillDown.mesh_promotion_status === 'rejected_rug' && (
+                    <div className="space-y-2 pt-2">
+                      <div className="text-xs text-muted-foreground">
+                        Override required: this token is currently flagged as rugged. Provide a reason to force-promote.
+                      </div>
+                      <Textarea
+                        placeholder="Why are you overriding the rug verdict? (recorded in audit trail)"
+                        value={overrideReason}
+                        onChange={(e) => setOverrideReason(e.target.value)}
+                        rows={2}
+                        className="text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="bg-amber-500 hover:bg-amber-500/90 text-amber-950"
+                        disabled={!!rowActioning || !overrideReason.trim()}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'override_promote', overrideReason.trim())}
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5 mr-1" /> Override → Promote
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

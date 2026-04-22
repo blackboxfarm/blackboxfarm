@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, Network, ArrowRight, ExternalLink, Copy, Check, Search, Filter, BarChart3 } from "lucide-react";
+import { RefreshCw, Network, ArrowRight, ExternalLink, Copy, Check, Search, Filter, BarChart3, Pencil } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import MeshVerdictEditorDialog from "@/components/admin/oracle/MeshVerdictEditorDialog";
+import { useUserRolesContext } from "@/contexts/UserRolesContext";
 
 // ── Entity Link (clickable + copy) ──────────────────────────────
 const EntityLink = ({ id, type }: { id: string; type: string }) => {
