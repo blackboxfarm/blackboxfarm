@@ -169,7 +169,7 @@ serve(withRunLog('stripe-webhook', async (req) => {
         await supabase.from("admin_notifications").insert({
           notification_type: "payment_confirmed",
           title: `💳 ${eventLabel}`,
-          message: `${customer.name || email} subscribed to ${tierKey.toUpperCase()} tier\n\n💰 Amount: ${formattedAmount}\n📅 Expires: ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}\n👤 ${hasAccount}`,
+          message: `${customer.name || email} subscribed to ${tierKey.toUpperCase()} tier\n\n💰 Amount: ${formattedAmount}\n📅 Expires: ${expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}\n👤 ${hasAccount}`,
           metadata: {
             email,
             customer_name: customer.name,
@@ -225,7 +225,7 @@ serve(withRunLog('stripe-webhook', async (req) => {
         // ──────────────────────────────────────────────
         if (event.type === "customer.subscription.created") {
           sendAdminSms(
-            `💳 NEW SUBSCRIPTION!\n\n👤 ${customer.name || 'Unknown'}\n📧 ${email}\n🏷️ Tier: ${tierKey.toUpperCase()}\n💰 Amount: ${formattedAmount}\n📅 Expires: ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}\n🔗 Has account: ${!!matchedUser}\n⏰ ${new Date().toISOString()}`
+            `💳 NEW SUBSCRIPTION!\n\n👤 ${customer.name || 'Unknown'}\n📧 ${email}\n🏷️ Tier: ${tierKey.toUpperCase()}\n💰 Amount: ${formattedAmount}\n📅 Expires: ${expiresAt ? new Date(expiresAt).toLocaleDateString() : 'N/A'}\n🔗 Has account: ${!!matchedUser}\n⏰ ${new Date().toISOString()}`
           );
         }
       } else if (!isActive) {
