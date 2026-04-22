@@ -1,110 +1,86 @@
 
 
-# Fix FLIP IT: Speed + Price Accuracy + Browser CPU
+# Insiders Lifecycle — Honest Reporting & Mesh Transparency
 
-## Root Causes (found in code, not guessed)
+Four upgrades to the Insiders Lifecycle tab that make the data fully honest and the mesh-promotion logic transparent.
 
-### 1. Paste-to-price is slow because `flipit-preflight` runs 5-10 serial network hops
-For any `*pump` mint, paste triggers `flipit-preflight`, which internally runs:
-- `detectVenue` → pump.fun HTTP (often 530) → Helius on-chain curve PDA → DexScreener fallback
-- `runMeshGuard` → DB lookup
-- `getVenueAwareQuote` → ANOTHER venue detect + curve math
+## What you'll get
 
-That's 3–10 seconds on a flaky pump.fun API day.
+### 1. "Saddev / Poor Launch" category (the 425 missing tokens)
+- Add a new summary card: **Never hit 2x** (currently 425 of 633 tokens — the silent majority).
+- Add filter options: `< 2x (saddev)`, `Dud (1 milestone only)`, `Dead on arrival (no milestone)`.
+- Default min-X dropdown gains a `≥ 1x (show all)` option so duds become visible.
+- New badge column: tokens with `peak_multiplier < 2` get a grey **"Saddev"** badge so they're scannable.
 
-### 2. `EXTREME_DEVIATION` blocks are our own fault
-- UI "display price" = `flipit-preflight.executablePriceUsd` (probe of **0.01 SOL**)
-- Trade guard "executable price" = `validateBuyQuote` → fresh `getVenueAwareQuote` at your **actual** buy size (e.g. 0.5 SOL)
+### 2. Export to CSV
+- New **Export CSV** button (top-right of controls). Exports the *currently filtered* view.
+- Columns: First called, Symbol, Mint (full), Entry MC, Peak X, Peak MC, Lifespan minutes, Milestones, Creator wallet, Mesh status, Mesh reason.
 
-On a volatile curve, these two numbers can legitimately differ 50–90%. The guard treats that as "garbage quote" and blocks the trade. **We're comparing executable against executable and calling the difference a display mismatch.**
+### 3. Fix the MAGA false-rug + make Mesh logic visible
 
-### 3. Second preflight on FLIP IT click re-quotes the curve
-Even with the 5s cache, the `isCurveToken` branch (added last turn) **always** re-fetches, so every curve buy pays `flipit-preflight` twice — and the second result becomes the "fresh" price sent to `flipit-execute`, which then gets re-compared against a THIRD quote inside trade-guard.
+**The bug:** MAGA's creator wallet has `trust_level='scammer'` and `tokens_rugged=1` in `dev_wallet_reputation` — flagged for a *previous* token. The promoter then marks **every** token that wallet ever touched as "rug". That's why MAGA (a 131x performer still pumping) shows as Rug.
 
-### 4. Browser CPU load
-- `FlipItDashboard.tsx` is 6,057 lines, re-renders on every position/interval tick
-- 2s interval for limit orders runs even when tab is hidden / no watching orders
-- 5s unified monitor always runs
-- Two realtime Postgres subscriptions (`flip_positions`, `flip_limit_orders`)
-- No `document.visibilitychange` pause
+**The fix — two-tier evaluation:**
 
----
+| Rug Signal Found On | New Treatment |
+|---|---|
+| **This token itself** (autopsy = rug, scam flag, LP pulled) | Hard `Rug` (red) — keep current behavior |
+| **Different token by same dev** (history-only) | New `⚠ Dev History` (amber) — *still mesh-eligible* if peak ≥3x, with an audit note |
+| **No rug pattern** | Promote to mesh as good actor |
 
-## Fix Plan
+So MAGA becomes `⚠ Dev History` (not blocked), still promotable, with a clickable explanation: *"Creator's prior token X rugged — but THIS token shows no rug signals (no LP pull, no autopsy flag, still trading)."*
 
-### A. Make paste-to-price instant (~250ms target)
+**Mesh transparency in the row pop-up:**
+- New **"Mesh Decision"** section on every drill-down showing the full reasoning chain:
+  - Creator wallet (full + Solscan link)
+  - Creator's prior history (tokens_rugged, trust_level, # of prior calls in insiders)
+  - This token's own death signals (autopsy, LP, mcap)
+  - Final decision + plain-English reason
+- New **"Reconsider"** button (super-admin only) on rejected tokens — re-runs evaluation with current data.
 
-**File: `src/components/admin/FlipItDashboard.tsx` (around line 1106-1196)**
+### 4. Fix the "0m lifespan" mystery + explain "Promote ≥3x to Mesh"
 
-For `*pump` mints, **stop calling `flipit-preflight` on paste**. Call `helius-fast-price` instead (same as non-pump tokens). It already has a pump.fun bonding-curve fallback built in and returns in 200-400ms. Preflight is for the *execute* phase, not the *display* phase.
+**Lifespan = 0m cause:** Several historical milestones in `telegram_channel_calls` share the exact same `created_at` (bulk-import artifact). The builder uses `created_at` when `message_timestamp` is null, so milestones collapse to one timestamp.
 
-Change:
+**Fix:** Builder prefers `message_timestamp` always; when missing, derives lifespan from the *spread* of `created_at` only if more than 60 seconds apart. If all timestamps collapse, surface lifespan as `unknown` (not `0m`) with a tooltip: *"Original Telegram timestamps not preserved on this batch."*
+
+**"Promote ≥3x to Mesh" — what it does (made visible in UI):**
+Add an info button next to the button with this hover-card explanation:
+> Scans every Insiders token with peak ≥3x. For each, looks up the creator wallet, checks for rug signals on **this specific token**, and if clean writes a `good_actor_creator` record into `reputation_mesh` (the global trust graph used by the bubble map, /dev report, and trading guards). Wallets with rug history on *other* tokens get an amber "Dev History" tag but stay eligible — only this-token rugs are hard-rejected.
+
+## How tokens & devs enter the Mesh (your last question, in plain English)
+
+```text
+                    ┌─────────────────────────────────┐
+                    │  reputation_mesh (the graph)    │
+                    └────────────────▲────────────────┘
+                                     │
+   ┌─────────────────┬───────────────┼──────────────┬──────────────────┐
+   │                 │               │              │                  │
+universal-mesh-   insiders-mesh-  social-      allstar-          oracle-unified-
+feeder (cron)    promoter        discovery    promotion         lookup
+                 (this button)   -engine      -engine
+   │                 │               │              │                  │
+every analyzed   ≥3x insiders    Twitter/web   devs w/ ATH        every /dev or
+token + dev      calls + clean   socials per   ≥$100k auto-       /holders runs
+auto-indexed     dev history     token         flagged star       index dev+token
 ```
-const pricePromise = isPumpMint
-  ? supabase.functions.invoke('flipit-preflight', { solAmount: 0.01, ... })  // ← SLOW
-  : supabase.functions.invoke('helius-fast-price', { tokenMint });
-```
-To:
-```
-const pricePromise = supabase.functions.invoke('helius-fast-price', { tokenMint: mint });
-// Keep flipit-preflight as STEP 2 fallback only (already in place at line 1204)
-```
 
-### B. Fix `EXTREME_DEVIATION` false-positives
+Five independent feeders all write into one table: `reputation_mesh`. Each row says *"source X has relationship Y with target Z, evidence = ..."*. The bubble map, trading guards, and Telegram bot all read from this single graph.
 
-**File: `supabase/functions/_shared/trade-guard.ts` (line 697-713)**
+## Technical Details
 
-The comparison logic is wrong for bonding-curve tokens. When the display price came from a 0.01 SOL probe and execution is e.g. 0.5 SOL, natural price impact on a thin curve can be >90% — that's real, not a quote error.
+**Files modified:**
+- `src/components/admin/tabs/InsidersLifecycleTab.tsx` — new card, new filters, CSV export, mesh-decision section in drill-down, info button.
+- `supabase/functions/insiders-mesh-promoter/index.ts` — split rug check into `thisTokenRug` vs `devHistoryRug`; only hard-reject on `thisTokenRug`; persist a structured `mesh_decision_trace` JSON.
+- `supabase/functions/insiders-lifecycle-builder/index.ts` — prefer `message_timestamp`, fall back smartly, mark unknown lifespans as null (not 0).
 
-Fix:
-- If `venueUsed === 'pumpfun' || 'bags_fm' || 'bonk_fun'` AND `isOnCurve`, **use `priceImpactPct` (not raw deviation)** as the block signal. Price impact already accounts for size.
-- Keep the 500% sanity cap for "truly garbage" quotes, but remove the 90% block for on-curve tokens. The slippage setting (already set per-trade) is the user's chosen protection.
-- Adverse deviation on graduated/Jupiter tokens stays at 90%.
+**DB migration:**
+- New nullable columns on `telegram_insider_token_lifecycle`:
+  - `dev_history_warning boolean` (amber flag for prior-rug devs whose current token is clean)
+  - `mesh_decision_trace jsonb` (full reasoning chain for the drill-down)
+- One-shot UPDATE that re-classifies the ~14 existing `rejected_rug` rows: those whose current token has no own-token rug evidence get reclassified to `not_eligible` + `dev_history_warning=true`.
+- Re-run the builder once after deploy to recompute lifespans for the bulk-imported batch.
 
-### C. Stop re-quoting on FLIP IT click for curve tokens
-
-**File: `src/components/admin/FlipItDashboard.tsx` (lines 2088-2152)**
-
-Drop the `isCurveToken` carve-out that forces a fresh preflight. Use the cached price IF fresh (<5s), pass `isOnCurve: true` + `venueHint: 'pumpfun_curve'` to `flipit-execute`, and let the backend's `validateBuyQuote` be the single source of truth. No double-quote.
-
-### D. Don't send UI display price as "display" when it's an executable quote
-
-**File: `src/components/admin/FlipItDashboard.tsx` (line 2174) and `supabase/functions/flipit-execute/index.ts` (line 897)**
-
-Add a flag `displayPriceIsExecutable: true` in the body when the UI price came from `flipit-preflight` or `helius-fast-price` curve fallback. In `flipit-execute`, when that flag is set, **skip the deviation check entirely** — trade-guard still runs tax check + price-impact check + slippage protection, but does not compare display↔executable.
-
-### E. Browser CPU savers (the "system runs slow with you open" complaint)
-
-**File: `src/components/admin/FlipItDashboard.tsx`**
-
-1. **Pause intervals when tab hidden**: add a `document.visibilitychange` listener; when `document.hidden` is true, `clearInterval` for both the 5s unified monitor AND the 2s limit-order poll. Resume on focus.
-2. **Gate the 2s limit-order poll harder**: it already checks `hasWatching`, but re-subscribes on every `limitOrders` array change. Memoize the watching flag so the effect doesn't tear down/rebuild every render.
-3. **Drop polling to 10s** when no holdings AND no watching orders (currently it still runs at 5s just to check).
-4. **Remove duplicate realtime subscription teardowns**: `flip-limit-orders-realtime` channel has no cleanup-safe unsubscribe for rapid unmount; wrap in `isMountedRef` guard.
-
-Expected impact: ~60% less background JS activity when dashboard is idle, measurable in browser Performance tab.
-
----
-
-## Latency Target After Fixes
-
-| Step | Before | After |
-|---|---|---|
-| Paste pump mint → price on screen | 1.5–5s (preflight chain) | **200–400ms** (helius-fast-price) |
-| Click FLIP IT (fresh cache) | 0ms + execute | 0ms + execute (unchanged, stays fast) |
-| Click FLIP IT (curve token) | preflight + execute + trade-guard re-quote = 3 quotes | 1 quote inside trade-guard |
-| Buy blocked by false EXTREME_DEVIATION | Common on volatile pump tokens | Eliminated (price impact check instead) |
-| Browser idle CPU | 5s + 2s intervals always on | Paused when hidden, 10s when nothing to watch |
-
-## Files Touched
-
-- `src/components/admin/FlipItDashboard.tsx` — swap paste fetcher, drop curve re-quote, add visibility-aware intervals
-- `supabase/functions/_shared/trade-guard.ts` — replace 90% deviation block with price-impact-based check for on-curve tokens
-- `supabase/functions/flipit-execute/index.ts` — honor `displayPriceIsExecutable` flag, skip deviation check when set
-
-## Out of Scope
-
-- `flipit-preflight` itself (still used as execute-time backstop and for non-paste flows)
-- `helius-fast-price` (already optimized last turn)
-- The 6,057-line component split — worth doing later but not this patch
+**No breaking changes** — everything is additive. The CSV export uses native browser blob download (no new deps).
 
