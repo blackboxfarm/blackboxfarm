@@ -25,6 +25,10 @@ import {
   Info,
   Skull,
   ExternalLink,
+  Check,
+  X,
+  RotateCw,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -38,6 +42,9 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import HypotheticalPnlPanel from "@/components/admin/HypotheticalPnlPanel";
 
 interface MeshDecisionTrace {
   creator_wallet?: string;
