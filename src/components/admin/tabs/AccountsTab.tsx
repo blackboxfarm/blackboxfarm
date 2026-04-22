@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Users, Search, Download, Filter, Mail } from "lucide-react";
+import { CreditCard } from "lucide-react";
+import { StripeCustomerDialog } from "@/components/admin/StripeCustomerDialog";
 
 type AccountRow = {
   user_id: string;
@@ -39,6 +41,7 @@ export default function AccountsTab() {
   const [search, setSearch] = useState("");
   const [preset, setPreset] = useState<PresetKey>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [stripeTarget, setStripeTarget] = useState<{ userId: string; email: string; name: string | null } | null>(null);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["admin-accounts-directory"],
@@ -220,13 +223,14 @@ export default function AccountsTab() {
                   <TableHead>Logins</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead>Last Active</TableHead>
+                  <TableHead className="w-12">Stripe</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8">Loading accounts...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={11} className="text-center py-8">Loading accounts...</TableCell></TableRow>
                 ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8">No accounts match filters</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={11} className="text-center py-8">No accounts match filters</TableCell></TableRow>
                 ) : (
                   filtered.slice(0, 500).map(a => (
                     <TableRow
@@ -271,6 +275,20 @@ export default function AccountsTab() {
                       <TableCell className="text-xs text-muted-foreground">
                         {a.last_active_at ? new Date(a.last_active_at).toLocaleDateString() : "—"}
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          title="View Stripe details"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setStripeTarget({ userId: a.user_id, email: a.email, name: a.display_name });
+                          }}
+                        >
+                          <CreditCard className="h-3.5 w-3.5 text-primary" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -279,6 +297,14 @@ export default function AccountsTab() {
           </div>
         </CardContent>
       </Card>
+
+      <StripeCustomerDialog
+        open={!!stripeTarget}
+        onOpenChange={(v) => !v && setStripeTarget(null)}
+        userId={stripeTarget?.userId}
+        email={stripeTarget?.email}
+        displayName={stripeTarget?.name ?? undefined}
+      />
     </div>
   );
 }
