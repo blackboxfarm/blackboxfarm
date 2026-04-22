@@ -475,10 +475,58 @@ export default function InsidersLifecycleTab() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <TooltipProvider delayDuration={200}>
+                          <div className="flex justify-end gap-1">
+                            {(r.mesh_promotion_status === 'not_eligible' || r.mesh_promotion_status === 'pending') && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-500 hover:bg-green-500/10"
+                                    disabled={!!rowActioning}
+                                    onClick={() => handleRowAction(r.token_mint, 'promote')}
+                                  >
+                                    {rowActioning === r.token_mint + ':promote' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Promote to Mesh</TooltipContent>
+                              </Tooltip>
+                            )}
+                            {(r.mesh_promotion_status === 'rejected_rug' || r.mesh_promotion_status === 'promoted' || r.mesh_promotion_status === 'manually_rejected') && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                    disabled={!!rowActioning}
+                                    onClick={() => handleRowAction(r.token_mint, 'reconsider')}
+                                  >
+                                    {rowActioning === r.token_mint + ':reconsider' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Reconsider</TooltipContent>
+                              </Tooltip>
+                            )}
+                            {r.mesh_promotion_status === 'promoted' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                    disabled={!!rowActioning}
+                                    onClick={() => handleRowAction(r.token_mint, 'reject')}
+                                  >
+                                    {rowActioning === r.token_mint + ':reject' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Remove from Mesh</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </TooltipProvider>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
