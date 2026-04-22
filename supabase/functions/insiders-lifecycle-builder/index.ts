@@ -108,6 +108,8 @@ serve(async (req) => {
       const ts = (row.message_timestamp || row.created_at) as string;
       const raw = (row.raw_message || '') as string;
       const isMilestone = /MILESTONE/i.test(raw);
+      // Track which timestamp source we used so we can detect bulk-import collapse later
+      const tsSource: 'message' | 'created' = row.message_timestamp ? 'message' : 'created';
 
       let agg = byToken.get(mint);
       if (!agg) {
@@ -136,6 +138,8 @@ serve(async (req) => {
             current_mc_text: m.currentMcText,
             timestamp: ts,
             message_id: row.message_id || null,
+            // @ts-ignore — extra field, harmless in JSONB
+            ts_source: tsSource,
           });
         }
         // If we never had an entry MC from an ALERT, take it from first milestone
