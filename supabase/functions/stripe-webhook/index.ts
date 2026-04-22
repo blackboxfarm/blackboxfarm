@@ -76,7 +76,16 @@ serve(withRunLog('stripe-webhook', async (req) => {
       const isActive = subscription.status === "active" || subscription.status === "trialing";
       const productId = subscription.items.data[0]?.price?.product as string;
       const tierKey = PRODUCT_TO_TIER[productId] || "pro";
-      const expiresAt = new Date(subscription.current_period_end * 1000).toISOString();
+      // Stripe API 2025-08-27.basil moved current_period_end onto subscription items.
+      // Fall back across all known locations to avoid "Invalid time value" crashes.
+      const periodEndUnix =
+        (subscription as any).current_period_end ??
+        subscription.items?.data?.[0]?.current_period_end ??
+        (subscription as any).billing_cycle_anchor ??
+        null;
+      const expiresAt = periodEndUnix
+        ? new Date(periodEndUnix * 1000).toISOString()
+        : null;
       const priceAmount = subscription.items.data[0]?.price?.unit_amount || null;
       const currency = subscription.items.data[0]?.price?.currency || 'usd';
       const interval = subscription.items.data[0]?.price?.recurring?.interval || null;
