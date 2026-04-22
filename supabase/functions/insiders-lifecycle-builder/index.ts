@@ -108,6 +108,8 @@ serve(async (req) => {
       const ts = (row.message_timestamp || row.created_at) as string;
       const raw = (row.raw_message || '') as string;
       const isMilestone = /MILESTONE/i.test(raw);
+      // Track which timestamp source we used so we can detect bulk-import collapse later
+      const tsSource: 'message' | 'created' = row.message_timestamp ? 'message' : 'created';
 
       let agg = byToken.get(mint);
       if (!agg) {
@@ -136,6 +138,8 @@ serve(async (req) => {
             current_mc_text: m.currentMcText,
             timestamp: ts,
             message_id: row.message_id || null,
+            // @ts-ignore — extra field, harmless in JSONB
+            ts_source: tsSource,
           });
         }
         // If we never had an entry MC from an ALERT, take it from first milestone
@@ -184,9 +188,19 @@ serve(async (req) => {
       const lastMilestoneAt = agg.milestones.length > 0
         ? agg.milestones[agg.milestones.length - 1].timestamp
         : null;
-      const lifespanMin = lastMilestoneAt
-        ? Math.round((new Date(lastMilestoneAt).getTime() - new Date(agg.first_called_at).getTime()) / 60000)
-        : null;
+
+      // Lifespan: only meaningful if timestamps actually spread > 60s.
+      // Bulk-import batches share an identical created_at and would collapse to 0m.
+      let lifespanMin: number | null = null;
+      if (lastMilestoneAt) {
+        const spreadMs = new Date(lastMilestoneAt).getTime() - new Date(agg.first_called_at).getTime();
+        if (spreadMs > 60_000) {
+          lifespanMin = Math.round(spreadMs / 60_000);
+        } else {
+          // Collapsed — leave null so UI shows "—" / "unknown" instead of misleading 0m
+          lifespanMin = null;
+        }
+      }
 
       return {
         token_mint: agg.token_mint,

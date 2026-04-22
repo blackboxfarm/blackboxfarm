@@ -13,7 +13,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, RefreshCw, Sparkles, Search, TrendingUp, AlertTriangle, ShieldCheck } from "lucide-react";
+import {
+  Loader2,
+  RefreshCw,
+  Sparkles,
+  Search,
+  TrendingUp,
+  AlertTriangle,
+  ShieldCheck,
+  Download,
+  Info,
+  Skull,
+  ExternalLink,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -21,6 +33,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+
+interface MeshDecisionTrace {
+  creator_wallet?: string;
+  dev_history?: {
+    risk_tier: string | null;
+    trust_level: string | null;
+    tokens_rugged: number;
+    auto_blacklisted: boolean;
+    has_history_rug: boolean;
+  };
+  this_token?: {
+    death_cause: string | null;
+    autopsy_notes: string | null;
+    market_cap: number | null;
+    is_rug: boolean;
+  };
+  peak_multiplier?: number;
+  decision?: string;
+  reason?: string;
+  evaluated_at?: string;
+}
 
 interface LifecycleRow {
   id: string;
@@ -40,10 +78,20 @@ interface LifecycleRow {
   is_rugged: boolean;
   mesh_promotion_status: string;
   mesh_promotion_reason: string | null;
+  mesh_decision_trace: MeshDecisionTrace | null;
+  dev_history_warning: boolean | null;
   total_messages: number;
 }
 
-const MIN_X_OPTIONS = [1, 2, 3, 5, 10, 15, 50];
+const MIN_X_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "1", label: "≥ 1x (show all)" },
+  { value: "2", label: "≥ 2x" },
+  { value: "3", label: "≥ 3x" },
+  { value: "5", label: "≥ 5x" },
+  { value: "10", label: "≥ 10x" },
+  { value: "15", label: "≥ 15x" },
+  { value: "50", label: "≥ 50x" },
+];
 
 function fmtMC(n: number | null | undefined): string {
   if (n == null || !isFinite(n)) return "—";
@@ -63,16 +111,69 @@ function shortMint(mint: string): string {
   return `${mint.slice(0, 4)}…${mint.slice(-4)}`;
 }
 
+function csvEscape(v: any): string {
+  if (v == null) return "";
+  const s = String(v);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function downloadCSV(rows: LifecycleRow[]) {
+  const headers = [
+    "First called",
+    "Symbol",
+    "Mint",
+    "Entry MC",
+    "Peak X",
+    "Peak MC",
+    "Lifespan minutes",
+    "Milestones",
+    "Creator wallet",
+    "Mesh status",
+    "Dev history warning",
+    "Mesh reason",
+  ];
+  const lines = [headers.join(",")];
+  for (const r of rows) {
+    lines.push(
+      [
+        new Date(r.first_called_at).toISOString(),
+        r.token_symbol || "",
+        r.token_mint,
+        r.entry_market_cap ?? "",
+        r.peak_multiplier,
+        r.peak_market_cap ?? "",
+        r.lifespan_minutes ?? "",
+        r.milestone_count,
+        r.creator_wallet || "",
+        r.mesh_promotion_status,
+        r.dev_history_warning ? "yes" : "no",
+        r.mesh_promotion_reason || "",
+      ]
+        .map(csvEscape)
+        .join(",")
+    );
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `insiders-lifecycle-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function InsidersLifecycleTab() {
   const [rows, setRows] = useState<LifecycleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
   const [promoting, setPromoting] = useState(false);
-  const [minX, setMinX] = useState<number>(2);
+  const [minX, setMinX] = useState<string>("2");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [drillDown, setDrillDown] = useState<LifecycleRow | null>(null);
-  const [stats, setStats] = useState<any>(null);
 
   const fetchRows = async () => {
     setLoading(true);
@@ -95,10 +196,25 @@ export default function InsidersLifecycleTab() {
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      if (r.peak_multiplier < minX) return false;
-      if (statusFilter === "promoted" && r.mesh_promotion_status !== "promoted") return false;
-      if (statusFilter === "rejected" && r.mesh_promotion_status !== "rejected_rug") return false;
-      if (statusFilter === "eligible" && (r.peak_multiplier < 3 || r.mesh_promotion_status === "promoted" || r.is_rugged)) return false;
+      // statusFilter — handle saddev/dud/dead which override minX
+      if (statusFilter === "saddev") {
+        if (r.peak_multiplier >= 2) return false;
+      } else if (statusFilter === "dud") {
+        if (r.milestone_count !== 1) return false;
+      } else if (statusFilter === "dead") {
+        if (r.milestone_count !== 0) return false;
+      } else if (statusFilter === "promoted") {
+        if (r.mesh_promotion_status !== "promoted") return false;
+      } else if (statusFilter === "rejected") {
+        if (r.mesh_promotion_status !== "rejected_rug") return false;
+      } else if (statusFilter === "eligible") {
+        if (r.peak_multiplier < 3 || r.mesh_promotion_status === "promoted" || r.is_rugged) return false;
+      } else if (statusFilter === "dev_history") {
+        if (!r.dev_history_warning) return false;
+      } else {
+        // "all" — apply minX
+        if (r.peak_multiplier < Number(minX)) return false;
+      }
       if (search) {
         const q = search.toLowerCase();
         if (!r.token_mint.toLowerCase().includes(q) && !(r.token_symbol || "").toLowerCase().includes(q)) return false;
@@ -110,6 +226,7 @@ export default function InsidersLifecycleTab() {
   const summary = useMemo(() => {
     return {
       total: rows.length,
+      neverHit2x: rows.filter((r) => r.peak_multiplier < 2).length,
       reached2x: rows.filter((r) => r.peak_multiplier >= 2).length,
       reached3x: rows.filter((r) => r.peak_multiplier >= 3).length,
       reached5x: rows.filter((r) => r.peak_multiplier >= 5).length,
@@ -117,6 +234,7 @@ export default function InsidersLifecycleTab() {
       reached15x: rows.filter((r) => r.peak_multiplier >= 15).length,
       promoted: rows.filter((r) => r.mesh_promotion_status === "promoted").length,
       rejected: rows.filter((r) => r.mesh_promotion_status === "rejected_rug").length,
+      devHistory: rows.filter((r) => r.dev_history_warning).length,
     };
   }, [rows]);
 
@@ -125,7 +243,6 @@ export default function InsidersLifecycleTab() {
     try {
       const { data, error } = await supabase.functions.invoke("insiders-lifecycle-builder", { body: {} });
       if (error) throw error;
-      setStats(data?.stats);
       toast.success(`Built ${data?.tokens_upserted} token lifecycles from ${data?.messages_processed} messages`);
       await fetchRows();
     } catch (e: any) {
@@ -141,7 +258,7 @@ export default function InsidersLifecycleTab() {
       const { data, error } = await supabase.functions.invoke("insiders-mesh-promoter", { body: {} });
       if (error) throw error;
       toast.success(
-        `Promoted ${data?.promoted} • Rejected (rug) ${data?.skipped_rug} • Already promoted ${data?.skipped_already_promoted} • No creator ${data?.skipped_no_creator}`
+        `Promoted ${data?.promoted} (${data?.promoted_with_dev_history || 0} ⚠ dev history) • Rejected (this-token rug) ${data?.skipped_rug} • Already in mesh ${data?.skipped_already_promoted}`
       );
       await fetchRows();
     } catch (e: any) {
@@ -154,14 +271,15 @@ export default function InsidersLifecycleTab() {
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total tokens</div><div className="text-2xl font-bold">{summary.total}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground flex items-center gap-1"><Skull className="h-3 w-3" />Never hit 2x</div><div className="text-2xl font-bold text-muted-foreground">{summary.neverHit2x}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">≥2x</div><div className="text-2xl font-bold text-green-500">{summary.reached2x}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">≥3x</div><div className="text-2xl font-bold text-green-500">{summary.reached3x}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">≥5x</div><div className="text-2xl font-bold text-yellow-500">{summary.reached5x}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">≥10x</div><div className="text-2xl font-bold text-orange-500">{summary.reached10x}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">≥15x</div><div className="text-2xl font-bold text-red-500">{summary.reached15x}</div></CardContent></Card>
-        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">In Mesh</div><div className="text-2xl font-bold text-cyan-400">{summary.promoted}</div><div className="text-xs text-red-400 mt-1">{summary.rejected} rug</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">In Mesh</div><div className="text-2xl font-bold text-cyan-400">{summary.promoted}</div><div className="text-xs text-amber-400 mt-1">{summary.devHistory} ⚠ dev hist</div></CardContent></Card>
       </div>
 
       {/* Controls */}
@@ -177,9 +295,41 @@ export default function InsidersLifecycleTab() {
               {building ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Rebuild from messages
             </Button>
-            <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
-              {promoting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              Promote ≥3x to Mesh
+            <div className="flex items-center gap-1">
+              <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
+                {promoting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                Promote ≥3x to Mesh
+              </Button>
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </HoverCardTrigger>
+                <HoverCardContent className="w-96 text-xs">
+                  <div className="space-y-2">
+                    <div className="font-semibold">What does "Promote ≥3x to Mesh" do?</div>
+                    <p>
+                      Scans every Insiders token with peak ≥3x. For each, looks up the creator wallet,
+                      checks for rug signals on <strong>this specific token</strong>, and if clean writes
+                      a <code>good_actor_creator</code> record into <code>reputation_mesh</code> — the global trust
+                      graph used by the bubble map, /dev report, and trading guards.
+                    </p>
+                    <p>
+                      Wallets with rug history on <em>other</em> tokens get an amber ⚠ "Dev History" tag but stay
+                      eligible — only this-token rugs are hard-rejected.
+                    </p>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            </div>
+            <Button
+              onClick={() => downloadCSV(filtered)}
+              size="sm"
+              variant="outline"
+              disabled={filtered.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />Export CSV
             </Button>
             <Button onClick={fetchRows} disabled={loading} size="sm" variant="ghost">
               <RefreshCw className="h-4 w-4 mr-2" />Refresh
@@ -193,20 +343,24 @@ export default function InsidersLifecycleTab() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-48 h-8"
               />
-              <Select value={String(minX)} onValueChange={(v) => setMinX(Number(v))}>
-                <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+              <Select value={minX} onValueChange={setMinX} disabled={statusFilter !== "all"}>
+                <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {MIN_X_OPTIONS.map((x) => (
-                    <SelectItem key={x} value={String(x)}>≥ {x}x</SelectItem>
+                    <SelectItem key={x.value} value={x.value}>{x.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40 h-8"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-44 h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="all">All (use min-X)</SelectItem>
+                  <SelectItem value="saddev">&lt; 2x (Saddev)</SelectItem>
+                  <SelectItem value="dud">Dud (1 milestone)</SelectItem>
+                  <SelectItem value="dead">Dead on arrival</SelectItem>
                   <SelectItem value="promoted">Mesh Promoted</SelectItem>
-                  <SelectItem value="rejected">Rejected (rug)</SelectItem>
+                  <SelectItem value="rejected">Rejected (this-token rug)</SelectItem>
+                  <SelectItem value="dev_history">⚠ Dev History</SelectItem>
                   <SelectItem value="eligible">Eligible (unpromoted)</SelectItem>
                 </SelectContent>
               </Select>
@@ -245,24 +399,37 @@ export default function InsidersLifecycleTab() {
                       <TableCell className="font-mono text-xs">{shortMint(r.token_mint)}</TableCell>
                       <TableCell className="text-right">{r.entry_mc_text || fmtMC(r.entry_market_cap)}</TableCell>
                       <TableCell className="text-right">
-                        <Badge
-                          variant={r.peak_multiplier >= 10 ? "destructive" : r.peak_multiplier >= 5 ? "default" : r.peak_multiplier >= 3 ? "secondary" : "outline"}
-                        >
-                          {r.peak_multiplier}x
-                        </Badge>
+                        {r.peak_multiplier < 2 ? (
+                          <Badge variant="outline" className="text-muted-foreground">
+                            <Skull className="h-3 w-3 mr-1" />Saddev
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant={r.peak_multiplier >= 10 ? "destructive" : r.peak_multiplier >= 5 ? "default" : r.peak_multiplier >= 3 ? "secondary" : "outline"}
+                          >
+                            {r.peak_multiplier}x
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">{fmtMC(r.peak_market_cap)}</TableCell>
-                      <TableCell>{fmtLifespan(r.lifespan_minutes)}</TableCell>
+                      <TableCell title={r.lifespan_minutes == null ? "Original Telegram timestamps not preserved on this batch." : undefined}>
+                        {fmtLifespan(r.lifespan_minutes)}
+                      </TableCell>
                       <TableCell>
-                        {r.mesh_promotion_status === "promoted" && (
-                          <Badge className="bg-cyan-500/20 text-cyan-400"><ShieldCheck className="h-3 w-3 mr-1" />Promoted</Badge>
-                        )}
-                        {r.mesh_promotion_status === "rejected_rug" && (
-                          <Badge variant="destructive"><AlertTriangle className="h-3 w-3 mr-1" />Rug</Badge>
-                        )}
-                        {r.mesh_promotion_status === "not_eligible" && r.peak_multiplier >= 3 && (
-                          <Badge variant="outline">Pending</Badge>
-                        )}
+                        <div className="flex gap-1 flex-wrap">
+                          {r.mesh_promotion_status === "promoted" && (
+                            <Badge className="bg-cyan-500/20 text-cyan-400"><ShieldCheck className="h-3 w-3 mr-1" />Promoted</Badge>
+                          )}
+                          {r.mesh_promotion_status === "rejected_rug" && (
+                            <Badge variant="destructive"><AlertTriangle className="h-3 w-3 mr-1" />Rug</Badge>
+                          )}
+                          {r.mesh_promotion_status === "not_eligible" && r.peak_multiplier >= 3 && (
+                            <Badge variant="outline">Pending</Badge>
+                          )}
+                          {r.dev_history_warning && (
+                            <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/40">⚠ Dev Hist</Badge>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -274,14 +441,14 @@ export default function InsidersLifecycleTab() {
             </div>
           )}
           <div className="text-xs text-muted-foreground">
-            Showing {filtered.length} of {rows.length} tokens. Click a row for the full milestone timeline.
+            Showing {filtered.length} of {rows.length} tokens. Click a row for the full milestone timeline & mesh decision.
           </div>
         </CardContent>
       </Card>
 
       {/* Drill-down dialog */}
       <Dialog open={!!drillDown} onOpenChange={(o) => !o && setDrillDown(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {drillDown?.token_symbol} — {drillDown && shortMint(drillDown.token_mint)}
@@ -293,13 +460,86 @@ export default function InsidersLifecycleTab() {
                 <div><span className="text-muted-foreground">First called:</span> {new Date(drillDown.first_called_at).toLocaleString()}</div>
                 <div><span className="text-muted-foreground">Entry MC:</span> {drillDown.entry_mc_text || fmtMC(drillDown.entry_market_cap)}</div>
                 <div><span className="text-muted-foreground">Peak:</span> {drillDown.peak_multiplier}x @ {fmtMC(drillDown.peak_market_cap)}</div>
-                <div><span className="text-muted-foreground">Lifespan:</span> {fmtLifespan(drillDown.lifespan_minutes)}</div>
-                <div className="col-span-2 break-all"><span className="text-muted-foreground">Mint:</span> <span className="font-mono text-xs">{drillDown.token_mint}</span></div>
+                <div>
+                  <span className="text-muted-foreground">Lifespan:</span> {fmtLifespan(drillDown.lifespan_minutes)}
+                  {drillDown.lifespan_minutes == null && (
+                    <span className="text-xs text-muted-foreground ml-1">(timestamps not preserved on this batch)</span>
+                  )}
+                </div>
+                <div className="col-span-2 break-all">
+                  <span className="text-muted-foreground">Mint:</span>{" "}
+                  <a
+                    href={`https://solscan.io/token/${drillDown.token_mint}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-xs underline hover:text-primary"
+                  >
+                    {drillDown.token_mint} <ExternalLink className="inline h-3 w-3" />
+                  </a>
+                </div>
                 {drillDown.creator_wallet && (
-                  <div className="col-span-2 break-all"><span className="text-muted-foreground">Creator:</span> <span className="font-mono text-xs">{drillDown.creator_wallet}</span></div>
+                  <div className="col-span-2 break-all">
+                    <span className="text-muted-foreground">Creator:</span>{" "}
+                    <a
+                      href={`https://solscan.io/account/${drillDown.creator_wallet}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-xs underline hover:text-primary"
+                    >
+                      {drillDown.creator_wallet} <ExternalLink className="inline h-3 w-3" />
+                    </a>
+                  </div>
                 )}
-                {drillDown.mesh_promotion_reason && (
-                  <div className="col-span-2"><span className="text-muted-foreground">Mesh:</span> {drillDown.mesh_promotion_reason}</div>
+              </div>
+
+              {/* Mesh Decision section */}
+              <div className="border rounded-md p-3 bg-muted/30">
+                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" /> Mesh Decision
+                </h4>
+                {drillDown.mesh_decision_trace ? (
+                  <div className="space-y-2 text-xs">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={
+                        drillDown.mesh_decision_trace.decision === "promoted"
+                          ? "default"
+                          : drillDown.mesh_decision_trace.decision === "rejected_rug"
+                          ? "destructive"
+                          : "outline"
+                      }>
+                        Decision: {drillDown.mesh_decision_trace.decision || "—"}
+                      </Badge>
+                      {drillDown.dev_history_warning && (
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/40">⚠ Dev Hist</Badge>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-semibold mb-1">Creator history (other tokens):</div>
+                      <ul className="ml-4 list-disc text-muted-foreground">
+                        <li>Risk tier: <span className="text-foreground">{drillDown.mesh_decision_trace.dev_history?.risk_tier || "none"}</span></li>
+                        <li>Trust level: <span className="text-foreground">{drillDown.mesh_decision_trace.dev_history?.trust_level || "none"}</span></li>
+                        <li>Tokens rugged before: <span className="text-foreground">{drillDown.mesh_decision_trace.dev_history?.tokens_rugged ?? 0}</span></li>
+                        <li>Auto-blacklisted: <span className="text-foreground">{drillDown.mesh_decision_trace.dev_history?.auto_blacklisted ? "yes" : "no"}</span></li>
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="font-semibold mb-1">This token's own signals:</div>
+                      <ul className="ml-4 list-disc text-muted-foreground">
+                        <li>Death cause: <span className="text-foreground">{drillDown.mesh_decision_trace.this_token?.death_cause || "alive / not flagged"}</span></li>
+                        <li>Current MC: <span className="text-foreground">{fmtMC(drillDown.mesh_decision_trace.this_token?.market_cap ?? null)}</span></li>
+                        <li>This token rug: <span className="text-foreground">{drillDown.mesh_decision_trace.this_token?.is_rug ? "YES" : "no"}</span></li>
+                      </ul>
+                    </div>
+                    {drillDown.mesh_promotion_reason && (
+                      <div className="pt-2 border-t">
+                        <span className="text-muted-foreground">Reason:</span> {drillDown.mesh_promotion_reason}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    {drillDown.mesh_promotion_reason || "No decision recorded yet. Run \"Promote ≥3x to Mesh\" to evaluate."}
+                  </div>
                 )}
               </div>
 

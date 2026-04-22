@@ -14552,6 +14552,7 @@ export type Database = {
           creator_resolved_at: string | null
           creator_risk_tier: string | null
           creator_wallet: string | null
+          dev_history_warning: boolean | null
           entry_market_cap: number | null
           entry_mc_text: string | null
           first_call_message_id: number | null
@@ -14560,6 +14561,7 @@ export type Database = {
           is_rugged: boolean
           last_milestone_at: string | null
           lifespan_minutes: number | null
+          mesh_decision_trace: Json | null
           mesh_promoted_at: string | null
           mesh_promotion_reason: string | null
           mesh_promotion_status: string
@@ -14583,6 +14585,7 @@ export type Database = {
           creator_resolved_at?: string | null
           creator_risk_tier?: string | null
           creator_wallet?: string | null
+          dev_history_warning?: boolean | null
           entry_market_cap?: number | null
           entry_mc_text?: string | null
           first_call_message_id?: number | null
@@ -14591,6 +14594,7 @@ export type Database = {
           is_rugged?: boolean
           last_milestone_at?: string | null
           lifespan_minutes?: number | null
+          mesh_decision_trace?: Json | null
           mesh_promoted_at?: string | null
           mesh_promotion_reason?: string | null
           mesh_promotion_status?: string
@@ -14614,6 +14618,7 @@ export type Database = {
           creator_resolved_at?: string | null
           creator_risk_tier?: string | null
           creator_wallet?: string | null
+          dev_history_warning?: boolean | null
           entry_market_cap?: number | null
           entry_mc_text?: string | null
           first_call_message_id?: number | null
@@ -14622,6 +14627,7 @@ export type Database = {
           is_rugged?: boolean
           last_milestone_at?: string | null
           lifespan_minutes?: number | null
+          mesh_decision_trace?: Json | null
           mesh_promoted_at?: string | null
           mesh_promotion_reason?: string | null
           mesh_promotion_status?: string
