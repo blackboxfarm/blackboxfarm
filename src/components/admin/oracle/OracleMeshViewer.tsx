@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, Network, ArrowRight, ExternalLink, Copy, Check, Search, Filter, BarChart3 } from "lucide-react";
+import { RefreshCw, Network, ArrowRight, ExternalLink, Copy, Check, Search, Filter, BarChart3, Pencil } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import MeshVerdictEditorDialog from "@/components/admin/oracle/MeshVerdictEditorDialog";
+import { useUserRolesContext } from "@/contexts/UserRolesContext";
 
 // ── Entity Link (clickable + copy) ──────────────────────────────
 const EntityLink = ({ id, type }: { id: string; type: string }) => {
@@ -100,6 +102,8 @@ const OracleMeshViewer = () => {
   const [activeSearch, setActiveSearch] = useState("");
   const [relationshipFilter, setRelationshipFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [editingRow, setEditingRow] = useState<any>(null);
+  const { isSuperAdmin } = useUserRolesContext();
 
   // Stats query
   const { data: stats } = useQuery({
@@ -291,6 +295,15 @@ const OracleMeshViewer = () => {
                           <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">
                             {formatDistanceToNow(new Date(link.discovered_at), { addSuffix: true })}
                           </span>
+                          {isSuperAdmin && (
+                            <Button
+                              size="sm" variant="ghost" className="h-6 w-6 p-0 flex-shrink-0"
+                              onClick={() => setEditingRow(link)}
+                              title="Edit verdict"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -317,6 +330,13 @@ const OracleMeshViewer = () => {
           </CardContent>
         </Card>
       )}
+
+      <MeshVerdictEditorDialog
+        row={editingRow}
+        open={!!editingRow}
+        onOpenChange={(o) => !o && setEditingRow(null)}
+        onSaved={() => refetch()}
+      />
     </div>
   );
 };

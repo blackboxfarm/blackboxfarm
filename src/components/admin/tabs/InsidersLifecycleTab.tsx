@@ -25,6 +25,10 @@ import {
   Info,
   Skull,
   ExternalLink,
+  Check,
+  X,
+  RotateCw,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -38,6 +42,9 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import HypotheticalPnlPanel from "@/components/admin/HypotheticalPnlPanel";
 
 interface MeshDecisionTrace {
   creator_wallet?: string;
@@ -174,6 +181,39 @@ export default function InsidersLifecycleTab() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [drillDown, setDrillDown] = useState<LifecycleRow | null>(null);
+  const [rowActioning, setRowActioning] = useState<string | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
+
+  const handleRowAction = async (
+    tokenMint: string,
+    action: 'promote' | 'reconsider' | 'reject' | 'override_promote',
+    reason?: string,
+  ) => {
+    setRowActioning(tokenMint + ':' + action);
+    try {
+      const { data, error } = await supabase.functions.invoke('insiders-mesh-row-action', {
+        body: { token_mint: tokenMint, action, reason },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'action failed');
+      toast.success(`${action.replace('_', ' ')} → ${data.new_status}`);
+      await fetchRows();
+      // If drill-down is open for this token, refresh that view too
+      if (drillDown?.token_mint === tokenMint) {
+        const { data: r } = await supabase
+          .from('telegram_insider_token_lifecycle')
+          .select('*')
+          .eq('token_mint', tokenMint)
+          .maybeSingle();
+        if (r) setDrillDown(r as any);
+      }
+      setOverrideReason("");
+    } catch (e: any) {
+      toast.error('Action failed: ' + (e?.message || String(e)));
+    } finally {
+      setRowActioning(null);
+    }
+  };
 
   const fetchRows = async () => {
     setLoading(true);
@@ -270,6 +310,9 @@ export default function InsidersLifecycleTab() {
 
   return (
     <div className="space-y-6">
+      {/* Hypothetical $X-per-call PnL simulator */}
+      <HypotheticalPnlPanel rows={rows} />
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total tokens</div><div className="text-2xl font-bold">{summary.total}</div></CardContent></Card>
@@ -383,6 +426,7 @@ export default function InsidersLifecycleTab() {
                     <TableHead className="text-right">Peak MC</TableHead>
                     <TableHead>Lifespan</TableHead>
                     <TableHead>Mesh</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -431,10 +475,58 @@ export default function InsidersLifecycleTab() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <TooltipProvider delayDuration={200}>
+                          <div className="flex justify-end gap-1">
+                            {(r.mesh_promotion_status === 'not_eligible' || r.mesh_promotion_status === 'pending') && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-500 hover:bg-green-500/10"
+                                    disabled={!!rowActioning}
+                                    onClick={() => handleRowAction(r.token_mint, 'promote')}
+                                  >
+                                    {rowActioning === r.token_mint + ':promote' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Promote to Mesh</TooltipContent>
+                              </Tooltip>
+                            )}
+                            {(r.mesh_promotion_status === 'rejected_rug' || r.mesh_promotion_status === 'promoted' || r.mesh_promotion_status === 'manually_rejected') && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                    disabled={!!rowActioning}
+                                    onClick={() => handleRowAction(r.token_mint, 'reconsider')}
+                                  >
+                                    {rowActioning === r.token_mint + ':reconsider' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Reconsider</TooltipContent>
+                              </Tooltip>
+                            )}
+                            {r.mesh_promotion_status === 'promoted' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                    disabled={!!rowActioning}
+                                    onClick={() => handleRowAction(r.token_mint, 'reject')}
+                                  >
+                                    {rowActioning === r.token_mint + ':reject' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Remove from Mesh</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </TooltipProvider>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -541,6 +633,57 @@ export default function InsidersLifecycleTab() {
                     {drillDown.mesh_promotion_reason || "No decision recorded yet. Run \"Promote ≥3x to Mesh\" to evaluate."}
                   </div>
                 )}
+
+                {/* Manual admin actions */}
+                <div className="mt-4 pt-3 border-t space-y-2">
+                  <div className="text-xs font-semibold flex items-center gap-1">
+                    <ShieldAlert className="h-3.5 w-3.5" /> Admin actions
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(drillDown.mesh_promotion_status === 'not_eligible' || drillDown.mesh_promotion_status === 'pending') && (
+                      <Button size="sm" variant="default" disabled={!!rowActioning}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'promote')}>
+                        <Check className="h-3.5 w-3.5 mr-1" /> Promote
+                      </Button>
+                    )}
+                    {(drillDown.mesh_promotion_status === 'rejected_rug' || drillDown.mesh_promotion_status === 'promoted' || drillDown.mesh_promotion_status === 'manually_rejected') && (
+                      <Button size="sm" variant="outline" disabled={!!rowActioning}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'reconsider')}>
+                        <RotateCw className="h-3.5 w-3.5 mr-1" /> Reconsider
+                      </Button>
+                    )}
+                    {drillDown.mesh_promotion_status === 'promoted' && (
+                      <Button size="sm" variant="destructive" disabled={!!rowActioning}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'reject')}>
+                        <X className="h-3.5 w-3.5 mr-1" /> Remove from Mesh
+                      </Button>
+                    )}
+                  </div>
+
+                  {drillDown.mesh_promotion_status === 'rejected_rug' && (
+                    <div className="space-y-2 pt-2">
+                      <div className="text-xs text-muted-foreground">
+                        Override required: this token is currently flagged as rugged. Provide a reason to force-promote.
+                      </div>
+                      <Textarea
+                        placeholder="Why are you overriding the rug verdict? (recorded in audit trail)"
+                        value={overrideReason}
+                        onChange={(e) => setOverrideReason(e.target.value)}
+                        rows={2}
+                        className="text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="bg-amber-500 hover:bg-amber-500/90 text-amber-950"
+                        disabled={!!rowActioning || !overrideReason.trim()}
+                        onClick={() => handleRowAction(drillDown.token_mint, 'override_promote', overrideReason.trim())}
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5 mr-1" /> Override → Promote
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
