@@ -102,6 +102,8 @@ const OracleMeshViewer = () => {
   const [activeSearch, setActiveSearch] = useState("");
   const [relationshipFilter, setRelationshipFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [editingRow, setEditingRow] = useState<any>(null);
+  const { isSuperAdmin } = useUserRolesContext();
 
   // Stats query
   const { data: stats } = useQuery({
