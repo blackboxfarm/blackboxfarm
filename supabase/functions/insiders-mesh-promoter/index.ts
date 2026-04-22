@@ -16,6 +16,7 @@ const corsHeaders = {
 
 const BAD_TIERS = new Set(['bad_actor', 'suspicious', 'rugger']);
 const BAD_TRUST_LEVELS = new Set(['rugger', 'serial_rugger', 'scammer', 'blacklisted']);
+const THIS_TOKEN_RUG_CAUSES = new Set(['rug_pull', 'lp_pulled', 'scam', 'rug']);
 
 async function resolveCreator(supabase: any, mint: string): Promise<string | null> {
   const { data: lc } = await supabase
@@ -31,7 +32,7 @@ interface CreatorRisk {
   trustLevel: string | null;
   tokensRugged: number;
   autoBlacklisted: boolean;
-  isRug: boolean;
+  devHistoryRug: boolean;
 }
 
 async function getCreatorRisk(supabase: any, wallet: string): Promise<CreatorRisk> {
@@ -43,12 +44,35 @@ async function getCreatorRisk(supabase: any, wallet: string): Promise<CreatorRis
   const trustLevel = rep?.trust_level || null;
   const tokensRugged = rep?.tokens_rugged || 0;
   const autoBlacklisted = !!rep?.auto_blacklisted;
-  const isRug =
+  const devHistoryRug =
     (riskTier && BAD_TIERS.has(riskTier)) ||
     (trustLevel && BAD_TRUST_LEVELS.has(trustLevel)) ||
     tokensRugged > 0 ||
     autoBlacklisted;
-  return { riskTier, trustLevel, tokensRugged, autoBlacklisted, isRug: !!isRug };
+  return { riskTier, trustLevel, tokensRugged, autoBlacklisted, devHistoryRug: !!devHistoryRug };
+}
+
+interface ThisTokenRug {
+  isRug: boolean;
+  deathCause: string | null;
+  autopsyNotes: string | null;
+  marketCap: number | null;
+}
+
+async function getThisTokenRug(supabase: any, mint: string): Promise<ThisTokenRug> {
+  const { data: tl } = await supabase
+    .from('token_lifecycle')
+    .select('death_cause, autopsy_notes, market_cap')
+    .eq('token_mint', mint)
+    .maybeSingle();
+  const deathCause = tl?.death_cause || null;
+  const isRug = !!(deathCause && THIS_TOKEN_RUG_CAUSES.has(deathCause));
+  return {
+    isRug,
+    deathCause,
+    autopsyNotes: tl?.autopsy_notes || null,
+    marketCap: tl?.market_cap ?? null,
+  };
 }
 
 serve(async (req) => {
