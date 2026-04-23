@@ -41,6 +41,7 @@ const TodoListTab = lazy(() => import("@/components/admin/tabs/TodoListTab"));
 const TestersTab = lazy(() => import("@/components/admin/tabs/TestersTab"));
 const AccountsTab = lazy(() => import("@/components/admin/tabs/AccountsTab"));
 const InsidersLifecycleTab = lazy(() => import("@/components/admin/tabs/InsidersLifecycleTab"));
+const DocsTab = lazy(() => import("@/components/admin/tabs/DocsTab"));
 
 const DEFAULT_ADMIN_TAB = "utilities";
 const ALLOWED_ADMIN_TABS = new Set([
@@ -69,6 +70,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "testers",
   "accounts",
   "insiders-lifecycle",
+  "docs",
 ]);
 
 // Simple loading fallback
