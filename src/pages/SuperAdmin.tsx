@@ -208,6 +208,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="testers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-rose-500/20">🧪 Testers</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-cyan-500/20">👥 Accounts</TabsTrigger>
             <TabsTrigger value="insiders-lifecycle" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500/30 data-[state=active]:to-purple-500/20">📈 Insiders Lifecycle</TabsTrigger>
+            <TabsTrigger value="docs" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">📚 Docs</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
