@@ -178,11 +178,11 @@ export default function IntelBriefingArticle() {
 
           {/* Hero image */}
           {article.featured_image_url && (
-            <div className="rounded-xl overflow-hidden mb-8">
+            <div className="rounded-xl overflow-hidden mb-8 bg-muted/30">
               <img
                 src={article.featured_image_url}
                 alt={article.title}
-                className="w-full aspect-[1200/630] object-cover"
+                className="w-full max-h-[70vh] object-contain"
               />
             </div>
           )}
