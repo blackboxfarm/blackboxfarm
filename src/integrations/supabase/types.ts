@@ -13048,6 +13048,51 @@ export type Database = {
         }
         Relationships: []
       }
+      super_admin_docs: {
+        Row: {
+          category: string
+          content_md: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_pinned: boolean
+          slug: string
+          sort_order: number
+          summary: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          content_md?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_pinned?: boolean
+          slug: string
+          sort_order?: number
+          summary?: string | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          content_md?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_pinned?: boolean
+          slug?: string
+          sort_order?: number
+          summary?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       super_admin_wallets: {
         Row: {
           created_at: string
