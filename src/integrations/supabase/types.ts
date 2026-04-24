@@ -14621,13 +14621,18 @@ export type Database = {
           creator_risk_tier: string | null
           creator_wallet: string | null
           dev_history_warning: boolean | null
+          enrichment_last_run_at: string | null
+          enrichment_status: string | null
           entry_market_cap: number | null
           entry_mc_text: string | null
           first_call_message_id: number | null
           first_called_at: string
+          genealogy_depth: number | null
+          genealogy_kyc_root: string | null
           id: string
           is_rugged: boolean
           last_milestone_at: string | null
+          launchpad: string | null
           lifespan_minutes: number | null
           mesh_decision_trace: Json | null
           mesh_promoted_at: string | null
@@ -14641,6 +14646,9 @@ export type Database = {
           peak_reached_at: string | null
           raw_alert_message: string | null
           rug_evidence: Json | null
+          socials_changed: boolean
+          socials_last_checked_at: string | null
+          socials_snapshot: Json | null
           token_mint: string
           token_symbol: string | null
           total_messages: number
@@ -14654,13 +14662,18 @@ export type Database = {
           creator_risk_tier?: string | null
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
+          enrichment_last_run_at?: string | null
+          enrichment_status?: string | null
           entry_market_cap?: number | null
           entry_mc_text?: string | null
           first_call_message_id?: number | null
           first_called_at: string
+          genealogy_depth?: number | null
+          genealogy_kyc_root?: string | null
           id?: string
           is_rugged?: boolean
           last_milestone_at?: string | null
+          launchpad?: string | null
           lifespan_minutes?: number | null
           mesh_decision_trace?: Json | null
           mesh_promoted_at?: string | null
@@ -14674,6 +14687,9 @@ export type Database = {
           peak_reached_at?: string | null
           raw_alert_message?: string | null
           rug_evidence?: Json | null
+          socials_changed?: boolean
+          socials_last_checked_at?: string | null
+          socials_snapshot?: Json | null
           token_mint: string
           token_symbol?: string | null
           total_messages?: number
@@ -14687,13 +14703,18 @@ export type Database = {
           creator_risk_tier?: string | null
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
+          enrichment_last_run_at?: string | null
+          enrichment_status?: string | null
           entry_market_cap?: number | null
           entry_mc_text?: string | null
           first_call_message_id?: number | null
           first_called_at?: string
+          genealogy_depth?: number | null
+          genealogy_kyc_root?: string | null
           id?: string
           is_rugged?: boolean
           last_milestone_at?: string | null
+          launchpad?: string | null
           lifespan_minutes?: number | null
           mesh_decision_trace?: Json | null
           mesh_promoted_at?: string | null
@@ -14707,6 +14728,9 @@ export type Database = {
           peak_reached_at?: string | null
           raw_alert_message?: string | null
           rug_evidence?: Json | null
+          socials_changed?: boolean
+          socials_last_checked_at?: string | null
+          socials_snapshot?: Json | null
           token_mint?: string
           token_symbol?: string | null
           total_messages?: number

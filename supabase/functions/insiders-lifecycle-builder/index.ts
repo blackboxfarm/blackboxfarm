@@ -2,9 +2,23 @@
 // Parses every message from the 'insiders' Telegram channel and reconstructs
 // per-token lifecycle records: first call → milestones → peak multiplier.
 // Idempotent: re-runnable, upserts into telegram_insider_token_lifecycle.
+//
+// Phase 2 (cron-driven, every 3h): after the message aggregation pass,
+// it runs a per-token enrichment loop that:
+//   - resolves creator_wallet via the unified creator-resolver
+//   - feeds token + creator + socials into reputation_mesh via meshFeed
+//   - snapshots socials from launchpad + DexScreener + Metaplex and detects drift
+//   - traces parent wallets / KYC root via auto-genealogy
+// Then it chains into insiders-mesh-promoter so newly-resolved ≥3x creators
+// are promoted as good actors in the same run.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolveTokenCreator } from "../_shared/creator-resolver.ts";
+import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { traceParentWallets, meshGenealogyResults } from "../_shared/auto-genealogy.ts";
+import { fetchPumpFunCoin } from "../_shared/pumpfun-fetch.ts";
+import { assertUpdate } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,6 +76,341 @@ function parseMilestone(raw: string): { multiplier: number | null; currentMcText
     entryMcText: entryMatch ? entryMatch[1].trim() : null,
     entryMc: entryMatch ? parseMcText(entryMatch[1]) : null,
   };
+}
+
+// =====================================================================
+// PHASE 2 — per-token enrichment helpers
+// =====================================================================
+
+const TWITTER_RE = /(?:twitter\.com|x\.com)\/(@?[a-zA-Z0-9_]+)/i;
+const TG_RE = /t\.me\/([a-zA-Z0-9_]+)/i;
+
+function normHandle(url: string | null | undefined, re: RegExp): string | null {
+  if (!url) return null;
+  const m = String(url).match(re);
+  if (!m) return null;
+  return m[1].replace(/^@/, '').toLowerCase();
+}
+
+/**
+ * Pull socials from DexScreener for a given mint.
+ */
+async function fetchDexscreenerSocials(mint: string): Promise<{ twitter: string | null; telegram: string | null; website: string | null } | null> {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${mint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const pairs = await res.json();
+    const pair = Array.isArray(pairs) ? pairs[0] : null;
+    if (!pair) return null;
+    const info = pair.info || {};
+    const socials: any[] = info.socials || [];
+    const websites: any[] = info.websites || [];
+    const twitter = socials.find((s: any) => /twitter|x/i.test(s.type))?.url || null;
+    const telegram = socials.find((s: any) => /telegram/i.test(s.type))?.url || null;
+    const website = websites[0]?.url || null;
+    return { twitter, telegram, website };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pull on-chain Metaplex socials via Helius DAS getAsset → metadata URI.
+ */
+async function fetchMetaplexSocials(mint: string): Promise<{ twitter: string | null; telegram: string | null; website: string | null } | null> {
+  try {
+    const heliusKey = Deno.env.get('HELIUS_API_KEY');
+    if (!heliusKey) return null;
+    const r = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 'mp', method: 'getAsset', params: { id: mint },
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const uri = j?.result?.content?.json_uri;
+    if (!uri) return null;
+    const meta = await fetch(uri, { signal: AbortSignal.timeout(5000) }).then(rr => rr.ok ? rr.json() : null).catch(() => null);
+    if (!meta) return null;
+    return {
+      twitter: meta.twitter || meta.x || null,
+      telegram: meta.telegram || null,
+      website: meta.website || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist a discovered social link as a versioned row in token_social_links.
+ * Marks any prior `is_current=true` of the same (mint, link_type, source) as superseded
+ * if the URL changed — that's how we get a history.
+ */
+async function recordSocialLink(supabase: any, params: {
+  mint: string;
+  url: string | null;
+  linkType: 'twitter' | 'telegram' | 'website';
+  source: 'launchpad' | 'dex' | 'metaplex';
+}) {
+  const { mint, url, linkType, source } = params;
+  if (!url) return { changed: false };
+  const normUrl = url.trim();
+  const handle = linkType === 'twitter' ? normHandle(normUrl, TWITTER_RE)
+               : linkType === 'telegram' ? normHandle(normUrl, TG_RE)
+               : null;
+
+  // Fetch the latest current row for this mint+link_type+source
+  const { data: prior } = await supabase
+    .from('token_social_links')
+    .select('id, url')
+    .eq('token_mint', mint)
+    .eq('link_type', linkType)
+    .eq('source', source)
+    .eq('is_current', true)
+    .maybeSingle();
+
+  if (prior?.url === normUrl) return { changed: false };
+
+  const now = new Date().toISOString();
+  if (prior?.id) {
+    const { error: supErr } = await supabase
+      .from('token_social_links')
+      .update({ is_current: false, superseded_at: now })
+      .eq('id', prior.id);
+    if (supErr) console.warn(`[enrich] supersede ${linkType} (${source}) failed: ${supErr.message}`);
+  }
+
+  const { error: insErr } = await supabase.from('token_social_links').insert({
+    token_mint: mint,
+    url: normUrl,
+    link_type: linkType,
+    platform: linkType,
+    extracted_handle: handle,
+    source,
+    is_current: true,
+    discovered_at: now,
+  });
+  if (insErr && !/duplicate/i.test(insErr.message || '')) {
+    console.warn(`[enrich] insert ${linkType} (${source}) failed: ${insErr.message}`);
+  }
+  return { changed: true };
+}
+
+interface EnrichmentResult {
+  candidates: number;
+  enriched: number;
+  creator_resolved: number;
+  creator_failed: number;
+  socials_found: number;
+  socials_changed: number;
+  genealogy_traced: number;
+  errors: string[];
+}
+
+async function runEnrichmentPass(
+  supabase: any,
+  opts: { enrichLimit: number; socialsRecheck: boolean; socialsLimit: number },
+): Promise<EnrichmentResult> {
+  const { enrichLimit, socialsRecheck, socialsLimit } = opts;
+  const result: EnrichmentResult = {
+    candidates: 0, enriched: 0, creator_resolved: 0, creator_failed: 0,
+    socials_found: 0, socials_changed: 0, genealogy_traced: 0, errors: [],
+  };
+
+  // Pull two queues:
+  //   A) tokens never enriched OR stale > 24h, ordered by peak DESC then newest
+  //   B) recent top-N for socials drift recheck
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+
+  const { data: queueA } = await supabase
+    .from('telegram_insider_token_lifecycle')
+    .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at')
+    .or(`enrichment_last_run_at.is.null,enrichment_last_run_at.lt.${cutoff}`)
+    .order('peak_multiplier', { ascending: false })
+    .order('first_called_at', { ascending: false })
+    .limit(enrichLimit);
+
+  const queueAIds = new Set((queueA || []).map((r: any) => r.id));
+
+  let queueB: any[] = [];
+  if (socialsRecheck) {
+    const { data } = await supabase
+      .from('telegram_insider_token_lifecycle')
+      .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at')
+      .order('first_called_at', { ascending: false })
+      .limit(socialsLimit);
+    queueB = (data || []).filter((r: any) => !queueAIds.has(r.id));
+  }
+
+  const fullQueue = [...(queueA || []), ...queueB];
+  result.candidates = fullQueue.length;
+
+  console.log(`[enrich] queueA=${queueA?.length || 0} queueB=${queueB.length} total=${fullQueue.length}`);
+
+  // Process in batches of 5 for governance (Helius credits, Pump.fun 200-300/hr)
+  const BATCH = 5;
+  for (let i = 0; i < fullQueue.length; i += BATCH) {
+    const batch = fullQueue.slice(i, i + BATCH);
+    await Promise.allSettled(batch.map(async (row: any) => {
+      try {
+        await enrichOneToken(supabase, row, result);
+      } catch (e) {
+        const msg = `${row.token_mint}: ${(e as Error).message}`;
+        console.error('[enrich]', msg);
+        result.errors.push(msg);
+      }
+    }));
+    // Pacing pause between batches
+    if (i + BATCH < fullQueue.length) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  console.log('[enrich] done', result);
+  return result;
+}
+
+async function enrichOneToken(supabase: any, row: any, summary: EnrichmentResult): Promise<void> {
+  const { id, token_mint: mint, token_symbol: symbol } = row;
+  let creator: string | null = row.creator_wallet || null;
+  let launchpad: string | null = null;
+  let launchpadSocials: { twitter?: string; telegram?: string; website?: string } = {};
+
+  // 1. Creator + launchpad socials in one call (mesh-feeder hits all 3 launchpads in parallel)
+  if (!creator) {
+    const lp = await meshFeed.resolveCreatorFromLaunchpads(supabase, mint, 'insiders-lifecycle-enrich');
+    if (lp.creator) {
+      creator = lp.creator;
+      launchpad = lp.launchpad || null;
+      if (lp.twitter) launchpadSocials.twitter = lp.twitter;
+    }
+    // Fallback to canonical resolver chain (Pump.fun → Helius mint tx → DAS → on-chain → DB cache)
+    if (!creator) {
+      const resolution = await resolveTokenCreator(mint, supabase, []);
+      if (resolution.creatorWallet) {
+        creator = resolution.creatorWallet;
+        launchpad = launchpad || (resolution.source === 'pumpfun' ? 'pump.fun' : null);
+      }
+    }
+  }
+
+  // Pull launchpad socials directly via pump.fun if we still need them
+  if (!launchpadSocials.twitter || !launchpadSocials.telegram || !launchpadSocials.website) {
+    if (mint.toLowerCase().endsWith('pump')) {
+      try {
+        const pf = await fetchPumpFunCoin(mint, 'insiders-lifecycle-enrich');
+        if (pf) {
+          launchpadSocials.twitter ||= pf.twitter ? (String(pf.twitter).startsWith('http') ? pf.twitter : `https://x.com/${pf.twitter}`) : undefined;
+          launchpadSocials.telegram ||= pf.telegram || undefined;
+          launchpadSocials.website ||= pf.website || undefined;
+          launchpad = launchpad || 'pump.fun';
+        }
+      } catch { /* throttled / 403 — fine */ }
+    }
+  }
+
+  // 2. DEX + Metaplex socials (parallel)
+  const [dex, mp] = await Promise.all([
+    fetchDexscreenerSocials(mint),
+    fetchMetaplexSocials(mint),
+  ]);
+
+  // 3. Record every social we found, by source — drift detection happens per-source
+  let socialsFound = 0;
+  let anyChanged = false;
+
+  for (const linkType of ['twitter', 'telegram', 'website'] as const) {
+    // launchpad
+    const lpUrl = (launchpadSocials as any)[linkType] as string | undefined;
+    if (lpUrl) {
+      socialsFound++;
+      const r = await recordSocialLink(supabase, { mint, url: lpUrl, linkType, source: 'launchpad' });
+      if (r.changed) anyChanged = true;
+    }
+    // dex
+    const dexUrl = (dex as any)?.[linkType] as string | undefined;
+    if (dexUrl) {
+      socialsFound++;
+      const r = await recordSocialLink(supabase, { mint, url: dexUrl, linkType, source: 'dex' });
+      if (r.changed) anyChanged = true;
+    }
+    // metaplex
+    const mpUrl = (mp as any)?.[linkType] as string | undefined;
+    if (mpUrl) {
+      socialsFound++;
+      const r = await recordSocialLink(supabase, { mint, url: mpUrl, linkType, source: 'metaplex' });
+      if (r.changed) anyChanged = true;
+    }
+  }
+
+  if (socialsFound > 0) summary.socials_found += socialsFound;
+  if (anyChanged) summary.socials_changed++;
+
+  // 4. Mesh-feed token + creator + best-known socials
+  await meshFeed.token(supabase, {
+    mint,
+    symbol,
+    creatorWallet: creator,
+    twitterUrl: launchpadSocials.twitter || dex?.twitter || mp?.twitter || null,
+    telegramUrl: launchpadSocials.telegram || dex?.telegram || mp?.telegram || null,
+    websiteUrl: launchpadSocials.website || dex?.website || mp?.website || null,
+    source: 'insiders-lifecycle',
+  });
+
+  // 5. Auto-genealogy on the creator (KYC root tracing)
+  let genealogyDepth: number | null = null;
+  let kycRoot: string | null = null;
+  if (creator) {
+    summary.creator_resolved++;
+    try {
+      const gen = await traceParentWallets(supabase, creator, 'insiders-lifecycle');
+      if (gen.parentWallets.length > 0 || gen.xAccounts.length > 0) {
+        await meshGenealogyResults(supabase, creator, gen, 'insiders-lifecycle');
+        summary.genealogy_traced++;
+        genealogyDepth = gen.parentWallets.length;
+        // Find the deepest CEX-tagged parent → that's our KYC root
+        const cexHit = gen.parentWallets.find((p: any) => p?.cex || p?.is_cex);
+        kycRoot = cexHit?.wallet || null;
+      }
+    } catch (e) {
+      console.warn(`[enrich] genealogy failed for ${creator.slice(0, 8)}: ${(e as Error).message}`);
+    }
+  } else {
+    summary.creator_failed++;
+  }
+
+  // 6. Persist enrichment outcome on the lifecycle row — assertUpdate so silent fails are impossible
+  await assertUpdate(
+    supabase
+      .from('telegram_insider_token_lifecycle')
+      .update({
+        creator_wallet: creator,
+        creator_resolved_at: creator ? new Date().toISOString() : null,
+        launchpad,
+        socials_last_checked_at: new Date().toISOString(),
+        socials_changed: anyChanged ? true : row.socials_changed || false,
+        socials_snapshot: {
+          launchpad: launchpadSocials,
+          dex,
+          metaplex: mp,
+          checked_at: new Date().toISOString(),
+        },
+        genealogy_depth: genealogyDepth,
+        genealogy_kyc_root: kycRoot,
+        enrichment_last_run_at: new Date().toISOString(),
+        enrichment_status: creator ? 'ok' : 'no_creator',
+      })
+      .eq('id', id),
+    'telegram_insider_token_lifecycle',
+  );
+
+  summary.enriched++;
 }
 
 serve(async (req) => {
@@ -252,12 +601,69 @@ serve(async (req) => {
 
     console.log('[insiders-lifecycle-builder] Done.', stats);
 
+    // ============================================================
+    // PHASE 2 — Per-token mesh enrichment
+    // ============================================================
+    // Cron-driven (every 3h). Picks tokens that are stale or never
+    // enriched, runs the full mesh treatment per token (creator,
+    // socials snapshot, genealogy, mesh feed), respects governance.
+    //
+    // Body params (all optional, sensible defaults for cron):
+    //   enrich:          boolean — run phase 2 (default true)
+    //   enrichLimit:     number  — max tokens per run (default 200)
+    //   socialsRecheck:  boolean — also re-snapshot top recent (default true)
+    //   socialsLimit:    number  — how many recent to recheck (default 50)
+    //   chainPromoter:   boolean — call insiders-mesh-promoter at end (default true)
+    let body: any = {};
+    try { body = await req.clone().json(); } catch { /* GET / no body — use defaults */ }
+    const doEnrich        = body.enrich !== false;
+    const enrichLimit     = Number(body.enrichLimit ?? 200);
+    const doSocialsRecheck = body.socialsRecheck !== false;
+    const socialsLimit    = Number(body.socialsLimit ?? 50);
+    const doChainPromoter = body.chainPromoter !== false;
+
+    let enrichmentSummary: any = { skipped: true };
+    if (doEnrich) {
+      enrichmentSummary = await runEnrichmentPass(supabase, {
+        enrichLimit,
+        socialsRecheck: doSocialsRecheck,
+        socialsLimit,
+      });
+    }
+
+    // ============================================================
+    // PHASE 3 — Chain into mesh promoter so newly-resolved
+    // creators on ≥3x tokens get promoted in the same run.
+    // ============================================================
+    let promoterResult: any = { skipped: true };
+    if (doChainPromoter) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const res = await fetch(`${supabaseUrl}/functions/v1/insiders-mesh-promoter`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ source: 'lifecycle-builder-chain' }),
+        });
+        promoterResult = await res.json();
+        console.log('[insiders-lifecycle-builder] Promoter chain done:', promoterResult);
+      } catch (e) {
+        console.error('[insiders-lifecycle-builder] Promoter chain failed:', e);
+        promoterResult = { error: (e as Error).message };
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         messages_processed: allRows.length,
         tokens_upserted: upserted,
         stats,
+        enrichment: enrichmentSummary,
+        promoter: promoterResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
