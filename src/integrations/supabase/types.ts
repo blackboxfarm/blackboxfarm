@@ -12786,9 +12786,14 @@ export type Database = {
           file_url: string
           height: number | null
           id: string
+          image_usage_context: string | null
           is_active: boolean | null
           last_used_at: string | null
           mime_type: string | null
+          related_article_id: string | null
+          related_article_label: string | null
+          related_article_slug: string | null
+          related_article_title: string | null
           source_type: string
           style_category_ids: string[] | null
           tags: string[] | null
@@ -12808,9 +12813,14 @@ export type Database = {
           file_url: string
           height?: number | null
           id?: string
+          image_usage_context?: string | null
           is_active?: boolean | null
           last_used_at?: string | null
           mime_type?: string | null
+          related_article_id?: string | null
+          related_article_label?: string | null
+          related_article_slug?: string | null
+          related_article_title?: string | null
           source_type?: string
           style_category_ids?: string[] | null
           tags?: string[] | null
@@ -12830,9 +12840,14 @@ export type Database = {
           file_url?: string
           height?: number | null
           id?: string
+          image_usage_context?: string | null
           is_active?: boolean | null
           last_used_at?: string | null
           mime_type?: string | null
+          related_article_id?: string | null
+          related_article_label?: string | null
+          related_article_slug?: string | null
+          related_article_title?: string | null
           source_type?: string
           style_category_ids?: string[] | null
           tags?: string[] | null
@@ -12842,7 +12857,15 @@ export type Database = {
           used_in_posts?: string[] | null
           width?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "social_media_gallery_related_article_id_fkey"
+            columns: ["related_article_id"]
+            isOneToOne: false
+            referencedRelation: "intel_briefings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       social_posts_log: {
         Row: {
