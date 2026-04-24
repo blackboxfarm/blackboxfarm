@@ -2,9 +2,23 @@
 // Parses every message from the 'insiders' Telegram channel and reconstructs
 // per-token lifecycle records: first call → milestones → peak multiplier.
 // Idempotent: re-runnable, upserts into telegram_insider_token_lifecycle.
+//
+// Phase 2 (cron-driven, every 3h): after the message aggregation pass,
+// it runs a per-token enrichment loop that:
+//   - resolves creator_wallet via the unified creator-resolver
+//   - feeds token + creator + socials into reputation_mesh via meshFeed
+//   - snapshots socials from launchpad + DexScreener + Metaplex and detects drift
+//   - traces parent wallets / KYC root via auto-genealogy
+// Then it chains into insiders-mesh-promoter so newly-resolved ≥3x creators
+// are promoted as good actors in the same run.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolveTokenCreator } from "../_shared/creator-resolver.ts";
+import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { traceParentWallets, meshGenealogyResults } from "../_shared/auto-genealogy.ts";
+import { fetchPumpFunCoin } from "../_shared/pumpfun-fetch.ts";
+import { assertUpdate } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
