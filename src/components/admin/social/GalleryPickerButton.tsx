@@ -9,10 +9,14 @@ interface GalleryPickerButtonProps {
   currentUrl?: string;
   label?: string;
   articleContent?: string;
+  articleId?: string | null;
+  articleSlug?: string;
   articleTitle?: string;
+  articleLabel?: string;
+  imageUsageContext?: 'hero' | 'inline' | 'gallery';
 }
 
-export function GalleryPickerButton({ onSelect, currentUrl, label = "Gallery", articleContent, articleTitle }: GalleryPickerButtonProps) {
+export function GalleryPickerButton({ onSelect, currentUrl, label = "Gallery", articleContent, articleId, articleSlug, articleTitle, articleLabel, imageUsageContext = 'gallery' }: GalleryPickerButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -29,7 +33,11 @@ export function GalleryPickerButton({ onSelect, currentUrl, label = "Gallery", a
           <ImageGallery
             mode="pick"
             articleContent={articleContent}
+            articleId={articleId}
+            articleSlug={articleSlug}
             articleTitle={articleTitle}
+            articleLabel={articleLabel}
+            imageUsageContext={imageUsageContext}
             onSelect={(url) => {
               onSelect(url);
               setOpen(false);
