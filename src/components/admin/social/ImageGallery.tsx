@@ -27,6 +27,11 @@ export interface GalleryImage {
   last_used_at: string | null;
   is_active: boolean;
   created_at: string;
+  related_article_id?: string | null;
+  related_article_slug?: string | null;
+  related_article_title?: string | null;
+  related_article_label?: string | null;
+  image_usage_context?: 'hero' | 'inline' | 'gallery' | null;
 }
 
 export interface StyleCategory {
@@ -42,10 +47,14 @@ interface ImageGalleryProps {
   mode?: 'manage' | 'pick';
   onSelect?: (imageUrl: string) => void;
   articleContent?: string;
+  articleId?: string | null;
+  articleSlug?: string;
   articleTitle?: string;
+  articleLabel?: string;
+  imageUsageContext?: 'hero' | 'inline' | 'gallery';
 }
 
-export function ImageGallery({ mode = 'manage', onSelect, articleContent, articleTitle }: ImageGalleryProps) {
+export function ImageGallery({ mode = 'manage', onSelect, articleContent, articleId, articleSlug, articleTitle, articleLabel, imageUsageContext = 'gallery' }: ImageGalleryProps) {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [categories, setCategories] = useState<StyleCategory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,7 +89,10 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
     const matchesSource = img.source_type === activeSourceTab;
     const matchesSearch = !searchQuery || 
       img.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      img.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      img.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      img.related_article_label?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      img.related_article_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      img.related_article_slug?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSource && matchesSearch;
   });
 
@@ -105,6 +117,11 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
         source_type: 'uploaded',
         mime_type: file.type,
         file_size_bytes: file.size,
+        related_article_id: articleId || null,
+        related_article_slug: articleSlug || null,
+        related_article_title: articleTitle || null,
+        related_article_label: articleLabel || null,
+        image_usage_context: imageUsageContext,
       });
       uploadCount++;
     }
@@ -134,6 +151,10 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
         body: {
           articleContent,
           articleTitle,
+          articleId,
+          articleSlug,
+          articleLabel,
+          imageUsageContext,
           styleImageUrls: uploadedImages,
         },
       });
@@ -176,6 +197,10 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
         body: {
           articleContent: articleContent || `Create unique, visually striking images inspired by the selected reference images.`,
           articleTitle: articleTitle || 'Inspired Generation',
+          articleId,
+          articleSlug,
+          articleLabel,
+          imageUsageContext,
           styleImageUrls: selected.map(i => i.file_url),
         },
       });
