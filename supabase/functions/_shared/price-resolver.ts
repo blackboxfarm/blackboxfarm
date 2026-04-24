@@ -724,14 +724,37 @@ function pickPreferredGraduatedPrice(
   dexResult: DexScreenerResult | null,
   jupResult: PriceResult | null
 ): PriceResult | null {
-  if (jupResult) {
-    console.log(`[${tokenMint.slice(0, 8)}] Graduated selector chose Jupiter: $${jupResult.price.toFixed(10)}`);
-    return jupResult;
+  // Prefer DexScreener: it picks the highest-liquidity pair and reflects the
+  // real spot market price. Jupiter's /price/v2 can return stale or routed
+  // execution prices that diverge sharply from the live market for tokens
+  // with low aggregator coverage.
+  if (dexResult && dexResult.price > 0) {
+    // If DexScreener confidence is at least 'medium' (>$1k liquidity) trust it.
+    // For low-liquidity Dex pairs, only fall back to Jupiter if the two prices
+    // disagree wildly (>50% off) — otherwise the Dex spot price is still
+    // closer to truth than Jupiter's routed quote.
+    if (dexResult.confidence !== 'low') {
+      console.log(`[${tokenMint.slice(0, 8)}] Graduated selector chose DexScreener: $${dexResult.price.toFixed(10)} (liq $${dexResult.liquidityUsd?.toFixed(0)})`);
+      return dexResult;
+    }
+
+    if (jupResult) {
+      const ratio = jupResult.price > 0 ? dexResult.price / jupResult.price : 0;
+      if (ratio > 0.5 && ratio < 2) {
+        console.log(`[${tokenMint.slice(0, 8)}] Graduated selector chose DexScreener (low-liq, jupiter agrees): $${dexResult.price.toFixed(10)}`);
+        return dexResult;
+      }
+      console.log(`[${tokenMint.slice(0, 8)}] Graduated selector chose Jupiter (low-liq dex disagreement): $${jupResult.price.toFixed(10)} vs dex $${dexResult.price.toFixed(10)}`);
+      return jupResult;
+    }
+
+    console.log(`[${tokenMint.slice(0, 8)}] Graduated selector chose DexScreener (only source): $${dexResult.price.toFixed(10)}`);
+    return dexResult;
   }
 
-  if (dexResult) {
-    console.log(`[${tokenMint.slice(0, 8)}] Graduated selector fell back to DexScreener: $${dexResult.price.toFixed(10)}`);
-    return dexResult;
+  if (jupResult) {
+    console.log(`[${tokenMint.slice(0, 8)}] Graduated selector fell back to Jupiter: $${jupResult.price.toFixed(10)}`);
+    return jupResult;
   }
 
   return null;

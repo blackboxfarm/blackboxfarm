@@ -4,6 +4,8 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { evaluateGraduationSell, type GradSellPriceMeta } from '../_shared/graduation-sell-evaluator.ts';
+import { resolvePricesBulk } from '../_shared/price-resolver.ts';
+import { getHeliusApiKey } from '../_shared/helius-client.ts';
 enableHeliusTracking('flipit-unified-monitor');
 
 const corsHeaders = {
@@ -41,31 +43,46 @@ interface MarketData {
 async function fetchTokenPricesAndMarketData(tokenMints: string[]): Promise<{
   prices: Record<string, number>;
   marketData: Record<string, MarketData>;
+  bondingCurveData: Record<string, number>;
+  priceMeta: Record<string, { source: string; isOnCurve: boolean; bondingCurveProgress?: number; fetchedAt: string }>;
 }> {
   const prices: Record<string, number> = {};
   const marketData: Record<string, MarketData> = {};
-  if (tokenMints.length === 0) return { prices, marketData };
+  const bondingCurveData: Record<string, number> = {};
+  const priceMeta: Record<string, { source: string; isOnCurve: boolean; bondingCurveProgress?: number; fetchedAt: string }> = {};
+  if (tokenMints.length === 0) return { prices, marketData, bondingCurveData, priceMeta };
 
+  // PRIMARY: use the shared price resolver so unified monitor matches the
+  // execution monitor (`flipit-price-monitor`). This routes pump.fun curve
+  // tokens through on-chain math and graduated tokens through
+  // DexScreener-first → Jupiter fallback (the trusted "normal" path).
   try {
-    const ids = tokenMints.join(',');
-    const jupiterRes = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`);
-    if (jupiterRes.ok) {
-      const jupiterData = await jupiterRes.json();
-      for (const mint of tokenMints) {
-        if (jupiterData.data?.[mint]?.price) {
-          prices[mint] = parseFloat(jupiterData.data[mint].price);
-        }
+    const heliusApiKey = getHeliusApiKey();
+    const { prices: resolved, metadata } = await resolvePricesBulk(tokenMints, {
+      heliusApiKey: heliusApiKey ?? undefined,
+      concurrency: 5,
+    });
+    for (const [mint, p] of Object.entries(resolved)) {
+      if (p && p > 0) prices[mint] = p;
+    }
+    for (const [mint, meta] of Object.entries(metadata)) {
+      priceMeta[mint] = {
+        source: meta.source,
+        isOnCurve: meta.isOnCurve,
+        bondingCurveProgress: meta.bondingCurveProgress,
+        fetchedAt: meta.fetchedAt,
+      };
+      if (typeof meta.bondingCurveProgress === 'number') {
+        bondingCurveData[mint] = meta.bondingCurveProgress;
       }
     }
   } catch (e) {
-    console.error('Jupiter price fetch failed:', e);
+    console.error('[Unified] resolvePricesBulk failed:', e);
   }
 
-  // Fetch from DexScreener for missing prices AND to get market data (volume, price changes)
-  // DexScreener provides much richer data than Jupiter
-  const mintsForDex = tokenMints.filter(m => !prices[m] || !marketData[m]);
-  
-  // Batch fetch for all tokens to get market data
+  // SIDE-CHANNEL: pull DexScreener market data (volume / price change) for UI
+  // indicators. We do NOT overwrite the resolved price unless the resolver
+  // failed for that mint.
   await Promise.all(tokenMints.map(async (mint) => {
     try {
       const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
@@ -79,9 +96,14 @@ async function fetchTokenPricesAndMarketData(tokenMints: string[]): Promise<{
         const pair = sortedPairs[0];
         
         if (pair) {
-          // Set price if not already set
+          // Only fill price if the trusted resolver did not return one.
           if (!prices[mint] && pair.priceUsd) {
             prices[mint] = parseFloat(pair.priceUsd);
+            priceMeta[mint] = {
+              source: 'dexscreener_sidecar',
+              isOnCurve: false,
+              fetchedAt: new Date().toISOString(),
+            };
           }
           
           // Extract market data
@@ -110,7 +132,7 @@ async function fetchTokenPricesAndMarketData(tokenMints: string[]): Promise<{
     }
   }));
 
-  return { prices, marketData };
+  return { prices, marketData, bondingCurveData, priceMeta };
 }
 
 async function fetchSolPrice(): Promise<number> {
@@ -259,10 +281,23 @@ serve(withRunLog('flipit-unified-monitor', async (req) => {
     (limitOrders || []).forEach(o => allMints.add(o.token_mint));
 
     // Fetch all prices and market data in one batch
-    const { prices, marketData } = await fetchTokenPricesAndMarketData(Array.from(allMints));
+    const { prices, marketData, bondingCurveData, priceMeta } = await fetchTokenPricesAndMarketData(Array.from(allMints));
     const solPrice = await fetchSolPrice();
     results.prices = prices;
     results.marketData = marketData;
+    results.bondingCurveData = bondingCurveData;
+
+    // Persist resolver metadata for UI transparency (fire-and-forget).
+    for (const pos of holdingPositions || []) {
+      const meta = priceMeta[pos.token_mint];
+      if (!meta) continue;
+      supabase.from('flip_positions').update({
+        price_source: meta.source,
+        price_fetched_at: meta.fetchedAt,
+        is_on_curve: meta.isOnCurve,
+        bonding_curve_progress: meta.bondingCurveProgress ?? null,
+      }).eq('id', pos.id).then(() => {}).catch(() => {});
+    }
 
     // 4. Check price targets for holding positions
     results.priceMonitor.checked = holdingPositions?.length || 0;
