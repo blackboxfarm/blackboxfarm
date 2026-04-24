@@ -797,6 +797,12 @@ export async function resolvePrice(
       venueHint = 'bags_fm';
     } else if (tokenMint.endsWith('BONK') || tokenMint.endsWith('bonk')) {
       venueHint = 'bonk_fun';
+    } else {
+      // No launchpad suffix → assume already-graduated DEX token.
+      // Skip ALL curve detection and go straight to parallel DexScreener + Jupiter.
+      // This is the fast path for tokens like FAITH (6PtX...rrr) that have no
+      // suffix and were getting routed through the slow full cascade.
+      venueHint = 'dex';
     }
   }
 
