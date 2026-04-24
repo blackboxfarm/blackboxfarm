@@ -1491,7 +1491,20 @@ serve(withRunLog('raydium-swap', async (req) => {
         const solAmount = Number(amount) / 1_000_000_000;
         pumpAmount = solAmount.toString();
       } else {
-        pumpAmount = sellAll ? "100%" : String(amount);
+        if (sellAll) {
+          pumpAmount = "100%";
+        } else {
+          // CRITICAL: PumpPortal expects UI tokens (not raw atomic units) when denominatedInSol="false".
+          // `amount` here is the raw atomic balance — convert to UI tokens using on-chain mint decimals.
+          const mintDecimals = await getMintDecimals(connection, new PublicKey(String(tokenMint)));
+          if (mintDecimals != null) {
+            pumpAmount = rawAmountToUiTokens(String(amount), mintDecimals);
+            console.log(`PumpPortal sell amount converted: raw=${String(amount)} decimals=${mintDecimals} ui=${pumpAmount}`);
+          } else {
+            console.log(`PumpPortal sell: could not fetch decimals, falling back to "100%" to avoid amount-shape 400`);
+            pumpAmount = "100%";
+          }
+        }
       }
 
       // Use the USER slippage for bonding curve tokens.
