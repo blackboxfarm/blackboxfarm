@@ -641,21 +641,35 @@ async function fetchDexScreenerPrice(tokenMint: string): Promise<DexScreenerResu
       return null;
     }
 
-    // CRITICAL: Pick the pair with the most real activity. Score = liquidity USD
-    // when reported, else 24h volume as a proxy. This fixes the case where a
-    // graduated/DBC pair reports liquidity=null (e.g. Meteora DBC) while a
-    // dead/abandoned pair has $9 liquidity and 0 volume — without this fix
-    // the sort by liquidity alone picks the dead pair and freezes the price.
-    const scorePair = (p: any): number => {
+    // CRITICAL pair selection — TIERED so dead pairs can never win:
+    //
+    //   Tier 2 (best):  real reported liquidity > $100  → rank by liquidity
+    //   Tier 1:         no liquidity reported, but real 24h activity → rank by vol+txns
+    //                   (covers Meteora DBC graduated pairs that report liquidity=null)
+    //   Tier 0 (worst): dust liquidity (<=$100) and no activity → rank by vol+txns
+    //
+    // Two real-world bugs this prevents:
+    //  • FAITH: live DBC pair reports liquidity=null but trades $53k/day; a dead
+    //    pair with $9.73 liquidity was winning a pure liquidity sort.
+    //  • eCash: live PumpSwap pair has $7.3k liquidity + $249k vol; a dead
+    //    pump.fun bonding curve pair with liquidity=null but $100k stale vol
+    //    was beating it on a flat liquidity-OR-volume score, freezing the price
+    //    at the old graduation price ($0.0000354 instead of live $0.0000086).
+    const scorePair = (p: any): { tier: number; score: number } => {
       const liq = Number(p?.liquidity?.usd);
-      if (Number.isFinite(liq) && liq > 0) return liq;
-      // No liquidity reported — fall back to 24h volume as activity proxy
       const vol24 = Number(p?.volume?.h24) || 0;
       const txns24 = Number(p?.txns?.h24?.buys || 0) + Number(p?.txns?.h24?.sells || 0);
-      // Weight volume so an active pair always beats a dead $1-liquidity pair
-      return vol24 > 0 || txns24 > 0 ? vol24 + txns24 : 0;
+      const activity = vol24 + txns24;
+      if (Number.isFinite(liq) && liq > 100) return { tier: 2, score: liq };
+      if (activity > 0) return { tier: 1, score: activity };
+      return { tier: 0, score: Number.isFinite(liq) ? liq : 0 };
     };
-    const sortedPairs = pairs.sort((a: any, b: any) => scorePair(b) - scorePair(a));
+    const sortedPairs = pairs.sort((a: any, b: any) => {
+      const sa = scorePair(a);
+      const sb = scorePair(b);
+      if (sa.tier !== sb.tier) return sb.tier - sa.tier;
+      return sb.score - sa.score;
+    });
     const bestPair = sortedPairs[0];
     
     if (!bestPair?.priceUsd) {
