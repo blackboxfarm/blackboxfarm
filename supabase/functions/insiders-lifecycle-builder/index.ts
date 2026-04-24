@@ -266,12 +266,69 @@ serve(async (req) => {
 
     console.log('[insiders-lifecycle-builder] Done.', stats);
 
+    // ============================================================
+    // PHASE 2 — Per-token mesh enrichment
+    // ============================================================
+    // Cron-driven (every 3h). Picks tokens that are stale or never
+    // enriched, runs the full mesh treatment per token (creator,
+    // socials snapshot, genealogy, mesh feed), respects governance.
+    //
+    // Body params (all optional, sensible defaults for cron):
+    //   enrich:          boolean — run phase 2 (default true)
+    //   enrichLimit:     number  — max tokens per run (default 200)
+    //   socialsRecheck:  boolean — also re-snapshot top recent (default true)
+    //   socialsLimit:    number  — how many recent to recheck (default 50)
+    //   chainPromoter:   boolean — call insiders-mesh-promoter at end (default true)
+    let body: any = {};
+    try { body = await req.clone().json(); } catch { /* GET / no body — use defaults */ }
+    const doEnrich        = body.enrich !== false;
+    const enrichLimit     = Number(body.enrichLimit ?? 200);
+    const doSocialsRecheck = body.socialsRecheck !== false;
+    const socialsLimit    = Number(body.socialsLimit ?? 50);
+    const doChainPromoter = body.chainPromoter !== false;
+
+    let enrichmentSummary: any = { skipped: true };
+    if (doEnrich) {
+      enrichmentSummary = await runEnrichmentPass(supabase, {
+        enrichLimit,
+        socialsRecheck: doSocialsRecheck,
+        socialsLimit,
+      });
+    }
+
+    // ============================================================
+    // PHASE 3 — Chain into mesh promoter so newly-resolved
+    // creators on ≥3x tokens get promoted in the same run.
+    // ============================================================
+    let promoterResult: any = { skipped: true };
+    if (doChainPromoter) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const res = await fetch(`${supabaseUrl}/functions/v1/insiders-mesh-promoter`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ source: 'lifecycle-builder-chain' }),
+        });
+        promoterResult = await res.json();
+        console.log('[insiders-lifecycle-builder] Promoter chain done:', promoterResult);
+      } catch (e) {
+        console.error('[insiders-lifecycle-builder] Promoter chain failed:', e);
+        promoterResult = { error: (e as Error).message };
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         messages_processed: allRows.length,
         tokens_upserted: upserted,
         stats,
+        enrichment: enrichmentSummary,
+        promoter: promoterResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
