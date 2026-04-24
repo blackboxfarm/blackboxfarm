@@ -2312,8 +2312,19 @@ serve(withRunLog('raydium-swap', async (req) => {
           const solAmount = Number(amount) / 1_000_000_000;
           pumpAmount = solAmount.toString();
         } else {
-          // For sells, use 100% or the token amount
-          pumpAmount = sellAll ? "100%" : String(amount);
+          // For sells, use 100% or the token amount in UI tokens (NOT raw atomic units).
+          if (sellAll) {
+            pumpAmount = "100%";
+          } else {
+            const mintDecimals = await getMintDecimals(connection, new PublicKey(String(tokenMint)));
+            if (mintDecimals != null) {
+              pumpAmount = rawAmountToUiTokens(String(amount), mintDecimals);
+              console.log(`PumpPortal fallback sell amount converted: raw=${String(amount)} decimals=${mintDecimals} ui=${pumpAmount}`);
+            } else {
+              console.log(`PumpPortal fallback sell: could not fetch decimals, falling back to "100%"`);
+              pumpAmount = "100%";
+            }
+          }
         }
         
         const poolsToTry: Array<'pump' | 'bonk' | 'auto'> = Array.from(
