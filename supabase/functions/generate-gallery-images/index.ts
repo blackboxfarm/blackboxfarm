@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.54.0";
+import { assertInsert } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +13,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { articleContent, articleTitle, styleImageUrls } = await req.json();
+    const { articleContent, articleTitle, articleId, articleSlug, articleLabel, imageUsageContext = "gallery", styleImageUrls } = await req.json();
 
     if (!articleContent) {
       return new Response(
@@ -149,7 +150,7 @@ Requirements:
         if (!urlData?.publicUrl) continue;
 
         // Insert into gallery as ai_generated
-        await supabase.from("social_media_gallery").insert({
+        await assertInsert(supabase.from("social_media_gallery").insert({
           file_name: fileName,
           display_name: `AI Trio - ${articleTitle?.slice(0, 40) || "Article"} #${i + 1}`,
           file_url: urlData.publicUrl,
@@ -157,7 +158,12 @@ Requirements:
           mime_type: "image/png",
           ai_prompt: prompt.slice(0, 500),
           tags: ["trio-generate", "ai-thumbnail"],
-        });
+          related_article_id: articleId || null,
+          related_article_slug: articleSlug || null,
+          related_article_title: articleTitle || null,
+          related_article_label: articleLabel || null,
+          image_usage_context: imageUsageContext,
+        }), "social_media_gallery");
 
         results.push({ imageUrl: urlData.publicUrl, prompt: prompt.slice(0, 200) });
         console.log(`Generated image ${i + 1}/3 successfully`);
