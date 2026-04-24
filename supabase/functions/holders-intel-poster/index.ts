@@ -854,6 +854,8 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
           console.log(`[poster] 🏘️ Detected X Community ${communityId}, auto-queuing enrichment...`);
           
           // Fire-and-forget: call the community enricher
+          // NOTE: enricher requires `communityUrl` (or `twitterUrl`) — NOT `communityId`.
+          // Sending the wrong shape was producing HTTP 400 on every auto-trigger.
           fetch(`${supabaseUrl}/functions/v1/x-community-enricher`, {
             method: 'POST',
             headers: {
@@ -861,8 +863,8 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
               'Authorization': `Bearer ${supabaseServiceKey}`,
             },
             body: JSON.stringify({
-              communityId,
-              tokenMint: item.token_mint,
+              communityUrl: twitterUrlForMesh,
+              linkedTokenMint: item.token_mint,
               source: 'holders-intel-poster-auto',
             }),
           }).then(async (res) => {
