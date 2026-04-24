@@ -385,6 +385,11 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                           className="w-full h-full object-cover"
                           loading="lazy"
                         />
+                        {img.related_article_label && (
+                          <Badge className="absolute top-1.5 right-1.5 max-w-[calc(100%-0.75rem)] truncate px-1.5 py-0 text-[9px] shadow-sm">
+                            {img.related_article_label}
+                          </Badge>
+                        )}
                         {/* Selection checkbox */}
                         {mode === 'manage' && (
                           <button
@@ -427,6 +432,9 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                         </div>
                         {img.use_count > 0 && (
                           <p className="text-[10px] text-muted-foreground">Used {img.use_count}x</p>
+                        )}
+                        {img.related_article_title && (
+                          <p className="text-[10px] text-muted-foreground truncate">{img.related_article_label || 'Article'} · {img.related_article_title}</p>
                         )}
                       </div>
 
@@ -498,6 +506,14 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
               <div className="space-y-1">
                 <Label className="text-xs">AI Prompt Used</Label>
                 <p className="text-xs text-muted-foreground bg-muted rounded p-2">{editImage.ai_prompt}</p>
+              </div>
+            )}
+            {editImage?.related_article_title && (
+              <div className="space-y-1">
+                <Label className="text-xs">Related Article</Label>
+                <p className="text-xs text-muted-foreground bg-muted rounded p-2">
+                  {editImage.related_article_label || 'Article'} · {editImage.related_article_title}
+                </p>
               </div>
             )}
           </div>
