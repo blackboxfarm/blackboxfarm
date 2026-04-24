@@ -641,14 +641,21 @@ async function fetchDexScreenerPrice(tokenMint: string): Promise<DexScreenerResu
       return null;
     }
 
-    // CRITICAL: Sort by USD liquidity descending and pick the highest
-    // This prevents using spoofed low-liquidity pairs that can show fake prices
-    const sortedPairs = pairs.sort((a: any, b: any) => {
-      const liquidityA = Number(a.liquidity?.usd) || 0;
-      const liquidityB = Number(b.liquidity?.usd) || 0;
-      return liquidityB - liquidityA;
-    });
-    
+    // CRITICAL: Pick the pair with the most real activity. Score = liquidity USD
+    // when reported, else 24h volume as a proxy. This fixes the case where a
+    // graduated/DBC pair reports liquidity=null (e.g. Meteora DBC) while a
+    // dead/abandoned pair has $9 liquidity and 0 volume — without this fix
+    // the sort by liquidity alone picks the dead pair and freezes the price.
+    const scorePair = (p: any): number => {
+      const liq = Number(p?.liquidity?.usd);
+      if (Number.isFinite(liq) && liq > 0) return liq;
+      // No liquidity reported — fall back to 24h volume as activity proxy
+      const vol24 = Number(p?.volume?.h24) || 0;
+      const txns24 = Number(p?.txns?.h24?.buys || 0) + Number(p?.txns?.h24?.sells || 0);
+      // Weight volume so an active pair always beats a dead $1-liquidity pair
+      return vol24 > 0 || txns24 > 0 ? vol24 + txns24 : 0;
+    };
+    const sortedPairs = pairs.sort((a: any, b: any) => scorePair(b) - scorePair(a));
     const bestPair = sortedPairs[0];
     
     if (!bestPair?.priceUsd) {
@@ -656,10 +663,19 @@ async function fetchDexScreenerPrice(tokenMint: string): Promise<DexScreenerResu
     }
 
     const latencyMs = Date.now() - start;
-    const liquidity = Number(bestPair.liquidity?.usd) || 0;
+    const reportedLiquidity = Number(bestPair.liquidity?.usd);
+    const liquidity = Number.isFinite(reportedLiquidity) && reportedLiquidity > 0 ? reportedLiquidity : 0;
+    const vol24h = Number(bestPair.volume?.h24) || 0;
     const dexId = bestPair.dexId || 'unknown';
 
-    console.log(`[DexScreener] Selected pair: dexId=${dexId}, $${liquidity.toFixed(0)} liquidity from ${pairs.length} pairs`);
+    // Confidence: trust pairs with real liquidity OR meaningful 24h volume
+    // (covers graduated DBC pairs that don't report liquidity but trade actively)
+    const confidence: 'high' | 'medium' | 'low' =
+      liquidity > 10000 || vol24h > 50000 ? 'high'
+      : liquidity > 1000 || vol24h > 5000 ? 'medium'
+      : 'low';
+
+    console.log(`[DexScreener] Selected pair: dexId=${dexId}, liq=$${liquidity.toFixed(0)}, vol24h=$${vol24h.toFixed(0)} from ${pairs.length} pairs (confidence=${confidence})`);
 
     return {
       price: Number(bestPair.priceUsd),
@@ -667,7 +683,7 @@ async function fetchDexScreenerPrice(tokenMint: string): Promise<DexScreenerResu
       fetchedAt: new Date().toISOString(),
       latencyMs,
       isOnCurve: false, // Will be overridden by caller if needed
-      confidence: liquidity > 10000 ? 'high' : liquidity > 1000 ? 'medium' : 'low',
+      confidence,
       pairAddress: bestPair.pairAddress || undefined,
       dexId,
       liquidityUsd: liquidity
