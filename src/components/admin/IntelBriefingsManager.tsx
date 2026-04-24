@@ -289,6 +289,8 @@ function IntelBriefingsArticlesManager() {
 
   // Get unique categories
   const categories = [...new Set(briefings.map(b => b.category))].sort();
+  const currentBriefingIndex = editingId ? briefings.findIndex((b) => b.id === editingId) : -1;
+  const articleLabel = currentBriefingIndex >= 0 ? `Article #${currentBriefingIndex + 1}` : `Draft Article #${briefings.length + 1}`;
 
   // Save mutation
   const saveMutation = useMutation({
@@ -882,7 +884,11 @@ function IntelBriefingsArticlesManager() {
           }}
           label="Hero from Gallery"
           articleContent={form.content_md}
+          articleId={editingId}
+          articleSlug={form.slug}
           articleTitle={form.title}
+          articleLabel={articleLabel}
+          imageUsageContext="hero"
         />
         <span className="text-xs text-muted-foreground">Recommended: 1200 × 630px (2:1 ratio)</span>
         {form.featured_image_url && (
@@ -939,7 +945,11 @@ function IntelBriefingsArticlesManager() {
               onSelect={handleGalleryInsert}
               label="Insert Gallery Image"
               articleContent={form.content_md}
+              articleId={editingId}
+              articleSlug={form.slug}
               articleTitle={form.title}
+              articleLabel={articleLabel}
+              imageUsageContext="inline"
             />
             {(() => {
               const inlineCount = (form.content_md.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
