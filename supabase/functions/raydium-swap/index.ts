@@ -59,6 +59,40 @@ async function getTokenBalance(
 
   return null;
 }
+
+/**
+ * Fetch mint decimals for a given token. Tries Token-2022 program first
+ * (pump.fun uses this), then standard SPL Token. Returns null on failure.
+ */
+async function getMintDecimals(
+  connection: Connection,
+  mint: PublicKey
+): Promise<number | null> {
+  try {
+    const info = await connection.getParsedAccountInfo(mint);
+    const data: any = info?.value?.data;
+    const decimals = data?.parsed?.info?.decimals;
+    if (typeof decimals === 'number' && Number.isFinite(decimals)) {
+      return decimals;
+    }
+  } catch (e) {
+    console.log('getMintDecimals failed:', (e as Error)?.message?.slice(0, 120));
+  }
+  return null;
+}
+
+/**
+ * Convert a raw atomic token amount string/number to a UI-token decimal string.
+ * PumpPortal expects UI tokens (not raw atomic units) when denominatedInSol="false".
+ */
+function rawAmountToUiTokens(rawAmount: string | number, decimals: number): string {
+  try {
+    const raw = typeof rawAmount === 'string' ? BigInt(rawAmount.split('.')[0]) : BigInt(Math.floor(Number(rawAmount)));
+    return formatTokenAmountFromRaw(raw, decimals);
+  } catch {
+    return String(rawAmount);
+  }
+}
 const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC (mainnet)
 import bs58 from "https://esm.sh/bs58@5.0.0";
