@@ -198,12 +198,14 @@ serve(withRunLog('backfill-developer-profiles', async (req) => {
                                outcome === 'rug_pull' ? 'rug_pull_count' : 
                                'failed_tokens';
             
-            await supabase.rpc('increment_developer_stat', {
-              p_developer_id: developerId,
-              p_field: updateField,
-            }).catch(() => {
+            try {
+              await supabase.rpc('increment_developer_stat', {
+                p_developer_id: developerId,
+                p_field: updateField,
+              });
+            } catch {
               // Fallback: manual update
-              supabase
+              await supabase
                 .from('developer_profiles')
                 .select('total_tokens_created, successful_tokens, failed_tokens, rug_pull_count')
                 .eq('id', developerId)
