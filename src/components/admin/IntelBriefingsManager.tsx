@@ -639,6 +639,7 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">Views</TableHead>
+                <TableHead className="text-center">Exposure</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -734,6 +735,9 @@ function IntelBriefingsArticlesManager() {
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ExposureCell briefingId={b.id} publications={allPublications} />
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
