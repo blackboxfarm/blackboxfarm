@@ -8,6 +8,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { createApiLogger } from "./api-logger.ts";
+import { clearEscalation } from "./api-failure-alerts.ts";
 
 const SUMMARY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
 const INSIDERS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -133,6 +134,9 @@ export async function fetchRugCheckSummary(
     }
 
     const data = await response.json() as RugCheckSummary;
+
+    // Service is healthy — clear any active escalation state
+    clearEscalation('rugcheck');
 
     // Write to both caches
     setInMemory(cacheKey, data);
