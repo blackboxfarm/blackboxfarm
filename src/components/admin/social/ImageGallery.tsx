@@ -319,6 +319,9 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
             <TabsTrigger value="ai_generated">
               <Sparkles className="h-3.5 w-3.5 mr-1" /> AI Generated ({images.filter(i => i.source_type === 'ai_generated').length})
             </TabsTrigger>
+            <TabsTrigger value="breadcrumb">
+              <Link2 className="h-3.5 w-3.5 mr-1" /> Breadcrumbs ({images.filter(i => i.is_breadcrumb).length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeSourceTab} className="mt-3">
