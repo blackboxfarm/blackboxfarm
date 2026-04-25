@@ -243,7 +243,7 @@ Deno.serve(withRunLog('whale-frenzy-detector', async (req) => {
                 })
 
                 if (swapResponse.error) {
-                  frenzyEvent.auto_buy_error = swapResponse.(error as Error).message
+                  frenzyEvent.auto_buy_error = swapResponse.error.message
                   console.error('Auto-buy failed:', swapResponse.error)
                 } else {
                   frenzyEvent.auto_buy_executed = true

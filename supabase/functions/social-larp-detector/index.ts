@@ -489,7 +489,7 @@ serve(withRunLog('social-larp-detector', async (req) => {
 
       for (const entry of meshEntries) {
         await supabase.from('reputation_mesh').insert(entry).then(r => {
-          if (r.error) console.warn('[LARP] Mesh insert error:', r.(error as Error).message);
+          if (r.error) console.warn('[LARP] Mesh insert error:', r.error.message);
         });
       }
 

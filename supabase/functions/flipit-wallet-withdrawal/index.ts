@@ -23,7 +23,7 @@ async function rpc(method: string, params: any[]): Promise<any> {
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   });
   const json = await res.json();
-  if (json.error) throw new Error(json.(error as Error).message || JSON.stringify(json.error));
+  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
   return json.result;
 }
 

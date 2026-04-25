@@ -197,7 +197,7 @@ serve(withRunLog('blackbox-executor', async (req) => {
       });
 
       if (swapResponse.error) {
-        const errorMessage = swapResponse.(error as Error).message || 'Unknown error';
+        const errorMessage = swapResponse.error.message || 'Unknown error';
         console.error(`❌ BUY FAILED for token ${campaign.token_address}:`, {
           error: swapResponse.error,
           buyAmountSOL,
@@ -413,7 +413,7 @@ serve(withRunLog('blackbox-executor', async (req) => {
             });
 
             if (swapResponse.error) {
-              const errorMessage = swapResponse.(error as Error).message || '';
+              const errorMessage = swapResponse.error.message || '';
               console.error(`❌ SELL FAILED for token ${campaign.token_address}:`, {
                 error: swapResponse.error,
                 sellPercent,
