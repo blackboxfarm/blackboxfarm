@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import {
   ImageIcon, Upload, Trash2, Edit2, Search, Tag, Sparkles, X, Check, Plus, Settings, Loader2, Wand2, ZoomIn
 } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { StyleCategoryManager } from "./StyleCategoryManager";
 
 export interface GalleryImage {
@@ -32,6 +33,7 @@ export interface GalleryImage {
   related_article_title?: string | null;
   related_article_label?: string | null;
   image_usage_context?: 'hero' | 'inline' | 'gallery' | null;
+  is_breadcrumb?: boolean | null;
 }
 
 export interface StyleCategory {
