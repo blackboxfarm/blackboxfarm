@@ -315,7 +315,7 @@ async function fetchFromWatchlistDB(supabase: any, limit = 100): Promise<{ token
     
     if (error) {
       console.error('[WebSocket DB] Query error:', error);
-      return { tokens: [], success: false, error: error.message };
+      return { tokens: [], success: false, error: (error as Error).message };
     }
     
     console.log(`[WebSocket DB] Got ${recentTokens?.length || 0} recent tokens from watchlist`);
@@ -963,7 +963,7 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
 
   if (error) {
     console.error('[Step 3] Watchlist fetch error:', error);
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   const tokens = watchlist || [];
@@ -1787,7 +1787,7 @@ async function trackLifecycle(supabase: any, tokenMint: string, decision: string
 
   if (error) {
     console.error('[Lifecycle] Insert error:', error);
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   return { success: true, record: data };

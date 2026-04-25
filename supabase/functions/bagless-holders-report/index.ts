@@ -1058,7 +1058,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       market_cap_at_discovery: inferredMarketCapUSD || null,
       health_grade: healthGrade || null,
     }, { onConflict: 'token_mint' }).then(({ error }) => {
-      if (error) console.warn('[bagless] seen_tokens upsert failed:', error.message);
+      if (error) console.warn('[bagless] seen_tokens upsert failed:', (error as Error).message);
       else console.log(`[bagless] ✅ Upserted ${tokenMint.slice(0,8)} into seen_tokens`);
     }).catch(e => console.warn('[bagless] seen_tokens upsert error:', e));
 
@@ -1076,7 +1076,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

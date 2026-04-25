@@ -41,7 +41,7 @@ Deno.serve(withRunLog('claim-preview-data', async (req) => {
           .update({ [column]: realUserId } as any)
           .eq(column, previewUserId)
           .select('id')
-        if (error) throw new Error(`${table}: ${error.message}`)
+        if (error) throw new Error(`${table}: ${(error as Error).message}`)
         results[table] = data?.length || 0
       } catch (err) {
         const msg = String(err)
@@ -99,7 +99,7 @@ Deno.serve(withRunLog('claim-preview-data', async (req) => {
         .update({ user_id: realUserId })
         .eq('user_id', previewUserId)
         .select('id')
-      if (error) throw new Error(`fantasy_wallets: ${error.message}`)
+      if (error) throw new Error(`fantasy_wallets: ${(error as Error).message}`)
       results['fantasy_wallets'] = data?.length || 0
     } else {
       results['fantasy_wallets'] = 0

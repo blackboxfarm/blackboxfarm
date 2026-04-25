@@ -124,7 +124,7 @@ serve(withRunLog('admin-add-seen-token', async (req) => {
 
     if (error) {
       console.error('Upsert error:', error);
-      return new Response(JSON.stringify({ error: error.message }), {
+      return new Response(JSON.stringify({ error: (error as Error).message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -205,7 +205,7 @@ serve(withRunLog('admin-add-seen-token', async (req) => {
 
   } catch (error: any) {
     console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

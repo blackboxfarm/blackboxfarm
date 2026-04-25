@@ -29,7 +29,7 @@ async function fetchBalanceFromRpc(rpcUrl: string, walletAddress: string): Promi
     const data = await response.json();
     
     if (data.error) {
-      const errMsg = data.error.message || JSON.stringify(data.error);
+      const errMsg = data.(error as Error).message || JSON.stringify(data.error);
       if (errMsg.includes('max usage') || errMsg.includes('rate limit') || errMsg.includes('429')) {
         console.log(`RPC rate limited: ${redactHeliusUrl(rpcUrl.substring(0, 80))}`);
         return null;

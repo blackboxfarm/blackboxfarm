@@ -85,7 +85,7 @@ serve(withRunLog('enable-2fa', async (req) => {
   } catch (error) {
     console.error('Error in enable-2fa:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,

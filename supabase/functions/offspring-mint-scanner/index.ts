@@ -389,7 +389,7 @@ Also checking known child wallet: ${includeKnownChildWallet}`);
     console.error('Offspring Mint Scanner error:', error);
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: (error as Error).message,
         scanDuration: Date.now() - startTime
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }

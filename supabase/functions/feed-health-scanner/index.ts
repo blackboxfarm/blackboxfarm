@@ -99,8 +99,8 @@ Deno.serve(withRunLog('feed-health-scanner', async (req) => {
         });
 
         if (error) {
-          console.warn(`[feed-health-scanner] Failed ${token.symbol}: ${error.message}`);
-          results.push({ mint: token.token_mint, symbol: token.symbol || '?', status: `error: ${error.message}` });
+          console.warn(`[feed-health-scanner] Failed ${token.symbol}: ${(error as Error).message}`);
+          results.push({ mint: token.token_mint, symbol: token.symbol || '?', status: `error: ${(error as Error).message}` });
           failed++;
         } else {
           scanned++;

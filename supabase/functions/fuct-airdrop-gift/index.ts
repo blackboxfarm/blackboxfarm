@@ -271,7 +271,7 @@ serve(withRunLog('fuct-airdrop-gift', async (req) => {
 
   } catch (error) {
     console.error('FUCT Gift error:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Unknown error occurred' }), {
+    return new Response(JSON.stringify({ error: (error as Error).message || 'Unknown error occurred' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

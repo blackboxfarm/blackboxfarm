@@ -85,7 +85,7 @@ serve(withRunLog('check-subscription', async (req) => {
       status: 200,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? (error as Error).message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     logStep("ERROR", { message: errorMessage, stack });
     return new Response(JSON.stringify({ error: errorMessage }), {

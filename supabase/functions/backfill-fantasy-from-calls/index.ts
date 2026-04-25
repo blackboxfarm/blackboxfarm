@@ -179,7 +179,7 @@ serve(withRunLog('backfill-fantasy-from-calls', async (req) => {
     console.error('[backfill-fantasy] Error:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: (error as Error).message
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500

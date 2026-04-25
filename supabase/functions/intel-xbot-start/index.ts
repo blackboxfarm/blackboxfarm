@@ -117,7 +117,7 @@ Deno.serve(withRunLog('intel-xbot-start', async (req) => {
         });
         
         if (error) {
-          results.push({ job: job.name, status: 'failed', error: error.message });
+          results.push({ job: job.name, status: 'failed', error: (error as Error).message });
         } else {
           results.push({ job: job.name, status: 'scheduled' });
         }
@@ -140,7 +140,7 @@ Deno.serve(withRunLog('intel-xbot-start', async (req) => {
     
   } catch (error: any) {
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

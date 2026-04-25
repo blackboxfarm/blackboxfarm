@@ -218,7 +218,7 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
       .limit(200);
     
     if (error) {
-      console.error('[scheduler] DB query error:', error.message);
+      console.error('[scheduler] DB query error:', (error as Error).message);
       return [];
     }
     
@@ -470,7 +470,7 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
   } catch (error: any) {
     console.error('[scheduler] Error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

@@ -278,7 +278,7 @@ Deno.serve(withRunLog('developer-discovery-job', async (req) => {
           .from('developer_analysis_jobs')
           .update({
             status: 'failed',
-            error_message: error.message,
+            error_message: (error as Error).message,
             completed_at: new Date().toISOString(),
           })
           .eq('id', jobId)
@@ -286,7 +286,7 @@ Deno.serve(withRunLog('developer-discovery-job', async (req) => {
     } catch {}
 
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

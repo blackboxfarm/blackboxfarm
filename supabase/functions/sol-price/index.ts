@@ -50,7 +50,7 @@ serve(withRunLog('sol-price', async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Could not fetch SOL price from any source',
-        message: error instanceof Error ? error.message : String(error),
+        message: error instanceof Error ? (error as Error).message : String(error),
         price: null,
         timestamp: new Date().toISOString(),
         source: 'error'

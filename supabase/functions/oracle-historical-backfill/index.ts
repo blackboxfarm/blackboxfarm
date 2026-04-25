@@ -324,7 +324,7 @@ Deno.serve(withRunLog('oracle-historical-backfill', async (req) => {
   } catch (error) {
     console.error('[Backfill] Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

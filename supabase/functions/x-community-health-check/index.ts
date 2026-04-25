@@ -167,7 +167,7 @@ Deno.serve(withRunLog('x-community-health-check', async (req) => {
         results.push({
           communityId: community.community_id,
           status: 'error',
-          error: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? (error as Error).message : String(error),
         });
       }
     }
@@ -187,7 +187,7 @@ Deno.serve(withRunLog('x-community-health-check', async (req) => {
   } catch (error) {
     console.error('[Health Check] Error:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

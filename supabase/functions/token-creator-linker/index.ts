@@ -230,7 +230,7 @@ Deno.serve(withRunLog('token-creator-linker', async (req) => {
       } catch (error) {
         console.error(`[CreatorLinker] Error processing ${tokenMint}:`, error);
         results.failed++;
-        results.errors.push(`${tokenMint}: ${error.message}`);
+        results.errors.push(`${tokenMint}: ${(error as Error).message}`);
       }
     }
 
@@ -252,7 +252,7 @@ Deno.serve(withRunLog('token-creator-linker', async (req) => {
     );
   } catch (error) {
     console.error('[CreatorLinker] Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

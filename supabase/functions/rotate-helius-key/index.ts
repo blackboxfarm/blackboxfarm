@@ -92,7 +92,7 @@ serve(withRunLog('rotate-helius-key', async (req) => {
     if (testData.error) {
       return new Response(JSON.stringify({ 
         error: 'Key validation failed', 
-        details: testData.error.message || 'RPC returned an error'
+        details: testData.(error as Error).message || 'RPC returned an error'
       }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });

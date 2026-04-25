@@ -54,7 +54,7 @@ Deno.serve(withRunLog('delete-campaign', async (req) => {
     if (error) {
       console.error('Delete campaign error:', error)
       return new Response(JSON.stringify({ 
-        error: error.message,
+        error: (error as Error).message,
         details: error 
       }), { status: 400, headers: corsHeaders })
     }

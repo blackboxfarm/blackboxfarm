@@ -61,8 +61,8 @@ serve(
     const { data: positions, error } = await query;
 
     if (error) {
-      console.error('[drift-sentinel] Failed to fetch positions:', error.message);
-      return new Response(JSON.stringify({ error: error.message }), {
+      console.error('[drift-sentinel] Failed to fetch positions:', (error as Error).message);
+      return new Response(JSON.stringify({ error: (error as Error).message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

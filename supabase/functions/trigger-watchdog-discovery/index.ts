@@ -117,7 +117,7 @@ Deno.serve(withRunLog('trigger-watchdog-discovery', async (req) => {
         results.push({
           tokenMint: entry.token_mint,
           status: 'error',
-          error: error.message,
+          error: (error as Error).message,
         })
         console.error(`Error processing ${entry.token_mint}:`, error)
       }
@@ -142,7 +142,7 @@ Deno.serve(withRunLog('trigger-watchdog-discovery', async (req) => {
   } catch (error) {
     console.error('Error in trigger-watchdog-discovery:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

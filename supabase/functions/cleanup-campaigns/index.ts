@@ -62,7 +62,7 @@ serve(withRunLog('cleanup-campaigns', async (req) => {
         }
       } catch (error) {
         console.error(`❌ Exception deleting campaign ${campaignId}:`, error);
-        deletionResults.push({ campaignId, success: false, error: error instanceof Error ? error.message : String(error) });
+        deletionResults.push({ campaignId, success: false, error: error instanceof Error ? (error as Error).message : String(error) });
       }
     }
 
@@ -97,7 +97,7 @@ serve(withRunLog('cleanup-campaigns', async (req) => {
   } catch (error: any) {
     console.error("❌ Cleanup error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

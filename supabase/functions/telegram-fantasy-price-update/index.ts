@@ -280,7 +280,7 @@ Deno.serve(withRunLog('telegram-fantasy-price-update', async (req) => {
     console.error('[telegram-fantasy-price-update] Error:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: (error as Error).message
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
   }
 }));
@@ -294,7 +294,7 @@ async function scanCorruptedPositions(supabase: any) {
     .select('*');
   
   if (error) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+    return new Response(JSON.stringify({ success: false, error: (error as Error).message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500
     });

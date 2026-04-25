@@ -236,7 +236,7 @@ async function autoQueueNewTokens(supabase: any, finalTokens: any[]): Promise<nu
 
     const { error } = await supabase.from('holders_intel_post_queue').insert(rows);
     if (error) {
-      console.error('[DexTop200] Queue insert error:', error.message);
+      console.error('[DexTop200] Queue insert error:', (error as Error).message);
       return 0;
     }
 
@@ -369,14 +369,14 @@ Deno.serve(withRunLog('dex-top-200', async (req, logger) => {
     await logScrapeHealth(supabase, {
       page1_ok: false, page2_ok: false,
       page1_count: 0, page2_count: 0,
-      page1_error: error instanceof Error ? error.message : String(error),
+      page1_error: error instanceof Error ? (error as Error).message : String(error),
       page2_error: null,
       total_parsed: 0, retry_used: false,
-    }, 0, 0, 0, error instanceof Error ? error.message : String(error));
+    }, 0, 0, 0, error instanceof Error ? (error as Error).message : String(error));
 
     return new Response(JSON.stringify({
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? (error as Error).message : String(error),
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -104,7 +104,7 @@ Deno.serve(withRunLog('execute-copy-trade', async (req) => {
         processedTrades.push({
           user_id: config.user_id,
           success: false,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? (error as Error).message : String(error)
         })
       }
     }
@@ -121,7 +121,7 @@ Deno.serve(withRunLog('execute-copy-trade', async (req) => {
 
   } catch (error) {
     console.error('Error in execute-copy-trade:', error)
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

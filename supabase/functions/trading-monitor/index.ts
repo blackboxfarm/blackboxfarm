@@ -171,7 +171,7 @@ const executeEmergencySell = async (session: TradingSession, position: Position)
     });
 
     if (error) {
-      await logActivity(session.id, `❌ Emergency sell failed: ${error.message}`, 'error');
+      await logActivity(session.id, `❌ Emergency sell failed: ${(error as Error).message}`, 'error');
       return;
     }
 
@@ -197,7 +197,7 @@ const executeEmergencySell = async (session: TradingSession, position: Position)
 
     await logActivity(session.id, `✅ Emergency sell completed for position ${position.lot_id}`, 'info');
   } catch (error) {
-    await logActivity(session.id, `❌ Emergency sell error: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    await logActivity(session.id, `❌ Emergency sell error: ${error instanceof Error ? (error as Error).message : String(error)}`, 'error');
   }
 };
 
@@ -240,7 +240,7 @@ const processTradingSession = async (session: TradingSession) => {
     // - Token switching logic
 
   } catch (error) {
-    await logActivity(session.id, `❌ Error processing session: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    await logActivity(session.id, `❌ Error processing session: ${error instanceof Error ? (error as Error).message : String(error)}`, 'error');
   }
 };
 
@@ -261,7 +261,7 @@ serve(withRunLog('trading-monitor', async (req) => {
 
     if (error) {
       console.error('Error fetching sessions:', error);
-      return new Response(JSON.stringify({ error: error.message }), {
+      return new Response(JSON.stringify({ error: (error as Error).message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -291,7 +291,7 @@ serve(withRunLog('trading-monitor', async (req) => {
 
   } catch (error) {
     console.error('Trading monitor error:', error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

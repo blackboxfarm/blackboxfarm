@@ -112,7 +112,7 @@ async function updateOnSuccess(supabase: any, devWallet: string, tokenMint: stri
 
   if (error) {
     console.error('[Dev Tracker] Upsert error:', error);
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   // Also update token_lifecycle_tracking
@@ -170,7 +170,7 @@ async function updateOnRug(supabase: any, devWallet: string, tokenMint: string):
 
   if (error) {
     console.error('[Dev Tracker] Upsert error:', error);
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   // Update token_lifecycle_tracking
@@ -300,7 +300,7 @@ async function linkSocialAccounts(
 
   if (error) {
     console.error('[Dev Tracker] Link error:', error);
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   return { success: true, updated: data };
@@ -315,7 +315,7 @@ async function getDevReputation(supabase: any, devWallet: string): Promise<any> 
     .single();
 
   if (error && error.code !== 'PGRST116') {
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   if (!data) {

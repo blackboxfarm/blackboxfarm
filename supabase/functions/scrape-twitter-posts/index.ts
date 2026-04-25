@@ -180,7 +180,7 @@ Deno.serve(withRunLog('scrape-twitter-posts', async (req) => {
           }, { onConflict: 'tweet_id', ignoreDuplicates: true });
 
         if (error) {
-          console.warn(`Failed to insert tweet ${tweetId}:`, error.message);
+          console.warn(`Failed to insert tweet ${tweetId}:`, (error as Error).message);
           skipped++;
         } else {
           scraped++;
@@ -208,7 +208,7 @@ Deno.serve(withRunLog('scrape-twitter-posts', async (req) => {
     });
   } catch (error: any) {
     console.error('Scrape error:', error);
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+    return new Response(JSON.stringify({ success: false, error: (error as Error).message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

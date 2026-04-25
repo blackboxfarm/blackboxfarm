@@ -92,7 +92,7 @@ async function initPool(supabase: any) {
     .select()
     .single()
 
-  if (error) return jsonResponse({ error: error.message }, 500)
+  if (error) return jsonResponse({ error: (error as Error).message }, 500)
   return jsonResponse({ success: true, pool: data, message: 'Pool initialized with $250' })
 }
 
@@ -255,7 +255,7 @@ async function discoverFromPumpfun(supabase: any): Promise<PumpfunCandidate[]> {
     .limit(100)
 
   if (error || !watchlistTokens?.length) {
-    console.log(`🔍 Pump.fun watchlist: ${error ? 'error: ' + error.message : 'no tokens found'}`)
+    console.log(`🔍 Pump.fun watchlist: ${error ? 'error: ' + (error as Error).message : 'no tokens found'}`)
     return []
   }
 

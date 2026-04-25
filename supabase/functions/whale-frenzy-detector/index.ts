@@ -243,7 +243,7 @@ Deno.serve(withRunLog('whale-frenzy-detector', async (req) => {
                 })
 
                 if (swapResponse.error) {
-                  frenzyEvent.auto_buy_error = swapResponse.error.message
+                  frenzyEvent.auto_buy_error = swapResponse.(error as Error).message
                   console.error('Auto-buy failed:', swapResponse.error)
                 } else {
                   frenzyEvent.auto_buy_executed = true
@@ -413,7 +413,7 @@ Deno.serve(withRunLog('whale-frenzy-detector', async (req) => {
   } catch (error: any) {
     console.error('Frenzy detector error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

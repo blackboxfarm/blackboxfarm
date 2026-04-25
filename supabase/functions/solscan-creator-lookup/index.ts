@@ -68,7 +68,7 @@ Deno.serve(withRunLog('solscan-creator-lookup', async (req) => {
   } catch (error) {
     console.error('Error in solscan-creator-lookup:', error);
     return new Response(
-      JSON.stringify({ error: error.message, creatorWallet: null }),
+      JSON.stringify({ error: (error as Error).message, creatorWallet: null }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

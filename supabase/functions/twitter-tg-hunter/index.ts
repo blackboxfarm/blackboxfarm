@@ -317,7 +317,7 @@ Deno.serve(withRunLog('twitter-tg-hunter', async (req) => {
   } catch (error) {
     console.error('twitter-tg-hunter error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: error instanceof Error ? (error as Error).message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

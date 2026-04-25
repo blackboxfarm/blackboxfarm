@@ -443,7 +443,7 @@ Deno.serve(withRunLog('resolve-token-addresses', async (req) => {
             discovery_source: token.discovery_source,
             scraped_at: token.first_seen_at,
             validation_status: 'invalid',
-            validation_error: error.message,
+            validation_error: (error as Error).message,
             last_validation_attempt: new Date().toISOString(),
             validation_attempts: (token.validation_attempts || 0) + 1
           });
@@ -460,7 +460,7 @@ Deno.serve(withRunLog('resolve-token-addresses', async (req) => {
           symbol: token.symbol,
           oldAddress: token.token_mint,
           success: false,
-          error: error.message
+          error: (error as Error).message
         });
       }
     }
@@ -479,7 +479,7 @@ Deno.serve(withRunLog('resolve-token-addresses', async (req) => {
 
   } catch (error: any) {
     console.error('Error in resolve-token-addresses:', error);
-    return new Response(JSON.stringify({ error: error.message, results: [], ok: false }), {
+    return new Response(JSON.stringify({ error: (error as Error).message, results: [], ok: false }), {
       // Return 200 so the client loop can continue and log the error
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -337,7 +337,7 @@ serve(withRunLog('flipit-verify-positions', async (req) => {
       const { data: positions, error } = await query.limit(50);
 
       if (error) {
-        return bad(`Failed to fetch positions: ${error.message}`);
+        return bad(`Failed to fetch positions: ${(error as Error).message}`);
       }
 
       const results: any[] = [];

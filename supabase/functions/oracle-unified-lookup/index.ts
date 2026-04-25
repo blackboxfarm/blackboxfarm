@@ -265,7 +265,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
         return allTokens;
       }
     } catch (error) {
-      const errMsg = `Pump.fun fetch error: ${error instanceof Error ? error.message : 'timeout'}`;
+      const errMsg = `Pump.fun fetch error: ${error instanceof Error ? (error as Error).message : 'timeout'}`;
       console.error(`[Oracle] ${errMsg}`);
       apiErrors.push(errMsg);
     }
@@ -345,7 +345,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
         }));
       }
     } catch (error) {
-      const errMsg = `Helius TOKEN_MINT error: ${error instanceof Error ? error.message : 'timeout'}`;
+      const errMsg = `Helius TOKEN_MINT error: ${error instanceof Error ? (error as Error).message : 'timeout'}`;
       console.warn(`[Oracle] ${errMsg} — falling through to DAS/DB`);
       apiErrors.push(errMsg);
     }
@@ -390,7 +390,7 @@ async function fetchPumpfunTokens(walletAddress: string, supabase: any, apiError
         }
       }
     } catch (error) {
-      const errMsg = `Helius DAS error: ${error instanceof Error ? error.message : 'timeout'}`;
+      const errMsg = `Helius DAS error: ${error instanceof Error ? (error as Error).message : 'timeout'}`;
       console.warn(`[Oracle] ${errMsg} — falling through to DB cache`);
       apiErrors.push(errMsg);
     }
@@ -1331,7 +1331,7 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
   } catch (error) {
     console.error('[Oracle] Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

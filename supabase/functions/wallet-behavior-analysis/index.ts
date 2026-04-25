@@ -163,9 +163,9 @@ serve(withRunLog('wallet-behavior-analysis', async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
-    console.error('Error analyzing wallet behavior:', redactHeliusSecrets(error.message));
+    console.error('Error analyzing wallet behavior:', redactHeliusSecrets((error as Error).message));
     return new Response(
-      JSON.stringify({ error: redactHeliusSecrets(error.message) }),
+      JSON.stringify({ error: redactHeliusSecrets((error as Error).message) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

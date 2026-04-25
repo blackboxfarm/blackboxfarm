@@ -266,7 +266,7 @@ Deno.serve(withRunLog('oracle-auto-classifier', async (req) => {
   } catch (error) {
     console.error('[AutoClassifier] Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

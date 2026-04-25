@@ -688,7 +688,7 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
     console.error('[DexCompiler] ❌ Fatal error:', error);
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? (error as Error).message : 'Unknown error',
         success: false 
       }),
       { 

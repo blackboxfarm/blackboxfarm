@@ -270,7 +270,7 @@ serve(withRunLog('flipit-repair-positions', async (req) => {
       const { data: positions, error } = await query;
 
       if (error) {
-        return bad(`Query failed: ${error.message}`);
+        return bad(`Query failed: ${(error as Error).message}`);
       }
 
       const results: any[] = [];

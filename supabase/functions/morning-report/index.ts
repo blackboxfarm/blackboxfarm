@@ -1846,9 +1846,9 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     );
 
   } catch (error: any) {
-    console.error('[morning-report] Fatal:', error.message);
+    console.error('[morning-report] Fatal:', (error as Error).message);
     return new Response(
-      JSON.stringify({ status: 'error', error: error.message }),
+      JSON.stringify({ status: 'error', error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

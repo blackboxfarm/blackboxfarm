@@ -179,7 +179,7 @@ Requirements:
   } catch (error) {
     console.error("Trio generate error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Generation failed" }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : "Generation failed" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

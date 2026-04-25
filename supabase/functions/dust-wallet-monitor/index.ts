@@ -255,7 +255,7 @@ serve(withRunLog('dust-wallet-monitor', async (req) => {
       });
 
       if (error) {
-        throw new Error(`Failed to mark dust wallets: ${error.message}`);
+        throw new Error(`Failed to mark dust wallets: ${(error as Error).message}`);
       }
 
       const result = data?.[0] || { marked_count: 0, total_dust: 0, total_active: 0, wallets_without_balance: 0 };
@@ -321,7 +321,7 @@ serve(withRunLog('dust-wallet-monitor', async (req) => {
   } catch (error) {
     console.error('[Dust Monitor] Error:', error);
     return new Response(JSON.stringify({
-      error: error.message || 'Unknown error'
+      error: (error as Error).message || 'Unknown error'
     }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 }));

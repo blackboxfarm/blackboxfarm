@@ -492,7 +492,7 @@ Deno.serve(withRunLog('twitter-token-mention-scanner', async (req) => {
   } catch (error: any) {
     console.error('Twitter Token Scanner error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

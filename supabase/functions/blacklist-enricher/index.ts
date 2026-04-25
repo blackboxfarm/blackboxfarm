@@ -579,13 +579,13 @@ Deno.serve(withRunLog('blacklist-enricher', async (req) => {
       if (entry_id) {
         await supabase.from("pumpfun_blacklist").update({
           enrichment_status: "failed",
-          enrichment_error: error.message
+          enrichment_error: (error as Error).message
         }).eq("id", entry_id);
       }
     } catch {}
     
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

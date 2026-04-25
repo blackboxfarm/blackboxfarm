@@ -257,7 +257,7 @@ serve(withRunLog('burn-token', async (req) => {
 
   } catch (error: any) {
     console.error("[burn-token] Error:", error);
-    return bad(error.message || "Internal server error", 500);
+    return bad((error as Error).message || "Internal server error", 500);
   }
 }));
 

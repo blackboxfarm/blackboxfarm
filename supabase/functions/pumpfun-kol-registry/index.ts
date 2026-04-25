@@ -213,7 +213,7 @@ async function refreshKolscanData(supabase: any, timeframe: string = '1'): Promi
         .upsert(upsertData, { onConflict: 'wallet_address' });
 
       if (error) {
-        result.errors.push(`Upsert error for ${kol.nickname}: ${error.message}`);
+        result.errors.push(`Upsert error for ${kol.nickname}: ${(error as Error).message}`);
       } else {
         if (isNew) result.added++;
         else result.updated++;
@@ -404,7 +404,7 @@ Deno.serve(withRunLog('pumpfun-kol-registry', async (req) => {
     }
   } catch (error: any) {
     console.error('KOL Registry error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

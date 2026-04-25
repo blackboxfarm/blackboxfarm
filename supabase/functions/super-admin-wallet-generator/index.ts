@@ -74,7 +74,7 @@ serve(withRunLog('super-admin-wallet-generator', async (req) => {
           p_operation: 'list_access',
           p_user_id: user.id,
           p_success: false,
-          p_error_message: error.message,
+          p_error_message: (error as Error).message,
           p_security_flags: { database_error: true }
         });
         throw error;
@@ -161,7 +161,7 @@ serve(withRunLog('super-admin-wallet-generator', async (req) => {
           p_operation: 'create_attempt',
           p_user_id: user.id,
           p_success: false,
-          p_error_message: error.message,
+          p_error_message: (error as Error).message,
           p_security_flags: { database_error: true }
         });
         throw error;
@@ -212,7 +212,7 @@ serve(withRunLog('super-admin-wallet-generator', async (req) => {
         p_operation: 'system_error',
         p_user_id: null,
         p_success: false,
-        p_error_message: (error instanceof Error ? error.message : String(error)) || 'Internal server error',
+        p_error_message: (error instanceof Error ? (error as Error).message : String(error)) || 'Internal server error',
         p_security_flags: {
           critical_error: true,
           timestamp: new Date().toISOString(),
@@ -224,7 +224,7 @@ serve(withRunLog('super-admin-wallet-generator', async (req) => {
     }
     
     return new Response(JSON.stringify({ 
-      error: (error instanceof Error ? error.message : String(error)) || 'Internal server error' 
+      error: (error instanceof Error ? (error as Error).message : String(error)) || 'Internal server error' 
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

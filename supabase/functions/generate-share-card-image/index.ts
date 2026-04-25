@@ -278,7 +278,7 @@ STYLE: Clean, minimal, fintech look. NO busy backgrounds. MAXIMUM TEXT READABILI
   } catch (error) {
     console.error('Error generating share card:', error);
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: error instanceof Error ? (error as Error).message : 'Unknown error' 
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

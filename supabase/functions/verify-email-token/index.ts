@@ -99,8 +99,8 @@ serve(withRunLog('verify-email-token', async (req, logger) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    logger?.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
+    logger?.error(`Error: ${error instanceof Error ? (error as Error).message : String(error)}`);
+    return new Response(JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }

@@ -207,7 +207,7 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
         results.push({
           token_mint: token.token_mint,
           success: false,
-          error: error.message
+          error: (error as Error).message
         });
       }
     }
@@ -227,7 +227,7 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
   } catch (error) {
     console.error('Error in enrich-scraped-tokens:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

@@ -50,8 +50,8 @@ Deno.serve(withRunLog('retry-dead-letters', async (req) => {
     .limit(20);
 
   if (error) {
-    console.error('[retry-dead-letters] Failed to fetch items:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('[retry-dead-letters] Failed to fetch items:', (error as Error).message);
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

@@ -114,7 +114,7 @@ Make it look like a premium crypto analytics report card that traders would want
   } catch (error) {
     console.error("Error generating share card:", error);
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Failed to generate share card" 
+      error: error instanceof Error ? (error as Error).message : "Failed to generate share card" 
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

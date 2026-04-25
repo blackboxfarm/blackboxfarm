@@ -443,7 +443,7 @@ async function getEarlyTradeAnalysis(supabase: any, tokenMint: string): Promise<
     .order('trade_index', { ascending: true });
   
   if (error) {
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
   
   const { data: token } = await supabase
