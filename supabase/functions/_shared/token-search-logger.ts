@@ -335,7 +335,7 @@ export async function logCompleteSearch(
     riskFlags?: string[];
     insidersGraph?: { bundledPercentage?: number };
     launchpadInfo?: { name?: string };
-    creatorInfo?: { creatorAddress?: string };
+    creatorInfo?: { creatorAddress?: string; wallet?: string };
     socials?: { twitter?: string; telegram?: string; website?: string; discord?: string };
     dexStatus?: { hasDexPaid?: boolean; hasCTO?: boolean; activeBoosts?: number; hasAds?: boolean };
   },
