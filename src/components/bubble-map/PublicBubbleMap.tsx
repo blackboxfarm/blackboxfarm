@@ -479,9 +479,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
       if (data?.kycRoot) {
         const isCexConfirmed = data.kycConfirmed !== false; // backwards compat: if field missing, assume true
-        const rootLabel = isCexConfirmed 
-          ? `🏦 CEX ROOT IDENTIFIED: ${data.kycRoot.slice(0, 24)}...`
-          : `🔍 DEEPEST FUNDER: ${data.kycRoot.slice(0, 24)}... (trail cold)`;
+        // Prefer the named CEX label ("Binance", "Coinbase", ...) over the raw hash.
+        const cexName: string | null = data.kycRootCex || data.kycRootLabel || null;
+        const namedRoot = cexName
+          ? `${cexName.toUpperCase()} (${data.kycRoot.slice(0, 8)}...${data.kycRoot.slice(-4)})`
+          : `${data.kycRoot.slice(0, 24)}...`;
+        const rootLabel = isCexConfirmed
+          ? `🏦 CEX ROOT IDENTIFIED: ${namedRoot}`
+          : `🔍 DEEPEST FUNDER: ${namedRoot} (trail cold)`;
         
         setTimeout(() => {
           addTerminalLine('', 'info');
@@ -541,9 +546,12 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
           setKycFound(true);
           dispatchThought('success');
-          const kycMsg = isCexConfirmed 
-            ? `🏦 CEX Root found in ${data.chainDepth || data.chain?.length || 0} hops: ${data.kycRoot.slice(0, 12)}...`
-            : `🔍 Deepest funder (trail cold) in ${data.chainDepth || data.chain?.length || 0} hops`;
+          const hops = data.chainDepth || data.chain?.length || 0;
+          const kycMsg = isCexConfirmed
+            ? (cexName
+                ? `🏦 KYC Root: ${cexName} — found in ${hops} hops`
+                : `🏦 CEX Root found in ${hops} hops: ${data.kycRoot.slice(0, 12)}...`)
+            : `🔍 Deepest funder (trail cold) in ${hops} hops`;
           dispatchThoughtCustom(kycMsg);
           setTimeout(() => setTerminalVisible(false), 3000);
         }, chainDelay + 1200);
