@@ -247,7 +247,7 @@ serve(withRunLog('generate-share-card-satori', async (req) => {
     };
 
     console.log('SVG generation starting...');
-    const svg = await satori(cardTree, {
+    const svg = await satori(cardTree as any, {
       width: 1200,
       height: 628,
       fonts: [{ name: 'Inter', data: fontData, weight: 400, style: 'normal' }],

@@ -465,7 +465,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       .update({ status: 'expired', error_message: `Auto-expired: older than ${STALE_HOURS}h` })
       .eq('status', 'pending')
       .lt('created_at', staleCutoff)
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true } as any);
     
     if (expiredCount && expiredCount > 0) {
       console.log(`[poster] Auto-expired ${expiredCount} stale items (>${STALE_HOURS}h old)`);
