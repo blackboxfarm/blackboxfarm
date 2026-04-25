@@ -6,11 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Trail-end states that are "settled" — no point re-tracing these on every pass.
+const SETTLED_TRAIL_REASONS = ['hit_cex', 'cycle_detected'];
+
 /**
  * Background backfill: picks creator wallets that have NO genealogy/KYC data
  * in the reputation_mesh, then calls wallet-genealogy-scanner for each.
- * Designed to run every 10 minutes via pg_cron, processing a small batch
- * to stay within Helius rate limits.
+ *
+ * Tiered + newest-first:
+ *   tier=A → high-value tokens (peak_multiplier > 5x OR in Insiders lifecycle)
+ *   tier=B → everything else from pumpfun_watchlist (newest first)
+ *
+ * Always skips wallets where dev_wallet_reputation.trail_end_reason is settled
+ * (hit_cex / cycle_detected), so we don't waste credits re-tracing solved cases.
  */
 Deno.serve(withRunLog('backfill-genealogy', async (req) => {
   if (req.method === 'OPTIONS') {
@@ -19,30 +27,46 @@ Deno.serve(withRunLog('backfill-genealogy', async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const batchSize = Math.min(body.batchSize || 5, 15); // Max 15 per run
+    const batchSize = Math.min(body.batchSize || 5, 25);
+    const tier = body.tier === 'A' || body.tier === 'B' ? body.tier : 'B';
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Find creator wallets that have NO funded_by links in reputation_mesh
-    // These are wallets we haven't traced yet
-    const { data: untracedTokens, error: queryErr } = await supabase
-      .from('pumpfun_watchlist')
-      .select('token_mint, creator_wallet')
-      .not('status', 'in', '("rejected","dead")')
-      .not('creator_wallet', 'is', null)
-      .not('creator_wallet', 'eq', '')
-      .limit(200); // Get a pool to filter from
+    // Build the candidate pool depending on tier.
+    let untracedTokens: Array<{ token_mint: string; creator_wallet: string }> = [];
+    if (tier === 'A') {
+      // Tier A: high-value tokens — peak_multiplier > 5x OR in Insiders lifecycle
+      const { data: insiders, error: insErr } = await supabase
+        .from('telegram_insider_token_lifecycle')
+        .select('token_mint, creator_wallet, peak_multiplier')
+        .not('creator_wallet', 'is', null)
+        .order('peak_multiplier', { ascending: false, nullsFirst: false })
+        .limit(200);
+      if (insErr) throw insErr;
+      untracedTokens = (insiders || []).map(t => ({ token_mint: t.token_mint, creator_wallet: t.creator_wallet }));
+    } else {
+      // Tier B: regular pumpfun watchlist — newest first
+      const { data: pf, error: queryErr } = await supabase
+        .from('pumpfun_watchlist')
+        .select('token_mint, creator_wallet, first_seen_at')
+        .not('status', 'in', '("rejected","dead")')
+        .not('creator_wallet', 'is', null)
+        .not('creator_wallet', 'eq', '')
+        .order('first_seen_at', { ascending: false, nullsFirst: false })
+        .limit(300);
+      if (queryErr) throw queryErr;
+      untracedTokens = (pf || []).map(t => ({ token_mint: t.token_mint, creator_wallet: t.creator_wallet }));
+    }
 
-    if (queryErr) throw queryErr;
     if (!untracedTokens || untracedTokens.length === 0) {
       return new Response(JSON.stringify({ message: 'No tokens to process', traced: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Deduplicate by creator_wallet
+    // Deduplicate by creator_wallet (preserve newest-first / highest-perf order)
     const uniqueWallets = new Map<string, string>();
     for (const t of untracedTokens) {
       if (t.creator_wallet && !uniqueWallets.has(t.creator_wallet)) {
@@ -50,22 +74,34 @@ Deno.serve(withRunLog('backfill-genealogy', async (req) => {
       }
     }
 
-    // Check which wallets already have funded_by links in mesh
+    // Skip wallets that are already settled (hit_cex / cycle_detected) OR already have mesh links.
     const walletsToCheck = Array.from(uniqueWallets.keys());
+    const checkSlice = walletsToCheck.slice(0, 200);
+
+    const { data: settledRep } = await supabase
+      .from('dev_wallet_reputation')
+      .select('wallet_address, trail_end_reason')
+      .in('wallet_address', checkSlice)
+      .in('trail_end_reason', SETTLED_TRAIL_REASONS);
+    const settled = new Set((settledRep || []).map((r: any) => r.wallet_address));
+
     const { data: existingLinks } = await supabase
       .from('reputation_mesh')
       .select('source_id')
       .eq('source_type', 'wallet')
       .eq('relationship', 'funded_by')
-      .in('source_id', walletsToCheck.slice(0, 100)); // Check up to 100
+      .in('source_id', checkSlice);
 
-    const alreadyTraced = new Set((existingLinks || []).map(l => l.source_id));
+    const alreadyTraced = new Set([
+      ...(existingLinks || []).map((l: any) => l.source_id),
+      ...settled,
+    ]);
     
     // Filter to only untraced wallets
     const needsTracing = walletsToCheck.filter(w => !alreadyTraced.has(w));
     const batch = needsTracing.slice(0, batchSize);
 
-    console.log(`[backfill-genealogy] Pool: ${uniqueWallets.size} unique wallets, ${alreadyTraced.size} already traced, ${needsTracing.length} need tracing, processing ${batch.length}`);
+    console.log(`[backfill-genealogy] tier=${tier} pool: ${uniqueWallets.size} unique wallets, ${alreadyTraced.size} already traced/settled, ${needsTracing.length} need tracing, processing ${batch.length}`);
 
     let traced = 0;
     let failed = 0;
@@ -100,6 +136,7 @@ Deno.serve(withRunLog('backfill-genealogy', async (req) => {
     console.log(`[backfill-genealogy] Complete: ${traced} traced, ${failed} failed, ${needsTracing.length - batch.length} remaining`);
 
     return new Response(JSON.stringify({
+      tier,
       traced,
       failed,
       remaining: needsTracing.length - batch.length,
