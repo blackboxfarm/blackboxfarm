@@ -1095,6 +1095,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         </div>
       )}
 
+      {/* Collaboration / Dev-Family Lens — surfaces shared funders across creators */}
+      {devWalletAddress && <SharedFundersPanel creatorWallet={devWalletAddress} />}
+
       {/* Unified Control Bar — layout controls only */}
       {graphData.nodes.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/80 backdrop-blur">
