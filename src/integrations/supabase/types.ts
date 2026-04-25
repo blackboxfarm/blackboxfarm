@@ -6856,6 +6856,7 @@ export type Database = {
           slug: string
           subtitle: string | null
           tags: string[] | null
+          target_persona_slug: string | null
           title: string
           updated_at: string
         }
@@ -6874,6 +6875,7 @@ export type Database = {
           slug: string
           subtitle?: string | null
           tags?: string[] | null
+          target_persona_slug?: string | null
           title: string
           updated_at?: string
         }
@@ -6892,6 +6894,7 @@ export type Database = {
           slug?: string
           subtitle?: string | null
           tags?: string[] | null
+          target_persona_slug?: string | null
           title?: string
           updated_at?: string
         }
@@ -7357,6 +7360,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      marketing_profiles: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          is_active: boolean
+          section: string
+          slug: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          is_active?: boolean
+          section: string
+          slug: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          is_active?: boolean
+          section?: string
+          slug?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       mega_whale_alert_config: {
         Row: {
