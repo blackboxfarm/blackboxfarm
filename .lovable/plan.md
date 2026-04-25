@@ -1,78 +1,113 @@
-# 🚀 Two Things, One Approval
 
-## Part 1 — Stop waiting, just retrace it now
+# 🎯 Mega-Bundle: KYC Names + Mass Retrace + 3D + Schematic Ladder
 
-You're right, the 3-hour cron is silly when we can fire the scan on demand.
-
-**Action:** Invoke `wallet-genealogy-scanner` immediately against the `Honestrug` creator (`3H7P1ru6aaMcXKvWNVpau1WdRjYsR7HZZ6puKaeXhxtP`) with `depth=20, branch=1`. Returns the full ladder live, persists to `reputation_mesh` + `dev_wallet_reputation`, and we read the KYC root straight out of the response.
-
-**If the right token was actually a different `$HONESTSHRUG` mint**, paste the CA and I'll target that one instead. (DB has `Honestrug`, `HONESTRUG`, and `Shruggie` variants — best guess is the first.)
-
-No code change needed for this — it's just a one-shot tool call.
+Four tracks, one approval. I'll ship in this order so each piece compounds: (1) labels light up everywhere → (2) backfills populate the mesh → (3) richer mesh feeds the new visualizations.
 
 ---
 
-## Part 2 — Surface the collaboration / "dev family" mesh (the real prize)
+## Track 1 — Show the actual CEX name everywhere ("Binance", not "Found")
 
-### What I found
+**Problem:** UI/logs just say "KYC found" or show a hash. We already have `getCexName()` in `_shared/cex-wallets.ts` — it just isn't propagated.
 
-Querying `reputation_mesh` right now returns this *already-collected* gold:
-
-| Funder Wallet (truncated) | Distinct creators it bankrolled |
-|---|---|
-| `14cT4K…oF9y` | **46** |
-| `5ndLnE…HEPs` | **45** |
-| `H8HBLH…NN3U` | **44** |
-| `7BwHJR…KTXY` | **44** |
-| `FopmrH…nUUb` | **43** |
-| `8QCVZ7…RNn5` | **36** |
-| ...20+ more | 20–35 each |
-
-These are **mid-fanout funders** (3–50 downstream wallets) — too small to be CEX hot wallets, too big to be coincidence. **This is the collaboration signal you're asking about.** When the same funder seeds 30 different "creator" wallets, that's one operator running a multi-mint farm.
-
-(Separately: the top-1 funder hit 1,737 creators — that's almost certainly an unlabelled CEX hot wallet that needs to be added to `cex-wallets.ts` so we stop walking through it. I'll tag it in the same pass.)
-
-### Three small additions
-
-**A. `mesh-shared-funders` edge function** *(new, ~80 lines)*
-- Input: `{ wallet }` — any creator wallet
-- Walks its `genealogy_chain` (already stored), then for each intermediate wallet, queries `reputation_mesh` for sibling downstream wallets ("who else did this funder seed?")
-- Returns:
-```json
-{
-  "creator": "3H7P1...",
-  "shared_funders": [
-    {
-      "funder": "5ndLnE...",
-      "depth_in_chain": 4,
-      "siblings_count": 45,
-      "sibling_creators": ["...", "...", "..."],
-      "sibling_tokens": [{ "mint": "...", "symbol": "FOO", "peak_multiplier": 12.3 }],
-      "cluster_label": "likely_dev_family"
-    }
-  ]
-}
-```
-
-**B. `<SharedFundersPanel />` UI component** *(new)*
-- Drop into the existing Bubblemap / Holders Report sidebar
-- Renders each shared funder as a collapsible card showing the sibling tokens (with their peak multipliers — so you instantly see "this farmer's other mints did 50x")
-- Click a sibling token → deep-link to its bubble map
-
-**C. Auto-flag known false-positive CEX hot wallets**
-- Add the top funder (1,737 fanout) to `cex-wallets.ts` after a quick Solscan label check, so future traces stop at it instead of polluting the cluster data with thousands of unrelated creators.
-
-### What I will NOT touch
-
-- `auto-genealogy.ts` core logic (just shipped, leaving alone)
-- The 3-hour backfill cron (orthogonal)
-- `insiders-cross-links` (different surface, different audience)
+**Changes:**
+- **Backend — `_shared/auto-genealogy.ts`**: Add `cexName` to `GenealogyResult` (already partially there in `parentWallets[].cexName`) and to the top-level summary so callers don't have to re-scan the chain.
+- **Edge function — `mesh-shared-funders/index.ts`**: When a funder *is* a CEX (currently filtered out), surface it in a separate `kyc_terminus: { wallet, cex_name }` field.
+- **Edge function — `wallet-genealogy-scanner` response**: Echo `kyc_root_cex` in the JSON so the UI gets it without a second query.
+- **UI — `SharedFundersPanel.tsx`**: 
+  - New top-line ribbon: `🏦 KYC Root: Binance` (green) / `⚠ Trail ended: depth_cap` (amber) / `🔍 Trail ended: unclassified_funder` (grey)
+  - Each sibling/funder hash gets a hover tooltip showing CEX name if known
+- **UI — `PublicBubbleMap.tsx` & `HackerTerminal.tsx`**: KYC root node label changes from `"5tzFki…uAi9"` → `"Binance (5tzFki…uAi9)"`
+- **Telegram — `/dev` & `/oracle` reports**: `KYC Root: Binance` instead of `KYC Root: ✅ Found`
+- **DB column (optional, no migration if we skip)**: I'll *not* add a column — derive at read time from `cex-wallets.ts` so the truth source stays in code and re-labelling is a redeploy, not a backfill.
 
 ---
 
-## TL;DR
-1. Retrace `Honestrug` right now to prove the new linear walker hits Binance.
-2. Build a tiny "shared funder" lens over the mesh data we're *already* collecting — turns the genealogy graph into a collaboration detector.
-3. Patch one suspect CEX wallet so it stops eating the cluster signal.
+## Track 2 — Retrace every Insiders Lifecycle token NOW (one big pass)
 
-Approve and I'll ship all three in one pass.
+**Problem:** `insiders-genealogy-backfill` exists but only runs when triggered. The Insiders list is high-signal, low-volume, so we can blast it.
+
+**Changes:**
+- **Edge function — `insiders-genealogy-backfill/index.ts`**:
+  - Already works in batches of 25. Add an `auto_loop` mode: when called with `{ auto_loop: true }`, it self-invokes the next batch via `supabase.functions.invoke('insiders-genealogy-backfill', { body: {...} })` until `remaining === 0`.
+  - Throttled by the existing 250 ms per-wallet sleep + the new linear-walk depth (max ~20 Helius calls per wallet vs the old branching cost).
+- **Admin trigger UI** — small button on `/super-admin` (or wherever the Insiders panel lives) labelled **"Retrace all Insiders KYC"** that fires the loop and shows a progress badge (`X/Y traced, Z KYC roots resolved`).
+- **Helius budget guard:** abort the loop if today's `helius_usage` row crosses 80% of monthly quota (memory: 10M/mo cap).
+
+**Estimated cost:** ~current Insiders count × 20 Helius calls × ~5 credits each. We'll log it before/after so you see exact spend.
+
+---
+
+## Track 3 — Recurring retrace for the entire Archive (newest first)
+
+**Problem:** Same as #2 but for the much larger `pumpfun_watchlist` + `telegram_insider_token_lifecycle` archive. Can't blast it all at once.
+
+**Changes:**
+- **Rewrite `backfill-genealogy/index.ts`** to:
+  - Order by **`first_seen_at DESC` / `created_at DESC`** (newest first, currently no order at all → it grabs random rows).
+  - Skip rows where `dev_wallet_reputation.upstream_wallets` already contains a CEX hit OR `trail_end_reason` is a terminal state (`hit_cex`, `cycle_detected`).
+  - Tier the queue: **Tier A** = tokens with peak_multiplier > 5x or in Insiders lifecycle (priority); **Tier B** = everything else.
+- **New cron** (replaces the existing 3-hour one):
+  - Every 30 min: Tier A, batch 10
+  - Every 6 hours: Tier B, batch 25 (off-peak)
+  - Hard daily cap of ~500 wallets so we stay well under Helius quota.
+- **`dev_wallet_reputation` already stores `upstream_wallets`** — we'll add `trail_end_reason` (text) so we can skip dead-ends on subsequent passes instead of retracing them. *(One small migration.)*
+
+---
+
+## Track 4a — 3D Bubble Map (rotatable)
+
+**Verdict:** Doable, low risk if we keep it as a **toggle** alongside the existing 2D view. No replacement.
+
+**Changes:**
+- Install `react-force-graph-3d` (sibling to the `react-force-graph-2d` already in the project — same API surface).
+- New component `BubbleMap3D.tsx` reusing the same `nodes/links` data shape that feeds `PublicBubbleMap`.
+- Toggle in the bubble-map header: `2D | 3D | Schematic` (segmented control).
+- 3D defaults: dark space background, gold/amber edges, particle-style nodes sized by `value`, slow auto-rotate that stops on user drag.
+- Mobile: 3D toggle hidden (forced 2D) — three.js perf is unkind to phones.
+- Pro-only feature (uses existing `useUserTier` gate already imported in `BubbleMap.tsx`).
+
+---
+
+## Track 4b — Schematic Ladder View (the blueprint)
+
+**Verdict:** Highest forensic value of the new views. Image #2 (the layered diagram) is the template. Mind-castle/Gimli view (#4) is too artistic for daily use — skipping for now.
+
+**Changes:**
+- New component `BubbleMapSchematic.tsx` using **`@xyflow/react`** (already installed!) with `dagre` layout (tiny dep, ~10kb).
+- Vertical layered topology, top → bottom:
+  1. **CEX Roots** (Binance / Coinbase / etc.) — labeled rectangles
+  2. **Hop wallets** in the funding chain — short hash boxes with depth label
+  3. **Creator wallet** — gold-bordered diamond
+  4. **Tokens minted by this creator** — small pill nodes with peak-multiplier badge
+  5. **Sibling tokens** (from Track 1's shared-funders data) — branched off shared funder boxes
+- Edges labelled with hop number and SOL amount where known.
+- Color-coded: red edges = CEX→burner, gold = main trail, dim grey = sibling branches.
+- Click any node → focus + sidebar drawer with raw mesh evidence.
+- Same toggle as 4a so users can switch 2D ⇄ 3D ⇄ Schematic without leaving the page.
+
+---
+
+## Track 5 — Memory + plan housekeeping
+
+- Update `mem://features/oracle/dev-genealogy-tracing` with the named-CEX surfacing rule.
+- Add `mem://features/bubble-map/view-modes` documenting the three view toggle (2D / 3D / Schematic) so future agents don't accidentally rip one out.
+- Patch `.lovable/plan.md` with the post-ship state.
+
+---
+
+## What I'm explicitly NOT doing
+- Mind-Castle / Gimli artistic view — fun, but no forensic ROI right now.
+- Cross-token graph (multi-creator simultaneous view) — separate request, would need its own UX pass.
+- Adding new CEX hot wallets — that's a data-curation task, separate from this code work. (The 1,737-fanout suspect from the prior plan stays on the to-do list as a manual Solscan label check.)
+
+---
+
+## Ship order (single approval, sequential commits)
+1. Track 1 (CEX names) — pure refactor, no DB cost
+2. Track 3 migration (`trail_end_reason` column)
+3. Tracks 2 + 3 (backfills + admin trigger)
+4. Track 4b (Schematic — uses already-installed xyflow)
+5. Track 4a (3D — needs `react-force-graph-3d` install)
+6. Track 5 (memory)
+
+Hit approve and I'll roll.
