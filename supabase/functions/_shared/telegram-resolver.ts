@@ -23,7 +23,7 @@ export async function resolveTelegramUsername(
   const cleanUsername = username.replace(/^@/, '').toLowerCase();
 
   // 1. Check cache first — look up by current_username
-  const { data: cached } = await supabase
+  const { data: cached }: { data: any } = await supabase
     .from('telegram_channel_registry')
     .select('channel_id, current_title, current_username, linked_token_count')
     .eq('current_username', cleanUsername)
@@ -71,7 +71,7 @@ export async function resolveTelegramUsername(
     const now = new Date().toISOString();
 
     // 3. Check if this channel_id already exists (recycled group detection!)
-    const { data: existing } = await supabase
+    const { data: existing }: { data: any } = await supabase
       .from('telegram_channel_registry')
       .select('channel_id, current_username, current_title, username_history, title_history, linked_token_count')
       .eq('channel_id', channelId)
@@ -154,7 +154,7 @@ export async function incrementChannelTokenCount(
   channelId: string,
   supabase: ReturnType<typeof createClient>,
 ): Promise<void> {
-  const { data } = await supabase
+  const { data }: { data: any } = await supabase
     .from('telegram_channel_registry')
     .select('linked_token_count')
     .eq('channel_id', channelId)

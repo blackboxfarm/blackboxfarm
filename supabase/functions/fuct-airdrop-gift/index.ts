@@ -19,7 +19,7 @@ function createMemoInstruction(memo: string, signer: PublicKey): TransactionInst
   return new TransactionInstruction({
     keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
     programId: MEMO_PROGRAM_ID,
-    data: new TextEncoder().encode(memo),
+    data: new TextEncoder().encode(memo) as any,
   });
 }
 

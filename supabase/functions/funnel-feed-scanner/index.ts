@@ -509,7 +509,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     .update({
       last_scraped_at: new Date().toISOString(),
       last_message_id: maxMessageId,
-      tokens_discovered: (source.tokens_discovered || 0) + newTokens,
+      tokens_discovered: ((source as any).tokens_discovered || 0) + newTokens,
     })
     .eq('id', source.id);
 

@@ -18,7 +18,7 @@ function ensureResvgInitialized(): Promise<void> {
     try {
       await initWasm(fetch(wasmUrl));
     } catch (e) {
-      const msg = String(e?.message ?? e);
+    const msg = String((e as any)?.message ?? e);
       if (msg.toLowerCase().includes("already") && msg.toLowerCase().includes("initialized")) return;
       throw e;
     }
