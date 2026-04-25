@@ -290,6 +290,18 @@ function IntelBriefingsArticlesManager() {
     enabled: !!editingId,
   });
 
+  // Fetch all publications once for the exposure column on the list view.
+  const { data: allPublications = [] } = useQuery({
+    queryKey: ['intel-publications', 'exposure-all'],
+    queryFn: async (): Promise<PublicationLite[]> => {
+      const { data, error } = await supabase
+        .from('intel_publications')
+        .select('id, briefing_id, platform, content_depth, is_breadcrumb, published_url, published_at');
+      if (error) throw error;
+      return (data || []) as PublicationLite[];
+    },
+  });
+
   // Get unique categories
   const categories = [...new Set(briefings.map(b => b.category))].sort();
   const currentBriefingIndex = editingId ? briefings.findIndex((b) => b.id === editingId) : -1;
