@@ -766,6 +766,22 @@ function IntelBriefingsArticlesManager() {
                                     ))}
                                   </div>
                                 )}
+                                {Object.keys(s.sources).length > 0 && (
+                                  <div className="pt-1 border-t border-border mt-1">
+                                    <p className="font-medium mb-0.5">Top sources:</p>
+                                    {Object.entries(s.sources).sort((a, b) => (b[1] as number) - (a[1] as number)).slice(0, 6).map(([src, count]) => (
+                                      <p key={src}>{src}: {count as number}</p>
+                                    ))}
+                                  </div>
+                                )}
+                                {Object.keys(s.utms).length > 0 && (
+                                  <div className="pt-1 border-t border-border mt-1">
+                                    <p className="font-medium mb-0.5">Campaign hits (utm_source):</p>
+                                    {Object.entries(s.utms).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([utm, count]) => (
+                                      <p key={utm}>{utm}: {count as number}</p>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             );
                           })()}
