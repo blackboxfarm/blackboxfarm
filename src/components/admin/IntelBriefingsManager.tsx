@@ -1027,6 +1027,12 @@ function IntelBriefingsArticlesManager() {
               articleLabel={articleLabel}
               imageUsageContext="inline"
             />
+            <BreadcrumbUploadButton
+              articleId={editingId}
+              articleSlug={form.slug}
+              articleTitle={form.title}
+              articleLabel={articleLabel}
+            />
             {(() => {
               const inlineCount = (form.content_md.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
               if (inlineCount === 0) return null;
