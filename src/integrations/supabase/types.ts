@@ -3562,6 +3562,9 @@ export type Database = {
           tokens_successful: number | null
           total_same_name_tokens: number | null
           total_tokens_launched: number | null
+          trail_end_at: string | null
+          trail_end_kyc_root: string | null
+          trail_end_reason: string | null
           trust_level: string | null
           twitter_accounts: string[] | null
           typical_sell_percentage: number | null
@@ -3614,6 +3617,9 @@ export type Database = {
           tokens_successful?: number | null
           total_same_name_tokens?: number | null
           total_tokens_launched?: number | null
+          trail_end_at?: string | null
+          trail_end_kyc_root?: string | null
+          trail_end_reason?: string | null
           trust_level?: string | null
           twitter_accounts?: string[] | null
           typical_sell_percentage?: number | null
@@ -3666,6 +3672,9 @@ export type Database = {
           tokens_successful?: number | null
           total_same_name_tokens?: number | null
           total_tokens_launched?: number | null
+          trail_end_at?: string | null
+          trail_end_kyc_root?: string | null
+          trail_end_reason?: string | null
           trust_level?: string | null
           twitter_accounts?: string[] | null
           typical_sell_percentage?: number | null
