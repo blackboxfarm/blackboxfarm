@@ -22,9 +22,16 @@ interface SharedFunder {
   cluster_label: 'tight_cluster' | 'likely_dev_family' | 'wide_funder';
 }
 
+interface KycTerminus {
+  wallet: string;
+  cex_name: string;
+  depth: number;
+}
+
 interface Response {
   creator: string;
   ancestors_walked?: number;
+  kyc_terminus?: KycTerminus | null;
   shared_funders: SharedFunder[];
   message?: string;
 }
@@ -81,6 +88,25 @@ export function SharedFundersPanel({ creatorWallet }: { creatorWallet: string | 
         {error && (
           <div className="text-xs text-destructive flex items-center gap-1">
             <AlertTriangle className="h-3 w-3" /> {error}
+          </div>
+        )}
+        {data?.kyc_terminus && (
+          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 flex items-center gap-2">
+            <span className="text-base">🏦</span>
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wide text-emerald-300/80">KYC Root</span>
+              <span className="text-sm font-semibold text-emerald-200">
+                {data.kyc_terminus.cex_name}
+              </span>
+            </div>
+            <span className="ml-auto text-[10px] text-emerald-300/70">
+              hop {data.kyc_terminus.depth} · <code className="font-mono">{data.kyc_terminus.wallet.slice(0, 6)}…{data.kyc_terminus.wallet.slice(-4)}</code>
+            </span>
+          </div>
+        )}
+        {data && !data.kyc_terminus && data.shared_funders.length > 0 && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+            ⚠ Trail did not reach a known exchange yet — collaboration clusters below may still be valuable.
           </div>
         )}
         {data && data.shared_funders.length === 0 && (
