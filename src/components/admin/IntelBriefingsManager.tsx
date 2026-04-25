@@ -654,7 +654,28 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead className="text-center">Views</TableHead>
+                <TableHead className="text-center">
+                  <div className="flex flex-col items-center gap-1">
+                    <span>Views</span>
+                    <div className="inline-flex rounded border border-border overflow-hidden text-[9px] font-normal">
+                      {(['24h', '7d', '30d', 'all'] as const).map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setViewsRange(r)}
+                          className={cn(
+                            'px-1.5 py-0.5 transition-colors',
+                            viewsRange === r
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background text-muted-foreground hover:bg-muted'
+                          )}
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </TableHead>
                 <TableHead className="text-center">Exposure</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
