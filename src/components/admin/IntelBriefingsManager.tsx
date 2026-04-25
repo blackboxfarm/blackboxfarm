@@ -949,6 +949,9 @@ function IntelBriefingsArticlesManager() {
         </div>
       )}
 
+      {/* Exposure history for this article */}
+      <ExposurePanel briefingId={editingId} briefingTitle={form.title} />
+
       {/* Markdown Editor / Preview */}
       <Tabs value={editorTab} onValueChange={setEditorTab}>
         <div className="flex items-center justify-between">
