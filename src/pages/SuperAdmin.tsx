@@ -206,6 +206,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="intel-briefings" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">📰 Intel Briefings</TabsTrigger>
             <TabsTrigger value="ai-config" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-cyan-500/20">🧠 AI Config</TabsTrigger>
             <TabsTrigger value="email-campaigns" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500/30 data-[state=active]:to-pink-500/20">📧 Email Campaigns</TabsTrigger>
+            <TabsTrigger value="marketing-profiles" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500/30 data-[state=active]:to-pink-500/20">🎯 Marketing Profiles</TabsTrigger>
             <TabsTrigger value="todo-list" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-lime-500/20">📝 To-Do</TabsTrigger>
             <TabsTrigger value="testers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-rose-500/20">🧪 Testers</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-cyan-500/20">👥 Accounts</TabsTrigger>
