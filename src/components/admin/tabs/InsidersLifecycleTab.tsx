@@ -598,6 +598,99 @@ export default function InsidersLifecycleTab() {
         </CardContent>
       </Card>
 
+      {/* Wallet Cross-Links — RedFlag/GreenFlag detector */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Network className="h-5 w-5" /> Wallet Cross-Links
+            {crossLinks?.stats && (
+              <span className="text-xs font-normal text-muted-foreground ml-2">
+                {crossLinks.stats.rowsWithCreator} creators • {crossLinks.stats.rowsWithKyc} KYC roots
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 mb-3">
+            <Button size="sm" variant={crossTab === 'creator' ? 'default' : 'outline'} onClick={() => setCrossTab('creator')}>
+              Shared Creator ({crossLinks?.sharedCreator?.length || 0})
+            </Button>
+            <Button size="sm" variant={crossTab === 'funder' ? 'default' : 'outline'} onClick={() => setCrossTab('funder')}>
+              Shared Funder ({crossLinks?.sharedFunder?.length || 0})
+            </Button>
+            <Button size="sm" variant={crossTab === 'kyc' ? 'default' : 'outline'} onClick={() => setCrossTab('kyc')}>
+              <Building2 className="h-3.5 w-3.5 mr-1" />Shared KYC ({crossLinks?.sharedKycRoot?.length || 0})
+            </Button>
+            <Button size="sm" variant="ghost" onClick={fetchCrossLinks} disabled={crossLinksLoading} className="ml-auto">
+              {crossLinksLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {crossLinksLoading && !crossLinks && (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          )}
+
+          {crossLinks && (() => {
+            const list = crossTab === 'creator' ? crossLinks.sharedCreator
+              : crossTab === 'funder' ? crossLinks.sharedFunder
+              : crossLinks.sharedKycRoot;
+            if (!list || list.length === 0) {
+              return <div className="text-sm text-muted-foreground py-4 text-center">No clusters found in this category yet.</div>;
+            }
+            return (
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {list.map((cluster: any, idx: number) => {
+                  const verdictColor = cluster.verdict === 'green' ? 'bg-green-500/20 text-green-400 border-green-500/40'
+                    : cluster.verdict === 'red' ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                    : cluster.verdict === 'mixed' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-muted text-muted-foreground';
+                  const verdictLabel = cluster.verdict === 'green' ? '🟢 Repeat Winner'
+                    : cluster.verdict === 'red' ? '🔴 Serial Saddev/Rug'
+                    : cluster.verdict === 'mixed' ? '⚠ Mixed-Outcome Family'
+                    : 'Neutral';
+                  return (
+                    <div key={idx} className="border rounded-md p-3 bg-muted/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          <a href={`https://solscan.io/account/${cluster.key}`} target="_blank" rel="noreferrer" className="hover:text-primary">
+                            {cluster.key.slice(0, 6)}…{cluster.key.slice(-4)}
+                          </a>
+                        </Badge>
+                        {cluster.cexName && (
+                          <Badge className="bg-green-500/20 text-green-400 border-green-500/40">{cluster.cexName}</Badge>
+                        )}
+                        <Badge className={verdictColor}>{verdictLabel}</Badge>
+                        <span className="text-xs text-muted-foreground ml-auto">{cluster.count} tokens</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {cluster.tokens.map((t: any) => (
+                          <button
+                            key={t.token_mint}
+                            onClick={() => {
+                              const full = rows.find(r => r.token_mint === t.token_mint);
+                              if (full) setDrillDown(full);
+                            }}
+                            className={`px-2 py-1 rounded text-xs border transition-colors hover:opacity-80 ${
+                              t.is_rugged ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                              : t.peak_multiplier >= 5 ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                              : t.peak_multiplier >= 2 ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+                              : 'bg-muted/50 border-border text-muted-foreground'
+                            }`}
+                            title={`${t.token_symbol || t.token_mint} — peak ${t.peak_multiplier}x`}
+                          >
+                            {t.token_symbol || t.token_mint.slice(0, 4)} · {t.peak_multiplier}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
       {/* Drill-down dialog */}
       <Dialog open={!!drillDown} onOpenChange={(o) => !o && setDrillDown(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
