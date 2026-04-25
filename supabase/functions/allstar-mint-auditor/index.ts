@@ -510,7 +510,7 @@ async function createAllstarAlert(
   });
 
   // Admin notification (dashboard badge)
-  const emoji = alertLevel === 'critical' ? '🌟🚨' : alertLevel === 'high_priority' ? '⭐🔔' : '✨';
+  const emoji = alertLevel === 'critical' ? '🌟🚨' : alertLevel === 'high' ? '⭐🔔' : '✨';
   await supabase.from('admin_notifications').insert({
     notification_type: 'allstar_mint',
     title: `${emoji} ALLSTAR DEV MINTED: $ ${ticker}`,
@@ -635,7 +635,7 @@ async function createAllstarAlert(
               <tr><td style="padding: 4px 0;">Best Token</td><td style="padding: 4px 0;"><strong>$${allstar.best_token_symbol}</strong> → ${mcapLabel}</td></tr>
               <tr><td style="padding: 4px 0;">Proven Tokens</td><td style="padding: 4px 0;">${allstar.total_proven_tokens || '?'}</td></tr>
               <tr><td style="padding: 4px 0;">Wallet Family</td><td style="padding: 4px 0;">${allstar.total_wallet_family_size || 1} wallets</td></tr>
-              <tr><td style="padding: 4px 0;">Alert Level</td><td style="padding: 4px 0; font-weight: bold; color: ${alertLevel === 'critical' ? '#ff4444' : alertLevel === 'high_priority' ? '#ffaa00' : '#00ff88'};">${alertLevel.toUpperCase()}</td></tr>
+              <tr><td style="padding: 4px 0;">Alert Level</td><td style="padding: 4px 0; font-weight: bold; color: ${alertLevel === 'critical' ? '#ff4444' : alertLevel === 'high' ? '#ffaa00' : '#00ff88'};">${alertLevel.toUpperCase()}</td></tr>
             </table>
             <hr style="border: 1px solid #333; margin: 16px 0;" />
             <h3 style="color: #00ff88; margin: 0 0 12px;">🔗 Quick Links</h3>
@@ -900,7 +900,7 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
         const familySize = (allstar.family_wallets || []).length;
         results.total_family_wallets_scanned += familySize;
 
-        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey, effectiveHoursLookback);
+        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey!, effectiveHoursLookback);
         results.allstars_audited++;
 
         for (const hit of hits) {
