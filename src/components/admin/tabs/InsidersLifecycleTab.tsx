@@ -392,12 +392,10 @@ export default function InsidersLifecycleTab() {
               {building ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Rebuild from messages
             </Button>
-            <Button onClick={handleTraceKyc} disabled={tracingKyc} size="sm" variant="secondary">
-              {tracingKyc ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Network className="h-4 w-4 mr-2" />}
-              {tracingKyc && traceProgress
-                ? `Tracing… ${traceProgress.done}/${traceProgress.done + (traceProgress.total - traceProgress.done)}`
-                : 'Trace KYC roots'}
-            </Button>
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 px-2">
+              <Network className="h-3.5 w-3.5" />
+              KYC tracing runs automatically every 3h via the orchestrator.
+            </div>
             <div className="flex items-center gap-1">
               <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
                 {promoting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
