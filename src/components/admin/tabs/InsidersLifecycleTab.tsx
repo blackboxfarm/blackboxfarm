@@ -783,7 +783,7 @@ export default function InsidersLifecycleTab() {
                     })}
                     {!drillDown.genealogy_kyc_root && (
                       <div className="text-xs text-muted-foreground mt-2 italic">
-                        🌑 Trail lost before reaching a known exchange. Run "Trace KYC roots" again later — depth limit is 8 hops.
+                        🌑 Trail lost before reaching a known exchange. Auto-tracer will retry on the next 3h cycle (depth limit: 8 hops).
                       </div>
                     )}
                   </div>
@@ -792,7 +792,7 @@ export default function InsidersLifecycleTab() {
               {drillDown.creator_wallet && (!drillDown.genealogy_chain || drillDown.genealogy_chain.length === 0) && (
                 <div className="border rounded-md p-3 bg-muted/30 text-xs text-muted-foreground">
                   <Network className="h-4 w-4 inline mr-1" />
-                  Wallet lineage not traced yet. Click <strong>"Trace KYC roots"</strong> at the top to map this creator back to its funding source.
+                  Wallet lineage not traced yet. The auto-tracer runs every 3h via the orchestrator and will resolve this on the next cycle.
                 </div>
               )}
 
