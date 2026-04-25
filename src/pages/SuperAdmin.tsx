@@ -37,6 +37,7 @@ const MetaTagsManager = lazy(() => import("@/components/admin/MetaTagsManager").
 const OgMetaDiagnostic = lazy(() => import("@/components/admin/OgMetaDiagnostic").then(m => ({ default: m.OgMetaDiagnostic })));
 const AIConfigTab = lazy(() => import("@/components/admin/tabs/AIConfigTab"));
 const EmailCampaignsManager = lazy(() => import("@/components/admin/EmailCampaignsManager").then(m => ({ default: m.EmailCampaignsManager })));
+const MarketingProfilesManager = lazy(() => import("@/components/admin/MarketingProfilesManager").then(m => ({ default: m.MarketingProfilesManager })));
 const TodoListTab = lazy(() => import("@/components/admin/tabs/TodoListTab"));
 const TestersTab = lazy(() => import("@/components/admin/tabs/TestersTab"));
 const AccountsTab = lazy(() => import("@/components/admin/tabs/AccountsTab"));
@@ -66,6 +67,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "intel-briefings",
   "ai-config",
   "email-campaigns",
+  "marketing-profiles",
   "todo-list",
   "testers",
   "accounts",
