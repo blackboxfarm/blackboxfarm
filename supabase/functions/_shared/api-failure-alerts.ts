@@ -28,6 +28,9 @@ export async function alertOnApiAuthFailure(
   errorBody?: string,
   functionName?: string
 ): Promise<void> {
+  // Only alert on auth/quota issues (401/403) and rate limits (429).
+  // 5xx errors are transient upstream blips and handled by health checks,
+  // not by paging escalation.
   if (![401, 403, 429].includes(httpStatus)) return;
 
   const cooldownKey = `${serviceName}:${httpStatus}`;
