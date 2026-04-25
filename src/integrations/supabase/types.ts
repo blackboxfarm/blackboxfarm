@@ -6789,8 +6789,13 @@ export type Database = {
           id: string
           ip_address: string | null
           referer: string | null
+          referrer_source: string | null
+          session_id: string | null
           slug: string
           user_agent: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
           visitor_type: string
         }
         Insert: {
@@ -6800,8 +6805,13 @@ export type Database = {
           id?: string
           ip_address?: string | null
           referer?: string | null
+          referrer_source?: string | null
+          session_id?: string | null
           slug: string
           user_agent?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
           visitor_type?: string
         }
         Update: {
@@ -6811,8 +6821,13 @@ export type Database = {
           id?: string
           ip_address?: string | null
           referer?: string | null
+          referrer_source?: string | null
+          session_id?: string | null
           slug?: string
           user_agent?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
           visitor_type?: string
         }
         Relationships: [
