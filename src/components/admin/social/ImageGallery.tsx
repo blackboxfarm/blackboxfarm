@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import {
   ImageIcon, Upload, Trash2, Edit2, Search, Tag, Sparkles, X, Check, Plus, Settings, Loader2, Wand2, ZoomIn
 } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { StyleCategoryManager } from "./StyleCategoryManager";
 
 export interface GalleryImage {
@@ -32,6 +33,7 @@ export interface GalleryImage {
   related_article_title?: string | null;
   related_article_label?: string | null;
   image_usage_context?: 'hero' | 'inline' | 'gallery' | null;
+  is_breadcrumb?: boolean | null;
 }
 
 export interface StyleCategory {
@@ -86,7 +88,10 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
   useEffect(() => { loadData(); }, [loadData]);
 
   const filteredImages = images.filter(img => {
-    const matchesSource = img.source_type === activeSourceTab;
+    const matchesSource =
+      activeSourceTab === 'breadcrumb'
+        ? !!img.is_breadcrumb
+        : img.source_type === activeSourceTab;
     const matchesSearch = !searchQuery || 
       img.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       img.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -314,6 +319,9 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
             <TabsTrigger value="ai_generated">
               <Sparkles className="h-3.5 w-3.5 mr-1" /> AI Generated ({images.filter(i => i.source_type === 'ai_generated').length})
             </TabsTrigger>
+            <TabsTrigger value="breadcrumb">
+              <Link2 className="h-3.5 w-3.5 mr-1" /> Breadcrumbs ({images.filter(i => i.is_breadcrumb).length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeSourceTab} className="mt-3">
@@ -388,6 +396,15 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                         {img.related_article_label && (
                           <Badge className="absolute top-1.5 right-1.5 max-w-[calc(100%-0.75rem)] truncate px-1.5 py-0 text-[9px] shadow-sm">
                             {img.related_article_label}
+                          </Badge>
+                        )}
+                        {img.is_breadcrumb && (
+                          <Badge
+                            variant="outline"
+                            className="absolute bottom-1.5 right-1.5 px-1.5 py-0 text-[9px] bg-background/80 backdrop-blur-sm border-primary/40 text-primary"
+                          >
+                            <Link2 className="h-2.5 w-2.5 mr-0.5" />
+                            breadcrumb
                           </Badge>
                         )}
                         {/* Selection checkbox */}

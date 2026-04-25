@@ -12806,6 +12806,7 @@ export type Database = {
           id: string
           image_usage_context: string | null
           is_active: boolean | null
+          is_breadcrumb: boolean
           last_used_at: string | null
           mime_type: string | null
           related_article_id: string | null
@@ -12833,6 +12834,7 @@ export type Database = {
           id?: string
           image_usage_context?: string | null
           is_active?: boolean | null
+          is_breadcrumb?: boolean
           last_used_at?: string | null
           mime_type?: string | null
           related_article_id?: string | null
@@ -12860,6 +12862,7 @@ export type Database = {
           id?: string
           image_usage_context?: string | null
           is_active?: boolean | null
+          is_breadcrumb?: boolean
           last_used_at?: string | null
           mime_type?: string | null
           related_article_id?: string | null

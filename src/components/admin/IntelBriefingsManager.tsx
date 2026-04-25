@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
+import { BreadcrumbUploadButton } from './social/BreadcrumbUploadButton';
 import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { InlineImageManagerModal } from './InlineImageManagerModal';
@@ -1025,6 +1026,12 @@ function IntelBriefingsArticlesManager() {
               articleTitle={form.title}
               articleLabel={articleLabel}
               imageUsageContext="inline"
+            />
+            <BreadcrumbUploadButton
+              articleId={editingId}
+              articleSlug={form.slug}
+              articleTitle={form.title}
+              articleLabel={articleLabel}
             />
             {(() => {
               const inlineCount = (form.content_md.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
