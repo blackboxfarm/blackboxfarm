@@ -389,6 +389,13 @@ export default function SuperAdmin() {
               </TabErrorBoundary>
             )}
           </TabsContent>
+          <TabsContent value="marketing-profiles">
+            {activeTab === "marketing-profiles" && (
+              <TabErrorBoundary tabName="Marketing Profiles">
+                <Suspense fallback={<TabLoader />}><MarketingProfilesManager /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
           <TabsContent value="todo-list">
             {activeTab === "todo-list" && (
               <TabErrorBoundary tabName="To-Do List">
