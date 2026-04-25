@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
+import { BreadcrumbUploadButton } from './social/BreadcrumbUploadButton';
 import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { InlineImageManagerModal } from './InlineImageManagerModal';
