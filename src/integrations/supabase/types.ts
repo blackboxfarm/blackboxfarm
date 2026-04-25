@@ -6888,6 +6888,7 @@ export type Database = {
           content_depth: number
           created_at: string
           id: string
+          is_breadcrumb: boolean
           notes: string | null
           platform: string
           published_at: string
@@ -6898,6 +6899,7 @@ export type Database = {
           content_depth?: number
           created_at?: string
           id?: string
+          is_breadcrumb?: boolean
           notes?: string | null
           platform: string
           published_at?: string
@@ -6908,6 +6910,7 @@ export type Database = {
           content_depth?: number
           created_at?: string
           id?: string
+          is_breadcrumb?: boolean
           notes?: string | null
           platform?: string
           published_at?: string
