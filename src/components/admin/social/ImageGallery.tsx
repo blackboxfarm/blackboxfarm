@@ -88,7 +88,10 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
   useEffect(() => { loadData(); }, [loadData]);
 
   const filteredImages = images.filter(img => {
-    const matchesSource = img.source_type === activeSourceTab;
+    const matchesSource =
+      activeSourceTab === 'breadcrumb'
+        ? !!img.is_breadcrumb
+        : img.source_type === activeSourceTab;
     const matchesSearch = !searchQuery || 
       img.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       img.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
