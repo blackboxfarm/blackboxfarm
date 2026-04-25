@@ -392,12 +392,10 @@ export default function InsidersLifecycleTab() {
               {building ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Rebuild from messages
             </Button>
-            <Button onClick={handleTraceKyc} disabled={tracingKyc} size="sm" variant="secondary">
-              {tracingKyc ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Network className="h-4 w-4 mr-2" />}
-              {tracingKyc && traceProgress
-                ? `Tracing… ${traceProgress.done}/${traceProgress.done + (traceProgress.total - traceProgress.done)}`
-                : 'Trace KYC roots'}
-            </Button>
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 px-2">
+              <Network className="h-3.5 w-3.5" />
+              KYC tracing runs automatically every 3h via the orchestrator.
+            </div>
             <div className="flex items-center gap-1">
               <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
                 {promoting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
@@ -785,7 +783,7 @@ export default function InsidersLifecycleTab() {
                     })}
                     {!drillDown.genealogy_kyc_root && (
                       <div className="text-xs text-muted-foreground mt-2 italic">
-                        🌑 Trail lost before reaching a known exchange. Run "Trace KYC roots" again later — depth limit is 8 hops.
+                        🌑 Trail lost before reaching a known exchange. Auto-tracer will retry on the next 3h cycle (depth limit: 8 hops).
                       </div>
                     )}
                   </div>
@@ -794,7 +792,7 @@ export default function InsidersLifecycleTab() {
               {drillDown.creator_wallet && (!drillDown.genealogy_chain || drillDown.genealogy_chain.length === 0) && (
                 <div className="border rounded-md p-3 bg-muted/30 text-xs text-muted-foreground">
                   <Network className="h-4 w-4 inline mr-1" />
-                  Wallet lineage not traced yet. Click <strong>"Trace KYC roots"</strong> at the top to map this creator back to its funding source.
+                  Wallet lineage not traced yet. The auto-tracer runs every 3h via the orchestrator and will resolve this on the next cycle.
                 </div>
               )}
 
