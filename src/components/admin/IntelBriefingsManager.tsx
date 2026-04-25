@@ -32,6 +32,9 @@ import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { InlineImageManagerModal } from './InlineImageManagerModal';
 import { format } from 'date-fns';
+import { ExposureCell } from './publications/ExposureCell';
+import { ExposurePanel } from './publications/ExposurePanel';
+import type { PublicationLite } from './publications/exposure-shared';
 
 interface Briefing {
   id: string;
@@ -285,6 +288,18 @@ function IntelBriefingsArticlesManager() {
       return data as Revision[];
     },
     enabled: !!editingId,
+  });
+
+  // Fetch all publications once for the exposure column on the list view.
+  const { data: allPublications = [] } = useQuery({
+    queryKey: ['intel-publications', 'exposure-all'],
+    queryFn: async (): Promise<PublicationLite[]> => {
+      const { data, error } = await supabase
+        .from('intel_publications')
+        .select('id, briefing_id, platform, content_depth, is_breadcrumb, published_url, published_at');
+      if (error) throw error;
+      return (data || []) as PublicationLite[];
+    },
   });
 
   // Get unique categories
@@ -624,6 +639,7 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">Views</TableHead>
+                <TableHead className="text-center">Exposure</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -719,6 +735,9 @@ function IntelBriefingsArticlesManager() {
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ExposureCell briefingId={b.id} publications={allPublications} />
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
@@ -929,6 +948,9 @@ function IntelBriefingsArticlesManager() {
           </div>
         </div>
       )}
+
+      {/* Exposure history for this article */}
+      <ExposurePanel briefingId={editingId} briefingTitle={form.title} />
 
       {/* Markdown Editor / Preview */}
       <Tabs value={editorTab} onValueChange={setEditorTab}>

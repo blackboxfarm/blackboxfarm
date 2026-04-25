@@ -33,7 +33,7 @@ export const IntelPublicationsManager = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('intel_publications')
-        .select('*')
+        .select('id, briefing_id, platform, content_depth, is_breadcrumb, published_url, notes, published_at')
         .order('published_at', { ascending: false });
       if (error) throw error;
       // Enrich with briefing titles
@@ -52,6 +52,8 @@ export const IntelPublicationsManager = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['intel-publications'] });
+      queryClient.invalidateQueries({ queryKey: ['intel-publications', 'exposure-all'] });
+      queryClient.invalidateQueries({ queryKey: ['intel-publications', 'exposure'] });
       toast({ title: 'Publication logged' });
     },
     onError: (err: any) => {
@@ -66,6 +68,8 @@ export const IntelPublicationsManager = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['intel-publications'] });
+      queryClient.invalidateQueries({ queryKey: ['intel-publications', 'exposure-all'] });
+      queryClient.invalidateQueries({ queryKey: ['intel-publications', 'exposure'] });
       toast({ title: 'Publication deleted' });
     },
     onError: (err: any) => {

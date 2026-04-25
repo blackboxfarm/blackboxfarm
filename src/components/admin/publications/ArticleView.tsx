@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { ExternalLink, Trash2, ChevronDown, ChevronRight, Link2, Repeat } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ALL_PLATFORMS as ALL_PLATFORMS_SHARED } from './exposure-shared';
 
 interface Publication {
   id: string;
@@ -14,6 +15,7 @@ interface Publication {
   notes: string | null;
   published_at: string;
   briefing_title?: string;
+  is_breadcrumb?: boolean;
 }
 
 interface ArticleViewProps {
@@ -36,7 +38,7 @@ const depthLabel = (depth: number) => {
   return 'text-red-400';
 };
 
-const ALL_PLATFORMS = ['Website', 'Medium', 'Reddit', 'Twitter/X', 'LinkedIn', 'Threads', 'Fiverr Repost', 'Substack'];
+const ALL_PLATFORMS = ALL_PLATFORMS_SHARED;
 
 export const ArticleView = ({ publications, briefings, onDelete }: ArticleViewProps) => {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
@@ -93,7 +95,15 @@ export const ArticleView = ({ publications, briefings, onDelete }: ArticleViewPr
                     <div className={cn('w-2 h-2 rounded-full shrink-0', depthDot(pub.content_depth))} />
                     <span className="text-muted-foreground w-16 shrink-0">{format(new Date(pub.published_at), 'MMM d')}</span>
                     <span className="text-foreground w-24 shrink-0">{pub.platform}</span>
-                    <span className={cn('w-10 shrink-0 font-medium', depthLabel(pub.content_depth))}>{pub.content_depth}%</span>
+                    {pub.is_breadcrumb ? (
+                      <Badge variant="outline" className="h-4 px-1 text-[9px] shrink-0">
+                        <Link2 className="h-2.5 w-2.5 mr-0.5" />link
+                      </Badge>
+                    ) : (
+                      <span className={cn('w-10 shrink-0 font-medium inline-flex items-center gap-1', depthLabel(pub.content_depth))}>
+                        <Repeat className="h-2.5 w-2.5" />{pub.content_depth}%
+                      </span>
+                    )}
                     <span className="text-muted-foreground truncate flex-1">{pub.notes || ''}</span>
                     <div className="flex gap-2 shrink-0">
                       {pub.published_url && (

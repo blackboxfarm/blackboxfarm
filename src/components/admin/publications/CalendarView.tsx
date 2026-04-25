@@ -15,6 +15,7 @@ interface Publication {
   notes: string | null;
   published_at: string;
   briefing_title?: string;
+  is_breadcrumb?: boolean;
 }
 
 interface CalendarViewProps {
@@ -58,7 +59,9 @@ const DayCell = ({ day, pubs, currentMonth, isWeek }: { day: Date; pubs: Publica
             </PopoverTrigger>
             <PopoverContent className="w-64 p-3 text-xs space-y-1">
               <p className="font-semibold text-foreground">{pub.briefing_title || 'Article'}</p>
-              <p className="text-muted-foreground">{pub.platform} · {pub.content_depth}%</p>
+              <p className="text-muted-foreground">
+                {pub.platform} · {pub.is_breadcrumb ? '🔗 Breadcrumb' : `${pub.content_depth}%`}
+              </p>
               {pub.notes && <p className="text-muted-foreground italic">{pub.notes}</p>}
               {pub.published_url && (
                 <a href={pub.published_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">{pub.published_url}</a>
