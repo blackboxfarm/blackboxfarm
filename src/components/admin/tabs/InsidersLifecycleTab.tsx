@@ -29,6 +29,9 @@ import {
   X,
   RotateCw,
   ShieldAlert,
+  Network,
+  Building2,
+  ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -88,6 +91,9 @@ interface LifecycleRow {
   mesh_decision_trace: MeshDecisionTrace | null;
   dev_history_warning: boolean | null;
   total_messages: number;
+  genealogy_depth?: number | null;
+  genealogy_kyc_root?: string | null;
+  genealogy_chain?: Array<{ wallet: string; depth: number; amountSol?: number | null; cexName?: string | null; role: 'creator' | 'funder' | 'kyc_root' }> | null;
 }
 
 const MIN_X_OPTIONS: Array<{ value: string; label: string }> = [
@@ -177,6 +183,11 @@ export default function InsidersLifecycleTab() {
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [tracingKyc, setTracingKyc] = useState(false);
+  const [traceProgress, setTraceProgress] = useState<{ done: number; total: number } | null>(null);
+  const [crossLinks, setCrossLinks] = useState<any | null>(null);
+  const [crossLinksLoading, setCrossLinksLoading] = useState(false);
+  const [crossTab, setCrossTab] = useState<'creator' | 'funder' | 'kyc'>('creator');
   const [minX, setMinX] = useState<string>("2");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -233,6 +244,49 @@ export default function InsidersLifecycleTab() {
   useEffect(() => {
     fetchRows();
   }, []);
+
+  const fetchCrossLinks = async () => {
+    setCrossLinksLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('insiders-cross-links', { body: {} });
+      if (error) throw error;
+      setCrossLinks(data);
+    } catch (e: any) {
+      toast.error('Failed to load cross-links: ' + (e?.message || String(e)));
+    } finally {
+      setCrossLinksLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCrossLinks();
+  }, []);
+
+  const handleTraceKyc = async () => {
+    setTracingKyc(true);
+    setTraceProgress({ done: 0, total: 0 });
+    try {
+      let totalProcessed = 0;
+      // Loop until remaining === 0 (or safety cap of 200 batches)
+      for (let i = 0; i < 200; i++) {
+        const { data, error } = await supabase.functions.invoke('insiders-genealogy-backfill', {
+          body: { batchSize: 25 },
+        });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'backfill failed');
+        totalProcessed += data.processed || 0;
+        setTraceProgress({ done: totalProcessed, total: totalProcessed + (data.remaining || 0) });
+        if (!data.remaining || data.remaining === 0 || data.processed === 0) break;
+      }
+      toast.success(`Traced ${totalProcessed} creator wallets back to KYC roots`);
+      await Promise.all([fetchRows(), fetchCrossLinks()]);
+    } catch (e: any) {
+      toast.error('Trace failed: ' + (e?.message || String(e)));
+    } finally {
+      setTracingKyc(false);
+      setTraceProgress(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -337,6 +391,12 @@ export default function InsidersLifecycleTab() {
             <Button onClick={handleBuild} disabled={building} size="sm">
               {building ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Rebuild from messages
+            </Button>
+            <Button onClick={handleTraceKyc} disabled={tracingKyc} size="sm" variant="secondary">
+              {tracingKyc ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Network className="h-4 w-4 mr-2" />}
+              {tracingKyc && traceProgress
+                ? `Tracing… ${traceProgress.done}/${traceProgress.done + (traceProgress.total - traceProgress.done)}`
+                : 'Trace KYC roots'}
             </Button>
             <div className="flex items-center gap-1">
               <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
@@ -538,6 +598,99 @@ export default function InsidersLifecycleTab() {
         </CardContent>
       </Card>
 
+      {/* Wallet Cross-Links — RedFlag/GreenFlag detector */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Network className="h-5 w-5" /> Wallet Cross-Links
+            {crossLinks?.stats && (
+              <span className="text-xs font-normal text-muted-foreground ml-2">
+                {crossLinks.stats.rowsWithCreator} creators • {crossLinks.stats.rowsWithKyc} KYC roots
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 mb-3">
+            <Button size="sm" variant={crossTab === 'creator' ? 'default' : 'outline'} onClick={() => setCrossTab('creator')}>
+              Shared Creator ({crossLinks?.sharedCreator?.length || 0})
+            </Button>
+            <Button size="sm" variant={crossTab === 'funder' ? 'default' : 'outline'} onClick={() => setCrossTab('funder')}>
+              Shared Funder ({crossLinks?.sharedFunder?.length || 0})
+            </Button>
+            <Button size="sm" variant={crossTab === 'kyc' ? 'default' : 'outline'} onClick={() => setCrossTab('kyc')}>
+              <Building2 className="h-3.5 w-3.5 mr-1" />Shared KYC ({crossLinks?.sharedKycRoot?.length || 0})
+            </Button>
+            <Button size="sm" variant="ghost" onClick={fetchCrossLinks} disabled={crossLinksLoading} className="ml-auto">
+              {crossLinksLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {crossLinksLoading && !crossLinks && (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          )}
+
+          {crossLinks && (() => {
+            const list = crossTab === 'creator' ? crossLinks.sharedCreator
+              : crossTab === 'funder' ? crossLinks.sharedFunder
+              : crossLinks.sharedKycRoot;
+            if (!list || list.length === 0) {
+              return <div className="text-sm text-muted-foreground py-4 text-center">No clusters found in this category yet.</div>;
+            }
+            return (
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {list.map((cluster: any, idx: number) => {
+                  const verdictColor = cluster.verdict === 'green' ? 'bg-green-500/20 text-green-400 border-green-500/40'
+                    : cluster.verdict === 'red' ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                    : cluster.verdict === 'mixed' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-muted text-muted-foreground';
+                  const verdictLabel = cluster.verdict === 'green' ? '🟢 Repeat Winner'
+                    : cluster.verdict === 'red' ? '🔴 Serial Saddev/Rug'
+                    : cluster.verdict === 'mixed' ? '⚠ Mixed-Outcome Family'
+                    : 'Neutral';
+                  return (
+                    <div key={idx} className="border rounded-md p-3 bg-muted/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          <a href={`https://solscan.io/account/${cluster.key}`} target="_blank" rel="noreferrer" className="hover:text-primary">
+                            {cluster.key.slice(0, 6)}…{cluster.key.slice(-4)}
+                          </a>
+                        </Badge>
+                        {cluster.cexName && (
+                          <Badge className="bg-green-500/20 text-green-400 border-green-500/40">{cluster.cexName}</Badge>
+                        )}
+                        <Badge className={verdictColor}>{verdictLabel}</Badge>
+                        <span className="text-xs text-muted-foreground ml-auto">{cluster.count} tokens</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {cluster.tokens.map((t: any) => (
+                          <button
+                            key={t.token_mint}
+                            onClick={() => {
+                              const full = rows.find(r => r.token_mint === t.token_mint);
+                              if (full) setDrillDown(full);
+                            }}
+                            className={`px-2 py-1 rounded text-xs border transition-colors hover:opacity-80 ${
+                              t.is_rugged ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                              : t.peak_multiplier >= 5 ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                              : t.peak_multiplier >= 2 ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+                              : 'bg-muted/50 border-border text-muted-foreground'
+                            }`}
+                            title={`${t.token_symbol || t.token_mint} — peak ${t.peak_multiplier}x`}
+                          >
+                            {t.token_symbol || t.token_mint.slice(0, 4)} · {t.peak_multiplier}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
       {/* Drill-down dialog */}
       <Dialog open={!!drillDown} onOpenChange={(o) => !o && setDrillDown(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -583,6 +736,67 @@ export default function InsidersLifecycleTab() {
                   </div>
                 )}
               </div>
+
+              {/* Funding Lineage — Mint → funder → … → KYC Root */}
+              {drillDown.genealogy_chain && drillDown.genealogy_chain.length > 0 && (
+                <div className="border rounded-md p-3 bg-muted/30">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Network className="h-4 w-4" /> Funding Lineage
+                    {drillDown.genealogy_kyc_root ? (
+                      <Badge className="bg-green-500/20 text-green-400 ml-2">KYC resolved</Badge>
+                    ) : (
+                      <Badge variant="outline" className="ml-2">Trail incomplete</Badge>
+                    )}
+                  </h4>
+                  <div className="space-y-1">
+                    {drillDown.genealogy_chain.map((hop, idx) => {
+                      const isKyc = hop.role === 'kyc_root';
+                      const isCreator = hop.role === 'creator';
+                      return (
+                        <div key={idx}>
+                          <div className={`flex items-center gap-2 p-2 rounded text-xs ${isKyc ? 'bg-green-500/10 border border-green-500/30' : isCreator ? 'bg-cyan-500/10 border border-cyan-500/30' : 'bg-background/50'}`}>
+                            <span className="w-16 shrink-0 text-muted-foreground">
+                              {isCreator ? 'Creator' : isKyc ? '🏦 KYC' : `Hop ${hop.depth}`}
+                            </span>
+                            <a
+                              href={`https://solscan.io/account/${hop.wallet}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono underline hover:text-primary flex-1 break-all"
+                            >
+                              {hop.wallet}
+                            </a>
+                            {hop.cexName && (
+                              <Badge variant="outline" className="text-green-400 border-green-500/40">
+                                {hop.cexName}
+                              </Badge>
+                            )}
+                            {hop.amountSol != null && hop.amountSol > 0 && (
+                              <span className="text-muted-foreground whitespace-nowrap">{hop.amountSol.toFixed(2)} SOL</span>
+                            )}
+                          </div>
+                          {idx < (drillDown.genealogy_chain?.length || 0) - 1 && (
+                            <div className="flex justify-center py-0.5">
+                              <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {!drillDown.genealogy_kyc_root && (
+                      <div className="text-xs text-muted-foreground mt-2 italic">
+                        🌑 Trail lost before reaching a known exchange. Run "Trace KYC roots" again later — depth limit is 8 hops.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {drillDown.creator_wallet && (!drillDown.genealogy_chain || drillDown.genealogy_chain.length === 0) && (
+                <div className="border rounded-md p-3 bg-muted/30 text-xs text-muted-foreground">
+                  <Network className="h-4 w-4 inline mr-1" />
+                  Wallet lineage not traced yet. Click <strong>"Trace KYC roots"</strong> at the top to map this creator back to its funding source.
+                </div>
+              )}
 
               {/* Mesh Decision section */}
               <div className="border rounded-md p-3 bg-muted/30">

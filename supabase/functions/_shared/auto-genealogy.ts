@@ -11,19 +11,7 @@
  */
 
 import { getHeliusRpcUrl } from './helius-client.ts';
-
-// Known CEX hot wallets — stop tracing when we hit one
-const CEX_WALLETS: Record<string, string> = {
-  '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9': 'Binance',
-  '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM': 'Binance',
-  'H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS': 'Coinbase',
-  'GJRs4FwHtemZ5ZE9x3FNvJ8TMwitKTh21yxdRPqn7npE': 'Coinbase',
-  '2ojv9BAiHUrvsm9gxDe7fJSzbNZSJcxZvf8dqmWGHG8S': 'Coinbase',
-  'CJsLwbP1iu5DuUikHEJnLfANgKy6stB2uFgvBBHoyxwz': 'Kraken',
-  'AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2': 'Bybit',
-  '5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD': 'OKX',
-  'BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6': 'KuCoin',
-};
+import { getCexName } from './cex-wallets.ts';
 
 const MAX_DEPTH = 8;
 const MIN_SOL = 0.1;
@@ -115,7 +103,7 @@ async function traceDepth(
   visited.add(wallet);
 
   // Check if CEX
-  const cex = CEX_WALLETS[wallet];
+  const cex = getCexName(wallet);
   if (cex) {
     result.cexSources.push(cex);
     return;
@@ -209,7 +197,7 @@ async function traceDepth(
         wallet: funderWallet,
         depth,
         amountSol: amount,
-        cexName: CEX_WALLETS[funderWallet],
+        cexName: getCexName(funderWallet) ?? undefined,
       });
 
       // Recurse deeper

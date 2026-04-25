@@ -14627,6 +14627,7 @@ export type Database = {
           entry_mc_text: string | null
           first_call_message_id: number | null
           first_called_at: string
+          genealogy_chain: Json | null
           genealogy_depth: number | null
           genealogy_kyc_root: string | null
           id: string
@@ -14668,6 +14669,7 @@ export type Database = {
           entry_mc_text?: string | null
           first_call_message_id?: number | null
           first_called_at: string
+          genealogy_chain?: Json | null
           genealogy_depth?: number | null
           genealogy_kyc_root?: string | null
           id?: string
@@ -14709,6 +14711,7 @@ export type Database = {
           entry_mc_text?: string | null
           first_call_message_id?: number | null
           first_called_at?: string
+          genealogy_chain?: Json | null
           genealogy_depth?: number | null
           genealogy_kyc_root?: string | null
           id?: string

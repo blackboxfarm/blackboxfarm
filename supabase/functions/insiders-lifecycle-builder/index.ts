@@ -366,6 +366,7 @@ async function enrichOneToken(supabase: any, row: any, summary: EnrichmentResult
   // 5. Auto-genealogy on the creator (KYC root tracing)
   let genealogyDepth: number | null = null;
   let kycRoot: string | null = null;
+  let genealogyChain: any[] | null = null;
   if (creator) {
     summary.creator_resolved++;
     try {
@@ -377,6 +378,20 @@ async function enrichOneToken(supabase: any, row: any, summary: EnrichmentResult
         // Find the deepest CEX-tagged parent → that's our KYC root
         const cexHit = gen.parentWallets.find((p: any) => p?.cex || p?.is_cex);
         kycRoot = cexHit?.wallet || null;
+        // Build the ordered ladder for the UI: creator → hop1 → hop2 → ... → KYC
+        genealogyChain = [
+          { wallet: creator, depth: 0, role: 'creator' },
+          ...gen.parentWallets
+            .slice()
+            .sort((a: any, b: any) => (a.depth ?? 0) - (b.depth ?? 0))
+            .map((p: any) => ({
+              wallet: p.wallet,
+              depth: p.depth,
+              amountSol: p.amountSol ?? null,
+              cexName: p.cexName ?? null,
+              role: p.cexName ? 'kyc_root' : 'funder',
+            })),
+        ];
       }
     } catch (e) {
       console.warn(`[enrich] genealogy failed for ${creator.slice(0, 8)}: ${(e as Error).message}`);
@@ -403,6 +418,7 @@ async function enrichOneToken(supabase: any, row: any, summary: EnrichmentResult
         },
         genealogy_depth: genealogyDepth,
         genealogy_kyc_root: kycRoot,
+        genealogy_chain: genealogyChain,
         enrichment_last_run_at: new Date().toISOString(),
         enrichment_status: creator ? 'ok' : 'no_creator',
       })
