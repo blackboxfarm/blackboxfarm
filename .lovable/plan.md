@@ -1,107 +1,97 @@
-# Wallet Genealogy & Cross-Link Detection for Insiders Channel
+## What's actually broken (diagnosis)
 
-## What I confirmed in your codebase
+Your "Views" column is reading `intel_briefing_views`. I queried the table — across **all 34 published articles, only ONE has any data**: 10 crawler hits on "How to Detect a Rug Pull". Everything else is `0/0/0`. The Nov 19 article you advertised on Instagram has zero rows.
 
-**The plumbing is already there — it just isn't being shown to you and isn't being run on the existing 1,055 rows.**
+**Root cause: the RLS policy silently rejects every human visit.**
 
-- `telegram_insider_token_lifecycle` already has columns `creator_wallet`, `genealogy_depth`, and `genealogy_kyc_root`.
-- `_shared/auto-genealogy.ts → traceParentWallets()` already walks the funding tree via Helius Enhanced Transactions API (top-3 funders per hop, MAX_DEPTH=8, min 0.1 SOL, with 9 known CEX wallets tagged as "KYC Root").
-- `insiders-lifecycle-builder` already calls it and writes back `genealogy_depth` + `genealogy_kyc_root`.
-- All discovered hops are also pushed into `reputation_mesh` as `directly_funded` / `indirectly_funded` edges with confidence scores.
-
-**Current state of the data:**
-| Metric | Value |
-| --- | --- |
-| Lifecycle rows total | 1,055 |
-| Rows with creator wallet resolved | 750 |
-| Rows with KYC root resolved | **0** ← the bug |
-| Creators that already minted ≥2 tokens in this batch | 15+ visible (e.g. `8ZN71X…686FP` minted CAM, AIB, chloe; best peak 583x) |
-
-The drill-down dialog only renders `Creator: <wallet>` — it never reads the parent-wallet ladder or the KYC root, even though the `reputation_mesh` rows are sitting in the database for many of them. That's why $RISE looks like Mint→KYC with nothing in between.
-
----
-
-## The 3 things to fix
-
-### 1. Backfill the trace on every existing row that has a creator (305 missing + ~750 never run)
-
-Add a **"Trace KYC roots"** button next to the existing "Rebuild from messages" / "Promote ≥3x to Mesh" buttons in `InsidersLifecycleTab.tsx`. It calls a new edge function `insiders-genealogy-backfill` that:
-
-- Selects every row where `creator_wallet IS NOT NULL AND (genealogy_kyc_root IS NULL OR enrichment_last_run_at < now() - 7 days)`.
-- For each, calls `traceParentWallets(creator)` and writes back `genealogy_depth`, `genealogy_kyc_root`, plus a new JSONB column `genealogy_chain` (added below) containing the full ordered ladder `[{wallet, depth, amountSol, cexName?}]`.
-- Uses a 200ms throttle between wallets (matches the existing Helius governance memo) and processes in batches of 50 per invocation, returning `{processed, remaining}` so the UI can loop until 0.
-
-**Why CEX detection sometimes misses Binance after 7-8 hops:** the shared `CEX_WALLETS` map only has 9 addresses. Your $RISE example confirms a real Binance hot wallet that isn't in that list. I'll cross-reference the existing `_shared/cex-wallets.ts` (176 lines, 150+ exchange addresses per the genealogy memory) and replace the inline 9-entry map in `auto-genealogy.ts` with the canonical import, so future traces resolve Binance/Coinbase/Kraken/etc reliably.
-
-### 2. Show the full wallet ladder in the drill-down dialog
-
-Replace the single `Creator: <wallet>` line with a structured "Funding Lineage" section:
-
-```
-Mint Wallet     35jp…Fpump          (— minted token)
-   ↓ funded by 1.42 SOL
-Hop 1           D7o5…3qv1            (creator wallet)
-   ↓ funded by 0.85 SOL  
-Hop 2           AbCd…wXyZ
-   ↓ funded by 2.10 SOL
-…
-🏦 KYC Root     5tzF…uAi9    [BINANCE]
-```
-
-Each row has a Solscan deep-link, a copy-button, and the SOL amount that funded it. The new `genealogy_chain` column drives this directly — no extra queries on render.
-
-If the chain terminates without hitting a CEX, show `🌑 Trail lost at depth N — funder: <wallet>` so you know the trace ran but didn't reach KYC.
-
-### 3. Cross-link detector (the "RedFlag/GreenFlag" feature you asked for)
-
-Add a new section below the table called **"Wallet Cross-Links"** with three tabs:
-
-**A. Shared Creator Wallet** — group lifecycle rows by `creator_wallet HAVING count(*) > 1`. For each cluster show: creator address, member tokens (symbol + peak X badge color-coded green/red), and a one-line verdict (e.g. "3 tokens • 2 over 5x • 0 rugs → 🟢 Repeat Winner" or "4 tokens • 0 over 2x • 3 rugs → 🔴 Serial Saddev").
-
-**B. Shared Intermediary Funder** — query `reputation_mesh` for `relationship IN ('directly_funded','indirectly_funded')` where `linked_id` is in our creator set, group by `source_id` (the funder), filter to funders that appear in ≥2 different families. Same color-coded verdict.
-
-**C. Shared KYC Root** — group by `genealogy_kyc_root`. This is the most powerful: shows every Insiders token that ultimately traces back to the same Binance/Coinbase/etc deposit address. A single CEX deposit funding 5 Insiders-channel tokens is a very loud signal whether they're all winners or all rugs.
-
-Each cluster row is clickable → opens the existing drill-down for that token. Clusters with mixed outcomes (some winners, some rugs from same root) get a yellow "⚠ Mixed-Outcome Family" flag.
-
----
-
-## Schema change (one migration)
-
+`supabase/migrations/...intel_briefing_views.sql`:
 ```sql
-ALTER TABLE telegram_insider_token_lifecycle
-  ADD COLUMN IF NOT EXISTS genealogy_chain jsonb;
-
-CREATE INDEX IF NOT EXISTS idx_lifecycle_kyc_root
-  ON telegram_insider_token_lifecycle (genealogy_kyc_root)
-  WHERE genealogy_kyc_root IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_lifecycle_creator
-  ON telegram_insider_token_lifecycle (creator_wallet)
-  WHERE creator_wallet IS NOT NULL;
+CREATE POLICY "Service role can insert views"
+  ON public.intel_briefing_views FOR INSERT
+  TO service_role WITH CHECK (true);
 ```
 
-No new tables — `reputation_mesh` already holds the funder edges with the right relationship strings.
+But `src/pages/IntelBriefingArticle.tsx` (line 64) inserts from the **browser** using the `anon` key:
+```ts
+supabase.from('intel_briefing_views').insert({...}).then(({ error }) => {
+  if (error) console.warn('[view-track]', error.message);  // swallowed
+});
+```
+Anon → not service_role → RLS denies → error logged to console only → user sees "0 views".
+
+**Why the one article has 10 crawler hits:** those came in through `share.blackbox.farm/<slug>` → `intel-share` edge function, which runs as service_role and inserts successfully. Direct hits on `/intel/briefing/<slug>` (which is the URL your IG/FB/Threads breadcrumbs link to) bypass `intel-share` entirely.
+
+**Secondary issues found:**
+1. **No bot detection on the direct article route.** `IntelBriefingArticle.tsx` blindly tags every hit as `'human'`. AI spiders that execute JS (Perplexity, ChatGPT browse, Claude) get counted as humans; non-JS bots aren't counted at all.
+2. **No deduplication.** A page refresh = a new row. Anonymous user reading 5 paragraphs = 5+ rows if they navigate.
+3. **`referer` is captured but never displayed.** Even when tracking works, the dashboard hides it — so you can't see "12 views from instagram.com, 8 from facebook.com" which is exactly what you'd want to validate the breadcrumb campaign.
+4. **No ad-campaign attribution.** Instagram Promoted posts append `?utm_source=ig` (or similar) — nothing in the pipeline reads or stores `utm_*` query params.
 
 ---
 
-## Files I will create or edit
+## The fix (4 parts)
 
-| File | Change |
-| --- | --- |
-| `supabase/functions/_shared/auto-genealogy.ts` | Replace inline 9-entry `CEX_WALLETS` with import from `_shared/cex-wallets.ts`; have `traceParentWallets` also return the ordered chain so the builder can persist it. |
-| `supabase/functions/insiders-lifecycle-builder/index.ts` | Persist the new `genealogy_chain` JSONB alongside existing `genealogy_depth` / `genealogy_kyc_root`. |
-| `supabase/functions/insiders-genealogy-backfill/index.ts` (new) | Batch backfill for the 750+ rows that never got traced; returns `{processed, remaining}`. |
-| `supabase/functions/insiders-cross-links/index.ts` (new) | Read-only aggregator: returns the three cluster lists (shared creator / shared funder / shared KYC root) with peak-X stats per token. |
-| `src/components/admin/tabs/InsidersLifecycleTab.tsx` | Add "Trace KYC roots" button (loops until remaining=0); add Funding Lineage section in drill-down; add Cross-Links panel below the table with 3 tabs. |
-| Migration | Add `genealogy_chain jsonb` + 2 indexes. |
+### 1. New edge function `track-briefing-view` (server-side, service_role)
+
+A tiny POST endpoint the article page calls. Runs as service_role so RLS lets it write. Does:
+- **Bot UA detection** — same regex set already used in `intel-share` (googlebot, bingbot, chatgpt, claudebot, perplexity, gemini, applebot, etc.) extracted into `_shared/bot-detector.ts` so both functions share one list.
+- **IP capture** from `x-forwarded-for` / `cf-connecting-ip`.
+- **Referrer capture** + parse hostname → `referrer_source` (e.g., `instagram.com`, `facebook.com`, `t.co`, `direct`).
+- **UTM capture** — read `utm_source`, `utm_medium`, `utm_campaign` from the URL the client passes.
+- **Per-session dedup** — accept a `session_id` from the client (sessionStorage UUID) + briefing_id; if a row exists for that pair within the last 30 min, skip.
+- Uses `assertDbWrite` (per the zero-tolerance silent-fails memory) so any future failure throws loudly instead of being swallowed.
+
+### 2. Schema additions to `intel_briefing_views`
+
+Migration adds:
+- `referrer_source TEXT` (parsed hostname, indexed)
+- `utm_source TEXT`, `utm_medium TEXT`, `utm_campaign TEXT`
+- `session_id TEXT` (indexed with briefing_id for dedup lookup)
+- Plus a partial unique index on `(briefing_id, session_id, date_trunc('hour', created_at))` to harden dedup at DB level.
+
+No RLS change needed — service_role insert policy already exists. (Optionally tighten the `SELECT` policy to admins only, since right now any authenticated user can read every view row.)
+
+### 3. Rewire `IntelBriefingArticle.tsx`
+
+Replace the broken direct insert with a call to the new `track-briefing-view` edge function:
+- Pass `briefing_id`, `slug`, `session_id` (from sessionStorage), `document.referrer`, `window.location.search` (for UTMs).
+- No need to pass UA — the function reads it from request headers, which is more reliable.
+- Keep the `useRef` guard so React StrictMode double-mount in dev doesn't double-fire.
+
+### 4. Dashboard upgrades (`IntelBriefingsManager.tsx`)
+
+- Update the views query to also fetch `referrer_source` + `utm_source`.
+- Expand the per-row tooltip from "Humans / Crawlers / AI Bots" to also show **"Top sources"** (top 5 referrer hostnames + counts) and **"Campaign hits"** (utm_source breakdown). This is what lets you immediately see *"OK, my Instagram ad drove 47 visits to article #3"*.
+- Add a small **"Last 24h / 7d / 30d"** segmented control on the Views header so the column can show recent activity instead of all-time, which matches your "tracking daily updates" mental model.
+- Show `—` only when truly zero; right now `s.total === 0` shows `—` even if there are AI bot hits, which is misleading.
 
 ---
 
-## What you'll see when it's done
+## Backfill question — quickly handled, not asked
 
-1. Click **"Trace KYC roots"** once → progress toast counts down 1055 → 0 over a few minutes (Helius cost: ~10 calls per wallet × 750 wallets ≈ 7,500 credits, well inside the 10M monthly quota).
-2. Click any row → drill-down now shows the full ladder Mint→funder→funder→…→🏦 Binance, exactly like clicking through Solscan's "Funded by" — but pre-computed.
-3. Scroll below the table → see clusters like *"3 tokens funded from same Coinbase deposit: 2 winners (45x, 12x), 1 rug → ⚠ Mixed-Outcome Family"* — the exact RedFlag/GreenFlag pattern you described.
+Existing rows can't be reconstructed (the inserts never happened). The Nov 19 article's IG/FB/Threads traffic is **lost**. Going forward, every visit will be tracked correctly within minutes of deploying. I'll add a console line on first deploy so you can sanity-check by visiting the article in an incognito window and watching a row appear.
 
-No changes to the trading guards, the bot, or any other surface — this is purely additive intel inside the existing `/super-admin` Insiders Lifecycle tab.
+---
+
+## Files
+
+**Create**
+- `supabase/functions/track-briefing-view/index.ts`
+- `supabase/functions/_shared/bot-detector.ts` (extracted from intel-share)
+- `supabase/migrations/<ts>_intel_briefing_views_referrer_utm.sql`
+
+**Edit**
+- `src/pages/IntelBriefingArticle.tsx` — call edge function instead of direct insert
+- `src/components/admin/IntelBriefingsManager.tsx` — expanded tooltip + time-range filter
+- `supabase/functions/intel-share/index.ts` — switch to shared bot-detector + write referrer/utm fields
+
+**No edit needed**
+- RLS policy is correct as-is (service_role already allowed). The browser was just calling the wrong path.
+
+---
+
+## Out of scope (flagging for next pass if you want)
+
+- **Cloudflare Worker bot detection.** The `blackbox-og-router` worker already intercepts `share.blackbox.farm`. We could extend it to also tag bot/non-bot at the edge for `/intel/briefing/*` and forward a header — more accurate than UA matching alone, but a bigger change.
+- **Geo/country breakdown.** CF gives `cf-ipcountry` for free; could store + display.
+- **Time-on-page / scroll-depth tracking.** Real "engagement" metrics. Out of scope unless you ask.
