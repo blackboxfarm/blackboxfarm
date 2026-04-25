@@ -149,7 +149,7 @@ serve(withRunLog('developer-wallet-tracer', async (req) => {
         for (const transfer of incomingTransfers.slice(0, 5)) {
           // Store this trace in database if developerId provided
           if (developerId) {
-            await supabase.from('wallet_funding_traces').insert({
+            await Promise.resolve(supabase.from('wallet_funding_traces').insert({
               developer_id: developerId,
               from_wallet: transfer.from,
               to_wallet: wallet,
@@ -158,7 +158,7 @@ serve(withRunLog('developer-wallet-tracer', async (req) => {
               trace_depth: currentDepth,
               timestamp: new Date(transfer.timestamp * 1000),
               source_type: sourceType
-            }).catch(e => console.error('Insert error:', e));
+            })).catch((e: any) => console.error('Insert error:', e));
           }
 
           // Recursively trace the funding source

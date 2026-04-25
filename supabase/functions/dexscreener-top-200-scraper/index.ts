@@ -465,7 +465,7 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
           .update({ 
             is_currently_top_200: true, 
             last_top_200_rank: rank,
-            highest_rank: supabase.rpc ? undefined : rank, // Will use SQL below
+            highest_rank: rank, // Will use SQL below
           })
           .eq('token_mint', mint);
         

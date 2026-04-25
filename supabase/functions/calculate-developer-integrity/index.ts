@@ -20,7 +20,7 @@ Deno.serve(withRunLog('calculate-developer-integrity', async (req) => {
 
     console.log('[Integrity] Calculating developer integrity scores');
 
-    let developers = [];
+    let developers: any[] = [];
 
     if (recalculateAll) {
       const { data } = await supabase
@@ -71,8 +71,8 @@ Deno.serve(withRunLog('calculate-developer-integrity', async (req) => {
           t.outcome === 'rug_pull' || (t.rug_pull_evidence && Object.keys(t.rug_pull_evidence).length > 0)
         ).length;
 
-        const failed = (devTokens || []).filter(t => 
-          t.outcome === 'failed' || !t.is_active
+        const failed = (devTokens || []).filter((t: any) => 
+          t.outcome === 'failed' || !(t as any).is_active
         ).length;
 
         // Calculate integrity score (0-100)

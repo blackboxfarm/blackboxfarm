@@ -241,7 +241,7 @@ Deno.serve(withRunLog('developer-enrichment', async (req) => {
     const result: DeveloperEnrichmentResult = {
       found: true,
       developerId: developerProfile.id,
-      riskLevel: combinedRisk.level,
+      riskLevel: combinedRisk.level as any,
       reputationScore: developerProfile.reputation_score || 50,
       warning: combinedRisk.warning,
       canTrade: combinedRisk.canTrade,

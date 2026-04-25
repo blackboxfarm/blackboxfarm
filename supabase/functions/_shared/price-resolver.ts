@@ -23,7 +23,10 @@ export type PriceSource =
   | 'raydium_launchlab' // Bonk.fun Raydium Launchlab curve
   | 'dexscreener'      // DexScreener (best for graduated tokens)
   | 'jupiter'          // Jupiter (fallback)
-  | 'fallback';        // Last resort / cached
+  | 'fallback'         // Last resort / cached
+  | 'bags_fm_api'
+  | 'bags_fm_fallback'
+  | 'bags_fm_error_fallback';
 
 export interface PriceResult {
   price: number;
@@ -464,7 +467,9 @@ export async function fetchRaydiumLaunchlab(
   heliusApiKey: string
 ): Promise<LaunchlabCurveState | null> {
   try {
-    const { Connection, PublicKey, TOKEN_PROGRAM_ID } = await import('npm:@solana/web3.js@1.95.3');
+    const web3 = await import('npm:@solana/web3.js@1.95.3');
+    const { Connection, PublicKey } = web3;
+    const { Buffer } = await import('node:buffer');
     
     const connection = new Connection(
       getHeliusRpcUrl(heliusApiKey),

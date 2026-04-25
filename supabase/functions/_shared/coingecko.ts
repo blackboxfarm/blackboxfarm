@@ -288,7 +288,7 @@ export async function getTokenPrices(
   const data = await fetchCoinGecko<Record<string, { usd?: number }>>(
     `/simple/price?ids=${ids.join(',')}&vs_currencies=usd`
   );
-  return data;
+  return data as Record<string, { usd: number }>;
 }
 
 /**

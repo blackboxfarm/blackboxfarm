@@ -124,7 +124,7 @@ Deno.serve(withRunLog('bulk-community-enricher', async (req) => {
           community_id: communityId,
           community_url: communityUrl,
           admin_usernames: adminUsername ? [adminUsername] : [],
-          member_count: memberCount ?? community.member_count,
+          member_count: memberCount ?? (community as any).member_count,
           last_scraped_at: now,
           scrape_status: scrapeStatus,
           failed_scrape_count: 0,
