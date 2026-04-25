@@ -222,8 +222,8 @@ serve(withRunLog('backfill-developer-profiles', async (req) => {
                     supabase.from('developer_profiles').update(updates).eq('id', developerId);
                   }
                 });
-            });
-            
+            }
+
             results.flipit.updated++;
             console.log(`Processed FlipIt position: ${position.token_symbol} -> ${outcome}`);
             
