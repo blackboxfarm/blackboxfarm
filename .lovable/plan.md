@@ -1,73 +1,55 @@
-# 🧹 Edge Function Build Error Sweep — Round 2
+# 🎯 Goal — Race the "Funded by" Trail to KYC, Solscan-Style
 
-## Goal
-Resolve every remaining `Type checking failed` error in the edge function build, then drop a tracking doc into `super_admin_docs` so we have a permanent record of what was fixed (in case a regression appears later).
+You're 100% right: Solscan reaches Binance in ~10 hops because it does a **linear recursive click** — follow the single biggest funder until it hits a known exchange. Our `auto-genealogy.ts` tracer fans out 3-wide and bails at depth 8 with a 0.1 SOL floor, so it dies at hop 2 on dust-funded mints like `$HONESTSHRUG`.
 
----
-
-## 📋 Errors to fix (grouped by root cause)
-
-### 1. `_shared/early-warning-writer.ts` — Generic `createClient` returns `never`
-The shared writer types `supabase` as `ReturnType<typeof createClient>` without a `Database` generic, so the Supabase v2.x typings collapse table rows to `never`. Every `.from('token_early_warnings')` call then fails (`Property 'scan_count' does not exist on type 'never'`, etc.).
-
-**Fix:** loosen the parameter type to `any` (or `SupabaseClient<any, 'public', any>`) so generic table writes type-check. Same pattern applied to `generatePatternWarnings`.
-
-### 2. `_shared/holder-intelligence.ts`
-- **Line 150** — `prev.holder_count` missing from selected columns. Either add `holder_count` to the `.select()` call, or read from the column we already selected and compute holder count differently. Simplest: cast `prev as any` since this is a snapshot row.
-- **Line 382** — `kycConfirmed` and `deepestFunder` are returned but the `DevGenealogyResult` interface doesn't declare them. **Fix:** add both fields to the interface (already used by callers).
-
-### 3. `_shared/rugcheck-insiders.ts` — `Set<unknown>` vs `Set<string>`
-Line 145: `new Set(nodesWithHoldings.map((n: any) => n.id || n.wallet || n.address))` infers `Set<unknown>`. **Fix:** annotate as `new Set<string>(...)`.
-
-### 4. `_shared/solscan-markets.ts` — `solscanApiKey` undefined
-The function is fully disabled with an early `return result;`, but the dead code below references an undeclared `solscanApiKey`. **Fix:** declare `const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY') ?? '';` near the top so the dead code still type-checks (preserving intent to re-enable later).
-
-### 5. `_shared/token-search-logger.ts` — `result.creatorInfo?.wallet`
-Line 379: the inline type for `creatorInfo` only declares `creatorAddress`. **Fix:** import the canonical `CreatorInfo` from `_shared/creator-api.ts` for that field, or widen the inline type to include `wallet?: string`.
-
-### 6. `_shared/rpc-provider.ts` — `error.message` on `unknown`
-Lines 131 & 137: cast `error` to `Error` (`(error as Error).message`).
-
-### 7. `bagless-holders-report/index.ts` — multiple
-- **Line 814–815** — `creatorInfo.createdTimestamp` doesn't exist on `CreatorInfo`. **Fix:** add `createdTimestamp?: number` to the `CreatorInfo` interface in `creator-api.ts` (it's used by callers, just not declared).
-- **Line 824** — `tokenCreatedAt` typed as `string | number | null`; `detectFreshWallets` expects `string | null | undefined`. **Fix:** ensure ternary always returns `string | null` (already does, but TS infers wider). Add an explicit cast or type annotation.
-- **Line 932** — `vitality.info.socials` not declared. **Fix:** cast `vitality as any` for the social lookup, or extend the `VitalityMetrics` interface in `dexscreener-api.ts`.
-- **Line 936 & 940** — `SupabaseClient<any, "public", "public", ...>` vs `SupabaseClient<unknown, ...>` mismatch (caller passes the strict client into helpers typed loosely). **Fix:** cast `supabaseForMesh as any` at the call sites — or apply fix #1 (change writer signature to `any`) which auto-resolves these too.
-- **Line 1034** — `logCompleteSearch` expects `symbol: string | undefined` but result has `string | null`. **Fix:** coalesce nulls → `undefined` before passing, or widen the helper's parameter type.
-- **Line 1063** — `.then(...).catch(...)` on Supabase query builder. The thenable returned by `.then()` is `PromiseLike`, not a real `Promise`. **Fix:** wrap in `Promise.resolve(...)` or restructure to pure async/await with try/catch.
-
-### 8. `bagless-investigation/index.ts` (and `_shared/rpc-provider.ts`) — `error.message` on `unknown`
-Same pattern as #6 — cast `error` to `Error`.
+We **already have** the right algorithm (`wallet-genealogy-scanner` runs depth=20, branch=1, min=0.05) — it's just not wired into the auto-trace path that runs on rejection. Fix is small.
 
 ---
 
-## 📝 Documentation deliverable
+## The Change (1 file, ~10 lines)
 
-After the fixes land, write a **single migration** that inserts a new `super_admin_docs` row:
-- **Slug:** `edge-function-error-sweep-2026-04`
-- **Title:** "🧹 Edge Function Type Error Sweep (Apr 2026)"
-- **Tags:** `['edge-functions', 'typescript', 'maintenance', 'changelog']`
-- **Content:** A markdown checklist of every file touched, the symptom, the fix applied, and the rationale. This becomes our paper trail if any of these regress.
+**`supabase/functions/_shared/auto-genealogy.ts`**
+
+| Constant | Current | New | Why |
+|---|---|---|---|
+| `MAX_DEPTH` | `8` | `20` | Match Solscan's reach; KYC roots commonly sit at 8–15 hops |
+| `MIN_SOL` | `0.1` | `0.01` | Catches dust-funded temp wallets (your `$HONESTSHRUG` case) |
+| Branching | top-3 funders | **top-1 funder only** (top-2 if depth ≤ 3) | Linear walk = `20 × 1 RPC` instead of `3²⁰`. Same cost as Solscan. |
+| Signature lookback | `limit: 20`, slice 10 | `limit: 50`, slice 25 | Wallet may have many outgoing txs hiding the funder |
+| Early-exit on CEX | already done ✅ | keep | Stops the moment we hit Binance/Coinbase/etc. |
+
+**Cost math:** A 20-hop linear chase = **20 Helius enhanced-tx calls** (~20 credits). Current 8-hop × top-3 with branching = up to **3⁰+3¹+…+3⁷ ≈ 9,840 calls** in the worst case (we cap visited so it's lower in practice, but still 10–40×). The new version is actually **cheaper and deeper**.
 
 ---
 
-## 📂 Files to edit
-| File | Change |
-|------|--------|
-| `supabase/functions/_shared/early-warning-writer.ts` | Loosen `supabase` param type to `any` in 3 functions |
-| `supabase/functions/_shared/holder-intelligence.ts` | Add `kycConfirmed` + `deepestFunder` to interface; cast `prev as any` |
-| `supabase/functions/_shared/rugcheck-insiders.ts` | Annotate `new Set<string>(...)` |
-| `supabase/functions/_shared/solscan-markets.ts` | Declare `solscanApiKey` const at top |
-| `supabase/functions/_shared/token-search-logger.ts` | Widen `creatorInfo` inline type |
-| `supabase/functions/_shared/rpc-provider.ts` | Cast `error as Error` (2 spots) |
-| `supabase/functions/_shared/creator-api.ts` | Add `createdTimestamp?: number` to `CreatorInfo` |
-| `supabase/functions/bagless-holders-report/index.ts` | 4 fixes (cast vitality, fix tokenCreatedAt type, coalesce symbol nulls, restructure .then().catch()) |
-| `supabase/functions/bagless-investigation/index.ts` | Cast `error as Error` if needed |
-| `supabase/migrations/<ts>_edge_function_sweep_doc.sql` | INSERT into `super_admin_docs` |
+## Optional Hop-2 Polish
 
-## ✅ Acceptance
-- `Type checking failed` errors disappear from the build log for all the files listed above.
-- New doc visible in **Super Admin → Docs** under the slug `edge-function-error-sweep-2026-04`.
-- No behavior change — these are all pure type-correctness fixes (no runtime logic touched).
+Add an explicit "trail lost" reason to `GenealogyResult`:
+- `"hit_cex"` → success, KYC found
+- `"depth_cap"` → hit 20 hops, still wallet (rare)
+- `"no_funders_above_threshold"` → wallet has no incoming SOL ≥ 0.01 (true dead-end)
+- `"unclassified_funder"` → funded by a wallet we can't classify (DEX router, bridge, swap aggregator)
 
-> ⚠️ Note: there may be a tail of additional `truncated` errors hidden by the build log cap. After this round, if the next build still reports failures, we'll do a Round 3 sweep on whatever surfaces.
+This surfaces in the UI/Telegram report as **"Trail ended at hop X — funded by unclassified `4xQR…` (likely Jupiter aggregator)"** instead of a silent stop.
+
+---
+
+## Verification Plan
+
+1. After deploy, manually invoke `wallet-genealogy-scanner` with `tempg6Y1TeRAYm5aHG43yGAtV5UYCNuHFpC17hmYAWz` (the wallet from your screenshot) and confirm it resolves to **Binance 2** in the response.
+2. Re-run the auto-tracer on `$HONESTSHRUG` and check `dev_wallet_reputation.upstream_wallets` populates with the full chain ending at the Binance deposit address.
+3. Spot-check Helius credit usage in the next 24h — expect a **decrease** (not increase) thanks to linear vs branching.
+
+---
+
+## What I'm **NOT** Touching
+
+- `wallet-genealogy-scanner` (already correct, used by Bubblemap deep scans)
+- `cex-wallets.ts` (Binance 2 is already known — not a coverage gap)
+- The 3-hour retry cadence (separate concern; this fix should resolve the trail in the **first** try)
+
+---
+
+## Memory Update
+
+I'll refresh `mem://features/oracle/dev-genealogy-tracing` to document the new defaults (20 hops, 0.01 SOL, linear walk) so future tracer work doesn't accidentally regress to the branching pattern.

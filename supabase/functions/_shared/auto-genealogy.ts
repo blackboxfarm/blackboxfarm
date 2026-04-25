@@ -1,9 +1,13 @@
 /**
  * AUTO-GENEALOGY TRACER
  * 
- * Lightweight parent wallet discovery (2-3 depth) that runs automatically
- * when a wallet enters the rejection mesh. Uses Helius RPC to find
- * incoming SOL transfers and builds a funding pyramid.
+ * Solscan-style "Funded by" tracer: linear recursive walk that follows the
+ * single largest funder of each wallet until it reaches a known CEX deposit
+ * address (KYC root) or runs out of upstream SOL transfers.
+ * 
+ * Cost-equivalent to Solscan: 1 Helius enhanced-tx call per hop, ~20 hops max.
+ * Branching is intentionally narrow (top-1, with top-2 near the root) to avoid
+ * exponential RPC explosions while still allowing some near-source diversity.
  * 
  * Also cross-links X accounts from launchpad_creator_profiles.
  * 
@@ -13,8 +17,11 @@
 import { getHeliusRpcUrl } from './helius-client.ts';
 import { getCexName } from './cex-wallets.ts';
 
-const MAX_DEPTH = 8;
-const MIN_SOL = 0.1;
+const MAX_DEPTH = 20;          // Solscan-style reach; KYC roots usually 8–15 hops
+const MIN_SOL = 0.01;          // Catch dust-funded temp wallets (1¢-ish at $85 SOL)
+const NEAR_ROOT_BRANCH_DEPTH = 3; // depth ≤ 3 → follow top-2 funders
+const SIG_LOOKBACK = 50;       // pull 50 sigs, parse top 25
+const SIG_PARSE_LIMIT = 25;
 
 interface ParentWallet {
   wallet: string;
@@ -23,15 +30,29 @@ interface ParentWallet {
   cexName?: string;
 }
 
+export type TrailEndReason =
+  | 'hit_cex'                       // success — KYC root found
+  | 'depth_cap'                     // reached MAX_DEPTH without a CEX
+  | 'no_funders_above_threshold'    // wallet has no incoming SOL ≥ MIN_SOL
+  | 'unclassified_funder'           // funder exists but isn't in any of our maps
+  | 'rpc_error'                     // Helius/RPC call failed
+  | 'cycle_detected'                // walked back into a visited wallet
+  | 'in_progress';                  // not yet terminated (initial state)
+
 interface GenealogyResult {
   parentWallets: ParentWallet[];
   xAccounts: string[];
   cexSources: string[];
+  trailEndReason: TrailEndReason;
+  trailEndedAtDepth: number;
+  trailEndedAtWallet: string | null;
 }
 
 /**
- * Trace 2-3 depth parent wallets for a given wallet using Helius RPC.
- * Returns parent wallets, discovered X accounts, and CEX sources.
+ * Trace upstream funders for a wallet using Helius RPC, Solscan-style.
+ * Walks the single biggest "Funded by" link recursively until it hits a CEX
+ * (success) or exhausts the trail. Returns parent wallets, discovered X
+ * accounts, CEX sources, and an explicit trail-end reason.
  */
 export async function traceParentWallets(
   supabase: any,
@@ -42,6 +63,9 @@ export async function traceParentWallets(
     parentWallets: [],
     xAccounts: [],
     cexSources: [],
+    trailEndReason: 'in_progress',
+    trailEndedAtDepth: 0,
+    trailEndedAtWallet: null,
   };
 
   const visited = new Set<string>();
@@ -50,7 +74,13 @@ export async function traceParentWallets(
     await traceDepth(wallet, 1, visited, result);
   } catch (err) {
     console.error(`[auto-genealogy] Error tracing ${wallet.slice(0, 8)}...: ${err}`);
+    if (result.trailEndReason === 'in_progress') {
+      result.trailEndReason = 'rpc_error';
+      result.trailEndedAtWallet = wallet;
+    }
   }
+
+  console.log(`[auto-genealogy] Trail for ${wallet.slice(0, 8)}... ended: ${result.trailEndReason} at depth ${result.trailEndedAtDepth} (${result.parentWallets.length} hops, ${result.cexSources.length} CEX)`);
 
   // Cross-link X accounts from known profiles
   try {
@@ -99,13 +129,31 @@ async function traceDepth(
   visited: Set<string>,
   result: GenealogyResult,
 ): Promise<void> {
-  if (depth > MAX_DEPTH || visited.has(wallet)) return;
+  if (visited.has(wallet)) {
+    if (result.trailEndReason === 'in_progress') {
+      result.trailEndReason = 'cycle_detected';
+      result.trailEndedAtDepth = depth;
+      result.trailEndedAtWallet = wallet;
+    }
+    return;
+  }
+  if (depth > MAX_DEPTH) {
+    if (result.trailEndReason === 'in_progress') {
+      result.trailEndReason = 'depth_cap';
+      result.trailEndedAtDepth = depth - 1;
+      result.trailEndedAtWallet = wallet;
+    }
+    return;
+  }
   visited.add(wallet);
 
-  // Check if CEX
+  // Check if CEX — successful KYC root reached
   const cex = getCexName(wallet);
   if (cex) {
     result.cexSources.push(cex);
+    result.trailEndReason = 'hit_cex';
+    result.trailEndedAtDepth = depth;
+    result.trailEndedAtWallet = wallet;
     return;
   }
 
@@ -115,7 +163,7 @@ async function traceDepth(
   try {
     const rpcUrl = getHeliusRpcUrl();
 
-    // Get recent signatures
+    // Get recent signatures (50, parse top 25)
     const sigResp = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -123,35 +171,42 @@ async function traceDepth(
         jsonrpc: '2.0',
         id: 'genealogy-sigs',
         method: 'getSignaturesForAddress',
-        params: [wallet, { limit: 20 }],
+        params: [wallet, { limit: SIG_LOOKBACK }],
       }),
     });
 
     if (!sigResp.ok) {
       console.warn(`[auto-genealogy] RPC sigs failed for ${wallet.slice(0, 8)}: ${sigResp.status}`);
+      if (result.trailEndReason === 'in_progress') {
+        result.trailEndReason = 'rpc_error';
+        result.trailEndedAtDepth = depth;
+        result.trailEndedAtWallet = wallet;
+      }
       return;
     }
 
     const sigData = await sigResp.json();
-    const signatures = sigData.result?.slice(0, 10) || [];
+    const signatures = sigData.result?.slice(0, SIG_PARSE_LIMIT) || [];
 
-    if (signatures.length === 0) return;
-
-    // Fetch parsed transactions
-    const txResp = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'genealogy-txs',
-        method: 'getTransaction',
-        params: [signatures[0].signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }],
-      }),
-    });
+    if (signatures.length === 0) {
+      if (result.trailEndReason === 'in_progress') {
+        result.trailEndReason = 'no_funders_above_threshold';
+        result.trailEndedAtDepth = depth;
+        result.trailEndedAtWallet = wallet;
+      }
+      return;
+    }
 
     // Use Helius enhanced transactions API for better native transfer parsing
     const heliusKey = Deno.env.get('HELIUS_API_KEY');
-    if (!heliusKey) return;
+    if (!heliusKey) {
+      if (result.trailEndReason === 'in_progress') {
+        result.trailEndReason = 'rpc_error';
+        result.trailEndedAtDepth = depth;
+        result.trailEndedAtWallet = wallet;
+      }
+      return;
+    }
 
     const enhancedResp = await fetch(
       `https://api.helius.xyz/v0/transactions/?api-key=${heliusKey}`,
@@ -159,13 +214,18 @@ async function traceDepth(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transactions: signatures.slice(0, 10).map((s: any) => s.signature),
+          transactions: signatures.map((s: any) => s.signature),
         }),
       },
     );
 
     if (!enhancedResp.ok) {
       console.warn(`[auto-genealogy] Helius enhanced API failed: ${enhancedResp.status}`);
+      if (result.trailEndReason === 'in_progress') {
+        result.trailEndReason = 'rpc_error';
+        result.trailEndedAtDepth = depth;
+        result.trailEndedAtWallet = wallet;
+      }
       return;
     }
 
@@ -187,24 +247,49 @@ async function traceDepth(
       }
     }
 
-    // Sort by amount, take top 3 funders
+    // Linear walk: follow the single biggest funder (top-2 near the root for diversity).
+    // Matches Solscan's "Funded by" recursive click pattern.
+    const branchWidth = depth <= NEAR_ROOT_BRANCH_DEPTH ? 2 : 1;
     const topFunders = [...funders.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
+      .slice(0, branchWidth);
+
+    if (topFunders.length === 0) {
+      if (result.trailEndReason === 'in_progress') {
+        result.trailEndReason = 'no_funders_above_threshold';
+        result.trailEndedAtDepth = depth;
+        result.trailEndedAtWallet = wallet;
+      }
+      return;
+    }
 
     for (const [funderWallet, amount] of topFunders) {
+      const funderCex = getCexName(funderWallet) ?? undefined;
       result.parentWallets.push({
         wallet: funderWallet,
         depth,
         amountSol: amount,
-        cexName: getCexName(funderWallet) ?? undefined,
+        cexName: funderCex,
       });
 
       // Recurse deeper
       await traceDepth(funderWallet, depth + 1, visited, result);
     }
+
+    // If we walked all branches without success/explicit termination, the funders
+    // existed but none classified as CEX or had upstream funders → unclassified.
+    if (result.trailEndReason === 'in_progress') {
+      result.trailEndReason = 'unclassified_funder';
+      result.trailEndedAtDepth = depth;
+      result.trailEndedAtWallet = topFunders[0][0];
+    }
   } catch (err) {
     console.warn(`[auto-genealogy] Trace error at depth ${depth}: ${err}`);
+    if (result.trailEndReason === 'in_progress') {
+      result.trailEndReason = 'rpc_error';
+      result.trailEndedAtDepth = depth;
+      result.trailEndedAtWallet = wallet;
+    }
   }
 }
 
