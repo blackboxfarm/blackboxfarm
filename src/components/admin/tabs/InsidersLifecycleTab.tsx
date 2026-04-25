@@ -644,6 +644,67 @@ export default function InsidersLifecycleTab() {
                 )}
               </div>
 
+              {/* Funding Lineage — Mint → funder → … → KYC Root */}
+              {drillDown.genealogy_chain && drillDown.genealogy_chain.length > 0 && (
+                <div className="border rounded-md p-3 bg-muted/30">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Network className="h-4 w-4" /> Funding Lineage
+                    {drillDown.genealogy_kyc_root ? (
+                      <Badge className="bg-green-500/20 text-green-400 ml-2">KYC resolved</Badge>
+                    ) : (
+                      <Badge variant="outline" className="ml-2">Trail incomplete</Badge>
+                    )}
+                  </h4>
+                  <div className="space-y-1">
+                    {drillDown.genealogy_chain.map((hop, idx) => {
+                      const isKyc = hop.role === 'kyc_root';
+                      const isCreator = hop.role === 'creator';
+                      return (
+                        <div key={idx}>
+                          <div className={`flex items-center gap-2 p-2 rounded text-xs ${isKyc ? 'bg-green-500/10 border border-green-500/30' : isCreator ? 'bg-cyan-500/10 border border-cyan-500/30' : 'bg-background/50'}`}>
+                            <span className="w-16 shrink-0 text-muted-foreground">
+                              {isCreator ? 'Creator' : isKyc ? '🏦 KYC' : `Hop ${hop.depth}`}
+                            </span>
+                            <a
+                              href={`https://solscan.io/account/${hop.wallet}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono underline hover:text-primary flex-1 break-all"
+                            >
+                              {hop.wallet}
+                            </a>
+                            {hop.cexName && (
+                              <Badge variant="outline" className="text-green-400 border-green-500/40">
+                                {hop.cexName}
+                              </Badge>
+                            )}
+                            {hop.amountSol != null && hop.amountSol > 0 && (
+                              <span className="text-muted-foreground whitespace-nowrap">{hop.amountSol.toFixed(2)} SOL</span>
+                            )}
+                          </div>
+                          {idx < (drillDown.genealogy_chain?.length || 0) - 1 && (
+                            <div className="flex justify-center py-0.5">
+                              <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {!drillDown.genealogy_kyc_root && (
+                      <div className="text-xs text-muted-foreground mt-2 italic">
+                        🌑 Trail lost before reaching a known exchange. Run "Trace KYC roots" again later — depth limit is 8 hops.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {drillDown.creator_wallet && (!drillDown.genealogy_chain || drillDown.genealogy_chain.length === 0) && (
+                <div className="border rounded-md p-3 bg-muted/30 text-xs text-muted-foreground">
+                  <Network className="h-4 w-4 inline mr-1" />
+                  Wallet lineage not traced yet. Click <strong>"Trace KYC roots"</strong> at the top to map this creator back to its funding source.
+                </div>
+              )}
+
               {/* Mesh Decision section */}
               <div className="border rounded-md p-3 bg-muted/30">
                 <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
