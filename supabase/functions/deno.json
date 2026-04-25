@@ -1,12 +1,5 @@
 {
   "nodeModulesDir": "auto",
-  "compilerOptions": {
-    "strict": false,
-    "noImplicitAny": false,
-    "useUnknownInCatchVariables": false,
-    "noImplicitThis": false,
-    "skipLibCheck": true
-  },
   "imports": {
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.54.0",
     "resend": "npm:resend@2.0.0"
