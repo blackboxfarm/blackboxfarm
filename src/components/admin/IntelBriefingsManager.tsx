@@ -251,24 +251,40 @@ function IntelBriefingsArticlesManager() {
     },
   });
 
-  // Fetch view stats per briefing
-  const { data: viewStats = [] } = useQuery({
-    queryKey: ['intel-briefing-view-stats'],
+  // Time range for the Views column (all-time / 30d / 7d / 24h)
+  const [viewsRange, setViewsRange] = useState<'all' | '30d' | '7d' | '24h'>('all');
+
+  // Fetch view stats per briefing — now includes referrer & utm_source for attribution.
+  const { data: viewStats = {} } = useQuery({
+    queryKey: ['intel-briefing-view-stats', viewsRange],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('intel_briefing_views')
-        .select('briefing_id, visitor_type, bot_name');
+        .select('briefing_id, visitor_type, bot_name, referrer_source, utm_source')
+        .limit(50000);
+      if (viewsRange !== 'all') {
+        const hours = viewsRange === '24h' ? 24 : viewsRange === '7d' ? 24 * 7 : 24 * 30;
+        const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
+        query = query.gte('created_at', cutoff);
+      }
+      const { data, error } = await query;
       if (error) throw error;
-      // Aggregate in JS since the view might not be queryable via client
-      const stats: Record<string, { human: number; crawler: number; ai_bot: number; total: number; bots: Record<string, number> }> = {};
-      for (const row of data || []) {
-        if (!stats[row.briefing_id]) stats[row.briefing_id] = { human: 0, crawler: 0, ai_bot: 0, total: 0, bots: {} };
+      const stats: Record<string, {
+        human: number; crawler: number; ai_bot: number; total: number;
+        bots: Record<string, number>;
+        sources: Record<string, number>;
+        utms: Record<string, number>;
+      }> = {};
+      for (const row of (data || []) as any[]) {
+        if (!stats[row.briefing_id]) stats[row.briefing_id] = { human: 0, crawler: 0, ai_bot: 0, total: 0, bots: {}, sources: {}, utms: {} };
         const s = stats[row.briefing_id];
         s.total++;
         if (row.visitor_type === 'human') s.human++;
         else if (row.visitor_type === 'crawler') s.crawler++;
         else if (row.visitor_type === 'ai_bot') s.ai_bot++;
         if (row.bot_name) s.bots[row.bot_name] = (s.bots[row.bot_name] || 0) + 1;
+        if (row.referrer_source) s.sources[row.referrer_source] = (s.sources[row.referrer_source] || 0) + 1;
+        if (row.utm_source) s.utms[row.utm_source] = (s.utms[row.utm_source] || 0) + 1;
       }
       return stats;
     },
@@ -638,7 +654,28 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead className="text-center">Views</TableHead>
+                <TableHead className="text-center">
+                  <div className="flex flex-col items-center gap-1">
+                    <span>Views</span>
+                    <div className="inline-flex rounded border border-border overflow-hidden text-[9px] font-normal">
+                      {(['24h', '7d', '30d', 'all'] as const).map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setViewsRange(r)}
+                          className={cn(
+                            'px-1.5 py-0.5 transition-colors',
+                            viewsRange === r
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background text-muted-foreground hover:bg-muted'
+                          )}
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </TableHead>
                 <TableHead className="text-center">Exposure</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -726,6 +763,22 @@ function IntelBriefingsArticlesManager() {
                                     <p className="font-medium mb-0.5">Bot breakdown:</p>
                                     {Object.entries(s.bots).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([name, count]) => (
                                       <p key={name}>{name}: {count as number}</p>
+                                    ))}
+                                  </div>
+                                )}
+                                {Object.keys(s.sources).length > 0 && (
+                                  <div className="pt-1 border-t border-border mt-1">
+                                    <p className="font-medium mb-0.5">Top sources:</p>
+                                    {Object.entries(s.sources).sort((a, b) => (b[1] as number) - (a[1] as number)).slice(0, 6).map(([src, count]) => (
+                                      <p key={src}>{src}: {count as number}</p>
+                                    ))}
+                                  </div>
+                                )}
+                                {Object.keys(s.utms).length > 0 && (
+                                  <div className="pt-1 border-t border-border mt-1">
+                                    <p className="font-medium mb-0.5">Campaign hits (utm_source):</p>
+                                    {Object.entries(s.utms).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([utm, count]) => (
+                                      <p key={utm}>{utm}: {count as number}</p>
                                     ))}
                                   </div>
                                 )}

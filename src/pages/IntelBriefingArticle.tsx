@@ -57,19 +57,28 @@ export default function IntelBriefingArticle() {
     enabled: !!article?.related_slugs && article.related_slugs.length > 0,
   });
 
-  // Track direct page view (human visitor)
+  // Track direct page view via edge function (server-side: classifies bots,
+  // captures referrer source + UTMs, dedupes by session_id, runs as service_role).
   useEffect(() => {
     if (!article?.id || viewLogged.current) return;
     viewLogged.current = true;
-    supabase.from('intel_briefing_views').insert({
-      briefing_id: article.id,
-      slug: article.slug,
-      visitor_type: 'human',
-      bot_name: null,
-      user_agent: navigator.userAgent.slice(0, 500),
-      ip_address: null,
-      referer: document.referrer || null,
-    } as any).then(({ error }) => {
+
+    // Per-session id (stable for the tab) — used for dedup
+    let sessionId = sessionStorage.getItem('bb_view_session_id');
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      sessionStorage.setItem('bb_view_session_id', sessionId);
+    }
+
+    supabase.functions.invoke('track-briefing-view', {
+      body: {
+        briefing_id: article.id,
+        slug: article.slug,
+        session_id: sessionId,
+        referer: document.referrer || null,
+        search: window.location.search || null,
+      },
+    }).then(({ error }) => {
       if (error) console.warn('[view-track]', error.message);
     });
   }, [article?.id]);

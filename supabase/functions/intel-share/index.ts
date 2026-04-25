@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { resolveMetaTags } from "../_shared/meta-tags-resolver.ts";
+import { classifyUserAgent, parseReferrerSource } from "../_shared/bot-detector.ts";
 
 const SITE_URL = "https://blackbox.farm";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/blackbox-og-image.png`;
@@ -64,44 +65,8 @@ Deno.serve(async (req) => {
     const twitterCard = meta.twitter_card || "summary_large_image";
     const twitterImage = ogImage;
 
-    const ua = (req.headers.get("user-agent") || "").toLowerCase();
-    const crawlerPatterns: [RegExp, string, string][] = [
-      // Social crawlers
-      [/facebookexternalhit|facebot/, 'facebookbot', 'crawler'],
-      [/twitterbot/, 'twitterbot', 'crawler'],
-      [/linkedinbot/, 'linkedinbot', 'crawler'],
-      [/discordbot/, 'discordbot', 'crawler'],
-      [/slackbot/, 'slackbot', 'crawler'],
-      [/telegrambot/, 'telegrambot', 'crawler'],
-      [/whatsapp/, 'whatsapp', 'crawler'],
-      [/pinterestbot/, 'pinterestbot', 'crawler'],
-      [/meta-externalagent/, 'meta-agent', 'crawler'],
-      // Search crawlers
-      [/googlebot/, 'googlebot', 'crawler'],
-      [/bingbot/, 'bingbot', 'crawler'],
-      [/applebot/, 'applebot', 'crawler'],
-      [/yandexbot/, 'yandexbot', 'crawler'],
-      [/baiduspider/, 'baiduspider', 'crawler'],
-      [/duckduckbot/, 'duckduckbot', 'crawler'],
-      // AI bots
-      [/chatgpt-user|oai-searchbot|gptbot/, 'chatgpt', 'ai_bot'],
-      [/claudebot|anthropic/, 'claudebot', 'ai_bot'],
-      [/perplexitybot/, 'perplexitybot', 'ai_bot'],
-      [/cohere-ai/, 'cohere', 'ai_bot'],
-      [/gemini|google-extended/, 'gemini', 'ai_bot'],
-      [/ccbot/, 'ccbot', 'ai_bot'],
-      [/ia_archiver/, 'ia_archiver', 'crawler'],
-    ];
-
-    let visitorType = 'human';
-    let botName: string | null = null;
-    for (const [pattern, name, type] of crawlerPatterns) {
-      if (pattern.test(ua)) {
-        visitorType = type;
-        botName = name;
-        break;
-      }
-    }
+    const uaRaw = req.headers.get("user-agent") || "";
+    const { visitorType, botName } = classifyUserAgent(uaRaw);
     const isCrawler = visitorType !== 'human';
 
     // Log the view asynchronously (fire-and-forget)
@@ -109,14 +74,16 @@ Deno.serve(async (req) => {
       || req.headers.get('cf-connecting-ip')
       || req.headers.get('x-real-ip');
     
+    const refererHeader = req.headers.get('referer');
     supabase.from('intel_briefing_views').insert({
       briefing_id: article.id || null,
       slug,
       visitor_type: visitorType,
       bot_name: botName,
-      user_agent: (req.headers.get("user-agent") || "").slice(0, 500),
+      user_agent: uaRaw.slice(0, 500),
       ip_address: ipAddress,
-      referer: req.headers.get('referer'),
+      referer: refererHeader,
+      referrer_source: parseReferrerSource(refererHeader),
     }).then(({ error: logErr }) => {
       if (logErr) console.warn('[intel-share] view log error:', logErr.message);
     });
