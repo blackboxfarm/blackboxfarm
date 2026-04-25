@@ -126,12 +126,12 @@ serve(withRunLog('flipit-price-monitor', async (req) => {
       const meta = priceMetadata[position.token_mint];
       if (meta) {
         // Update price source and curve status (fire-and-forget, don't block monitoring)
-        supabase.from("flip_positions").update({
+        Promise.resolve(supabase.from("flip_positions").update({
           price_source: meta.source,
           price_fetched_at: meta.fetchedAt,
           is_on_curve: meta.isOnCurve,
           bonding_curve_progress: meta.bondingCurveProgress ?? null
-        }).eq("id", position.id).then(() => {}).catch(() => {});
+        }).eq("id", position.id)).then(() => {}).catch(() => {});
       }
     }
 

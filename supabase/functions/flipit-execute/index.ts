@@ -77,7 +77,7 @@ async function fetchTokenPrice(tokenMint: string, options: { forceFresh?: boolea
   
   // CRITICAL: Pass forceFresh to bypass cache for accurate buy execution
   const result = await resolvePrice(tokenMint, { 
-    heliusApiKey, 
+    heliusApiKey: heliusApiKey ?? undefined, 
     forceFresh: options.forceFresh ?? false,
     venueHint: hint
   });
@@ -128,7 +128,7 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
           return result;
         }
       } else {
-        console.log("pump.fun API non-200:", pumpRes.status);
+        console.log("pump.fun API returned no data");
       }
     } catch (e) {
       console.log("pump.fun API failed, falling back:", e);
@@ -890,7 +890,7 @@ serve(withRunLog('flipit-execute', async (req) => {
       try {
         const tradeGuardConfig = await getTradeGuardConfig(supabase);
         execLog.log('TRADE_GUARD_CONFIG', { 
-          maxPremiumPct: tradeGuardConfig.maxPremiumPct,
+          maxPremiumPct: (tradeGuardConfig as any).maxPremiumPct,
           maxPriceImpactPct: tradeGuardConfig.maxPriceImpactPct 
         });
 
@@ -1068,7 +1068,7 @@ serve(withRunLog('flipit-execute', async (req) => {
                   // Apply decimals to get human-readable amount
                   quantityTokensRaw = tokenOutput.rawTokenAmount.tokenAmount;
                   tokenDecimals = tokenOutput.rawTokenAmount.decimals ?? 9;
-                  const humanAmount = Number(quantityTokensRaw) / Math.pow(10, tokenDecimals);
+                  const humanAmount = Number(quantityTokensRaw) / Math.pow(10, tokenDecimals as number);
                   quantityTokens = String(humanAmount);
                   console.log(`Got token quantity from swap event: raw=${quantityTokensRaw}, decimals=${tokenDecimals}, human=${humanAmount}`);
                 } else if (tokenOutput?.tokenAmount) {
@@ -1105,7 +1105,7 @@ serve(withRunLog('flipit-execute', async (req) => {
                       // Apply decimals to get human-readable amount
                       quantityTokensRaw = tokenChange.rawTokenAmount.tokenAmount;
                       tokenDecimals = tokenChange.rawTokenAmount.decimals ?? 9;
-                      const humanAmount = Number(rawAmount) / Math.pow(10, tokenDecimals);
+                      const humanAmount = Number(rawAmount) / Math.pow(10, tokenDecimals as number);
                       quantityTokens = String(humanAmount);
                       console.log(`Got token quantity from accountData: raw=${quantityTokensRaw}, decimals=${tokenDecimals}, human=${humanAmount}`);
                       break;
@@ -1902,7 +1902,7 @@ serve(withRunLog('flipit-execute', async (req) => {
           sellPrice: sellPricePerToken,
           tokensSold: position.quantity_tokens ? Number(position.quantity_tokens) : undefined,
           profitLossSol: profitSol,
-          profitLossUsd: profit,
+          profitLossUsd: profit ?? undefined,
           profitLossPct: profitPercent,
           holdDurationMins: holdDurationMins,
           walletAddress: position.super_admin_wallets?.pubkey,

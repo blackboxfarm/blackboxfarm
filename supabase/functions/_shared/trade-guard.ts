@@ -372,7 +372,7 @@ async function getBondingCurveQuote(
         return computeCurveQuote(virtualSolReserves, virtualTokenReserves, solAmountLamports, solPrice);
       }
     } else {
-      console.log(`[TradeGuard] pump.fun API returned ${res.status}, trying on-chain fallback...`);
+      console.log(`[TradeGuard] pump.fun API returned non-OK, trying on-chain fallback...`);
     }
   } catch (e) {
     console.log(`[TradeGuard] pump.fun API error: ${e instanceof Error ? e.message : String(e)}, trying on-chain fallback...`);
