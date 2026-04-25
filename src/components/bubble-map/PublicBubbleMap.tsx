@@ -18,6 +18,7 @@ import SocialTimeline from "./SocialTimeline";
 import BubbleMapMinimap from "./BubbleMapMinimap";
 import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
 import { dispatchThought, dispatchThoughtCustom } from "@/components/chat/AvatarThoughtBubble";
+import { SharedFundersPanel } from "./SharedFundersPanel";
 
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
