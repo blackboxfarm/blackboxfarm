@@ -29,6 +29,9 @@ import {
   X,
   RotateCw,
   ShieldAlert,
+  Network,
+  Building2,
+  ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -88,6 +91,9 @@ interface LifecycleRow {
   mesh_decision_trace: MeshDecisionTrace | null;
   dev_history_warning: boolean | null;
   total_messages: number;
+  genealogy_depth?: number | null;
+  genealogy_kyc_root?: string | null;
+  genealogy_chain?: Array<{ wallet: string; depth: number; amountSol?: number | null; cexName?: string | null; role: 'creator' | 'funder' | 'kyc_root' }> | null;
 }
 
 const MIN_X_OPTIONS: Array<{ value: string; label: string }> = [
@@ -177,6 +183,11 @@ export default function InsidersLifecycleTab() {
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [tracingKyc, setTracingKyc] = useState(false);
+  const [traceProgress, setTraceProgress] = useState<{ done: number; total: number } | null>(null);
+  const [crossLinks, setCrossLinks] = useState<any | null>(null);
+  const [crossLinksLoading, setCrossLinksLoading] = useState(false);
+  const [crossTab, setCrossTab] = useState<'creator' | 'funder' | 'kyc'>('creator');
   const [minX, setMinX] = useState<string>("2");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -233,6 +244,49 @@ export default function InsidersLifecycleTab() {
   useEffect(() => {
     fetchRows();
   }, []);
+
+  const fetchCrossLinks = async () => {
+    setCrossLinksLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('insiders-cross-links', { body: {} });
+      if (error) throw error;
+      setCrossLinks(data);
+    } catch (e: any) {
+      toast.error('Failed to load cross-links: ' + (e?.message || String(e)));
+    } finally {
+      setCrossLinksLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCrossLinks();
+  }, []);
+
+  const handleTraceKyc = async () => {
+    setTracingKyc(true);
+    setTraceProgress({ done: 0, total: 0 });
+    try {
+      let totalProcessed = 0;
+      // Loop until remaining === 0 (or safety cap of 200 batches)
+      for (let i = 0; i < 200; i++) {
+        const { data, error } = await supabase.functions.invoke('insiders-genealogy-backfill', {
+          body: { batchSize: 25 },
+        });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'backfill failed');
+        totalProcessed += data.processed || 0;
+        setTraceProgress({ done: totalProcessed, total: totalProcessed + (data.remaining || 0) });
+        if (!data.remaining || data.remaining === 0 || data.processed === 0) break;
+      }
+      toast.success(`Traced ${totalProcessed} creator wallets back to KYC roots`);
+      await Promise.all([fetchRows(), fetchCrossLinks()]);
+    } catch (e: any) {
+      toast.error('Trace failed: ' + (e?.message || String(e)));
+    } finally {
+      setTracingKyc(false);
+      setTraceProgress(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -337,6 +391,12 @@ export default function InsidersLifecycleTab() {
             <Button onClick={handleBuild} disabled={building} size="sm">
               {building ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Rebuild from messages
+            </Button>
+            <Button onClick={handleTraceKyc} disabled={tracingKyc} size="sm" variant="secondary">
+              {tracingKyc ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Network className="h-4 w-4 mr-2" />}
+              {tracingKyc && traceProgress
+                ? `Tracing… ${traceProgress.done}/${traceProgress.done + (traceProgress.total - traceProgress.done)}`
+                : 'Trace KYC roots'}
             </Button>
             <div className="flex items-center gap-1">
               <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
