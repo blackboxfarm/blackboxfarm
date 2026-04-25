@@ -32,6 +32,9 @@ import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { InlineImageManagerModal } from './InlineImageManagerModal';
 import { format } from 'date-fns';
+import { ExposureCell } from './publications/ExposureCell';
+import { ExposurePanel } from './publications/ExposurePanel';
+import type { PublicationLite } from './publications/exposure-shared';
 
 interface Briefing {
   id: string;
