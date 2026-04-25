@@ -291,6 +291,8 @@ export interface DevGenealogyResult {
   cexSources: string[];
   kycRootWallet: string | null;
   alreadyKnown: boolean; // true if genealogy was already in DB
+  kycConfirmed?: boolean;
+  deepestFunder?: string | null;
 }
 
 /**

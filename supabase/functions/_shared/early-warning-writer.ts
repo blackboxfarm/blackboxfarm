@@ -27,7 +27,7 @@ interface EarlyWarning {
  */
 export async function writeEarlyWarnings(
   warnings: EarlyWarning[],
-  supabase?: ReturnType<typeof createClient>,
+  supabase?: any,
 ): Promise<void> {
   if (warnings.length === 0) return;
 
@@ -341,7 +341,7 @@ export async function generatePatternWarnings(
     volume_mcap_ratio?: number;
   },
   sourceFunction: string,
-  supabase?: ReturnType<typeof createClient>,
+  supabase?: any,
 ): Promise<EarlyWarning[]> {
   const warnings: EarlyWarning[] = [];
 
@@ -400,7 +400,7 @@ function matchesRuleConditions(conditions: Record<string, any>, metrics: Record<
  */
 export async function getTokenWarnings(
   tokenMint: string,
-  supabase?: ReturnType<typeof createClient>,
+  supabase?: any,
 ): Promise<Array<{
   warning_type: string;
   severity: string;

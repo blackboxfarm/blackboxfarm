@@ -142,7 +142,7 @@ function parseInsidersGraph(data: any): InsidersGraphResult {
     
     // Build clusters from edges - only include nodes with holdings
     if (data.edges && Array.isArray(data.edges)) {
-      const holdingNodeIds = new Set(nodesWithHoldings.map((n: any) => n.id || n.wallet || n.address));
+      const holdingNodeIds = new Set<string>(nodesWithHoldings.map((n: any) => n.id || n.wallet || n.address));
       clusters = buildClustersFromEdges(nodesWithHoldings, data.edges, holdingNodeIds);
     }
     

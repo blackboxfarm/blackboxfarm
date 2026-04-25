@@ -128,13 +128,13 @@ export async function fetchTransactionHistory(
         return await fetchRpcTransactions(walletAddress, limit);
     }
   } catch (error) {
-    await logProviderError(provider, error.message);
+    await logProviderError(provider, (error as Error).message);
     // Try fallback
     if (provider !== 'public_rpc') {
       console.log(`Falling back from ${provider} to public_rpc`);
       return await fetchRpcTransactions(walletAddress, limit);
     }
-    return { data: null, error: error.message, provider };
+    return { data: null, error: (error as Error).message, provider };
   }
 }
 
@@ -256,6 +256,6 @@ export async function fetchTokenBalance(
       provider: 'public_rpc'
     };
   } catch (error) {
-    return { data: null, error: error.message, provider: 'public_rpc' };
+    return { data: null, error: (error as Error).message, provider: 'public_rpc' };
   }
 }
