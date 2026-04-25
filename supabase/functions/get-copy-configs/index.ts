@@ -35,7 +35,7 @@ Deno.serve(withRunLog('get-copy-configs', async (req) => {
 
     if (error) {
       console.error('get-copy-configs error:', error)
-      return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
+      return new Response(JSON.stringify({ error: (error as Error).message }), { status: 400, headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ configs: data || [] }), { status: 200, headers: corsHeaders })

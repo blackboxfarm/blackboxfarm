@@ -499,7 +499,7 @@ serve(withRunLog('blackbox-executor', async (req) => {
           }
         }
       } catch (error) {
-        console.error(`❌ Sell failed: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(`❌ Sell failed: ${error instanceof Error ? (error as Error).message : String(error)}`);
         throw error;
       }
     }
@@ -517,7 +517,7 @@ serve(withRunLog('blackbox-executor', async (req) => {
   } catch (error: any) {
     console.error("Execution error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

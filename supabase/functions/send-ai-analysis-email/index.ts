@@ -79,7 +79,7 @@ Deno.serve(withRunLog('send-ai-analysis-email', async (req) => {
 
   } catch (error: unknown) {
     console.error("Error sending email:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to send email";
+    const errorMessage = error instanceof Error ? (error as Error).message : "Failed to send email";
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

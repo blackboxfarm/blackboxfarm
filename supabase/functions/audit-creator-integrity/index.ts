@@ -167,7 +167,7 @@ Deno.serve(withRunLog('audit-creator-integrity', async (req) => {
   } catch (error) {
     console.error('Error in audit-creator-integrity:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

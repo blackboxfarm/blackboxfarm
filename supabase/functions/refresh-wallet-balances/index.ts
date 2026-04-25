@@ -344,7 +344,7 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
           status: 200,
         });
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorMsg = error instanceof Error ? (error as Error).message : String(error);
         logStep("Single wallet refresh failed", { error: errorMsg });
         return new Response(JSON.stringify({ 
           success: false,
@@ -423,7 +423,7 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
           
           logStep("Updated wallet balance", { pubkey: pubkey.slice(0, 8) + "...", balance: solBalance });
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
+          const errorMsg = error instanceof Error ? (error as Error).message : String(error);
           errors.push({ pubkey, error: errorMsg });
           logStep("Failed to update wallet balance", { pubkey: pubkey.slice(0, 8) + "...", error: errorMsg });
         }
@@ -472,7 +472,7 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
       } catch (error) {
         logStep("Database update error", { 
           pubkey: update.pubkey.slice(0, 8) + "...", 
-          error: error instanceof Error ? error.message : String(error) 
+          error: error instanceof Error ? (error as Error).message : String(error) 
         });
       }
     }
@@ -496,7 +496,7 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
       status: 200,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? (error as Error).message : String(error);
     logStep("ERROR in refresh-wallet-balances", { message: errorMessage });
     
     return new Response(JSON.stringify({ 

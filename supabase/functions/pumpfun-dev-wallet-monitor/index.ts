@@ -458,7 +458,7 @@ serve(withRunLog('pumpfun-dev-wallet-monitor', async (req) => {
     }
   } catch (error) {
     console.error('Error:', error);
-    return jsonResponse({ error: error.message }, 500);
+    return jsonResponse({ error: (error as Error).message }, 500);
   }
 }));
 

@@ -11,6 +11,7 @@ export interface CreatorInfo {
   bondingCurveProgress?: number;
   xAccount?: string;
   feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
+  createdTimestamp?: number;
 }
 
 export async function fetchCreatorInfo(launchpadInfo: LaunchpadInfo, tokenMint: string, supabaseClient?: any): Promise<CreatorInfo> {

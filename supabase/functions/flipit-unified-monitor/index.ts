@@ -465,6 +465,6 @@ serve(withRunLog('flipit-unified-monitor', async (req) => {
 
   } catch (error: any) {
     console.error('Unified monitor error:', error);
-    return bad(error.message || 'Internal error', 500);
+    return bad((error as Error).message || 'Internal error', 500);
   }
 }));

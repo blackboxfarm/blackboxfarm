@@ -811,9 +811,9 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     const allHolderAddresses = nonLpHolders.slice(0, 50).map(h => h.owner);
     
     // Determine token creation time for fresh wallet detection
-    const tokenCreatedAt = creatorInfo.createdTimestamp 
+    const tokenCreatedAt: string | null = creatorInfo.createdTimestamp 
       ? new Date(creatorInfo.createdTimestamp * 1000).toISOString() 
-      : vitality?.pairCreatedAt || null;
+      : (vitality?.pairCreatedAt ? String(vitality.pairCreatedAt) : null);
     
     const [flaggedHolders, historicalDelta, socialWarnings, kolMatches, devGenealogy, freshWallets] = await Promise.all([
       crossLinkHolderReputation(top20Addresses),
@@ -929,7 +929,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       top10_pct: distributionStats?.top10Percentage || 0,
       health_score: healthScore,
       dev_sold_all: false, // Not available here
-      has_twitter: !!vitality?.info?.socials?.find((s: any) => s.type === 'twitter'),
+      has_twitter: !!(vitality as any)?.info?.socials?.find((s: any) => s.type === 'twitter'),
       bundled_pct: insidersResult?.bundledPercentage || 0,
       lp_pct: lpPctVal,
       volume_mcap_ratio: inferredMarketCapUSD > 0 ? (vitality?.volume?.h24 || 0) / inferredMarketCapUSD : 0,
@@ -1031,7 +1031,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     };
 
     // Log complete search data (fire and forget - don't block response)
-    logCompleteSearch(searchId, result, totalTime, rankedHolders.length).catch(e => 
+    logCompleteSearch(searchId, result as any, totalTime, rankedHolders.length).catch(e => 
       console.warn('[TokenSearchLogger] Background logging error:', e)
     );
 
@@ -1049,7 +1049,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }).catch(e => console.warn('[bagless] Snapshot write failed:', e));
 
     // Upsert into holders_intel_seen_tokens — every scan grows the intelligence layer
-    supabaseForMesh.from('holders_intel_seen_tokens').upsert({
+    Promise.resolve(supabaseForMesh.from('holders_intel_seen_tokens').upsert({
       token_mint: tokenMint,
       symbol: tokenSymbol || null,
       name: tokenName || null,
@@ -1057,10 +1057,10 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       times_seen: 1, // Will increment via ON CONFLICT if supported, otherwise just marks seen
       market_cap_at_discovery: inferredMarketCapUSD || null,
       health_grade: healthGrade || null,
-    }, { onConflict: 'token_mint' }).then(({ error }) => {
-      if (error) console.warn('[bagless] seen_tokens upsert failed:', error.message);
+    }, { onConflict: 'token_mint' })).then(({ error }: { error: any }) => {
+      if (error) console.warn('[bagless] seen_tokens upsert failed:', (error as Error).message);
       else console.log(`[bagless] ✅ Upserted ${tokenMint.slice(0,8)} into seen_tokens`);
-    }).catch(e => console.warn('[bagless] seen_tokens upsert error:', e));
+    }).catch((e: any) => console.warn('[bagless] seen_tokens upsert error:', e));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -1076,7 +1076,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

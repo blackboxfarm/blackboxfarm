@@ -328,7 +328,7 @@ async function isUserSuspended(userId: string): Promise<boolean> {
   try {
     const { data } = await supabase.auth.admin.getUserById(userId);
     if (!data?.user) return false;
-    const bannedUntil = data.user.banned_until;
+        const bannedUntil = (data.user as any).banned_until;
     if (!bannedUntil) return false;
     return new Date(bannedUntil) > new Date();
   } catch {
@@ -3168,7 +3168,7 @@ async function handleConfig(chatId: number, telegramUserId: string, args: string
     
     if (userChannels && userChannels.length === 1) {
       selectedChatId = userChannels[0].chat_id;
-      await setSelectedChannelId(telegramUserId, selectedChatId);
+      await setSelectedChannelId(telegramUserId, selectedChatId as number);
       await sendMessage(chatId, `🔄 Auto-selected: *${userChannels[0].chat_title || selectedChatId}*`);
     } else {
       await sendMessage(chatId, `❌ No channel selected.\n\nUse \`/config select <chat_id>\` first.\nSee /channels for your chat IDs.`);
@@ -3597,7 +3597,7 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, _args
 
       // Send SOL payment receipt email
       try {
-        const email = linked.email || linked.profiles?.email;
+      const email = (linked as any).email || (linked as any).profiles?.email;
         if (email) {
           await fetch(`${SUPABASE_URL}/functions/v1/subscriber-welcome`, {
             method: 'POST',
@@ -3608,7 +3608,7 @@ async function handlePaymentVerify(chatId: number, telegramUserId: string, _args
             body: JSON.stringify({
               emailType: 'sol_payment_confirmed',
               email,
-              name: linked.profiles?.display_name,
+          name: (linked as any).profiles?.display_name,
               amountSol: pendingSub.amount_sol,
               walletPubkey: pendingSub.payment_wallet_pubkey,
               expiresAt: data.expires_at,

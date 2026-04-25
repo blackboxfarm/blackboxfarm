@@ -640,7 +640,7 @@ serve(withRunLog('telegram-fantasy-price-monitor', async (req) => {
     console.error('[telegram-fantasy-price-monitor] Error:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: (error as Error).message
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
   }
 }));

@@ -254,7 +254,7 @@ Deno.serve(withRunLog('token-account-cleaner', async (req) => {
           .eq(src.activeCol, true);
 
         if (error) {
-          console.error(`Error fetching from ${src.table}:`, error.message);
+          console.error(`Error fetching from ${src.table}:`, (error as Error).message);
           continue;
         }
 

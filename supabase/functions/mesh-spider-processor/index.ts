@@ -70,13 +70,13 @@ Deno.serve(withRunLog('mesh-spider-processor', async (req) => {
         clearTimeout(timeout);
 
         if (error) {
-          console.warn(`[spider] Error for ${item.entity_id}: ${error.message}`);
+          console.warn(`[spider] Error for ${item.entity_id}: ${(error as Error).message}`);
           await supabase
             .from("mesh_spider_queue")
             .update({
               status: "failed",
               completed_at: new Date().toISOString(),
-              error_message: error.message,
+              error_message: (error as Error).message,
             })
             .eq("id", item.id);
           continue;

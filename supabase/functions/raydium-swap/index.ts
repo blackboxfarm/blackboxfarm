@@ -980,7 +980,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             .maybeSingle();
 
           if (error) {
-            console.log(`Wallet lookup error in ${table}:`, error.message);
+            console.log(`Wallet lookup error in ${table}:`, (error as Error).message);
             continue;
           }
 
@@ -1007,7 +1007,7 @@ serve(withRunLog('raydium-swap', async (req) => {
       } catch (error) {
         return softError(
           "WALLET_LOOKUP_FAILED",
-          `Failed to fetch wallet: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to fetch wallet: ${error instanceof Error ? (error as Error).message : String(error)}`
         );
       }
     } else if (headerSecret) {
@@ -1025,7 +1025,7 @@ serve(withRunLog('raydium-swap', async (req) => {
         try {
           secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
         } catch (error) {
-          return bad(`Failed to decrypt wallet secret: ${error instanceof Error ? error.message : String(error)}`, 400);
+          return bad(`Failed to decrypt wallet secret: ${error instanceof Error ? (error as Error).message : String(error)}`, 400);
         }
       }
     }

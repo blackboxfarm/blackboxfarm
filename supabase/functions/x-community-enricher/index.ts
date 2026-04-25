@@ -598,7 +598,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
   } catch (error) {
     console.error("X Community enricher error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

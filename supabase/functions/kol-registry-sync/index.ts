@@ -188,7 +188,7 @@ Deno.serve(withRunLog('kol-registry-sync', async (req) => {
         .from('kol_registry')
         .upsert(batch, { onConflict: 'x_handle', ignoreDuplicates: false });
       if (error) {
-        console.error(`[kol-sync] Upsert error:`, error.message);
+        console.error(`[kol-sync] Upsert error:`, (error as Error).message);
       } else {
         upserted += batch.length;
       }
@@ -218,7 +218,7 @@ Deno.serve(withRunLog('kol-registry-sync', async (req) => {
   } catch (error: any) {
     console.error('[kol-sync] Error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

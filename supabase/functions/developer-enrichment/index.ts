@@ -241,7 +241,7 @@ Deno.serve(withRunLog('developer-enrichment', async (req) => {
     const result: DeveloperEnrichmentResult = {
       found: true,
       developerId: developerProfile.id,
-      riskLevel: combinedRisk.level,
+      riskLevel: combinedRisk.level as any,
       reputationScore: developerProfile.reputation_score || 50,
       warning: combinedRisk.warning,
       canTrade: combinedRisk.canTrade,
@@ -312,7 +312,7 @@ Deno.serve(withRunLog('developer-enrichment', async (req) => {
   } catch (error) {
     console.error('[developer-enrichment] Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

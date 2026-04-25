@@ -154,7 +154,7 @@ async function executeSell(
 
     if (error) {
       console.error('Sell execution error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: (error as Error).message };
     }
 
     if (!data?.success) {
@@ -213,7 +213,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
   if (error) {
     console.error('Error fetching positions:', error);
-    stats.errors.push(error.message);
+    stats.errors.push((error as Error).message);
     stats.durationMs = Date.now() - startTime;
     return stats;
   }

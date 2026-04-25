@@ -117,7 +117,7 @@ async function monitorRejectedTokens(supabase: any): Promise<MonitorStats> {
 
   if (error) {
     console.error('[Lifecycle Monitor] Fetch error:', error);
-    stats.errors.push(error.message);
+    stats.errors.push((error as Error).message);
     stats.durationMs = Date.now() - startTime;
     return stats;
   }
@@ -242,7 +242,7 @@ async function getMissedStats(supabase: any): Promise<any> {
     .limit(20);
 
   if (error) {
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   // Calculate aggregate stats
@@ -300,7 +300,7 @@ async function trackRejection(
 
   if (error) {
     console.error('[Lifecycle Monitor] Track error:', error);
-    return { error: error.message };
+    return { error: (error as Error).message };
   }
 
   return { success: true, tracked: data };

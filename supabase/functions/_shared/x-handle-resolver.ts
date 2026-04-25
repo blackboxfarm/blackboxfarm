@@ -27,7 +27,7 @@ export async function resolveXHandle(
   const cleanHandle = handle.replace(/^@/, '').toLowerCase();
 
   // 1. Check cache — look up by current_handle
-  const { data: cached } = await supabase
+  const { data: cached }: { data: any } = await supabase
     .from('x_account_registry')
     .select('x_user_id, current_handle, display_name, is_verified, handle_history, linked_token_count')
     .eq('current_handle', cleanHandle)
@@ -86,7 +86,7 @@ export async function resolveXHandle(
     const now = new Date().toISOString();
 
     // 3. Check if this user_id already exists (handle rotation detection!)
-    const { data: existing } = await supabase
+    const { data: existing }: { data: any } = await supabase
       .from('x_account_registry')
       .select('x_user_id, current_handle, display_name, handle_history, name_history, linked_token_count')
       .eq('x_user_id', userId)
@@ -173,7 +173,7 @@ export async function incrementXUserTokenCount(
   xUserId: string,
   supabase: ReturnType<typeof createClient>,
 ): Promise<void> {
-  const { data } = await supabase
+  const { data }: { data: any } = await supabase
     .from('x_account_registry')
     .select('linked_token_count')
     .eq('x_user_id', xUserId)

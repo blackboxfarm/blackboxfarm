@@ -278,7 +278,7 @@ serve(withRunLog('flipit-notify', async (req) => {
 
         if (error) {
           console.error(`[flipit-notify] Failed to send to ${target.label}:`, error);
-          results.push({ target: target.label, success: false, error: error.message });
+          results.push({ target: target.label, success: false, error: (error as Error).message });
         } else if (data?.success) {
           console.log(`[flipit-notify] ✓ Sent to ${target.label}`);
           results.push({ target: target.label, success: true });
@@ -313,7 +313,7 @@ serve(withRunLog('flipit-notify', async (req) => {
   } catch (error) {
     console.error('[flipit-notify] Error:', error);
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: error instanceof Error ? (error as Error).message : 'Unknown error' 
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -132,7 +132,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
         }, { onConflict: 'source_id' })
         .select()
         .single();
-      if (error) return jsonRes({ error: error.message }, 500);
+      if (error) return jsonRes({ error: (error as Error).message }, 500);
       return jsonRes({ success: true, source: data });
     }
 
@@ -142,7 +142,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
         .from('funnel_feed_sources')
         .update({ is_active })
         .eq('id', id);
-      if (error) return jsonRes({ error: error.message }, 500);
+      if (error) return jsonRes({ error: (error as Error).message }, 500);
       return jsonRes({ success: true });
     }
 
@@ -152,7 +152,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
         .from('funnel_feed_sources')
         .delete()
         .eq('id', id);
-      if (error) return jsonRes({ error: error.message }, 500);
+      if (error) return jsonRes({ error: (error as Error).message }, 500);
       return jsonRes({ success: true });
     }
 
@@ -161,7 +161,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
         .from('funnel_feed_sources')
         .select('*')
         .order('created_at', { ascending: false });
-      if (error) return jsonRes({ error: error.message }, 500);
+      if (error) return jsonRes({ error: (error as Error).message }, 500);
       return jsonRes({ sources: data });
     }
 
@@ -172,7 +172,7 @@ Deno.serve(withRunLog('funnel-feed-scanner', async (req) => {
         .select('*, funnel_feed_sources(source_name)')
         .order('discovered_at', { ascending: false })
         .limit(limit);
-      if (error) return jsonRes({ error: error.message }, 500);
+      if (error) return jsonRes({ error: (error as Error).message }, 500);
       return jsonRes({ discoveries: data });
     }
 
@@ -307,8 +307,8 @@ async function scrapeViaMTProto(supabase: any, source: FunnelSource): Promise<an
   });
 
   if (error) {
-    console.error(`[funnel-feed-scanner] MTProto invoke error for ${source.source_name}:`, error.message);
-    throw new Error(`MTProto error: ${error.message}`);
+    console.error(`[funnel-feed-scanner] MTProto invoke error for ${source.source_name}:`, (error as Error).message);
+    throw new Error(`MTProto error: ${(error as Error).message}`);
   }
 
   if (!data?.success) {
@@ -509,7 +509,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     .update({
       last_scraped_at: new Date().toISOString(),
       last_message_id: maxMessageId,
-      tokens_discovered: (source.tokens_discovered || 0) + newTokens,
+      tokens_discovered: ((source as any).tokens_discovered || 0) + newTokens,
     })
     .eq('id', source.id);
 

@@ -497,7 +497,7 @@ serve(withRunLog('liquidity-lock-checker', async (req) => {
     console.error('Error checking liquidity lock:', error);
     return new Response(JSON.stringify({ 
       error: 'Failed to check liquidity lock status',
-      details: error instanceof Error ? error.message : String(error)
+      details: error instanceof Error ? (error as Error).message : String(error)
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

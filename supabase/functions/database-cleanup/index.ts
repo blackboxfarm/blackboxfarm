@@ -54,14 +54,14 @@ serve(withRunLog('database-cleanup', async (req) => {
 
         if (error) {
           console.error(`❌ Failed to delete campaign ${campaign.nickname}:`, error);
-          deletionResults.push({ campaign: campaign.nickname, success: false, error: error.message });
+          deletionResults.push({ campaign: campaign.nickname, success: false, error: (error as Error).message });
         } else {
           console.log(`✅ Deleted campaign ${campaign.nickname}`);
           deletionResults.push({ campaign: campaign.nickname, success: true });
         }
       } catch (error) {
         console.error(`❌ Exception deleting campaign ${campaign.nickname}:`, error);
-        deletionResults.push({ campaign: campaign.nickname, success: false, error: error instanceof Error ? error.message : String(error) });
+        deletionResults.push({ campaign: campaign.nickname, success: false, error: error instanceof Error ? (error as Error).message : String(error) });
       }
     }
 
@@ -251,7 +251,7 @@ serve(withRunLog('database-cleanup', async (req) => {
   } catch (error: any) {
     console.error("❌ Database cleanup error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

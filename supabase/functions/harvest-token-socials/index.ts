@@ -57,7 +57,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
       stats: typeof results.backfill,
     ) {
       // Try to resolve to immutable user ID
-      const xRes = await resolveXHandle(handle, supabase);
+    const xRes = await resolveXHandle(handle, supabase as any);
       if (xRes) {
         stats.xResolved++;
         if (xRes.isRotated) {
@@ -89,7 +89,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
           });
         }
         // Increment linked token count
-        await incrementXUserTokenCount(xRes.userId, supabase);
+      await incrementXUserTokenCount(xRes.userId, supabase as any);
       }
     }
 
@@ -104,7 +104,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
       meshLinks: MeshLink[],
       stats: typeof results.backfill,
     ) {
-      const tgRes = await resolveTelegramUsername(username, supabase);
+    const tgRes = await resolveTelegramUsername(username, supabase as any);
       if (tgRes) {
         stats.tgResolved++;
         if (tgRes.isRecycled) {
@@ -123,7 +123,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
           discovered_via: `harvest-token-socials:${source}`,
         });
         // Increment linked token count
-        await incrementChannelTokenCount(tgRes.channelId, supabase);
+      await incrementChannelTokenCount(tgRes.channelId, supabase as any);
       }
     }
 
@@ -231,7 +231,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
 
       // Register all X handles for Phanes backfill (lightweight, no API calls)
       if (xHandlesToRegister.length > 0) {
-        const registered = await registerXHandlesForPhanes(xHandlesToRegister, supabase, 'harvest-backfill');
+      const registered = await registerXHandlesForPhanes(xHandlesToRegister, supabase as any, 'harvest-backfill');
         console.log(`[harvest] Registered ${registered} new X handles for Phanes backfill`);
       }
 
@@ -455,7 +455,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
 
           // Register X handles for Phanes backfill
           if (xHandlesToRegister.length > 0) {
-            await registerXHandlesForPhanes(xHandlesToRegister, supabase, 'harvest-dexscreener');
+      await registerXHandlesForPhanes(xHandlesToRegister, supabase as any, 'harvest-dexscreener');
             xHandlesToRegister.length = 0; // Clear after registering
           }
 
@@ -493,7 +493,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
   } catch (error) {
     console.error('[harvest] Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

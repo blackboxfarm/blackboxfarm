@@ -76,7 +76,7 @@ serve(async (req) => {
     console.error("❌ Test error:", error);
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: (error as Error).message,
         message: "Test failed - check function logs for details"
       }),
       {

@@ -9,6 +9,7 @@ export interface SolscanMarketResult {
 }
 
 export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMarketResult> {
+  const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY') ?? '';
   const result: SolscanMarketResult = {
     poolAddresses: new Set(),
     verifiedLPAccount: null,

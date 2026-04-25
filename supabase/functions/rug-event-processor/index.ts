@@ -543,7 +543,7 @@ Deno.serve(withRunLog('rug-event-processor', async (req) => {
 
   } catch (error: any) {
     console.error("[Rug Event] Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

@@ -146,7 +146,7 @@ Deno.serve(withRunLog('verify-2fa-login', async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error instanceof Error ? error.message : String(error) 
+        error: error instanceof Error ? (error as Error).message : String(error) 
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

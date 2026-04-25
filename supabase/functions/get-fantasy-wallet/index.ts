@@ -36,7 +36,7 @@ Deno.serve(withRunLog('get-fantasy-wallet', async (req) => {
 
     if (error) {
       console.error('get-fantasy-wallet error:', error)
-      return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
+      return new Response(JSON.stringify({ error: (error as Error).message }), { status: 400, headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ fantasy_wallet: data || null }), { status: 200, headers: corsHeaders })

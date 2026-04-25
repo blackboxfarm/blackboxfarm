@@ -37,7 +37,7 @@ Deno.serve(withRunLog('get-monitored-wallets', async (req) => {
 
     if (error) {
       console.error('get-monitored-wallets error:', error)
-      return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
+      return new Response(JSON.stringify({ error: (error as Error).message }), { status: 400, headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ wallets: data || [] }), { status: 200, headers: corsHeaders })

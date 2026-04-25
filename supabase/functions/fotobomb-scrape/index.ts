@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('[FOTOBOMB] Error:', error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? (error as Error).message : 'Unknown error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

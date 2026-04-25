@@ -133,7 +133,7 @@ export async function fetchHistoricalDelta(
 
     if (error || !data || data.length === 0) return null;
 
-    const prev = data[0];
+    const prev = data[0] as any;
     const totalTiers = (prev.tier_dust ?? 0) + (prev.tier_retail ?? 0) + (prev.tier_serious ?? 0) + (prev.tier_whale ?? 0);
     const prevDustPct = totalTiers > 0 ? ((prev.tier_dust ?? 0) / totalTiers) * 100 : 0;
     
@@ -291,6 +291,8 @@ export interface DevGenealogyResult {
   cexSources: string[];
   kycRootWallet: string | null;
   alreadyKnown: boolean; // true if genealogy was already in DB
+  kycConfirmed?: boolean;
+  deepestFunder?: string | null;
 }
 
 /**

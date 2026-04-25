@@ -291,7 +291,7 @@ IMPORTANT: Only cite information that appears in the search results above. Use t
   } catch (error) {
     console.error('Social predictor error:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Analysis failed' }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : 'Analysis failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

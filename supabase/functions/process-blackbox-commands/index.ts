@@ -43,7 +43,7 @@ serve(withRunLog('process-blackbox-commands', async (req) => {
 
     if (error) {
       console.error("Error fetching command codes:", error);
-      return new Response(JSON.stringify({ error: error.message }), {
+      return new Response(JSON.stringify({ error: (error as Error).message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -107,14 +107,14 @@ serve(withRunLog('process-blackbox-commands', async (req) => {
 
             if (error) {
               console.error(`❌ Buy execution failed for ${command.id}:`, error);
-              results.push({ command_id: command.id, action: 'buy', success: false, error: error.message });
+              results.push({ command_id: command.id, action: 'buy', success: false, error: (error as Error).message });
             } else {
               console.log(`✅ Buy execution successful for ${command.id}:`, data);
               results.push({ command_id: command.id, action: 'buy', success: true, result: data });
             }
           } catch (error) {
             console.error(`❌ Buy execution error for ${command.id}:`, error);
-            results.push({ command_id: command.id, action: 'buy', success: false, error: error instanceof Error ? error.message : String(error) });
+            results.push({ command_id: command.id, action: 'buy', success: false, error: error instanceof Error ? (error as Error).message : String(error) });
           }
         }
 
@@ -131,14 +131,14 @@ serve(withRunLog('process-blackbox-commands', async (req) => {
 
             if (error) {
               console.error(`❌ Sell execution failed for ${command.id}:`, error);
-              results.push({ command_id: command.id, action: 'sell', success: false, error: error.message });
+              results.push({ command_id: command.id, action: 'sell', success: false, error: (error as Error).message });
             } else {
               console.log(`✅ Sell execution successful for ${command.id}:`, data);
               results.push({ command_id: command.id, action: 'sell', success: true, result: data });
             }
           } catch (error) {
             console.error(`❌ Sell execution error for ${command.id}:`, error);
-            results.push({ command_id: command.id, action: 'sell', success: false, error: error instanceof Error ? error.message : String(error) });
+            results.push({ command_id: command.id, action: 'sell', success: false, error: error instanceof Error ? (error as Error).message : String(error) });
           }
         }
 
@@ -148,7 +148,7 @@ serve(withRunLog('process-blackbox-commands', async (req) => {
 
       } catch (error) {
         console.error(`Error processing command ${command.id}:`, error);
-        results.push({ command_id: command.id, success: false, error: error instanceof Error ? error.message : String(error) });
+        results.push({ command_id: command.id, success: false, error: error instanceof Error ? (error as Error).message : String(error) });
       }
     }
 
@@ -166,7 +166,7 @@ serve(withRunLog('process-blackbox-commands', async (req) => {
 
   } catch (error: any) {
     console.error("BlackBox command processor error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });

@@ -123,7 +123,7 @@ serve(withRunLog('enhanced-revenue-collector', async (req) => {
   } catch (error: any) {
     console.error("Revenue collection error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

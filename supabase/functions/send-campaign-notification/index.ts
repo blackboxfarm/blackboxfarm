@@ -270,7 +270,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.error('Error in send-campaign-notification function:', error);
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: (error as Error).message,
         details: 'Failed to send campaign notification'
       }),
       { 

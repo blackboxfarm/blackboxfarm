@@ -138,7 +138,7 @@ serve(withRunLog('banner-fund-sweep', async (req) => {
         sweptOrders.push(order.id);
       } catch (error: any) {
         console.error(`Error sweeping order ${order.id}:`, error);
-        errors.push({ orderId: order.id, error: error.message });
+        errors.push({ orderId: order.id, error: (error as Error).message });
       }
     }
 
@@ -154,7 +154,7 @@ serve(withRunLog('banner-fund-sweep', async (req) => {
   } catch (error: any) {
     console.error('Error in fund sweep:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

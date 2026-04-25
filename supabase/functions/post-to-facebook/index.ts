@@ -111,7 +111,7 @@ Deno.serve(withRunLog('post-to-facebook', async (req) => {
     console.error("Facebook posting error:", error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message || String(error),
+      error: (error as Error).message || String(error),
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -541,6 +541,6 @@ Deno.serve(withRunLog('pumpfun-curve-analyzer', async (req) => {
 
   } catch (error) {
     console.error("Curve analyzer error:", error);
-    return bad(`Analyzer error: ${error.message}`, 500);
+    return bad(`Analyzer error: ${(error as Error).message}`, 500);
   }
 }));

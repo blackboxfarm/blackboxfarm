@@ -18,7 +18,7 @@ function ensureResvgInitialized(): Promise<void> {
     try {
       await initWasm(fetch(wasmUrl));
     } catch (e) {
-      const msg = String(e?.message ?? e);
+    const msg = String((e as any)?.message ?? e);
       if (msg.toLowerCase().includes("already") && msg.toLowerCase().includes("initialized")) return;
       throw e;
     }
@@ -247,7 +247,7 @@ serve(withRunLog('generate-share-card-satori', async (req) => {
     };
 
     console.log('SVG generation starting...');
-    const svg = await satori(cardTree, {
+    const svg = await satori(cardTree as any, {
       width: 1200,
       height: 628,
       fonts: [{ name: 'Inter', data: fontData, weight: 400, style: 'normal' }],
@@ -290,7 +290,7 @@ serve(withRunLog('generate-share-card-satori', async (req) => {
   } catch (error) {
     console.error('Error generating share card:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

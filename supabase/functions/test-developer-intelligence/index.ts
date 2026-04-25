@@ -35,14 +35,14 @@ Deno.serve(async (req) => {
       
       for (const table of tables) {
         const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true })
-        if (error) throw new Error(`Table ${table} not accessible: ${error.message}`)
+        if (error) throw new Error(`Table ${table} not accessible: ${(error as Error).message}`)
         test1.details[table] = `✓ Exists (${count} records)`
       }
       test1.status = 'passed'
       results.summary.passed++
     } catch (error) {
       test1.status = 'failed'
-      test1.details.error = error.message
+      test1.details.error = (error as Error).message
       results.summary.failed++
     }
     results.tests.push(test1)
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       results.summary.passed++
     } catch (error) {
       test2.status = 'failed'
-      test2.details.error = error.message
+      test2.details.error = (error as Error).message
       results.summary.failed++
     }
     results.tests.push(test2)
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
       results.summary.passed++
     } catch (error) {
       test4.status = 'failed'
-      test4.details.error = error.message
+      test4.details.error = (error as Error).message
       results.summary.failed++
     }
     results.tests.push(test4)
@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
       results.summary.passed++
     } catch (error) {
       test5.status = 'failed'
-      test5.details.error = error.message
+      test5.details.error = (error as Error).message
       results.summary.failed++
     }
     results.tests.push(test5)
@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
       results.summary.passed++
     } catch (error) {
       test6.status = 'failed'
-      test6.details.error = error.message
+      test6.details.error = (error as Error).message
       results.summary.failed++
     }
     results.tests.push(test6)
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Integration test error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

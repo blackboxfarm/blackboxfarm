@@ -177,7 +177,7 @@ Deno.serve(withRunLog('backfill-wallet-transactions', async (req) => {
     console.error('Backfill error:', error)
     return new Response(JSON.stringify({
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? (error as Error).message : String(error),
       hint: 'Check HELIUS_API_KEY validity, wallet address, and function logs.'
     }), {
       status: 200,

@@ -512,7 +512,7 @@ serve(withRunLog('mint-monitor-scanner', async (req) => {
       
       if (error) {
         console.error('Error adding to cron:', error);
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: (error as Error).message }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
@@ -541,7 +541,7 @@ serve(withRunLog('mint-monitor-scanner', async (req) => {
       
       if (error) {
         console.error('Error removing from cron:', error);
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: (error as Error).message }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
@@ -780,7 +780,7 @@ serve(withRunLog('mint-monitor-scanner', async (req) => {
         .order('created_at', { ascending: false });
       
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: (error as Error).message }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
@@ -875,7 +875,7 @@ serve(withRunLog('mint-monitor-scanner', async (req) => {
     
   } catch (error) {
     console.error('Error in mint-monitor-scanner:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }

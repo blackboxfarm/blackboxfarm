@@ -296,7 +296,7 @@ serve(withRunLog('flipit-wallet-withdrawal', async (req) => {
 
   } catch (error: any) {
     console.error("[flipit-withdrawal] Error:", error);
-    return new Response(JSON.stringify({ error: error.message || "Internal server error" }),
+    return new Response(JSON.stringify({ error: (error as Error).message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 }));

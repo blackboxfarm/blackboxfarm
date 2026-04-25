@@ -19,7 +19,7 @@ function createMemoInstruction(memo: string, signer: PublicKey): TransactionInst
   return new TransactionInstruction({
     keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
     programId: MEMO_PROGRAM_ID,
-    data: new TextEncoder().encode(memo),
+    data: new TextEncoder().encode(memo) as any,
   });
 }
 
@@ -271,7 +271,7 @@ serve(withRunLog('fuct-airdrop-gift', async (req) => {
 
   } catch (error) {
     console.error('FUCT Gift error:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Unknown error occurred' }), {
+    return new Response(JSON.stringify({ error: (error as Error).message || 'Unknown error occurred' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

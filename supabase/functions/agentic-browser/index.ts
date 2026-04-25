@@ -261,7 +261,7 @@ serve(withRunLog('agentic-browser', async (req) => {
               console.error('❌ Challenge handler error:', error);
               return {
                 success: false,
-                error: error.message,
+                error: (error as Error).message,
                 finalUrl: page.url(),
                 finalTitle: await page.title().catch(() => 'Error'),
                 challengeDetected: true,

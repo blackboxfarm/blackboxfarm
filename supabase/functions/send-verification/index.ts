@@ -99,7 +99,7 @@ serve(withRunLog('send-verification', async (req) => {
   } catch (error) {
     console.error('Error in send-verification:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      JSON.stringify({ error: error instanceof Error ? (error as Error).message : String(error) }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,

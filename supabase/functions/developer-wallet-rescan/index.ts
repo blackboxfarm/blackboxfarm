@@ -444,7 +444,7 @@ Deno.serve(withRunLog('developer-wallet-rescan', async (req) => {
   } catch (error: any) {
     console.error("[Developer Rescan] Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

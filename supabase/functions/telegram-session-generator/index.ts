@@ -105,7 +105,7 @@ serve(withRunLog('telegram-session-generator', async (req) => {
         console.error('[telegram-session-generator] Error creating session:', error);
         return new Response(JSON.stringify({
           success: false,
-          error: 'Failed to create session: ' + error.message
+          error: 'Failed to create session: ' + (error as Error).message
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
       }
 
@@ -215,7 +215,7 @@ serve(withRunLog('telegram-session-generator', async (req) => {
           console.error('[telegram-session-generator] Error testing public channel:', error);
           return new Response(JSON.stringify({
             success: false,
-            error: 'Failed to access channel: ' + error.message
+            error: 'Failed to access channel: ' + (error as Error).message
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
         }
       }
@@ -265,7 +265,7 @@ serve(withRunLog('telegram-session-generator', async (req) => {
     console.error('[telegram-session-generator] Error:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: (error as Error).message
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
   }
 }));

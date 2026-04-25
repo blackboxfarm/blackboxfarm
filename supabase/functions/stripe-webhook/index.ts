@@ -142,7 +142,7 @@ serve(withRunLog('stripe-webhook', async (req) => {
               updated_at: new Date().toISOString(),
             }, { onConflict: "user_id,tier_key" });
 
-          if (error) logStep("web_user_subscriptions upsert error", { error: error.message });
+          if (error) logStep("web_user_subscriptions upsert error", { error: (error as Error).message });
           else logStep("web_user_subscriptions synced");
         } else {
           const { error } = await supabase
@@ -151,7 +151,7 @@ serve(withRunLog('stripe-webhook', async (req) => {
             .eq("user_id", userId)
             .eq("tier_key", tierKey);
 
-          if (error) logStep("Deactivation error", { error: error.message });
+          if (error) logStep("Deactivation error", { error: (error as Error).message });
           else logStep("Subscription deactivated in DB");
         }
       } else {

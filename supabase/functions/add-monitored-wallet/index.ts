@@ -85,7 +85,7 @@ Deno.serve(withRunLog('add-monitored-wallet', async (req) => {
       }
 
       console.error('Failed to insert monitored wallet:', error)
-      return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
+      return new Response(JSON.stringify({ error: (error as Error).message }), { status: 400, headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ wallet: data, status: 'created' }), { status: 200, headers: corsHeaders })

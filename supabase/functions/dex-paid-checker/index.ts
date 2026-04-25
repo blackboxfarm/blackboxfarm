@@ -67,7 +67,7 @@ async function fetchDexScreenerOrders(tokenMint: string): Promise<DexScreenerOrd
     // API returns { orders: [...], boosts: [...] } - extract orders array
     return data?.orders || (Array.isArray(data) ? data : []);
   } catch (error) {
-    await logger.fail(error instanceof Error ? error.message : String(error));
+    await logger.fail(error instanceof Error ? (error as Error).message : String(error));
     console.error(`Error fetching DexScreener orders for ${tokenMint}:`, error);
     return [];
   }
@@ -130,7 +130,7 @@ async function fetchDexScreenerData(tokenMint: string): Promise<{ boosts: number
     await logger.complete(200);
     return { boosts: maxBoosts, socials };
   } catch (error) {
-    await logger.fail(error instanceof Error ? error.message : String(error));
+    await logger.fail(error instanceof Error ? (error as Error).message : String(error));
     console.error(`Error fetching DexScreener data for ${tokenMint}:`, error);
     return { boosts: 0 };
   }
@@ -385,7 +385,7 @@ serve(withRunLog('dex-paid-checker', async (req) => {
     console.error('Error in dex-paid-checker:', error);
     return new Response(
       JSON.stringify({ 
-        error: error.message || 'Unknown error',
+        error: (error as Error).message || 'Unknown error',
         success: false
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

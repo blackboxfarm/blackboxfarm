@@ -79,7 +79,7 @@ Deno.serve(withRunLog('backfill-genealogy', async (req) => {
         });
 
         if (error) {
-          console.warn(`[backfill-genealogy] Scanner error for ${wallet.slice(0, 8)}:`, error.message);
+          console.warn(`[backfill-genealogy] Scanner error for ${wallet.slice(0, 8)}:`, (error as Error).message);
           failed++;
         } else {
           traced++;
@@ -110,7 +110,7 @@ Deno.serve(withRunLog('backfill-genealogy', async (req) => {
 
   } catch (error: any) {
     console.error('[backfill-genealogy] Fatal:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

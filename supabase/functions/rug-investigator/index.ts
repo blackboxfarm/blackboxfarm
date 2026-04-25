@@ -460,9 +460,9 @@ serve(withRunLog('rug-investigator', async (req) => {
     try {
       tokenInfo = await getTokenInfo(tokenMint);
     } catch (error) {
-      await failInvestigation(`Failed to fetch token info: ${error.message}`);
+      await failInvestigation(`Failed to fetch token info: ${(error as Error).message}`);
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch token info', details: error.message }),
+        JSON.stringify({ error: 'Failed to fetch token info', details: (error as Error).message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -666,12 +666,12 @@ serve(withRunLog('rug-investigator', async (req) => {
     try {
       await supabase
         .from('rug_investigations')
-        .update({ status: 'failed', error_message: String(error.message || error) })
+        .update({ status: 'failed', error_message: String((error as Error).message || error) })
         .eq('status', 'in_progress');
     } catch {}
     
     return new Response(
-      JSON.stringify({ error: error.message || 'Investigation failed' }),
+      JSON.stringify({ error: (error as Error).message || 'Investigation failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

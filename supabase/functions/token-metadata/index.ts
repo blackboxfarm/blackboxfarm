@@ -107,7 +107,7 @@ async function fetchBagsFmMetadata(mintAddress: string, apiKey?: string): Promis
     
     return null;
   } catch (error) {
-    console.log('Bags.fm metadata fetch failed:', error instanceof Error ? error.message : String(error));
+    console.log('Bags.fm metadata fetch failed:', error instanceof Error ? (error as Error).message : String(error));
     return null;
   }
 }
@@ -144,7 +144,7 @@ async function fetchPumpFunMetadata(mintAddress: string): Promise<{
       bondingCurveProgress: data.bonding_curve_progress
     };
   } catch (error) {
-    console.log('Pump.fun metadata fetch failed:', error instanceof Error ? error.message : String(error));
+    console.log('Pump.fun metadata fetch failed:', error instanceof Error ? (error as Error).message : String(error));
     return null;
   }
 }
@@ -177,7 +177,7 @@ async function fetchHeliusMetadata(mintAddress: string, heliusApiKey: string) {
       };
     }
   } catch (error) {
-    console.log('Helius metadata fetch failed:', error instanceof Error ? error.message : String(error));
+    console.log('Helius metadata fetch failed:', error instanceof Error ? (error as Error).message : String(error));
   }
   return null;
 }
@@ -228,7 +228,7 @@ async function fetchMetaplexMetadata(mintAddress: string, rpcUrl: string) {
       }
     }
   } catch (error) {
-    console.log('Metaplex metadata fetch failed:', error instanceof Error ? error.message : String(error));
+    console.log('Metaplex metadata fetch failed:', error instanceof Error ? (error as Error).message : String(error));
   }
   return null;
 }
@@ -259,7 +259,7 @@ async function fetchMintAuthorityFallback(mintAddress: string, rpcUrl: string): 
 
     return null;
   } catch (error) {
-    console.warn('Mint authority fallback failed:', error instanceof Error ? error.message : String(error));
+    console.warn('Mint authority fallback failed:', error instanceof Error ? (error as Error).message : String(error));
     return null;
   }
 }
@@ -565,7 +565,7 @@ serve(withRunLog('token-metadata', async (req) => {
         }
       }
     } catch (error) {
-      console.log('DexScreener fetch failed:', error instanceof Error ? error.message : String(error));
+      console.log('DexScreener fetch failed:', error instanceof Error ? (error as Error).message : String(error));
     }
 
     // Step 2: Detect launchpad
@@ -891,7 +891,7 @@ serve(withRunLog('token-metadata', async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? (error as Error).message : String(error),
         metadata: {
           mint: mintAddress,
           name: 'Unknown Token',
