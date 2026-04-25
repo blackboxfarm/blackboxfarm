@@ -1,55 +1,78 @@
-# 🎯 Goal — Race the "Funded by" Trail to KYC, Solscan-Style
+# 🚀 Two Things, One Approval
 
-You're 100% right: Solscan reaches Binance in ~10 hops because it does a **linear recursive click** — follow the single biggest funder until it hits a known exchange. Our `auto-genealogy.ts` tracer fans out 3-wide and bails at depth 8 with a 0.1 SOL floor, so it dies at hop 2 on dust-funded mints like `$HONESTSHRUG`.
+## Part 1 — Stop waiting, just retrace it now
 
-We **already have** the right algorithm (`wallet-genealogy-scanner` runs depth=20, branch=1, min=0.05) — it's just not wired into the auto-trace path that runs on rejection. Fix is small.
+You're right, the 3-hour cron is silly when we can fire the scan on demand.
 
----
+**Action:** Invoke `wallet-genealogy-scanner` immediately against the `Honestrug` creator (`3H7P1ru6aaMcXKvWNVpau1WdRjYsR7HZZ6puKaeXhxtP`) with `depth=20, branch=1`. Returns the full ladder live, persists to `reputation_mesh` + `dev_wallet_reputation`, and we read the KYC root straight out of the response.
 
-## The Change (1 file, ~10 lines)
+**If the right token was actually a different `$HONESTSHRUG` mint**, paste the CA and I'll target that one instead. (DB has `Honestrug`, `HONESTRUG`, and `Shruggie` variants — best guess is the first.)
 
-**`supabase/functions/_shared/auto-genealogy.ts`**
-
-| Constant | Current | New | Why |
-|---|---|---|---|
-| `MAX_DEPTH` | `8` | `20` | Match Solscan's reach; KYC roots commonly sit at 8–15 hops |
-| `MIN_SOL` | `0.1` | `0.01` | Catches dust-funded temp wallets (your `$HONESTSHRUG` case) |
-| Branching | top-3 funders | **top-1 funder only** (top-2 if depth ≤ 3) | Linear walk = `20 × 1 RPC` instead of `3²⁰`. Same cost as Solscan. |
-| Signature lookback | `limit: 20`, slice 10 | `limit: 50`, slice 25 | Wallet may have many outgoing txs hiding the funder |
-| Early-exit on CEX | already done ✅ | keep | Stops the moment we hit Binance/Coinbase/etc. |
-
-**Cost math:** A 20-hop linear chase = **20 Helius enhanced-tx calls** (~20 credits). Current 8-hop × top-3 with branching = up to **3⁰+3¹+…+3⁷ ≈ 9,840 calls** in the worst case (we cap visited so it's lower in practice, but still 10–40×). The new version is actually **cheaper and deeper**.
+No code change needed for this — it's just a one-shot tool call.
 
 ---
 
-## Optional Hop-2 Polish
+## Part 2 — Surface the collaboration / "dev family" mesh (the real prize)
 
-Add an explicit "trail lost" reason to `GenealogyResult`:
-- `"hit_cex"` → success, KYC found
-- `"depth_cap"` → hit 20 hops, still wallet (rare)
-- `"no_funders_above_threshold"` → wallet has no incoming SOL ≥ 0.01 (true dead-end)
-- `"unclassified_funder"` → funded by a wallet we can't classify (DEX router, bridge, swap aggregator)
+### What I found
 
-This surfaces in the UI/Telegram report as **"Trail ended at hop X — funded by unclassified `4xQR…` (likely Jupiter aggregator)"** instead of a silent stop.
+Querying `reputation_mesh` right now returns this *already-collected* gold:
+
+| Funder Wallet (truncated) | Distinct creators it bankrolled |
+|---|---|
+| `14cT4K…oF9y` | **46** |
+| `5ndLnE…HEPs` | **45** |
+| `H8HBLH…NN3U` | **44** |
+| `7BwHJR…KTXY` | **44** |
+| `FopmrH…nUUb` | **43** |
+| `8QCVZ7…RNn5` | **36** |
+| ...20+ more | 20–35 each |
+
+These are **mid-fanout funders** (3–50 downstream wallets) — too small to be CEX hot wallets, too big to be coincidence. **This is the collaboration signal you're asking about.** When the same funder seeds 30 different "creator" wallets, that's one operator running a multi-mint farm.
+
+(Separately: the top-1 funder hit 1,737 creators — that's almost certainly an unlabelled CEX hot wallet that needs to be added to `cex-wallets.ts` so we stop walking through it. I'll tag it in the same pass.)
+
+### Three small additions
+
+**A. `mesh-shared-funders` edge function** *(new, ~80 lines)*
+- Input: `{ wallet }` — any creator wallet
+- Walks its `genealogy_chain` (already stored), then for each intermediate wallet, queries `reputation_mesh` for sibling downstream wallets ("who else did this funder seed?")
+- Returns:
+```json
+{
+  "creator": "3H7P1...",
+  "shared_funders": [
+    {
+      "funder": "5ndLnE...",
+      "depth_in_chain": 4,
+      "siblings_count": 45,
+      "sibling_creators": ["...", "...", "..."],
+      "sibling_tokens": [{ "mint": "...", "symbol": "FOO", "peak_multiplier": 12.3 }],
+      "cluster_label": "likely_dev_family"
+    }
+  ]
+}
+```
+
+**B. `<SharedFundersPanel />` UI component** *(new)*
+- Drop into the existing Bubblemap / Holders Report sidebar
+- Renders each shared funder as a collapsible card showing the sibling tokens (with their peak multipliers — so you instantly see "this farmer's other mints did 50x")
+- Click a sibling token → deep-link to its bubble map
+
+**C. Auto-flag known false-positive CEX hot wallets**
+- Add the top funder (1,737 fanout) to `cex-wallets.ts` after a quick Solscan label check, so future traces stop at it instead of polluting the cluster data with thousands of unrelated creators.
+
+### What I will NOT touch
+
+- `auto-genealogy.ts` core logic (just shipped, leaving alone)
+- The 3-hour backfill cron (orthogonal)
+- `insiders-cross-links` (different surface, different audience)
 
 ---
 
-## Verification Plan
+## TL;DR
+1. Retrace `Honestrug` right now to prove the new linear walker hits Binance.
+2. Build a tiny "shared funder" lens over the mesh data we're *already* collecting — turns the genealogy graph into a collaboration detector.
+3. Patch one suspect CEX wallet so it stops eating the cluster signal.
 
-1. After deploy, manually invoke `wallet-genealogy-scanner` with `tempg6Y1TeRAYm5aHG43yGAtV5UYCNuHFpC17hmYAWz` (the wallet from your screenshot) and confirm it resolves to **Binance 2** in the response.
-2. Re-run the auto-tracer on `$HONESTSHRUG` and check `dev_wallet_reputation.upstream_wallets` populates with the full chain ending at the Binance deposit address.
-3. Spot-check Helius credit usage in the next 24h — expect a **decrease** (not increase) thanks to linear vs branching.
-
----
-
-## What I'm **NOT** Touching
-
-- `wallet-genealogy-scanner` (already correct, used by Bubblemap deep scans)
-- `cex-wallets.ts` (Binance 2 is already known — not a coverage gap)
-- The 3-hour retry cadence (separate concern; this fix should resolve the trail in the **first** try)
-
----
-
-## Memory Update
-
-I'll refresh `mem://features/oracle/dev-genealogy-tracing` to document the new defaults (20 hops, 0.01 SOL, linear walk) so future tracer work doesn't accidentally regress to the branching pattern.
+Approve and I'll ship all three in one pass.

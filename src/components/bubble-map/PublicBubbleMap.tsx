@@ -18,6 +18,7 @@ import SocialTimeline from "./SocialTimeline";
 import BubbleMapMinimap from "./BubbleMapMinimap";
 import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
 import { dispatchThought, dispatchThoughtCustom } from "@/components/chat/AvatarThoughtBubble";
+import { SharedFundersPanel } from "./SharedFundersPanel";
 
 type ViewMode = 'bubble' | 'tree';
 type SolarMode = 'minimum' | 'clusters';
@@ -1093,6 +1094,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           Resolving dev wallet...
         </div>
       )}
+
+      {/* Collaboration / Dev-Family Lens — surfaces shared funders across creators */}
+      {devWalletAddress && <SharedFundersPanel creatorWallet={devWalletAddress} />}
 
       {/* Unified Control Bar — layout controls only */}
       {graphData.nodes.length > 0 && (
