@@ -1,62 +1,107 @@
-## What's actually broken
+# Wallet Genealogy & Cross-Link Detection for Insiders Channel
 
-Confirmed from the DB and cron table:
+## What I confirmed in your codebase
 
-- `telegram-channel-monitor` IS on cron (every 15s × 4 stagger) — messages keep flowing into `telegram_channel_calls`. ✅
-- `insiders-lifecycle-builder` is **NOT on cron** — only fires when you click "Rebuild from messages". Last build: yesterday 21:47 UTC.
-- `insiders-mesh-promoter` is **NOT on cron** — never run. 0 promoted.
-- Of 823 lifecycle tokens, **822 have no `creator_wallet`**, so the promoter marks all 150 ≥3x tokens as `not_eligible` and skips. That's why the table looks empty.
-- Lifecycle builder doesn't enrich anything — no creator resolution, no socials, no genealogy, no DEX-vs-launchpad social diff. It's a dumb message aggregator.
+**The plumbing is already there — it just isn't being shown to you and isn't being run on the existing 1,055 rows.**
 
-So the user is right: this needs to be on a cron AND each token needs the full mesh treatment.
+- `telegram_insider_token_lifecycle` already has columns `creator_wallet`, `genealogy_depth`, and `genealogy_kyc_root`.
+- `_shared/auto-genealogy.ts → traceParentWallets()` already walks the funding tree via Helius Enhanced Transactions API (top-3 funders per hop, MAX_DEPTH=8, min 0.1 SOL, with 9 known CEX wallets tagged as "KYC Root").
+- `insiders-lifecycle-builder` already calls it and writes back `genealogy_depth` + `genealogy_kyc_root`.
+- All discovered hops are also pushed into `reputation_mesh` as `directly_funded` / `indirectly_funded` edges with confidence scores.
 
-## The fix — 3 parts
+**Current state of the data:**
+| Metric | Value |
+| --- | --- |
+| Lifecycle rows total | 1,055 |
+| Rows with creator wallet resolved | 750 |
+| Rows with KYC root resolved | **0** ← the bug |
+| Creators that already minted ≥2 tokens in this batch | 15+ visible (e.g. `8ZN71X…686FP` minted CAM, AIB, chloe; best peak 583x) |
 
-### 1. Upgrade `insiders-lifecycle-builder` to enrich every token
+The drill-down dialog only renders `Creator: <wallet>` — it never reads the parent-wallet ladder or the KYC root, even though the `reputation_mesh` rows are sitting in the database for many of them. That's why $RISE looks like Mint→KYC with nothing in between.
 
-After the existing message aggregation + upsert, add a per-token enrichment loop that runs for every token (full pass on first cron run, then incremental) doing:
+---
 
-- **Creator resolution** via `_shared/creator-resolver.ts` (Pump.fun → Helius → DAS → DB cache). Write `creator_wallet` and `creator_resolved_at` back to `telegram_insider_token_lifecycle`.
-- **Mesh feed** — call `meshFeed.token()` and `meshFeed.wallet()` from `_shared/mesh-feeder.ts` so the token + creator land in `reputation_mesh`.
-- **Social discovery** — for each token, fetch:
-  - Launchpad socials (Pump.fun / Bonk.fun / Bags.fm via existing `fetchPumpFunCoin` + sister helpers)
-  - DexScreener socials (already have `dex-top-200` cache + on-demand fetch)
-  - Metaplex on-chain URI socials (`social-link-mint-checker` logic)
-  - Diff them, upsert each into `token_social_links` with a `source` ('launchpad' | 'dex' | 'metaplex') and `observed_at` so changes over time become a history. If the same handle appears in launchpad and dex → that's confirmation. If they differ → flag `socials_changed` on the lifecycle row.
-- **Auto-genealogy** — call `traceParentWallets()` from `_shared/auto-genealogy.ts` on the creator wallet, up to depth 8 (existing default), to find KYC root via CEX hot-wallet match. Store result on `dev_wallet_reputation` (already what genealogy meshing does).
-- **No silent fails** — wrap every write with `assertDbWrite` per the project's zero-tolerance rule. Log per-token enrichment outcome (creator: yes/no, socials: N found, genealogy: depth/KYC).
+## The 3 things to fix
 
-Concurrency: process tokens in batches of 5 with small delays to respect Helius/Pump.fun governance (200-300/hr Pump.fun, 5s throttle; Helius credits monthly cap).
+### 1. Backfill the trace on every existing row that has a creator (305 missing + ~750 never run)
 
-Priority order inside the cron pass: highest `peak_multiplier` first (most successful = most important, exactly as you said), then newest. Always re-check the top-50 most recent tokens for socials drift on every run.
+Add a **"Trace KYC roots"** button next to the existing "Rebuild from messages" / "Promote ≥3x to Mesh" buttons in `InsidersLifecycleTab.tsx`. It calls a new edge function `insiders-genealogy-backfill` that:
 
-### 2. Wire `insiders-mesh-promoter` to run after enrichment
+- Selects every row where `creator_wallet IS NOT NULL AND (genealogy_kyc_root IS NULL OR enrichment_last_run_at < now() - 7 days)`.
+- For each, calls `traceParentWallets(creator)` and writes back `genealogy_depth`, `genealogy_kyc_root`, plus a new JSONB column `genealogy_chain` (added below) containing the full ordered ladder `[{wallet, depth, amountSol, cexName?}]`.
+- Uses a 200ms throttle between wallets (matches the existing Helius governance memo) and processes in batches of 50 per invocation, returning `{processed, remaining}` so the UI can loop until 0.
 
-In the same cron run, after the enrichment pass finishes, call the promoter so any newly-resolved creators on ≥3x tokens get promoted to `reputation_mesh` as good actors (existing logic already handles this correctly — it just couldn't fire before because creators were null).
+**Why CEX detection sometimes misses Binance after 7-8 hops:** the shared `CEX_WALLETS` map only has 9 addresses. Your $RISE example confirms a real Binance hot wallet that isn't in that list. I'll cross-reference the existing `_shared/cex-wallets.ts` (176 lines, 150+ exchange addresses per the genealogy memory) and replace the inline 9-entry map in `auto-genealogy.ts` with the canonical import, so future traces resolve Binance/Coinbase/Kraken/etc reliably.
 
-### 3. Add the cron job — every 3 hours
+### 2. Show the full wallet ladder in the drill-down dialog
 
-Single `pg_cron` job (`insiders-lifecycle-full-3h`):
-- Calls a new orchestrator endpoint OR sequentially hits `insiders-lifecycle-builder` then `insiders-mesh-promoter` (cleaner: have the builder call the promoter at the end of its run, keep the cron to one HTTP call).
-- Schedule: `0 */3 * * *` (top of the hour, every 3h).
-- First run on deploy will be the "complete refetch + full mesh build for all 823 tokens" the user asked for. Subsequent runs are incremental + drift checks.
+Replace the single `Creator: <wallet>` line with a structured "Funding Lineage" section:
 
-### Files I will touch
+```
+Mint Wallet     35jp…Fpump          (— minted token)
+   ↓ funded by 1.42 SOL
+Hop 1           D7o5…3qv1            (creator wallet)
+   ↓ funded by 0.85 SOL  
+Hop 2           AbCd…wXyZ
+   ↓ funded by 2.10 SOL
+…
+🏦 KYC Root     5tzF…uAi9    [BINANCE]
+```
 
-- `supabase/functions/insiders-lifecycle-builder/index.ts` — add enrichment loop (creator resolve + mesh feed + socials diff + genealogy + assertDbWrite + chain to promoter at end).
-- New migration: `pg_cron` job `insiders-lifecycle-full-3h` (every 3h).
-- (Optional, only if needed) one new column on `telegram_insider_token_lifecycle`: `socials_last_checked_at timestamptz`, `socials_changed boolean default false` — so the UI can show drift.
+Each row has a Solscan deep-link, a copy-button, and the SOL amount that funded it. The new `genealogy_chain` column drives this directly — no extra queries on render.
 
-### What I am NOT doing
+If the chain terminates without hitting a CEX, show `🌑 Trail lost at depth N — funder: <wallet>` so you know the trace ran but didn't reach KYC.
 
-- Not touching `telegram-channel-monitor` (already on cron, working).
-- Not rewriting `creator-resolver`, `mesh-feeder`, `auto-genealogy`, or `social-link-mint-checker` — reusing them as-is.
-- Not changing the UI (the existing buttons keep working; cron just makes manual clicks unnecessary).
+### 3. Cross-link detector (the "RedFlag/GreenFlag" feature you asked for)
 
-### Outcome after deploy
+Add a new section below the table called **"Wallet Cross-Links"** with three tabs:
 
-- Within minutes of the first cron tick: all 823 tokens get a creator-resolution attempt, mesh links written, socials snapshotted, KYC traced. The UI table will start filling in `Mesh: Promoted` (or `Pending` with concrete reason) instead of being empty.
-- Every 3 hours after that: re-checks top-50 newest for social drift, attempts to resolve any creators that failed last time, promotes any new ≥3x tokens.
-- `mesh_decision_trace` on each row tells you exactly why a token did or didn't get promoted — no more "fail to find KYC" silent shrugs.
+**A. Shared Creator Wallet** — group lifecycle rows by `creator_wallet HAVING count(*) > 1`. For each cluster show: creator address, member tokens (symbol + peak X badge color-coded green/red), and a one-line verdict (e.g. "3 tokens • 2 over 5x • 0 rugs → 🟢 Repeat Winner" or "4 tokens • 0 over 2x • 3 rugs → 🔴 Serial Saddev").
 
-Approve and I'll execute it in one pass.
+**B. Shared Intermediary Funder** — query `reputation_mesh` for `relationship IN ('directly_funded','indirectly_funded')` where `linked_id` is in our creator set, group by `source_id` (the funder), filter to funders that appear in ≥2 different families. Same color-coded verdict.
+
+**C. Shared KYC Root** — group by `genealogy_kyc_root`. This is the most powerful: shows every Insiders token that ultimately traces back to the same Binance/Coinbase/etc deposit address. A single CEX deposit funding 5 Insiders-channel tokens is a very loud signal whether they're all winners or all rugs.
+
+Each cluster row is clickable → opens the existing drill-down for that token. Clusters with mixed outcomes (some winners, some rugs from same root) get a yellow "⚠ Mixed-Outcome Family" flag.
+
+---
+
+## Schema change (one migration)
+
+```sql
+ALTER TABLE telegram_insider_token_lifecycle
+  ADD COLUMN IF NOT EXISTS genealogy_chain jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_lifecycle_kyc_root
+  ON telegram_insider_token_lifecycle (genealogy_kyc_root)
+  WHERE genealogy_kyc_root IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_lifecycle_creator
+  ON telegram_insider_token_lifecycle (creator_wallet)
+  WHERE creator_wallet IS NOT NULL;
+```
+
+No new tables — `reputation_mesh` already holds the funder edges with the right relationship strings.
+
+---
+
+## Files I will create or edit
+
+| File | Change |
+| --- | --- |
+| `supabase/functions/_shared/auto-genealogy.ts` | Replace inline 9-entry `CEX_WALLETS` with import from `_shared/cex-wallets.ts`; have `traceParentWallets` also return the ordered chain so the builder can persist it. |
+| `supabase/functions/insiders-lifecycle-builder/index.ts` | Persist the new `genealogy_chain` JSONB alongside existing `genealogy_depth` / `genealogy_kyc_root`. |
+| `supabase/functions/insiders-genealogy-backfill/index.ts` (new) | Batch backfill for the 750+ rows that never got traced; returns `{processed, remaining}`. |
+| `supabase/functions/insiders-cross-links/index.ts` (new) | Read-only aggregator: returns the three cluster lists (shared creator / shared funder / shared KYC root) with peak-X stats per token. |
+| `src/components/admin/tabs/InsidersLifecycleTab.tsx` | Add "Trace KYC roots" button (loops until remaining=0); add Funding Lineage section in drill-down; add Cross-Links panel below the table with 3 tabs. |
+| Migration | Add `genealogy_chain jsonb` + 2 indexes. |
+
+---
+
+## What you'll see when it's done
+
+1. Click **"Trace KYC roots"** once → progress toast counts down 1055 → 0 over a few minutes (Helius cost: ~10 calls per wallet × 750 wallets ≈ 7,500 credits, well inside the 10M monthly quota).
+2. Click any row → drill-down now shows the full ladder Mint→funder→funder→…→🏦 Binance, exactly like clicking through Solscan's "Funded by" — but pre-computed.
+3. Scroll below the table → see clusters like *"3 tokens funded from same Coinbase deposit: 2 winners (45x, 12x), 1 rug → ⚠ Mixed-Outcome Family"* — the exact RedFlag/GreenFlag pattern you described.
+
+No changes to the trading guards, the bot, or any other surface — this is purely additive intel inside the existing `/super-admin` Insiders Lifecycle tab.
