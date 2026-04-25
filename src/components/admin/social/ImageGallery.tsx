@@ -398,6 +398,15 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                             {img.related_article_label}
                           </Badge>
                         )}
+                        {img.is_breadcrumb && (
+                          <Badge
+                            variant="outline"
+                            className="absolute bottom-1.5 right-1.5 px-1.5 py-0 text-[9px] bg-background/80 backdrop-blur-sm border-primary/40 text-primary"
+                          >
+                            <Link2 className="h-2.5 w-2.5 mr-0.5" />
+                            breadcrumb
+                          </Badge>
+                        )}
                         {/* Selection checkbox */}
                         {mode === 'manage' && (
                           <button
