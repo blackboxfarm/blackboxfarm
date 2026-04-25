@@ -5,6 +5,7 @@ import { ExternalLink, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Link2 } from 'lucide-react';
 
 interface Publication {
   id: string;
@@ -15,6 +16,7 @@ interface Publication {
   notes: string | null;
   published_at: string;
   briefing_title?: string;
+  is_breadcrumb?: boolean;
 }
 
 interface PlatformViewProps {
@@ -60,9 +62,15 @@ export const PlatformView = ({ publications, onDelete }: PlatformViewProps) => {
                   <div className="flex-1 min-w-0">
                     <p className="text-foreground truncate font-medium">{pub.briefing_title || 'Untitled'}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className={cn('px-1.5 py-0.5 rounded text-[10px] border', depthBadge(pub.content_depth))}>
-                        {pub.content_depth}%
-                      </span>
+                      {pub.is_breadcrumb ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] border border-primary/40 bg-primary/10 text-primary inline-flex items-center gap-0.5">
+                          <Link2 className="h-2.5 w-2.5" />breadcrumb
+                        </span>
+                      ) : (
+                        <span className={cn('px-1.5 py-0.5 rounded text-[10px] border', depthBadge(pub.content_depth))}>
+                          {pub.content_depth}%
+                        </span>
+                      )}
                       <span className="text-muted-foreground">{format(new Date(pub.published_at), 'MMM d')}</span>
                     </div>
                     {pub.notes && <p className="text-muted-foreground italic mt-0.5 truncate">{pub.notes}</p>}
