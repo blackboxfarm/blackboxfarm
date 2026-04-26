@@ -116,6 +116,7 @@ Deno.serve(withRunLog('bulk-community-enricher', async (req) => {
 
         const adminUsername = aboutResult.adminUsername;
         const memberCount = aboutResult.memberCount;
+        const communityName = aboutResult.communityName;
         const now = new Date().toISOString();
 
         // Update community record
@@ -125,6 +126,7 @@ Deno.serve(withRunLog('bulk-community-enricher', async (req) => {
           community_url: communityUrl,
           admin_usernames: adminUsername ? [adminUsername] : [],
           member_count: memberCount ?? (community as any).member_count,
+          name: communityName ?? (community as any).name ?? null,
           last_scraped_at: now,
           scrape_status: scrapeStatus,
           failed_scrape_count: 0,

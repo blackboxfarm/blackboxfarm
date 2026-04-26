@@ -191,14 +191,14 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
           }
         }
 
-        // Website → token link
+        // Token → Website (correct DAG direction)
         if (t.website_url) {
           allLinks.push({
-            source_type: 'website',
-            source_id: t.website_url.trim(),
-            linked_type: 'token',
-            linked_id: t.token_mint,
-            relationship: 'website_of_token',
+            source_type: 'token',
+            source_id: t.token_mint,
+            linked_type: 'website',
+            linked_id: t.website_url.trim(),
+            relationship: 'has_website',
             confidence: 70,
             evidence: { symbol: t.token_symbol, source: 'pumpfun_watchlist' },
             discovered_via: 'harvest-token-socials:backfill',
@@ -401,15 +401,15 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
               }
             }
 
-            // Websites
+            // Websites (Token → Website, correct DAG direction)
             for (const website of websites) {
               if (website.url) {
                 meshLinks.push({
-                  source_type: 'website',
-                  source_id: website.url.trim(),
-                  linked_type: 'token',
-                  linked_id: mint,
-                  relationship: 'website_of_token',
+                  source_type: 'token',
+                  source_id: mint,
+                  linked_type: 'website',
+                  linked_id: website.url.trim(),
+                  relationship: 'has_website',
                   confidence: 85,
                   evidence: { label: website.label, dex_paid: true, source: 'dexscreener' },
                   discovered_via: 'harvest-token-socials:dexscreener',

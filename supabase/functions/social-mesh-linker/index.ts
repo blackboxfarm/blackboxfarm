@@ -392,14 +392,14 @@ Deno.serve(withRunLog('social-mesh-linker', async (req) => {
         }
       }
 
-      // 3. Website → wallet
+      // 3. Wallet → Website (correct DAG direction)
       if (website_url && website_url.trim()) {
         meshLinks.push({
-          source_type: "website",
-          source_id: website_url.trim(),
-          linked_type: "wallet",
-          linked_id: creator_wallet,
-          relationship: "website_of",
+          source_type: "wallet",
+          source_id: creator_wallet,
+          linked_type: "website",
+          linked_id: website_url.trim(),
+          relationship: "has_website",
           confidence: 70,
           evidence: { source: "watchlist_enrichment", token_mint, token_symbol },
           discovered_via: "social-mesh-linker",
