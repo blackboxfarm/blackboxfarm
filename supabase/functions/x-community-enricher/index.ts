@@ -212,7 +212,6 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
         rawData: existingCommunity?.raw_data,
       };
 
-      if (needsScrape && browserlessApiKey) {
       if (needsScrape) {
         console.log('[x-community-enricher] Resolving community via canonical resolver...');
 
