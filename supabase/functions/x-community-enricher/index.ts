@@ -333,6 +333,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
 
         communityData = {
           communityId,
+          name: aboutResult.communityName ?? existingCommunity?.name ?? undefined,
           adminUsernames: normalizedAdmin ? [normalizedAdmin] : [],
           moderatorUsernames: normalizedMods,
           memberCount: aboutResult.memberCount ?? existingCommunity?.member_count ?? undefined,
@@ -349,7 +350,11 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
             } : null,
           },
         };
-        scrapeStatus = normalizedAdmin ? 'complete' : 'no_admin_on_about_page';
+        // If we successfully scraped a community name, treat that as a meaningful
+        // result even if the about page didn't surface an admin handle.
+        scrapeStatus = normalizedAdmin
+          ? 'complete'
+          : (aboutResult.communityName ? 'name_only' : 'no_admin_on_about_page');
 
         if (existingCommunity?.failed_scrape_count > 0) {
           await supabase.from('x_communities').update({
@@ -403,6 +408,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
       const { error: upsertError } = await supabase.from('x_communities').upsert({
         community_id: communityId,
         community_url: urlToProcess,
+        name: communityData.name ?? existingCommunity?.name ?? null,
         admin_usernames: communityData.adminUsernames,
         moderator_usernames: communityData.moderatorUsernames,
         member_count: communityData.memberCount,
