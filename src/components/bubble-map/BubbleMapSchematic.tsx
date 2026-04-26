@@ -2,7 +2,6 @@ import React, { useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
-  Controls,
   type Node,
   type Edge,
   Position,
