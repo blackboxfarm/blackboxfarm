@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,6 +132,9 @@ async function enrichSingleToken(
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
+    if (communityId) {
+      await enqueueCommunityResolution(supabase, communityId, 'enrich-token-communities', 3);
+    }
   }
   
   // Also create/update token_banners if a banner exists

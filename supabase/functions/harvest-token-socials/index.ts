@@ -4,6 +4,7 @@ import { extractXHandle, extractXCommunityId } from '../_shared/x-handle-extract
 import { resolveXHandle, incrementXUserTokenCount } from '../_shared/x-handle-resolver.ts';
 import { resolveTelegramUsername, incrementChannelTokenCount } from '../_shared/telegram-resolver.ts';
 import { registerXHandlesForPhanes } from '../_shared/register-x-handle.ts';
+import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -340,6 +341,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
                     });
                     if (!xcErr) results.dexscreener.communitiesAdded++;
                   }
+                  await enqueueCommunityResolution(supabase, communityIdFromSocial, 'harvest-token-socials', 4);
                   continue; // Not a handle — skip handle extraction
                 }
 
@@ -449,6 +451,7 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
                     });
                   if (!xcErr) results.dexscreener.communitiesAdded++;
                 }
+                await enqueueCommunityResolution(supabase, communityId, 'harvest-token-socials', 4);
               }
             }
           }
