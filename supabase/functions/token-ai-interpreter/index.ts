@@ -630,7 +630,7 @@ serve(withRunLog('token-ai-interpreter', async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: buildSystemPrompt(mode, tone as ToneType) },
+          { role: "system", content: buildSystemPrompt(mode as any, tone as ToneType) },
           { role: "user", content: userPrompt }
         ],
         tools: [interpretationTool],

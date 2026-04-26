@@ -6,7 +6,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 export type ServiceName = 'helius' | 'dexscreener' | 'solscan' | 'rugcheck' | 'pumpfun' | 'jupiter' | 'coingecko' | 'bonkfun' | 'bagsfm' | 'apify' | 'firecrawl';
-export type RequestType = 'holders_report' | 'price_discovery' | 'sns_lookup' | 'lp_detection' | 'insider_check' | 'creator_lookup' | 'market_data';
+export type RequestType = 'holders_report' | 'price_discovery' | 'sns_lookup' | 'lp_detection' | 'insider_check' | 'creator_lookup' | 'market_data' | 'token_metadata';
 
 export interface ApiLogParams {
   serviceName: ServiceName;

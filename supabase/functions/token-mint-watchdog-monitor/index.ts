@@ -1016,7 +1016,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
         
         console.log(`Helius page ${pageCount + 1}, before: ${beforeSignature || 'start'}`)
         
-        const response = await fetch(
+        const response: Response = await fetch(
           getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '100', ...(beforeSignature ? { before: beforeSignature } : {}) }),
           { method: 'GET' }
         )
@@ -1027,7 +1027,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
           break
         }
         
-        const transactions = await response.json()
+        const transactions: any[] = await response.json()
         
         if (!transactions || transactions.length === 0) {
           console.log(`No more transactions at page ${pageCount + 1}`)

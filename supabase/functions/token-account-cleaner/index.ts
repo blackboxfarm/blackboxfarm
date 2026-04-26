@@ -259,7 +259,7 @@ Deno.serve(withRunLog('token-account-cleaner', async (req) => {
         }
 
         if (wallets && wallets.length > 0) {
-          for (const w of wallets) {
+          for (const w of (wallets as any[])) {
             // Filter by specific wallet if requested
             if (walletPubkey && w[src.pubkeyCol] !== walletPubkey) continue;
             
