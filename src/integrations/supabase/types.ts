@@ -19656,6 +19656,39 @@ export type Database = {
           },
         ]
       }
+      x_community_resolution_queue: {
+        Row: {
+          attempts: number
+          community_id: string
+          discovered_via: string | null
+          enqueued_at: string
+          id: string
+          last_error: string | null
+          priority: number
+          resolved_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          community_id: string
+          discovered_via?: string | null
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          priority?: number
+          resolved_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          community_id?: string
+          discovered_via?: string | null
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          priority?: number
+          resolved_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       developer_genealogy: {
