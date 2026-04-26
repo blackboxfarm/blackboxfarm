@@ -77,7 +77,23 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
     g.setEdge(s, t);
   }
 
-  dagre.layout(g);
+  try {
+    dagre.layout(g);
+  } catch (err) {
+    console.warn('[BubbleMapSchematic] dagre layout failed, falling back to grid:', err);
+    // Fallback: simple ranked grid so the view still renders.
+    const byRank: Record<number, any[]> = {};
+    for (const n of graphData.nodes) {
+      const r = rankNode(n, devId);
+      (byRank[r] ||= []).push(n);
+    }
+    Object.entries(byRank).forEach(([r, list]) => {
+      const rank = Number(r);
+      list.forEach((n: any, i: number) => {
+        g.setNode(n.id, { ...g.node(n.id), x: i * (NODE_W + 40) + NODE_W / 2, y: rank * (NODE_H + 90) + NODE_H / 2 });
+      });
+    });
+  }
 
   const nodes: Node[] = graphData.nodes.map((n: any) => {
     const pos = g.node(n.id);
