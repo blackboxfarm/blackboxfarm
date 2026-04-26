@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
+import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 enableHeliusTracking('admin-add-seen-token');
 
 const corsHeaders = {
@@ -186,6 +187,15 @@ serve(withRunLog('admin-add-seen-token', async (req) => {
           console.log(`[admin-add-seen-token] Created new community ${effectiveId} for ${tokenMint}`);
         } else {
           console.error('Failed to create community:', insertError);
+        }
+      }
+
+      // Defer staff resolution (admin/mods) to the background queue if this looks like a real community
+      if (communityId) {
+        try {
+          await enqueueCommunityResolution(supabase, communityId, 'admin-add-seen-token', 3);
+        } catch (e) {
+          console.warn('[admin-add-seen-token] enqueue community resolution failed:', e);
         }
       }
     }
