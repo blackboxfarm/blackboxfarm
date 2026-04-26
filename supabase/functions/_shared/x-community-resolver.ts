@@ -488,10 +488,10 @@ export async function linkWalletToCommunityStaff(
 
   if (rows.length === 0) return { inserted: 0 };
 
-  // Idempotent insert; conflict handled by the unique index on (wallet, x_user_id, relationship, community_id, token_mint)
+  // Idempotent: dev_handle_links has a generated link_key with a unique constraint
   const { error, count } = await supabase
     .from('dev_handle_links')
-    .upsert(rows, { onConflict: 'wallet_address,x_user_id,relationship,community_id,token_mint', count: 'exact', ignoreDuplicates: false });
+    .upsert(rows, { onConflict: 'link_key', count: 'exact', ignoreDuplicates: false });
 
   if (error) {
     console.warn('[x-community-resolver] dev_handle_links upsert error:', error.message);
