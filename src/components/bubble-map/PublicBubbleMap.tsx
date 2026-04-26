@@ -1367,10 +1367,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               d3AlphaDecay={isMobile ? 0.05 : 0.03}
               d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
               d3AlphaMin={isMobile ? 0.01 : 0.005}
-              warmupTicks={isMobile ? 30 : 60}
-              onEngineStop={() => {
-                try { graphRef.current?.zoomToFit?.(600, 60); } catch { /* noop */ }
-              }}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
               linkDirectionalParticles={isMobile ? 0 : 1}
