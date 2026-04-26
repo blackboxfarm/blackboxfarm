@@ -403,6 +403,9 @@ verify_jwt = false
 [functions.share-card-page]
 verify_jwt = false
 
+[functions.upload-bubble-snapshot]
+verify_jwt = false
+
 [functions.x-community-health-check]
 verify_jwt = false
 
