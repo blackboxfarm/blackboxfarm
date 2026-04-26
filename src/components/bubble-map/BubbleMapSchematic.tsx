@@ -2,7 +2,6 @@ import React, { useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
-  Controls,
   type Node,
   type Edge,
   Position,
@@ -187,7 +186,6 @@ const BubbleMapSchematic: React.FC<BubbleMapSchematicProps> = ({
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={24} color="hsl(var(--border))" />
-        <Controls position="bottom-right" />
       </ReactFlow>
     </div>
   );
