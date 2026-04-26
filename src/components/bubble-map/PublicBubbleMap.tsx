@@ -1270,11 +1270,30 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         <div ref={containerRef} className={`w-full relative ${shakeGraph ? 'animate-shake-graph' : ''}`} style={{ height: '600px', background: 'hsl(var(--background))' }}>
           {/* Hacker Terminal Overlay */}
           <HackerTerminal lines={terminalLines} visible={terminalVisible} title={terminalTitle} />
-          {/* Minimap Navigation */}
-          <BubbleMapMinimap
-            graphRef={graphRef}
-            nodes={(displayData?.nodes || []).map((n: any) => ({ x: n.x, y: n.y, color: n.color, type: n.type }))}
-          />
+          {/* Minimap Navigation — only useful in force-graph (bubble/tree) views */}
+          {(viewMode === 'bubble' || viewMode === 'tree') && (
+            <BubbleMapMinimap
+              graphRef={graphRef}
+              nodes={(displayData?.nodes || []).map((n: any) => ({ x: n.x, y: n.y, color: n.color, type: n.type }))}
+            />
+          )}
+          {/* In-frame zoom controls — top-right on desktop, bottom-center on mobile */}
+          {graphData.nodes.length > 0 && viewMode !== '3d' && (
+            <div
+              className={`absolute z-20 flex items-center gap-0.5 rounded-md border border-border/60 bg-background/80 backdrop-blur p-0.5 ${
+                isMobile
+                  ? 'bottom-2 left-1/2 -translate-x-1/2'
+                  : (viewMode === 'schematic' ? 'top-2 right-2' : 'top-2 right-[140px]')
+              }`}
+            >
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleZoomIn} title="Zoom in">
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleZoomOut} title="Zoom out">
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
           {/* Action Buttons Overlay — top-left inside graph */}
           {graphData.nodes.length > 0 && (
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
