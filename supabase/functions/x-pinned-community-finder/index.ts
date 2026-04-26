@@ -111,18 +111,23 @@ async function fetchPinnedAndRecentTweets(handle: string, apifyKey: string): Pro
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        twitterHandles: [handle],
-        maxItems: 25,            // pinned tweet usually surfaces in top results
+        // Correct input shape for apidojo~tweet-scraper
+        startUrls: [{ url: `https://twitter.com/${handle}` }],
+        maxItems: 25,
         sort: 'Latest',
-        includeSearchTerms: false,
+        tweetLanguage: 'en',
       }),
     }
   );
   await logger.complete(res.status);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.warn(`[x-pinned-community-finder] tweet-scraper non-200 for @${handle}: ${res.status}`);
+    return null;
+  }
 
   const tweets = await res.json();
   if (!Array.isArray(tweets)) return null;
+  console.log(`[x-pinned-community-finder] tweet-scraper returned ${tweets.length} tweets for @${handle}`);
 
   for (const t of tweets) {
     const text = [t.text, t.full_text, t.url].filter(Boolean).join(' ');
@@ -131,6 +136,38 @@ async function fetchPinnedAndRecentTweets(handle: string, apifyKey: string): Pro
     const haystack = [text, ...urls].join(' ');
     const found = findCommunityInText(haystack);
     if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Last-resort: try public Nitter mirrors. Nitter renders the user's profile
+ * server-side so pinned tweets and bio link cards are visible in raw HTML.
+ * We rotate through a few mirrors since individual instances rate-limit.
+ */
+const NITTER_MIRRORS = [
+  'https://nitter.net',
+  'https://nitter.privacydev.net',
+  'https://nitter.poast.org',
+];
+
+async function fetchPinnedFromNitter(handle: string): Promise<string | null> {
+  for (const base of NITTER_MIRRORS) {
+    try {
+      const res = await fetch(`${base}/${handle}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BlackBoxFarmBot/1.0)' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const found = findCommunityInText(html);
+      if (found) {
+        console.log(`[x-pinned-community-finder] Nitter ${base} found community for @${handle}`);
+        return found;
+      }
+    } catch (e) {
+      console.warn(`[x-pinned-community-finder] Nitter ${base} failed for @${handle}:`, (e as Error).message);
+    }
   }
   return null;
 }
@@ -161,7 +198,7 @@ Deno.serve(withRunLog('x-pinned-community-finder', async (req) => {
     // Step 1 — bio + url entities (cheap, single-record)
     const bioResult = await fetchProfileBio(handle, apifyKey);
     let communityUrl = bioResult.communityUrl;
-    let source: 'bio' | 'pinned_tweet' | null = communityUrl ? 'bio' : null;
+    let source: 'bio' | 'pinned_tweet' | 'nitter' | null = communityUrl ? 'bio' : null;
 
     // Step 2 — fall back to scanning recent/pinned tweets
     if (!communityUrl) {
@@ -169,6 +206,15 @@ Deno.serve(withRunLog('x-pinned-community-finder', async (req) => {
       if (tweetCommunity) {
         communityUrl = tweetCommunity;
         source = 'pinned_tweet';
+      }
+    }
+
+    // Step 3 — Nitter mirror fallback (renders pinned tweets server-side)
+    if (!communityUrl) {
+      const nitterCommunity = await fetchPinnedFromNitter(handle);
+      if (nitterCommunity) {
+        communityUrl = nitterCommunity;
+        source = 'nitter';
       }
     }
 
