@@ -43,7 +43,8 @@ export interface ResolvedCommunity {
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const APIFY_MAX_MEMBERS = 50;
+const APIFY_MAX_MEMBERS_DEFAULT = 200;
+const APIFY_MAX_MEMBERS_DEEP = 1000;   // when caller wants full mod harvest
 
 function normHandle(h: string | null | undefined): string | null {
   const v = h?.trim().replace(/^@/, '').toLowerCase();
@@ -129,6 +130,7 @@ async function tryCache(
 async function tryApify(
   communityId: string,
   apifyKey: string,
+  maxMembers: number,
 ): Promise<ResolvedCommunity | null> {
   const actorId = 'danpoletaev~twitter-x-community-member-scraper';
   const logger = createApiLogger({
@@ -136,22 +138,21 @@ async function tryApify(
     endpoint: actorId,
     method: 'POST',
     functionName: 'x-community-resolver',
-    metadata: { communityId, maxMembers: APIFY_MAX_MEMBERS },
+    metadata: { communityId, maxMembers },
   });
 
   let res: Response;
   try {
     res = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyKey}&maxItems=${APIFY_MAX_MEMBERS}&clean=1`,
+      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyKey}&clean=1&timeout=180`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           communityId,
-          maxMembers: APIFY_MAX_MEMBERS,
-          proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
+          maxMembers,
         }),
-        signal: AbortSignal.timeout(75000),
+        signal: AbortSignal.timeout(180000),
       },
     );
   } catch (e) {
@@ -353,6 +354,7 @@ async function persistCommunity(
 
   const upsertRow: any = {
     community_id: resolved.communityId,
+    community_url: `https://x.com/i/communities/${resolved.communityId}`,
     last_scraped_at: now,
     scrape_status: 'complete',
     failed_scrape_count: 0,
@@ -370,11 +372,18 @@ async function persistCommunity(
   if (adminUsernames.length > 0) upsertRow.admin_usernames = adminUsernames;
   if (moderatorUsernames.length > 0) upsertRow.moderator_usernames = moderatorUsernames;
 
-  const { error } = await supabase
-    .from('x_communities')
-    .upsert(upsertRow, { onConflict: 'community_id' });
-
-  if (error) throw new Error(`x_communities upsert failed for ${resolved.communityId}: ${error.message}`);
+  let error: any = null;
+  if (existing?.id) {
+    // Existing row: update by id (avoids NOT NULL re-validation of unrelated columns)
+    const { id: _omit, ...rest } = upsertRow as any;
+    const res = await supabase.from('x_communities').update(rest).eq('id', existing.id);
+    error = res.error;
+  } else {
+    // Brand-new row: insert with all required columns
+    const res = await supabase.from('x_communities').insert(upsertRow);
+    error = res.error;
+  }
+  if (error) throw new Error(`x_communities persist failed for ${resolved.communityId}: ${error.message}`);
 
   // Registry for every observed handle
   const allMembers = [
@@ -396,6 +405,7 @@ export interface ResolveOptions {
   forceRefresh?: boolean;       // bypass cache
   persist?: boolean;            // default true
   apifyKey?: string;            // override env (for tests)
+  deep?: boolean;               // scrape up to APIFY_MAX_MEMBERS_DEEP
 }
 
 export async function resolveXCommunity(
@@ -415,7 +425,8 @@ export async function resolveXCommunity(
   // 2. Apify (primary)
   let resolved: ResolvedCommunity | null = null;
   if (apifyKey) {
-    resolved = await tryApify(communityId, apifyKey);
+    const max = opts.deep ? APIFY_MAX_MEMBERS_DEEP : APIFY_MAX_MEMBERS_DEFAULT;
+    resolved = await tryApify(communityId, apifyKey, max);
   } else {
     console.warn('[x-community-resolver] APIFY_API_KEY missing — skipping primary resolver');
   }
