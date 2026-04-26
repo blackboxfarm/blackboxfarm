@@ -174,15 +174,45 @@ Deno.serve(async (req) => {
       console.error(`❌ ${communityId}: ${msg}`);
       results.push({ communityId, source: 'error', mods: 0, admin: null, ok: false, error: msg });
 
-      // Increment attempts on the queue row
-      await supabase.rpc('increment_xcrq_attempt', { p_community_id: communityId, p_error: msg }).catch(() => {
-        // Fallback: direct update
-        return supabase
+      // ── Terminal-failure detection ──────────────────────────────────────
+      // Some failures mean the community is GONE (deleted, suspended, or the
+      // ID was always bogus). Retrying these wastes Apify credits. We mark
+      // them is_deleted=true and resolve the queue row so the scanner skips
+      // them forever.
+      const lower = msg.toLowerCase();
+      const isTerminal =
+        lower.includes('uncaught exception') ||           // Apify actor crash on bad/empty community
+        lower.includes('not found') ||
+        lower.includes('404') ||
+        lower.includes('does not exist') ||
+        lower.includes('community is private') ||
+        lower.includes('suspended');
+
+      if (isTerminal) {
+        console.warn(`💀 ${communityId} marked deleted (terminal): ${msg}`);
+        await supabase
+          .from('x_communities')
+          .update({
+            is_deleted: true,
+            deleted_detected_at: new Date().toISOString(),
+            last_scraped_at: new Date().toISOString(),
+          })
+          .eq('community_id', communityId);
+        await supabase
           .from('x_community_resolution_queue')
-          .update({ attempts: (row as any)?.attempts ? (row as any).attempts + 1 : 1, last_error: msg })
+          .update({ resolved_at: new Date().toISOString(), last_error: `terminal: ${msg}` })
           .eq('community_id', communityId)
           .is('resolved_at', null);
-      });
+      } else {
+        // Transient — increment attempts (max 3 enforced by query filter)
+        await supabase.rpc('increment_xcrq_attempt', { p_community_id: communityId, p_error: msg }).catch(() => {
+          return supabase
+            .from('x_community_resolution_queue')
+            .update({ attempts: (row as any)?.attempts ? (row as any).attempts + 1 : 1, last_error: msg })
+            .eq('community_id', communityId)
+            .is('resolved_at', null);
+        });
+      }
     }
 
     if (rows && rows.length > 1) await new Promise(r => setTimeout(r, SLEEP_MS));
