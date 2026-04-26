@@ -30,29 +30,67 @@ Deno.serve(async (req) => {
   const startedAt = Date.now();
   console.log(`[backfill-x-community-members] start limit=${limit} only=${onlyCommunityId ?? 'auto'} force=${force}`);
 
-  // Pick rows: either the single requested one, or oldest-missing-mods ascending
-  let query = supabase
-    .from('x_communities')
-    .select('community_id, name, last_scraped_at, moderator_usernames, raw_data')
-    .eq('is_deleted', false)
-    .limit(limit);
+  // Step 1: DRAIN THE QUEUE FIRST. Discovery functions (DexScreener, harvest, social-link-checker, etc.)
+  // enqueue communities into x_community_resolution_queue. Those take priority over the oldest-mods scan.
+  let rows: any[] = [];
+  let source: 'queue' | 'scan' | 'single' = 'scan';
 
   if (onlyCommunityId) {
-    query = query.eq('community_id', onlyCommunityId);
+    source = 'single';
+    const { data, error } = await supabase
+      .from('x_communities')
+      .select('community_id, name, last_scraped_at, moderator_usernames, raw_data')
+      .eq('community_id', onlyCommunityId)
+      .limit(1);
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    rows = data ?? [];
   } else {
-    // missing mods OR never scraped — oldest first to fairness-rotate
-    query = query
-      .or('moderator_usernames.is.null,last_scraped_at.is.null')
-      .order('last_scraped_at', { ascending: true, nullsFirst: true });
+    // 1a. Try queue first
+    const { data: queueRows, error: queueErr } = await supabase
+      .from('x_community_resolution_queue')
+      .select('community_id, priority, attempts')
+      .is('resolved_at', null)
+      .lt('attempts', 3)
+      .order('priority', { ascending: true })
+      .order('enqueued_at', { ascending: true })
+      .limit(limit);
+
+    if (queueErr) console.warn('[backfill] queue read failed:', queueErr.message);
+
+    if (queueRows && queueRows.length > 0) {
+      source = 'queue';
+      const ids = queueRows.map((q: any) => q.community_id);
+      const { data: communityRows } = await supabase
+        .from('x_communities')
+        .select('community_id, name, last_scraped_at, moderator_usernames, raw_data')
+        .in('community_id', ids);
+      // Preserve order from queue
+      const byId = new Map((communityRows ?? []).map((r: any) => [r.community_id, r]));
+      rows = ids.map(id => byId.get(id) ?? { community_id: id, name: null, last_scraped_at: null, moderator_usernames: null, raw_data: null });
+    } else {
+      // 1b. Fallback: oldest-missing-mods scan
+      const { data, error } = await supabase
+        .from('x_communities')
+        .select('community_id, name, last_scraped_at, moderator_usernames, raw_data')
+        .eq('is_deleted', false)
+        .or('moderator_usernames.is.null,last_scraped_at.is.null')
+        .order('last_scraped_at', { ascending: true, nullsFirst: true })
+        .limit(limit);
+
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      rows = data ?? [];
+    }
   }
 
-  const { data: rows, error } = await query;
-  if (error) {
-    console.error('[backfill-x-community-members] select failed:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
+  console.log(`[backfill-x-community-members] source=${source} rows=${rows.length}`);
 
   const results: Array<{ communityId: string; source: string; mods: number; admin: string | null; ok: boolean; error?: string }> = [];
 
@@ -91,16 +129,34 @@ Deno.serve(async (req) => {
         ok: true,
       });
       console.log(`✅ ${communityId} [${resolved.source}] admin=@${resolved.admin?.handle ?? '—'} mods=${resolved.moderators.length}`);
+
+      // Mark queue row resolved (no-op if not from queue)
+      await supabase
+        .from('x_community_resolution_queue')
+        .update({ resolved_at: new Date().toISOString() })
+        .eq('community_id', communityId)
+        .is('resolved_at', null);
     } catch (e) {
       const msg = (e as Error).message;
       console.error(`❌ ${communityId}: ${msg}`);
       results.push({ communityId, source: 'error', mods: 0, admin: null, ok: false, error: msg });
+
+      // Increment attempts on the queue row
+      await supabase.rpc('increment_xcrq_attempt', { p_community_id: communityId, p_error: msg }).catch(() => {
+        // Fallback: direct update
+        return supabase
+          .from('x_community_resolution_queue')
+          .update({ attempts: (row as any)?.attempts ? (row as any).attempts + 1 : 1, last_error: msg })
+          .eq('community_id', communityId)
+          .is('resolved_at', null);
+      });
     }
 
     if (rows && rows.length > 1) await new Promise(r => setTimeout(r, SLEEP_MS));
   }
 
   const summary = {
+    source,
     processed: results.length,
     succeeded: results.filter(r => r.ok).length,
     failed: results.filter(r => !r.ok).length,
