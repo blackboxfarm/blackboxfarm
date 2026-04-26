@@ -30,32 +30,35 @@ const SnapshotShareDialog: React.FC<SnapshotShareDialogProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [commentary, setCommentary] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const ticker = watermark.ticker || 'TOKEN';
+  // Strip any leading "$" — incoming display labels often already include one,
+  // and we add our own. Avoids "$$TRUMP".
+  const ticker = (watermark.ticker || 'TOKEN').replace(/^\$+/, '').trim() || 'TOKEN';
   const ca = watermark.tokenAddress;
 
   const defaultCommentary = useCallback(() => {
     const lines = [
       `🔍 $${ticker} — Holder Mesh${watermark.grade ? ` · Grade ${watermark.grade}` : ''}`,
       watermark.realHolders ? `${watermark.realHolders.toLocaleString()} real holders mapped` : '',
-      `Mapped on @HoldersIntel`,
-      `https://blackbox.farm/bubblemap?token=${ca}`,
+      `Mapped on @BlackBox_Farm`,
     ].filter(Boolean);
     return lines.join('\n');
-  }, [ticker, ca, watermark.grade, watermark.realHolders]);
+  }, [ticker, watermark.grade, watermark.realHolders]);
 
   const doCapture = useCallback(async () => {
     setCapturing(true);
     setPublicUrl(null);
+    setShareUrl(null);
     try {
       const newBlob = await captureBubbleMap({
         view,
         forceGraphRef,
         schematicContainer,
         watermark: {
-          ticker: watermark.ticker,
+          ticker,
           ca: watermark.tokenAddress,
           grade: watermark.grade,
           viewLabel: view === 'schematic' ? 'SCHEMATIC' : 'BUBBLE',
@@ -70,7 +73,7 @@ const SnapshotShareDialog: React.FC<SnapshotShareDialogProps> = ({
     } finally {
       setCapturing(false);
     }
-  }, [view, forceGraphRef, schematicContainer, watermark, previewUrl]);
+  }, [view, forceGraphRef, schematicContainer, watermark, ticker, previewUrl]);
 
   // Auto-capture on open
   useEffect(() => {
@@ -85,12 +88,18 @@ const SnapshotShareDialog: React.FC<SnapshotShareDialogProps> = ({
       setPreviewUrl(null);
       setBlob(null);
       setPublicUrl(null);
+      setShareUrl(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const ensureUploaded = useCallback(async (): Promise<string | null> => {
-    if (publicUrl) return publicUrl;
+  /**
+   * Returns { shareUrl, publicUrl } where shareUrl is an OG-tagged HTML page
+   * (so X / Telegram / etc. unfurl with the snapshot as the card image), and
+   * publicUrl is the raw PNG in storage (for direct copy / download).
+   */
+  const ensureUploaded = useCallback(async (): Promise<{ shareUrl: string; publicUrl: string } | null> => {
+    if (shareUrl && publicUrl) return { shareUrl, publicUrl };
     if (!blob) {
       toast.error('No snapshot captured yet');
       return null;
@@ -102,15 +111,25 @@ const SnapshotShareDialog: React.FC<SnapshotShareDialogProps> = ({
         body: {
           pngBase64: b64,
           tokenAddress: ca,
-          ticker: watermark.ticker,
+          ticker,
           viewMode: view,
           commentary,
         },
       });
       if (error) throw error;
       if (!data?.publicUrl) throw new Error('Upload returned no URL');
+      const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID
+        || (supabase as any)?.supabaseUrl?.match(/https?:\/\/([^.]+)\./)?.[1]
+        || '';
+      const fnHost = projectRef
+        ? `https://${projectRef}.functions.supabase.co`
+        : 'https://blackbox.farm';
+      const sUrl = data.snapshotId
+        ? `${fnHost}/bubble-share?id=${encodeURIComponent(data.snapshotId)}`
+        : (data.publicUrl as string);
       setPublicUrl(data.publicUrl);
-      return data.publicUrl as string;
+      setShareUrl(sUrl);
+      return { shareUrl: sUrl, publicUrl: data.publicUrl };
     } catch (err: any) {
       console.error('Upload failed', err);
       toast.error(err?.message || 'Upload failed');
@@ -118,29 +137,30 @@ const SnapshotShareDialog: React.FC<SnapshotShareDialogProps> = ({
     } finally {
       setUploading(false);
     }
-  }, [blob, publicUrl, ca, ticker, view, commentary, watermark.ticker]);
+  }, [blob, publicUrl, shareUrl, ca, ticker, view, commentary]);
 
   const handleCopyLink = useCallback(async () => {
-    const url = await ensureUploaded();
-    if (!url) return;
-    await navigator.clipboard.writeText(url);
+    const res = await ensureUploaded();
+    if (!res) return;
+    await navigator.clipboard.writeText(res.publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast.success('Public image URL copied');
   }, [ensureUploaded]);
 
   const handleShareToX = useCallback(async () => {
-    const url = await ensureUploaded();
-    if (!url) return;
-    const text = `${commentary}\n\n${url}`;
+    const res = await ensureUploaded();
+    if (!res) return;
+    // Put the OG-unfurling share link FIRST so X uses it as the card source.
+    const text = `${commentary}\n\n${res.shareUrl}`;
     const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
     window.open(intentUrl, '_blank', 'width=550,height=520');
   }, [ensureUploaded, commentary]);
 
   const handleShareToTelegram = useCallback(async () => {
-    const url = await ensureUploaded();
-    if (!url) return;
-    const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(commentary)}`;
+    const res = await ensureUploaded();
+    if (!res) return;
+    const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(res.shareUrl)}&text=${encodeURIComponent(commentary)}`;
     window.open(tgUrl, '_blank', 'width=550,height=520');
   }, [ensureUploaded, commentary]);
 
