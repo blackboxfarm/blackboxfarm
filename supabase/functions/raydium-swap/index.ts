@@ -1142,7 +1142,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                 { pubkey: owner!.publicKey, isSigner: false, isWritable: true }, // destination for all lamports
                 { pubkey: owner!.publicKey, isSigner: true, isWritable: false }, // authority
               ],
-              data: new Uint8Array([9]) as unknown as Buffer, // CloseAccount instruction = 9 (Deno-safe)
+              data: new Uint8Array([9]) as any, // CloseAccount instruction = 9 (Deno-safe)
             })
           );
 
