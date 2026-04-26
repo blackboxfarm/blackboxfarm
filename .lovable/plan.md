@@ -102,12 +102,16 @@ Four tracks, one approval. I'll ship in this order so each piece compounds: (1) 
 
 ---
 
-## Ship order (single approval, sequential commits)
-1. Track 1 (CEX names) — pure refactor, no DB cost
-2. Track 3 migration (`trail_end_reason` column)
-3. Tracks 2 + 3 (backfills + admin trigger)
-4. Track 4b (Schematic — uses already-installed xyflow)
-5. Track 4a (3D — needs `react-force-graph-3d` install)
-6. Track 5 (memory)
+## Ship status — ALL TRACKS LANDED ✅
 
-Hit approve and I'll roll.
+1. ✅ Track 1 (Named CEX labels) — `getCexName()` propagated through `mesh-kyc-deep-search`, `SharedFundersPanel`, `PublicBubbleMap`
+2. ✅ Track 2 (Insiders auto-loop) — `insiders-genealogy-backfill` supports `{ auto_loop: true }` + 80% Helius budget guard
+3. ✅ Track 3 (Archive prioritized retrace) — `backfill-genealogy` rewritten with Tier A/B + newest-first + settled-trail skip; `dev_wallet_reputation` migration added (`trail_end_reason`, `trail_end_kyc_root`, `trail_end_at`)
+4. ✅ Admin trigger — `GenealogyRetracePanel` mounted in `/super-admin` Utilities tab
+5. ✅ Track 4a (3D) — `BubbleMap3D.tsx` (react-force-graph-3d), desktop-only toggle, slow auto-rotate
+6. ✅ Track 4b (Schematic) — `BubbleMapSchematic.tsx` (xyflow + dagre), layered CEX→Funder→Dev→Token→Socials blueprint
+7. ✅ Track 5 (memory) — `mem://features/bubble-map/view-modes` + named-CEX rule appended to `mem://features/oracle/dev-genealogy-tracing`
+
+## Skipped (intentional)
+- Mind-Castle / Gimli artistic view — low forensic ROI, can revisit on demand
+- Cross-token graph (multi-creator simultaneous view) — separate UX pass
