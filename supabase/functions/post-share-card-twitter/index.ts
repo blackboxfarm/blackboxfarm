@@ -345,7 +345,7 @@ Free report 👉 blackbox.farm/holders`;
         const tgMessage =
           `📢 *New X Post*\n\n${finalTweetText}\n\n🐦 ${tweetUrl}`;
 
-        await broadcastToBlackBox(supabase, tgMessage);
+        await broadcastToBlackBox(supabase as any, tgMessage);
         console.log("TG broadcast sent for tweet:", result.data?.id);
       } catch (tgErr) {
         console.warn("TG broadcast failed (non-blocking):", tgErr);

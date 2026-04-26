@@ -438,7 +438,7 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
       }
 
       // Store in reputation_mesh as a social entity
-      await sb.from('reputation_mesh').insert({
+      await (sb as any).from('reputation_mesh').insert({
         source_type: 'x_account',
         source_id: handle,
         linked_type: 'x_account',
@@ -550,7 +550,7 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
       try {
         // Trace parent wallets (who funded this creator)
         const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
-        let currentWallet = creatorWallet;
+        let currentWallet: string = creatorWallet as string;
         const visitedWallets = new Set<string>();
 
         for (let depth = 0; depth < 6; depth++) {
@@ -945,7 +945,7 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
                 entry_type: 'token_address',
                 identifier: mint,
                 risk_level: 'critical',
-                blacklist_reason: reason || `Token by blacklisted actor: ${creatorWallet.slice(0, 8)}...`,
+              blacklist_reason: reason || `Token by blacklisted actor: ${(creatorWallet as string).slice(0, 8)}...`,
                 tags: ['spider_discovered'],
                 linked_wallets: [creatorWallet],
                 source: 'oracle_spider',
@@ -1148,7 +1148,7 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
       }, { onConflict: 'run_date' });
 
       // Increment counters
-      await supabase.rpc('increment_spider_metrics', {
+      await (supabase as any).rpc('increment_spider_metrics', {
         p_date: today,
         p_tokens: resolvedTokenMint ? 1 : 0,
         p_wallets: genealogy.parents.length + genealogy.satellites.length,
@@ -1158,7 +1158,7 @@ Deno.serve(withRunLog('oracle-master-spider', async (req) => {
         p_genealogy_depth: genealogy.depth,
       }).catch(() => {
         // Fallback: direct upsert if RPC doesn't exist
-        supabase.from('spider_run_metrics').upsert({
+        (supabase as any).from('spider_run_metrics').upsert({
           run_date: today,
           tokens_spidered: resolvedTokenMint ? 1 : 0,
           wallets_discovered: genealogy.parents.length + genealogy.satellites.length,

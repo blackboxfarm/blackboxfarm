@@ -60,6 +60,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     const periodEnd = now;
     const periodStart = new Date(now.getTime() - 15 * 3600_000); // 15 hours back (6pm → 9am)
     const reportDate = now.toISOString().split('T')[0];
+    const cutoffISO = periodStart.toISOString();
 
     const alerts: { level: string; category: string; title: string; detail: string }[] = [];
 
@@ -1264,7 +1265,6 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     // ═══════════════════════════════════════════════════════════════
     let webChatStats: any = {};
     try {
-      const cutoffISO = periodStart.toISOString();
       const { data: newSessions } = await supabase
         .from('web_chat_sessions')
         .select('id, visitor_fingerprint, user_id, tier, message_count, page_path, device_type, created_at, updated_at')

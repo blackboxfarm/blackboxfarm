@@ -600,7 +600,8 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       }).then(() => {}).catch(() => {});
 
       // Post to X Community (fantasy buy alert)
-      EdgeRuntime.waitUntil(
+      // @ts-ignore - EdgeRuntime is a Deno Deploy global
+      (globalThis as any).EdgeRuntime?.waitUntil(
         supabase.functions.invoke('fantasy-tweet', {
           body: {
             type: 'buy',
@@ -614,7 +615,7 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
             holders: entryHolderCount || undefined,
             mcap: entryMarketCapUsd || undefined,
           }
-        }).catch(e => console.error('Fantasy tweet error:', e))
+        }).catch((e: any) => console.error('Fantasy tweet error:', e))
       );
 
       // DISABLED: Only broadcast profitable sells to BlackBox
