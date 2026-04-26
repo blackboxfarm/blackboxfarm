@@ -522,6 +522,9 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
             communitiesCreated++;
           }
 
+          // Always enqueue for deferred staff resolution (admin + moderators via Apify)
+          await enqueueCommunityResolution(supabase, foundCommunityId, `backfill-${communitySource}`, 6);
+
           // Mesh link
           const { data: meshExists } = await supabase
             .from('reputation_mesh')
