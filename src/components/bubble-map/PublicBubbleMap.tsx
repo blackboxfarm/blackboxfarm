@@ -1423,6 +1423,26 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           </Card>
         ) : null;
       })()}
+
+      {/* Snapshot & Share dialog */}
+      {(() => {
+        const tokenNode = graphData.nodes.find((n: any) => n.type === 'token');
+        const tokenAddress = tokenNode?.fullId || tokenNode?.id?.replace(/^token:/, '') || searchInput.trim();
+        const ticker = (tokenNode as any)?.displayName || (tokenNode as any)?.label || undefined;
+        return (
+          <SnapshotShareDialog
+            open={snapshotOpen}
+            onOpenChange={setSnapshotOpen}
+            view={viewMode === 'schematic' ? 'schematic' : 'bubble'}
+            forceGraphRef={graphRef.current}
+            schematicContainer={containerRef.current}
+            watermark={{
+              tokenAddress: tokenAddress || '',
+              ticker,
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };
