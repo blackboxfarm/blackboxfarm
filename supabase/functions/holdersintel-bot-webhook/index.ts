@@ -1204,12 +1204,13 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   // Determine risk signals
   const signals: string[] = [];
   let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' = 'LOW';
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let riskEmoji = '🟢';
 
   // Dev risk signals
   if (rugCount > 0) { signals.push(`🔴 Dev has ${rugCount} prior rug(s)`); riskLevel = 'HIGH'; }
   if (devClass === 'serial_rugger' || devClass === 'scammer') { signals.push(`🔴 Dev classified: ${devClass}`); riskLevel = 'CRITICAL'; }
-  else if (devScore != null && devScore < 30) { signals.push(`🔴 Dev reputation: ${devScore}/100`); if (riskLevel !== 'CRITICAL') riskLevel = 'HIGH'; }
+  else if (devScore != null && devScore < 30) { signals.push(`🔴 Dev reputation: ${devScore}/100`); if ((riskLevel as string) !== 'CRITICAL') riskLevel = 'HIGH'; }
   else if (devScore != null && devScore < 50) { signals.push(`🟡 Dev reputation: ${devScore}/100`); if (riskLevel === 'LOW') riskLevel = 'MODERATE'; }
   else if (devScore != null) { signals.push(`🟢 Dev reputation: ${devScore}/100`); }
 

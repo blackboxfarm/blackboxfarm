@@ -555,7 +555,7 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
     .from('pumpfun_seen_symbols')
     .select('symbol_lower, status, block_reason, creator_wallet, peak_mcap_usd, lifespan_mins, is_test_launch, token_outcome');
   
-  const seenSymbolsMap = new Map((seenSymbols || []).map((s: any) => [s.symbol_lower, s]));
+  const seenSymbolsMap = new Map<string, any>((seenSymbols || []).map((s: any) => [s.symbol_lower, s]));
 
   // Get existing tokens from DB (already curated) - with creator info
   const { data: watchlist } = await supabase
@@ -581,7 +581,7 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
     .select('wallet_address, is_serial_spammer, is_test_launcher, is_legitimate_builder, reputation_score, trust_level, dev_pattern')
     .in('wallet_address', creatorWallets);
   
-  const devRepMap = new Map((devReputations || []).map((d: any) => [d.wallet_address, d]));
+  const devRepMap = new Map<string, any>((devReputations || []).map((d: any) => [d.wallet_address, d]));
 
   // STEP 1: Find ALL duplicate tickers within the batch (case-insensitive) but GROUP BY CREATOR
   const tickerCreatorCounts: Record<string, Set<string>> = {};
@@ -1172,11 +1172,11 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
   };
 
   // Summary stats
-  const growingTokens = recentUpdates.filter(t => t.trend === 'growing' || t.trend === 'surging').length;
-  const decliningTokens = recentUpdates.filter(t => t.trend === 'declining' || t.trend === 'dumping').length;
-  const surgingTokens = recentUpdates.filter(t => t.isSurging).length;
-  const dumpingTokens = recentUpdates.filter(t => t.isDumping).length;
-  const spikedAndKilledTokens = recentUpdates.filter(t => t.wasSpikedAndKilled).length;
+  const growingTokens = recentUpdates.filter((t: any) => t.trend === 'growing' || t.trend === 'surging').length;
+  const decliningTokens = recentUpdates.filter((t: any) => t.trend === 'declining' || t.trend === 'dumping').length;
+  const surgingTokens = recentUpdates.filter((t: any) => t.isSurging).length;
+  const dumpingTokens = recentUpdates.filter((t: any) => t.isDumping).length;
+  const spikedAndKilledTokens = recentUpdates.filter((t: any) => t.wasSpikedAndKilled).length;
 
   return {
     monitorEnabled,

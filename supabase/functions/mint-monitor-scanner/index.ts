@@ -647,7 +647,7 @@ serve(withRunLog('mint-monitor-scanner', async (req) => {
             newMints: newMints.length,
             mints: newMints
           });
-        } catch (e) {
+        } catch (e: any) {
           console.error(`Error scanning wallet ${wallet.wallet_address}:`, e);
           scanStatus = 'error';
           errorMessage = e.message;
@@ -853,7 +853,7 @@ serve(withRunLog('mint-monitor-scanner', async (req) => {
           const result = await resp.json();
           console.log(`Test notification to ${email}:`, result);
           results.push({ email, success: resp.ok, error: result.error });
-        } catch (e) {
+        } catch (e: any) {
           console.error(`Failed to send test to ${email}:`, e);
           results.push({ email, success: false, error: e.message });
         }

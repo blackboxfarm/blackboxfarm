@@ -297,7 +297,7 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
           volume_sol: volumeSol,
           tx_count: txCount,
           price_usd: priceUsd,
-          market_cap_usd: marketCapUsd,
+          market_cap_usd: marketCapUsd ?? undefined,
           liquidity_usd: liquidityUsd,
           // Track peaks
           holder_count_peak: Math.max(existing.holder_count_peak || 0, holderCount),
@@ -312,7 +312,7 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
           if (watchingMinutes >= minWatchTime && 
               holderCount >= qualifyHolders && 
               volumeSol >= qualifyVolume &&
-              (existing.bundle_score === null || existing.bundle_score <= config.max_bundle_score)) {
+              (existing.bundle_score == null || existing.bundle_score <= config.max_bundle_score)) {
             
             updates.status = 'qualified';
             updates.qualified_at = now.toISOString();
@@ -458,9 +458,9 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
           price_ath_usd: priceUsd,
           holder_count_peak: holderCount,
           tx_count: txCount,
-          market_cap_usd: marketCapUsd,
+          market_cap_usd: marketCapUsd ?? undefined,
           liquidity_usd: liquidityUsd,
-          bundle_score: bundleScore,
+          bundle_score: bundleScore ?? undefined,
           creator_wallet: tokenData.creator,
           metadata: { image: tokenData.token?.image },
         };

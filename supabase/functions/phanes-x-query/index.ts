@@ -199,7 +199,7 @@ serve(withRunLog('phanes-x-query', async (req) => {
  * The /x command only works in DMs (Phanes rejects it in group chats).
  */
 async function queryPhanes(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   handle: string,
 ): Promise<{
   sent: boolean;

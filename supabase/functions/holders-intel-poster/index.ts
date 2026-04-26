@@ -460,7 +460,7 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
     const staleCutoff = new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000).toISOString();
 
     // Auto-expire stale pending items (older than 6h) so they don't clog the queue
-    const { count: expiredCount } = await supabase
+    const { count: expiredCount } = await (supabase as any)
       .from('holders_intel_post_queue')
       .update({ status: 'expired', error_message: `Auto-expired: older than ${STALE_HOURS}h` })
       .eq('status', 'pending')

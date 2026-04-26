@@ -239,8 +239,8 @@ async function checkDevWalletHistory(creatorWallet: string): Promise<{ isSerialS
         return acc;
       }, {});
       
-      const maxNameDupes = Math.max(...Object.values(nameCounts), 0);
-      const maxSymbolDupes = Math.max(...Object.values(symbolCounts), 0);
+      const maxNameDupes = Math.max(...(Object.values(nameCounts) as number[]), 0);
+      const maxSymbolDupes = Math.max(...(Object.values(symbolCounts) as number[]), 0);
       
       // If same name/symbol used more than once (2+), it's a copy-paste scam
       if (maxNameDupes >= 2 || maxSymbolDupes >= 2) {
