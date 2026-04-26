@@ -1142,7 +1142,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             w.tokensSent += amount
             w.netTokens = w.tokensReceived - w.tokensSent
             w.lastTxTime = Math.max(w.lastTxTime, tx.timestamp)
-            w.txTypes[tx.type] = (w.txTypes[tx.type] || 0) + 1
+            ;(w.txTypes as Record<string, number>)[tx.type] = ((w.txTypes as Record<string, number>)[tx.type] || 0) + 1
             if (t.toUserAccount) w.interactedWith.add(t.toUserAccount)
             walletActivity.set(t.fromUserAccount, w)
           }
@@ -1167,7 +1167,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             w.tokensReceived += amount
             w.netTokens = w.tokensReceived - w.tokensSent
             w.lastTxTime = Math.max(w.lastTxTime, tx.timestamp)
-            w.txTypes[tx.type] = (w.txTypes[tx.type] || 0) + 1
+            ;(w.txTypes as Record<string, number>)[tx.type] = ((w.txTypes as Record<string, number>)[tx.type] || 0) + 1
             if (t.fromUserAccount) w.interactedWith.add(t.fromUserAccount)
             walletActivity.set(t.toUserAccount, w)
           }
@@ -1336,14 +1336,14 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             if (amount > 0.0001) { // Ignore dust
               totalSolSent += amount
               
-              const existing = offspringWallets.get(recipient) || {
+              const existing: any = offspringWallets.get(recipient) || {
                 wallet: recipient,
                 totalSolReceived: 0,
                 txCount: 0,
                 firstTx: tx.signature,
                 firstTxTime: tx.timestamp,
                 firstTxTimeFormatted: new Date(tx.timestamp * 1000).toISOString(),
-                transactions: []
+                transactions: [] as any[]
               }
               
               existing.totalSolReceived += amount
