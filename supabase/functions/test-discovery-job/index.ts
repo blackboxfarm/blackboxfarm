@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
         .single()
 
       if (profile) {
-        results['developerProfile'] = {
+        (results as any)['developerProfile'] = {
           displayName: profile.display_name,
           trustLevel: profile.trust_level,
           reputationScore: profile.reputation_score,
