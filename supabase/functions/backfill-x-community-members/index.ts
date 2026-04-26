@@ -30,6 +30,33 @@ Deno.serve(async (req) => {
   const startedAt = Date.now();
   console.log(`[backfill-x-community-members] start limit=${limit} only=${onlyCommunityId ?? 'auto'} force=${force}`);
 
+  // Step 0: Honor pause state. If Apify is paused (credit block, manual pause), short-circuit.
+  // Manual force=true overrides this.
+  if (!force) {
+    try {
+      const { data: pause } = await supabase
+        .from('apify_pause_state')
+        .select('paused_until, reason, last_failure_status')
+        .eq('id', 1)
+        .maybeSingle();
+      if (pause?.paused_until && new Date(pause.paused_until).getTime() > Date.now()) {
+        const remainingMs = new Date(pause.paused_until).getTime() - Date.now();
+        const remainingMin = Math.ceil(remainingMs / 60000);
+        console.warn(`[backfill-x-community-members] PAUSED ${remainingMin}min — reason: ${pause.reason}`);
+        return new Response(JSON.stringify({
+          status: 'paused',
+          paused_until: pause.paused_until,
+          remaining_minutes: remainingMin,
+          reason: pause.reason,
+          last_failure_status: pause.last_failure_status,
+        }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    } catch (e) {
+      console.warn('[backfill-x-community-members] pause check failed:', (e as Error).message);
+      // Soft-fail open — better to attempt than to block
+    }
+  }
+
   // Step 1: DRAIN THE QUEUE FIRST. Discovery functions (DexScreener, harvest, social-link-checker, etc.)
   // enqueue communities into x_community_resolution_queue. Those take priority over the oldest-mods scan.
   let rows: any[] = [];
