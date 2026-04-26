@@ -73,10 +73,14 @@ Deno.serve(async (req) => {
       rows = ids.map(id => byId.get(id) ?? { community_id: id, name: null, last_scraped_at: null, moderator_usernames: null, raw_data: null });
     } else {
       // 1b. Fallback: oldest-missing-mods scan
+      // CRITICAL: only scan rows with numeric community_id (6-25 digits) — never
+      // pseudo-IDs like "https___x_com_handle" created by admin-add-seen-token
+      // for plain Twitter handles. Those waste Apify credits with 400 errors.
       const { data, error } = await supabase
         .from('x_communities')
         .select('community_id, name, last_scraped_at, moderator_usernames, raw_data')
         .eq('is_deleted', false)
+        .filter('community_id', 'similar to', '[0-9]{6,25}')
         .or('moderator_usernames.is.null,last_scraped_at.is.null')
         .order('last_scraped_at', { ascending: true, nullsFirst: true })
         .limit(limit);
