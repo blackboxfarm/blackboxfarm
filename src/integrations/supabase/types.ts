@@ -898,6 +898,36 @@ export type Database = {
         }
         Relationships: []
       }
+      apify_pause_state: {
+        Row: {
+          id: number
+          last_failure_body: string | null
+          last_failure_status: number | null
+          paused_until: string | null
+          reason: string | null
+          triggered_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          id: number
+          last_failure_body?: string | null
+          last_failure_status?: number | null
+          paused_until?: string | null
+          reason?: string | null
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          last_failure_body?: string | null
+          last_failure_status?: number | null
+          paused_until?: string | null
+          reason?: string | null
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       arb_balances: {
         Row: {
           base_token_base: number
@@ -20335,6 +20365,16 @@ export type Database = {
         }[]
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
+      pause_apify: {
+        Args: {
+          p_body?: string
+          p_minutes: number
+          p_reason: string
+          p_status?: number
+          p_triggered_by?: string
+        }
+        Returns: string
+      }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
       record_function_skip: {
         Args: { p_function_name: string }
@@ -20344,6 +20384,7 @@ export type Database = {
       refresh_master_token_directory: { Args: never; Returns: undefined }
       refresh_mesh_summary: { Args: never; Returns: undefined }
       reset_daily_auto_buy_counts: { Args: never; Returns: undefined }
+      resume_apify: { Args: { p_triggered_by?: string }; Returns: undefined }
       schedule_arb_scanner: { Args: never; Returns: undefined }
       schedule_cron_job: {
         Args: { job_command: string; job_name: string; job_schedule: string }
