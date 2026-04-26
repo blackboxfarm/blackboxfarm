@@ -322,11 +322,17 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
 
     console.log(`[KYCDeep] Done: ${chain.length} chain links, ${siblingWallets.length} siblings, KYC root: ${kycRoot?.slice(0, 12) || 'not found'} (${kycRootLabel || 'N/A'}), ${meshLinksAdded} mesh links added`);
 
+    // Prefer our own curated CEX label over Helius's "funderName" — guarantees
+    // we always say "Binance" instead of "Binance Hot Wallet 7" or null.
+    const ourCexLabel = kycRoot ? getCexName(kycRoot) : null;
+    const finalKycLabel = ourCexLabel ?? kycRootLabel ?? null;
+
     return new Response(
       JSON.stringify({
         walletAddress,
         kycRoot,
-        kycRootLabel,
+        kycRootLabel: finalKycLabel,
+        kycRootCex: ourCexLabel, // explicit: name from our curated list (null if not in our DB)
         chainDepth: chain.length,
         walletsTraced: visited.size,
         meshLinksAdded,

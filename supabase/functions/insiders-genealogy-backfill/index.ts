@@ -24,6 +24,8 @@ const corsHeaders = {
 const DEFAULT_BATCH = 25;
 const MAX_BATCH = 50;
 const PER_WALLET_DELAY_MS = 250; // throttle Helius
+const HELIUS_MONTHLY_QUOTA = 10_000_000;
+const HELIUS_BUDGET_GUARD_PCT = 0.80; // abort auto_loop above 80% of quota
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -38,8 +40,31 @@ serve(async (req) => {
 
   const batchSize = Math.min(Math.max(Number(body.batchSize) || DEFAULT_BATCH, 1), MAX_BATCH);
   const force = !!body.force; // if true, re-trace even rows that already have a kyc_root
+  const autoLoop = !!body.auto_loop; // if true, self-invoke until remaining===0 (subject to budget guard)
 
   try {
+    // Budget guard: aborts auto_loop if we're already over 80% of monthly Helius quota.
+    if (autoLoop) {
+      const monthStart = new Date();
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+      const { data: usage } = await supabase
+        .from('helius_api_usage')
+        .select('credits_used')
+        .gte('timestamp', monthStart.toISOString())
+        .limit(50000);
+      const totalCredits = (usage || []).reduce((s, r: any) => s + (r.credits_used || 0), 0);
+      if (totalCredits > HELIUS_MONTHLY_QUOTA * HELIUS_BUDGET_GUARD_PCT) {
+        console.warn(`[insiders-genealogy-backfill] BUDGET GUARD: ${totalCredits}/${HELIUS_MONTHLY_QUOTA} credits used — auto_loop aborted`);
+        return new Response(JSON.stringify({
+          ok: false,
+          aborted: 'helius_budget_guard',
+          credits_used: totalCredits,
+          monthly_quota: HELIUS_MONTHLY_QUOTA,
+        }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // 1. Find rows that need tracing
     const filter = supabase
       .from('telegram_insider_token_lifecycle')
@@ -125,9 +150,19 @@ serve(async (req) => {
 
     const remaining = Math.max(0, total - rows.length);
 
+    // Auto-loop: schedule the next batch (fire-and-forget, no await on the body).
+    if (autoLoop && remaining > 0) {
+      console.log(`[insiders-genealogy-backfill] auto_loop: scheduling next batch (${remaining} remaining)`);
+      // Fire-and-forget; do not await — we just want to chain.
+      supabase.functions.invoke('insiders-genealogy-backfill', {
+        body: { auto_loop: true, batchSize, force },
+      }).catch((e) => console.warn('[insiders-genealogy-backfill] next-batch invoke failed:', e?.message));
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
+        auto_loop: autoLoop,
         processed: rows.length,
         traced,
         failed,

@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
     const ancestors = new Map<string, { depth: number; cex?: string | null }>();
     let frontier = [wallet];
     const visited = new Set<string>([wallet]);
+    let kycTerminus: { wallet: string; cex_name: string; depth: number } | null = null;
 
     for (let depth = 1; depth <= 20 && frontier.length > 0; depth++) {
       const { data: edges, error } = await supabase
@@ -64,7 +65,14 @@ Deno.serve(async (req) => {
         visited.add(f);
         const cex = getCexName(f);
         ancestors.set(f, { depth, cex });
-        if (!cex) next.push(f); // don't keep walking past CEX
+        if (cex) {
+          // Capture the SHALLOWEST (first) CEX hit as the KYC terminus.
+          if (!kycTerminus || depth < kycTerminus.depth) {
+            kycTerminus = { wallet: f, cex_name: cex, depth };
+          }
+        } else {
+          next.push(f); // don't keep walking past CEX
+        }
       }
       frontier = next;
     }
@@ -163,6 +171,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       creator: wallet,
       ancestors_walked: ancestors.size,
+      kyc_terminus: kycTerminus, // { wallet, cex_name, depth } | null
       shared_funders,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

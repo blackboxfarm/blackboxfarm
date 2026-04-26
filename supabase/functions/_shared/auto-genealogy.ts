@@ -307,6 +307,13 @@ export async function meshGenealogyResults(
 
   // 1. Update dev_wallet_reputation with discovered upstream wallets
   const upstreamAddresses = genealogy.parentWallets.map(p => p.wallet);
+  const cexHit = genealogy.parentWallets.find((p) => p.cexName);
+  const trailFields = {
+    trail_end_reason: genealogy.trailEndReason,
+    trail_end_kyc_root: cexHit?.wallet ?? null,
+    trail_end_at: now,
+  };
+
   if (upstreamAddresses.length > 0) {
     const { data: existing } = await supabase
       .from('dev_wallet_reputation')
@@ -330,7 +337,35 @@ export async function meshGenealogyResults(
           upstream_wallets: mergedUpstream,
           twitter_accounts: mergedTwitter,
           updated_at: now,
+          ...trailFields,
         })
+        .eq('id', existing.id);
+    } else {
+      // No reputation row yet — create a minimal one so we can record the trail end.
+      await supabase
+        .from('dev_wallet_reputation')
+        .insert({
+          wallet_address: targetWallet,
+          upstream_wallets: upstreamAddresses,
+          twitter_accounts: genealogy.xAccounts,
+          trust_level: 'under_investigation',
+          first_seen_at: now,
+          last_activity_at: now,
+          notes: `Auto-created by ${source} — trail ended: ${genealogy.trailEndReason}`,
+          ...trailFields,
+        });
+    }
+  } else if (genealogy.trailEndReason !== 'in_progress') {
+    // Even with no upstream wallets, record the dead-end so we don't retrace.
+    const { data: existing } = await supabase
+      .from('dev_wallet_reputation')
+      .select('id')
+      .eq('wallet_address', targetWallet)
+      .maybeSingle();
+    if (existing) {
+      await supabase
+        .from('dev_wallet_reputation')
+        .update({ ...trailFields, updated_at: now })
         .eq('id', existing.id);
     }
   }
