@@ -20286,6 +20286,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      increment_xcrq_attempt: {
+        Args: { p_community_id: string; p_error: string }
+        Returns: undefined
+      }
       initialize_arb_balances_for_user: {
         Args: { p_user_id: string }
         Returns: undefined
