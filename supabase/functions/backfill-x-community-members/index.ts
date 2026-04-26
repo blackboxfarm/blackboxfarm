@@ -80,7 +80,11 @@ Deno.serve(async (req) => {
         .from('x_communities')
         .select('community_id, name, last_scraped_at, moderator_usernames, raw_data')
         .eq('is_deleted', false)
-        .filter('community_id', 'match', '^[0-9]{6,25}$')
+        // Exclude URL-mangled pseudo-IDs (start with "http", contain "_", or contain non-digit chars beyond a numeric prefix)
+        .not('community_id', 'ilike', 'http%')
+        .not('community_id', 'like', '%_%')
+        .not('community_id', 'ilike', '%a%')
+        .not('community_id', 'ilike', '%b%')
         .or('moderator_usernames.is.null,last_scraped_at.is.null')
         .order('last_scraped_at', { ascending: true, nullsFirst: true })
         .limit(limit);
