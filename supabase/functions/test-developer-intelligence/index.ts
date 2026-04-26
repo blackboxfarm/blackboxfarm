@@ -85,8 +85,9 @@ Deno.serve(async (req) => {
 
       if (error) throw error
       
-      test3.details.indexCount = indexes?.length || 0
-      test3.details.status = indexes && indexes.length > 20 ? '✓ Sufficient indexes' : '⚠ Limited indexes'
+      const idxArr = Array.isArray(indexes) ? indexes : (indexes ? [indexes] : []);
+      test3.details.indexCount = idxArr.length || 0
+      test3.details.status = idxArr.length > 20 ? '✓ Sufficient indexes' : '⚠ Limited indexes'
       test3.status = 'passed'
       results.summary.passed++
     } catch (error) {
