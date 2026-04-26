@@ -452,7 +452,6 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
                   if (!xcErr) results.dexscreener.communitiesAdded++;
                 }
                 await enqueueCommunityResolution(supabase, communityId, 'harvest-token-socials', 4);
-                }
               }
             }
           }
