@@ -29,6 +29,8 @@ interface GenealogyResult {
   common_ancestors: string[];
   max_depth_reached: number;
   total_wallets_traced: number;
+  /** Shallowest CEX hit in the funding tree, if any — Track 1 named-CEX surfacing. */
+  kyc_root_cex?: { wallet: string; cex_name: string; depth: number } | null;
 }
 
 // getCexName imported from _shared/cex-wallets.ts
@@ -291,6 +293,23 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
       const allWallets = extractAllWallets(fundingTree);
       allWalletSets.push(allWallets);
 
+      // Pick the SHALLOWEST CEX hit as the canonical KYC root for this wallet.
+      const shallowestCex = cexSources.length > 0
+        ? cexSources.reduce((best, cur) => {
+            // walk the tree to find this cex_wallet's depth (cheap; tree is small)
+            const findDepth = (node: WalletNode): number | null => {
+              if (node.wallet === cur.wallet) return node.depth;
+              for (const c of node.children) {
+                const d = findDepth(c);
+                if (d !== null) return d;
+              }
+              return null;
+            };
+            const d = findDepth(fundingTree) ?? 99;
+            return !best || d < best.depth ? { wallet: cur.wallet, cex_name: cur.cex, depth: d } : best;
+          }, null as { wallet: string; cex_name: string; depth: number } | null)
+        : null;
+
       results.push({
         root_wallet: wallet,
         funding_tree: fundingTree,
@@ -298,9 +317,10 @@ Deno.serve(withRunLog('wallet-genealogy-scanner', async (req) => {
         common_ancestors: [], // Will be filled after all wallets are traced
         max_depth_reached: getMaxDepth(fundingTree),
         total_wallets_traced: visited.size,
+        kyc_root_cex: shallowestCex,
       });
 
-      console.log(`Traced ${visited.size} wallets for ${wallet}, found ${cexSources.length} CEX sources`);
+      console.log(`Traced ${visited.size} wallets for ${wallet}, found ${cexSources.length} CEX sources${shallowestCex ? ` (KYC root: ${shallowestCex.cex_name} @ depth ${shallowestCex.depth})` : ''}`);
     }
 
     // Find common ancestors between all wallet sets
