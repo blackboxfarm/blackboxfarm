@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
 /**
  * Lightweight enqueue helper for deferred X Community staff resolution.
  *
@@ -20,7 +18,7 @@ export function extractCommunityIdFromUrl(url: string | null | undefined): strin
 }
 
 export async function enqueueCommunityResolution(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   communityIdOrUrl: string,
   discoveredVia: string,
   priority = 5,
@@ -45,7 +43,7 @@ export async function enqueueCommunityResolution(
 }
 
 export async function enqueueManyCommunityResolutions(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   ids: (string | null | undefined)[],
   discoveredVia: string,
   priority = 5,
