@@ -5,6 +5,7 @@ import { alertAndLogCommunityDeletion, CommunityAlertInfo } from "../_shared/x-c
 import { meshFeed } from "../_shared/mesh-feeder.ts";
 import { fetchXCommunityAboutAdmin } from "../_shared/x-community-about-admin.ts";
 import { resolveXHandle } from "../_shared/x-handle-resolver.ts";
+import { resolveXCommunity, linkWalletToCommunityStaff, type ResolvedCommunity } from "../_shared/x-community-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -212,7 +213,8 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
       };
 
       if (needsScrape && browserlessApiKey) {
-        console.log('[x-community-enricher] Fetching community admin from X about page...');
+      if (needsScrape) {
+        console.log('[x-community-enricher] Resolving community via canonical resolver...');
 
         await supabase.from('x_communities').upsert({
           community_id: communityId,
@@ -222,43 +224,30 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
           updated_at: currentScrapeAt,
         }, { onConflict: 'community_id' });
 
-        const aboutResult = await fetchXCommunityAboutAdmin(communityId, browserlessApiKey);
-
-        if (aboutResult.httpStatus >= 400 || (aboutResult.httpStatus === 0 && aboutResult.error)) {
+        let resolved: ResolvedCommunity;
+        try {
+          resolved = await resolveXCommunity(supabase as any, communityId, { forceRefresh: true });
+        } catch (e) {
           const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
-          const errorStatus = aboutResult.httpStatus > 0 ? `error_${aboutResult.httpStatus}` : 'error_browserless';
-          console.warn(`[x-community-enricher] About-page lookup failed for ${communityId} (fail #${newFailCount}): ${aboutResult.error || aboutResult.httpStatus}`);
-
+          console.warn(`[x-community-enricher] Resolver threw for ${communityId} (fail #${newFailCount}):`, (e as Error).message);
           await supabase.from('x_communities').upsert({
             community_id: communityId,
             community_url: urlToProcess,
             failed_scrape_count: newFailCount,
-            scrape_status: errorStatus,
+            scrape_status: 'error_resolver',
             last_scraped_at: currentScrapeAt,
             updated_at: currentScrapeAt,
-            raw_data: aboutResult.rawData,
           }, { onConflict: 'community_id' });
-
           return new Response(JSON.stringify({
-            success: false,
-            type: 'community',
-            communityId,
-            error: aboutResult.error || `About page lookup returned ${aboutResult.httpStatus}`,
-            failCount: newFailCount,
-            willRetryAfter: newFailCount >= 3 ? 'never (max failures reached)' : '24h',
+            success: false, type: 'community', communityId,
+            error: (e as Error).message, failCount: newFailCount,
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const existenceCheck = aboutResult.adminUsername
-          ? {
-              exists: true,
-              isDeleted: false,
-              memberCount: aboutResult.memberCount ?? undefined,
-              checkedAt: currentScrapeAt,
-            }
-          : await validateCommunityExists(communityId, []);
-
-        if (existenceCheck.isDeleted) {
+        // Resolver returned nothing → check existence to detect deletion
+        if (resolved.source === 'none') {
+          const existenceCheck = await validateCommunityExists(communityId, []);
+          if (existenceCheck.isDeleted) {
           console.warn(`[X Community Enricher] Community ${communityId} appears DELETED`);
 
           const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
@@ -269,7 +258,6 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
             failed_scrape_count: newFailCount,
             last_existence_check_at: currentScrapeAt,
             last_scraped_at: currentScrapeAt,
-            raw_data: aboutResult.rawData,
           }).eq('community_id', communityId);
 
           if (!existingCommunity?.deletion_alert_sent) {
@@ -329,41 +317,45 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
             message: 'Community has been deleted by its owners'
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+          // Existence undetermined; bump fail count and bail
+          const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
+          await supabase.from('x_communities').upsert({
+            community_id: communityId,
+            community_url: urlToProcess,
+            failed_scrape_count: newFailCount,
+            scrape_status: 'no_data',
+            last_scraped_at: currentScrapeAt,
+            updated_at: currentScrapeAt,
+          }, { onConflict: 'community_id' });
+          return new Response(JSON.stringify({
+            success: false, type: 'community', communityId,
+            error: 'Resolver returned no data', failCount: newFailCount,
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
-        const resolvedAdmin = aboutResult.adminUsername
-          ? await resolveXHandle(aboutResult.adminUsername, supabase as any)
-          : null;
-        const normalizedAdmin = normalizeScreenName(resolvedAdmin?.handle || aboutResult.adminUsername);
-
-        // Normalize moderator handles from about page
-        const normalizedMods = (aboutResult.moderatorUsernames || [])
-          .map((h: string) => normalizeScreenName(h))
-          .filter((h: string | null): h is string => !!h && h !== normalizedAdmin);
+        // Map resolver output back into the legacy communityData shape used downstream
+        const normalizedAdmin = resolved.admin?.handle ?? null;
+        const normalizedMods = resolved.moderators.map(m => m.handle).filter(h => h !== normalizedAdmin);
 
         communityData = {
           communityId,
-          name: aboutResult.communityName ?? existingCommunity?.name ?? undefined,
+          name: resolved.name ?? existingCommunity?.name ?? undefined,
           adminUsernames: normalizedAdmin ? [normalizedAdmin] : [],
           moderatorUsernames: normalizedMods,
-          memberCount: aboutResult.memberCount ?? existingCommunity?.member_count ?? undefined,
+          memberCount: resolved.memberCount ?? existingCommunity?.member_count ?? undefined,
           rawData: {
-            ...aboutResult.rawData,
-            resolvedAdmin: resolvedAdmin ? {
-              userId: resolvedAdmin.userId,
-              displayName: resolvedAdmin.displayName,
-              handle: resolvedAdmin.handle,
-              isVerified: resolvedAdmin.isVerified,
-              isRotated: resolvedAdmin.isRotated,
-              handleCount: resolvedAdmin.handleCount,
-              linkedTokenCount: resolvedAdmin.linkedTokenCount,
-            } : null,
+            resolverSource: resolved.source,
+            adminXUserId: resolved.admin?.xUserId ?? null,
+            adminVerified: resolved.admin?.isVerified ?? false,
+            moderatorCount: normalizedMods.length,
+            memberSampleSize: resolved.memberSample.length,
           },
         };
-        // If we successfully scraped a community name, treat that as a meaningful
-        // result even if the about page didn't surface an admin handle.
         scrapeStatus = normalizedAdmin
           ? 'complete'
-          : (aboutResult.communityName ? 'name_only' : 'no_admin_on_about_page');
+          : (resolved.name ? 'name_only' : 'no_admin');
+
+        console.log(`[x-community-enricher] Resolver(${resolved.source}) → admin=@${normalizedAdmin || 'none'}, mods=${normalizedMods.length}, name="${resolved.name || ''}"`);
 
         if (existingCommunity?.failed_scrape_count > 0) {
           await supabase.from('x_communities').update({
@@ -372,8 +364,6 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
         }
 
         if (normalizedAdmin) {
-          console.log(`[x-community-enricher] About page admin for ${communityId}: @${normalizedAdmin}`);
-
           const { data: existingTarget } = await supabase
             .from('community_follow_targets')
             .select('follow_status')
@@ -386,22 +376,51 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
             .upsert([{
               community_id: communityId,
               target_handle: normalizedAdmin,
-              target_x_user_id: resolvedAdmin?.userId || null,
-              is_blue_verified: resolvedAdmin?.isVerified || false,
+              target_x_user_id: resolved.admin?.xUserId || null,
+              is_blue_verified: resolved.admin?.isVerified || false,
               community_role: 'Admin',
-              followers_count: null,
+              followers_count: resolved.admin?.followers ?? null,
               follow_status: existingTarget?.follow_status || 'not_followed',
               updated_at: currentScrapeAt,
             }], { onConflict: 'community_id,target_handle' });
 
           if (followUpsertErr) {
             console.warn('[x-community-enricher] Follow targets upsert error:', followUpsertErr.message);
-          } else {
-            console.log(`[x-community-enricher] ✅ Indexed about-page admin for community ${communityId}`);
           }
         }
-      } else if (needsScrape && !browserlessApiKey) {
-        console.warn('BROWSERLESS_API_KEY not configured, skipping about-page lookup');
+
+        // ALSO upsert moderators into community_follow_targets so the follow tool sees them
+        for (const mod of resolved.moderators) {
+          const { data: existingTarget } = await supabase
+            .from('community_follow_targets')
+            .select('follow_status')
+            .eq('community_id', communityId)
+            .eq('target_handle', mod.handle)
+            .maybeSingle();
+          await supabase.from('community_follow_targets').upsert([{
+            community_id: communityId,
+            target_handle: mod.handle,
+            target_x_user_id: mod.xUserId || null,
+            is_blue_verified: mod.isVerified,
+            community_role: 'Moderator',
+            followers_count: mod.followers ?? null,
+            follow_status: existingTarget?.follow_status || 'not_followed',
+            updated_at: currentScrapeAt,
+          }], { onConflict: 'community_id,target_handle' });
+        }
+
+        // Cross-link to wallet (master Dev↔Handle mesh)
+        if (linkedWallet) {
+          try {
+            const { inserted } = await linkWalletToCommunityStaff(supabase as any, linkedWallet, resolved, {
+              tokenMint: linkedTokenMint || null,
+              discoveredVia: 'x-community-enricher',
+            });
+            if (inserted > 0) console.log(`[x-community-enricher] Linked ${inserted} dev_handle_links rows for wallet ${linkedWallet.slice(0,8)}…`);
+          } catch (e) {
+            console.warn('[x-community-enricher] dev_handle_links failed:', (e as Error).message);
+          }
+        }
       }
 
       const linkedTokenMints = existingCommunity?.linked_token_mints || [];
