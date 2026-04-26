@@ -406,6 +406,9 @@ verify_jwt = false
 [functions.upload-bubble-snapshot]
 verify_jwt = false
 
+[functions.bubble-share]
+verify_jwt = false
+
 [functions.x-community-health-check]
 verify_jwt = false
 

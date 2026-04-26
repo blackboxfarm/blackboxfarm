@@ -135,7 +135,7 @@ function compose(source: HTMLCanvasElement | HTMLImageElement, w: CaptureWaterma
   ctx.font = '12px system-ui, sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(
-    `Mapped on @HoldersIntel · ${new Date().toLocaleDateString()}`,
+    `Mapped on @BlackBox_Farm · ${new Date().toLocaleDateString()}`,
     outW - padX,
     outH - footerH / 2
   );
