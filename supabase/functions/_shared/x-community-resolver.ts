@@ -43,8 +43,12 @@ export interface ResolvedCommunity {
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const APIFY_MAX_MEMBERS_DEFAULT = 200;
-const APIFY_MAX_MEMBERS_DEEP = 1000;   // when caller wants full mod harvest
+// We only need the community admin (1) + moderators (typically 1–10).
+// Apify scrapes are billed per-member, so fetching 200 was wasting ~13× the
+// credits for data we never used. 15 covers >99% of communities and gives a
+// small buffer in case X reorders the member list.
+const APIFY_MAX_MEMBERS_DEFAULT = 15;
+const APIFY_MAX_MEMBERS_DEEP = 50;   // "deep" mode: still tiny vs 1000
 
 function normHandle(h: string | null | undefined): string | null {
   const v = h?.trim().replace(/^@/, '').toLowerCase();
