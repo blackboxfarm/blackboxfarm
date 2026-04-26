@@ -1,131 +1,197 @@
-## Goal
-Let any user (and especially Pro users) capture the **visible Bubble Map area** — works for both the **Classic ForceGraph view** and the **Schematic xyflow view** — into a PNG, upload it to a public storage URL, and share to X/Telegram with custom commentary. Reuses your existing share-card infrastructure (`generate-share-card-satori`, `share-card-page`, `social-gallery` bucket, `post-share-card-twitter`).
+## Why we're changing this
+
+Yesterday's fix nailed the **community name** and **admin** for LASTMAN, but the screenshot proves we're still missing the rich `Moderators` block (quiet, Big Chad, de8en, Dionio99, YBD, …). The reason is structural, not parsing:
+
+- Firecrawl on `/i/communities/<id>/about` is being silently redirected by X to the **main community tab** (the snippet stored in `raw_data.textSnippet` for LASTMAN contains *no* "Moderators" heading at all — only the public "Created by" sidebar).
+- Browserless can occasionally see it, but the free tier is exhausted and the result is inconsistent.
+- Database evidence: **852 communities have an admin, only 106 have any moderator** (12% coverage). That's the parser silently giving up on a page that never contained the data.
+
+But we already have the gold-standard tool wired in elsewhere:
+**`danpoletaev~twitter-x-community-member-scraper`** (Apify) — used today only inside `x-community-follow` and `social-larp-detector`. It returns every member with an authoritative `communityRole` field (`Admin` / `Moderator` / `member`), follower counts, blue-check status, X user IDs, and display names. This is the data behind your screenshot.
+
+The plan promotes that scraper to the **canonical resolver** for *every* X-Community lookup site-wide, then builds the cross-linking master mesh you asked for.
 
 ---
 
-## Why this is straightforward in your stack
-- **ForceGraph2D** (Classic view) — the underlying canvas is already a real `<canvas>` element. Direct `canvas.toDataURL('image/png')` works. No extra library needed for that view.
-- **xyflow / React Flow** (Schematic view) — supports `getNodesBounds` + `getViewportForBounds` + the `html-to-image` library (officially recommended by xyflow docs) to rasterize the SVG/HTML graph.
-- You already have public Supabase Storage buckets (`social-gallery`, `intel-images`, `OG`) with `getPublicUrl()` flows in production.
-- You already have a tweet/X intent share flow (`shareToTwitter`) and a server-side autoposter (`post-share-card-twitter`).
+## 1 · Canonical resolver: `_shared/x-community-resolver.ts` (NEW)
 
----
+A single shared module every caller uses. Internal waterfall:
 
-## Architecture
+| Step | Source | Returns |
+|---|---|---|
+| 1 | `community_follow_targets` cache (≤ 24 h old) | full member list with roles |
+| 2 | **Apify member-scraper** (primary) — `maxMembers: 50`, residential proxy | name, description, member_count, admin, moderators[], member sample, all `x_user_id`s |
+| 3 | Firecrawl `/about` (existing) | name + admin only — *fallback for name when Apify returns 0 members* |
+| 4 | Browserless (existing) | last-resort same as today |
 
-### 1. New shared util: `src/utils/captureBubbleMap.ts`
-Two strategies behind one API:
-
+Output shape (single source of truth):
 ```ts
-captureBubbleMap({
-  view: 'bubble' | 'schematic',
-  containerRef,         // for schematic
-  forceGraphRef,        // for bubble
-  width, height,
-  watermark?: { tokenSymbol, ca, grade }   // overlay drawn before upload
-}): Promise<Blob>
+{
+  communityId, name, description, memberCount, createdAt,
+  admin:     { handle, xUserId, displayName, isVerified, followers },
+  moderators:[{ handle, xUserId, displayName, isVerified, followers }],
+  memberSample:[{ handle, xUserId, isVerified }],   // first 50 for evidence
+  source: 'cache' | 'apify' | 'firecrawl' | 'browserless',
+  scrapedAt
+}
 ```
 
-- **Bubble view**: pull `forceGraphRef.current` → its internal canvas → composite with a header strip drawn via `OffscreenCanvas` (token symbol, CA, healthGrade, "blackbox.farm/holders" footer, gold border for brand consistency) → return PNG Blob.
-- **Schematic view**: use `html-to-image` `toPng()` against the React Flow wrapper element (the `.react-flow` root). Add the same header/footer overlay via a hidden DOM wrapper or a post-process canvas.
-- Output is always **1200×675** (Twitter/OG safe) — we letterbox or cover-fit the captured area.
+Also persists every member's `x_user_id` so handle-recycling (rename) is detectable later via Phanes.
 
-### 2. New dependency
-- Add `html-to-image` (~12 KB, pure browser, no Node) — required for the Schematic/SVG view. The Bubble view does not need it.
+## 2 · Replace ad-hoc scrapers with the resolver
 
-### 3. New component: `src/components/bubble-map/SnapshotShareDialog.tsx`
-A modal opened from a new "📸 Snapshot & Share" button placed in the Bubble Map toolbar (next to the existing view-mode toggle, visible in both Bubble and Schematic modes; hidden in 3D for now to avoid WebGL readback complications).
+Edit these to call the new resolver instead of their inline logic:
 
-Dialog flow:
-1. **Preview pane** — shows the captured PNG inline.
-2. **Commentary textarea** — pre-filled with a smart default:
-   `🔍 ${ticker} — Grade ${grade} · ${realHolders} real holders\nMapped on @HoldersIntel\nblackbox.farm/holders?token=${ca}`
-3. **Visibility toggle**:
-   - "Public link only" (just upload + copy URL)
-   - "Share to X" (opens `twitter.com/intent/tweet` with text + URL)
-   - "Share to Telegram" (opens `t.me/share/url`)
-4. **Re-capture** button (in case user pans/zooms first).
-5. **Download PNG** button.
+- `x-community-enricher/index.ts` — main pipeline (drops the Firecrawl-first path)
+- `bulk-community-enricher/index.ts`
+- `backfill-x-communities/index.ts`
+- `enrich-token-communities/index.ts`
+- `oracle-master-spider/index.ts`
+- `social-mesh-linker/index.ts`
+- `harvest-token-socials/index.ts`
+- `dexscreener-top-200-scraper/index.ts` (community link discovery)
+- `x-pinned-community-finder/index.ts` (after finding a community, immediately resolve it)
+- `social-link-mint-checker/index.ts`
 
-### 4. New edge function: `upload-bubble-snapshot`
-Why server-side instead of a direct browser upload?
-- Anonymous (free-tier) users still need to share but shouldn't get write access to the bucket.
-- Lets us stamp a server-signed filename, enforce per-user rate limits (3/day Free, unlimited Pro — matches `mem://features/bubble-map/access-and-tiers`), and log to a `bubble_snapshots` table for analytics.
+`x-community-about-admin.ts` becomes a thin Firecrawl-only fallback used by the resolver (no longer called directly anywhere).
 
-Function:
-- Accepts `{ pngBase64, tokenAddress, commentary?, viewMode }`.
-- Validates auth + rate limit.
-- Uploads to `social-gallery/bubble-snapshots/{userId}/{timestamp}-{ticker}.png`.
-- Inserts row into new table `bubble_snapshots(id, user_id, token_address, view_mode, public_url, commentary, created_at)` — uses `assertInsert` per zero-tolerance silent-fails rule.
-- Returns `{ publicUrl, snapshotId, shareUrl }` where `shareUrl` is a friendly path like `share.blackbox.farm/bubble/{snapshotId}` proxied via the existing Cloudflare `blackbox-og-router` worker so the link itself unfurls beautifully in X/TG/Discord.
+## 3 · Persist the rich data
 
-### 5. New OG endpoint: extend `share-card-page` (or add `bubble-share-page`)
-`/bubble/{snapshotId}` returns minimal HTML with:
-- `og:image` = the uploaded PNG
-- `og:title` = "${ticker} — Holder Mesh · Grade ${grade}"
-- `og:description` = the user's commentary (sanitized)
-- A meta-refresh / link back to `/bubblemap?token=${ca}` so humans land on the live map.
-This is the same pattern already used for `/intel-share`.
+`x_communities` already has the columns we need; we just start filling them:
 
-### 6. New table migration
+- `admin_usernames` → `[admin.handle]`
+- `moderator_usernames` → all mods' handles (the field that's currently 88% empty)
+- `member_count`, `name`, `description`, `created_at_x` → from Apify
+- `raw_data.members` → full member sample with `xUserId`s for forensic re-resolution
+
+For every admin **and moderator**, write to the master mesh (see §4).
+
+## 4 · Master Mesh: Dev ↔ Handle ↔ Community cross-linking
+
+Two new tables (`reputation_mesh` is too generic for the directional facts you described):
+
+### `x_handle_registry` (handle as the canonical entity)
+
+```
+id uuid pk
+handle              text unique (lowercased current handle)
+x_user_id           text unique  -- the immutable Twitter numeric ID
+display_name        text
+is_verified         boolean
+followers_count     int
+first_seen_at, last_seen_at
+handle_history      jsonb  -- [{handle, observed_at}]  ← recycling
+display_name_history jsonb -- [{name, observed_at}]
+linked_token_count  int
+linked_wallet_count int
+linked_community_count int
+metadata            jsonb
+```
+
+Whenever a handle is observed, we upsert by `x_user_id` so a rename automatically appends to `handle_history` and updates `handle` — that's your **handle-recycling tracker**.
+
+### `dev_handle_links` (the many-to-many master mesh)
+
+```
+id uuid pk
+wallet_address text not null
+x_user_id      text not null         -- joins to x_handle_registry
+handle_at_link text                  -- handle observed at link time
+relationship   text                  -- 'community_admin', 'community_mod',
+                                     --  'token_official_x', 'pinned_community_admin',
+                                     --  'genealogy_funder', 'mesh_inferred'
+confidence     int                   -- 0-100
+evidence       jsonb                 -- {community_id?, token_mint?, source_fn, scraped_at}
+discovered_at  timestamptz default now()
+unique (wallet_address, x_user_id, relationship, (evidence->>'community_id'))
+```
+
+This gives you **both** directions natively:
+- "All handles for wallet X" → `select x_user_id from dev_handle_links where wallet=X`
+- "All wallets behind handle Y" → `select wallet from dev_handle_links where x_user_id=Y`
+- "Community recycling" → join on `x_handle_registry.handle_history`
+
+`reputation_mesh` keeps getting populated for backwards compatibility, but `dev_handle_links` is the authoritative graph for analytics, the bubble map, and the dev report.
+
+### View: `v_dev_social_graph`
+
 ```sql
-create table public.bubble_snapshots (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
-  token_address text not null,
-  view_mode text not null check (view_mode in ('bubble','schematic')),
-  public_url text not null,
-  commentary text,
-  created_at timestamptz default now()
-);
-alter table public.bubble_snapshots enable row level security;
--- public read (so OG endpoint can resolve), insert via edge function only (service-role)
-create policy "Public can read snapshots" on public.bubble_snapshots
-  for select using (true);
+SELECT d.wallet_address,
+       array_agg(DISTINCT r.handle)         FILTER (WHERE r.handle IS NOT NULL)         AS current_handles,
+       array_agg(DISTINCT h)                FILTER (WHERE h IS NOT NULL)                AS historical_handles,
+       array_agg(DISTINCT l.evidence->>'community_id')
+                                            FILTER (WHERE l.evidence ? 'community_id') AS communities,
+       count(*) AS link_count
+FROM dev_handle_links l
+JOIN x_handle_registry r ON r.x_user_id = l.x_user_id
+LEFT JOIN LATERAL jsonb_array_elements_text(r.handle_history) h(h) ON true
+GROUP BY d.wallet_address;
 ```
-Per-user rate limit enforced inside the edge function (not via RLS).
 
-### 7. UI placement
-In `PublicBubbleMap.tsx`, in the toolbar row that already contains the view-mode toggle (`Sun / Orbit / Box / LayoutTemplate` icons), add a `Camera` icon button → opens `SnapshotShareDialog`. Disabled when `viewMode === '3d'` with a tooltip "Snapshot available in Bubble & Schematic views" (3D WebGL readback can be added later if you want).
+The bubble map and `/dev` Telegram report both read from this view → one query gives the full picture.
+
+## 5 · Wire-in points (ensures coverage *everywhere*)
+
+| Where a community URL is discovered | Action |
+|---|---|
+| DexScreener token row (`socials[]`) | resolver runs → mesh upserts |
+| Pump.fun mint metadata `twitter` field | if it's a community URL → resolver; if it's a profile → `x-pinned-community-finder` → resolver |
+| Helius `tokenMetadata` JSON | same as above |
+| `token_social_links` insert trigger | new DB trigger calls `enrich-token-communities` async via `pg_net` (already used elsewhere) |
+| Pinned community finder result | calls resolver before returning |
+| Manual paste in `/super-admin → Mesh` | calls resolver |
+| Dev report `/dev` Telegram | reads `v_dev_social_graph` |
+
+## 6 · Recycling tracking
+
+- `x_handle_registry.handle_history` updated on every observation where the existing row's `handle` ≠ incoming handle for the same `x_user_id`.
+- Phanes already returns `phanes_recycled_accounts`; we extend `phanes-x-query` to write into `x_handle_registry` so we capture rebrands proactively, not only when re-scraped.
+- Communities themselves: a new boolean `x_communities.is_renamed` + `name_history jsonb` (parallel to handles).
+
+## 7 · Backfill
+
+One-shot edge function `backfill-x-community-members`:
+- Iterates every `x_communities` row where `array_length(moderator_usernames,1) IS NULL OR < 1`.
+- Throttled to **30 communities / 5 min** (Apify quota friendly).
+- Re-runs the resolver and upserts admin + mods + populates the new tables.
+- Estimated cost: 7 070 communities × ~$0.0007 = **≈ $5 USD** of Apify credits, run once.
+
+After backfill completes, a cron `bulk-community-enricher` already exists — we extend its rotation to refresh the *oldest 200 communities every 6 h* so the data stays warm.
+
+## 8 · UI surfacing (small but visible)
+
+- Bubble map: when an X-Community node is hovered, the tooltip lists Admin + first 3 moderators with verified badges (already designed, just needs the data).
+- `/super-admin → Dev Teams`: the "+N admins/mods" chip lights up properly now that mods aren't empty.
+- `/dev` Telegram report: adds a `🛡 Mods:` line under the existing `👑 Admin:` line for the token's official community.
+
+## 9 · Non-goals (kept explicit)
+
+- We are **not** following or DMing community members (that's the separate `x-community-follow` workflow, untouched here).
+- We are **not** fetching every member of every community — `maxMembers: 50` is enough to capture the entire admin/mod set (X caps mods at ~25) plus a representative member sample.
+- No changes to the bubble simulation, schematic view, or share-card pipeline.
 
 ---
 
-## Tier behavior (matches existing mesh memory)
-| Tier | Snapshots/day | Watermark | "Powered by" footer |
-|------|---------------|-----------|---------------------|
-| Anon | 1 | Yes (gold "TRY PRO") | Yes |
-| Free | 3 | Yes (subtle) | Yes |
-| Pro  | Unlimited | Optional toggle | Optional |
+## Files to be created / modified
 
----
+**New**
+- `supabase/functions/_shared/x-community-resolver.ts`
+- `supabase/functions/backfill-x-community-members/index.ts`
+- migration: `x_handle_registry`, `dev_handle_links`, `v_dev_social_graph`, `x_communities.name_history` + `is_renamed`
 
-## Files to create / edit
-**Create**
-- `src/utils/captureBubbleMap.ts`
-- `src/components/bubble-map/SnapshotShareDialog.tsx`
-- `supabase/functions/upload-bubble-snapshot/index.ts`
-- `supabase/migrations/<ts>_bubble_snapshots.sql`
-- (Optional) `supabase/functions/bubble-share-page/index.ts` — or extend `share-card-page`
+**Modified**
+- `supabase/functions/_shared/x-community-about-admin.ts` (downgraded to fallback only)
+- `supabase/functions/x-community-enricher/index.ts`
+- `supabase/functions/bulk-community-enricher/index.ts`
+- `supabase/functions/backfill-x-communities/index.ts`
+- `supabase/functions/enrich-token-communities/index.ts`
+- `supabase/functions/x-pinned-community-finder/index.ts`
+- `supabase/functions/social-mesh-linker/index.ts`
+- `supabase/functions/oracle-master-spider/index.ts`
+- `supabase/functions/dexscreener-top-200-scraper/index.ts`
+- `supabase/functions/phanes-x-query/index.ts` (writes to registry)
+- `src/hooks/useMeshGraph.ts` (consumes `v_dev_social_graph`)
+- `src/components/bubble-map/PublicBubbleMap.tsx` (tooltip mods)
+- `src/components/admin/DevTeamsView.tsx` (no schema change, but data finally populates)
 
-**Edit**
-- `src/components/bubble-map/PublicBubbleMap.tsx` — add Camera button in toolbar
-- `src/components/bubble-map/BubbleMapSchematic.tsx` — expose container ref via `forwardRef` so the capture util can target the React Flow root
-- `package.json` — add `html-to-image`
-- `supabase/config.toml` — register new function(s)
-
----
-
-## Risks / things I'll watch for
-1. **CORS / tainted canvas** — any token logos loaded from third-party CDNs without `crossOrigin="anonymous"` will taint the canvas and block `toDataURL`. Mitigation: route external images through your existing image proxy or fall back to a text-only badge in the overlay.
-2. **Very large meshes** — 200+ nodes at 1200×675 produces ~200 KB PNGs, fine for `social-gallery`. We cap to 500 KB and re-encode at quality 0.85 if larger.
-3. **ForceGraph reheats** — capture is taken from a paused frame (`graphRef.current.pauseAnimation()` → capture → `resumeAnimation()`).
-4. **Rate-limit table grows** — share `bubble_snapshots` retention with the existing 30-day cleanup cron in `database-housekeeping`.
-
----
-
-## Out of scope (deliberate)
-- 3D view capture — defer until requested.
-- AI-generated commentary — easy follow-up, but first ship the human-driven flow.
-- Direct Instagram/Facebook posting — X + Telegram + copyable public URL covers 95% of use right now.
-
-Once you approve I'll implement in this order: migration → edge function → util → dialog → toolbar wiring → docs note in `mem://features/bubble-map/`.
+After approval I'll run the migration, deploy the resolver and rewired functions, kick off the backfill, and verify with the LASTMAN community that all 5+ moderators land in `moderator_usernames` and the master mesh.

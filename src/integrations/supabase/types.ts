@@ -3480,6 +3480,51 @@ export type Database = {
         }
         Relationships: []
       }
+      dev_handle_links: {
+        Row: {
+          community_id: string | null
+          confidence: number
+          discovered_at: string
+          discovered_via: string | null
+          evidence: Json
+          handle_at_link: string | null
+          id: string
+          relationship: string
+          token_mint: string | null
+          updated_at: string
+          wallet_address: string
+          x_user_id: string
+        }
+        Insert: {
+          community_id?: string | null
+          confidence?: number
+          discovered_at?: string
+          discovered_via?: string | null
+          evidence?: Json
+          handle_at_link?: string | null
+          id?: string
+          relationship: string
+          token_mint?: string | null
+          updated_at?: string
+          wallet_address: string
+          x_user_id: string
+        }
+        Update: {
+          community_id?: string | null
+          confidence?: number
+          discovered_at?: string
+          discovered_via?: string | null
+          evidence?: Json
+          handle_at_link?: string | null
+          id?: string
+          relationship?: string
+          token_mint?: string | null
+          updated_at?: string
+          wallet_address?: string
+          x_user_id?: string
+        }
+        Relationships: []
+      }
       dev_teams: {
         Row: {
           admin_usernames: string[] | null
@@ -19468,13 +19513,16 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           is_flagged: boolean | null
+          is_renamed: boolean
           last_existence_check_at: string | null
           last_scraped_at: string | null
           linked_token_mints: string[] | null
           linked_wallets: string[] | null
           member_count: number | null
+          member_sample: Json
           moderator_usernames: string[] | null
           name: string | null
+          name_history: Json
           raw_data: Json | null
           scrape_status: string | null
           updated_at: string | null
@@ -19493,13 +19541,16 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           is_flagged?: boolean | null
+          is_renamed?: boolean
           last_existence_check_at?: string | null
           last_scraped_at?: string | null
           linked_token_mints?: string[] | null
           linked_wallets?: string[] | null
           member_count?: number | null
+          member_sample?: Json
           moderator_usernames?: string[] | null
           name?: string | null
+          name_history?: Json
           raw_data?: Json | null
           scrape_status?: string | null
           updated_at?: string | null
@@ -19518,13 +19569,16 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           is_flagged?: boolean | null
+          is_renamed?: boolean
           last_existence_check_at?: string | null
           last_scraped_at?: string | null
           linked_token_mints?: string[] | null
           linked_wallets?: string[] | null
           member_count?: number | null
+          member_sample?: Json
           moderator_usernames?: string[] | null
           name?: string | null
+          name_history?: Json
           raw_data?: Json | null
           scrape_status?: string | null
           updated_at?: string | null
@@ -19756,6 +19810,19 @@ export type Database = {
           secret_type?: string | null
           success?: boolean | null
           summary?: never
+        }
+        Relationships: []
+      }
+      v_dev_social_graph: {
+        Row: {
+          communities: string[] | null
+          current_handles: string[] | null
+          historical_handles: string[] | null
+          last_link_at: string | null
+          link_count: number | null
+          relationships: string[] | null
+          tokens: string[] | null
+          wallet_address: string | null
         }
         Relationships: []
       }
