@@ -9,6 +9,7 @@ export interface XCommunityAboutAdminResult {
   adminUsername: string | null;
   moderatorUsernames: string[];
   memberCount: number | null;
+  communityName: string | null;
   httpStatus: number;
   error?: string;
   scrapeProvider: 'firecrawl' | 'browserless' | 'none';
@@ -21,6 +22,7 @@ export interface XCommunityAboutAdminResult {
     adminUsername: string | null;
     moderatorUsernames: string[];
     memberCount: number | null;
+    communityName: string | null;
   };
 }
 
@@ -37,6 +39,7 @@ function parseAboutPageText(text: string): {
   adminUsername: string | null;
   moderatorUsernames: string[];
   memberCount: number | null;
+  communityName: string | null;
 } {
   // Reserved words that are NOT real handles
   const RESERVED = new Set([
@@ -80,10 +83,52 @@ function parseAboutPageText(text: string): {
 
   const memberMatch = text.match(/([\d,]+)\s+Members?\b/i);
 
+  // Extract community name from markdown H1 or first prominent text line.
+  // Also strip noise like "Community", "About" headers.
+  let communityName: string | null = null;
+  const noiseNames = new Set(['community', 'about', 'home', 'communities', 'rules', 'members', 'moderators', 'admin']);
+  const stripChrome = (s: string) => s.replace(/\s*\/\s*X\s*$/i, '').replace(/\s*on\s*X\s*$/i, '').trim();
+
+  // 1) Markdown H1 (Firecrawl): "# Name"
+  const h1Match = text.match(/^#\s+(.+?)\s*$/m);
+  if (h1Match) {
+    const candidate = stripChrome(h1Match[1]);
+    if (candidate && !noiseNames.has(candidate.toLowerCase()) && candidate.length <= 80) {
+      communityName = candidate;
+    }
+  }
+
+  // 2) Look for "Community Info" header followed by name on next non-empty line
+  if (!communityName) {
+    const infoMatch = text.match(/Community\s+Info[\s\n]+([^\n]{2,80})/i);
+    if (infoMatch) {
+      const candidate = stripChrome(infoMatch[1]);
+      if (candidate && !noiseNames.has(candidate.toLowerCase())) {
+        communityName = candidate;
+      }
+    }
+  }
+
+  // 3) First non-empty, non-noise line within first 1500 chars (Browserless body.innerText)
+  if (!communityName) {
+    const lines = text.slice(0, 1500).split('\n').map(l => stripChrome(l)).filter(Boolean);
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (line.length < 2 || line.length > 80) continue;
+      if (noiseNames.has(lower)) continue;
+      if (/^@/.test(line)) continue;
+      if (/^\d/.test(line)) continue; // member counts, dates
+      if (/^(home|explore|notifications|messages|profile|more|search|settings)$/i.test(line)) continue;
+      communityName = line;
+      break;
+    }
+  }
+
   return {
     adminUsername: allHandles.length > 0 ? allHandles[0] : null,
     moderatorUsernames: allHandles.slice(1),
     memberCount: memberMatch ? Number(memberMatch[1].replace(/,/g, '')) : null,
+    communityName,
   };
 }
 
@@ -134,6 +179,7 @@ async function fetchViaFirecrawl(
         .map(h => normalizeHandle(h))
         .filter(Boolean) as string[],
       memberCount: parsed.memberCount,
+      communityName: parsed.communityName,
       httpStatus: response.status,
       scrapeProvider: 'firecrawl',
       rawData: {
@@ -143,6 +189,7 @@ async function fetchViaFirecrawl(
         adminUsername: parsed.adminUsername,
         moderatorUsernames: parsed.moderatorUsernames,
         memberCount: parsed.memberCount,
+        communityName: parsed.communityName,
       },
     };
   } catch (error) {
@@ -221,6 +268,7 @@ async function fetchViaBrowserless(
         .map(h => normalizeHandle(h))
         .filter(Boolean) as string[],
       memberCount: parsed.memberCount,
+      communityName: parsed.communityName,
       httpStatus: response.status,
       scrapeProvider: 'browserless',
       rawData: {
@@ -232,6 +280,7 @@ async function fetchViaBrowserless(
         adminUsername: parsed.adminUsername,
         moderatorUsernames: parsed.moderatorUsernames,
         memberCount: parsed.memberCount,
+        communityName: parsed.communityName,
       },
     };
   } catch (error) {
@@ -273,6 +322,7 @@ export async function fetchXCommunityAboutAdmin(
     adminUsername: null,
     moderatorUsernames: [],
     memberCount: null,
+    communityName: null,
     httpStatus: 0,
     error: 'Both Firecrawl and Browserless failed or returned no data',
     scrapeProvider: 'none',
@@ -283,6 +333,7 @@ export async function fetchXCommunityAboutAdmin(
       adminUsername: null,
       moderatorUsernames: [],
       memberCount: null,
+      communityName: null,
     },
   };
 }
