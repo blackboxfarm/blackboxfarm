@@ -8,6 +8,7 @@ import { ReputationBackfillPanel } from '@/components/admin/ReputationBackfillPa
 import { SocialLinksBackfillPanel } from '@/components/admin/SocialLinksBackfillPanel';
 import { VigilStatusPanel } from '@/components/admin/VigilStatusPanel';
 import { GenealogyRetracePanel } from '@/components/admin/GenealogyRetracePanel';
+import { XCommunityQueueEtaCard } from '@/components/admin/XCommunityQueueEtaCard';
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
 const HoldersResourceDashboard = lazy(() => import("@/components/admin/HoldersResourceDashboard").then(m => ({ default: m.HoldersResourceDashboard })));
 const SolPriceAnalytics = lazy(() => import("@/components/admin/SolPriceAnalytics").then(m => ({ default: m.SolPriceAnalytics })));
@@ -30,6 +31,7 @@ export default function UtilitiesTab() {
       <ReputationBackfillPanel />
       <GenealogyRetracePanel />
       <SocialLinksBackfillPanel />
+      <XCommunityQueueEtaCard />
       <VigilStatusPanel />
       <ServiceToggles />
       <HealthModeToggles />
