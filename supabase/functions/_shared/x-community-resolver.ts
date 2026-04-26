@@ -353,6 +353,7 @@ async function persistCommunity(
 
   const upsertRow: any = {
     community_id: resolved.communityId,
+    community_url: `https://x.com/i/communities/${resolved.communityId}`,
     last_scraped_at: now,
     scrape_status: 'complete',
     failed_scrape_count: 0,
