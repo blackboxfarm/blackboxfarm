@@ -164,7 +164,8 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
       const needsScrape = (!hasStaffData || !hasName) && !exhaustedAboutLookup && (
         !existingCommunity ||
         !existingCommunity.last_scraped_at ||
-        timeSinceLastScrape > 24 * 60 * 60 * 1000
+        timeSinceLastScrape > 24 * 60 * 60 * 1000 ||
+        !hasName
       );
 
       const activePendingLock = existingCommunity?.scrape_status === 'pending'
@@ -187,7 +188,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
 
       const recentlyScraped = lastScrapedMs > 0 && timeSinceLastScrape < 5 * 60 * 1000;
 
-      if (recentlyScraped && existingCommunity) {
+      if (recentlyScraped && existingCommunity && hasName) {
         console.log(`[x-community-enricher] Skipping ${communityId} - scraped ${Math.round(timeSinceLastScrape / 1000)}s ago (5min cooldown)`);
         return new Response(JSON.stringify({
           success: true,
