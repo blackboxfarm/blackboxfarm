@@ -227,7 +227,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
   console.log(`📋 Monitoring ${positions.length} live positions`);
 
   const solPrice = await getSolPrice();
-  const mints = [...new Set(positions.map((p: any) => p.token_mint))];
+  const mints = [...new Set(positions.map((p: any) => p.token_mint as string))] as string[];
   const priceMap = await batchFetchPrices(mints);
 
   const now = new Date().toISOString();
