@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
