@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     results.summary.total++
 
     // Test 3: Database Indexes
-    const test3 = { name: 'Performance Indexes Check', status: 'pending', details: {} }
+    const test3: any = { name: 'Performance Indexes Check', status: 'pending', details: {} }
     try {
       const { data: indexes, error } = await supabase.rpc('pg_indexes')
         .select('indexname')
@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
     results.summary.total++
 
     // Test 4: RLS Policies
-    const test4 = { name: 'Row Level Security Policies', status: 'pending', details: {} }
+    const test4: any = { name: 'Row Level Security Policies', status: 'pending', details: {} }
     try {
       // Check that tables have RLS enabled
       const tables = ['developer_profiles', 'developer_wallets', 'developer_tokens', 
@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
     results.summary.total++
 
     // Test 5: Sample Discovery Job (Mock)
-    const test5 = { name: 'Discovery Job Workflow (Dry Run)', status: 'pending', details: {} }
+    const test5: any = { name: 'Discovery Job Workflow (Dry Run)', status: 'pending', details: {} }
     try {
       // Create a test job entry
       const { data: jobData, error: jobError } = await supabase
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
     results.summary.total++
 
     // Test 6: Watchdog Monitor System
-    const test6 = { name: 'Token Watchdog Monitor', status: 'pending', details: {} }
+    const test6: any = { name: 'Token Watchdog Monitor', status: 'pending', details: {} }
     try {
       const { data: watchdogData, error: watchdogError } = await supabase
         .from('token_mint_watchdog')
