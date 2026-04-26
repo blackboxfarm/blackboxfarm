@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { withRunLog } from '../_shared/run-logger.ts';
 import { extractXHandle, extractXCommunityId } from '../_shared/x-handle-extractor.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -239,12 +240,15 @@ Deno.serve(withRunLog('social-link-mint-checker', async (req) => {
             scrape_status: 'pending',
           }, { onConflict: 'community_id' });
           communitiesQueued++;
+          // Enqueue for deferred staff resolution (admin + moderators)
+          await enqueueCommunityResolution(supabase, communityId, 'social-link-mint-checker', 5);
         } else if (!existing.admin_usernames || existing.admin_usernames.length === 0) {
           // Existing but no admin yet — mark for re-scrape
           await supabase.from('x_communities')
             .update({ scrape_status: 'pending' })
             .eq('id', existing.id);
           communitiesQueued++;
+          await enqueueCommunityResolution(supabase, communityId, 'social-link-mint-checker', 5);
         }
       }
     }

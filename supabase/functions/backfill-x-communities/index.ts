@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { PUMPFUN_API_BASE, PUMPFUN_HEADERS } from '../_shared/pumpfun-api.ts';
 import { getHeliusApiKey } from '../_shared/helius-client.ts';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -520,6 +521,9 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
             });
             communitiesCreated++;
           }
+
+          // Always enqueue for deferred staff resolution (admin + moderators via Apify)
+          await enqueueCommunityResolution(supabase, foundCommunityId, `backfill-${communitySource}`, 6);
 
           // Mesh link
           const { data: meshExists } = await supabase

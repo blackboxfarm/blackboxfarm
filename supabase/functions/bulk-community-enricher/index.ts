@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { fetchXCommunityAboutAdmin } from "../_shared/x-community-about-admin.ts";
+import { enqueueCommunityResolution } from "../_shared/queue-community-resolution.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -132,6 +133,12 @@ Deno.serve(withRunLog('bulk-community-enricher', async (req) => {
           failed_scrape_count: 0,
           raw_data: aboutResult.rawData,
         }, { onConflict: 'community_id' });
+
+        // If About-page didn't surface an admin, queue this community for the deeper
+        // Apify member-scraper resolver (canonical staff discovery).
+        if (!adminUsername) {
+          await enqueueCommunityResolution(supabase, communityId, 'bulk-community-enricher', 4);
+        }
 
         // Create mesh links
         const meshLinks: any[] = [];

@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -551,6 +552,9 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
               linkedTokenMint: token.address,
             }
           }).catch(e => console.warn(`[DexCompiler] Community enricher trigger failed: ${e}`));
+
+          // Also enqueue for the deferred resolver (canonical Apify-based staff discovery)
+          await enqueueCommunityResolution(supabase, communityId, 'dexscreener-top-200', 5);
         }
       } else {
         const xHandle = extractXHandle(token.twitter);
