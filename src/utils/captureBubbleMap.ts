@@ -1,4 +1,5 @@
 import { toPng } from 'html-to-image';
+import { injectPngCopyright } from './imageMetadata';
 
 /**
  * Capture the visible Bubble Map area as a PNG Blob, with a branded
@@ -239,14 +240,25 @@ export async function captureBubbleMap(opts: CaptureOptions): Promise<Blob> {
   const h = opts.height ?? OUT_H_DEFAULT;
   const wm = opts.watermark ?? {};
 
+  let raw: Blob;
   if (opts.view === 'bubble') {
-    return await captureForceGraph(opts.forceGraphRef, wm, w, h);
-  }
-  if (opts.view === 'schematic') {
+    raw = await captureForceGraph(opts.forceGraphRef, wm, w, h);
+  } else if (opts.view === 'schematic') {
     if (!opts.schematicContainer) throw new Error('schematicContainer is required for schematic capture');
-    return await captureSchematic(opts.schematicContainer, wm, w, h);
+    raw = await captureSchematic(opts.schematicContainer, wm, w, h);
+  } else {
+    throw new Error(`Unsupported view: ${opts.view}`);
   }
-  throw new Error(`Unsupported view: ${opts.view}`);
+
+  // Strip implicit metadata (canvas re-encode already did) and inject our
+  // copyright + source URL as PNG tEXt chunks so the file carries ownership
+  // info wherever it ends up.
+  try {
+    return await injectPngCopyright(raw);
+  } catch (err) {
+    console.warn('[captureBubbleMap] copyright inject failed, returning raw:', err);
+    return raw;
+  }
 }
 
 /** Convert a Blob → base64 (no data: prefix). */

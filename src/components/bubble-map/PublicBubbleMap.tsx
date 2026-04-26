@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera, ZoomIn, ZoomOut } from "lucide-react";
 import { xIcon } from "@/components/token/SocialIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
@@ -109,6 +109,51 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   }, []);
 
   const prevViewModeRef = useRef<ViewMode>(viewMode);
+
+  // Force Solar Min when in tree/schematic — clusters layouts are too wide.
+  useEffect(() => {
+    if ((viewMode === 'tree' || viewMode === 'schematic') && solarMode !== 'minimum') {
+      setSolarMode('minimum');
+    }
+  }, [viewMode, solarMode]);
+
+  // Auto recenter / fit when the user switches view mode or solar mode.
+  // For ForceGraph2D we call zoomToFit; React-Flow / 3D handle their own fitView.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (graphRef.current && (viewMode === 'bubble' || viewMode === 'tree')) {
+          graphRef.current.zoomToFit?.(600, 60);
+        }
+      } catch { /* noop */ }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [viewMode, solarMode]);
+
+  // --- Zoom controls (in-frame) ---
+  const handleZoomIn = useCallback(() => {
+    try {
+      if (viewMode === 'bubble' || viewMode === 'tree') {
+        const cur = graphRef.current?.zoom?.() ?? 1;
+        graphRef.current?.zoom?.(cur * 1.25, 250);
+      } else if (viewMode === 'schematic' && containerRef.current) {
+        const btn = containerRef.current.querySelector('.react-flow__controls-zoomin') as HTMLButtonElement | null;
+        btn?.click();
+      }
+    } catch { /* noop */ }
+  }, [viewMode]);
+
+  const handleZoomOut = useCallback(() => {
+    try {
+      if (viewMode === 'bubble' || viewMode === 'tree') {
+        const cur = graphRef.current?.zoom?.() ?? 1;
+        graphRef.current?.zoom?.(cur / 1.25, 250);
+      } else if (viewMode === 'schematic' && containerRef.current) {
+        const btn = containerRef.current.querySelector('.react-flow__controls-zoomout') as HTMLButtonElement | null;
+        btn?.click();
+      }
+    } catch { /* noop */ }
+  }, [viewMode]);
 
   useEffect(() => {
     if (graphRef.current) {
@@ -1115,14 +1160,27 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       {/* Unified Control Bar — layout controls only */}
       {graphData.nodes.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/80 backdrop-blur">
-          {/* Solar Mode */}
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-            <Button variant={solarMode === 'minimum' ? 'secondary' : 'ghost'} size="sm"
+          {/* Solar Mode — toggle pair with explicit border + slash divider */}
+          <div className="flex items-center gap-0 bg-muted rounded-md p-0.5 border border-border/60">
+            <Button
+              variant={solarMode === 'minimum' ? 'secondary' : 'ghost'}
+              size="sm"
               className={`h-7 text-xs px-2 ${solarMode === 'minimum' ? 'text-gold border-gold/30' : ''}`}
-              onClick={() => { setSolarMode('minimum'); recordInteraction(); }}>
+              onClick={() => { setSolarMode('minimum'); recordInteraction(); }}
+            >
               <Sun className="h-3 w-3 mr-1" /> Solar Min
             </Button>
-            <Button variant={solarMode === 'clusters' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => { setSolarMode('clusters'); recordInteraction(); }}>
+            <span className="px-1 text-muted-foreground/60 text-xs select-none">/</span>
+            <Button
+              variant={solarMode === 'clusters' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 text-xs px-2 disabled:opacity-40"
+              disabled={viewMode === 'tree' || viewMode === 'schematic'}
+              title={(viewMode === 'tree' || viewMode === 'schematic')
+                ? 'Solar Clusters is disabled in Tree and Schematic views'
+                : 'Group satellites into clusters'}
+              onClick={() => { setSolarMode('clusters'); recordInteraction(); }}
+            >
               <Orbit className="h-3 w-3 mr-1" /> Solar Clusters
             </Button>
           </div>
@@ -1212,11 +1270,30 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         <div ref={containerRef} className={`w-full relative ${shakeGraph ? 'animate-shake-graph' : ''}`} style={{ height: '600px', background: 'hsl(var(--background))' }}>
           {/* Hacker Terminal Overlay */}
           <HackerTerminal lines={terminalLines} visible={terminalVisible} title={terminalTitle} />
-          {/* Minimap Navigation */}
-          <BubbleMapMinimap
-            graphRef={graphRef}
-            nodes={(displayData?.nodes || []).map((n: any) => ({ x: n.x, y: n.y, color: n.color, type: n.type }))}
-          />
+          {/* Minimap Navigation — only useful in force-graph (bubble/tree) views */}
+          {(viewMode === 'bubble' || viewMode === 'tree') && (
+            <BubbleMapMinimap
+              graphRef={graphRef}
+              nodes={(displayData?.nodes || []).map((n: any) => ({ x: n.x, y: n.y, color: n.color, type: n.type }))}
+            />
+          )}
+          {/* In-frame zoom controls — top-right on desktop, bottom-center on mobile */}
+          {graphData.nodes.length > 0 && viewMode !== '3d' && (
+            <div
+              className={`absolute z-20 flex items-center gap-0.5 rounded-md border border-border/60 bg-background/80 backdrop-blur p-0.5 ${
+                isMobile
+                  ? 'bottom-2 left-1/2 -translate-x-1/2'
+                  : (viewMode === 'schematic' ? 'top-2 right-2' : 'top-2 right-[140px]')
+              }`}
+            >
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleZoomIn} title="Zoom in">
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleZoomOut} title="Zoom out">
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
           {/* Action Buttons Overlay — top-left inside graph */}
           {graphData.nodes.length > 0 && (
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
