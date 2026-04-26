@@ -241,14 +241,14 @@ export const meshFeed = {
       });
     }
 
-    // Website → wallet
+    // Wallet → Website (correct DAG direction; the wallet has a website)
     if (websiteUrl && creatorWallet) {
       links.push({
-        source_type: 'website',
-        source_id: websiteUrl.trim(),
-        linked_type: 'wallet',
-        linked_id: creatorWallet,
-        relationship: 'website_of',
+        source_type: 'wallet',
+        source_id: creatorWallet,
+        linked_type: 'website',
+        linked_id: websiteUrl.trim(),
+        relationship: 'has_website',
         confidence: 70,
         evidence: { token: mint, symbol, source },
         discovered_via: `mesh-feeder:${source}`,

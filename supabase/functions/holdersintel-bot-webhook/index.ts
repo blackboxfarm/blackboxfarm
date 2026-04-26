@@ -1494,7 +1494,8 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
   }
 
   const websites = meshLinks.filter((m: any) =>
-    m.relationship === 'website_of' && (m.sourceType === 'website' || m.linkedType === 'website')
+    (m.relationship === 'has_website' || m.relationship === 'website_of' || m.relationship === 'website_of_token' || m.relationship === 'official_website')
+    && (m.sourceType === 'website' || m.linkedType === 'website')
   );
   for (const w of websites.slice(0, 3)) {
     const url = w.sourceType === 'website' ? w.sourceId : w.linkedId;
