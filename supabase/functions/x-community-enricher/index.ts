@@ -132,7 +132,9 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
         .single();
 
       const failCount = existingCommunity?.failed_scrape_count || 0;
-      if (failCount >= 3) {
+      const existingName = existingCommunity?.name || '';
+      const hasUsableExistingName = Boolean(existingName) && !/^\[?X\]?/i.test(existingName.trim());
+      if (failCount >= 3 && hasUsableExistingName) {
         console.log(`[x-community-enricher] Skipping community ${communityId} - ${failCount} consecutive failures (likely deleted/private)`);
         return new Response(JSON.stringify({
           success: false,
@@ -154,7 +156,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
         (existingCommunity?.admin_usernames && existingCommunity.admin_usernames.length > 0) ||
         (existingCommunity?.moderator_usernames && existingCommunity.moderator_usernames.length > 0)
       );
-      const hasName = Boolean(existingCommunity?.name);
+      const hasName = hasUsableExistingName;
       // Only mark "exhausted" once we've at least captured the community name —
       // otherwise we permanently lose the ability to display its title.
       const exhaustedAboutLookup =
@@ -162,7 +164,8 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
       const needsScrape = (!hasStaffData || !hasName) && !exhaustedAboutLookup && (
         !existingCommunity ||
         !existingCommunity.last_scraped_at ||
-        timeSinceLastScrape > 24 * 60 * 60 * 1000
+        timeSinceLastScrape > 24 * 60 * 60 * 1000 ||
+        !hasName
       );
 
       const activePendingLock = existingCommunity?.scrape_status === 'pending'
@@ -185,7 +188,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
 
       const recentlyScraped = lastScrapedMs > 0 && timeSinceLastScrape < 5 * 60 * 1000;
 
-      if (recentlyScraped && existingCommunity) {
+      if (recentlyScraped && existingCommunity && hasName) {
         console.log(`[x-community-enricher] Skipping ${communityId} - scraped ${Math.round(timeSinceLastScrape / 1000)}s ago (5min cooldown)`);
         return new Response(JSON.stringify({
           success: true,
@@ -482,7 +485,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
           relationship: 'admin_of',
           confidence: 100,
           discovered_via: 'x_community_enricher',
-          evidence: { scraped_at: now }
+          evidence: { scraped_at: now, community_name: communityData.name ?? existingCommunity?.name ?? null }
         });
       }
 
@@ -495,7 +498,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
           relationship: 'mod_of',
           confidence: 100,
           discovered_via: 'x_community_enricher',
-          evidence: { scraped_at: now }
+          evidence: { scraped_at: now, community_name: communityData.name ?? existingCommunity?.name ?? null }
         });
       }
 
@@ -530,7 +533,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
           relationship: 'community_for',
           confidence: 95,
           discovered_via: 'x_community_enricher',
-          evidence: { scraped_at: now }
+          evidence: { scraped_at: now, community_name: communityData.name ?? existingCommunity?.name ?? null }
         });
       }
 

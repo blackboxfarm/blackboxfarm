@@ -66,9 +66,10 @@ function parseAboutPageText(text: string): {
     for (const m of handleMatches) addHandle(m[1]);
   }
 
-  // Fallback: "Created by @handle"
+  // Fallback: "Created by @handle". X markdown often renders this as
+  // "Created March 19, 2026 by\n\n[@handle](https://x.com/handle)".
   if (allHandles.length === 0) {
-    const createdMatch = text.match(/Created[\s\S]{0,160}?by\s+@?([A-Za-z0-9_]{1,15})/i);
+    const createdMatch = text.match(/Created[\s\S]{0,220}?by\s*(?:\[)?@?([A-Za-z0-9_]{1,15})/i);
     if (createdMatch) addHandle(createdMatch[1]);
   }
 
@@ -81,19 +82,44 @@ function parseAboutPageText(text: string): {
     }
   }
 
-  const memberMatch = text.match(/([\d,]+)\s+Members?\b/i);
+  const memberMatch = text.match(/([\d,]+)\s*Members?\b/i);
 
   // Extract community name from markdown H1 or first prominent text line.
   // Also strip noise like "Community", "About" headers.
   let communityName: string | null = null;
-  const noiseNames = new Set(['community', 'about', 'home', 'communities', 'rules', 'members', 'moderators', 'admin']);
-  const stripChrome = (s: string) => s.replace(/\s*\/\s*X\s*$/i, '').replace(/\s*on\s*X\s*$/i, '').trim();
+  const noiseNames = new Set(['x', 'community', 'about', 'home', 'communities', 'rules', 'members', 'moderators', 'admin', 'top', 'latest', 'media']);
+  const stripChrome = (s: string) => s
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/^#+\s*/, '')
+    .replace(/\s*\/\s*X\s*$/i, '')
+    .replace(/\s*on\s*X\s*$/i, '')
+    .trim();
+  const isUsableName = (candidate: string) => {
+    const lower = candidate.toLowerCase();
+    return Boolean(candidate)
+      && !noiseNames.has(lower)
+      && !/^@/.test(candidate)
+      && !/^\d/.test(candidate)
+      && !/^https?:\/\//i.test(candidate)
+      && !/^(don.t miss|people on x|log in|sign up|see new posts|join|click to join|community info|new to x|trending now|what.s happening)$/i.test(candidate)
+      && candidate.length <= 80;
+  };
+
+  // 0) X community pages expose the community title as a markdown H2 after the X chrome H1.
+  const headingMatches = [...text.matchAll(/^##\s+(.+?)\s*$/gm)];
+  for (const match of headingMatches) {
+    const candidate = stripChrome(match[1]);
+    if (isUsableName(candidate) && !/rules$/i.test(candidate)) {
+      communityName = candidate;
+      break;
+    }
+  }
 
   // 1) Markdown H1 (Firecrawl): "# Name"
   const h1Match = text.match(/^#\s+(.+?)\s*$/m);
-  if (h1Match) {
+  if (!communityName && h1Match) {
     const candidate = stripChrome(h1Match[1]);
-    if (candidate && !noiseNames.has(candidate.toLowerCase()) && candidate.length <= 80) {
+    if (isUsableName(candidate)) {
       communityName = candidate;
     }
   }
@@ -103,7 +129,7 @@ function parseAboutPageText(text: string): {
     const infoMatch = text.match(/Community\s+Info[\s\n]+([^\n]{2,80})/i);
     if (infoMatch) {
       const candidate = stripChrome(infoMatch[1]);
-      if (candidate && !noiseNames.has(candidate.toLowerCase())) {
+      if (isUsableName(candidate)) {
         communityName = candidate;
       }
     }
@@ -113,12 +139,7 @@ function parseAboutPageText(text: string): {
   if (!communityName) {
     const lines = text.slice(0, 1500).split('\n').map(l => stripChrome(l)).filter(Boolean);
     for (const line of lines) {
-      const lower = line.toLowerCase();
-      if (line.length < 2 || line.length > 80) continue;
-      if (noiseNames.has(lower)) continue;
-      if (/^@/.test(line)) continue;
-      if (/^\d/.test(line)) continue; // member counts, dates
-      if (/^(home|explore|notifications|messages|profile|more|search|settings)$/i.test(line)) continue;
+      if (!isUsableName(line)) continue;
       communityName = line;
       break;
     }
