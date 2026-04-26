@@ -510,38 +510,24 @@ export function useMeshGraph(initialEntityId?: string) {
 
         for (const handle of discoveredHandles.slice(0, 2)) {
           try {
-            console.log(`[MeshSpider] Scraping X profile @${handle} for pinned community...`);
-            const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('firecrawl-scrape', {
-              body: {
-                url: `https://x.com/${handle}`,
-                options: { formats: ['links', 'markdown'], onlyMainContent: false, waitFor: 3000 },
-              },
+            console.log(`[MeshSpider] Resolving pinned community for @${handle} via Apify breadcrumb…`);
+            // X.com blocks Firecrawl HTML scraping (returns empty links/markdown), so we use
+            // the Apify-backed breadcrumb resolver: bio entities → pinned/recent tweets.
+            const { data: pinnedData, error: pinnedError } = await supabase.functions.invoke('x-pinned-community-finder', {
+              body: { handle },
             });
 
-            if (scrapeError) {
-              console.warn(`[MeshSpider] Firecrawl scrape failed for @${handle}:`, scrapeError);
+            if (pinnedError) {
+              console.warn(`[MeshSpider] x-pinned-community-finder failed for @${handle}:`, pinnedError);
               continue;
             }
 
-            // Extract community URLs from scraped links and markdown content
-            const scrapedLinks: string[] = scrapeData?.data?.links || scrapeData?.links || [];
-            const scrapedMarkdown: string = scrapeData?.data?.markdown || scrapeData?.markdown || '';
-            
-            // Search for community URLs in links
-            let profileCommunityUrl = scrapedLinks.find((l: string) => 
-              l.includes('/communities/') && /communities\/\d+/.test(l)
-            );
-
-            // Also regex the markdown for community URLs
-            if (!profileCommunityUrl) {
-              const communityMatch = scrapedMarkdown.match(/x\.com\/i\/communities\/(\d+)/);
-              if (communityMatch) {
-                profileCommunityUrl = `https://x.com/i/communities/${communityMatch[1]}`;
-              }
+            const profileCommunityUrl: string | undefined = pinnedData?.communityUrl;
+            if (profileCommunityUrl) {
+              console.log(`[MeshSpider] 🎯 @${handle} pinned community resolved (source=${pinnedData?.source}): ${profileCommunityUrl}`);
             }
 
             if (profileCommunityUrl) {
-              console.log(`[MeshSpider] 🎯 Found pinned community on @${handle}'s profile: ${profileCommunityUrl}`);
               communityUrl = profileCommunityUrl;
 
               // Now enrich this community
@@ -553,21 +539,21 @@ export function useMeshGraph(initialEntityId?: string) {
                 },
               });
               if (!enrichError && enrichData) {
-                console.log(`[MeshSpider] Community enriched from profile scrape: ${enrichData.admins?.length || 0} admins, ${enrichData.moderators?.length || 0} mods`);
+                console.log(`[MeshSpider] Community enriched from breadcrumb: ${enrichData.admins?.length || 0} admins, ${enrichData.moderators?.length || 0} mods`);
                 const cMatch = profileCommunityUrl.match(/communities\/(\d+)/);
                 if (cMatch && enrichData.communityName) {
                   await supabase.from('reputation_mesh')
-                    .update({ evidence: { community_name: enrichData.communityName, source: 'x-profile-scrape' } })
+                    .update({ evidence: { community_name: enrichData.communityName, source: 'x-pinned-community-finder' } })
                     .eq('linked_type', 'x_community')
                     .eq('linked_id', cMatch[1]);
                 }
               }
               break; // Found a community, stop checking other handles
             } else {
-              console.log(`[MeshSpider] No pinned community found on @${handle}'s profile`);
+              console.log(`[MeshSpider] @${handle} has no pinned/bio community link`);
             }
           } catch (e) {
-            console.warn(`[MeshSpider] Error scraping X profile @${handle}:`, e);
+            console.warn(`[MeshSpider] Breadcrumb error for @${handle}:`, e);
           }
         }
       }
