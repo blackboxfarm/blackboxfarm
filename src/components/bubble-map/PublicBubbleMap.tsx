@@ -110,6 +110,51 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
 
   const prevViewModeRef = useRef<ViewMode>(viewMode);
 
+  // Force Solar Min when in tree/schematic — clusters layouts are too wide.
+  useEffect(() => {
+    if ((viewMode === 'tree' || viewMode === 'schematic') && solarMode !== 'minimum') {
+      setSolarMode('minimum');
+    }
+  }, [viewMode, solarMode]);
+
+  // Auto recenter / fit when the user switches view mode or solar mode.
+  // For ForceGraph2D we call zoomToFit; React-Flow / 3D handle their own fitView.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (graphRef.current && (viewMode === 'bubble' || viewMode === 'tree')) {
+          graphRef.current.zoomToFit?.(600, 60);
+        }
+      } catch { /* noop */ }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [viewMode, solarMode]);
+
+  // --- Zoom controls (in-frame) ---
+  const handleZoomIn = useCallback(() => {
+    try {
+      if (viewMode === 'bubble' || viewMode === 'tree') {
+        const cur = graphRef.current?.zoom?.() ?? 1;
+        graphRef.current?.zoom?.(cur * 1.25, 250);
+      } else if (viewMode === 'schematic' && containerRef.current) {
+        const btn = containerRef.current.querySelector('.react-flow__controls-zoomin') as HTMLButtonElement | null;
+        btn?.click();
+      }
+    } catch { /* noop */ }
+  }, [viewMode]);
+
+  const handleZoomOut = useCallback(() => {
+    try {
+      if (viewMode === 'bubble' || viewMode === 'tree') {
+        const cur = graphRef.current?.zoom?.() ?? 1;
+        graphRef.current?.zoom?.(cur / 1.25, 250);
+      } else if (viewMode === 'schematic' && containerRef.current) {
+        const btn = containerRef.current.querySelector('.react-flow__controls-zoomout') as HTMLButtonElement | null;
+        btn?.click();
+      }
+    } catch { /* noop */ }
+  }, [viewMode]);
+
   useEffect(() => {
     if (graphRef.current) {
       const sf = spreadFactor;
