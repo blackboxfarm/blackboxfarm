@@ -123,6 +123,17 @@ export function createApiLogger(params: ApiLogParams): ApiLogger {
         }
       }
 
+      // Apify-specific: detect credit/funds failures separately (402 + quota wording)
+      // Fires SMS to admin and auto-pauses the pipeline.
+      if (params.serviceName === 'apify' && [402, 403, 429].includes(status)) {
+        try {
+          const { alertOnApifyCreditFailure } = await import("./api-failure-alerts.ts");
+          await alertOnApifyCreditFailure(supabase, params.endpoint, status, errorMessage, params.functionName);
+        } catch (alertErr) {
+          console.warn('[ApiLogger] Failed to send Apify credit-failure alert:', alertErr);
+        }
+      }
+
       // Clear escalation state on successful responses
       if (success) {
         try {
@@ -130,6 +141,16 @@ export function createApiLogger(params: ApiLogParams): ApiLogger {
           clearEscalation(params.serviceName);
         } catch {
           // ignore
+        }
+        // Auto-resume Apify on a successful call (fast recovery once funds are added)
+        if (params.serviceName === 'apify') {
+          try {
+            const { clearApifyCreditCooldown } = await import("./api-failure-alerts.ts");
+            clearApifyCreditCooldown();
+            await supabase.rpc('resume_apify', { p_triggered_by: 'auto-recovery' });
+          } catch {
+            // ignore
+          }
         }
       }
     } catch (e) {
