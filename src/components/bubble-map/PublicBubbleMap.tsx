@@ -1130,6 +1130,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             <Button variant={viewMode === 'tree' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('tree')}>
               <GitBranch className="h-3 w-3 mr-1" /> Tree
             </Button>
+            {!isMobile && (
+              <Button variant={viewMode === '3d' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('3d')} title="3D rotatable view (desktop only)">
+                <Box className="h-3 w-3 mr-1" /> 3D
+              </Button>
+            )}
+            <Button variant={viewMode === 'schematic' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => setViewMode('schematic')} title="Schematic ladder / blueprint view">
+              <LayoutTemplate className="h-3 w-3 mr-1" /> Schematic
+            </Button>
           </div>
           {/* Spacing */}
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
