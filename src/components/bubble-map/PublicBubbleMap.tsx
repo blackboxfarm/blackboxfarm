@@ -1315,6 +1315,21 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
                 </Button>
               </div>
             </div>
+          ) : viewMode === '3d' && !isMobile ? (
+            <BubbleMap3D
+              graphData={displayData}
+              width={dimensions.width}
+              height={600}
+              onNodeClick={handleNodeClick}
+              onNodeHover={(node: any) => setHoveredNode(node as MeshNode | null)}
+            />
+          ) : viewMode === 'schematic' ? (
+            <BubbleMapSchematic
+              graphData={displayData}
+              width={dimensions.width}
+              height={600}
+              onNodeClick={handleNodeClick}
+            />
           ) : (
             <ForceGraph2D
               ref={graphRef}
