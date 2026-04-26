@@ -134,6 +134,12 @@ Deno.serve(withRunLog('bulk-community-enricher', async (req) => {
           raw_data: aboutResult.rawData,
         }, { onConflict: 'community_id' });
 
+        // If About-page didn't surface an admin, queue this community for the deeper
+        // Apify member-scraper resolver (canonical staff discovery).
+        if (!adminUsername) {
+          await enqueueCommunityResolution(supabase, communityId, 'bulk-community-enricher', 4);
+        }
+
         // Create mesh links
         const meshLinks: any[] = [];
         const linkedTokens = community.linked_token_mints || [];
