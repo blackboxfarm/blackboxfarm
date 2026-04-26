@@ -2345,10 +2345,10 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                             tokenMint: tokenMint,
                             tokenSymbol: currentTokenData?.symbol || 'TOKEN',
                             tokenName: currentTokenData?.name || null,
-                            twitterUrl: currentTokenData?.twitterUrl || '',
+                            twitterUrl: (currentTokenData as any)?.twitterUrl || '',
                             entryPrice: entryPrice,
                             targetMultiplier: currentRuleResult.sellTarget,
-                            amountSol: currentRuleResult.buyAmount / (await getSolPrice() || 130),
+                            amountSol: currentRuleResult.buyAmount / (await (globalThis as any).getSolPrice?.() || 130),
                             isFantasy: true,
                             source: `telegram-${config.channel_name || config.channel_id}`
                           }
@@ -2375,7 +2375,7 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                       } else if (announceTargets && announceTargets.length > 0) {
                         console.log(`[telegram-channel-monitor] Sending announcements to ${announceTargets.length} targets`);
                         
-                        EdgeRuntime.waitUntil((async () => {
+                        (globalThis as any).EdgeRuntime?.waitUntil((async () => {
                           for (let i = 0; i < announceTargets.length; i++) {
                             const target = announceTargets[i];
                             
@@ -2634,7 +2634,7 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                     // ============== TEST MODE: FANTASY BUY (Uses telegram_fantasy_positions table) ==============
                     console.log(`[telegram-channel-monitor] SCALP FANTASY MODE: Simulating buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${scalpBuyAmount}`);
 
-                    const currentPrice = currentTokenData?.priceUsd || 0;
+                    const currentPrice = (currentTokenData as any)?.priceUsd || 0;
                     const estimatedTokens = currentPrice > 0 ? scalpBuyAmount / currentPrice : 0;
                     const takeProfitPct = config.scalp_take_profit_pct || 50;
 

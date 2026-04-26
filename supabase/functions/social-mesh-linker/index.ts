@@ -210,7 +210,7 @@ Deno.serve(withRunLog('social-mesh-linker', async (req) => {
       const twitterHandle = extractTwitterHandle(twitter_url);
       if (twitterHandle) {
         // Try to resolve handle → immutable numeric user ID
-        const xResolved = await resolveXHandle(twitterHandle, supabase);
+      const xResolved = await resolveXHandle(twitterHandle, supabase as any);
         
         if (xResolved) {
           // Primary link: immutable user ID → wallet
@@ -248,7 +248,7 @@ Deno.serve(withRunLog('social-mesh-linker', async (req) => {
           });
           
           // Increment token count for rotation detection
-          await incrementXUserTokenCount(xResolved.userId, supabase);
+        await incrementXUserTokenCount(xResolved.userId, supabase as any);
           
           discoveredSocials.push(`x_user:${xResolved.userId}(@${xResolved.handle})`);
           if (xResolved.isRotated) {
@@ -334,7 +334,7 @@ Deno.serve(withRunLog('social-mesh-linker', async (req) => {
       const telegramHandle = extractTelegramHandle(telegram_url);
       if (telegramHandle) {
         // Try to resolve username → immutable numeric channel ID
-        const resolved = await resolveTelegramUsername(telegramHandle, supabase);
+      const resolved = await resolveTelegramUsername(telegramHandle, supabase as any);
         
         if (resolved) {
           // Primary link: immutable channel ID → wallet
@@ -370,7 +370,7 @@ Deno.serve(withRunLog('social-mesh-linker', async (req) => {
           });
           
           // Increment token count for recycling detection
-          await incrementChannelTokenCount(resolved.channelId, supabase);
+        await incrementChannelTokenCount(resolved.channelId, supabase as any);
           
           discoveredSocials.push(`tg_channel:${resolved.channelId}(${resolved.title})`);
           if (resolved.isRecycled) {
@@ -532,7 +532,7 @@ Deno.serve(withRunLog('social-mesh-linker', async (req) => {
     });
   } catch (err) {
     console.error("[social-mesh-linker] Error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

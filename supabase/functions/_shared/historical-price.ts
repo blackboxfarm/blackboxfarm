@@ -1,5 +1,5 @@
-/**
 import { fetchPumpFunTrades } from './pumpfun-fetch.ts';
+/**
  * HISTORICAL PRICE FETCHER - Stale Alpha Protection
  * 
  * Multi-tier approach to fetch token price at a specific historical timestamp:

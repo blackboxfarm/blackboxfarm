@@ -241,7 +241,7 @@ serve(withRunLog('telegram-fantasy-price-monitor', async (req) => {
       }
       
       // Over 12 hours - check if price is moving towards target
-      const currentPrice = p.current_price_usd || 0;
+      const currentPrice = (p as any).current_price_usd || 0;
       const entryPrice = p.entry_price_usd || 0;
       
       if (currentPrice <= 0 || entryPrice <= 0) {
