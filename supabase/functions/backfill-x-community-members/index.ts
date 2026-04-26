@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
         .from('x_communities')
         .select('community_id, name, last_scraped_at, moderator_usernames, raw_data')
         .eq('is_deleted', false)
-        .filter('community_id', 'similar to', '[0-9]{6,25}')
+        .filter('community_id', 'match', '^[0-9]{6,25}$')
         .or('moderator_usernames.is.null,last_scraped_at.is.null')
         .order('last_scraped_at', { ascending: true, nullsFirst: true })
         .limit(limit);
