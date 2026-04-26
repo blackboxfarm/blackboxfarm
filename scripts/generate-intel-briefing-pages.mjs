@@ -12,7 +12,16 @@ const GENERATED_REDIRECTS_START = '# BEGIN INTEL BRIEFING STATIC ROUTES';
 const GENERATED_REDIRECTS_END = '# END INTEL BRIEFING STATIC ROUTES';
 
 export async function generateIntelBriefingPages() {
-  const baseHtml = await readFile(DIST_INDEX_PATH, 'utf8');
+  let baseHtml;
+  try {
+    baseHtml = await readFile(DIST_INDEX_PATH, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') {
+      console.warn(`[intel-og-pages] skipped: ${DIST_INDEX_PATH} not found (likely a dev build)`);
+      return;
+    }
+    throw err;
+  }
   const assetTags = extractAssetTags(baseHtml);
   const appRoot = baseHtml.match(/<div id="root"><\/div>/)?.[0] || '<div id="root"></div>';
   const articles = await fetchPublishedArticles();
