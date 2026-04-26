@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera } from "lucide-react";
 import { xIcon } from "@/components/token/SocialIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,7 @@ import { dispatchThought, dispatchThoughtCustom } from "@/components/chat/Avatar
 import { SharedFundersPanel } from "./SharedFundersPanel";
 import BubbleMap3D from "./BubbleMap3D";
 import BubbleMapSchematic from "./BubbleMapSchematic";
+import SnapshotShareDialog from "./SnapshotShareDialog";
 
 type ViewMode = 'bubble' | 'tree' | '3d' | 'schematic';
 type SolarMode = 'minimum' | 'clusters';
@@ -75,6 +76,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const [terminalVisible, setTerminalVisible] = useState(false);
   const [terminalTitle, setTerminalTitle] = useState('ORACLE TRACE');
+
+  // Snapshot & Share dialog
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
 
   const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated } = useBubbleMapRateLimit();
 
