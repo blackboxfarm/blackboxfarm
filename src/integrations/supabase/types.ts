@@ -3489,6 +3489,7 @@ export type Database = {
           evidence: Json
           handle_at_link: string | null
           id: string
+          link_key: string | null
           relationship: string
           token_mint: string | null
           updated_at: string
@@ -3503,6 +3504,7 @@ export type Database = {
           evidence?: Json
           handle_at_link?: string | null
           id?: string
+          link_key?: string | null
           relationship: string
           token_mint?: string | null
           updated_at?: string
@@ -3517,6 +3519,7 @@ export type Database = {
           evidence?: Json
           handle_at_link?: string | null
           id?: string
+          link_key?: string | null
           relationship?: string
           token_mint?: string | null
           updated_at?: string
