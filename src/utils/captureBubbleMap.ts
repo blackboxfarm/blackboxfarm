@@ -187,12 +187,22 @@ async function captureSchematic(container: HTMLElement, watermark: CaptureWaterm
     cacheBust: true,
     pixelRatio: 2,
     backgroundColor: '#0a0a0f',
+    // Skip embedded webfonts — fetching them often trips html-to-image's
+    // stylesheet parser ("can't access property trim of undefined") when a
+    // cross-origin sheet or @font-face rule has an unexpected shape.
+    skipFonts: true,
     // Skip the controls / minimap / attribution so the capture is graph-only
     filter: (node: HTMLElement) => {
-      if (!node.classList) return true;
-      if (node.classList.contains('react-flow__controls')) return false;
-      if (node.classList.contains('react-flow__minimap')) return false;
-      if (node.classList.contains('react-flow__attribution')) return false;
+      // Skip non-element nodes defensively (html-to-image only handles Elements)
+      if (!(node instanceof Element)) return true;
+      const cl = (node as HTMLElement).classList;
+      if (!cl) return true;
+      if (cl.contains('react-flow__controls')) return false;
+      if (cl.contains('react-flow__minimap')) return false;
+      if (cl.contains('react-flow__attribution')) return false;
+      // Skip <link rel="stylesheet"> and <style> tags inside the subtree
+      const tag = (node as HTMLElement).tagName;
+      if (tag === 'LINK' || tag === 'STYLE') return false;
       return true;
     },
   });
