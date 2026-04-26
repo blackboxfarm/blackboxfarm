@@ -2379,6 +2379,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bubble_snapshots: {
+        Row: {
+          commentary: string | null
+          created_at: string
+          id: string
+          public_url: string
+          storage_path: string
+          ticker: string | null
+          token_address: string
+          user_id: string | null
+          view_mode: string
+        }
+        Insert: {
+          commentary?: string | null
+          created_at?: string
+          id?: string
+          public_url: string
+          storage_path: string
+          ticker?: string | null
+          token_address: string
+          user_id?: string | null
+          view_mode: string
+        }
+        Update: {
+          commentary?: string | null
+          created_at?: string
+          id?: string
+          public_url?: string
+          storage_path?: string
+          ticker?: string | null
+          token_address?: string
+          user_id?: string | null
+          view_mode?: string
+        }
+        Relationships: []
+      }
       bundle_reports: {
         Row: {
           created_at: string
