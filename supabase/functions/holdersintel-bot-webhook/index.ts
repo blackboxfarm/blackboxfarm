@@ -1204,6 +1204,7 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   // Determine risk signals
   const signals: string[] = [];
   let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' = 'LOW';
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let riskEmoji = '🟢';
 
   // Dev risk signals
