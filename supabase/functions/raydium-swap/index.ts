@@ -1139,10 +1139,10 @@ serve(withRunLog('raydium-swap', async (req) => {
               programId: TOKEN_PROGRAM_ID,
               keys: [
                 { pubkey, isSigner: false, isWritable: true },
-                { pubkey: owner.publicKey, isSigner: false, isWritable: true }, // destination for all lamports
-                { pubkey: owner.publicKey, isSigner: true, isWritable: false }, // authority
+                { pubkey: owner!.publicKey, isSigner: false, isWritable: true }, // destination for all lamports
+                { pubkey: owner!.publicKey, isSigner: true, isWritable: false }, // authority
               ],
-              data: new Uint8Array([9]), // CloseAccount instruction = 9 (Deno-safe)
+              data: new Uint8Array([9]) as unknown as Buffer, // CloseAccount instruction = 9 (Deno-safe)
             })
           );
 
@@ -1357,7 +1357,7 @@ serve(withRunLog('raydium-swap', async (req) => {
         }
 
         return {
-          dexIds: Array.from(set),
+          dexIds: Array.from(set) as string[],
           hasRaydium: set.has("raydium"),
           // DexScreener uses `pumpswap` for Pump.fun's in-ecosystem venue.
           // Treat it as Pump.fun so we route via PumpPortal when Jupiter/Raydium have no route.
@@ -1555,7 +1555,7 @@ serve(withRunLog('raydium-swap', async (req) => {
 
             const tokenModeResult = await tryPumpPortalTrade({
               mint: String(tokenMint),
-              userPublicKey: owner.publicKey.toBase58(),
+              userPublicKey: owner!.publicKey.toBase58(),
               action: 'buy',
               amount: estimatedTokenAmount,
               slippageBps: candidateSlippageBps,
@@ -1576,7 +1576,7 @@ serve(withRunLog('raydium-swap', async (req) => {
 
             const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
             (vtx as any).message.recentBlockhash = blockhash;
-            vtx.sign([owner]);
+            vtx.sign([owner!]);
 
             let sig: string;
             try {
@@ -2179,7 +2179,7 @@ serve(withRunLog('raydium-swap', async (req) => {
 
       if (!("txs" in j) || jupiterFailureForFallback) {
         // If this is a 6024 graduated token and Jupiter said NOT_TRADABLE, retry once after another delay
-        const jupFailed = jupiterFailureForFallback ?? j?.error ?? '';
+        const jupFailed = jupiterFailureForFallback ?? (j as any)?.error ?? '';
         if (is6024Fallthrough && (jupFailed.includes('NOT_TRADABLE') || jupFailed.includes('Route not found'))) {
           console.log('Jupiter not tradable for graduated token — retrying after 3s delay...');
           await new Promise(r => setTimeout(r, 3000));
@@ -2188,7 +2188,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             outputMint: String(outputMint),
             amount: amount as any,
             slippageBps: effectiveSlippage,
-            userPublicKey: owner.publicKey.toBase58(),
+            userPublicKey: owner!.publicKey.toBase58(),
             computeUnitPriceMicroLamports,
             asLegacy: String(txVersion).toUpperCase() === "LEGACY",
           });
@@ -2197,7 +2197,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             const vtx2 = VersionedTransaction.deserialize(u8);
             const fresh2 = await connection.getLatestBlockhash("confirmed");
             (vtx2 as any).message.recentBlockhash = fresh2.blockhash;
-            vtx2.sign([owner]);
+            vtx2.sign([owner!]);
             const sig2 = await connection.sendTransaction(vtx2, { skipPreflight: false, maxRetries: 3 });
             const confirm2 = await hardConfirmTransaction(connection, sig2, fresh2.blockhash, fresh2.lastValidBlockHeight, 30000);
             if (confirm2.confirmed) {
@@ -2394,7 +2394,7 @@ serve(withRunLog('raydium-swap', async (req) => {
 
         return softError(
           "SWAP_FAILED",
-          `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${meteoraResult.error || 'n/a'}; bags.fm: ${bagsFmResult.error || 'n/a'}; PumpPortal: ${lastPumpPortalError || 'n/a'}`
+          `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${jupiterFailureMessage}; Meteora: ${(meteoraResult as any).error || 'n/a'}; bags.fm: ${(bagsFmResult as any).error || 'n/a'}; PumpPortal: ${lastPumpPortalError || 'n/a'}`
         );
       }
     }
@@ -2437,7 +2437,7 @@ serve(withRunLog('raydium-swap', async (req) => {
           computeUnitPriceMicroLamports: String(computeUnitPriceMicroLamports),
           swapResponse: freshSwapResponse,
           txVersion: normalizedTxVersion,
-          wallet: owner.publicKey.toBase58(),
+          wallet: owner!.publicKey.toBase58(),
           wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
           unwrapSol: Boolean(unwrapSol && isOutputSol),
           inputAccount,
