@@ -552,6 +552,9 @@ Deno.serve(withRunLog('dexscreener-top-200-scraper', async (req) => {
               linkedTokenMint: token.address,
             }
           }).catch(e => console.warn(`[DexCompiler] Community enricher trigger failed: ${e}`));
+
+          // Also enqueue for the deferred resolver (canonical Apify-based staff discovery)
+          await enqueueCommunityResolution(supabase, communityId, 'dexscreener-top-200', 5);
         }
       } else {
         const xHandle = extractXHandle(token.twitter);
