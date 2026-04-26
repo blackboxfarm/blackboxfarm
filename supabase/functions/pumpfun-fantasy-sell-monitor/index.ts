@@ -5,6 +5,7 @@ import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { broadcastToBlackBox } from '../_shared/telegram-broadcast.ts';
 import { getSolPriceQuick } from '../_shared/sol-price-fetcher.ts';
 import { obfuscateTicker } from '../_shared/ticker-obfuscator.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('pumpfun-fantasy-sell-monitor');
 
 /**
@@ -769,7 +770,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
   const solPrice = await getSolPrice();
 
   // Batch fetch all prices using multiple sources
-  const mints = [...new Set(positions.map((p: any) => p.token_mint))];
+  const mints = [...new Set(positions.map((p: any) => p.token_mint as string))] as string[];
   const priceMap = await batchFetchPrices(mints, supabase);
 
   // Cross-reference watchlist for rug detection (dev_sold, bombed, etc.)
@@ -1114,7 +1115,8 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
 
           // Post profitable sell to X Community
           const holdMins = (Date.now() - new Date(position.entry_at || position.created_at).getTime()) / (1000 * 60);
-          EdgeRuntime.waitUntil(
+          // @ts-ignore - EdgeRuntime is a Deno Deploy global
+          (globalThis as any).EdgeRuntime?.waitUntil(
             supabase.functions.invoke('fantasy-tweet', {
               body: {
                 type: 'sell',
@@ -1129,7 +1131,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
                 exitReason: `Target ${position.target_multiplier}x reached`,
                 holdDurationMins: holdMins,
               }
-            }).catch(e => console.error('Fantasy tweet error:', e))
+            }).catch((e: any) => console.error('Fantasy tweet error:', e))
           );
 
         } else {

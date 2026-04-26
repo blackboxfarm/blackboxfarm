@@ -384,7 +384,7 @@ Deno.serve(withRunLog('pumpfun-kol-registry', async (req) => {
           verified: stats?.filter((k: any) => k.kol_tier === 'verified').length || 0,
           suspected: stats?.filter((k: any) => k.kol_tier === 'suspected').length || 0,
         };
-        const avgTrust = stats?.reduce((sum: number, k: any) => sum + (k.trust_score || 50), 0) / (total || 1);
+        const avgTrust = (stats?.reduce((sum: number, k: any) => sum + (k.trust_score || 50), 0) || 0) / (total || 1);
         const totalKills = stats?.reduce((sum: number, k: any) => sum + (k.chart_kills || 0), 0) || 0;
         const totalPumps = stats?.reduce((sum: number, k: any) => sum + (k.successful_pumps || 0), 0) || 0;
 
