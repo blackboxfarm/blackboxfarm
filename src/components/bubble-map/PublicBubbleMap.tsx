@@ -1160,14 +1160,27 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       {/* Unified Control Bar — layout controls only */}
       {graphData.nodes.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/80 backdrop-blur">
-          {/* Solar Mode */}
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-            <Button variant={solarMode === 'minimum' ? 'secondary' : 'ghost'} size="sm"
+          {/* Solar Mode — toggle pair with explicit border + slash divider */}
+          <div className="flex items-center gap-0 bg-muted rounded-md p-0.5 border border-border/60">
+            <Button
+              variant={solarMode === 'minimum' ? 'secondary' : 'ghost'}
+              size="sm"
               className={`h-7 text-xs px-2 ${solarMode === 'minimum' ? 'text-gold border-gold/30' : ''}`}
-              onClick={() => { setSolarMode('minimum'); recordInteraction(); }}>
+              onClick={() => { setSolarMode('minimum'); recordInteraction(); }}
+            >
               <Sun className="h-3 w-3 mr-1" /> Solar Min
             </Button>
-            <Button variant={solarMode === 'clusters' ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2" onClick={() => { setSolarMode('clusters'); recordInteraction(); }}>
+            <span className="px-1 text-muted-foreground/60 text-xs select-none">/</span>
+            <Button
+              variant={solarMode === 'clusters' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 text-xs px-2 disabled:opacity-40"
+              disabled={viewMode === 'tree' || viewMode === 'schematic'}
+              title={(viewMode === 'tree' || viewMode === 'schematic')
+                ? 'Solar Clusters is disabled in Tree and Schematic views'
+                : 'Group satellites into clusters'}
+              onClick={() => { setSolarMode('clusters'); recordInteraction(); }}
+            >
               <Orbit className="h-3 w-3 mr-1" /> Solar Clusters
             </Button>
           </div>
