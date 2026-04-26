@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     }
 
     // Test 1: Database Tables Exist
-    const test1 = { name: 'Database Tables Existence', status: 'pending', details: {} }
+    const test1: any = { name: 'Database Tables Existence', status: 'pending', details: {} }
     try {
       const tables = ['developer_profiles', 'developer_wallets', 'developer_tokens', 
                      'wallet_funding_traces', 'developer_analysis_jobs', 'token_mint_watchdog']
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     results.summary.total++
 
     // Test 2: Edge Functions Availability
-    const test2 = { name: 'Edge Functions Health Check', status: 'pending', details: {} }
+    const test2: any = { name: 'Edge Functions Health Check', status: 'pending', details: {} }
     try {
       const functions = [
         'developer-wallet-tracer',

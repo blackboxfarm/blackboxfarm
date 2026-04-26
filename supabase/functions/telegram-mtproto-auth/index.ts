@@ -674,7 +674,7 @@ Copy the printed session string and use **Save Session**.
             filter: { _: 'channelParticipantsSearch', q: '' },
             offset,
             limit: batchSize,
-            hash: BigInt(0),
+            hash: BigInt(0) as any,
           }) as any;
 
           if (!result?.participants?.length) break;

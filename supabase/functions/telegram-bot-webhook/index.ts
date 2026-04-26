@@ -48,6 +48,7 @@ Deno.serve(withRunLog('telegram-bot-webhook', async (req) => {
     const sanitized = sanitizeTelegramInput(message.text);
     const command = sanitized.command;
     const args = sanitized.args;
+    const text: string = (message.text ?? '').toString();
 
     if (!isInputSafeToProcess(sanitized)) {
       console.warn("[TELEGRAM-BOT] BLOCKED suspicious input", JSON.stringify({
