@@ -3,7 +3,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   type Node,
   type Edge,
   Position,
@@ -63,10 +62,19 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
   for (const n of graphData.nodes) {
     g.setNode(n.id, { width: NODE_W, height: NODE_H, rank: rankNode(n, devId) });
   }
+  // Skip self-loops and any edge whose reverse is already in the DAG —
+  // dagre throws "Found cycle in node path" otherwise.
+  const seen = new Set<string>();
   for (const l of graphData.links) {
     const s = typeof l.source === 'object' ? l.source.id : l.source;
     const t = typeof l.target === 'object' ? l.target.id : l.target;
-    if (g.hasNode(s) && g.hasNode(t)) g.setEdge(s, t);
+    if (!s || !t || s === t) continue;
+    if (!g.hasNode(s) || !g.hasNode(t)) continue;
+    const fwd = `${s}→${t}`;
+    const rev = `${t}→${s}`;
+    if (seen.has(fwd) || seen.has(rev)) continue;
+    seen.add(fwd);
+    g.setEdge(s, t);
   }
 
   dagre.layout(g);
@@ -164,16 +172,6 @@ const BubbleMapSchematic: React.FC<BubbleMapSchematicProps> = ({
       >
         <Background gap={24} color="hsl(var(--border))" />
         <Controls position="bottom-right" />
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(n: any) => {
-            const orig = graphData.nodes.find((x: any) => x.id === n.id);
-            return ENTITY_COLORS[orig?.type] || '#666';
-          }}
-          maskColor="rgba(0,0,0,0.4)"
-          style={{ background: 'hsl(var(--card))' }}
-        />
       </ReactFlow>
     </div>
   );
