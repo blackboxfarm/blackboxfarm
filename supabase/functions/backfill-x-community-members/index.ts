@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
   const limit = Math.min(BATCH_SIZE, Number(body.limit ?? url.searchParams.get('limit') ?? BATCH_SIZE));
   const onlyCommunityId: string | null = body.communityId ?? url.searchParams.get('communityId') ?? null;
   const force = body.force === true || url.searchParams.get('force') === 'true';
+  const deep = body.deep === true || url.searchParams.get('deep') === 'true';
 
   const startedAt = Date.now();
   console.log(`[backfill-x-community-members] start limit=${limit} only=${onlyCommunityId ?? 'auto'} force=${force}`);
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
   for (const row of rows ?? []) {
     const communityId = row.community_id as string;
     try {
-      const resolved = await resolveXCommunity(supabase, communityId, { forceRefresh: force });
+      const resolved = await resolveXCommunity(supabase, communityId, { forceRefresh: force, deep });
 
       // Cross-link any wallets that already point at this community (token_social_links → tokens.creator_wallet)
       try {
