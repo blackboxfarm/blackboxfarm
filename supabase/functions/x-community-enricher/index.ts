@@ -583,6 +583,7 @@ Deno.serve(withRunLog('x-community-enricher', async (req) => {
         success: true,
         type: 'community',
         communityId,
+        communityName: communityData.name ?? null,
         admins: communityData.adminUsernames,
         moderators: communityData.moderatorUsernames,
         memberCount: communityData.memberCount,
