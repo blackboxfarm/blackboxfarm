@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { fetchXCommunityAboutAdmin } from "../_shared/x-community-about-admin.ts";
+import { enqueueCommunityResolution } from "../_shared/queue-community-resolution.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
