@@ -1143,6 +1143,17 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <LayoutTemplate className="h-3 w-3 mr-1" /> Schematic
             </Button>
           </div>
+          {/* Snapshot & Share */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs px-2 border-primary/40 text-primary hover:text-primary"
+            disabled={viewMode === '3d'}
+            title={viewMode === '3d' ? 'Snapshot available in Bubble, Tree, and Schematic views' : 'Capture this map and share it'}
+            onClick={() => { recordInteraction(); setSnapshotOpen(true); }}
+          >
+            <Camera className="h-3 w-3 mr-1" /> Snapshot
+          </Button>
           {/* Spacing */}
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
