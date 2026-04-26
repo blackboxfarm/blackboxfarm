@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera } from "lucide-react";
 import { xIcon } from "@/components/token/SocialIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,7 @@ import { dispatchThought, dispatchThoughtCustom } from "@/components/chat/Avatar
 import { SharedFundersPanel } from "./SharedFundersPanel";
 import BubbleMap3D from "./BubbleMap3D";
 import BubbleMapSchematic from "./BubbleMapSchematic";
+import SnapshotShareDialog from "./SnapshotShareDialog";
 
 type ViewMode = 'bubble' | 'tree' | '3d' | 'schematic';
 type SolarMode = 'minimum' | 'clusters';
@@ -75,6 +76,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const [terminalVisible, setTerminalVisible] = useState(false);
   const [terminalTitle, setTerminalTitle] = useState('ORACLE TRACE');
+
+  // Snapshot & Share dialog
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
 
   const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated } = useBubbleMapRateLimit();
 
@@ -1139,6 +1143,17 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <LayoutTemplate className="h-3 w-3 mr-1" /> Schematic
             </Button>
           </div>
+          {/* Snapshot & Share */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs px-2 border-primary/40 text-primary hover:text-primary"
+            disabled={viewMode === '3d'}
+            title={viewMode === '3d' ? 'Snapshot available in Bubble, Tree, and Schematic views' : 'Capture this map and share it'}
+            onClick={() => { recordInteraction(); setSnapshotOpen(true); }}
+          >
+            <Camera className="h-3 w-3 mr-1" /> Snapshot
+          </Button>
           {/* Spacing */}
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
@@ -1407,6 +1422,26 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             </CardContent>
           </Card>
         ) : null;
+      })()}
+
+      {/* Snapshot & Share dialog */}
+      {(() => {
+        const tokenNode = graphData.nodes.find((n: any) => n.type === 'token');
+        const tokenAddress = tokenNode?.fullId || tokenNode?.id?.replace(/^token:/, '') || searchInput.trim();
+        const ticker = (tokenNode as any)?.displayName || (tokenNode as any)?.label || undefined;
+        return (
+          <SnapshotShareDialog
+            open={snapshotOpen}
+            onOpenChange={setSnapshotOpen}
+            view={viewMode === 'schematic' ? 'schematic' : 'bubble'}
+            forceGraphRef={graphRef.current}
+            schematicContainer={containerRef.current}
+            watermark={{
+              tokenAddress: tokenAddress || '',
+              ticker,
+            }}
+          />
+        );
       })()}
     </div>
   );
