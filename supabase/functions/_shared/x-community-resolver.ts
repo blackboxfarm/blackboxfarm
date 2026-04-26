@@ -371,11 +371,18 @@ async function persistCommunity(
   if (adminUsernames.length > 0) upsertRow.admin_usernames = adminUsernames;
   if (moderatorUsernames.length > 0) upsertRow.moderator_usernames = moderatorUsernames;
 
-  const { error } = await supabase
-    .from('x_communities')
-    .upsert(upsertRow, { onConflict: 'community_id' });
-
-  if (error) throw new Error(`x_communities upsert failed for ${resolved.communityId}: ${error.message}`);
+  let error: any = null;
+  if (existing?.id) {
+    // Existing row: update by id (avoids NOT NULL re-validation of unrelated columns)
+    const { id: _omit, ...rest } = upsertRow as any;
+    const res = await supabase.from('x_communities').update(rest).eq('id', existing.id);
+    error = res.error;
+  } else {
+    // Brand-new row: insert with all required columns
+    const res = await supabase.from('x_communities').insert(upsertRow);
+    error = res.error;
+  }
+  if (error) throw new Error(`x_communities persist failed for ${resolved.communityId}: ${error.message}`);
 
   // Registry for every observed handle
   const allMembers = [
