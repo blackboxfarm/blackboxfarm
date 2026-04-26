@@ -157,7 +157,7 @@ Deno.serve(withRunLog('x-community-follow', async (req) => {
         success: true,
         totalMembers: members?.length || 0,
         blueChecked: blueChecked.length,
-        targets: upsertData.map(t => ({
+        targets: (upsertData as any[]).map((t: any) => ({
           handle: t.target_handle,
           xUserId: t.target_x_user_id,
           role: t.community_role,
@@ -431,9 +431,9 @@ Deno.serve(withRunLog('x-community-follow', async (req) => {
     return new Response(JSON.stringify({ error: 'Invalid action. Use: scrape_blue_checks, follow, get_targets, reset_errors' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[x-community-follow] Error:', err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: err?.message ?? String(err) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

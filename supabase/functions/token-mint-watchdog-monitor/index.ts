@@ -1626,14 +1626,14 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             const amount = (transfer.amount || 0) / 1e9
             
             if (amount > 0.0001) { // Ignore dust
-              const existing = fundingSources.get(sender) || {
+              const existing: any = fundingSources.get(sender) || {
                 wallet: sender,
                 totalSolSent: 0,
                 txCount: 0,
                 firstTx: tx.signature,
                 firstTxTime: tx.timestamp,
                 firstTxTimeFormatted: new Date(tx.timestamp * 1000).toISOString(),
-                transactions: []
+                transactions: [] as any[]
               }
               
               existing.totalSolSent += amount
@@ -1996,7 +1996,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
           console.log(`   ↳ Known to be funded by: ${treasuryInfo.fundedBy}`)
           
           // Mark this wallet
-          const node = walletTree.get(wallet) || {
+          const node: any = walletTree.get(wallet) || {
             wallet,
             depth,
             solReceived: fundedAmount,
@@ -2007,7 +2007,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             fundingTime,
             cexSource: null,
             isLeaf: false,
-            children: [],
+            children: [] as string[],
             isTreasury: true
           }
           walletTree.set(wallet, node)

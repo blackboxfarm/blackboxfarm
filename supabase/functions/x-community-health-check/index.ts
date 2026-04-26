@@ -116,7 +116,7 @@ Deno.serve(withRunLog('x-community-health-check', async (req) => {
                 detectedAt: new Date().toISOString(),
               };
 
-              const { alerted } = await alertAndLogCommunityDeletion(supabase, alertInfo);
+              const { alerted } = await alertAndLogCommunityDeletion(supabase as any, alertInfo);
               
               if (alerted) {
                 alertsSent++;

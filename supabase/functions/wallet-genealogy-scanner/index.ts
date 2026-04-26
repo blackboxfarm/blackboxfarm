@@ -114,7 +114,7 @@ function findIncomingSolTransfers(
               transfers.push({
                 from: transfer.fromUserAccount,
                 amount: amountSol,
-                timestamp: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : null,
+                timestamp: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : '',
                 signature: tx.signature,
               });
             }
