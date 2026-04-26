@@ -144,7 +144,7 @@ async function tryApify(
   let res: Response;
   try {
     res = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyKey}&maxItems=${maxMembers}&clean=1&timeout=180`,
+      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apifyKey}&clean=1&timeout=180`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
