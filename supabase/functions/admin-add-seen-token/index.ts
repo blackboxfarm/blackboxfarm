@@ -138,11 +138,17 @@ serve(withRunLog('admin-add-seen-token', async (req) => {
     if (twitterUrl) {
       // Check if it's a community URL (contains /communities/)
       communityId = extractCommunityId(twitterUrl);
-      
-      // For any Twitter URL, we'll create/update an x_communities entry
-      // Use the URL as a pseudo community_id if not a real community
-      const effectiveId = communityId || twitterUrl.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
-      
+
+      // ONLY create x_communities rows for REAL communities (numeric IDs).
+      // Plain Twitter handles like x.com/somehandle are NOT communities and must
+      // not be inserted as pseudo-IDs (they pollute the resolution queue and
+      // waste Apify credits with 400 errors). Those handles belong in
+      // token_social_links / x_handles, not x_communities.
+      if (!communityId) {
+        console.log(`[admin-add-seen-token] Twitter URL is not a community (no /communities/<id>), skipping x_communities link: ${twitterUrl}`);
+      } else {
+      const effectiveId = communityId;
+
       // Check if this community already exists
       const { data: existingCommunity } = await supabase
         .from('x_communities')
@@ -198,6 +204,7 @@ serve(withRunLog('admin-add-seen-token', async (req) => {
           console.warn('[admin-add-seen-token] enqueue community resolution failed:', e);
         }
       }
+      } // close: if (communityId)
     }
 
     return new Response(JSON.stringify({ 
