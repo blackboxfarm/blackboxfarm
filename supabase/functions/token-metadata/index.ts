@@ -577,7 +577,7 @@ serve(withRunLog('token-metadata', async (req) => {
     console.log('Fetching accurate price via resolvePrice router...');
     const priceResult: PriceResult | null = await resolvePrice(tokenMint, {
       forceFresh: true,  // Never use cache for user-initiated fetches
-      heliusApiKey: heliusApiKey
+      heliusApiKey: heliusApiKey || undefined
     });
     
     if (priceResult) {
@@ -731,7 +731,7 @@ serve(withRunLog('token-metadata', async (req) => {
 
           if (watchlistRow?.creator_wallet) {
             creatorWallet = watchlistRow.creator_wallet;
-            console.log(`[token-metadata] ✅ Creator resolved from pumpfun_watchlist: ${creatorWallet.slice(0, 8)}...`);
+            console.log(`[token-metadata] ✅ Creator resolved from pumpfun_watchlist: ${(creatorWallet as string).slice(0, 8)}...`);
           } else {
             // Try token_lifecycle
             const { data: lifecycleRow } = await dbClient
@@ -743,7 +743,7 @@ serve(withRunLog('token-metadata', async (req) => {
 
             if (lifecycleRow?.creator_wallet) {
               creatorWallet = lifecycleRow.creator_wallet;
-              console.log(`[token-metadata] ✅ Creator resolved from token_lifecycle: ${creatorWallet.slice(0, 8)}...`);
+              console.log(`[token-metadata] ✅ Creator resolved from token_lifecycle: ${(creatorWallet as string).slice(0, 8)}...`);
             }
           }
         }

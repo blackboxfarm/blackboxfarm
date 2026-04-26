@@ -223,7 +223,7 @@ Deno.serve(withRunLog('token-vigil', async (req) => {
               post_mortem_id: postMortemId,
             }).eq('id', vigil.id);
             stats.deaths++;
-            await trackFunnelStage(supabase, 'dead', 1);
+            await trackFunnelStage(supabase as any, 'dead', 1);
           }
         }
         // Mid-growth assessment: > 100K mcap, still watching, not yet assessed
@@ -378,7 +378,7 @@ async function captureAssessment(
       price_usd: reportData?.tokenPriceUSD || dexPair?.priceUsd || 0,
       mcap_usd: reportData?.marketCap || dexPair?.marketCap || 0,
       ath_usd: vigil.peak_price_usd,
-      price_drop_from_ath_pct: vigil.price_drop_from_peak_pct,
+      price_drop_from_ath_pct: (vigil as any).price_drop_from_peak_pct,
       volume_1h: vitality?.volume?.h1 || 0,
       volume_24h: vitality?.volume?.h24 || 0,
       volume_mcap_ratio: reportData?.marketCap > 0 

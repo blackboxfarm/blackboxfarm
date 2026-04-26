@@ -1016,7 +1016,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
         
         console.log(`Helius page ${pageCount + 1}, before: ${beforeSignature || 'start'}`)
         
-        const response = await fetch(
+        const response: Response = await fetch(
           getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { limit: '100', ...(beforeSignature ? { before: beforeSignature } : {}) }),
           { method: 'GET' }
         )
@@ -1027,7 +1027,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
           break
         }
         
-        const transactions = await response.json()
+        const transactions: any[] = await response.json()
         
         if (!transactions || transactions.length === 0) {
           console.log(`No more transactions at page ${pageCount + 1}`)
@@ -1142,7 +1142,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             w.tokensSent += amount
             w.netTokens = w.tokensReceived - w.tokensSent
             w.lastTxTime = Math.max(w.lastTxTime, tx.timestamp)
-            w.txTypes[tx.type] = (w.txTypes[tx.type] || 0) + 1
+            ;(w.txTypes as Record<string, number>)[tx.type] = ((w.txTypes as Record<string, number>)[tx.type] || 0) + 1
             if (t.toUserAccount) w.interactedWith.add(t.toUserAccount)
             walletActivity.set(t.fromUserAccount, w)
           }
@@ -1167,7 +1167,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             w.tokensReceived += amount
             w.netTokens = w.tokensReceived - w.tokensSent
             w.lastTxTime = Math.max(w.lastTxTime, tx.timestamp)
-            w.txTypes[tx.type] = (w.txTypes[tx.type] || 0) + 1
+            ;(w.txTypes as Record<string, number>)[tx.type] = ((w.txTypes as Record<string, number>)[tx.type] || 0) + 1
             if (t.fromUserAccount) w.interactedWith.add(t.fromUserAccount)
             walletActivity.set(t.toUserAccount, w)
           }
@@ -1336,14 +1336,14 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             if (amount > 0.0001) { // Ignore dust
               totalSolSent += amount
               
-              const existing = offspringWallets.get(recipient) || {
+              const existing: any = offspringWallets.get(recipient) || {
                 wallet: recipient,
                 totalSolReceived: 0,
                 txCount: 0,
                 firstTx: tx.signature,
                 firstTxTime: tx.timestamp,
                 firstTxTimeFormatted: new Date(tx.timestamp * 1000).toISOString(),
-                transactions: []
+                transactions: [] as any[]
               }
               
               existing.totalSolReceived += amount
@@ -1626,14 +1626,14 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             const amount = (transfer.amount || 0) / 1e9
             
             if (amount > 0.0001) { // Ignore dust
-              const existing = fundingSources.get(sender) || {
+              const existing: any = fundingSources.get(sender) || {
                 wallet: sender,
                 totalSolSent: 0,
                 txCount: 0,
                 firstTx: tx.signature,
                 firstTxTime: tx.timestamp,
                 firstTxTimeFormatted: new Date(tx.timestamp * 1000).toISOString(),
-                transactions: []
+                transactions: [] as any[]
               }
               
               existing.totalSolSent += amount
@@ -1996,7 +1996,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
           console.log(`   ↳ Known to be funded by: ${treasuryInfo.fundedBy}`)
           
           // Mark this wallet
-          const node = walletTree.get(wallet) || {
+          const node: any = walletTree.get(wallet) || {
             wallet,
             depth,
             solReceived: fundedAmount,
@@ -2007,7 +2007,7 @@ Deno.serve(withRunLog('token-mint-watchdog-monitor', async (req) => {
             fundingTime,
             cexSource: null,
             isLeaf: false,
-            children: [],
+            children: [] as string[],
             isTreasury: true
           }
           walletTree.set(wallet, node)

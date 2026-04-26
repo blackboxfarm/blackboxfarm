@@ -42,7 +42,7 @@ async function resolveOnChainCreator(tokenMint: string, heliusKey: string): Prom
 
   // Step 1: Paginate to get the OLDEST signature (creation transaction)
   // getSignaturesForAddress returns newest-first, so we paginate until we reach the end
-  let oldestSignature: string | null = null;
+  let oldestSignature: string | undefined = undefined;
   let lastSignature: string | undefined = undefined;
 
   for (let page = 0; page < 20; page++) {
@@ -143,7 +143,7 @@ Deno.serve(withRunLog('token-creator-linker', async (req) => {
 
         // FALLBACK: On-chain lookup via Helius (oldest transaction = creation tx)
         if (!creatorWallet) {
-          creatorWallet = await resolveOnChainCreator(tokenMint, heliusKey);
+          creatorWallet = await resolveOnChainCreator(tokenMint, heliusKey || '');
         }
 
         if (!creatorWallet) {
