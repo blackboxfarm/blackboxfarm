@@ -3387,6 +3387,102 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_identity_aliases: {
+        Row: {
+          alias_kind: Database["public"]["Enums"]["creator_alias_kind"]
+          alias_value: string
+          confidence: number
+          creator_id: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          source: string | null
+        }
+        Insert: {
+          alias_kind: Database["public"]["Enums"]["creator_alias_kind"]
+          alias_value: string
+          confidence?: number
+          creator_id: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          source?: string | null
+        }
+        Update: {
+          alias_kind?: Database["public"]["Enums"]["creator_alias_kind"]
+          alias_value?: string
+          confidence?: number
+          creator_id?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_identity_aliases_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "creator_identity_aliases_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creator_merge_log: {
+        Row: {
+          absorbed_id: string
+          created_at: string
+          id: string
+          metadata: Json
+          surviving_id: string
+          trigger_kind: Database["public"]["Enums"]["creator_alias_kind"]
+          trigger_value: string
+          triggered_by: string | null
+        }
+        Insert: {
+          absorbed_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          surviving_id: string
+          trigger_kind: Database["public"]["Enums"]["creator_alias_kind"]
+          trigger_value: string
+          triggered_by?: string | null
+        }
+        Update: {
+          absorbed_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          surviving_id?: string
+          trigger_kind?: Database["public"]["Enums"]["creator_alias_kind"]
+          trigger_value?: string
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_merge_log_surviving_id_fkey"
+            columns: ["surviving_id"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "creator_merge_log_surviving_id_fkey"
+            columns: ["surviving_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dailies_manual_comments: {
         Row: {
           comment_date: string
@@ -4003,6 +4099,8 @@ export type Database = {
           kyc_verified: boolean | null
           last_analysis_at: string | null
           master_wallet_address: string
+          merged_at: string | null
+          merged_into: string | null
           metadata: Json | null
           notes: string | null
           quick_dump_count: number | null
@@ -4042,6 +4140,8 @@ export type Database = {
           kyc_verified?: boolean | null
           last_analysis_at?: string | null
           master_wallet_address: string
+          merged_at?: string | null
+          merged_into?: string | null
           metadata?: Json | null
           notes?: string | null
           quick_dump_count?: number | null
@@ -4081,6 +4181,8 @@ export type Database = {
           kyc_verified?: boolean | null
           last_analysis_at?: string | null
           master_wallet_address?: string
+          merged_at?: string | null
+          merged_into?: string | null
           metadata?: Json | null
           notes?: string | null
           quick_dump_count?: number | null
@@ -4102,7 +4204,22 @@ export type Database = {
           wash_trading_detected?: boolean | null
           website_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "developer_profiles_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "developer_profiles_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       developer_tokens: {
         Row: {
@@ -20446,6 +20563,16 @@ export type Database = {
         | "troubleshooting"
         | "marketing"
         | "compliance"
+      creator_alias_kind:
+        | "wallet"
+        | "kyc_root"
+        | "x_user_id"
+        | "x_handle"
+        | "telegram_user_id"
+        | "telegram_handle"
+        | "discord_id"
+        | "discord_handle"
+        | "website_domain"
       web_tier_key:
         | "free"
         | "auth"
@@ -20599,6 +20726,17 @@ export const Constants = {
         "troubleshooting",
         "marketing",
         "compliance",
+      ],
+      creator_alias_kind: [
+        "wallet",
+        "kyc_root",
+        "x_user_id",
+        "x_handle",
+        "telegram_user_id",
+        "telegram_handle",
+        "discord_id",
+        "discord_handle",
+        "website_domain",
       ],
       web_tier_key: [
         "free",
