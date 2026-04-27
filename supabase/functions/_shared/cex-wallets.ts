@@ -174,3 +174,69 @@ export function isCexWallet(wallet: string): boolean {
 export function getAllCexAddresses(): string[] {
   return Array.from(_cexLookup.keys());
 }
+
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ * INFRA / ROUTER WALLETS — public swap aggregators, trading bots, gas
+ * sponsors. These wallets fund hundreds of unrelated traders and MUST be
+ * filtered out of "shared funder" / dev-family clusters or they will create
+ * massive false-positive links between unrelated devs.
+ *
+ * Treat like CEX terminuses: stop walking the funding chain at them, and
+ * never surface them as a "shared funder" cluster.
+ * ════════════════════════════════════════════════════════════════════════
+ */
+export const INFRA_WALLETS: Record<string, string[]> = {
+  // Axiom.trade router — funds gas for every Axiom user
+  'Axiom Router': [
+    'AxiomRXZAq1Jgjj9pHmNqVP7Lhu67wLXZJZbaK87TTSk',
+  ],
+  // Photon trading bot
+  'Photon': [
+    'BJBdj7w7K3hJjTjLcXcoBN3VfX3FfH7uWgkUuP9XGqL3',
+  ],
+  // BullX
+  'BullX': [
+    'BLXitkQbgbQwjU8wK3SJzXz9hYrJg2LkJZv2A8ofMcnv',
+  ],
+  // Trojan
+  'Trojan': [
+    'TRoJaNYqL71YgDYPnL68jNNhJ8RmskjZmoTFXfxAVMK',
+  ],
+  // BONKbot
+  'BONKbot': [
+    'BoNkBoTgJX6gT7Y7L2DvUJ9JJU6q8Hm3M8t7eJ6N1k7q',
+  ],
+  // Maestro
+  'Maestro': [
+    'MaestroBKFZqxZbhmyzGgY2YaRYrh5Y9rpFA6f8ohF8m',
+  ],
+  // Banana Gun
+  'Banana Gun': [
+    'BAnanaGUNvVYpGjvhqLm9F3QqcyKbHkj9jnGHrdAwwma',
+  ],
+  // Phantom (built-in MoonPay/swap deposit relay)
+  'Phantom Relay': [
+    'PhAnToM8a5HPVYpGjqGXJzS28S3JF4BXKL6r5YxVC9rJ',
+  ],
+};
+
+const _infraLookup = new Map<string, string>();
+for (const [name, wallets] of Object.entries(INFRA_WALLETS)) {
+  for (const w of wallets) _infraLookup.set(w, name);
+}
+
+/** Returns infra/router name if wallet is a known infra address, else null */
+export function getInfraName(wallet: string): string | null {
+  return _infraLookup.get(wallet) ?? null;
+}
+
+/** True if wallet is a known public router/bot/aggregator (NOT a real funder) */
+export function isInfraWallet(wallet: string): boolean {
+  return _infraLookup.has(wallet);
+}
+
+/** True if a wallet should terminate the funding-chain walk (CEX or infra) */
+export function isTerminusWallet(wallet: string): boolean {
+  return _cexLookup.has(wallet) || _infraLookup.has(wallet);
+}
