@@ -22,6 +22,7 @@ import { SharedFundersPanel } from "./SharedFundersPanel";
 import BubbleMap3D from "./BubbleMap3D";
 import BubbleMapSchematic from "./BubbleMapSchematic";
 import SnapshotShareDialog from "./SnapshotShareDialog";
+import { DailyTraceInfo } from "./DailyTraceInfo";
 
 type ViewMode = 'bubble' | 'tree' | '3d' | 'schematic';
 type SolarMode = 'minimum' | 'clusters';
