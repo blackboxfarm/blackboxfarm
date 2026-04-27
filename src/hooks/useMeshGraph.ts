@@ -748,7 +748,7 @@ export function useMeshGraph(initialEntityId?: string) {
             first_seen_at: now_ts,
             last_seen_at: now_ts,
           }, { onConflict: 'current_handle', ignoreDuplicates: true });
-          diagnostics.push(`📝 Registered @${cleanHandle} in x_account_registry for future cross-linking`);
+          diagnostics.push(`📝 Filed @${cleanHandle} into the watchlist — we'll cross-link it on the next sweep.`);
           console.log(`[MeshSpider] Registered X handle @${cleanHandle} in registry`);
         } catch (regErr) {
           console.warn('[MeshSpider] Handle registration failed:', regErr);
@@ -794,7 +794,7 @@ export function useMeshGraph(initialEntityId?: string) {
             // 2. Community discovery
             if (isBase58) {
               await autoDiscoverCommunity(normalizedInput, walletToTrace);
-              diagnostics.push('🏠 X Community auto-discovery ran');
+              diagnostics.push('🏠 Sweeping for X Community fingerprints…');
             }
           } catch (e) {
             console.warn('[MeshSpider] Fallback community discovery failed:', e);
@@ -888,7 +888,7 @@ export function useMeshGraph(initialEntityId?: string) {
             autoDiscoverCommunity(mint, result.resolvedWallet)
           );
           await Promise.allSettled(communityPromises);
-          diagnostics.push(`🏠 X Community auto-discovery ran for ${tokensToCheck.size} tokens`);
+          diagnostics.push(`🏠 Scanning ${tokensToCheck.size} token${tokensToCheck.size === 1 ? '' : 's'} for X Community fingerprints…`);
         }
 
         // ═══ FOLLOW THE MONEY (even on success) ═══
@@ -896,16 +896,16 @@ export function useMeshGraph(initialEntityId?: string) {
         const walletForChain = result.resolvedWallet;
         if (walletForChain && isBase58Check) {
           try {
-            diagnostics.push('💰 Tracing funding chain...');
+          diagnostics.push('💰 Following the money — tracing the funding chain…');
             setSpiderStatus(prev => ({ ...prev, stage: '💰 Following the money...' }));
             const { data: kycData } = await supabase.functions.invoke('mesh-kyc-deep-search', {
               body: { walletAddress: walletForChain, maxDepth: 5 },
             });
             if (kycData?.kycRoot) {
-              diagnostics.push(`🏦 KYC Root: ${kycData.kycRoot.slice(0, 16)}...`);
+              diagnostics.push(`🏦 KYC root surfaced: ${kycData.kycRoot.slice(0, 16)}…`);
             }
             if (kycData?.chain?.length) {
-              diagnostics.push(`✅ ${kycData.chain.length} funding hops traced`);
+              diagnostics.push(`🔗 ${kycData.chain.length} funding hops mapped`);
             }
           } catch (e) {
             console.warn('[MeshSpider] Follow-the-money trace failed:', e);
