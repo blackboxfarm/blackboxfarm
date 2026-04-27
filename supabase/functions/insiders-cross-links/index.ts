@@ -53,6 +53,28 @@ serve(async (req) => {
 
     const all = rows || [];
 
+    // ── Fused-creator stats: how many distinct Creator Profiles do these
+    // wallets resolve to? (after the fusion system has been seeded)
+    const distinctCreatorWallets = [
+      ...new Set(all.filter((r) => r.creator_wallet).map((r) => r.creator_wallet)),
+    ];
+    let fusedCreatorCount = distinctCreatorWallets.length; // worst-case: every wallet is its own profile
+    let walletToCreator = new Map<string, string>();
+    if (distinctCreatorWallets.length > 0) {
+      const { data: aliasRows } = await supabase
+        .from('creator_identity_aliases')
+        .select('alias_value, creator_id')
+        .eq('alias_kind', 'wallet')
+        .in('alias_value', distinctCreatorWallets);
+      for (const a of (aliasRows || []) as any[]) {
+        walletToCreator.set(a.alias_value, a.creator_id);
+      }
+      // Distinct creator_ids + wallets that haven't been fused yet (each unfused wallet still counts as 1 creator).
+      const fusedIds = new Set(walletToCreator.values());
+      const unfusedWallets = distinctCreatorWallets.filter((w) => !walletToCreator.has(w));
+      fusedCreatorCount = fusedIds.size + unfusedWallets.length;
+    }
+
     // ── 1. Shared creator wallet ──
     const byCreator = new Map<string, any[]>();
     for (const r of all) {
@@ -127,6 +149,10 @@ serve(async (req) => {
           totalRows: all.length,
           rowsWithCreator: all.filter((r) => r.creator_wallet).length,
           rowsWithKyc: all.filter((r) => r.genealogy_kyc_root).length,
+          distinctCreatorWallets: distinctCreatorWallets.length,
+          fusedCreatorCount,
+          distinctTokens: all.length,
+          distinctKycRoots: new Set(all.filter((r) => r.genealogy_kyc_root).map((r) => r.genealogy_kyc_root)).size,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
