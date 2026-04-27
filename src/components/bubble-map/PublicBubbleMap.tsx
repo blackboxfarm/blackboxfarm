@@ -1301,10 +1301,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
               <Plus className="h-3 w-3" />
             </Button>
-            {/* Schematic Prune / Branches toggle — sits inside the spacing control group
-                so it lives next to the internal +/- icons. Shows the OPPOSITE button to
-                the current state, so one click flips the mode. */}
-            {viewMode === 'schematic' && (
+            {/* Prune / Branches toggle — sits inside the spacing control group so it
+                lives next to the internal +/- icons. Always visible: prune strips
+                funders/siblings/KYC roots in every view (Bubble, Tree, Schematic, 3D),
+                Branches restores the full mesh. One click flips the mode. */}
+            {(
               schematicMode === 'branches' ? (
                 <Button
                   variant="ghost"
