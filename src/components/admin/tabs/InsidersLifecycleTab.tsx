@@ -546,7 +546,7 @@ export default function InsidersLifecycleTab() {
                     <TableRow
                       key={r.id}
                       className="cursor-pointer hover:bg-muted/40"
-                      onClick={() => setDrillDown(r)}
+                      onClick={() => openDrillDown(r)}
                     >
                       <TableCell className="text-xs whitespace-nowrap">
                         {new Date(r.first_called_at).toLocaleString()}
@@ -720,7 +720,7 @@ export default function InsidersLifecycleTab() {
                             key={t.token_mint}
                             onClick={() => {
                               const full = rows.find(r => r.token_mint === t.token_mint);
-                              if (full) setDrillDown(full);
+                              if (full) openDrillDown(full);
                             }}
                             className={`px-2 py-1 rounded text-xs border transition-colors hover:opacity-80 ${
                               t.is_rugged ? 'bg-red-500/10 border-red-500/30 text-red-400'
