@@ -614,24 +614,42 @@ export default function InsidersLifecycleTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>First called</TableHead>
-                    <TableHead>Symbol</TableHead>
+                    <TableHead className="cursor-pointer select-none w-12" onClick={() => toggleSort('ordinal')}>
+                      # <SortIcon k="ordinal" />
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('first_called_at')}>
+                      First called <SortIcon k="first_called_at" />
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('token_symbol')}>
+                      Symbol <SortIcon k="token_symbol" />
+                    </TableHead>
                     <TableHead>Mint</TableHead>
-                    <TableHead className="text-right">Entry MC</TableHead>
-                    <TableHead className="text-right">Peak X</TableHead>
-                    <TableHead className="text-right">Peak MC</TableHead>
-                    <TableHead>Lifespan</TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('entry_market_cap')}>
+                      Entry MC <SortIcon k="entry_market_cap" />
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('peak_multiplier')}>
+                      Peak X <SortIcon k="peak_multiplier" />
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('peak_market_cap')}>
+                      Peak MC <SortIcon k="peak_market_cap" />
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('lifespan_minutes')}>
+                      Lifespan <SortIcon k="lifespan_minutes" />
+                    </TableHead>
                     <TableHead>Mesh</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((r) => (
+                  {pageRows.map((r, idx) => (
                     <TableRow
                       key={r.id}
                       className="cursor-pointer hover:bg-muted/40"
                       onClick={() => openDrillDown(r)}
                     >
+                      <TableCell className="text-xs text-muted-foreground tabular-nums">
+                        {pageStart + idx + 1}
+                      </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {new Date(r.first_called_at).toLocaleString()}
                       </TableCell>
