@@ -64,6 +64,10 @@ function pruneToTokenAndSocials(graphData: { nodes: any[]; links: any[] }) {
   const keep = new Set<string>();
   keep.add(tokenNode.id);
   if (devNode) keep.add(devNode.id);
+  // Keep ALL KYC root nodes — they are CORE, not a branch ("pot of gold").
+  for (const n of graphData.nodes) {
+    if (n.type === 'kyc_root') keep.add(n.id);
+  }
 
   // Keep socials directly linked to the token.
   for (const l of graphData.links) {
