@@ -825,18 +825,41 @@ export default function InsidersLifecycleTab() {
       {/* Wallet Cross-Links — RedFlag/GreenFlag detector */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 flex-wrap">
             <Network className="h-5 w-5" /> Wallet Cross-Links
             {crossLinks?.stats && (
               <span className="text-xs font-normal text-muted-foreground ml-2">
                 {crossLinks.stats.rowsWithCreator} creators • {crossLinks.stats.rowsWithKyc} KYC roots
-                {crossLinks.stats.rowsWithKyc === 0 && (
-                  <span className="ml-2 text-amber-400">
-                    (run "Rescan KYC (free)" or "Retrace Insiders KYC" in Utilities → Genealogy to populate)
-                  </span>
-                )}
               </span>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleRescanKyc()}
+                disabled={rescanRunning || tracingKyc}
+                className="gap-1.5"
+                title="Re-checks every existing chain wallet against the current CEX dictionary. Zero RPC cost."
+              >
+                {rescanRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                <span className="text-xs">Rescan KYC (free)</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={handleTraceKyc}
+                disabled={tracingKyc || rescanRunning}
+                className="gap-1.5"
+                title="Re-walks every Insiders token's funding chain to KYC. Uses Helius credits."
+              >
+                {tracingKyc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                <span className="text-xs">
+                  {tracingKyc && traceProgress
+                    ? `Retracing… ${traceProgress.done}/${traceProgress.total}`
+                    : 'Retrace Insiders KYC'}
+                </span>
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
