@@ -997,23 +997,54 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             )}
           </div>
 
-          {/* Spider Status */}
-          {spiderStatus.active && (
+          {/* Spider Status / Diagnostics — sticky per-trace, dismissible */}
+          {mode !== 'promo' &&
+            !diagnosticsDismissed &&
+            (spiderStatus.active ||
+              (spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0)) && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <Radar className="h-3.5 w-3.5 text-primary animate-spin" />
-                <span className="text-xs font-medium text-primary">{spiderStatus.stage}</span>
-              </div>
-              {mode !== 'promo' && spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
-                <button onClick={() => setShowDiagnostics(!showDiagnostics)}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
-                  {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  Diagnostics ({spiderStatus.diagnostics.length})
+                {spiderStatus.active ? (
+                  <Radar className="h-3.5 w-3.5 text-primary animate-spin" />
+                ) : (
+                  <SearchCheck className="h-3.5 w-3.5 text-primary" />
+                )}
+                <span className="text-xs font-medium text-primary flex-1 truncate">
+                  {spiderStatus.active
+                    ? spiderStatus.stage
+                    : 'Following the money — trace complete'}
+                </span>
+                {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                    title={showDiagnostics ? 'Collapse diagnostics' : 'Expand diagnostics'}
+                  >
+                    {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    Diagnostics ({spiderStatus.diagnostics.length})
+                  </button>
+                )}
+                <button
+                  onClick={() => setDiagnosticsDismissed(true)}
+                  className="text-muted-foreground hover:text-foreground"
+                  title="Dismiss diagnostics panel"
+                  aria-label="Dismiss diagnostics"
+                >
+                  <XIcon className="h-3.5 w-3.5" />
                 </button>
-              )}
-              {mode !== 'promo' && showDiagnostics && spiderStatus.diagnostics && (
+              </div>
+              {showDiagnostics && spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
                 <div className="rounded bg-background/50 p-2 space-y-0.5 text-[10px] font-mono text-muted-foreground">
                   {spiderStatus.diagnostics.map((d, i) => <div key={i}>{d}</div>)}
+                  {/* Helpful instruction when trace finished but no KYC root was identified */}
+                  {!spiderStatus.active &&
+                    !kycFound &&
+                    graphData.nodes.some(n => n.type === 'wallet') && (
+                    <div className="mt-2 pt-2 border-t border-border/40 text-amber-400">
+                      ↳ no KYC root in this sweep — press{' '}
+                      <span className="font-semibold">“Find KYC Root”</span> for a Deep Trace.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
