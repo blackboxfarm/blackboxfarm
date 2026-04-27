@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { fuseAndAudit } from '../_shared/fuse-and-audit.ts';
 enableHeliusTracking('token-creator-linker');
 
 const corsHeaders = {
@@ -154,38 +155,43 @@ Deno.serve(withRunLog('token-creator-linker', async (req) => {
 
         console.log(`[CreatorLinker] Found creator ${creatorWallet} for ${tokenMint}`);
 
-        // Check if developer profile exists
-        let { data: profile } = await supabase
-          .from('developer_profiles')
+        // Resolve OR mint developer profile via unified Creator Fusion.
+        // This automatically merges duplicates and attaches X / TG / website signals
+        // when token_social_links are available.
+        const { data: socials } = await supabase
+          .from('token_social_links')
+          .select('twitter, telegram, website, discord')
+          .eq('token_mint', tokenMint)
+          .maybeSingle();
+
+        const fused = await fuseAndAudit(
+          {
+            devWallet: creatorWallet,
+            xHandle: socials?.twitter || null,
+            telegramHandle: socials?.telegram || null,
+            discordHandle: socials?.discord || null,
+            websiteDomain: socials?.website || null,
+            displayName: `Dev ${creatorWallet.slice(0, 8)}`,
+            source: 'token-creator-linker',
+          },
+          supabase,
+          { throwOnError: true },
+        );
+        if (!fused) {
+          console.error(`[CreatorLinker] Fusion returned null for ${tokenMint}`);
+          results.failed++;
+          continue;
+        }
+        const developerId = fused.creatorId;
+        if (fused.isNew) results.created++;
+
+        // Ensure the wallet is registered in developer_wallets (idempotent).
+        const { data: existingWallet } = await supabase
+          .from('developer_wallets')
           .select('id')
-          .eq('master_wallet_address', creatorWallet)
-          .single();
-
-        let developerId = profile?.id;
-
-        // Create profile if doesn't exist
-        if (!profile) {
-          const { data: newProfile, error: profileError } = await supabase
-            .from('developer_profiles')
-            .insert({
-              master_wallet_address: creatorWallet,
-              display_name: `Dev ${creatorWallet.slice(0, 8)}`,
-              reputation_score: 50,
-              trust_level: 'neutral',
-            })
-            .select('id')
-            .single();
-
-          if (profileError) {
-            console.error(`[CreatorLinker] Error creating profile:`, profileError);
-            results.failed++;
-            continue;
-          }
-
-          developerId = newProfile.id;
-          results.created++;
-
-          // Add wallet to developer_wallets
+          .eq('wallet_address', creatorWallet)
+          .maybeSingle();
+        if (!existingWallet) {
           await supabase.from('developer_wallets').insert({
             developer_id: developerId,
             wallet_address: creatorWallet,
