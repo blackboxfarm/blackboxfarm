@@ -24,7 +24,7 @@ export default function BubblePromo() {
   }
   return (
     <SiteLayout>
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6" data-oracle-hint="1 free deep scan per day — paste a token address to start" data-oracle-zone="bubblepromo-main">
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6" data-oracle-hint="1 free Trace/day for visitors · sign up free for 3/day · paste a token address to start" data-oracle-zone="bubblepromo-main">
         <PublicBubbleMap mode="promo" showUpgradePrompt initialToken={initialToken || undefined} />
 
         {/* Testimonial Carousel */}
