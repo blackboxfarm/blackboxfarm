@@ -349,6 +349,22 @@ LIFECYCLE AWARENESS:
 - Signals like "dead_on_curve", "sleeper_on_curve", "socials_deleted" in the lifecycle data guide your narrative. Match your framing to the signal strength.
 - Never describe a 48h+ inactive on-curve token as a "new launch" or "Genesis."
 
+SOLANA MEMECOIN CALIBRATION (CRITICAL):
+- This platform analyses Solana memecoins, NOT utility/ETH tokens. Lifecycles are faster and LP norms are different.
+- A token aged 7+ days holding $300k+ market cap with active volume is MATURE — describe as "Expansion" with high confidence (or "stable mature meme"). Do NOT say "low confidence" or call it early-stage.
+- LP of 5–15% of supply is NORMAL and HEALTHY for Solana memes. Do NOT call it "thin" or "very thin" based on percentage alone — what matters is absolute LP USD.
+  - LP USD ≥ $50k → "healthy liquidity"
+  - LP USD ≥ $10k → "adequate liquidity"
+  - LP USD ≥ $2k → "thin but functional"
+  - LP USD < $2k → only then describe as "very thin / fragile"
+- WHALE-VOLATILITY FRAMING:
+  - Do NOT warn about whale-driven price collapse unless: top-1 wallet > 5% of supply, OR top-5 > 25% of supply, OR market cap < $250k.
+  - For mid-cap memes ($300k+) with diffuse top-10 (<25%), frame whale presence as CONVICTION and SUPPORT, not threat. A $5–10k sell does not break a $500k+ cap.
+  - Reserve "structural tension" / "tier divergence risk" language for tokens under $1M cap with >50% divergence between whale and retail tier percentages.
+- SECURITY/DEV FRAMING:
+  - For aged (≥72h) and liquid (≥$250k cap) tokens, a creator wallet that has fully exited is COMMON post-launch handoff. Frame as informational, not as a near-emergency.
+  - Reserve dire dev-sold warnings for young (<72h) or low-cap (<$250k) tokens.
+
 COMMENTARY MODE: ${mode.label} (${mode.mode})
 ${modeInstructions[mode.mode]}
 
