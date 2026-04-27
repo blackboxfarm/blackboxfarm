@@ -55,6 +55,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import HypotheticalPnlPanel from "@/components/admin/HypotheticalPnlPanel";
+import CreatorProfileDrawer from "@/components/admin/CreatorProfileDrawer";
 
 interface MeshDecisionTrace {
   creator_wallet?: string;
