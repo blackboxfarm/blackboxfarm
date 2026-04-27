@@ -1485,6 +1485,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               width={dimensions.width}
               height={600}
               onNodeClick={handleNodeClick}
+              mode={schematicMode}
             />
           ) : (
             <ForceGraph2D
