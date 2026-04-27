@@ -228,9 +228,23 @@ export default function InsidersLifecycleTab() {
 
   const fetchRows = async () => {
     setLoading(true);
+    // Lean column list — exclude heavy JSON columns (mesh_decision_trace,
+    // milestone_timeline, genealogy_chain) which are only needed in the
+    // drill-down dialog. With 1300+ rows the heavy columns add several MB
+    // to the initial payload and cause noticeable lag on tab open.
+    const LEAN_COLUMNS = [
+      'id', 'token_mint', 'token_symbol', 'first_called_at',
+      'entry_market_cap', 'entry_mc_text',
+      'peak_multiplier', 'peak_market_cap', 'peak_reached_at',
+      'milestone_count', 'lifespan_minutes',
+      'creator_wallet', 'creator_risk_tier', 'is_rugged',
+      'mesh_promotion_status', 'mesh_promotion_reason',
+      'dev_history_warning', 'total_messages',
+      'genealogy_depth', 'genealogy_kyc_root',
+    ].join(',');
     const { data, error } = await supabase
       .from("telegram_insider_token_lifecycle")
-      .select("*")
+      .select(LEAN_COLUMNS)
       .order("peak_multiplier", { ascending: false })
       .limit(2000);
     if (error) {
