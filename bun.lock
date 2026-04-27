@@ -8,7 +8,7 @@
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
-        "@fingerprintjs/fingerprintjs": "^4.6.2",
+        "@fingerprintjs/fingerprintjs": "^5.2.0",
         "@hookform/resolvers": "^3.10.0",
         "@marsidev/react-turnstile": "^1.5.0",
         "@otplib/preset-default": "^12.0.1",
@@ -366,7 +366,7 @@
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.3.4", "", { "dependencies": { "@eslint/core": "^0.15.1", "levn": "^0.4.1" } }, "sha512-Ul5l+lHEcw3L5+k8POx6r74mxEYKG5kOb6Xpy2gCRW6zweT6TEhAf8vhxGgjhqrd/VO/Dirhsb+1hNpD1ue9hw=="],
 
-    "@fingerprintjs/fingerprintjs": ["@fingerprintjs/fingerprintjs@4.6.2", "", { "dependencies": { "tslib": "^2.4.1" } }, "sha512-g8mXuqcFKbgH2CZKwPfVtsUJDHyvcgIABQI7Y0tzWEFXpGxJaXuAuzlifT2oTakjDBLTK4Gaa9/5PERDhqUjtw=="],
+    "@fingerprintjs/fingerprintjs": ["@fingerprintjs/fingerprintjs@5.2.0", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@fingerprintjs/fingerprintjs/-/fingerprintjs-5.2.0.tgz", {}, "sha512-j+2nInkwCQNTJcNhOjvkGM/nLRTuGJTC6xai4quqvUpjob2ssrGwBZjS7k55nOmKvge7qvJT2nS3i/IRvQSTQA=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.7.2", "", { "dependencies": { "@floating-ui/utils": "^0.2.10" } }, "sha512-wNB5ooIKHQc+Kui96jE/n69rHFWAVoxn5CAzL1Xdd8FG03cgY3MLO+GF9U3W737fYDSgPWA6MReKhBQBop6Pcw=="],
 

@@ -2409,6 +2409,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bubble_map_anon_usage: {
+        Row: {
+          count: number
+          day: string
+          first_seen: string
+          id: string
+          identifier_hash: string
+          ip_hash: string | null
+          last_seen: string
+          user_agent_short: string | null
+          visitor_hash: string | null
+        }
+        Insert: {
+          count?: number
+          day?: string
+          first_seen?: string
+          id?: string
+          identifier_hash: string
+          ip_hash?: string | null
+          last_seen?: string
+          user_agent_short?: string | null
+          visitor_hash?: string | null
+        }
+        Update: {
+          count?: number
+          day?: string
+          first_seen?: string
+          id?: string
+          identifier_hash?: string
+          ip_hash?: string | null
+          last_seen?: string
+          user_agent_short?: string | null
+          visitor_hash?: string | null
+        }
+        Relationships: []
+      }
       bubble_snapshots: {
         Row: {
           commentary: string | null
@@ -20121,6 +20157,7 @@ export type Database = {
         Args: { target_user_id: string }
         Returns: boolean
       }
+      cleanup_bubble_map_anon_usage: { Args: never; Returns: undefined }
       cleanup_dead_letter_queue: {
         Args: { retention_days?: number }
         Returns: number
