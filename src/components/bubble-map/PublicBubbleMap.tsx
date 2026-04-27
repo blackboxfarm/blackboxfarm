@@ -842,6 +842,30 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       }
     }
 
+    // PRUNE mode (applies in ALL view modes, not just schematic):
+    // keep only the central token, the dev wallet, and socials directly linked
+    // to the token. Strips funder chains, sibling wallets, KYC roots, etc.
+    if (schematicMode === 'prune' && baseNodes.length > 0) {
+      const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
+      const tokenNode = baseNodes.find(n => n.type === 'token');
+      if (tokenNode) {
+        const keep = new Set<string>();
+        keep.add(tokenNode.id);
+        const devNode = baseNodes.find((n: any) => n.type === 'wallet' && (n as any).isDev);
+        if (devNode) keep.add(devNode.id);
+        for (const l of graphData.links) {
+          const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
+          const t = typeof l.target === 'string' ? l.target : (l.target as any).id;
+          if (s === tokenNode.id || t === tokenNode.id) {
+            const otherId = s === tokenNode.id ? t : s;
+            const other = baseNodes.find(n => n.id === otherId);
+            if (other && SOCIAL_TYPES.has(other.type)) keep.add(other.id);
+          }
+        }
+        baseNodes = baseNodes.filter(n => keep.has(n.id));
+      }
+    }
+
     const nodeIds = new Set(baseNodes.map(n => n.id));
     const baseLinks = graphData.links.filter(l =>
       nodeIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
@@ -849,7 +873,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     );
 
     return { nodes: baseNodes, links: baseLinks };
-  }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode]);
+  }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode, schematicMode]);
 
   const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
