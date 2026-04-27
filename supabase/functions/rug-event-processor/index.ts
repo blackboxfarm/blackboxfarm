@@ -93,30 +93,37 @@ Deno.serve(withRunLog('rug-event-processor', async (req) => {
     }
 
     if (!devProfile) {
-      // Create new developer profile
-      const { data: newProfile, error: createError } = await supabase
-        .from('developer_profiles')
-        .insert({
-          master_wallet_address: creator_wallet,
-          display_name: `Dev ${creator_wallet.slice(0, 8)}`,
-          reputation_score: 0,
-          integrity_score: 0,
-          trust_level: 'scammer',
-          rug_pull_count: 1,
-          total_tokens_created: 1,
-          failed_tokens: 1,
-          source: 'rug_event_processor',
-          blacklist_reason: `${rug_type}: ${token_symbol || token_mint}`,
-        })
-        .select()
-        .single();
-
-      if (createError) {
-        console.error('Failed to create developer profile:', createError);
-      } else {
-        devProfile = newProfile;
-        results.developer_updated = true;
-        console.log(`   Created new developer profile: ${devProfile.id}`);
+      // Use unified Creator Fusion to find OR mint the profile, then update with rug data.
+      try {
+        const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts');
+        const fused = await fuseAndAudit(
+          { devWallet: creator_wallet, source: 'rug-event-processor' },
+          supabase,
+          { throwOnError: true },
+        );
+        if (fused) {
+          // Apply rug-specific fields on top of fused profile.
+          const { data: updated } = await supabase
+            .from('developer_profiles')
+            .update({
+              display_name: `Dev ${creator_wallet.slice(0, 8)}`,
+              reputation_score: 0,
+              integrity_score: 0,
+              trust_level: 'scammer',
+              rug_pull_count: 1,
+              total_tokens_created: 1,
+              failed_tokens: 1,
+              blacklist_reason: `${rug_type}: ${token_symbol || token_mint}`,
+            })
+            .eq('id', fused.creatorId)
+            .select()
+            .single();
+          devProfile = updated;
+          results.developer_updated = true;
+          console.log(`   Fused/created developer profile: ${devProfile?.id}`);
+        }
+      } catch (createError) {
+        console.error('Failed to create developer profile via fusion:', createError);
       }
     } else {
       // Update existing developer profile
