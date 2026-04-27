@@ -200,6 +200,13 @@ export default function InsidersLifecycleTab() {
   const [drillDownLoading, setDrillDownLoading] = useState(false);
   const [rowActioning, setRowActioning] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+  const [lastBuildAt, setLastBuildAt] = useState<string | null>(null);
+  // Sorting + pagination (client-side; full table is already in memory)
+  type SortKey = 'ordinal' | 'first_called_at' | 'token_symbol' | 'entry_market_cap' | 'peak_multiplier' | 'peak_market_cap' | 'lifespan_minutes';
+  const [sortKey, setSortKey] = useState<SortKey>('peak_multiplier');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 100;
 
   // Open drill-down dialog: shows lean row immediately, then hydrates the
   // heavy JSON columns (mesh_decision_trace, milestone_timeline,
