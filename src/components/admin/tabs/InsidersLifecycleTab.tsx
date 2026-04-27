@@ -563,10 +563,10 @@ export default function InsidersLifecycleTab() {
               </HoverCard>
             </div>
             <Button
-              onClick={() => downloadCSV(filtered)}
+              onClick={() => downloadCSV(sorted)}
               size="sm"
               variant="outline"
-              disabled={filtered.length === 0}
+              disabled={sorted.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />Export CSV
             </Button>
