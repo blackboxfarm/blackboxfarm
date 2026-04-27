@@ -739,15 +739,40 @@ export default function InsidersLifecycleTab() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
+                  {pageRows.length === 0 && (
+                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
           )}
-          <div className="text-xs text-muted-foreground">
-            Showing {filtered.length} of {rows.length} tokens. Click a row for the full milestone timeline & mesh decision.
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+            <div className="text-xs text-muted-foreground">
+              Showing {sorted.length === 0 ? 0 : pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, sorted.length)} of {sorted.length.toLocaleString()} matched
+              <span className="opacity-70"> ({rows.length.toLocaleString()} total tokens)</span>
+              . Click a row for the full milestone timeline & mesh decision.
+            </div>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage <= 1}
+                onClick={() => setPage(1)}
+              >« First</Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              ><ChevronLeft className="h-3.5 w-3.5" /> Prev</Button>
+              <span className="text-xs text-muted-foreground tabular-nums px-2">
+                Page {safePage} / {totalPages}
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >Next <ChevronRight className="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage(totalPages)}
+              >Last »</Button>
+            </div>
           </div>
         </CardContent>
       </Card>
