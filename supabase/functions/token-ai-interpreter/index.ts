@@ -30,6 +30,42 @@ function bucketLiquidityCoverage(unlockedToLpRatio: number): MetricBucket {
   return { value: unlockedToLpRatio, bucket: "very-thin" };
 }
 
+/**
+ * Solana-meme-aware liquidity bucketing.
+ * Memes commonly run with 5–15% LP — judging on absolute LP USD is far more honest
+ * than the unlocked/LP ratio. Ratio is only used as a tiebreaker when LP USD is missing.
+ * Optional secondary LPs (Meteora/Orca/Raydium duplicate pools) bump the bucket up one tier.
+ */
+function bucketLiquidityCoverageV2(
+  liquidityUsd: number | null,
+  unlockedToLpRatio: number,
+  secondaryLpsCount: number = 0,
+): MetricBucket {
+  let bucket: string;
+  let value: number;
+
+  if (liquidityUsd != null && liquidityUsd > 0) {
+    value = liquidityUsd;
+    if (liquidityUsd >= 50_000) bucket = "healthy";
+    else if (liquidityUsd >= 10_000) bucket = "adequate";
+    else if (liquidityUsd >= 2_000) bucket = "thin";
+    else bucket = "very-thin";
+  } else {
+    // Fallback to ratio when LP USD unknown
+    value = unlockedToLpRatio;
+    if (unlockedToLpRatio < 5) bucket = "adequate";
+    else if (unlockedToLpRatio < 12) bucket = "thin";
+    else bucket = "very-thin";
+  }
+
+  // Secondary LP bump — each extra pool de-risks the dependency on a single LP
+  if (secondaryLpsCount >= 1 && bucket === "very-thin") bucket = "thin";
+  else if (secondaryLpsCount >= 1 && bucket === "thin") bucket = "adequate";
+  else if (secondaryLpsCount >= 2 && bucket === "adequate") bucket = "healthy";
+
+  return { value, bucket };
+}
+
 function bucketResilienceScore(score: number): MetricBucket {
   if (score < 40) return { value: score, bucket: "weak" };
   if (score < 70) return { value: score, bucket: "moderate" };
@@ -38,8 +74,9 @@ function bucketResilienceScore(score: number): MetricBucket {
 
 function bucketTierDivergence(whalePercent: number, retailPercent: number): MetricBucket {
   const divergence = Math.abs(whalePercent - retailPercent);
-  if (divergence < 15) return { value: divergence, bucket: "low" };
-  if (divergence < 35) return { value: divergence, bucket: "medium" };
+  // Solana-meme calibration: tier divergence is structurally normal — only flag extreme gaps
+  if (divergence < 25) return { value: divergence, bucket: "low" };
+  if (divergence < 50) return { value: divergence, bucket: "medium" };
   return { value: divergence, bucket: "high" };
 }
 
