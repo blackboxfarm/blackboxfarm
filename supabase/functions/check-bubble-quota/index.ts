@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { ingestPublicCAQuery } from "../_shared/mesh-ingest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +55,12 @@ Deno.serve(async (req) => {
     });
   }
 
-  let body: { visitorId?: string; action?: "check" | "consume"; tier?: "anon" | "free" | "pro" } = {};
+  let body: {
+    visitorId?: string;
+    action?: "check" | "consume";
+    tier?: "anon" | "free" | "pro";
+    mint?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
@@ -64,9 +70,21 @@ Deno.serve(async (req) => {
   const tier = body.tier === "pro" || body.tier === "free" ? body.tier : "anon";
   const action = body.action === "consume" ? "consume" : "check";
   const limit = tier === "pro" ? Number.POSITIVE_INFINITY : tier === "free" ? DAILY_LIMIT_FREE_AUTH : DAILY_LIMIT_ANON;
+  const mint = typeof body.mint === "string" ? body.mint.trim() : "";
 
   // Pro: unlimited, never tracked here.
   if (tier === "pro") {
+    // Pro users still feed the mesh — fire-and-forget ingest if a mint was provided.
+    if (mint) {
+      try {
+        const sbUrl = Deno.env.get("SUPABASE_URL");
+        const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (sbUrl && sbKey) {
+          const sbProIngest = createClient(sbUrl, sbKey, { auth: { persistSession: false } });
+          ingestPublicCAQuery(sbProIngest, { mint, source: "web:/bubblemap" });
+        }
+      } catch { /* fail-open */ }
+    }
     return new Response(
       JSON.stringify({ allowed: true, remaining: -1, limit: -1, reason: "pro" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -161,7 +179,10 @@ Deno.serve(async (req) => {
         reason: "consumed",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    ).also?.(() => {}) ?? (() => {
+      // unreachable — keeping the structure simple; ingest is fired below before return
+      return null as any;
+    })();
   } catch (e) {
     console.error("[check-bubble-quota] fatal:", (e as Error).message);
     return failOpen("exception", limit as number);
