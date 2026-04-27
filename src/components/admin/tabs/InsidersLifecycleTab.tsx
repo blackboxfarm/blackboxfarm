@@ -1230,6 +1230,12 @@ export default function InsidersLifecycleTab() {
           )}
         </DialogContent>
       </Dialog>
+
+      <CreatorProfileDrawer
+        open={creatorDrawerOpen}
+        onOpenChange={setCreatorDrawerOpen}
+        query={creatorSearchQuery}
+      />
     </div>
   );
 }
