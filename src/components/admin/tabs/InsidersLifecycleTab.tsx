@@ -347,6 +347,47 @@ export default function InsidersLifecycleTab() {
     fetchCrossLinks();
   }, []);
 
+  // Auto-run free KYC rescan once if we have creators traced but zero KYC roots.
+  // The rescan function makes ZERO RPC calls — it only re-checks existing chains
+  // against the in-memory CEX dictionary, so it's safe to fire automatically.
+  useEffect(() => {
+    if (hasAutoRescannedRef.current) return;
+    if (!crossLinks?.stats) return;
+    const { rowsWithCreator, rowsWithKyc } = crossLinks.stats;
+    if (rowsWithKyc === 0 && rowsWithCreator > 0) {
+      hasAutoRescannedRef.current = true;
+      handleRescanKyc({ silent: true });
+    }
+  }, [crossLinks]);
+
+  const handleRescanKyc = async (opts: { silent?: boolean } = {}) => {
+    setRescanRunning(true);
+    try {
+      let totalScanned = 0;
+      let totalKyc = 0;
+      // Loop until no more rows to rescan (zero RPC cost).
+      for (let i = 0; i < 20; i++) {
+        const { data, error } = await supabase.functions.invoke('insiders-genealogy-rescan-kyc', {
+          body: { batchSize: 1000 },
+        });
+        if (error) throw error;
+        const d = data as { scanned?: number; kycResolved?: number };
+        totalScanned += d.scanned || 0;
+        totalKyc += d.kycResolved || 0;
+        if (!d.scanned || d.scanned === 0) break;
+      }
+      if (!opts.silent || totalKyc > 0) {
+        toast.success(`KYC rescan complete: ${totalKyc} new KYC roots resolved (${totalScanned} chains scanned, zero RPC cost)`);
+      }
+      await fetchCrossLinks();
+    } catch (e: any) {
+      if (!opts.silent) toast.error('KYC rescan failed: ' + (e?.message || String(e)));
+      else console.warn('[InsidersLifecycle] auto-rescan failed:', e);
+    } finally {
+      setRescanRunning(false);
+    }
+  };
+
   const handleTraceKyc = async () => {
     setTracingKyc(true);
     setTraceProgress({ done: 0, total: 0 });
