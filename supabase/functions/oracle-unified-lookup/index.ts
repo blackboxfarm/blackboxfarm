@@ -6,6 +6,7 @@ import { discoverFundingChain } from '../_shared/funding-resolver.ts';
 import { isSolscanUsable } from '../_shared/provider-health.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
