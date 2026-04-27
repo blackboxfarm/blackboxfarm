@@ -74,17 +74,26 @@ export function useBubbleMapRateLimit() {
   const isLimited = !isSubscriber;
   const canSearch = remaining > 0 || isSubscriber;
 
-  const recordSearch = useCallback(async () => {
+  const recordSearch = useCallback(async (mint?: string) => {
+    // Note: Pro subscribers skip quota tracking but STILL ping the function so the
+    // mesh gets the demand signal (Phase 1 mesh symmetry).
     if (isSubscriber) {
-      console.log('[BubbleMapRateLimit] Subscriber — no limit tracked');
+      try {
+        const visitorId = await getVisitorId();
+        await supabase.functions.invoke('check-bubble-quota', {
+          body: { visitorId, action: 'check', tier: 'pro', mint: mint ?? undefined },
+        });
+      } catch { /* fail-open */ }
+      console.log('[BubbleMapRateLimit] Subscriber — no limit tracked, mesh fed');
       return;
     }
-    // Server-side consume (fail-open)
+    // Server-side consume (fail-open) — forwards mint so the edge function
+    // can stamp holders_intel_seen_tokens + reputation_mesh.
     try {
       const visitorId = await getVisitorId();
       const tier: 'anon' | 'free' = user ? 'free' : 'anon';
       const { data, error } = await supabase.functions.invoke('check-bubble-quota', {
-        body: { visitorId, action: 'consume', tier },
+        body: { visitorId, action: 'consume', tier, mint: mint ?? undefined },
       });
       if (!error && data && typeof data.remaining === 'number') {
         setServerRemaining(Math.max(0, data.remaining));
