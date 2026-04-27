@@ -30,6 +30,42 @@ function bucketLiquidityCoverage(unlockedToLpRatio: number): MetricBucket {
   return { value: unlockedToLpRatio, bucket: "very-thin" };
 }
 
+/**
+ * Solana-meme-aware liquidity bucketing.
+ * Memes commonly run with 5–15% LP — judging on absolute LP USD is far more honest
+ * than the unlocked/LP ratio. Ratio is only used as a tiebreaker when LP USD is missing.
+ * Optional secondary LPs (Meteora/Orca/Raydium duplicate pools) bump the bucket up one tier.
+ */
+function bucketLiquidityCoverageV2(
+  liquidityUsd: number | null,
+  unlockedToLpRatio: number,
+  secondaryLpsCount: number = 0,
+): MetricBucket {
+  let bucket: string;
+  let value: number;
+
+  if (liquidityUsd != null && liquidityUsd > 0) {
+    value = liquidityUsd;
+    if (liquidityUsd >= 50_000) bucket = "healthy";
+    else if (liquidityUsd >= 10_000) bucket = "adequate";
+    else if (liquidityUsd >= 2_000) bucket = "thin";
+    else bucket = "very-thin";
+  } else {
+    // Fallback to ratio when LP USD unknown
+    value = unlockedToLpRatio;
+    if (unlockedToLpRatio < 5) bucket = "adequate";
+    else if (unlockedToLpRatio < 12) bucket = "thin";
+    else bucket = "very-thin";
+  }
+
+  // Secondary LP bump — each extra pool de-risks the dependency on a single LP
+  if (secondaryLpsCount >= 1 && bucket === "very-thin") bucket = "thin";
+  else if (secondaryLpsCount >= 1 && bucket === "thin") bucket = "adequate";
+  else if (secondaryLpsCount >= 2 && bucket === "adequate") bucket = "healthy";
+
+  return { value, bucket };
+}
+
 function bucketResilienceScore(score: number): MetricBucket {
   if (score < 40) return { value: score, bucket: "weak" };
   if (score < 70) return { value: score, bucket: "moderate" };
@@ -38,8 +74,9 @@ function bucketResilienceScore(score: number): MetricBucket {
 
 function bucketTierDivergence(whalePercent: number, retailPercent: number): MetricBucket {
   const divergence = Math.abs(whalePercent - retailPercent);
-  if (divergence < 15) return { value: divergence, bucket: "low" };
-  if (divergence < 35) return { value: divergence, bucket: "medium" };
+  // Solana-meme calibration: tier divergence is structurally normal — only flag extreme gaps
+  if (divergence < 25) return { value: divergence, bucket: "low" };
+  if (divergence < 50) return { value: divergence, bucket: "medium" };
   return { value: divergence, bucket: "high" };
 }
 
@@ -162,12 +199,27 @@ function determineLifecycleStage(metrics: {
     return { stage: "Distribution", confidence: "medium", signals };
   }
   
-  // Strong serious + whale tiers = Expansion
-  if (seriousPercent + whalePercent > 25) {
+  // Solana-meme calibration: a 500+ holder, aged, actively-traded token is NOT "low confidence Expansion".
+  // Promote to high when there is real participation (15%+ in serious+whale tiers, was 25%).
+  if (seriousPercent + whalePercent > 15) {
     signals.push(`serious_whale_strong:${(seriousPercent + whalePercent).toFixed(1)}%`);
+    // Aged + liquid = Mature/Expansion high confidence
+    const ageHours = pairCreatedAt ? (Date.now() - pairCreatedAt) / 3_600_000 : null;
+    if (ageHours !== null && ageHours >= 168) signals.push(`mature_age:${Math.floor(ageHours / 24)}d`);
     return { stage: "Expansion", confidence: "high", signals };
   }
-  
+
+  // Mid-confidence floor for any actively-traded mature holder base — never fall to "low"
+  // unless the token is truly limp (no volume, no transactions).
+  const hasRealActivity =
+    (volume24h !== undefined && volume24h !== null && volume24h >= 5_000) ||
+    (txns1h !== undefined && txns1h !== null && txns1h >= 20);
+
+  if (hasRealActivity) {
+    signals.push(`active_market`);
+    return { stage: "Expansion", confidence: "medium", signals };
+  }
+
   return { stage: "Expansion", confidence: "low", signals };
 }
 
@@ -296,6 +348,22 @@ LIFECYCLE AWARENESS:
 - If the signal "socials_deleted" or "confirmed_dead" appears, the token's X account or community has been deleted by its owner. This is a STRONG confirmation of abandonment — always classify as Dormant with high confidence.
 - Signals like "dead_on_curve", "sleeper_on_curve", "socials_deleted" in the lifecycle data guide your narrative. Match your framing to the signal strength.
 - Never describe a 48h+ inactive on-curve token as a "new launch" or "Genesis."
+
+SOLANA MEMECOIN CALIBRATION (CRITICAL):
+- This platform analyses Solana memecoins, NOT utility/ETH tokens. Lifecycles are faster and LP norms are different.
+- A token aged 7+ days holding $300k+ market cap with active volume is MATURE — describe as "Expansion" with high confidence (or "stable mature meme"). Do NOT say "low confidence" or call it early-stage.
+- LP of 5–15% of supply is NORMAL and HEALTHY for Solana memes. Do NOT call it "thin" or "very thin" based on percentage alone — what matters is absolute LP USD.
+  - LP USD ≥ $50k → "healthy liquidity"
+  - LP USD ≥ $10k → "adequate liquidity"
+  - LP USD ≥ $2k → "thin but functional"
+  - LP USD < $2k → only then describe as "very thin / fragile"
+- WHALE-VOLATILITY FRAMING:
+  - Do NOT warn about whale-driven price collapse unless: top-1 wallet > 5% of supply, OR top-5 > 25% of supply, OR market cap < $250k.
+  - For mid-cap memes ($300k+) with diffuse top-10 (<25%), frame whale presence as CONVICTION and SUPPORT, not threat. A $5–10k sell does not break a $500k+ cap.
+  - Reserve "structural tension" / "tier divergence risk" language for tokens under $1M cap with >50% divergence between whale and retail tier percentages.
+- SECURITY/DEV FRAMING:
+  - For aged (≥72h) and liquid (≥$250k cap) tokens, a creator wallet that has fully exited is COMMON post-launch handoff. Frame as informational, not as a near-emergency.
+  - Reserve dire dev-sold warnings for young (<72h) or low-cap (<$250k) tokens.
 
 COMMENTARY MODE: ${mode.label} (${mode.mode})
 ${modeInstructions[mode.mode]}
@@ -486,10 +554,14 @@ serve(withRunLog('token-ai-interpreter', async (req) => {
 
     // Calculate derived metrics
     const unlockedToLpRatio = lpPercentage > 0 ? circulatingPct / lpPercentage : 10;
+    const secondaryLpsCount =
+      (reportData as any).secondaryLpsCount ??
+      (Array.isArray((reportData as any).secondaryPools) ? (reportData as any).secondaryPools.length : 0) ??
+      0;
 
     // Bucket metrics
     const controlDensity = bucketControlDensity(top10Pct);
-    const liquidityCoverage = bucketLiquidityCoverage(unlockedToLpRatio);
+    const liquidityCoverage = bucketLiquidityCoverageV2(liquidityUsd, unlockedToLpRatio, secondaryLpsCount);
     const resilienceScore = bucketResilienceScore(healthScore);
     const tierDivergence = bucketTierDivergence(whalePercent, retailPercent);
 

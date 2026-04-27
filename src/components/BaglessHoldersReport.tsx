@@ -828,9 +828,32 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
     // Dev wallet detection
     if (report.potentialDevWallet) {
       const devFlag = walletFlags[report.potentialDevWallet.address];
+      // Solana-meme calibration: a creator wallet that has fully exited an aged + liquid
+      // token is common post-launch handoff — downgrade severity instead of amber-warning.
+      const devPct = report.potentialDevWallet.percentageOfSupply;
+      const devSoldOut = devPct < 0.01;
+      const pairAgeHours = (report as any)?.vitality?.pairAgeHours
+        ?? ((report as any)?.vitality?.pairCreatedAt
+          ? (Date.now() - (report as any).vitality.pairCreatedAt) / 3_600_000
+          : null);
+      const mcap = (report as any)?.marketCap ?? (report as any)?.vitality?.marketCap ?? 0;
+      const isAgedAndLiquid = (pairAgeHours ?? 0) >= 72 && mcap >= 250_000;
+
+      let alertType: 'critical' | 'warning' | 'info';
+      let alertMessage: string;
+      if (devFlag?.flag === 'dev') {
+        alertType = 'info';
+        alertMessage = `Potential Dev: ${truncateAddress(report.potentialDevWallet.address)} holds ${devPct.toFixed(1)}% - ${report.potentialDevWallet.reason}`;
+      } else if (devSoldOut && isAgedAndLiquid) {
+        alertType = 'info';
+        alertMessage = `Creator wallet ${truncateAddress(report.potentialDevWallet.address)} has exited — common after launch handoff for established tokens. Not necessarily bearish.`;
+      } else {
+        alertType = 'warning';
+        alertMessage = `Potential Dev: ${truncateAddress(report.potentialDevWallet.address)} holds ${devPct.toFixed(1)}% - ${report.potentialDevWallet.reason}`;
+      }
       alerts.push({
-        type: devFlag?.flag === 'dev' ? 'info' : 'warning',
-        message: `Potential Dev: ${truncateAddress(report.potentialDevWallet.address)} holds ${report.potentialDevWallet.percentageOfSupply.toFixed(1)}% - ${report.potentialDevWallet.reason}`,
+        type: alertType,
+        message: alertMessage,
         flagged: devFlag?.flag === 'dev'
       });
     }

@@ -1,135 +1,67 @@
+## Problem
 
-# HoldersIntel Reputation Engine — Manifesto + Surface Updates
+The /holders report is calibrated as if every token were a utility ETH coin. For a $600k Solana memecoin like $ASSFACE this produces:
 
-Four tracks. #2 (public Creator Profile pages) is intentionally deferred — keep it admin/beta only.
+1. **"Expansion / low confidence" in red** — scary and wrong for a token sitting strong at $600k for days.
+2. **"Very Thin" liquidity at 11.84** — but ~10% LP is normal/healthy on Solana memes.
+3. **Whale-sell-off panic copy** — "whales" are $1k+ wallets; a $10k sell does not kill a $600k cap.
+4. **LP Health = 11/100** — punitive; a normal LP looks broken.
+5. **Holder Count = 100/100** — inflated by 1,006 dust wallets; doesn't reflect that only ~1,300 are real participants.
+6. **Diamond Hands = 0/100 (red)** — shown even when no historical snapshots exist yet.
+7. **Security alert "Dev sold entire position"** — dressed as a near-emergency for what is actually mildly informative.
 
----
+## Fix
 
-## Track A — "HoldersIntel Dev Team Foreward" floating modal (NEW)
+### 1. Lifecycle classifier — add a "Mature Meme" tier (no more low-confidence Expansion)
+File: `supabase/functions/token-ai-interpreter/index.ts` `determineLifecycleStage()`
 
-A small floating icon, present on every page (mobile + desktop), positioned roughly where the user's mouse pointer sits in the screenshot — at the **right edge of the nav bar row**, just past the last nav tab. On click, opens an old-school terminal-style modal with the manifesto.
+- For tokens with **500+ holders AND pair age ≥ 72h AND market cap proxy / volume strong**, classify as **`Expansion` high** (rename label to "Mature" in UI when age ≥ 7d) instead of falling through to `Expansion / low`.
+- Remove the catch-all `return { stage: "Expansion", confidence: "low" }`. Replace with: if holders ≥ 500 and aged ≥ 24h and there is real volume, return `Expansion / medium` minimum; promote to `high` when serious+whale > 15% (currently 25%).
+- Pass `pairAgeHours` and `volume24h` into the existing call (already partially threaded).
 
-### Placement
+### 2. Liquidity Coverage thresholds — Solana-meme aware
+File: `supabase/functions/token-ai-interpreter/index.ts` `bucketLiquidityCoverage()` + LP$ floor
 
-- Render inside `SiteLayout.tsx` as a sibling to the `<nav>` inside the nav bar container, absolutely positioned to the right end of the nav row (so it sits on the same horizontal line as the tabs, near the right gutter).
-- On mobile: same row, but shrink to icon-only (no label) and tuck it just before the mobile scroll-hint chevron so it doesn't get clipped by overflow scroll.
-- z-index above the scroll-hint gradient so it's always clickable.
+- Current: ratio < 3 = covered, < 8 = thin, ≥ 8 = very-thin. With ~100% circulating that flags any LP < ~12% as "very thin".
+- New rule: bucket primarily on **absolute LP USD value**, not the ratio:
+  - LP_USD ≥ $50k → `healthy`
+  - LP_USD ≥ $10k → `adequate`
+  - LP_USD ≥ $2k → `thin`
+  - LP_USD < $2k OR unlocked → `very-thin / critical`
+- Use ratio only as a secondary hint when LP_USD missing.
+- Bonus: if `secondary_lps_count ≥ 1` (Meteora/Orca/Raydium duplicate pool) bump bucket up one tier.
 
-### Icon choice
+### 3. Stability sub-scores — recalibrate
+File: `supabase/functions/bagless-holders-report/index.ts` lines 480–515
 
-Recommend `ScrollText` from lucide-react (parchment/scroll vibe, fits "foreward / dev note") with a subtle amber/gold tint matching brand. Alternative: `BookOpen` or `Feather`. I'll use `ScrollText` unless you say otherwise.
+- **lpScore**: change `scoreMetric(lpPct, good=30, bad=5)` → use **LP_USD bands** (≥$50k=100, ≥$25k=85, ≥$10k=70, ≥$5k=55, ≥$2k=40, ≥$500=20, else 5). Add **+5 per additional secondary LP** (capped +15).
+- **holderCountScore**: stop counting dust as "real" holders. Use `seriousCount + whaleCount + retailCount` (exclude dust). New thresholds: good=400 real, bad=20.
+- Add explicit **dust penalty** to holderCountScore: if dust% > 40, multiply final holderCountScore by 0.85; > 55, by 0.7. Surface a tooltip "Headline holder count inflated by X% dust wallets."
 
-### Hover label
+### 4. Whale-volatility narrative — soften and gate by absolute size
+File: `supabase/functions/token-ai-interpreter/index.ts` (mode selection + prompt)
 
-Tooltip text (shadcn `Tooltip`): **"HoldersIntel Dev Team Foreward"**
+- In the prompt (~line 286), add a rule: **Do not warn about whale-driven volatility unless top-1 wallet > 5% of supply OR top-5 > 25% OR mcap < $250k.** For mid-cap memes, frame whale presence as conviction, not threat.
+- Adjust `bucketTierDivergence`: only flag "structural tension" when divergence > 50% (was lower) AND mcap < $1M.
 
-### Modal content (verbatim, old-school formatted)
+### 5. Diamond Hands card — gate behind real history
+File: `src/components/premium/RetentionAnalysis.tsx`
 
-- shadcn `Dialog` modal, max-w ~`2xl`.
-- Body styled as a terminal/typewriter: `font-mono`, slight green-on-near-black (`bg-[#0a0a0a] text-[hsl(140_60%_75%)]`), thin amber border, ASCII rule lines above and below the body, blinking caret at the end.
-- Header row: `> cat /var/holdersintel/foreward.txt`
-- Footer signature right-aligned: `— HoldersIntel Dev Team`
-- Small "ESC to close" hint bottom-left.
+- The `isTooYoung` guard already exists but only checks 73h. Add a second condition: hide if the API returns `metrics.total_wallets_start === 0` OR `retention_data.length < 2` (i.e., no historical snapshots yet). Render `null` instead of the red "0/100 High churn risk" panel.
 
-Body text (exact, preserved line breaks):
+### 6. Security Alerts — tone down dev-sold framing
+File: `src/components/holders/SecurityAlertsCard.tsx`
 
-```
-HoldersIntel is a Reputation Engine.
+- For the "dev sold entire position" case when token is **aged ≥ 72h AND mcap ≥ $250k**, downgrade visual severity from amber-warning to a neutral info note: *"Creator wallet exited — common after launch handoff. Not necessarily bearish for established tokens."* Keep amber only for young/small tokens.
 
-Primary entities: Creator Profiles ↔ Token Projects
-(many-to-many, cross-linked on many signals)
+## Out of scope (this turn)
 
-The lifecycle outcome of a Token Project
-(success/failure, intentional/accidental)
-is evidence that updates the Creator's reputation.
+- Detecting secondary LPs on Meteora/Orca (the +5 bonus assumes the data is already on the report; if not, we'll wire it in a follow-up).
+- Rewriting the full stability blend weights — only the two sub-scores above change.
 
-Data is collected from many sources
-(on-chain, X, Telegram, web scrapes, KYC traces,
-behavioral analysis).
+## Files touched
 
-Data is displayed across many surfaces
-(web reports, Bubble Map, Telegram bot DMs/groups,
-Intel Briefings, Live Feed).
-
-Monetization: monthly subscription unlocks the
-full pipeline.
-```
-
-### Files
-
-- **NEW**: `src/components/layout/DevTeamForewardButton.tsx` — icon button + tooltip + dialog, all self-contained.
-- **EDIT**: `src/components/layout/SiteLayout.tsx` — mount it inside the nav-bar container at the right edge.
-
----
-
-## Track B — Reframe sitewide copy around "Reputation Engine" (Track #1)
-
-Tighten the public surfaces so the thesis lands without anyone having to click the foreward.
-
-### Files & changes
-
-1. **`src/pages/Index.tsx` (landing)**
-   - Hero subhead: replace current line with → *"The Reputation Engine for Solana creators. Every wallet, every token, every outcome — linked."*
-   - Add a 3-line "How it works" strip directly under the hero: **Creators ↔ Tokens → Outcomes → Reputation.**
-2. **`src/pages/Pricing.tsx`**
-   - Top-of-page banner: *"Your subscription unlocks the full reputation graph — not features, evidence."*
-3. **`public/llms.txt` and `public/ai.txt`**
-   - Replace tagline with the manifesto's first paragraph so AI crawlers index us as a reputation engine, not a "holders tool".
-4. **`index.html` `<meta name="description">`** — same reframing (~155 chars).
-5. **`src/components/chat/` AI persona seed** — append one sentence to Helper Mode and Signal Mode system prompts: *"You are the front-end of a Reputation Engine. Creators and Token Projects are the two primary entities; outcomes are evidence."* (Located in the AI Config table — done via a tiny migration that updates the existing `ai_configurations` rows.)
-
----
-
-## Track C — Add `intent_classification` dimension (Track #3)
-
-Make intent (rug / abandoned / accidental-fail / organic-success / engineered-success) a first-class field used by autopsy and allstar engines.
-
-### Files & changes
-
-1. **NEW migration** — add `intent_classification` enum + column to `token_lifecycle_events` (or whichever table autopsy/allstar already write to; verified during exploration to be `token_autopsies` and `allstar_mint_alerts`).
-   - Enum values: `rug_pull`, `soft_rug`, `abandoned`, `accidental_failure`, `organic_success`, `engineered_success`, `unknown`.
-   - Default `unknown`.
-2. **EDIT `supabase/functions/token-autopsy/index.ts`** — heuristic classifier (LP yanked + dev sells inside 1h → `rug_pull`; LP intact + zero dev activity 7d → `abandoned`; etc.). Write classification when autopsy runs.
-3. **EDIT `supabase/functions/allstar-promotion-engine/index.ts`** — read intent; only promote on `organic_success` or `engineered_success`. Demote/skip if any historic `rug_pull`.
-4. **EDIT `src/components/admin/CreatorProfileDrawer.tsx`** — add an "Intent breakdown" row (counts per intent type across the creator's tokens).
-5. **Pro gating** — surface intent breakdown publicly only on Pro tier. Free/anon sees aggregate "X tokens, Y rugs" without per-token intent labels.
-
----
-
-## Track D — Pricing reframe around the reputation graph (Track #4)
-
-Rewrite `src/pages/Pricing.tsx` tier cards from feature-list to **access-tier-of-graph**:
-
-| Tier | Reframed value |
-|------|----------------|
-| Free | "Sample one Creator's reputation per day" |
-| Pro  | "Full graph access — every Creator, every Token, every link, every outcome" |
-| Enterprise / Telegram annual | unchanged structurally; subhead becomes *"Direct pipe into the reputation graph"* |
-
-- Keep Stripe links untouched (per existing memory).
-- Keep the existing `TierCards` component shape; just rewrite copy and bullets.
-
----
-
-## Out of scope (per your call)
-
-- Public `/creator/{id}` route — stays admin-only / beta. No public link added anywhere. CreatorProfileDrawer remains the only viewer for now.
-
----
-
-## Technical notes
-
-- All new work is read-mostly except (a) one tiny migration for `intent_classification`, (b) one migration to update `ai_configurations` system-prompt rows, and (c) the new component file.
-- No cron changes, no new edge functions.
-- `assertDbWrite` used for any DB write touched (zero-tolerance rule).
-- Foreward modal is pure client UI — no DB.
-
----
-
-## Order of execution (when you approve)
-
-1. Add `DevTeamForewardButton` + wire into `SiteLayout` (visible immediately on every page).
-2. Reframe copy on Index, Pricing, llms.txt, ai.txt, index.html meta.
-3. Migration + autopsy/allstar wiring for `intent_classification`.
-4. Pricing tier rewrite.
-5. AI persona seed migration.
+- `supabase/functions/token-ai-interpreter/index.ts`
+- `supabase/functions/bagless-holders-report/index.ts`
+- `src/components/premium/RetentionAnalysis.tsx`
+- `src/components/holders/SecurityAlertsCard.tsx`
