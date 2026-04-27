@@ -29,7 +29,7 @@ export default function BubbleMapPage() {
           <Network className="h-12 w-12 text-primary mx-auto" />
           <h1 className="text-2xl font-bold text-foreground">Bubble Map</h1>
           <p className="text-muted-foreground">
-            Sign in to access the Bubble Map. Subscribe for $9.99/mo for unlimited access.
+            1 free Trace/day for visitors · 3/day signed in · Unlimited for Pro ($9.99/mo).
           </p>
           <div className="flex items-center justify-center gap-3">
             <Button onClick={() => navigate('/auth')} className="gap-2">

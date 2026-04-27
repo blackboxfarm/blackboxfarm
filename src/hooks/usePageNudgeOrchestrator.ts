@@ -57,7 +57,7 @@ const PAGE_NUDGES: Record<string, NudgeConfig> = {
   '/subscriptions': {
     anonNudges: [
       "X subscribers save on every paid plan",
-      "1 free bubblemap per day — sign up to get started",
+      "anon get 1 Trace/day · sign up free for 3/day · Pro for unlimited",
       "free account unlocks AI analysis and whale warnings",
     ],
     authNudges: [
@@ -82,7 +82,7 @@ const PAGE_NUDGES: Record<string, NudgeConfig> = {
   },
   '/bubblepromo': {
     anonNudges: [
-      "1 free deep scan per day — make it count",
+      "1 free Trace/day for visitors — sign up free to get 3/day",
       "paste any Solana token address above to start",
       "sign up free for full access to the Bubble Map tool",
     ],

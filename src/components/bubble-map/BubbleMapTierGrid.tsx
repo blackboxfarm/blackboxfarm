@@ -54,7 +54,7 @@ export function BubbleMapTierGrid({ compact = false }: BubbleMapTierGridProps) {
       </div>
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-muted-foreground leading-relaxed max-w-md">
-          Free accounts get 2 lookups/day with basic graph view. Pro subscribers ($9.99/mo) unlock unlimited searches, 
+          Anon visitors get 1 Trace/day. Free signed-in accounts get 3 Traces/day. Pro subscribers ($9.99/mo) unlock unlimited Traces, 
           KYC tracing, deep spidering, token discovery, and data export.
         </p>
         <Button size="sm" className="text-xs h-7 gap-1" onClick={() => navigate('/subscriptions')}>
