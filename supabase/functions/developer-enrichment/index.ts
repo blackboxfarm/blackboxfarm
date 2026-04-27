@@ -627,34 +627,40 @@ async function findDeveloperByWallet(supabase: any, walletAddress: string): Prom
 }
 
 async function createDeveloperProfile(supabase: any, walletAddress: string, twitterHandle: string | null): Promise<any> {
-  const { data, error } = await supabase
-    .from('developer_profiles')
-    .insert({
-      master_wallet_address: walletAddress,
-      twitter_handle: twitterHandle,
-      reputation_score: 50,
-      trust_level: 'neutral',
-      total_tokens_created: 1,
-      source: 'fantasy_enrichment'
-    })
-    .select()
-    .single();
+  // Use unified Creator Fusion so we never create duplicate profiles for the same wallet/X-handle.
+  const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts');
+  const fused = await fuseAndAudit(
+    {
+      devWallet: walletAddress,
+      xHandle: twitterHandle,
+      source: 'developer-enrichment',
+    },
+    supabase,
+    { throwOnError: true },
+  );
+  if (!fused) throw new Error('[developer-enrichment] Fusion returned null');
 
-  if (error) {
-    console.error('[developer-enrichment] Error creating profile:', error);
-    throw error;
-  }
-
-  await supabase
+  // Ensure wallet is registered (idempotent).
+  const { data: existingWallet } = await supabase
     .from('developer_wallets')
-    .insert({
-      developer_id: data.id,
+    .select('id')
+    .eq('wallet_address', walletAddress)
+    .maybeSingle();
+  if (!existingWallet) {
+    await supabase.from('developer_wallets').insert({
+      developer_id: fused.creatorId,
       wallet_address: walletAddress,
       wallet_type: 'creator',
-      is_primary: true
+      is_primary: true,
     });
+  }
 
-  return data;
+  const { data: profile } = await supabase
+    .from('developer_profiles')
+    .select('*')
+    .eq('id', fused.creatorId)
+    .single();
+  return profile;
 }
 
 function calculateRiskLevel(profile: any): { level: string; warning: string | null } {
