@@ -437,24 +437,48 @@ Deno.serve(withRunLog('social-mesh-linker', async (req) => {
           const extraSocials = await discoverSocialsFromWebsite(website_url.trim());
           websitesScraped++;
 
-          for (const social of extraSocials) {
-            meshLinks.push({
-              source_type: social.type,
-              source_id: social.id,
-              linked_type: "wallet",
-              linked_id: creator_wallet,
-              relationship: "social_account_of",
-              confidence: 60,
-              evidence: {
-                source: "website_scrape",
-                discovered_on: website_url,
-                token_mint,
-                token_symbol,
-                full_url: social.fullUrl,
-              },
-              discovered_via: "social-mesh-linker",
-            });
-            discoveredSocials.push(`${social.type}:${social.id}`);
+          // ⚠️ FALSE-POSITIVE GUARD ⚠️
+          // A token site that THEMES around an open-source project (e.g. a
+          // memecoin riffing on a robotics repo) will list every contributor
+          // of that repo. Treating those as "the dev's identity" is wrong.
+          // Rules:
+          //   1. Drop GitHub `org/repo` paths (anything with `/`) — those are
+          //      project pages, never personal identities.
+          //   2. If the page exposes >3 distinct social handles, it's a
+          //      credits/contributors page — write NONE of them as identity.
+          //   3. Use a weak `mentioned_on_site` relationship at confidence 25
+          //      (below the UI display threshold of ~50). These are
+          //      *associations*, not *ownership*. Stronger evidence (e.g.
+          //      handle resolved by Pump.fun + matches creator wallet history)
+          //      is required to upgrade to `social_account_of`.
+          const filtered = extraSocials.filter((s) => {
+            if (s.type === 'github' && typeof s.id === 'string' && s.id.includes('/')) return false;
+            return true;
+          });
+
+          if (filtered.length > 3) {
+            console.log(`[mesh-linker] ${website_url} exposed ${filtered.length} socials → contributors/credits page, skipping all`);
+          } else {
+            for (const social of filtered) {
+              meshLinks.push({
+                source_type: social.type,
+                source_id: social.id,
+                linked_type: "wallet",
+                linked_id: creator_wallet,
+                relationship: "mentioned_on_site",
+                confidence: 25,
+                evidence: {
+                  source: "website_scrape",
+                  discovered_on: website_url,
+                  token_mint,
+                  token_symbol,
+                  full_url: social.fullUrl,
+                  note: "weak association — not proven ownership",
+                },
+                discovered_via: "social-mesh-linker",
+              });
+              discoveredSocials.push(`${social.type}:${social.id}(weak)`);
+            }
           }
         } catch (e) {
           console.warn(`[mesh-linker] Website scrape failed for ${website_url}: ${e}`);

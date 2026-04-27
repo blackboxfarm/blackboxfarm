@@ -19,7 +19,7 @@ interface SharedFunder {
   siblings_count: number;
   sibling_creators: string[];
   sibling_tokens: SiblingToken[];
-  cluster_label: 'tight_cluster' | 'likely_dev_family' | 'wide_funder';
+  cluster_label: 'tight_cluster' | 'likely_dev_family' | 'wide_funder' | 'infra_router';
 }
 
 interface KycTerminus {
@@ -40,6 +40,7 @@ const labelMeta: Record<SharedFunder['cluster_label'], { color: string; text: st
   tight_cluster: { color: 'bg-amber-500/20 text-amber-300 border-amber-500/40', text: 'Tight Cluster' },
   likely_dev_family: { color: 'bg-rose-500/20 text-rose-300 border-rose-500/40', text: 'Likely Dev Family' },
   wide_funder: { color: 'bg-muted text-muted-foreground border-border', text: 'Wide Funder' },
+  infra_router: { color: 'bg-destructive/20 text-destructive border-destructive/40', text: 'Public Router (ignore)' },
 };
 
 export function SharedFundersPanel({ creatorWallet }: { creatorWallet: string | null }) {
