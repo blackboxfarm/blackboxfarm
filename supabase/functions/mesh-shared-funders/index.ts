@@ -7,7 +7,7 @@
 // Read-only function — no DB writes, safe to call from the frontend.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
-import { isCexWallet, getCexName } from '../_shared/cex-wallets.ts';
+import { isCexWallet, getCexName, isInfraWallet, getInfraName, isTerminusWallet } from '../_shared/cex-wallets.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,13 +15,13 @@ const corsHeaders = {
 };
 
 const MIN_SIBLINGS = 2;          // funder must have funded ≥2 OTHER creators
-const NOISE_FANOUT_CAP = 150;    // funders with >150 downstreams treated as noise (likely unlabelled CEX)
+const NOISE_FANOUT_CAP = 40;     // funders with >40 distinct creators are public routers/CEX/bots, not real dev families
 const MAX_FUNDERS_RETURNED = 12; // cap output for UI
 const MAX_SIBLING_TOKENS = 8;    // per funder
 
-function clusterLabel(siblings: number): 'tight_cluster' | 'likely_dev_family' | 'wide_funder' {
+function clusterLabel(siblings: number): 'tight_cluster' | 'likely_dev_family' | 'wide_funder' | 'infra_router' {
   if (siblings <= 4) return 'tight_cluster';
-  if (siblings <= 25) return 'likely_dev_family';
+  if (siblings <= 15) return 'likely_dev_family';
   return 'wide_funder';
 }
 
@@ -64,12 +64,16 @@ Deno.serve(async (req) => {
         if (visited.has(f)) continue;
         visited.add(f);
         const cex = getCexName(f);
-        ancestors.set(f, { depth, cex });
+        const infra = getInfraName(f);
+        ancestors.set(f, { depth, cex: cex ?? infra });
         if (cex) {
           // Capture the SHALLOWEST (first) CEX hit as the KYC terminus.
           if (!kycTerminus || depth < kycTerminus.depth) {
             kycTerminus = { wallet: f, cex_name: cex, depth };
           }
+        } else if (infra) {
+          // Infra/router wallets terminate the chain (do not walk past) but
+          // are NOT a KYC terminus. Just stop.
         } else {
           next.push(f); // don't keep walking past CEX
         }
@@ -86,7 +90,8 @@ Deno.serve(async (req) => {
     }
 
     // 2. For each ancestor, count how many OTHER creators it has funded.
-    const ancestorIds = [...ancestors.keys()].filter((a) => !isCexWallet(a));
+    // Exclude both CEX and infra/router wallets — they're not real funders.
+    const ancestorIds = [...ancestors.keys()].filter((a) => !isTerminusWallet(a));
 
     const { data: siblingEdges, error: sibErr } = await supabase
       .from('reputation_mesh')
