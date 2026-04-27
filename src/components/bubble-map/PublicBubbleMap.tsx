@@ -349,7 +349,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       dispatchThoughtCustom("daily scan used — subscribe for unlimited");
       return;
     }
-    recordSearch();
+    {
+      const rawForMint = searchInput.trim();
+      const looksLikeMint = !rawForMint.startsWith('@') && rawForMint.length >= 30;
+      recordSearch(looksLikeMint ? rawForMint : undefined);
+    }
     setXAccountsRevealed(false);
     setHasSpideredOnce(false);
     setDevWalletAddress(null);
@@ -388,7 +392,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       setInitialTokenLoaded(true);
       // Trigger search after state update
       setTimeout(() => {
-        recordSearch();
+        recordSearch(initialToken);
         focusOnEntity(initialToken, 'wallet');
         queueTokenFromFrontend(initialToken, 'bubblemap_input', { comment: 'Bubblemap URL preload' });
       }, 100);

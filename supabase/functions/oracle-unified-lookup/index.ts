@@ -6,6 +6,7 @@ import { discoverFundingChain } from '../_shared/funding-resolver.ts';
 import { isSolscanUsable } from '../_shared/provider-health.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
@@ -525,6 +526,15 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
           `[Oracle] Creator resolved via ${creatorResolution.source}: ${resolvedWallet.slice(0, 8)} (confidence: ${creatorResolution.confidence})`
         );
       }
+
+      // Phase 1: Feed the public-input flywheel.
+      // Every Bubble Map / web token query bumps demand and grows the mesh,
+      // even before we know the creator (we'll have the mint at minimum).
+      ingestPublicCAQuery(supabase, {
+        mint: cleanedInput,
+        source: 'web:/bubblemap',
+        creatorWallet: resolvedWallet ?? null,
+      });
 
       // Last-resort linker pass (backfills token_lifecycle)
       if (!resolvedWallet) {

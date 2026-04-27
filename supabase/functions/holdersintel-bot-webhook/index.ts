@@ -4,6 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { detectTokenPhase, contextualizeDevRep, type TokenPhase } from "../_shared/token-phase.ts";
 import { getHealthMode } from "../_shared/health-mode.ts";
 import { meshFeed } from "../_shared/mesh-feeder.ts";
+import { ingestPublicCAQuery, type IngestSource } from "../_shared/mesh-ingest.ts";
 import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts";
 import { sanitizeTelegramInput, isInputSafeToProcess } from "../_shared/telegram-input-sanitizer.ts";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
@@ -4448,6 +4449,51 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
       isGroupChat,
       sanitizerFlags: sanitized.flags.length > 0 ? sanitized.flags : undefined,
     }));
+
+    // ─── Phase 1 mesh symmetry: every CA-bearing bot command feeds the
+    // reputation mesh + bumps the public-demand counter, even before the
+    // command's own handler runs. Fire-and-forget; never blocks the user.
+    {
+      const CA_BEARING_COMMANDS = new Set<string>([
+        "/holders", "/ca", "/risk", "/r", "/dev", "/d",
+        "/quick", "/q", "/oracle", "/o", "/wallet", "/w",
+        "/insiders", "/i", "/concentration", "/con",
+        "/momentum", "/m", "/mom", "/ai", "/compare", "/cmp",
+      ]);
+      const COMMAND_TO_SOURCE: Record<string, IngestSource> = {
+        "/holders": "tg_bot:/holders",
+        "/ca": "tg_bot:/ca",
+        "/risk": "tg_bot:/risk", "/r": "tg_bot:/risk",
+        "/dev": "tg_bot:/dev", "/d": "tg_bot:/dev",
+        "/quick": "tg_bot:/quick", "/q": "tg_bot:/quick",
+        "/oracle": "tg_bot:/oracle", "/o": "tg_bot:/oracle",
+        "/insiders": "tg_bot:/insiders", "/i": "tg_bot:/insiders",
+        "/concentration": "tg_bot:/concentration", "/con": "tg_bot:/concentration",
+        "/momentum": "tg_bot:/momentum", "/m": "tg_bot:/momentum", "/mom": "tg_bot:/momentum",
+        "/ai": "tg_bot:/ai",
+        "/compare": "tg_bot:/compare", "/cmp": "tg_bot:/compare",
+      };
+      if (CA_BEARING_COMMANDS.has(command)) {
+        const ca = extractCA(args);
+        if (ca) {
+          ingestPublicCAQuery(supabase, {
+            mint: ca,
+            source: COMMAND_TO_SOURCE[command] ?? "tg_bot:/ca",
+            telegramUserId,
+          });
+        }
+      } else if (!command.startsWith("/")) {
+        // DM CA paste auto-trigger path (no command, just a CA in the message)
+        const ca = extractCA(message.text);
+        if (ca && !isGroupChat) {
+          ingestPublicCAQuery(supabase, {
+            mint: ca,
+            source: "tg_bot:dm:ca_paste",
+            telegramUserId,
+          });
+        }
+      }
+    }
 
     // ─── DM-only: Check if linked user is suspended or needs verification nudge ───
     if (!isGroupChat) {
