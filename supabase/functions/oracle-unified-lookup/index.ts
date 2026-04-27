@@ -527,6 +527,15 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
         );
       }
 
+      // Phase 1: Feed the public-input flywheel.
+      // Every Bubble Map / web token query bumps demand and grows the mesh,
+      // even before we know the creator (we'll have the mint at minimum).
+      ingestPublicCAQuery(supabase, {
+        mint: cleanedInput,
+        source: 'web:/bubblemap',
+        creatorWallet: resolvedWallet ?? null,
+      });
+
       // Last-resort linker pass (backfills token_lifecycle)
       if (!resolvedWallet) {
         try {
