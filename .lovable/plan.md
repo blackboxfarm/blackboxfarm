@@ -1,127 +1,130 @@
-# Creator Profile = Fused Identity, Queryable by Any Signal
+# Unified Creator Identity — Full Wire-Up, Backfill, Crons & Audits
 
-## What "Creator" actually means (the rule)
+Goal: take the parallel `fuseCreator` system and make it the **active, automatic** identity layer. Every natural place a wallet/social signal lands → fusion runs. Existing 58,628 `developer_profiles` get backfilled. Cron jobs keep it converging. Audits + morning report surface what happened. Zero silent fails.
 
-A **Creator Profile** is **one identity** that fuses every signal we've ever seen tied to the same person:
+---
 
-- **Wallets**: dev/mint wallet + sister wallets + KYC root (exchange deposit)
-- **Socials**: X handle(s) (by immutable numeric ID, not @-name), Telegram user ID(s), Discord ID(s), website domain(s)
-- **Tokens**: every mint we've attributed to any of the above
+## What gets done (in this exact order)
 
-Any one of those signals is a **valid query key**. Drop a TG user ID into the mesh search → it resolves to the same Creator Profile as the dev wallet → you instantly see every token, every alias, every prior rug or win.
+### 1. Wire `fuseCreator()` into live write paths
 
-The profile **grows organically**. New token from an unknown dev wallet + unknown KYC, but its X handle matches one we've seen → the new wallet + new KYC get **fused into the existing profile** automatically. No manual merge.
+Every existing function that mints a `developer_profiles` row or learns a new social signal will call fusion **after** its existing work, fire-and-forget but with explicit error logging into a new audit table (so a transient fusion hiccup never breaks the core write).
 
-## Why this works on what we already have
+Functions to edit (8 hooks total):
 
-We don't need a sprawling new schema. The pieces exist:
+| Function | Signal it contributes |
+|---|---|
+| `token-creator-linker` | dev wallet (pump.fun creator) — replace its bespoke insert with fusion |
+| `developer-discovery-job` | dev wallet + display_name |
+| `developer-enrichment` | dev wallet + twitter/telegram/discord/website |
+| `oracle-auto-classifier` | dev wallet + classification metadata |
+| `oracle-x-reverse-lookup` | x_user_id + x_handle → wallet |
+| `family-discovery-engine` | sister wallets cluster |
+| `rug-event-processor` | rug-flagged dev wallet |
+| `flipit-execute` | dev wallet at execution |
 
-- `developer_profiles` — master_wallet + KYC fields + twitter/telegram/discord handles + reputation
-- `developer_wallets` — sister wallets linked to a developer_id
-- `developer_genealogy` — KYC root + funding chain
-- `co_mint_clusters` — wallet groupings by mint behavior
-- `x_account_registry` — immutable X user IDs with handle-rotation history
-- `reputation_mesh` — generic typed edges (source_type/source_id → linked_type/linked_id)
+Plus two **social** write hooks (so an X handle alone creates/updates a profile):
 
-What's missing is a **single fusion key** + a tiny **alias table** so a TG ID or Discord ID can resolve back to a `developer_profiles.id`.
+| Function | Signal |
+|---|---|
+| `harvest-token-socials` | x_handle, telegram_handle, website_domain (per token_mint → look up creator wallet, fuse) |
+| `social-links-backfill` | same — bulk path |
 
-## The plan
+Every call uses `assertDbWrite`-friendly try/catch that logs failures into `creator_fusion_audit` (new table) but never throws past the host function — fusion is auxiliary, host writes must succeed.
 
-### 1. `creator_identity_aliases` (one new small table)
+### 2. Replace `token-creator-linker`'s bespoke profile creation
 
-Glue table — every non-wallet signal points back to a `developer_profiles.id`:
+Today it does its own `developer_profiles` insert + `developer_wallets` insert. After this, it calls `fuseCreator({devWallet, source:'token-creator-linker'})` and uses the returned `creatorId` for downstream `token_lifecycle.developer_id` and `developer_tokens.developer_id`. This stops creating duplicate profiles for the same wallet.
 
-```text
-creator_identity_aliases
-├── creator_id           uuid → developer_profiles.id
-├── alias_kind           enum: 'wallet' | 'kyc_root' | 'x_user_id' | 'x_handle'
-│                            | 'telegram_user_id' | 'telegram_handle'
-│                            | 'discord_id' | 'discord_handle' | 'website_domain'
-├── alias_value          text (lowercased, normalized)
-├── confidence           int  (0–100)
-├── source               text (which edge function attributed it)
-├── first_seen_at / last_seen_at
-└── UNIQUE (alias_kind, alias_value)   ← any signal resolves to exactly ONE creator
+### 3. One-shot full backfill (executed automatically, not waiting on a button)
+
+Run `creator-profile-backfill` in a paged loop until `done:true`. Handles all 461 lifecycle rows with a creator wallet + their social links. Then run a second backfill pass over `developer_profiles` rows that have any of `twitter_handle / telegram_handle / discord_handle / website_url` so we capture the other 58k profiles' existing signals.
+
+### 4. New audit + maintenance tables
+
+```sql
+create table creator_fusion_audit (
+  id uuid pk default gen_random_uuid(),
+  ts timestamptz default now(),
+  source text not null,           -- which function triggered fusion
+  signals jsonb not null,         -- the input bag
+  creator_id uuid,                -- result (null on failure)
+  is_new boolean,
+  merged_absorbed_ids uuid[],
+  aliases_written int,
+  status text not null,           -- 'success' | 'error'
+  error text
+);
+create index on creator_fusion_audit (ts desc);
+create index on creator_fusion_audit (status, ts desc);
 ```
 
-The `UNIQUE` constraint is the whole trick: when a new token's X handle matches an existing alias row, we already know which `creator_id` to attach the new wallet/KYC to. Fusion happens at write time, not query time.
+Plus a tiny RPC `prune_creator_fusion_audit()` that deletes success rows older than 14 days and error rows older than 90 days.
 
-### 2. `creator-profile-fuser` edge function (the brain)
+### 5. Recurring crons (added via `pg_cron`, persisted)
 
-Runs on every new token discovery (called from existing genealogy/social pipelines, no new cron). For each new token it gathers all signals it can find:
+| Cron | Schedule | Purpose |
+|---|---|---|
+| `creator-fusion-rolling-backfill` | every 30 min | calls `creator-profile-backfill` with `{limit:500}` rolling through new lifecycle rows + any developer_profiles that still have null aliases |
+| `creator-fusion-audit-prune` | daily 04:15 | runs `prune_creator_fusion_audit()` |
+| `creator-fusion-integrity-recalc` | daily 04:30 | re-runs `calculate-developer-integrity` for any creator with new merges in last 24h so integrity scores reflect fused identities |
 
-```text
-inputs collected for new token:
-  dev_wallet, kyc_root, x_handle (→ x_user_id via registry),
-  telegram_user_id, discord_id, website_domain, sister_wallets
+Wired via `cron.schedule` using a new `_shared/cron-guard.ts` no-op + a re-assert step in the migration (so if a remix wipes them, re-running the migration restores them — protects against "lost cron" risk).
 
-resolution:
-  for each signal, check creator_identity_aliases:
-    - if it resolves to creator_id X → reuse X
-    - if multiple signals resolve to DIFFERENT creators → MERGE (lowest id wins,
-      record merge in creator_merge_log)
-    - if no signal resolves → create new developer_profiles row, use that id
-  upsert every signal as an alias row pointing to the chosen creator_id
-```
+### 6. Surface in morning report
 
-This is the organic growth: a base dev launching secretly under a fresh wallet but reusing his X handle gets **automatically fused** to his prior identity.
+Add to `morning-report` function (and a migration for the columns if missing):
+- `fused_creators_total`, `fused_creators_new_24h`, `merges_24h`
+- `fusion_failures_24h` (red flag)
+- `top_creators_by_token_count_24h` (jsonb)
 
-### 3. Mesh query: any signal → Creator Profile
+Section appears in the daily morning email/report.
 
-A single read endpoint `creator-profile-lookup` accepts:
+### 7. Insiders panel polish (no behavior change, just truthful labels)
 
-```text
-{ query: "0xWallet..." }   or
-{ query: "@somehandle" }   or
-{ query: "tg:123456789" }  or
-{ query: "discord:abc#1234" }
-```
+Header re-phrased per your earlier note: `"422 token projects across N creator profiles · M KYC roots"`. The `CreatorProfileDrawer` gains a "Tokens by this Creator" list pulling `developer_tokens` joined to `token_lifecycle` (mint, symbol, peak multiplier, rug status, launch date).
 
-It normalizes, hits `creator_identity_aliases`, and returns the full fused profile:
+---
 
-- All wallets (dev, sister, KYC root) with roles
-- All socials (X with rotation history, TG, Discord, website)
-- All tokens with peak_multiplier / is_rugged / mesh_promotion_status
-- Aggregate verdict (green / red / mixed) + counts
-- Merge history (so you can see "this profile absorbed 2 prior identities")
+## Failure & observability guarantees
 
-### 4. UI: replace the misleading "319 creators • 0 KYC roots" header
+- Every fusion call wrapped: success → `creator_fusion_audit` row (`status='success'`); failure → `status='error'` row with full error + signals, **plus** the host function continues so we never break the upstream pipeline.
+- All DB writes inside fusion already use `assertDbWrite` (per the zero-tolerance constraint memory) — so a real DB error escalates correctly via SMS + `edge_function_runs` failure.
+- Cron jobs use the standard `net.http_post` pattern from the schedule-jobs guidance and are inserted via the data-insert tool so they survive remixes properly.
+- Audit pruning prevents the audit table from growing unbounded (per the storage-management memory).
 
-The current Wallet Cross-Links panel in `InsidersLifecycleTab.tsx` calls `insiders-cross-links` and groups by raw `creator_wallet` — which is why it says "319 creators" (it's really 319 distinct dev wallets, many of which collapse into the same person once we fuse).
+---
 
-Changes in the existing panel (no new tab, no new page):
+## Files touched
 
-- Header becomes truthful: `N fused creators · M wallets · K KYC roots · T tokens`
-- Each row in Shared Creator / Shared Funder / Shared KYC Root tabs shows the **fused Creator Profile name** (or alias preview if no display_name) instead of just a wallet hash
-- Click a row → side drawer opens showing the full fused profile (wallets list, socials list, token list with verdict pills, merge history)
-- New small **search box** at the top of the panel: paste any wallet, X handle, TG ID, or Discord ID → drawer opens for the matching Creator Profile. This is the "mesh query" you described.
-- The two action buttons that already live next to "Wallet Cross-Links" (Rescan KYC / Retrace Insiders KYC) stay where they are.
+**New**
+- `supabase/migrations/<timestamp>_creator_fusion_audit_and_morning_columns.sql` — audit table, prune RPC, morning_report columns
+- `supabase/functions/_shared/fuse-and-audit.ts` — shared helper: `await fuseAndAudit(signals, supabase)` wraps fuseCreator + audit row + try/catch
+- (data insert) `cron.schedule(...)` x3
 
-### 5. Backfill
+**Edited (fusion hook added)**
+- `supabase/functions/token-creator-linker/index.ts` (also: replace bespoke insert)
+- `supabase/functions/developer-discovery-job/index.ts`
+- `supabase/functions/developer-enrichment/index.ts`
+- `supabase/functions/oracle-auto-classifier/index.ts`
+- `supabase/functions/oracle-x-reverse-lookup/index.ts`
+- `supabase/functions/family-discovery-engine/index.ts`
+- `supabase/functions/rug-event-processor/index.ts`
+- `supabase/functions/flipit-execute/index.ts`
+- `supabase/functions/harvest-token-socials/index.ts`
+- `supabase/functions/social-links-backfill/index.ts`
+- `supabase/functions/morning-report/index.ts` — fusion stats block
+- `src/components/admin/tabs/InsidersLifecycleTab.tsx` — header phrasing
+- `src/components/admin/CreatorProfileDrawer.tsx` — "Tokens by this Creator" list
 
-One-time job (`creator-profile-backfill`) walks every existing `telegram_insider_token_lifecycle` row and pushes it through the fuser. After it finishes, every historical token is attached to a Creator Profile and the mesh-search works retroactively.
+**Executed automatically (no button)**
+- Paged loop hitting `creator-profile-backfill` until `done`
+- Second pass over `developer_profiles` with social fields
+- `cron.schedule` for the three new jobs
 
-## Technical notes (skip if not interested)
+---
 
-- New table: `creator_identity_aliases` only. Everything else reuses existing tables.
-- Optional new columns on `developer_profiles`: `merged_into uuid` + `merged_at timestamptz` so a merged-away profile becomes a tombstone redirecting to the surviving id.
-- `creator_merge_log` (audit table): old_id, new_id, trigger_signal, timestamp.
-- All writes go through `assertDbWrite` per the zero-tolerance silent-fails rule.
-- `creator-profile-fuser` is idempotent — safe to re-run on the same token.
-- X handles always normalize via `x_account_registry` to the immutable numeric ID **before** being stored as an alias, so handle rotation can't fragment a profile.
-- Telegram handles likewise normalize to numeric `telegram_user_id` when known; fall back to lowercased handle alias otherwise.
-- `creator-profile-lookup` is the single source of truth for the upcoming Bubble Map "Creator card" too — same endpoint will power the mesh-wide identity hover.
+## Out of scope (intentional)
 
-## What you'll actually see after this ships
-
-1. The "Wallet Cross-Links" header stops lying — real fused-creator count.
-2. Each cross-link row is a **person**, not a wallet hash, with all their tokens listed.
-3. A search box right above the panel where you paste a TG ID / X handle / wallet → instant Creator Profile drawer.
-4. New rugger pops up under a fresh wallet but reuses his X handle → he's auto-fused into his prior rug history. No manual work.
-
-## What I'm NOT doing
-
-- Not adding a new tab, new page, or new sidebar entry.
-- Not rebuilding the Insiders Lifecycle table.
-- Not touching the existing Rescan/Retrace buttons.
-- Not adding new crons (fuser runs inline on existing pipelines; backfill is one-shot).
+- Bubble Map / Oracle / Telegram bots still read `reputation_mesh` / `developer_profiles` directly. Fusion is non-destructive — tombstones keep their FKs alive. Migrating the read side is a follow-up that I'll plan separately when you want it.
+- No new RLS policy changes — `creator_fusion_audit` is admin-only via existing super-admin RLS pattern.
