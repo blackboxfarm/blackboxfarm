@@ -998,15 +998,21 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             <div className="flex items-center gap-2">
               <Lock className="h-4 w-4 text-gold" />
               <span className="text-sm font-bold text-foreground">
-                {remaining > 0
-                  ? "ONLY 1 Complete* Bubblemap Per Day"
-                  : "Daily scan used!"}
+                {remaining <= 0
+                  ? "Daily Traces used — come back tomorrow or upgrade"
+                  : tierLabel === 'anon'
+                    ? "1 Free Trace per day — no sign-up needed"
+                    : "3 Traces per day on your free account"}
               </span>
+              <span className="text-xs text-muted-foreground font-mono">
+                {remaining} of {limit} left today
+              </span>
+              <DailyTraceInfo variant="icon" />
             </div>
             <div className="flex items-center gap-2">
               {!isAuthenticated && (
                 <Button size="sm" variant="outline" onClick={() => navigate('/auth')} className="text-xs h-7">
-                  Sign Up Free
+                  Sign Up Free → 3/day
                 </Button>
               )}
               <Button size="sm" onClick={() => navigate('/subscriptions')} className="text-xs h-7 gap-1 bg-gold text-gold-foreground hover:bg-gold/90">
@@ -1017,8 +1023,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           </div>
           <p className="text-xs text-muted-foreground">
             {remaining > 0
-              ? "Multi Node · 100% Exposed Structures · as DEEP as we can go!! Subscribe for $9.99/mo for unlimited."
-              : "Subscribe for $9.99/mo to unlock unlimited Bubble Map access."}
+              ? <>One <strong>Trace</strong> = one new token/wallet investigation. Find KYC Root, Map X Community, and view toggles are <strong>free & unlimited</strong> on whatever you've already traced. <button type="button" onClick={() => {}} className="hidden" />Need more? <button type="button" className="underline hover:text-foreground" onClick={() => navigate(isAuthenticated ? '/subscriptions' : '/auth')}>{isAuthenticated ? 'Subscribe for unlimited' : 'Sign up free for 3/day'}</button>.</>
+              : <>Subscribe for <strong>$9.99/mo</strong> for unlimited Traces, or {isAuthenticated ? 'wait until tomorrow' : <button type="button" className="underline hover:text-foreground" onClick={() => navigate('/auth')}>sign up free for 3 Traces/day</button>}.</>}
           </p>
         </div>
       )}
