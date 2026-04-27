@@ -833,7 +833,10 @@ export default function InsidersLifecycleTab() {
             <Network className="h-5 w-5" /> Wallet Cross-Links
             {crossLinks?.stats && (
               <span className="text-xs font-normal text-muted-foreground ml-2">
-                {crossLinks.stats.rowsWithCreator} creators • {crossLinks.stats.rowsWithKyc} KYC roots
+                {(crossLinks.stats.fusedCreatorCount ?? crossLinks.stats.distinctCreatorWallets ?? crossLinks.stats.rowsWithCreator)} fused creators
+                {' · '}{crossLinks.stats.distinctCreatorWallets ?? crossLinks.stats.rowsWithCreator} wallets
+                {' · '}{crossLinks.stats.distinctKycRoots ?? crossLinks.stats.rowsWithKyc} KYC roots
+                {' · '}{crossLinks.stats.distinctTokens ?? crossLinks.stats.totalRows} tokens
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">
