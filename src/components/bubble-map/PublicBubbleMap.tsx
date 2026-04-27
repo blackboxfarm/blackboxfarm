@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera, ZoomIn, ZoomOut } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera, ZoomIn, ZoomOut, X as XIcon, Scissors } from "lucide-react";
 import { xIcon } from "@/components/token/SocialIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +44,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const [hoveredNode, setHoveredNode] = useState<MeshNode | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnosticsDismissed, setDiagnosticsDismissed] = useState(false);
+  const [schematicMode, setSchematicMode] = useState<'branches' | 'prune'>('branches');
   const [viewMode, setViewMode] = useState<ViewMode>('bubble');
   const [kycSearching, setKycSearching] = useState(false);
   const [kycFound, setKycFound] = useState(false);
@@ -348,6 +350,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     setXAccountsRevealed(false);
     setHasSpideredOnce(false);
     setDevWalletAddress(null);
+    setDiagnosticsDismissed(false);
+    setShowDiagnostics(true);
     setSuggestCount(0); // Reset suggestion count for new search
     setTraceButtonGold(false);
     setTraceButtonPulse(false);
@@ -993,23 +997,54 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             )}
           </div>
 
-          {/* Spider Status */}
-          {spiderStatus.active && (
+          {/* Spider Status / Diagnostics — sticky per-trace, dismissible */}
+          {mode !== 'promo' &&
+            !diagnosticsDismissed &&
+            (spiderStatus.active ||
+              (spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0)) && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <Radar className="h-3.5 w-3.5 text-primary animate-spin" />
-                <span className="text-xs font-medium text-primary">{spiderStatus.stage}</span>
-              </div>
-              {mode !== 'promo' && spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
-                <button onClick={() => setShowDiagnostics(!showDiagnostics)}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
-                  {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  Diagnostics ({spiderStatus.diagnostics.length})
+                {spiderStatus.active ? (
+                  <Radar className="h-3.5 w-3.5 text-primary animate-spin" />
+                ) : (
+                  <SearchCheck className="h-3.5 w-3.5 text-primary" />
+                )}
+                <span className="text-xs font-medium text-primary flex-1 truncate">
+                  {spiderStatus.active
+                    ? spiderStatus.stage
+                    : 'Following the money — trace complete'}
+                </span>
+                {spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                    title={showDiagnostics ? 'Collapse diagnostics' : 'Expand diagnostics'}
+                  >
+                    {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    Diagnostics ({spiderStatus.diagnostics.length})
+                  </button>
+                )}
+                <button
+                  onClick={() => setDiagnosticsDismissed(true)}
+                  className="text-muted-foreground hover:text-foreground"
+                  title="Dismiss diagnostics panel"
+                  aria-label="Dismiss diagnostics"
+                >
+                  <XIcon className="h-3.5 w-3.5" />
                 </button>
-              )}
-              {mode !== 'promo' && showDiagnostics && spiderStatus.diagnostics && (
+              </div>
+              {showDiagnostics && spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0 && (
                 <div className="rounded bg-background/50 p-2 space-y-0.5 text-[10px] font-mono text-muted-foreground">
                   {spiderStatus.diagnostics.map((d, i) => <div key={i}>{d}</div>)}
+                  {/* Helpful instruction when trace finished but no KYC root was identified */}
+                  {!spiderStatus.active &&
+                    !kycFound &&
+                    graphData.nodes.some(n => n.type === 'wallet') && (
+                    <div className="mt-2 pt-2 border-t border-border/40 text-amber-400">
+                      ↳ no KYC root in this sweep — press{' '}
+                      <span className="font-semibold">“Find KYC Root”</span> for a Deep Trace.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1201,6 +1236,31 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <LayoutTemplate className="h-3 w-3 mr-1" /> Schematic
             </Button>
           </div>
+          {/* Schematic Prune / Branches toggle — only meaningful in schematic view.
+              Shows the OPPOSITE button to the current state, so one click flips the mode. */}
+          {viewMode === 'schematic' && (
+            schematicMode === 'branches' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
+                title="Prune funder/sibling noise — keep only token, dev wallet and socials"
+                onClick={() => { setSchematicMode('prune'); recordInteraction(); }}
+              >
+                <Scissors className="h-3 w-3 mr-1" /> Prune
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2 border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10"
+                title="Show all branches — funders, siblings and KYC chain"
+                onClick={() => { setSchematicMode('branches'); recordInteraction(); }}
+              >
+                <GitBranch className="h-3 w-3 mr-1" /> Branches
+              </Button>
+            )
+          )}
           {/* Snapshot & Share */}
           <Button
             variant="outline"
@@ -1300,7 +1360,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching || kycFound}
                 className={`text-xs h-7 justify-start backdrop-blur bg-background/70 ${kycFound
                   ? 'border-muted/30 text-muted-foreground opacity-50 cursor-not-allowed'
-                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'}`}>
+                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'} ${
+                    !kycFound && !kycSearching && graphData.nodes.some(n => n.type === 'wallet')
+                      ? 'animate-[pulse_1.6s_cubic-bezier(0.4,0,0.6,1)_infinite] border-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.35)]'
+                      : ''
+                  }`}>
                 {kycSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Key className="h-3 w-3 mr-1" />}
                 {kycFound ? 'KYC Root Found ✓' : 'Find KYC Root'}
               </Button>
@@ -1421,6 +1485,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               width={dimensions.width}
               height={600}
               onNodeClick={handleNodeClick}
+              mode={schematicMode}
             />
           ) : (
             <ForceGraph2D
