@@ -171,6 +171,11 @@ Deno.serve(async (req) => {
       return failOpen("write", limit as number);
     }
 
+    // Fire-and-forget: stamp the token in the public-demand mesh.
+    if (mint) {
+      ingestPublicCAQuery(sb, { mint, source: "web:/bubblemap" });
+    }
+
     return new Response(
       JSON.stringify({
         allowed: true,
@@ -179,10 +184,7 @@ Deno.serve(async (req) => {
         reason: "consumed",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    ).also?.(() => {}) ?? (() => {
-      // unreachable — keeping the structure simple; ingest is fired below before return
-      return null as any;
-    })();
+    );
   } catch (e) {
     console.error("[check-bubble-quota] fatal:", (e as Error).message);
     return failOpen("exception", limit as number);
