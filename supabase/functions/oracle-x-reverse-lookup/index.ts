@@ -249,6 +249,23 @@ Deno.serve(withRunLog('oracle-x-reverse-lookup', async (req) => {
         .upsert(newMeshLinks, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
     }
 
+    // Fuse the X handle to every linked wallet so the unified Creator Profile knows them all.
+    if (linkedWallets.size > 0) {
+      try {
+        const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts');
+        const walletsArr = Array.from(linkedWallets);
+        await fuseAndAudit(
+          {
+            devWallet: walletsArr[0],
+            sisterWallets: walletsArr.slice(1),
+            xHandle: cleanHandle,
+            source: 'oracle-x-reverse-lookup',
+          },
+          supabase,
+        );
+      } catch (_) { /* audited internally; never break the lookup response */ }
+    }
+
     console.log(`[XReverseLookup] Found ${linkedWallets.size} wallets, ${linkedCommunities.length} communities for @${cleanHandle}`);
 
     return new Response(

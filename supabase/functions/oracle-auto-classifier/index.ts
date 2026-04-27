@@ -228,6 +228,15 @@ Deno.serve(withRunLog('oracle-auto-classifier', async (req) => {
             last_analysis_at: new Date().toISOString(),
           }, { onConflict: 'master_wallet_address' });
 
+        // Register the wallet as an alias of the creator so any future signal resolves correctly.
+        try {
+          const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts');
+          await fuseAndAudit(
+            { devWallet: walletAddress, source: 'oracle-auto-classifier' },
+            supabase,
+          );
+        } catch (_) { /* fuseAndAudit handles its own audit; never break the loop */ }
+
         // Mark tokens as analyzed
         await supabase
           .from('token_lifecycle')

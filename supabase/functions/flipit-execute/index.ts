@@ -253,28 +253,29 @@ async function trackDeveloper(supabase: any, tokenMint: string, positionId: stri
         }
       }
       
-      const { data: newProfile, error: profileError } = await supabase
-        .from("developer_profiles")
-        .insert({
-          master_wallet_address: creatorWallet,
-          display_name: twitterHandle || `Dev-${creatorWallet.slice(0, 8)}`,
-          twitter_handle: twitterHandle,
-          total_tokens_created: 1,
-          reputation_score: 50, // Neutral starting score
-          trust_level: "neutral",
-          source: "flipit",
-          is_active: true
-        })
-        .select("id")
-        .single();
-      
-      if (profileError) {
-        console.error("Failed to create developer profile:", profileError);
+      // Use unified Creator Fusion (handles dedupe across wallet + X handle).
+      try {
+        const { fuseAndAudit } = await import("../_shared/fuse-and-audit.ts");
+        const fused = await fuseAndAudit(
+          {
+            devWallet: creatorWallet,
+            xHandle: twitterHandle,
+            displayName: twitterHandle || `Dev-${creatorWallet.slice(0, 8)}`,
+            source: "flipit-execute",
+          },
+          supabase,
+          { throwOnError: true },
+        );
+        if (!fused) {
+          console.error("Fusion returned null for", creatorWallet);
+          return null;
+        }
+        developerId = fused.creatorId;
+        console.log("Fused/created developer profile:", developerId, "(new=", fused.isNew, ")");
+      } catch (profileError) {
+        console.error("Failed to create developer profile via fusion:", profileError);
         return null;
       }
-      
-      developerId = newProfile.id;
-      console.log("Created developer profile:", developerId);
     }
     
     // Create developer wallet entry if it doesn't exist

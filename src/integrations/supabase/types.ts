@@ -3387,6 +3387,45 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_fusion_audit: {
+        Row: {
+          aliases_written: number | null
+          creator_id: string | null
+          error: string | null
+          id: string
+          is_new: boolean | null
+          merged_absorbed_ids: string[] | null
+          signals: Json
+          source: string
+          status: string
+          ts: string
+        }
+        Insert: {
+          aliases_written?: number | null
+          creator_id?: string | null
+          error?: string | null
+          id?: string
+          is_new?: boolean | null
+          merged_absorbed_ids?: string[] | null
+          signals: Json
+          source: string
+          status: string
+          ts?: string
+        }
+        Update: {
+          aliases_written?: number | null
+          creator_id?: string | null
+          error?: string | null
+          id?: string
+          is_new?: boolean | null
+          merged_absorbed_ids?: string[] | null
+          signals?: Json
+          source?: string
+          status?: string
+          ts?: string
+        }
+        Relationships: []
+      }
       creator_identity_aliases: {
         Row: {
           alias_kind: Database["public"]["Enums"]["creator_alias_kind"]
@@ -8861,6 +8900,7 @@ export type Database = {
           function_health: Json | null
           funnel_feed_throughput: Json | null
           funnel_metrics: Json | null
+          fusion_stats: Json | null
           holders_intel_metrics: Json | null
           id: string
           intelligence_stats: Json | null
@@ -8901,6 +8941,7 @@ export type Database = {
           function_health?: Json | null
           funnel_feed_throughput?: Json | null
           funnel_metrics?: Json | null
+          fusion_stats?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
           intelligence_stats?: Json | null
@@ -8941,6 +8982,7 @@ export type Database = {
           function_health?: Json | null
           funnel_feed_throughput?: Json | null
           funnel_metrics?: Json | null
+          fusion_stats?: Json | null
           holders_intel_metrics?: Json | null
           id?: string
           intelligence_stats?: Json | null
@@ -20493,6 +20535,13 @@ export type Database = {
         Returns: string
       }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
+      prune_creator_fusion_audit: {
+        Args: never
+        Returns: {
+          deleted_error: number
+          deleted_success: number
+        }[]
+      }
       record_function_skip: {
         Args: { p_function_name: string }
         Returns: undefined

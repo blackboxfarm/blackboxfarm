@@ -250,6 +250,20 @@ export async function fuseCreator(
       tuples.find((t) => t.kind === 'wallet')?.value ||
       `creator-${crypto.randomUUID()}`;
 
+    // FALLBACK LOOKUP: legacy rows in developer_profiles created before fusion existed
+    // are keyed by master_wallet_address but have no aliases. Adopt them instead of
+    // re-inserting (which would violate the unique constraint).
+    const { data: legacy } = await supabase
+      .from('developer_profiles')
+      .select('id, merged_into')
+      .eq('master_wallet_address', masterWallet)
+      .maybeSingle();
+    if (legacy?.id) {
+      // Follow tombstone if present.
+      let id = legacy.id as string;
+      if ((legacy as any).merged_into) id = (legacy as any).merged_into;
+      survivingId = id;
+    } else {
     const { data: created, error } = await supabase
       .from('developer_profiles')
       .insert({
@@ -267,6 +281,7 @@ export async function fuseCreator(
       throw new Error(`[creator-fusion] Failed to mint developer_profiles: ${error?.message}`);
     }
     survivingId = created.id;
+    }
     isNew = true;
   } else {
     // Pick lowest-uuid (deterministic) as survivor.

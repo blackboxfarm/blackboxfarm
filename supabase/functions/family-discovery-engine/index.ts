@@ -300,6 +300,20 @@ Deno.serve(withRunLog('family-discovery-engine', async (req) => {
         await supabase.from('allstar_dev_registry').update({
           family_wallets: mergedWallets, total_wallet_family_size: mergedWallets.length, updated_at: new Date().toISOString(),
         }).eq('id', allstar.id);
+
+        // ═══ CROSS-FEED 3b: Fuse newly-discovered family wallets into the unified Creator Profile ═══
+        try {
+          const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts');
+          await fuseAndAudit(
+            {
+              devWallet: seedWallet,
+              sisterWallets: newWalletAddresses,
+              xHandle: allstar.twitter_handle || null,
+              source: 'family-discovery-engine',
+            },
+            supabase,
+          );
+        } catch (_) { /* audited internally */ }
       }
 
       // Update family stats
