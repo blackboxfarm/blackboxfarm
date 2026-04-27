@@ -19949,6 +19949,36 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_intel_demand_24h: {
+        Row: {
+          demand_score_24h: number | null
+          last_seen_at: string | null
+          last_trigger_source: string | null
+          name: string | null
+          symbol: string | null
+          times_seen: number | null
+          token_mint: string | null
+        }
+        Insert: {
+          demand_score_24h?: never
+          last_seen_at?: string | null
+          last_trigger_source?: string | null
+          name?: string | null
+          symbol?: string | null
+          times_seen?: number | null
+          token_mint?: string | null
+        }
+        Update: {
+          demand_score_24h?: never
+          last_seen_at?: string | null
+          last_trigger_source?: string | null
+          name?: string | null
+          symbol?: string | null
+          times_seen?: number | null
+          token_mint?: string | null
+        }
+        Relationships: []
+      }
       intel_briefing_view_stats: {
         Row: {
           ai_bot_hits: number | null
