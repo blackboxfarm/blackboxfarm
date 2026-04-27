@@ -57,10 +57,21 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
   return (
     <OracleHoverProvider>
     <div className="min-h-screen bg-background">
-      {/* Farm Banner - clickable to home */}
-      <Link to="/">
-        <FarmBanner />
-      </Link>
+      {/* Farm Banner - clickable to home, with floating Dev Team Foreward icon */}
+      <div className="relative">
+        <Link to="/">
+          <FarmBanner />
+        </Link>
+        {/* Foreward icon — floats above the second fence stencil in the banner.
+            Second fence sits at x≈600-650 of viewBox 1200 (~52% from left).
+            Vertically anchored just above the fence line. */}
+        <div
+          className="absolute z-20 pointer-events-auto"
+          style={{ left: '52%', top: '58%', transform: 'translate(-50%, -100%)' }}
+        >
+          <DevTeamForewardButton />
+        </div>
+      </div>
 
       {/* Header */}
       <div className="container mx-auto px-4 py-3 md:py-4">
@@ -159,10 +170,6 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
                 );
               })}
             </nav>
-            {/* Dev Team Foreward — manifesto popup, sits at the right edge of the nav row */}
-            <div className="shrink-0 pl-2 pr-1 md:pr-2 relative z-10">
-              <DevTeamForewardButton />
-            </div>
           </div>
         </div>
         {/* Mobile scroll hint arrow */}
