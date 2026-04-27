@@ -398,6 +398,57 @@ export default function InsidersLifecycleTab() {
     });
   }, [rows, minX, statusFilter, search]);
 
+  // Sort the filtered list by the active column. Ordinal sort uses the
+  // current filtered insertion order (which mirrors the default peak_multiplier desc fetch).
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    if (sortKey === 'ordinal') {
+      // ordinal = position in `filtered`. asc keeps fetch order, desc reverses.
+      return sortDir === 'asc' ? arr : arr.reverse();
+    }
+    const dir = sortDir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      const va: any = (a as any)[sortKey];
+      const vb: any = (b as any)[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; // nulls last
+      if (vb == null) return -1;
+      if (typeof va === 'string' && typeof vb === 'string') {
+        return va.localeCompare(vb) * dir;
+      }
+      if (sortKey === 'first_called_at') {
+        return (new Date(va).getTime() - new Date(vb).getTime()) * dir;
+      }
+      return (Number(va) - Number(vb)) * dir;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  // Reset page when filters/sort change so the user always sees page 1 of the new view.
+  useEffect(() => { setPage(1); }, [minX, statusFilter, search, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageRows = sorted.slice(pageStart, pageStart + PAGE_SIZE);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      // sensible defaults: numeric/date columns → desc; text → asc
+      setSortDir(key === 'token_symbol' ? 'asc' : 'desc');
+    }
+  };
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 inline ml-1 opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="h-3 w-3 inline ml-1 text-primary" />
+      : <ArrowDown className="h-3 w-3 inline ml-1 text-primary" />;
+  };
+
   const summary = useMemo(() => {
     return {
       total: rows.length,
