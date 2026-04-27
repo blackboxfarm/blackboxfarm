@@ -470,7 +470,7 @@ export default function InsidersLifecycleTab() {
       const { data, error } = await supabase.functions.invoke("insiders-lifecycle-builder", { body: {} });
       if (error) throw error;
       toast.success(`Built ${data?.tokens_upserted} token lifecycles from ${data?.messages_processed} messages`);
-      await fetchRows();
+      await Promise.all([fetchRows(), fetchCrossLinks()]);
     } catch (e: any) {
       toast.error("Build failed: " + (e?.message || String(e)));
     } finally {
