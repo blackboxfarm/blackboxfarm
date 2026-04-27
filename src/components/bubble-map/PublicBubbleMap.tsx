@@ -1068,6 +1068,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             >
               <Search className="h-3.5 w-3.5 mr-1" /> Trace
             </Button>
+            <DailyTraceInfo variant="icon" />
             <Button variant="ghost" size="sm" onClick={resetView}>
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
