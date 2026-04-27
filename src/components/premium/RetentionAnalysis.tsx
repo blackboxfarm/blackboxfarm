@@ -23,6 +23,13 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
   // Hide if token is too young (less than 73 hours / ~3 days)
   const isTooYoung = tokenAge !== undefined && tokenAge < 73;
 
+  // Hide if there is no real historical data yet — showing 0/100 "High churn risk"
+  // for a token that simply hasn't been snapshotted is misleading noise.
+  const hasNoHistory =
+    !loading &&
+    (!metrics || (metrics.total_wallets_start ?? 0) === 0) &&
+    retentionData.length < 2;
+
   useEffect(() => {
     trackView();
   }, [trackView]);
@@ -59,6 +66,11 @@ export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProp
 
   // Don't render anything if token is too young
   if (isTooYoung) {
+    return null;
+  }
+
+  // Don't render the red 0/100 panel when we simply have no snapshots yet
+  if (hasNoHistory) {
     return null;
   }
 
