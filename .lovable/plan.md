@@ -1,67 +1,76 @@
-## Problem
+## Goal
 
-The /holders report is calibrated as if every token were a utility ETH coin. For a $600k Solana memecoin like $ASSFACE this produces:
+Make the daily Bubble Map quota crystal clear to anonymous visitors and bump signed-in users from 1/day to 3/day, with prominent Sign-Up CTAs.
 
-1. **"Expansion / low confidence" in red** — scary and wrong for a token sitting strong at $600k for days.
-2. **"Very Thin" liquidity at 11.84** — but ~10% LP is normal/healthy on Solana memes.
-3. **Whale-sell-off panic copy** — "whales" are $1k+ wallets; a $10k sell does not kill a $600k cap.
-4. **LP Health = 11/100** — punitive; a normal LP looks broken.
-5. **Holder Count = 100/100** — inflated by 1,006 dust wallets; doesn't reflect that only ~1,300 are real participants.
-6. **Diamond Hands = 0/100 (red)** — shown even when no historical snapshots exist yet.
-7. **Security alert "Dev sold entire position"** — dressed as a near-emergency for what is actually mildly informative.
+## Tier limits (new)
 
-## Fix
+| Tier | Daily Traces |
+|------|--------------|
+| Anonymous (not signed in) | **1** |
+| Signed-in Free | **3** |
+| Pro / Subscriber | **Unlimited** |
 
-### 1. Lifecycle classifier — add a "Mature Meme" tier (no more low-confidence Expansion)
-File: `supabase/functions/token-ai-interpreter/index.ts` `determineLifecycleStage()`
+A "Trace" = one click of the **Trace** button on a fresh token/wallet/handle. After that, on the same target the user can freely: Find KYC Root, Map X Community, toggle Prune/Branches/Solar Min/Solar Cluster, pan/zoom, click nodes, open Hacker Terminal — none of these consume quota.
 
-- For tokens with **500+ holders AND pair age ≥ 72h AND market cap proxy / volume strong**, classify as **`Expansion` high** (rename label to "Mature" in UI when age ≥ 7d) instead of falling through to `Expansion / low`.
-- Remove the catch-all `return { stage: "Expansion", confidence: "low" }`. Replace with: if holders ≥ 500 and aged ≥ 24h and there is real volume, return `Expansion / medium` minimum; promote to `high` when serious+whale > 15% (currently 25%).
-- Pass `pairAgeHours` and `volume24h` into the existing call (already partially threaded).
+## Changes
 
-### 2. Liquidity Coverage thresholds — Solana-meme aware
-File: `supabase/functions/token-ai-interpreter/index.ts` `bucketLiquidityCoverage()` + LP$ floor
+### 1. `src/hooks/useBubbleMapRateLimit.ts`
+- `DAILY_LIMIT_ANON = 1` (unchanged)
+- `DAILY_LIMIT_FREE_AUTH = 3` (was 1)
+- `DISPLAY_LIMIT` becomes dynamic (1 for anon, 3 for signed-in free, ∞ for pro) so the "X left today" UI is correct.
+- Return `tierLabel: 'anon' | 'free' | 'pro'` so UI can render the right copy.
 
-- Current: ratio < 3 = covered, < 8 = thin, ≥ 8 = very-thin. With ~100% circulating that flags any LP < ~12% as "very thin".
-- New rule: bucket primarily on **absolute LP USD value**, not the ratio:
-  - LP_USD ≥ $50k → `healthy`
-  - LP_USD ≥ $10k → `adequate`
-  - LP_USD ≥ $2k → `thin`
-  - LP_USD < $2k OR unlocked → `very-thin / critical`
-- Use ratio only as a secondary hint when LP_USD missing.
-- Bonus: if `secondary_lps_count ≥ 1` (Meteora/Orca/Raydium duplicate pool) bump bucket up one tier.
+### 2. `src/components/bubble-map/PublicBubbleMap.tsx` — Rate Limit Banner (lines ~993–1023)
 
-### 3. Stability sub-scores — recalibrate
-File: `supabase/functions/bagless-holders-report/index.ts` lines 480–515
+Replace the current banner with a tier-aware version:
 
-- **lpScore**: change `scoreMetric(lpPct, good=30, bad=5)` → use **LP_USD bands** (≥$50k=100, ≥$25k=85, ≥$10k=70, ≥$5k=55, ≥$2k=40, ≥$500=20, else 5). Add **+5 per additional secondary LP** (capped +15).
-- **holderCountScore**: stop counting dust as "real" holders. Use `seriousCount + whaleCount + retailCount` (exclude dust). New thresholds: good=400 real, bad=20.
-- Add explicit **dust penalty** to holderCountScore: if dust% > 40, multiply final holderCountScore by 0.85; > 55, by 0.7. Surface a tooltip "Headline holder count inflated by X% dust wallets."
+- **Title** changes by tier:
+  - Anon: `"1 Free Trace per day — no sign-up needed"`
+  - Signed-in Free: `"3 Traces per day on your free account"`
+  - When exhausted: `"Daily Traces used — come back tomorrow or upgrade"`
+- Show `remaining / limit` counter ("2 of 3 left today").
+- Add an **info icon** (`Info` from lucide) right next to the title. On hover (desktop) it opens a `HoverCard`; on click (mobile/all) it opens a `Dialog` modal. Same content in both:
 
-### 4. Whale-volatility narrative — soften and gate by absolute size
-File: `supabase/functions/token-ai-interpreter/index.ts` (mode selection + prompt)
+  > **What counts as "1 use"?**
+  >
+  > One click of the **Trace** button on a token/wallet/handle = your daily counter ticks up by 1.
+  >
+  > After that initial Trace, on the **same** target you can still freely:
+  > - Click **Find KYC Root** (deep genealogy hop search)
+  > - Click **Map X Community** (social discovery)
+  > - Toggle **Prune / Branches / Solar Min / Solar Cluster**
+  > - Pan, zoom, click nodes, open the **Hacker Terminal**
+  >
+  > **Daily limits**
+  > - Anonymous: **1** Trace / day
+  > - Signed-in Free: **3** Traces / day
+  > - Subscriber: **Unlimited**
+  >
+  > [Sign Up Free] [Subscribe $9.99/mo]
 
-- In the prompt (~line 286), add a rule: **Do not warn about whale-driven volatility unless top-1 wallet > 5% of supply OR top-5 > 25% OR mcap < $250k.** For mid-cap memes, frame whale presence as conviction, not threat.
-- Adjust `bucketTierDivergence`: only flag "structural tension" when divergence > 50% (was lower) AND mcap < $1M.
+- CTA row in the banner:
+  - Anon: `[Sign Up Free → 3/day]` + `[Subscribe — Unlimited]`
+  - Free: `[Subscribe — Unlimited]`
+  - Pro: hidden (banner not shown).
 
-### 5. Diamond Hands card — gate behind real history
-File: `src/components/premium/RetentionAnalysis.tsx`
+### 3. Second info trigger near the Trace button (lines ~1056–1063)
+Add a small `Info` icon button immediately to the right of the **Trace** button that opens the same modal/hover-card. This places the explainer exactly where the user is about to spend their quota.
 
-- The `isTooYoung` guard already exists but only checks 73h. Add a second condition: hide if the API returns `metrics.total_wallets_start === 0` OR `retention_data.length < 2` (i.e., no historical snapshots yet). Render `null` instead of the red "0/100 High churn risk" panel.
+### 4. Tooltip on disabled state
+When `!canSearch`, the Trace button gets a tooltip: `"You've used today's Traces. Sign up free for 3/day or subscribe for unlimited."` with inline links.
 
-### 6. Security Alerts — tone down dev-sold framing
-File: `src/components/holders/SecurityAlertsCard.tsx`
+### 5. Reusable component
+Extract the explainer into `src/components/bubble-map/DailyTraceInfo.tsx` exporting:
+- `<DailyTraceInfoTrigger variant="hover" | "icon">` — renders the Info icon + HoverCard + Dialog fallback.
+- Internally shows the markdown above and the two CTA buttons (`/auth`, `/subscriptions`).
 
-- For the "dev sold entire position" case when token is **aged ≥ 72h AND mcap ≥ $250k**, downgrade visual severity from amber-warning to a neutral info note: *"Creator wallet exited — common after launch handoff. Not necessarily bearish for established tokens."* Keep amber only for young/small tokens.
+This avoids duplicating copy between the banner and the Trace button.
 
-## Out of scope (this turn)
-
-- Detecting secondary LPs on Meteora/Orca (the +5 bonus assumes the data is already on the report; if not, we'll wire it in a follow-up).
-- Rewriting the full stability blend weights — only the two sub-scores above change.
+## Out of scope (not changing now)
+- Server-side enforcement of the limit (still localStorage). Memory note flags this as a known soft limit; can be hardened later if requested.
+- Pro subscriber UI (no banner shown).
 
 ## Files touched
-
-- `supabase/functions/token-ai-interpreter/index.ts`
-- `supabase/functions/bagless-holders-report/index.ts`
-- `src/components/premium/RetentionAnalysis.tsx`
-- `src/components/holders/SecurityAlertsCard.tsx`
+- `src/hooks/useBubbleMapRateLimit.ts` — bump free-auth limit, dynamic display limit, tier label
+- `src/components/bubble-map/PublicBubbleMap.tsx` — banner copy, info triggers, CTA wiring
+- `src/components/bubble-map/DailyTraceInfo.tsx` — new shared explainer component
