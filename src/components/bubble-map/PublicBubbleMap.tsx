@@ -350,6 +350,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     setXAccountsRevealed(false);
     setHasSpideredOnce(false);
     setDevWalletAddress(null);
+    setDiagnosticsDismissed(false);
+    setShowDiagnostics(true);
     setSuggestCount(0); // Reset suggestion count for new search
     setTraceButtonGold(false);
     setTraceButtonPulse(false);
