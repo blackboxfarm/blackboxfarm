@@ -941,10 +941,27 @@ export default function InsidersLifecycleTab() {
                     <div key={idx} className="border rounded-md p-3 bg-muted/20">
                       <div className="flex items-center gap-2 mb-2">
                         <Badge variant="outline" className="font-mono text-xs">
-                          <a href={`https://solscan.io/account/${cluster.key}`} target="_blank" rel="noreferrer" className="hover:text-primary">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCreatorSearchQuery(cluster.key);
+                              setCreatorDrawerOpen(true);
+                            }}
+                            className="hover:text-primary"
+                            title="Open fused Creator Profile"
+                          >
                             {cluster.key.slice(0, 6)}…{cluster.key.slice(-4)}
-                          </a>
+                          </button>
                         </Badge>
+                        <a
+                          href={`https://solscan.io/account/${cluster.key}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-muted-foreground hover:text-primary"
+                          title="Open in Solscan"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
                         {cluster.cexName && (
                           <Badge className="bg-green-500/20 text-green-400 border-green-500/40">{cluster.cexName}</Badge>
                         )}
