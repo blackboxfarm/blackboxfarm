@@ -1397,6 +1397,42 @@ Deno.serve(withRunLog('morning-report', async (req) => {
     const executionTimeMs = Date.now() - startTime;
 
     // ═══════════════════════════════════════════════════════════════
+    // CREATOR FUSION STATS (last 24h)
+    // ═══════════════════════════════════════════════════════════════
+    let fusionStats: any = null;
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [{ count: total }, { count: success24 }, { count: failures24 }, { data: newRows }, { data: mergeRows }, { data: profileTotal }, { data: aliasTotal }] = await Promise.all([
+        supabase.from('creator_fusion_audit').select('*', { count: 'exact', head: true }),
+        supabase.from('creator_fusion_audit').select('*', { count: 'exact', head: true }).eq('status', 'success').gte('ts', since),
+        supabase.from('creator_fusion_audit').select('*', { count: 'exact', head: true }).eq('status', 'error').gte('ts', since),
+        supabase.from('creator_fusion_audit').select('creator_id').eq('is_new', true).gte('ts', since),
+        supabase.from('creator_merge_log').select('id, surviving_id, absorbed_id, trigger_kind, created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(20),
+        supabase.from('developer_profiles').select('id', { count: 'exact', head: true }).is('merged_into', null),
+        supabase.from('creator_identity_aliases').select('creator_id', { count: 'exact', head: true }),
+      ]);
+      fusionStats = {
+        audit_rows_total: total || 0,
+        success_24h: success24 || 0,
+        failures_24h: failures24 || 0,
+        new_creators_24h: (newRows || []).length,
+        merges_24h: (mergeRows || []).length,
+        recent_merges: (mergeRows || []).slice(0, 10),
+        active_creator_profiles: profileTotal as any || 0,
+        alias_count: aliasTotal as any || 0,
+      };
+      if ((failures24 || 0) > 0) {
+        alerts.push({
+          severity: (failures24 || 0) > 5 ? 'critical' : 'warning',
+          category: 'creator-fusion',
+          message: `${failures24} Creator Fusion failures in last 24h — check creator_fusion_audit table`,
+        });
+      }
+    } catch (e) {
+      console.error('[morning-report] fusion stats failed:', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // SAVE REPORT TO DATABASE
     // ═══════════════════════════════════════════════════════════════
     const report = await assertUpsert(supabase
@@ -1432,6 +1468,7 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         telegram_bot_stats: telegramBotStats,
         web_chat_stats: webChatStats,
         sol_subscription_stats: solSubscriptionStats,
+        fusion_stats: fusionStats,
         unread_notifications: unreadCount || 0,
         alerts,
         execution_time_ms: executionTimeMs,
