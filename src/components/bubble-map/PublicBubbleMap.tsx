@@ -1287,6 +1287,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <LayoutTemplate className="h-3 w-3 mr-1" /> Schematic
             </Button>
           </div>
+          {/* Spacing — bordered group sits between Schematic and Snapshot */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5 border border-border/60">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
+              <Minus className="h-3 w-3" />
+            </Button>
+            <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
           {/* Snapshot & Share */}
           <Button
             variant="outline"
@@ -1298,16 +1308,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           >
             <Camera className="h-3 w-3 mr-1" /> Snapshot
           </Button>
-          {/* Spacing */}
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.max(1, f - 1))} title="Reduce spacing">
-              <Minus className="h-3 w-3" />
-            </Button>
-            <span className="text-[10px] text-muted-foreground w-8 text-center">{spreadFactor}x</span>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
           {/* Shakey-Shake */}
           <Button
             variant="outline"
