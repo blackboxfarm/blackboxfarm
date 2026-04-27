@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Zap,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -192,6 +194,8 @@ export default function InsidersLifecycleTab() {
   const [traceProgress, setTraceProgress] = useState<{ done: number; total: number } | null>(null);
   const [crossLinks, setCrossLinks] = useState<any | null>(null);
   const [crossLinksLoading, setCrossLinksLoading] = useState(false);
+  const [rescanRunning, setRescanRunning] = useState(false);
+  const hasAutoRescannedRef = useRef(false);
   const [crossTab, setCrossTab] = useState<'creator' | 'funder' | 'kyc'>('creator');
   const [minX, setMinX] = useState<string>("2");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -342,6 +346,47 @@ export default function InsidersLifecycleTab() {
   useEffect(() => {
     fetchCrossLinks();
   }, []);
+
+  // Auto-run free KYC rescan once if we have creators traced but zero KYC roots.
+  // The rescan function makes ZERO RPC calls — it only re-checks existing chains
+  // against the in-memory CEX dictionary, so it's safe to fire automatically.
+  useEffect(() => {
+    if (hasAutoRescannedRef.current) return;
+    if (!crossLinks?.stats) return;
+    const { rowsWithCreator, rowsWithKyc } = crossLinks.stats;
+    if (rowsWithKyc === 0 && rowsWithCreator > 0) {
+      hasAutoRescannedRef.current = true;
+      handleRescanKyc({ silent: true });
+    }
+  }, [crossLinks]);
+
+  const handleRescanKyc = async (opts: { silent?: boolean } = {}) => {
+    setRescanRunning(true);
+    try {
+      let totalScanned = 0;
+      let totalKyc = 0;
+      // Loop until no more rows to rescan (zero RPC cost).
+      for (let i = 0; i < 20; i++) {
+        const { data, error } = await supabase.functions.invoke('insiders-genealogy-rescan-kyc', {
+          body: { batchSize: 1000 },
+        });
+        if (error) throw error;
+        const d = data as { scanned?: number; kycResolved?: number };
+        totalScanned += d.scanned || 0;
+        totalKyc += d.kycResolved || 0;
+        if (!d.scanned || d.scanned === 0) break;
+      }
+      if (!opts.silent || totalKyc > 0) {
+        toast.success(`KYC rescan complete: ${totalKyc} new KYC roots resolved (${totalScanned} chains scanned, zero RPC cost)`);
+      }
+      await fetchCrossLinks();
+    } catch (e: any) {
+      if (!opts.silent) toast.error('KYC rescan failed: ' + (e?.message || String(e)));
+      else console.warn('[InsidersLifecycle] auto-rescan failed:', e);
+    } finally {
+      setRescanRunning(false);
+    }
+  };
 
   const handleTraceKyc = async () => {
     setTracingKyc(true);
@@ -780,18 +825,41 @@ export default function InsidersLifecycleTab() {
       {/* Wallet Cross-Links — RedFlag/GreenFlag detector */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 flex-wrap">
             <Network className="h-5 w-5" /> Wallet Cross-Links
             {crossLinks?.stats && (
               <span className="text-xs font-normal text-muted-foreground ml-2">
                 {crossLinks.stats.rowsWithCreator} creators • {crossLinks.stats.rowsWithKyc} KYC roots
-                {crossLinks.stats.rowsWithKyc === 0 && (
-                  <span className="ml-2 text-amber-400">
-                    (run "Rescan KYC (free)" or "Retrace Insiders KYC" in Utilities → Genealogy to populate)
-                  </span>
-                )}
               </span>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleRescanKyc()}
+                disabled={rescanRunning || tracingKyc}
+                className="gap-1.5"
+                title="Re-checks every existing chain wallet against the current CEX dictionary. Zero RPC cost."
+              >
+                {rescanRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                <span className="text-xs">Rescan KYC (free)</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={handleTraceKyc}
+                disabled={tracingKyc || rescanRunning}
+                className="gap-1.5"
+                title="Re-walks every Insiders token's funding chain to KYC. Uses Helius credits."
+              >
+                {tracingKyc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                <span className="text-xs">
+                  {tracingKyc && traceProgress
+                    ? `Retracing… ${traceProgress.done}/${traceProgress.total}`
+                    : 'Retrace Insiders KYC'}
+                </span>
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
