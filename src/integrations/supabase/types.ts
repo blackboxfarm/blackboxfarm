@@ -6635,6 +6635,7 @@ export type Database = {
           health_grade: string | null
           image_uri: string | null
           last_seen_at: string
+          last_trigger_source: string | null
           market_cap_at_discovery: number | null
           minted_at: string | null
           name: string | null
@@ -6654,6 +6655,7 @@ export type Database = {
           health_grade?: string | null
           image_uri?: string | null
           last_seen_at?: string
+          last_trigger_source?: string | null
           market_cap_at_discovery?: number | null
           minted_at?: string | null
           name?: string | null
@@ -6673,6 +6675,7 @@ export type Database = {
           health_grade?: string | null
           image_uri?: string | null
           last_seen_at?: string
+          last_trigger_source?: string | null
           market_cap_at_discovery?: number | null
           minted_at?: string | null
           name?: string | null
@@ -20119,6 +20122,15 @@ export type Database = {
       bulk_prune_table: {
         Args: { p_column: string; p_cutoff: string; p_table: string }
         Returns: number
+      }
+      bump_seen_token: {
+        Args: {
+          p_mint: string
+          p_name?: string
+          p_source: string
+          p_symbol?: string
+        }
+        Returns: undefined
       }
       check_api_service_alerts: {
         Args: never
