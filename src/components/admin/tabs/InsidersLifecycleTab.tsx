@@ -294,17 +294,32 @@ export default function InsidersLifecycleTab() {
       'dev_history_warning', 'total_messages',
       'genealogy_depth', 'genealogy_kyc_root',
     ].join(',');
-    const { data, error } = await supabase
-      .from("telegram_insider_token_lifecycle")
-      .select(LEAN_COLUMNS)
-      .order("peak_multiplier", { ascending: false })
-      .limit(2000);
-    if (error) {
-      toast.error("Failed to load lifecycle: " + error.message);
-    } else {
-      setRows((data as any) || []);
+    // Page through to bypass PostgREST's default 1000-row response cap.
+    const PAGE = 1000;
+    const acc: any[] = [];
+    let latest: string | null = null;
+    try {
+      for (let from = 0; from < 50_000; from += PAGE) {
+        const { data, error } = await supabase
+          .from("telegram_insider_token_lifecycle")
+          .select(LEAN_COLUMNS)
+          .order("peak_multiplier", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const batch = (data as any[]) || [];
+        acc.push(...batch);
+        for (const r of batch) {
+          if (!latest || (r.first_called_at && r.first_called_at > latest)) latest = r.first_called_at;
+        }
+        if (batch.length < PAGE) break;
+      }
+      setRows(acc as any);
+      setLastBuildAt(latest);
+    } catch (e: any) {
+      toast.error("Failed to load lifecycle: " + (e?.message || String(e)));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
