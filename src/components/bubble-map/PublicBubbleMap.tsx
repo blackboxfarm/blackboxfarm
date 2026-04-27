@@ -132,26 +132,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     return () => clearTimeout(t);
   }, [viewMode, solarMode]);
 
-  // Auto-fit after node count changes substantially (e.g. first trace renders nodes).
-  // Multiple staged fits so the user sees a clean layout once the simulation settles.
   const lastNodeCountRef = useRef(0);
-  useEffect(() => {
-    const count = displayData?.nodes?.length || 0;
-    if (count === 0) { lastNodeCountRef.current = 0; return; }
-    // Only react when a meaningful set of nodes is added (initial trace, spider expand, etc.)
-    const grew = count >= lastNodeCountRef.current + 2 || lastNodeCountRef.current === 0;
-    lastNodeCountRef.current = count;
-    if (!grew) return;
-    if (viewMode !== 'bubble' && viewMode !== 'tree') return;
-    const timers: number[] = [];
-    [400, 1200, 2200].forEach(delay => {
-      timers.push(window.setTimeout(() => {
-        try { graphRef.current?.zoomToFit?.(600, 80); } catch { /* noop */ }
-      }, delay));
-    });
-    return () => { timers.forEach(t => clearTimeout(t)); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayData?.nodes?.length, viewMode]);
 
   // --- Zoom controls (in-frame) ---
   const handleZoomIn = useCallback(() => {
