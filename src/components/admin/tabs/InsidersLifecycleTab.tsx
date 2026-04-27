@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Zap,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -192,6 +194,8 @@ export default function InsidersLifecycleTab() {
   const [traceProgress, setTraceProgress] = useState<{ done: number; total: number } | null>(null);
   const [crossLinks, setCrossLinks] = useState<any | null>(null);
   const [crossLinksLoading, setCrossLinksLoading] = useState(false);
+  const [rescanRunning, setRescanRunning] = useState(false);
+  const hasAutoRescannedRef = useRef(false);
   const [crossTab, setCrossTab] = useState<'creator' | 'funder' | 'kyc'>('creator');
   const [minX, setMinX] = useState<string>("2");
   const [statusFilter, setStatusFilter] = useState<string>("all");
