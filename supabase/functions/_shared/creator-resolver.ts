@@ -38,6 +38,17 @@ export async function resolveTokenCreator(
   try {
     const data = await fetchPumpFunCoin(tokenMint, 'creator-resolver');
     if (data?.creator) {
+      // Backfill token_lifecycle so downstream queries (e.g. "tokens minted
+      // by this dev") don't return zero. Fire-and-forget — never block.
+      try {
+        if (supabase?.from) {
+          await supabase
+            .from('token_lifecycle')
+            .update({ creator_wallet: data.creator })
+            .eq('token_mint', tokenMint)
+            .is('creator_wallet', null);
+        }
+      } catch (_) { /* fire-and-forget */ }
       return {
         creatorWallet: data.creator,
         source: 'pumpfun',
