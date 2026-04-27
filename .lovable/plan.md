@@ -1,130 +1,135 @@
-# Unified Creator Identity — Full Wire-Up, Backfill, Crons & Audits
 
-Goal: take the parallel `fuseCreator` system and make it the **active, automatic** identity layer. Every natural place a wallet/social signal lands → fusion runs. Existing 58,628 `developer_profiles` get backfilled. Cron jobs keep it converging. Audits + morning report surface what happened. Zero silent fails.
+# HoldersIntel Reputation Engine — Manifesto + Surface Updates
+
+Four tracks. #2 (public Creator Profile pages) is intentionally deferred — keep it admin/beta only.
 
 ---
 
-## What gets done (in this exact order)
+## Track A — "HoldersIntel Dev Team Foreward" floating modal (NEW)
 
-### 1. Wire `fuseCreator()` into live write paths
+A small floating icon, present on every page (mobile + desktop), positioned roughly where the user's mouse pointer sits in the screenshot — at the **right edge of the nav bar row**, just past the last nav tab. On click, opens an old-school terminal-style modal with the manifesto.
 
-Every existing function that mints a `developer_profiles` row or learns a new social signal will call fusion **after** its existing work, fire-and-forget but with explicit error logging into a new audit table (so a transient fusion hiccup never breaks the core write).
+### Placement
 
-Functions to edit (8 hooks total):
+- Render inside `SiteLayout.tsx` as a sibling to the `<nav>` inside the nav bar container, absolutely positioned to the right end of the nav row (so it sits on the same horizontal line as the tabs, near the right gutter).
+- On mobile: same row, but shrink to icon-only (no label) and tuck it just before the mobile scroll-hint chevron so it doesn't get clipped by overflow scroll.
+- z-index above the scroll-hint gradient so it's always clickable.
 
-| Function | Signal it contributes |
-|---|---|
-| `token-creator-linker` | dev wallet (pump.fun creator) — replace its bespoke insert with fusion |
-| `developer-discovery-job` | dev wallet + display_name |
-| `developer-enrichment` | dev wallet + twitter/telegram/discord/website |
-| `oracle-auto-classifier` | dev wallet + classification metadata |
-| `oracle-x-reverse-lookup` | x_user_id + x_handle → wallet |
-| `family-discovery-engine` | sister wallets cluster |
-| `rug-event-processor` | rug-flagged dev wallet |
-| `flipit-execute` | dev wallet at execution |
+### Icon choice
 
-Plus two **social** write hooks (so an X handle alone creates/updates a profile):
+Recommend `ScrollText` from lucide-react (parchment/scroll vibe, fits "foreward / dev note") with a subtle amber/gold tint matching brand. Alternative: `BookOpen` or `Feather`. I'll use `ScrollText` unless you say otherwise.
 
-| Function | Signal |
-|---|---|
-| `harvest-token-socials` | x_handle, telegram_handle, website_domain (per token_mint → look up creator wallet, fuse) |
-| `social-links-backfill` | same — bulk path |
+### Hover label
 
-Every call uses `assertDbWrite`-friendly try/catch that logs failures into `creator_fusion_audit` (new table) but never throws past the host function — fusion is auxiliary, host writes must succeed.
+Tooltip text (shadcn `Tooltip`): **"HoldersIntel Dev Team Foreward"**
 
-### 2. Replace `token-creator-linker`'s bespoke profile creation
+### Modal content (verbatim, old-school formatted)
 
-Today it does its own `developer_profiles` insert + `developer_wallets` insert. After this, it calls `fuseCreator({devWallet, source:'token-creator-linker'})` and uses the returned `creatorId` for downstream `token_lifecycle.developer_id` and `developer_tokens.developer_id`. This stops creating duplicate profiles for the same wallet.
+- shadcn `Dialog` modal, max-w ~`2xl`.
+- Body styled as a terminal/typewriter: `font-mono`, slight green-on-near-black (`bg-[#0a0a0a] text-[hsl(140_60%_75%)]`), thin amber border, ASCII rule lines above and below the body, blinking caret at the end.
+- Header row: `> cat /var/holdersintel/foreward.txt`
+- Footer signature right-aligned: `— HoldersIntel Dev Team`
+- Small "ESC to close" hint bottom-left.
 
-### 3. One-shot full backfill (executed automatically, not waiting on a button)
+Body text (exact, preserved line breaks):
 
-Run `creator-profile-backfill` in a paged loop until `done:true`. Handles all 461 lifecycle rows with a creator wallet + their social links. Then run a second backfill pass over `developer_profiles` rows that have any of `twitter_handle / telegram_handle / discord_handle / website_url` so we capture the other 58k profiles' existing signals.
+```
+HoldersIntel is a Reputation Engine.
 
-### 4. New audit + maintenance tables
+Primary entities: Creator Profiles ↔ Token Projects
+(many-to-many, cross-linked on many signals)
 
-```sql
-create table creator_fusion_audit (
-  id uuid pk default gen_random_uuid(),
-  ts timestamptz default now(),
-  source text not null,           -- which function triggered fusion
-  signals jsonb not null,         -- the input bag
-  creator_id uuid,                -- result (null on failure)
-  is_new boolean,
-  merged_absorbed_ids uuid[],
-  aliases_written int,
-  status text not null,           -- 'success' | 'error'
-  error text
-);
-create index on creator_fusion_audit (ts desc);
-create index on creator_fusion_audit (status, ts desc);
+The lifecycle outcome of a Token Project
+(success/failure, intentional/accidental)
+is evidence that updates the Creator's reputation.
+
+Data is collected from many sources
+(on-chain, X, Telegram, web scrapes, KYC traces,
+behavioral analysis).
+
+Data is displayed across many surfaces
+(web reports, Bubble Map, Telegram bot DMs/groups,
+Intel Briefings, Live Feed).
+
+Monetization: monthly subscription unlocks the
+full pipeline.
 ```
 
-Plus a tiny RPC `prune_creator_fusion_audit()` that deletes success rows older than 14 days and error rows older than 90 days.
+### Files
 
-### 5. Recurring crons (added via `pg_cron`, persisted)
-
-| Cron | Schedule | Purpose |
-|---|---|---|
-| `creator-fusion-rolling-backfill` | every 30 min | calls `creator-profile-backfill` with `{limit:500}` rolling through new lifecycle rows + any developer_profiles that still have null aliases |
-| `creator-fusion-audit-prune` | daily 04:15 | runs `prune_creator_fusion_audit()` |
-| `creator-fusion-integrity-recalc` | daily 04:30 | re-runs `calculate-developer-integrity` for any creator with new merges in last 24h so integrity scores reflect fused identities |
-
-Wired via `cron.schedule` using a new `_shared/cron-guard.ts` no-op + a re-assert step in the migration (so if a remix wipes them, re-running the migration restores them — protects against "lost cron" risk).
-
-### 6. Surface in morning report
-
-Add to `morning-report` function (and a migration for the columns if missing):
-- `fused_creators_total`, `fused_creators_new_24h`, `merges_24h`
-- `fusion_failures_24h` (red flag)
-- `top_creators_by_token_count_24h` (jsonb)
-
-Section appears in the daily morning email/report.
-
-### 7. Insiders panel polish (no behavior change, just truthful labels)
-
-Header re-phrased per your earlier note: `"422 token projects across N creator profiles · M KYC roots"`. The `CreatorProfileDrawer` gains a "Tokens by this Creator" list pulling `developer_tokens` joined to `token_lifecycle` (mint, symbol, peak multiplier, rug status, launch date).
+- **NEW**: `src/components/layout/DevTeamForewardButton.tsx` — icon button + tooltip + dialog, all self-contained.
+- **EDIT**: `src/components/layout/SiteLayout.tsx` — mount it inside the nav-bar container at the right edge.
 
 ---
 
-## Failure & observability guarantees
+## Track B — Reframe sitewide copy around "Reputation Engine" (Track #1)
 
-- Every fusion call wrapped: success → `creator_fusion_audit` row (`status='success'`); failure → `status='error'` row with full error + signals, **plus** the host function continues so we never break the upstream pipeline.
-- All DB writes inside fusion already use `assertDbWrite` (per the zero-tolerance constraint memory) — so a real DB error escalates correctly via SMS + `edge_function_runs` failure.
-- Cron jobs use the standard `net.http_post` pattern from the schedule-jobs guidance and are inserted via the data-insert tool so they survive remixes properly.
-- Audit pruning prevents the audit table from growing unbounded (per the storage-management memory).
+Tighten the public surfaces so the thesis lands without anyone having to click the foreward.
 
----
+### Files & changes
 
-## Files touched
-
-**New**
-- `supabase/migrations/<timestamp>_creator_fusion_audit_and_morning_columns.sql` — audit table, prune RPC, morning_report columns
-- `supabase/functions/_shared/fuse-and-audit.ts` — shared helper: `await fuseAndAudit(signals, supabase)` wraps fuseCreator + audit row + try/catch
-- (data insert) `cron.schedule(...)` x3
-
-**Edited (fusion hook added)**
-- `supabase/functions/token-creator-linker/index.ts` (also: replace bespoke insert)
-- `supabase/functions/developer-discovery-job/index.ts`
-- `supabase/functions/developer-enrichment/index.ts`
-- `supabase/functions/oracle-auto-classifier/index.ts`
-- `supabase/functions/oracle-x-reverse-lookup/index.ts`
-- `supabase/functions/family-discovery-engine/index.ts`
-- `supabase/functions/rug-event-processor/index.ts`
-- `supabase/functions/flipit-execute/index.ts`
-- `supabase/functions/harvest-token-socials/index.ts`
-- `supabase/functions/social-links-backfill/index.ts`
-- `supabase/functions/morning-report/index.ts` — fusion stats block
-- `src/components/admin/tabs/InsidersLifecycleTab.tsx` — header phrasing
-- `src/components/admin/CreatorProfileDrawer.tsx` — "Tokens by this Creator" list
-
-**Executed automatically (no button)**
-- Paged loop hitting `creator-profile-backfill` until `done`
-- Second pass over `developer_profiles` with social fields
-- `cron.schedule` for the three new jobs
+1. **`src/pages/Index.tsx` (landing)**
+   - Hero subhead: replace current line with → *"The Reputation Engine for Solana creators. Every wallet, every token, every outcome — linked."*
+   - Add a 3-line "How it works" strip directly under the hero: **Creators ↔ Tokens → Outcomes → Reputation.**
+2. **`src/pages/Pricing.tsx`**
+   - Top-of-page banner: *"Your subscription unlocks the full reputation graph — not features, evidence."*
+3. **`public/llms.txt` and `public/ai.txt`**
+   - Replace tagline with the manifesto's first paragraph so AI crawlers index us as a reputation engine, not a "holders tool".
+4. **`index.html` `<meta name="description">`** — same reframing (~155 chars).
+5. **`src/components/chat/` AI persona seed** — append one sentence to Helper Mode and Signal Mode system prompts: *"You are the front-end of a Reputation Engine. Creators and Token Projects are the two primary entities; outcomes are evidence."* (Located in the AI Config table — done via a tiny migration that updates the existing `ai_configurations` rows.)
 
 ---
 
-## Out of scope (intentional)
+## Track C — Add `intent_classification` dimension (Track #3)
 
-- Bubble Map / Oracle / Telegram bots still read `reputation_mesh` / `developer_profiles` directly. Fusion is non-destructive — tombstones keep their FKs alive. Migrating the read side is a follow-up that I'll plan separately when you want it.
-- No new RLS policy changes — `creator_fusion_audit` is admin-only via existing super-admin RLS pattern.
+Make intent (rug / abandoned / accidental-fail / organic-success / engineered-success) a first-class field used by autopsy and allstar engines.
+
+### Files & changes
+
+1. **NEW migration** — add `intent_classification` enum + column to `token_lifecycle_events` (or whichever table autopsy/allstar already write to; verified during exploration to be `token_autopsies` and `allstar_mint_alerts`).
+   - Enum values: `rug_pull`, `soft_rug`, `abandoned`, `accidental_failure`, `organic_success`, `engineered_success`, `unknown`.
+   - Default `unknown`.
+2. **EDIT `supabase/functions/token-autopsy/index.ts`** — heuristic classifier (LP yanked + dev sells inside 1h → `rug_pull`; LP intact + zero dev activity 7d → `abandoned`; etc.). Write classification when autopsy runs.
+3. **EDIT `supabase/functions/allstar-promotion-engine/index.ts`** — read intent; only promote on `organic_success` or `engineered_success`. Demote/skip if any historic `rug_pull`.
+4. **EDIT `src/components/admin/CreatorProfileDrawer.tsx`** — add an "Intent breakdown" row (counts per intent type across the creator's tokens).
+5. **Pro gating** — surface intent breakdown publicly only on Pro tier. Free/anon sees aggregate "X tokens, Y rugs" without per-token intent labels.
+
+---
+
+## Track D — Pricing reframe around the reputation graph (Track #4)
+
+Rewrite `src/pages/Pricing.tsx` tier cards from feature-list to **access-tier-of-graph**:
+
+| Tier | Reframed value |
+|------|----------------|
+| Free | "Sample one Creator's reputation per day" |
+| Pro  | "Full graph access — every Creator, every Token, every link, every outcome" |
+| Enterprise / Telegram annual | unchanged structurally; subhead becomes *"Direct pipe into the reputation graph"* |
+
+- Keep Stripe links untouched (per existing memory).
+- Keep the existing `TierCards` component shape; just rewrite copy and bullets.
+
+---
+
+## Out of scope (per your call)
+
+- Public `/creator/{id}` route — stays admin-only / beta. No public link added anywhere. CreatorProfileDrawer remains the only viewer for now.
+
+---
+
+## Technical notes
+
+- All new work is read-mostly except (a) one tiny migration for `intent_classification`, (b) one migration to update `ai_configurations` system-prompt rows, and (c) the new component file.
+- No cron changes, no new edge functions.
+- `assertDbWrite` used for any DB write touched (zero-tolerance rule).
+- Foreward modal is pure client UI — no DB.
+
+---
+
+## Order of execution (when you approve)
+
+1. Add `DevTeamForewardButton` + wire into `SiteLayout` (visible immediately on every page).
+2. Reframe copy on Index, Pricing, llms.txt, ai.txt, index.html meta.
+3. Migration + autopsy/allstar wiring for `intent_classification`.
+4. Pricing tier rewrite.
+5. AI persona seed migration.

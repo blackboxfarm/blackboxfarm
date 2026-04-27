@@ -17,6 +17,7 @@ import { ChatWidget } from '@/components/chat/ChatWidget';
 import { OracleHoverProvider } from '@/components/chat/OracleHoverProvider';
 import { OraclePeek } from '@/components/chat/OraclePeek';
 import { useCanonical } from '@/hooks/useCanonical';
+import { DevTeamForewardButton } from '@/components/layout/DevTeamForewardButton';
 
 const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
@@ -138,28 +139,34 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
       {/* Nav Menu */}
       <div className="border-b border-border bg-muted/30 relative">
         <div className="container mx-auto px-4">
-          <nav className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide">
-            {NAV_ITEMS.map((item) => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={cn(
-                    "px-4 py-2.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
-                    isActive 
-                      ? "bg-accent text-accent-foreground" 
-                      : "bg-[hsl(270_25%_18%)] text-muted-foreground/80 hover:text-foreground hover:bg-[hsl(270_25%_24%)]"
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="flex items-center justify-between gap-2">
+            <nav className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide flex-1 min-w-0">
+              {NAV_ITEMS.map((item) => {
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={cn(
+                      "px-4 py-2.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+                      isActive 
+                        ? "bg-accent text-accent-foreground" 
+                        : "bg-[hsl(270_25%_18%)] text-muted-foreground/80 hover:text-foreground hover:bg-[hsl(270_25%_24%)]"
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            {/* Dev Team Foreward — manifesto popup, sits at the right edge of the nav row */}
+            <div className="shrink-0 pl-2 pr-1 md:pr-2 relative z-10">
+              <DevTeamForewardButton />
+            </div>
+          </div>
         </div>
         {/* Mobile scroll hint arrow */}
-        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-muted/80 to-transparent flex items-center justify-end pr-1 pointer-events-none md:hidden">
+        <div className="absolute right-10 top-0 bottom-0 w-8 bg-gradient-to-l from-muted/80 to-transparent flex items-center justify-end pr-1 pointer-events-none md:hidden">
           <ChevronRight className="h-4 w-4 text-[hsl(270_40%_55%)] animate-pulse" />
         </div>
       </div>

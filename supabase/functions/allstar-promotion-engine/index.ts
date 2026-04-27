@@ -168,6 +168,26 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
           .eq('master_wallet_address', creatorWallet)
           .maybeSingle();
 
+        // ═══ Reputation Engine: skip-guard for prior rug_pull intent ═══
+        // If this creator's wallet (or any of its family wallets) is on record
+        // as the creator of any token classified as rug_pull, do NOT promote.
+        const familyForRugCheck = [creatorWallet];
+        try {
+          const { data: rugHistory } = await supabase
+            .from('token_lifecycle')
+            .select('token_mint, intent_classification')
+            .in('creator_wallet', familyForRugCheck)
+            .eq('intent_classification', 'rug_pull')
+            .limit(1);
+          if (rugHistory && rugHistory.length > 0) {
+            console.log(`[AllstarPromotion] ⛔ Skip ${creatorWallet.slice(0,8)} — prior rug_pull intent on ${rugHistory[0].token_mint}`);
+            results.skipped++;
+            continue;
+          }
+        } catch (e) {
+          console.warn(`[AllstarPromotion] rug intent check failed (non-fatal):`, (e as Error).message);
+        }
+
         // Build family wallets from reputation_mesh
         const familyWallets: string[] = [creatorWallet];
         if (devProfile) {
@@ -239,6 +259,23 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
 
         results.promoted++;
         console.log(`[AllstarPromotion] ⭐ Promoted ${creatorWallet.slice(0, 8)}... → T${tier} via $${bestToken.symbol} (MCap $${Math.round(mcap).toLocaleString()})`);
+
+        // ═══ Reputation Engine: stamp positive intent on the winning token ═══
+        // Reaching the allstar mcap threshold = engineered_success by default.
+        // (token-autopsy never marks live high-mcap tokens, so no overlap.)
+        try {
+          await supabase
+            .from('token_lifecycle')
+            .update({
+              intent_classification: 'engineered_success',
+              intent_classified_at: new Date().toISOString(),
+              intent_classification_source: 'allstar-promotion-engine',
+            })
+            .eq('token_mint', bestToken.token_mint)
+            .eq('intent_classification', 'unknown'); // don't overwrite explicit values
+        } catch (e) {
+          console.warn(`[AllstarPromotion] intent stamp failed (non-fatal):`, (e as Error).message);
+        }
 
         // ═══ Cross-feed: Seed into wallet_families ═══
         const { data: existingFamily } = await supabase

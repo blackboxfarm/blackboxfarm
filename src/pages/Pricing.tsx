@@ -38,6 +38,10 @@ export default function Pricing() {
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             From free token analysis to full AI-powered intel. Pick the plan that fits your trading style.
           </p>
+          <div className="max-w-2xl mx-auto rounded-md border border-gold/40 bg-gold/5 px-4 py-2 text-sm text-gold/90">
+            Your subscription unlocks the full <span className="font-semibold">reputation graph</span> —
+            not features, evidence.
+          </div>
           <div className="flex items-center justify-center gap-2 text-sm text-blue-400">
             <SocialIcon platform="twitter" className="w-4 h-4" />
             <XSuspendedPopover>

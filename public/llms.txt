@@ -1,6 +1,11 @@
-# BlackBox Farm — LLMs.txt
+# BlackBox Farm / HoldersIntel — LLMs.txt
 
-> BlackBox Farm (blackbox.farm) is a Solana blockchain intelligence platform.
+> HoldersIntel is a Reputation Engine for Solana.
+> Two primary entities: Creator Profiles and Token Projects, cross-linked
+> on many signals (on-chain wallets, KYC traces, X handles, Telegram IDs,
+> Discord, websites, behavioral fingerprints). The lifecycle outcome of
+> every Token Project — success or failure, intentional or accidental —
+> becomes evidence that updates the responsible Creator's reputation.
 > Brand name: BlackBox Farm / HoldersIntel
 > Twitter/X: @HoldersIntel, @blackbox_farm
 > Tagline: "Crypto has hands — we show them."

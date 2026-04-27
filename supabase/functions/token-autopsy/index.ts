@@ -160,6 +160,19 @@ Deno.serve(withRunLog('token-autopsy', async (req) => {
         const result = diagnose(token, devScore, holders || []);
         results.push(result);
 
+        // Map autopsy death_cause → reputation-engine intent classification.
+        // Only failure intents here; allstar-promotion-engine handles the
+        // organic_success / engineered_success side.
+        const intentMap: Record<string, string> = {
+          rug_pull: 'rug_pull',
+          slow_drain: 'soft_rug',
+          liquidity_pulled: 'rug_pull',
+          abandoned: 'abandoned',
+          organic_death: 'accidental_failure',
+          unknown: 'unknown',
+        };
+        const intent = intentMap[result.death_cause] ?? 'unknown';
+
         // Write back to token_lifecycle
         await supabase
           .from('token_lifecycle')
@@ -168,6 +181,9 @@ Deno.serve(withRunLog('token-autopsy', async (req) => {
             death_confidence: result.death_confidence,
             autopsy_at: new Date().toISOString(),
             autopsy_notes: result.autopsy_notes,
+            intent_classification: intent,
+            intent_classified_at: new Date().toISOString(),
+            intent_classification_source: 'token-autopsy',
           })
           .eq('token_mint', token.token_mint);
 

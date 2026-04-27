@@ -134,6 +134,10 @@ export default function Home() {
           <p className="text-base md:text-lg max-w-2xl mx-auto mb-6 text-gold font-semibold" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)' }}>
             Link wallets, expose insider clusters, and identify bad devs before you ape.
           </p>
+          <p className="text-xs md:text-sm max-w-2xl mx-auto -mt-3 mb-6 text-muted-foreground/80 tracking-wide">
+            <span className="text-primary/80 font-semibold">Reputation Engine</span> for Solana &middot;
+            <span className="px-2">Creators &harr; Tokens &rarr; Outcomes &rarr; Reputation</span>
+          </p>
           <div className="mb-10" data-oracle-hint="I can help you run your first token check" data-oracle-zone="home-hero-cta">
             <Button 
               size="lg" 
