@@ -870,6 +870,36 @@ export default function InsidersLifecycleTab() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Mesh identity search — paste any wallet, X handle (@name), TG ID, KYC root, or domain */}
+          <div className="flex gap-2 mb-3 items-center">
+            <div className="flex items-center gap-2 flex-1 border rounded-md px-2 bg-muted/20 focus-within:ring-1 focus-within:ring-primary">
+              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Input
+                value={creatorSearchInput}
+                onChange={(e) => setCreatorSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && creatorSearchInput.trim()) {
+                    setCreatorSearchQuery(creatorSearchInput.trim());
+                    setCreatorDrawerOpen(true);
+                  }
+                }}
+                placeholder="Mesh ID lookup — wallet, @xhandle, tg:123456, discord:name, kyc:wallet, or domain.com"
+                className="border-0 bg-transparent h-8 text-xs focus-visible:ring-0 focus-visible:ring-offset-0 px-0"
+              />
+            </div>
+            <Button
+              size="sm"
+              variant="default"
+              disabled={!creatorSearchInput.trim()}
+              onClick={() => {
+                setCreatorSearchQuery(creatorSearchInput.trim());
+                setCreatorDrawerOpen(true);
+              }}
+            >
+              Resolve
+            </Button>
+          </div>
+
           <div className="flex gap-2 mb-3">
             <Button size="sm" variant={crossTab === 'creator' ? 'default' : 'outline'} onClick={() => setCrossTab('creator')}>
               Shared Creator ({crossLinks?.sharedCreator?.length || 0})
