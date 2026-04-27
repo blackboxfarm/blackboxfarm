@@ -1109,9 +1109,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             )}
           </div>
 
-          {/* Spider Status / Diagnostics — sticky per-trace, dismissible */}
-          {mode !== 'promo' &&
-            !diagnosticsDismissed &&
+          {/* Spider Status / Diagnostics — sticky per-trace, dismissible (shown on all modes) */}
+          {!diagnosticsDismissed &&
             (spiderStatus.active ||
               (spiderStatus.diagnostics && spiderStatus.diagnostics.length > 0)) && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
