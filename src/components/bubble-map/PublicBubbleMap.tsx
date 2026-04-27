@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useMeshGraph, ENTITY_COLORS, ENTITY_LABELS, MeshNode } from "@/hooks/useMeshGraph";
-import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera, ZoomIn, ZoomOut } from "lucide-react";
+import { Search, RotateCcw, Radar, AlertTriangle, ChevronDown, ChevronUp, Network, GitBranch, Key, Coins, Loader2, Unlock, Lock, Crown, ExternalLink, SearchCheck, Plus, Minus, Copy, Check, Sun, Orbit, Box, LayoutTemplate, Camera, ZoomIn, ZoomOut, X as XIcon, Scissors } from "lucide-react";
 import { xIcon } from "@/components/token/SocialIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +44,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const [hoveredNode, setHoveredNode] = useState<MeshNode | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnosticsDismissed, setDiagnosticsDismissed] = useState(false);
+  const [schematicMode, setSchematicMode] = useState<'branches' | 'prune'>('branches');
   const [viewMode, setViewMode] = useState<ViewMode>('bubble');
   const [kycSearching, setKycSearching] = useState(false);
   const [kycFound, setKycFound] = useState(false);
