@@ -785,6 +785,11 @@ export default function InsidersLifecycleTab() {
             {crossLinks?.stats && (
               <span className="text-xs font-normal text-muted-foreground ml-2">
                 {crossLinks.stats.rowsWithCreator} creators • {crossLinks.stats.rowsWithKyc} KYC roots
+                {crossLinks.stats.rowsWithKyc === 0 && (
+                  <span className="ml-2 text-amber-400">
+                    (run "Rescan KYC (free)" or "Retrace Insiders KYC" in Utilities → Genealogy to populate)
+                  </span>
+                )}
               </span>
             )}
           </CardTitle>
