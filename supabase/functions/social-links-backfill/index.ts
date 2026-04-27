@@ -149,6 +149,48 @@ Deno.serve(withRunLog('social-links-backfill', async (req) => {
           console.warn(`[social-links-backfill] Upsert chunk error:`, upsertError.message);
         }
       }
+
+      // ═══ Creator Fusion: attach social signals to each known creator profile ═══
+      try {
+        const uniqueMints = [...new Set(links.map((l: any) => l.token_mint))];
+        const { data: lifecycleRows } = await supabase
+          .from('token_lifecycle')
+          .select('token_mint, creator_wallet')
+          .in('token_mint', uniqueMints)
+          .not('creator_wallet', 'is', null);
+        const walletByMint = new Map<string, string>();
+        for (const r of (lifecycleRows || []) as any[]) walletByMint.set(r.token_mint, r.creator_wallet);
+
+        // Group socials by mint
+        const socialsByMint = new Map<string, { twitter?: string; telegram?: string; website?: string; discord?: string }>();
+        for (const l of links as any[]) {
+          const cur = socialsByMint.get(l.token_mint) || {};
+          if (l.platform === 'twitter' || l.platform === 'x') cur.twitter = cur.twitter || l.url;
+          if (l.platform === 'telegram') cur.telegram = cur.telegram || l.url;
+          if (l.platform === 'website' || l.platform === 'site') cur.website = cur.website || l.url;
+          if (l.platform === 'discord') cur.discord = cur.discord || l.url;
+          socialsByMint.set(l.token_mint, cur);
+        }
+
+        const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts');
+        for (const [mint, social] of socialsByMint) {
+          const wallet = walletByMint.get(mint);
+          if (!wallet) continue;
+          await fuseAndAudit(
+            {
+              devWallet: wallet,
+              xHandle: social.twitter || null,
+              telegramHandle: social.telegram || null,
+              websiteDomain: social.website || null,
+              discordHandle: social.discord || null,
+              source: 'social-links-backfill',
+            },
+            supabase,
+          );
+        }
+      } catch (fusionErr) {
+        console.warn('[social-links-backfill] Fusion sweep error:', (fusionErr as Error).message);
+      }
     }
 
     const nextOffset = offset + meshEntries.length;
