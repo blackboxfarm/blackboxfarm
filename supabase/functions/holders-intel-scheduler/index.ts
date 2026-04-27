@@ -365,6 +365,31 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     
     const qualifiedTokens = newTokens.filter(t => !establishedMints.has(t.mint));
     
+    // Phase 3: demand-weighted ranking — boost tokens the public is actually
+    // querying right now via /holders, /bubblemap, or the Telegram bot.
+    let demandMap = new Map<string, number>();
+    if (qualifiedTokens.length > 0) {
+      try {
+        const { data: demandRows } = await supabase
+          .from('holders_intel_demand_24h')
+          .select('token_mint, demand_score_24h')
+          .in('token_mint', qualifiedTokens.map(t => t.mint));
+        for (const r of (demandRows || [])) {
+          demandMap.set(r.token_mint, Number(r.demand_score_24h) || 0);
+        }
+        const boosted = [...demandMap.values()].filter(v => v > 0).length;
+        if (boosted > 0) {
+          console.log(`[scheduler] 📈 ${boosted} tokens boosted by 24h public demand`);
+        }
+      } catch (e) {
+        console.warn('[scheduler] demand-weighted ranking unavailable:', (e as Error).message);
+      }
+    }
+
+    // Sort: tokens with public demand bubble to the top (highest demand first),
+    // then ties fall back to the original DEX-trending order.
+    qualifiedTokens.sort((a, b) => (demandMap.get(b.mint) ?? 0) - (demandMap.get(a.mint) ?? 0));
+
     // CAP: Check current pending count — don't flood the queue beyond 50 pending
     const { count: currentPending } = await supabase
       .from('holders_intel_post_queue')

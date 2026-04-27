@@ -7,6 +7,7 @@ import { isSolscanUsable } from '../_shared/provider-health.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
+import { getCachedCreator } from '../_shared/mesh-cache.ts';
 enableHeliusTracking('oracle-unified-lookup');
 
 const corsHeaders = {
@@ -517,14 +518,22 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
         xAccountData = xData;
       }
     } else if (inputType === 'token') {
-      // Canonical creator resolution chain (Pump.fun -> Helius TOKEN_MINT -> Helius DAS -> DB cache)
-      const creatorResolution = await resolveTokenCreator(cleanedInput, supabase, apiErrors);
-
-      if (creatorResolution.creatorWallet) {
-        resolvedWallet = creatorResolution.creatorWallet;
-        console.log(
-          `[Oracle] Creator resolved via ${creatorResolution.source}: ${resolvedWallet.slice(0, 8)} (confidence: ${creatorResolution.confidence})`
-        );
+      // Phase 2: Read-Before-Fetch — try the 5-min mesh cache first to avoid
+      // burning Helius/Pump.fun credits on hot tokens repeatedly queried by
+      // the public across Bubble Map, /holders, and the Telegram bot.
+      const cachedCreator = await getCachedCreator(supabase, cleanedInput);
+      if (cachedCreator) {
+        resolvedWallet = cachedCreator;
+        console.log(`[Oracle] ✅ creator from mesh cache: ${cachedCreator.slice(0, 8)}`);
+      } else {
+        // Canonical creator resolution chain (Pump.fun -> Helius TOKEN_MINT -> Helius DAS -> DB cache)
+        const creatorResolution = await resolveTokenCreator(cleanedInput, supabase, apiErrors);
+        if (creatorResolution.creatorWallet) {
+          resolvedWallet = creatorResolution.creatorWallet;
+          console.log(
+            `[Oracle] Creator resolved via ${creatorResolution.source}: ${resolvedWallet.slice(0, 8)} (confidence: ${creatorResolution.confidence})`
+          );
+        }
       }
 
       // Phase 1: Feed the public-input flywheel.

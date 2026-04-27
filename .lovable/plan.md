@@ -203,3 +203,11 @@ group by token_mint;
 Phase 1 alone unlocks the flywheel symmetry and is low-risk (~1 migration + 1 new shared file + 4 wiring edits). Phase 2 is the big credits-saver. Phase 3 is the highest leverage for product (public demand actually steers the funnel). Phase 4 is polish.
 
 Reply with which phase(s) to start, or "all of phase 1" and I'll begin.
+
+---
+
+## Status update — Phases 2, 3, 4 shipped
+
+- **Phase 2** ✅ `_shared/mesh-cache.ts` added (`getCachedToken`, `getCachedCreator`, `shouldFetchFresh`, `readBeforeFetch`). Oracle now hits the 5-min mesh cache before resolving creator wallets via Helius/Pump.fun.
+- **Phase 3** ✅ View `public.holders_intel_demand_24h` created; scheduler reads it and re-sorts qualified tokens so high-demand mints rise to the top of the post queue.
+- **Phase 4** ✅ All public-input surfaces (Bubble Map quota, Oracle, Telegram bot) feed `bump_seen_token` and `meshFeed.token`, so demand is symmetric across the three vehicles.
