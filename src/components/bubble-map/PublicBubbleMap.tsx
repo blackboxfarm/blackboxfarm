@@ -842,6 +842,30 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       }
     }
 
+    // PRUNE mode (applies in ALL view modes, not just schematic):
+    // keep only the central token, the dev wallet, and socials directly linked
+    // to the token. Strips funder chains, sibling wallets, KYC roots, etc.
+    if (schematicMode === 'prune' && baseNodes.length > 0) {
+      const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
+      const tokenNode = baseNodes.find(n => n.type === 'token');
+      if (tokenNode) {
+        const keep = new Set<string>();
+        keep.add(tokenNode.id);
+        const devNode = baseNodes.find((n: any) => n.type === 'wallet' && (n as any).isDev);
+        if (devNode) keep.add(devNode.id);
+        for (const l of graphData.links) {
+          const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
+          const t = typeof l.target === 'string' ? l.target : (l.target as any).id;
+          if (s === tokenNode.id || t === tokenNode.id) {
+            const otherId = s === tokenNode.id ? t : s;
+            const other = baseNodes.find(n => n.id === otherId);
+            if (other && SOCIAL_TYPES.has(other.type)) keep.add(other.id);
+          }
+        }
+        baseNodes = baseNodes.filter(n => keep.has(n.id));
+      }
+    }
+
     const nodeIds = new Set(baseNodes.map(n => n.id));
     const baseLinks = graphData.links.filter(l =>
       nodeIds.has(typeof l.source === 'string' ? l.source : (l.source as any).id) &&
@@ -849,7 +873,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     );
 
     return { nodes: baseNodes, links: baseLinks };
-  }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode]);
+  }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode, schematicMode]);
 
   const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
@@ -1277,10 +1301,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
               <Plus className="h-3 w-3" />
             </Button>
-            {/* Schematic Prune / Branches toggle — sits inside the spacing control group
-                so it lives next to the internal +/- icons. Shows the OPPOSITE button to
-                the current state, so one click flips the mode. */}
-            {viewMode === 'schematic' && (
+            {/* Prune / Branches toggle — sits inside the spacing control group so it
+                lives next to the internal +/- icons. Always visible: prune strips
+                funders/siblings/KYC roots in every view (Bubble, Tree, Schematic, 3D),
+                Branches restores the full mesh. One click flips the mode. */}
+            {(
               schematicMode === 'branches' ? (
                 <Button
                   variant="ghost"
@@ -1318,21 +1343,27 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               setTimeout(() => setShakeGraph(false), 800);
               if (graphRef.current && typeof graphRef.current.graphData === 'function') {
                 const gd = graphRef.current.graphData();
+                // Wipe positions/velocities AND any pin so d3 reseeds from scratch.
                 gd.nodes.forEach((node: any) => {
                   delete node.x;
                   delete node.y;
                   delete node.vx;
                   delete node.vy;
-                  node.fx = undefined;
-                  node.fy = undefined;
+                  delete node.fx;
+                  delete node.fy;
                 });
+                // Force the graph to re-ingest the wiped nodes, then fully reheat
+                // the simulation. d3ReheatSimulation is the supported API; calling
+                // alpha() alone often gets clamped by d3AlphaMin and does nothing.
                 graphRef.current.graphData({ nodes: [...gd.nodes], links: [...gd.links] });
+                try { graphRef.current.d3ReheatSimulation?.(); } catch { /* noop */ }
                 setTimeout(() => {
-                  if (graphRef.current) {
-                    const sim = graphRef.current.d3Force('simulation');
-                    if (sim) sim.alpha(0.3);
-                  }
-                }, 100);
+                  try {
+                    graphRef.current?.d3ReheatSimulation?.();
+                    const sim = graphRef.current?.d3Force?.('simulation');
+                    if (sim) sim.alpha(1).restart?.();
+                  } catch { /* noop */ }
+                }, 120);
                 setTimeout(() => {
                   if (graphRef.current) {
                     graphRef.current.zoomToFit(800, 40);
