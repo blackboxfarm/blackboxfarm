@@ -16536,6 +16536,9 @@ export type Database = {
           first_seen_at: string
           highest_rank: number | null
           image_url: string | null
+          intent_classification: Database["public"]["Enums"]["token_intent_classification"]
+          intent_classification_source: string | null
+          intent_classified_at: string | null
           is_currently_top_200: boolean | null
           last_fetched_at: string | null
           last_seen_at: string
@@ -16583,6 +16586,9 @@ export type Database = {
           first_seen_at: string
           highest_rank?: number | null
           image_url?: string | null
+          intent_classification?: Database["public"]["Enums"]["token_intent_classification"]
+          intent_classification_source?: string | null
+          intent_classified_at?: string | null
           is_currently_top_200?: boolean | null
           last_fetched_at?: string | null
           last_seen_at: string
@@ -16630,6 +16636,9 @@ export type Database = {
           first_seen_at?: string
           highest_rank?: number | null
           image_url?: string | null
+          intent_classification?: Database["public"]["Enums"]["token_intent_classification"]
+          intent_classification_source?: string | null
+          intent_classified_at?: string | null
           is_currently_top_200?: boolean | null
           last_fetched_at?: string | null
           last_seen_at?: string
@@ -20622,6 +20631,14 @@ export type Database = {
         | "discord_id"
         | "discord_handle"
         | "website_domain"
+      token_intent_classification:
+        | "rug_pull"
+        | "soft_rug"
+        | "abandoned"
+        | "accidental_failure"
+        | "organic_success"
+        | "engineered_success"
+        | "unknown"
       web_tier_key:
         | "free"
         | "auth"
@@ -20786,6 +20803,15 @@ export const Constants = {
         "discord_id",
         "discord_handle",
         "website_domain",
+      ],
+      token_intent_classification: [
+        "rug_pull",
+        "soft_rug",
+        "abandoned",
+        "accidental_failure",
+        "organic_success",
+        "engineered_success",
+        "unknown",
       ],
       web_tier_key: [
         "free",
