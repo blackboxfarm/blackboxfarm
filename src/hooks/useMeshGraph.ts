@@ -699,25 +699,34 @@ export function useMeshGraph(initialEntityId?: string) {
 
       const result = data as any;
       
-      // Build diagnostics from result
+      // Build diagnostics — framed as a discovery feed, never as a failure log.
+      // Every line should feel like a clue or a next lead, not an error.
       const diagnostics: string[] = [];
-      if (result.inputType) diagnostics.push(`Input type: ${result.inputType}`);
-      if (result.resolvedWallet) diagnostics.push(`Resolved wallet: ${result.resolvedWallet.slice(0, 12)}...`);
-      else diagnostics.push('❌ Could not resolve wallet');
-      
-      if (result.requiresScan) diagnostics.push('⚠️ No data found in any source');
+      const typeLabel = result.inputType === 'token' ? '🪙 Token contract'
+        : result.inputType === 'wallet' ? '👛 Wallet address'
+        : result.inputType === 'x_handle' ? '🐦 X handle'
+        : result.inputType ? `🔎 ${result.inputType}` : null;
+      if (typeLabel) diagnostics.push(`Identified: ${typeLabel}`);
+      if (result.resolvedWallet) {
+        diagnostics.push(`🎯 Locked onto wallet ${result.resolvedWallet.slice(0, 12)}…`);
+      }
       if (result.liveAnalysis) {
-        diagnostics.push(`Live analysis: ${result.liveAnalysis.tokensAnalyzed} tokens, pattern: ${result.liveAnalysis.pattern}`);
+        diagnostics.push(`🧪 Live read: ${result.liveAnalysis.tokensAnalyzed} tokens scanned · pattern ${result.liveAnalysis.pattern}`);
       }
       if (result.stats) {
-        diagnostics.push(`Stats: ${result.stats.totalTokens} tokens, ${result.stats.rugPulls} rugs, ${result.stats.successfulTokens} successful`);
+        const s = result.stats;
+        const parts = [`${s.totalTokens} tokens launched`];
+        if (s.successfulTokens) parts.push(`${s.successfulTokens} hit`);
+        if (s.rugPulls) parts.push(`${s.rugPulls} rugged`);
+        diagnostics.push(`📊 Track record: ${parts.join(' · ')}`);
       }
+      // API errors become "next lead" hints — we never show red failure noise to the user.
       if (result.apiErrors && result.apiErrors.length > 0) {
-        for (const err of result.apiErrors) {
-          diagnostics.push(`❌ ${err}`);
-        }
+        diagnostics.push(`🔄 Switching providers — chasing the next lead…`);
       }
-      diagnostics.push(`Mesh links added: ${result.meshLinksAdded || 0}`);
+      if ((result.meshLinksAdded || 0) > 0) {
+        diagnostics.push(`🕸️ ${result.meshLinksAdded} new mesh connections uncovered`);
+      }
 
       const hasUsefulData = (result.meshLinksAdded || 0) > 0 || result.found;
 
@@ -739,7 +748,7 @@ export function useMeshGraph(initialEntityId?: string) {
             first_seen_at: now_ts,
             last_seen_at: now_ts,
           }, { onConflict: 'current_handle', ignoreDuplicates: true });
-          diagnostics.push(`📝 Registered @${cleanHandle} in x_account_registry for future cross-linking`);
+          diagnostics.push(`📝 Filed @${cleanHandle} into the watchlist — we'll cross-link it on the next sweep.`);
           console.log(`[MeshSpider] Registered X handle @${cleanHandle} in registry`);
         } catch (regErr) {
           console.warn('[MeshSpider] Handle registration failed:', regErr);
@@ -754,7 +763,7 @@ export function useMeshGraph(initialEntityId?: string) {
         const walletToTrace = result.resolvedWallet || (isBase58 ? normalizedInput : null);
         
         if (walletToTrace) {
-          diagnostics.push('💰 Oracle empty — activating Follow-the-Money fallback...');
+          diagnostics.push('💰 Following the money — tracing the funding chain…');
           setSpiderStatus({
             active: true,
             stage: '💰 Following the money — tracing funding chain...',
@@ -770,22 +779,22 @@ export function useMeshGraph(initialEntityId?: string) {
             if (!kycErr && kycData) {
               const chainLen = kycData.chain?.length || 0;
               const walletsTraced = kycData.walletsTraced || 0;
-              diagnostics.push(`✅ Funding chain: ${chainLen} hops, ${walletsTraced} wallets traced`);
+              diagnostics.push(`🔗 Funding chain mapped: ${chainLen} hops · ${walletsTraced} wallets`);
               if (kycData.kycRoot) {
-                diagnostics.push(`🏦 KYC Root identified: ${kycData.kycRoot.slice(0, 16)}...`);
+                diagnostics.push(`🏦 KYC root surfaced: ${kycData.kycRoot.slice(0, 16)}…`);
               }
             } else {
-              diagnostics.push(`⚠️ Funding trace: ${kycErr?.message || 'no chain found'}`);
+              diagnostics.push(`🛰️ Trail goes cold here — try “Find KYC Root” for a deeper sweep.`);
             }
-          } catch (e) {
-            diagnostics.push(`⚠️ Funding trace failed: ${e}`);
+          } catch {
+            diagnostics.push(`🛰️ Trail goes cold here — try “Find KYC Root” for a deeper sweep.`);
           }
 
           try {
             // 2. Community discovery
             if (isBase58) {
               await autoDiscoverCommunity(normalizedInput, walletToTrace);
-              diagnostics.push('🏠 X Community auto-discovery ran');
+              diagnostics.push('🏠 Sweeping for X Community fingerprints…');
             }
           } catch (e) {
             console.warn('[MeshSpider] Fallback community discovery failed:', e);
@@ -803,7 +812,7 @@ export function useMeshGraph(initialEntityId?: string) {
             .limit(5);
 
           if (checkLinks && checkLinks.length > 0) {
-            diagnostics.push(`✅ Follow-the-money found ${checkLinks.length} mesh links!`);
+            diagnostics.push(`💡 Follow-the-money paid off — ${checkLinks.length} fresh leads added!`);
             setSpiderStatus({
               active: false,
               stage: '',
@@ -821,7 +830,7 @@ export function useMeshGraph(initialEntityId?: string) {
 
             if (walletLinks && walletLinks.length > 0) {
               // Data exists under the resolved wallet — focus on that instead
-              diagnostics.push(`✅ Found ${walletLinks.length} links via resolved wallet ${walletToTrace.slice(0, 12)}...`);
+              diagnostics.push(`🎯 Pivoted to resolved wallet — ${walletLinks.length} connections found.`);
               setSpiderStatus({
                 active: false,
                 stage: '',
@@ -879,7 +888,7 @@ export function useMeshGraph(initialEntityId?: string) {
             autoDiscoverCommunity(mint, result.resolvedWallet)
           );
           await Promise.allSettled(communityPromises);
-          diagnostics.push(`🏠 X Community auto-discovery ran for ${tokensToCheck.size} tokens`);
+          diagnostics.push(`🏠 Scanning ${tokensToCheck.size} token${tokensToCheck.size === 1 ? '' : 's'} for X Community fingerprints…`);
         }
 
         // ═══ FOLLOW THE MONEY (even on success) ═══
@@ -887,16 +896,16 @@ export function useMeshGraph(initialEntityId?: string) {
         const walletForChain = result.resolvedWallet;
         if (walletForChain && isBase58Check) {
           try {
-            diagnostics.push('💰 Tracing funding chain...');
+          diagnostics.push('💰 Following the money — tracing the funding chain…');
             setSpiderStatus(prev => ({ ...prev, stage: '💰 Following the money...' }));
             const { data: kycData } = await supabase.functions.invoke('mesh-kyc-deep-search', {
               body: { walletAddress: walletForChain, maxDepth: 5 },
             });
             if (kycData?.kycRoot) {
-              diagnostics.push(`🏦 KYC Root: ${kycData.kycRoot.slice(0, 16)}...`);
+              diagnostics.push(`🏦 KYC root surfaced: ${kycData.kycRoot.slice(0, 16)}…`);
             }
             if (kycData?.chain?.length) {
-              diagnostics.push(`✅ ${kycData.chain.length} funding hops traced`);
+              diagnostics.push(`🔗 ${kycData.chain.length} funding hops mapped`);
             }
           } catch (e) {
             console.warn('[MeshSpider] Follow-the-money trace failed:', e);
