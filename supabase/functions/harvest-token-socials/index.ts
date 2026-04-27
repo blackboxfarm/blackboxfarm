@@ -228,6 +228,25 @@ Deno.serve(withRunLog('harvest-token-socials', async (req) => {
             }
           }
         }
+
+        // ═══ Creator Fusion: attach social signals to creator profile ═══
+        if (t.creator_wallet && (t.twitter_url || t.telegram_url || t.website_url)) {
+          try {
+            const xHandle = t.twitter_url ? (t.twitter_url.match(/(?:twitter\.com|x\.com)\/([^\/\?#]+)/i)?.[1] || null) : null;
+            const tgHandle = t.telegram_url ? (t.telegram_url.match(/t\.me\/([a-zA-Z0-9_]+)/i)?.[1] || null) : null;
+            const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts');
+            await fuseAndAudit(
+              {
+                devWallet: t.creator_wallet,
+                xHandle,
+                telegramHandle: tgHandle,
+                websiteDomain: t.website_url || null,
+                source: 'harvest-token-socials',
+              },
+              supabase,
+            );
+          } catch (_) { /* audited internally */ }
+        }
       }
 
       // Register all X handles for Phanes backfill (lightweight, no API calls)
