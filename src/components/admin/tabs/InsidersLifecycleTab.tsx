@@ -192,8 +192,48 @@ export default function InsidersLifecycleTab() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [drillDown, setDrillDown] = useState<LifecycleRow | null>(null);
+  const [drillDownLoading, setDrillDownLoading] = useState(false);
   const [rowActioning, setRowActioning] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+
+  // Open drill-down dialog: shows lean row immediately, then hydrates the
+  // heavy JSON columns (mesh_decision_trace, milestone_timeline,
+  // genealogy_chain) on demand so they don't bloat the initial table fetch.
+  const openDrillDown = async (row: LifecycleRow) => {
+    setDrillDown({ ...row, milestone_timeline: row.milestone_timeline ?? [] } as LifecycleRow);
+    // If heavy fields are already present (e.g. just refreshed), skip the round-trip.
+    if (
+      Array.isArray((row as any).milestone_timeline) &&
+      (row as any).milestone_timeline.length >= 0 &&
+      'mesh_decision_trace' in row &&
+      'genealogy_chain' in row
+    ) {
+      // Heavy fields already loaded — nothing to do
+      // (this branch hits when the row was hydrated by handleRowAction's refetch)
+      if ((row as any)._hydrated) return;
+    }
+    setDrillDownLoading(true);
+    try {
+      const { data } = await supabase
+        .from('telegram_insider_token_lifecycle')
+        .select('mesh_decision_trace, milestone_timeline, genealogy_chain')
+        .eq('id', row.id)
+        .maybeSingle();
+      if (data) {
+        setDrillDown((prev) => prev && prev.id === row.id ? ({
+          ...prev,
+          mesh_decision_trace: (data as any).mesh_decision_trace ?? null,
+          milestone_timeline: (data as any).milestone_timeline ?? [],
+          genealogy_chain: (data as any).genealogy_chain ?? null,
+          _hydrated: true,
+        } as any) : prev);
+      }
+    } catch (e: any) {
+      toast.error('Failed to load token details: ' + (e?.message || String(e)));
+    } finally {
+      setDrillDownLoading(false);
+    }
+  };
 
   const handleRowAction = async (
     tokenMint: string,
@@ -228,9 +268,23 @@ export default function InsidersLifecycleTab() {
 
   const fetchRows = async () => {
     setLoading(true);
+    // Lean column list — exclude heavy JSON columns (mesh_decision_trace,
+    // milestone_timeline, genealogy_chain) which are only needed in the
+    // drill-down dialog. With 1300+ rows the heavy columns add several MB
+    // to the initial payload and cause noticeable lag on tab open.
+    const LEAN_COLUMNS = [
+      'id', 'token_mint', 'token_symbol', 'first_called_at',
+      'entry_market_cap', 'entry_mc_text',
+      'peak_multiplier', 'peak_market_cap', 'peak_reached_at',
+      'milestone_count', 'lifespan_minutes',
+      'creator_wallet', 'creator_risk_tier', 'is_rugged',
+      'mesh_promotion_status', 'mesh_promotion_reason',
+      'dev_history_warning', 'total_messages',
+      'genealogy_depth', 'genealogy_kyc_root',
+    ].join(',');
     const { data, error } = await supabase
       .from("telegram_insider_token_lifecycle")
-      .select("*")
+      .select(LEAN_COLUMNS)
       .order("peak_multiplier", { ascending: false })
       .limit(2000);
     if (error) {
@@ -492,7 +546,7 @@ export default function InsidersLifecycleTab() {
                     <TableRow
                       key={r.id}
                       className="cursor-pointer hover:bg-muted/40"
-                      onClick={() => setDrillDown(r)}
+                      onClick={() => openDrillDown(r)}
                     >
                       <TableCell className="text-xs whitespace-nowrap">
                         {new Date(r.first_called_at).toLocaleString()}
@@ -666,7 +720,7 @@ export default function InsidersLifecycleTab() {
                             key={t.token_mint}
                             onClick={() => {
                               const full = rows.find(r => r.token_mint === t.token_mint);
-                              if (full) setDrillDown(full);
+                              if (full) openDrillDown(full);
                             }}
                             className={`px-2 py-1 rounded text-xs border transition-colors hover:opacity-80 ${
                               t.is_rugged ? 'bg-red-500/10 border-red-500/30 text-red-400'
@@ -697,6 +751,11 @@ export default function InsidersLifecycleTab() {
               {drillDown?.token_symbol} — {drillDown && shortMint(drillDown.token_mint)}
             </DialogTitle>
           </DialogHeader>
+          {drillDownLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading mesh decision, milestones & lineage…
+            </div>
+          )}
           {drillDown && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
