@@ -1335,7 +1335,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <Button variant="outline" size="sm" onClick={handleFindKYC} disabled={kycSearching || kycFound}
                 className={`text-xs h-7 justify-start backdrop-blur bg-background/70 ${kycFound
                   ? 'border-muted/30 text-muted-foreground opacity-50 cursor-not-allowed'
-                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'}`}>
+                  : 'border-amber-500/30 hover:bg-amber-500/10 text-amber-400'} ${
+                    !kycFound && !kycSearching && graphData.nodes.some(n => n.type === 'wallet')
+                      ? 'animate-[pulse_1.6s_cubic-bezier(0.4,0,0.6,1)_infinite] border-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.35)]'
+                      : ''
+                  }`}>
                 {kycSearching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Key className="h-3 w-3 mr-1" />}
                 {kycFound ? 'KYC Root Found ✓' : 'Find KYC Root'}
               </Button>
