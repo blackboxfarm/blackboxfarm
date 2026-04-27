@@ -1307,33 +1307,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
               <Plus className="h-3 w-3" />
             </Button>
-            {/* Prune / Branches toggle — sits inside the spacing control group so it
-                lives next to the internal +/- icons. Always visible: prune strips
-                funders/siblings/KYC roots in every view (Bubble, Tree, Schematic, 3D),
-                Branches restores the full mesh. One click flips the mode. */}
-            {(
-              schematicMode === 'branches' ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs px-2 ml-1 text-emerald-400 hover:bg-emerald-500/10"
-                  title="Prune funder/sibling noise — keep only token, dev wallet and socials"
-                  onClick={() => { setSchematicMode('prune'); recordInteraction(); }}
-                >
-                  <Scissors className="h-3 w-3 mr-1" /> Prune
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs px-2 ml-1 text-cyan-400 hover:bg-cyan-500/10"
-                  title="Show all branches — funders, siblings and KYC chain"
-                  onClick={() => { setSchematicMode('branches'); recordInteraction(); }}
-                >
-                  <GitBranch className="h-3 w-3 mr-1" /> Branches
-                </Button>
-              )
-            )}
           </div>
           {/* Shakey-Shake */}
           <Button
@@ -1411,6 +1384,29 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleZoomOut} title="Zoom out">
                 <ZoomOut className="h-3.5 w-3.5" />
               </Button>
+              {/* Prune / Branches toggle — sits with the in-frame zoom magnifier
+                  icons. One click flips the mode. Always visible across all view modes. */}
+              {schematicMode === 'branches' ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-emerald-400 hover:bg-emerald-500/10"
+                  title="Prune — keep only Token, Dev, KYC and token-direct socials"
+                  onClick={() => { setSchematicMode('prune'); recordInteraction(); }}
+                >
+                  <Scissors className="h-3.5 w-3.5 mr-1" /> Prune
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-cyan-400 hover:bg-cyan-500/10"
+                  title="Branches — show funders, siblings and KYC chain"
+                  onClick={() => { setSchematicMode('branches'); recordInteraction(); }}
+                >
+                  <GitBranch className="h-3.5 w-3.5 mr-1" /> Branches
+                </Button>
+              )}
             </div>
           )}
           {/* Action Buttons Overlay — top-left inside graph */}
