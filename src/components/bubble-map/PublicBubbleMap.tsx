@@ -1257,31 +1257,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               <LayoutTemplate className="h-3 w-3 mr-1" /> Schematic
             </Button>
           </div>
-          {/* Schematic Prune / Branches toggle — only meaningful in schematic view.
-              Shows the OPPOSITE button to the current state, so one click flips the mode. */}
-          {viewMode === 'schematic' && (
-            schematicMode === 'branches' ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs px-2 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
-                title="Prune funder/sibling noise — keep only token, dev wallet and socials"
-                onClick={() => { setSchematicMode('prune'); recordInteraction(); }}
-              >
-                <Scissors className="h-3 w-3 mr-1" /> Prune
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs px-2 border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10"
-                title="Show all branches — funders, siblings and KYC chain"
-                onClick={() => { setSchematicMode('branches'); recordInteraction(); }}
-              >
-                <GitBranch className="h-3 w-3 mr-1" /> Branches
-              </Button>
-            )
-          )}
           {/* Snapshot & Share */}
           <Button
             variant="outline"
@@ -1302,6 +1277,32 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setSpreadFactor(f => Math.min(10, f + 1))} title="Increase spacing">
               <Plus className="h-3 w-3" />
             </Button>
+            {/* Schematic Prune / Branches toggle — sits inside the spacing control group
+                so it lives next to the internal +/- icons. Shows the OPPOSITE button to
+                the current state, so one click flips the mode. */}
+            {viewMode === 'schematic' && (
+              schematicMode === 'branches' ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs px-2 ml-1 text-emerald-400 hover:bg-emerald-500/10"
+                  title="Prune funder/sibling noise — keep only token, dev wallet and socials"
+                  onClick={() => { setSchematicMode('prune'); recordInteraction(); }}
+                >
+                  <Scissors className="h-3 w-3 mr-1" /> Prune
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs px-2 ml-1 text-cyan-400 hover:bg-cyan-500/10"
+                  title="Show all branches — funders, siblings and KYC chain"
+                  onClick={() => { setSchematicMode('branches'); recordInteraction(); }}
+                >
+                  <GitBranch className="h-3 w-3 mr-1" /> Branches
+                </Button>
+              )
+            )}
           </div>
           {/* Shakey-Shake */}
           <Button
