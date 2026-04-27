@@ -16,6 +16,12 @@ interface BubbleMapSchematicProps {
   width: number;
   height?: number;
   onNodeClick?: (node: any) => void;
+  /**
+   * 'branches' (default) — full mesh: KYC roots, funders, dev, tokens, socials.
+   * 'prune'              — Solar-Min-style: only the central token, its dev wallet
+   *                         and any socials directly attached to that token.
+   */
+  mode?: 'branches' | 'prune';
 }
 
 /**
@@ -45,6 +51,38 @@ function rankNode(n: any, devWalletId: string | null): number {
     return 1; // assume funder/hop
   }
   return TYPE_TO_RANK[n.type] ?? 4;
+}
+
+const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
+
+function pruneToTokenAndSocials(graphData: { nodes: any[]; links: any[] }) {
+  // Find the primary token node (first token, or one flagged as central if any).
+  const tokenNode = graphData.nodes.find((n: any) => n.type === 'token');
+  if (!tokenNode) return graphData; // nothing to prune around — fall back
+  const devNode = graphData.nodes.find((n: any) => n.type === 'wallet' && n.isDev);
+
+  const keep = new Set<string>();
+  keep.add(tokenNode.id);
+  if (devNode) keep.add(devNode.id);
+
+  // Keep socials directly linked to the token.
+  for (const l of graphData.links) {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    if (s === tokenNode.id || t === tokenNode.id) {
+      const otherId = s === tokenNode.id ? t : s;
+      const other = graphData.nodes.find((n: any) => n.id === otherId);
+      if (other && SOCIAL_TYPES.has(other.type)) keep.add(other.id);
+    }
+  }
+
+  const nodes = graphData.nodes.filter((n: any) => keep.has(n.id));
+  const links = graphData.links.filter((l: any) => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    return keep.has(s) && keep.has(t);
+  });
+  return { nodes, links };
 }
 
 function buildLayout(graphData: { nodes: any[]; links: any[] }) {
@@ -162,8 +200,13 @@ const BubbleMapSchematic: React.FC<BubbleMapSchematicProps> = ({
   width,
   height = 600,
   onNodeClick,
+  mode = 'branches',
 }) => {
-  const { nodes, edges } = useMemo(() => buildLayout(graphData), [graphData]);
+  const effectiveData = useMemo(
+    () => (mode === 'prune' ? pruneToTokenAndSocials(graphData) : graphData),
+    [graphData, mode],
+  );
+  const { nodes, edges } = useMemo(() => buildLayout(effectiveData), [effectiveData]);
 
   const handleNodeClick = useCallback(
     (_e: any, node: Node) => {
@@ -181,8 +224,8 @@ const BubbleMapSchematic: React.FC<BubbleMapSchematicProps> = ({
         onNodeClick={handleNodeClick}
         fitView
         fitViewOptions={{ padding: 0.15 }}
-        minZoom={0.2}
-        maxZoom={2}
+        minZoom={0.1}
+        maxZoom={4}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={24} color="hsl(var(--border))" />
