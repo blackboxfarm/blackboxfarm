@@ -538,10 +538,14 @@ serve(withRunLog('token-ai-interpreter', async (req) => {
 
     // Calculate derived metrics
     const unlockedToLpRatio = lpPercentage > 0 ? circulatingPct / lpPercentage : 10;
+    const secondaryLpsCount =
+      (reportData as any).secondaryLpsCount ??
+      (Array.isArray((reportData as any).secondaryPools) ? (reportData as any).secondaryPools.length : 0) ??
+      0;
 
     // Bucket metrics
     const controlDensity = bucketControlDensity(top10Pct);
-    const liquidityCoverage = bucketLiquidityCoverage(unlockedToLpRatio);
+    const liquidityCoverage = bucketLiquidityCoverageV2(liquidityUsd, unlockedToLpRatio, secondaryLpsCount);
     const resilienceScore = bucketResilienceScore(healthScore);
     const tierDivergence = bucketTierDivergence(whalePercent, retailPercent);
 
