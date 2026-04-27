@@ -14,7 +14,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-import { assertInsert, assertUpsert, assertUpdate } from './db-assert.ts';
+import { assertDbWrite } from './db-assert.ts';
 import { resolveXHandle } from './x-handle-resolver.ts';
 
 type Supa = ReturnType<typeof createClient>;
@@ -197,7 +197,7 @@ async function mergeProfiles(
     .eq('developer_id', absorbed); // best-effort; ignore error if column missing
 
   // Tombstone the absorbed profile.
-  await assertUpdate(
+  await assertDbWrite(
     supabase
       .from('developer_profiles')
       .update({ merged_into: surviving, merged_at: new Date().toISOString() })
@@ -207,7 +207,7 @@ async function mergeProfiles(
   );
 
   // Audit log.
-  await assertInsert(
+  await assertDbWrite(
     supabase.from('creator_merge_log').insert({
       surviving_id: surviving,
       absorbed_id: absorbed,
@@ -296,7 +296,7 @@ export async function fuseCreator(
     last_seen_at: now,
   }));
 
-  await assertUpsert(
+  await assertDbWrite(
     supabase
       .from('creator_identity_aliases')
       .upsert(aliasRows, { onConflict: 'alias_kind,alias_value' }),
