@@ -32,6 +32,11 @@ import {
   Network,
   Building2,
   ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -195,6 +200,13 @@ export default function InsidersLifecycleTab() {
   const [drillDownLoading, setDrillDownLoading] = useState(false);
   const [rowActioning, setRowActioning] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+  const [lastBuildAt, setLastBuildAt] = useState<string | null>(null);
+  // Sorting + pagination (client-side; full table is already in memory)
+  type SortKey = 'ordinal' | 'first_called_at' | 'token_symbol' | 'entry_market_cap' | 'peak_multiplier' | 'peak_market_cap' | 'lifespan_minutes';
+  const [sortKey, setSortKey] = useState<SortKey>('peak_multiplier');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 100;
 
   // Open drill-down dialog: shows lean row immediately, then hydrates the
   // heavy JSON columns (mesh_decision_trace, milestone_timeline,
@@ -282,17 +294,32 @@ export default function InsidersLifecycleTab() {
       'dev_history_warning', 'total_messages',
       'genealogy_depth', 'genealogy_kyc_root',
     ].join(',');
-    const { data, error } = await supabase
-      .from("telegram_insider_token_lifecycle")
-      .select(LEAN_COLUMNS)
-      .order("peak_multiplier", { ascending: false })
-      .limit(2000);
-    if (error) {
-      toast.error("Failed to load lifecycle: " + error.message);
-    } else {
-      setRows((data as any) || []);
+    // Page through to bypass PostgREST's default 1000-row response cap.
+    const PAGE = 1000;
+    const acc: any[] = [];
+    let latest: string | null = null;
+    try {
+      for (let from = 0; from < 50_000; from += PAGE) {
+        const { data, error } = await supabase
+          .from("telegram_insider_token_lifecycle")
+          .select(LEAN_COLUMNS)
+          .order("peak_multiplier", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const batch = (data as any[]) || [];
+        acc.push(...batch);
+        for (const r of batch) {
+          if (!latest || (r.first_called_at && r.first_called_at > latest)) latest = r.first_called_at;
+        }
+        if (batch.length < PAGE) break;
+      }
+      setRows(acc as any);
+      setLastBuildAt(latest);
+    } catch (e: any) {
+      toast.error("Failed to load lifecycle: " + (e?.message || String(e)));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -371,6 +398,57 @@ export default function InsidersLifecycleTab() {
     });
   }, [rows, minX, statusFilter, search]);
 
+  // Sort the filtered list by the active column. Ordinal sort uses the
+  // current filtered insertion order (which mirrors the default peak_multiplier desc fetch).
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    if (sortKey === 'ordinal') {
+      // ordinal = position in `filtered`. asc keeps fetch order, desc reverses.
+      return sortDir === 'asc' ? arr : arr.reverse();
+    }
+    const dir = sortDir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      const va: any = (a as any)[sortKey];
+      const vb: any = (b as any)[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; // nulls last
+      if (vb == null) return -1;
+      if (typeof va === 'string' && typeof vb === 'string') {
+        return va.localeCompare(vb) * dir;
+      }
+      if (sortKey === 'first_called_at') {
+        return (new Date(va).getTime() - new Date(vb).getTime()) * dir;
+      }
+      return (Number(va) - Number(vb)) * dir;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  // Reset page when filters/sort change so the user always sees page 1 of the new view.
+  useEffect(() => { setPage(1); }, [minX, statusFilter, search, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageRows = sorted.slice(pageStart, pageStart + PAGE_SIZE);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      // sensible defaults: numeric/date columns → desc; text → asc
+      setSortDir(key === 'token_symbol' ? 'asc' : 'desc');
+    }
+  };
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 inline ml-1 opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="h-3 w-3 inline ml-1 text-primary" />
+      : <ArrowDown className="h-3 w-3 inline ml-1 text-primary" />;
+  };
+
   const summary = useMemo(() => {
     return {
       total: rows.length,
@@ -392,7 +470,7 @@ export default function InsidersLifecycleTab() {
       const { data, error } = await supabase.functions.invoke("insiders-lifecycle-builder", { body: {} });
       if (error) throw error;
       toast.success(`Built ${data?.tokens_upserted} token lifecycles from ${data?.messages_processed} messages`);
-      await fetchRows();
+      await Promise.all([fetchRows(), fetchCrossLinks()]);
     } catch (e: any) {
       toast.error("Build failed: " + (e?.message || String(e)));
     } finally {
@@ -448,7 +526,13 @@ export default function InsidersLifecycleTab() {
             </Button>
             <div className="text-xs text-muted-foreground flex items-center gap-1.5 px-2">
               <Network className="h-3.5 w-3.5" />
-              KYC tracing runs automatically every 3h via the orchestrator.
+              Auto-rebuild + KYC tracing every 3h.
+              {lastBuildAt && (
+                <span className="ml-1 inline-flex items-center gap-1 text-foreground/80">
+                  <Clock className="h-3.5 w-3.5" />
+                  Latest call: {new Date(lastBuildAt).toLocaleString()}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
@@ -479,10 +563,10 @@ export default function InsidersLifecycleTab() {
               </HoverCard>
             </div>
             <Button
-              onClick={() => downloadCSV(filtered)}
+              onClick={() => downloadCSV(sorted)}
               size="sm"
               variant="outline"
-              disabled={filtered.length === 0}
+              disabled={sorted.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />Export CSV
             </Button>
@@ -530,24 +614,42 @@ export default function InsidersLifecycleTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>First called</TableHead>
-                    <TableHead>Symbol</TableHead>
+                    <TableHead className="cursor-pointer select-none w-12" onClick={() => toggleSort('ordinal')}>
+                      # <SortIcon k="ordinal" />
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('first_called_at')}>
+                      First called <SortIcon k="first_called_at" />
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('token_symbol')}>
+                      Symbol <SortIcon k="token_symbol" />
+                    </TableHead>
                     <TableHead>Mint</TableHead>
-                    <TableHead className="text-right">Entry MC</TableHead>
-                    <TableHead className="text-right">Peak X</TableHead>
-                    <TableHead className="text-right">Peak MC</TableHead>
-                    <TableHead>Lifespan</TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('entry_market_cap')}>
+                      Entry MC <SortIcon k="entry_market_cap" />
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('peak_multiplier')}>
+                      Peak X <SortIcon k="peak_multiplier" />
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('peak_market_cap')}>
+                      Peak MC <SortIcon k="peak_market_cap" />
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('lifespan_minutes')}>
+                      Lifespan <SortIcon k="lifespan_minutes" />
+                    </TableHead>
                     <TableHead>Mesh</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((r) => (
+                  {pageRows.map((r, idx) => (
                     <TableRow
                       key={r.id}
                       className="cursor-pointer hover:bg-muted/40"
                       onClick={() => openDrillDown(r)}
                     >
+                      <TableCell className="text-xs text-muted-foreground tabular-nums">
+                        {pageStart + idx + 1}
+                      </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {new Date(r.first_called_at).toLocaleString()}
                       </TableCell>
@@ -637,15 +739,40 @@ export default function InsidersLifecycleTab() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
+                  {pageRows.length === 0 && (
+                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
           )}
-          <div className="text-xs text-muted-foreground">
-            Showing {filtered.length} of {rows.length} tokens. Click a row for the full milestone timeline & mesh decision.
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+            <div className="text-xs text-muted-foreground">
+              Showing {sorted.length === 0 ? 0 : pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, sorted.length)} of {sorted.length.toLocaleString()} matched
+              <span className="opacity-70"> ({rows.length.toLocaleString()} total tokens)</span>
+              . Click a row for the full milestone timeline & mesh decision.
+            </div>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage <= 1}
+                onClick={() => setPage(1)}
+              >« First</Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              ><ChevronLeft className="h-3.5 w-3.5" /> Prev</Button>
+              <span className="text-xs text-muted-foreground tabular-nums px-2">
+                Page {safePage} / {totalPages}
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >Next <ChevronRight className="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage(totalPages)}
+              >Last »</Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -658,6 +785,11 @@ export default function InsidersLifecycleTab() {
             {crossLinks?.stats && (
               <span className="text-xs font-normal text-muted-foreground ml-2">
                 {crossLinks.stats.rowsWithCreator} creators • {crossLinks.stats.rowsWithKyc} KYC roots
+                {crossLinks.stats.rowsWithKyc === 0 && (
+                  <span className="ml-2 text-amber-400">
+                    (run "Rescan KYC (free)" or "Retrace Insiders KYC" in Utilities → Genealogy to populate)
+                  </span>
+                )}
               </span>
             )}
           </CardTitle>
