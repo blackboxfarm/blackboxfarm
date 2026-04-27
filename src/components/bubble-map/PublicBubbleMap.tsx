@@ -844,9 +844,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     }
 
     // PRUNE mode (applies in ALL view modes):
-    // CORE = Token + Dev wallet + KYC root + socials directly attached to the token
-    // (website, X, Telegram, etc). Everything else (funder chains, sibling wallets,
-    // sibling tokens, second-degree socials) is treated as a "branch" and stripped.
+    // CORE = Token + Dev wallet + ALL KYC roots + EVERY first-hop neighbor of the
+    // token (socials, x_community, x_account once revealed, etc.) + the social
+    // chain (token → x_community → x_account) + the dev → KYC funder path.
+    // Anything beyond first-hop or off the dev→KYC spine is a "branch" and stripped.
     if (schematicMode === 'prune' && baseNodes.length > 0) {
       const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
       const tokenNode = baseNodes.find(n => n.type === 'token');
@@ -859,8 +860,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         for (const n of baseNodes) {
           if (n.type === 'kyc_root') keep.add(n.id);
         }
-        // Keep the token's social chain: BFS from token through social-typed nodes
-        // so token → x_community → x_account stays connected, plus website/telegram.
         const adj = new Map<string, string[]>();
         for (const l of graphData.links) {
           const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
@@ -870,6 +869,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
           adj.get(s)!.push(t);
           adj.get(t)!.push(s);
         }
+        // Keep EVERY first-hop neighbor of the token regardless of type.
+        // This guarantees that once the user clicks Map X Community / Find KYC /
+        // socials get discovered, those nodes immediately appear in Prune view.
+        for (const nb of adj.get(tokenNode.id) || []) {
+          keep.add(nb);
+        }
+        // Walk the social chain deeper: token → x_community → x_account, etc.
         const socialQueue: string[] = [tokenNode.id];
         const socialVisited = new Set<string>([tokenNode.id]);
         while (socialQueue.length > 0) {
@@ -909,6 +915,18 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               let p: string | null = kycId;
               while (p) { keep.add(p); p = prev.get(p) ?? null; }
             }
+          }
+        }
+        // For each X community kept, also pull in its first-hop x_account children
+        // so accounts attached to community (not directly to token) appear too.
+        const communityNodes = [...keep].filter(id => {
+          const n = baseNodes.find(b => b.id === id);
+          return n?.type === 'x_community';
+        });
+        for (const cid of communityNodes) {
+          for (const nb of adj.get(cid) || []) {
+            const nbNode = baseNodes.find(n => n.id === nb);
+            if (nbNode && SOCIAL_TYPES.has(nbNode.type)) keep.add(nb);
           }
         }
         baseNodes = baseNodes.filter(n => keep.has(n.id));
