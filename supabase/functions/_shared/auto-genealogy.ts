@@ -263,6 +263,27 @@ async function traceDepth(
       return;
     }
 
+    // ── CEX-priority short-circuit ──
+    // Before chasing the largest funder, scan ALL funders at this hop for a known
+    // CEX address. Catches the common pattern where a small "seed" CEX deposit is
+    // dwarfed by a larger peer-to-peer top-up. If found, lock the KYC root and stop.
+    for (const [funderWallet, amount] of funders.entries()) {
+      const cexHit = getCexName(funderWallet);
+      if (cexHit) {
+        result.parentWallets.push({
+          wallet: funderWallet,
+          depth,
+          amountSol: amount,
+          cexName: cexHit,
+        });
+        result.cexSources.push(cexHit);
+        result.trailEndReason = 'hit_cex';
+        result.trailEndedAtDepth = depth;
+        result.trailEndedAtWallet = funderWallet;
+        return;
+      }
+    }
+
     for (const [funderWallet, amount] of topFunders) {
       const funderCex = getCexName(funderWallet) ?? undefined;
       result.parentWallets.push({
