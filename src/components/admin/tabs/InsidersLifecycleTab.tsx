@@ -198,6 +198,9 @@ export default function InsidersLifecycleTab() {
   const [rescanRunning, setRescanRunning] = useState(false);
   const hasAutoRescannedRef = useRef(false);
   const [crossTab, setCrossTab] = useState<'creator' | 'funder' | 'kyc'>('creator');
+  const [creatorSearchInput, setCreatorSearchInput] = useState("");
+  const [creatorSearchQuery, setCreatorSearchQuery] = useState<string | null>(null);
+  const [creatorDrawerOpen, setCreatorDrawerOpen] = useState(false);
   const [minX, setMinX] = useState<string>("2");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
