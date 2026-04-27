@@ -142,22 +142,24 @@ Deno.serve(withRunLog('developer-discovery-job', async (req) => {
       const masterWallet = traceData.cexSources?.[0]?.wallet || startWallet
       const kycSource = traceData.cexSources?.[0]?.exchange || 'unknown'
 
-      const { data: newDev, error: devError } = await supabase
-        .from('developer_profiles')
-        .insert({
-          master_wallet_address: masterWallet,
-          kyc_source: kycSource,
-          kyc_verified: kycSource !== 'unknown',
-        })
-        .select()
-        .single()
-
-      if (devError || !newDev) {
-        throw new Error('Failed to create developer profile')
-      }
-
-      developerId = newDev.id
-      console.log(`Created new developer profile: ${developerId}`)
+      // Use unified Creator Fusion to mint/find the profile (handles dedupe + KYC root + sister wallets)
+      const { fuseAndAudit } = await import('../_shared/fuse-and-audit.ts')
+      const sisterWallets = (traceData.cexSources || [])
+        .map((c: any) => c?.wallet)
+        .filter((w: string) => w && w !== startWallet && w !== masterWallet)
+      const fused = await fuseAndAudit(
+        {
+          devWallet: startWallet,
+          kycRoot: kycSource !== 'unknown' ? masterWallet : undefined,
+          sisterWallets,
+          source: 'developer-discovery-job',
+        },
+        supabase,
+        { throwOnError: true },
+      )
+      if (!fused) throw new Error('Failed to create developer profile via fusion')
+      developerId = fused.creatorId
+      console.log(`Created/resolved developer profile via fusion: ${developerId} (new=${fused.isNew}, merged=${fused.mergedAbsorbedIds.length})`)
 
       // Add wallet to developer_wallets
       await supabase
