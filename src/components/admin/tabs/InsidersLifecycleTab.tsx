@@ -526,7 +526,13 @@ export default function InsidersLifecycleTab() {
             </Button>
             <div className="text-xs text-muted-foreground flex items-center gap-1.5 px-2">
               <Network className="h-3.5 w-3.5" />
-              KYC tracing runs automatically every 3h via the orchestrator.
+              Auto-rebuild + KYC tracing every 3h.
+              {lastBuildAt && (
+                <span className="ml-1 inline-flex items-center gap-1 text-foreground/80">
+                  <Clock className="h-3.5 w-3.5" />
+                  Latest call: {new Date(lastBuildAt).toLocaleString()}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <Button onClick={handlePromote} disabled={promoting} size="sm" variant="secondary">
