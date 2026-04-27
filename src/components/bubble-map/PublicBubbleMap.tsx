@@ -83,7 +83,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   // Snapshot & Share dialog
   const [snapshotOpen, setSnapshotOpen] = useState(false);
 
-  const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated } = useBubbleMapRateLimit();
+  const { canSearch, remaining, limit, isSubscriber, isLimited, recordSearch, isAuthenticated, tierLabel } = useBubbleMapRateLimit();
 
   const {
     graphData, isLoading, focusedEntity, focusOnEntity,
