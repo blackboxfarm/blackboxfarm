@@ -768,7 +768,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     let baseNodes = isOverCap ? graphData.nodes.slice(0, nodeCap) : graphData.nodes;
     
     // Hide x_account nodes until user clicks Map X Community
-    if (!xAccountsRevealed) {
+    // EXCEPTION: in prune mode, x_accounts are CORE socials and always shown.
+    if (!xAccountsRevealed && schematicMode !== 'prune') {
       baseNodes = baseNodes.filter(n => n.type !== 'x_account');
     }
 
@@ -858,14 +859,56 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         for (const n of baseNodes) {
           if (n.type === 'kyc_root') keep.add(n.id);
         }
-        // Keep socials directly attached to the token.
+        // Keep the token's social chain: BFS from token through social-typed nodes
+        // so token → x_community → x_account stays connected, plus website/telegram.
+        const adj = new Map<string, string[]>();
         for (const l of graphData.links) {
           const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
           const t = typeof l.target === 'string' ? l.target : (l.target as any).id;
-          if (s === tokenNode.id || t === tokenNode.id) {
-            const otherId = s === tokenNode.id ? t : s;
-            const other = baseNodes.find(n => n.id === otherId);
-            if (other && SOCIAL_TYPES.has(other.type)) keep.add(other.id);
+          if (!adj.has(s)) adj.set(s, []);
+          if (!adj.has(t)) adj.set(t, []);
+          adj.get(s)!.push(t);
+          adj.get(t)!.push(s);
+        }
+        const socialQueue: string[] = [tokenNode.id];
+        const socialVisited = new Set<string>([tokenNode.id]);
+        while (socialQueue.length > 0) {
+          const cur = socialQueue.shift()!;
+          for (const nb of adj.get(cur) || []) {
+            if (socialVisited.has(nb)) continue;
+            const nbNode = baseNodes.find(n => n.id === nb);
+            if (!nbNode) continue;
+            if (SOCIAL_TYPES.has(nbNode.type)) {
+              socialVisited.add(nb);
+              keep.add(nb);
+              socialQueue.push(nb);
+            }
+          }
+        }
+        // Also walk dev → KYC root chain so the connecting funder hop stays linked
+        // (otherwise KYC root floats with no edge to dev wallet).
+        if (devNode) {
+          const kycRoots = baseNodes.filter(n => n.type === 'kyc_root').map(n => n.id);
+          for (const kycId of kycRoots) {
+            // BFS shortest path dev → kyc through wallets
+            const prev = new Map<string, string | null>([[devNode.id, null]]);
+            const q: string[] = [devNode.id];
+            while (q.length) {
+              const cur = q.shift()!;
+              if (cur === kycId) break;
+              for (const nb of adj.get(cur) || []) {
+                if (prev.has(nb)) continue;
+                const nbNode = baseNodes.find(n => n.id === nb);
+                if (!nbNode) continue;
+                if (nbNode.type !== 'wallet' && nbNode.type !== 'kyc_root') continue;
+                prev.set(nb, cur);
+                q.push(nb);
+              }
+            }
+            if (prev.has(kycId)) {
+              let p: string | null = kycId;
+              while (p) { keep.add(p); p = prev.get(p) ?? null; }
+            }
           }
         }
         baseNodes = baseNodes.filter(n => keep.has(n.id));
