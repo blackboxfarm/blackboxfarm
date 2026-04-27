@@ -854,6 +854,25 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const displayData = filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
 
+  // Auto-fit when node count grows (first trace, spider expand) so the user
+  // doesn't see a scrambled/off-screen layout. Fires multiple staged fits as
+  // the simulation settles.
+  useEffect(() => {
+    const count = displayData.nodes.length;
+    if (count === 0) { lastNodeCountRef.current = 0; return; }
+    const grew = count >= lastNodeCountRef.current + 2 || lastNodeCountRef.current === 0;
+    lastNodeCountRef.current = count;
+    if (!grew) return;
+    if (viewMode !== 'bubble' && viewMode !== 'tree') return;
+    const timers: number[] = [];
+    [400, 1200, 2400].forEach(delay => {
+      timers.push(window.setTimeout(() => {
+        try { graphRef.current?.zoomToFit?.(600, 80); } catch { /* noop */ }
+      }, delay));
+    });
+    return () => { timers.forEach(t => clearTimeout(t)); };
+  }, [displayData.nodes.length, viewMode]);
+
 
   const typeCounts = displayData.nodes.reduce((acc, n) => {
     acc[n.type] = (acc[n.type] || 0) + 1;
