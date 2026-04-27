@@ -477,9 +477,31 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     };
     
     // ── STRUCTURAL METRICS (long-term health) ──
-    const holderCountScore = scoreMetric(nonLpHolders.length, 500, 20);
+    // Solana-meme calibration:
+    // (1) Holder count uses REAL participants (excludes dust wallets), then a soft dust penalty
+    //     because a sea of $0.50 wallets does not equal a real holder base.
+    const realHolderCount = Math.max(0, nonLpHolders.length - simpleTiers.dust.count);
+    let holderCountScore = scoreMetric(realHolderCount, 400, 20);
+    if (simpleTiers.dust.percentage > 55) holderCountScore *= 0.7;
+    else if (simpleTiers.dust.percentage > 40) holderCountScore *= 0.85;
+    holderCountScore = Math.round(holderCountScore);
+
     const whaleScore = scoreMetric(distributionStats.top5Percentage, 10, 50); // lower is better
-    const lpScore = scoreMetric(lpPercentage, 30, 5);
+
+    // (2) LP score is bucketed on absolute LP USD (memes commonly run 5–15% LP),
+    //     not on percentage-of-supply. A small +5 bonus per secondary LP rewards multi-pool depth.
+    const lpUsd = vitality.liquidityUsd || 0;
+    let lpScoreRaw: number;
+    if (lpUsd >= 50_000) lpScoreRaw = 100;
+    else if (lpUsd >= 25_000) lpScoreRaw = 85;
+    else if (lpUsd >= 10_000) lpScoreRaw = 70;
+    else if (lpUsd >= 5_000) lpScoreRaw = 55;
+    else if (lpUsd >= 2_000) lpScoreRaw = 40;
+    else if (lpUsd >= 500) lpScoreRaw = 20;
+    else lpScoreRaw = 5;
+    // Future: when secondary-pool detection is wired in, += 5 per extra pool, capped at +15.
+    const secondaryLps = (vitality as any).secondaryLpsCount ?? 0;
+    const lpScore = Math.min(100, lpScoreRaw + Math.min(15, secondaryLps * 5));
     const bundledScore = scoreMetric(insidersResult.bundledPercentage, 0, 25); // lower is better
     const dustScore = scoreMetric(simpleTiers.dust.percentage, 10, 60); // lower is better
     const devPct = potentialDevWallet?.percentageOfSupply ?? 0;
