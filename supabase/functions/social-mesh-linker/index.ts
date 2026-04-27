@@ -48,6 +48,30 @@ const SOCIAL_PATTERNS = {
   ],
 };
 
+// Reserved GitHub site/UI paths that must NEVER be saved as a "github account".
+// These are nav, footer, and product pages on github.com itself — not real users.
+const GITHUB_RESERVED = new Set([
+  'fluidicon','pricing','features','marketplace','team','enterprise','solutions',
+  'resources','sponsors','customer-stories','mcp','accelerator','trust-center',
+  'trending','topics','collections','security','partners','premium-support',
+  'why-github','search','login','signup','about','contact','site-map','readme',
+  'codespaces','copilot','actions','issues','discussions','explore',
+  'notifications','settings','new','organizations','events','jobs',
+  'developers','apps','integrations','open-source','enterprise-trial',
+  'orgs','site-policy','articles','site','assets','images','favicon.ico',
+  'robots.txt','humans.txt','sitemap.xml','manifest.json'
+]);
+
+// Validates a GitHub handle/repo extracted from a URL.
+// Accepts "user" or "user/repo" where user matches GitHub's username rules.
+function isValidGithubId(id: string): boolean {
+  if (!id) return false;
+  const first = id.split('/')[0].toLowerCase();
+  if (!first || GITHUB_RESERVED.has(first)) return false;
+  // GitHub username: alnum + dash, 1-39 chars, no leading/trailing dash, no double dash
+  return /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/i.test(first);
+}
+
 // Extract Twitter handle from URL (filters out reserved paths like "i")
 const X_RESERVED = new Set(['i','intent','search','hashtag','settings','home','explore','notifications','messages','compose','lists','bookmarks','communities','spaces','tos','privacy','help','about','login','signup','share','status','jobs','download']);
 function extractTwitterHandle(url: string | null): string | null {
@@ -76,11 +100,13 @@ function extractExtraSocials(url: string | null): { type: string; id: string; fu
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match) {
-        found.push({
-          type: platform,
-          id: match[1] || match[2] || '',
-          fullUrl: url,
-        });
+        const id = match[1] || match[2] || '';
+        // Validate per-platform — reject UI/nav paths masquerading as accounts.
+        if (platform === 'github' && !isValidGithubId(id)) {
+          break;
+        }
+        if (!id) break;
+        found.push({ type: platform, id, fullUrl: url });
         break;
       }
     }
