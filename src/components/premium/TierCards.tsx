@@ -38,7 +38,7 @@ const TIERS: Tier[] = [
     name: "Free",
     icon: <Zap className="w-5 h-5" />,
     monthlyPrice: "Free",
-    description: "Explore the basics. No account needed.",
+    description: "Sample the reputation graph — one Creator's surface a day.",
     color: "border-muted-foreground/30",
     cta: { label: "Try Free Analysis", action: "navigate", to: "/holders" },
     features: [
@@ -56,7 +56,7 @@ const TIERS: Tier[] = [
     name: "Signed In",
     icon: <Users className="w-5 h-5" />,
     monthlyPrice: "Free",
-    description: "Create an account to unlock more depth.",
+    description: "Cross-reference Creators ↔ Tokens. Limited evidence depth.",
     color: "border-primary/30",
     cta: { label: "Sign Up Free", action: "auth", to: "" },
     features: [
@@ -77,7 +77,7 @@ const TIERS: Tier[] = [
     yearlyPrice: "$38.99/yr",
     yearlySavings: "Save 19%",
     hasBillingToggle: true,
-    description: "Subscribe via X for premium intel.",
+    description: "Walk the graph. Trace wallets, KYC roots, dev histories.",
     color: "border-primary/50",
     cta: { label: "Subscribe on X", action: "external", to: "https://x.com/holdersintel" },
     features: [
@@ -98,7 +98,7 @@ const TIERS: Tier[] = [
     yearlyPrice: "$89.99/yr",
     yearlySavings: "Save 25%",
     hasBillingToggle: true,
-    description: "Full power. Every tool. Every signal.",
+    description: "Full reputation graph. Every Creator, every Token, every outcome.",
     color: "border-primary",
     highlight: true,
     cta: { label: "Upgrade to Pro", action: "checkout", to: "" },
