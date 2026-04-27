@@ -842,9 +842,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       }
     }
 
-    // PRUNE mode (applies in ALL view modes, not just schematic):
-    // keep only the central token, the dev wallet, and socials directly linked
-    // to the token. Strips funder chains, sibling wallets, KYC roots, etc.
+    // PRUNE mode (applies in ALL view modes):
+    // CORE = Token + Dev wallet + KYC root + socials directly attached to the token
+    // (website, X, Telegram, etc). Everything else (funder chains, sibling wallets,
+    // sibling tokens, second-degree socials) is treated as a "branch" and stripped.
     if (schematicMode === 'prune' && baseNodes.length > 0) {
       const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
       const tokenNode = baseNodes.find(n => n.type === 'token');
@@ -853,6 +854,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         keep.add(tokenNode.id);
         const devNode = baseNodes.find((n: any) => n.type === 'wallet' && (n as any).isDev);
         if (devNode) keep.add(devNode.id);
+        // Keep ALL KYC root nodes (CEX origin) — the "pot of gold" anchor.
+        for (const n of baseNodes) {
+          if (n.type === 'kyc_root') keep.add(n.id);
+        }
+        // Keep socials directly attached to the token.
         for (const l of graphData.links) {
           const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
           const t = typeof l.target === 'string' ? l.target : (l.target as any).id;
