@@ -199,12 +199,27 @@ function determineLifecycleStage(metrics: {
     return { stage: "Distribution", confidence: "medium", signals };
   }
   
-  // Strong serious + whale tiers = Expansion
-  if (seriousPercent + whalePercent > 25) {
+  // Solana-meme calibration: a 500+ holder, aged, actively-traded token is NOT "low confidence Expansion".
+  // Promote to high when there is real participation (15%+ in serious+whale tiers, was 25%).
+  if (seriousPercent + whalePercent > 15) {
     signals.push(`serious_whale_strong:${(seriousPercent + whalePercent).toFixed(1)}%`);
+    // Aged + liquid = Mature/Expansion high confidence
+    const ageHours = pairCreatedAt ? (Date.now() - pairCreatedAt) / 3_600_000 : null;
+    if (ageHours !== null && ageHours >= 168) signals.push(`mature_age:${Math.floor(ageHours / 24)}d`);
     return { stage: "Expansion", confidence: "high", signals };
   }
-  
+
+  // Mid-confidence floor for any actively-traded mature holder base — never fall to "low"
+  // unless the token is truly limp (no volume, no transactions).
+  const hasRealActivity =
+    (volume24h !== undefined && volume24h !== null && volume24h >= 5_000) ||
+    (txns1h !== undefined && txns1h !== null && txns1h >= 20);
+
+  if (hasRealActivity) {
+    signals.push(`active_market`);
+    return { stage: "Expansion", confidence: "medium", signals };
+  }
+
   return { stage: "Expansion", confidence: "low", signals };
 }
 
