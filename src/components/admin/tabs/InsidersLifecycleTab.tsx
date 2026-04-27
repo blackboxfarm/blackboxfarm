@@ -751,6 +751,11 @@ export default function InsidersLifecycleTab() {
               {drillDown?.token_symbol} — {drillDown && shortMint(drillDown.token_mint)}
             </DialogTitle>
           </DialogHeader>
+          {drillDownLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading mesh decision, milestones & lineage…
+            </div>
+          )}
           {drillDown && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
