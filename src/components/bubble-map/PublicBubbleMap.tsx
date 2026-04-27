@@ -1343,21 +1343,27 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               setTimeout(() => setShakeGraph(false), 800);
               if (graphRef.current && typeof graphRef.current.graphData === 'function') {
                 const gd = graphRef.current.graphData();
+                // Wipe positions/velocities AND any pin so d3 reseeds from scratch.
                 gd.nodes.forEach((node: any) => {
                   delete node.x;
                   delete node.y;
                   delete node.vx;
                   delete node.vy;
-                  node.fx = undefined;
-                  node.fy = undefined;
+                  delete node.fx;
+                  delete node.fy;
                 });
+                // Force the graph to re-ingest the wiped nodes, then fully reheat
+                // the simulation. d3ReheatSimulation is the supported API; calling
+                // alpha() alone often gets clamped by d3AlphaMin and does nothing.
                 graphRef.current.graphData({ nodes: [...gd.nodes], links: [...gd.links] });
+                try { graphRef.current.d3ReheatSimulation?.(); } catch { /* noop */ }
                 setTimeout(() => {
-                  if (graphRef.current) {
-                    const sim = graphRef.current.d3Force('simulation');
-                    if (sim) sim.alpha(0.3);
-                  }
-                }, 100);
+                  try {
+                    graphRef.current?.d3ReheatSimulation?.();
+                    const sim = graphRef.current?.d3Force?.('simulation');
+                    if (sim) sim.alpha(1).restart?.();
+                  } catch { /* noop */ }
+                }, 120);
                 setTimeout(() => {
                   if (graphRef.current) {
                     graphRef.current.zoomToFit(800, 40);
