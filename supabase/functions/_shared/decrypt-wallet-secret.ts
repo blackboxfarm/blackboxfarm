@@ -66,6 +66,15 @@ export async function decryptWalletSecretAuto(raw: string): Promise<string> {
       console.log("[decryptWalletSecretAuto] Plain base64 decode succeeded");
       return decoded;
     }
+
+    // 5. Legacy salted-base64 envelope:
+    // older DB helpers stored base64(salt32 + plaintextSecret)
+    // where salt32 was often 32 hex chars. Only strip if the remainder validates.
+    const stripped = stripLegacySaltPrefix(decoded);
+    if (stripped && isValidPlaintextKey(stripped)) {
+      console.log("[decryptWalletSecretAuto] Legacy salted base64 decode succeeded");
+      return stripped;
+    }
   } catch {
     // Not valid base64
   }
@@ -103,4 +112,19 @@ function isValidPlaintextKey(value: string): boolean {
   }
 
   return false;
+}
+
+function stripLegacySaltPrefix(value: string): string | null {
+  const v = value.trim();
+  if (v.length <= 32) return null;
+
+  const salt32 = v.slice(0, 32);
+  const remainder = v.slice(32).trim();
+
+  // Legacy secure/base64 format used a 32-char salt prefix (often hex/md5-like).
+  if (/^[a-f0-9]{32}$/i.test(salt32) || /^[A-Za-z0-9]{32}$/.test(salt32)) {
+    return remainder;
+  }
+
+  return null;
 }
