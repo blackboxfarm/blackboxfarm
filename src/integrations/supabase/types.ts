@@ -14998,8 +14998,11 @@ export type Database = {
           built_at: string
           channel_name: string
           created_at: string
+          creator_attempts: number
+          creator_last_attempt_at: string | null
           creator_resolved_at: string | null
           creator_risk_tier: string | null
+          creator_status: string
           creator_wallet: string | null
           dev_history_warning: boolean | null
           enrichment_last_run_at: string | null
@@ -15013,6 +15016,10 @@ export type Database = {
           genealogy_kyc_root: string | null
           id: string
           is_rugged: boolean
+          kyc_attempts: number
+          kyc_label: string | null
+          kyc_last_attempt_at: string | null
+          kyc_status: string
           last_milestone_at: string | null
           launchpad: string | null
           lifespan_minutes: number | null
@@ -15040,8 +15047,11 @@ export type Database = {
           built_at?: string
           channel_name?: string
           created_at?: string
+          creator_attempts?: number
+          creator_last_attempt_at?: string | null
           creator_resolved_at?: string | null
           creator_risk_tier?: string | null
+          creator_status?: string
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
           enrichment_last_run_at?: string | null
@@ -15055,6 +15065,10 @@ export type Database = {
           genealogy_kyc_root?: string | null
           id?: string
           is_rugged?: boolean
+          kyc_attempts?: number
+          kyc_label?: string | null
+          kyc_last_attempt_at?: string | null
+          kyc_status?: string
           last_milestone_at?: string | null
           launchpad?: string | null
           lifespan_minutes?: number | null
@@ -15082,8 +15096,11 @@ export type Database = {
           built_at?: string
           channel_name?: string
           created_at?: string
+          creator_attempts?: number
+          creator_last_attempt_at?: string | null
           creator_resolved_at?: string | null
           creator_risk_tier?: string | null
+          creator_status?: string
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
           enrichment_last_run_at?: string | null
@@ -15097,6 +15114,10 @@ export type Database = {
           genealogy_kyc_root?: string | null
           id?: string
           is_rugged?: boolean
+          kyc_attempts?: number
+          kyc_label?: string | null
+          kyc_last_attempt_at?: string | null
+          kyc_status?: string
           last_milestone_at?: string | null
           launchpad?: string | null
           lifespan_minutes?: number | null

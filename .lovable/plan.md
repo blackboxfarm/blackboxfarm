@@ -1,93 +1,162 @@
-## Confidence Audit: $HENRY / Dev Wallet `7L3pwH…Gnaw`
 
-**Short answer: ~30% of what the UI is showing for this token is wrong.** Two distinct false-positive sources are bleeding into the bubblemap. Neither is a topology bug — both are *upstream data-quality* bugs in two specific edge functions. Below is what's real, what's noise, and a tight fix.
+## Mission
 
----
+**Find every dev wallet for every token. Find every KYC root for every dev wallet.** No row left behind.
 
-### What is actually correct ✅
+Current state (live DB):
 
-1. **The dev wallet itself** (`7L3pwHJLSep5n2MmfKty4aWjBjqivpGVoRY2HNXMGnaw`) — real, came from the Pump.fun creator field via the unified creator resolver. Confidence: high.
-2. **The 3 `created_token` edges in `reputation_mesh`** at confidence 95:
-   - `98onUX1k…pump`
-   - `GtFhWYuu…pump`
-   - `4QYFpHD5…pump`
-   These were written by the canonical resolver after Pump.fun confirmed the creator. Plus the active token `CJUrEND…pump` itself = **4 real mints by this dev**, not 20+.
-   
-   Note: `token_lifecycle.creator_wallet` is `NULL` for the searched token — that's a separate gap (the watchlist row had it but it never got copied across).
+| Metric | Count | Gap |
+|---|---|---|
+| Total Insiders tokens | 1547 | — |
+| Dev wallet known | 534 | **1013 missing** |
+| Genealogy chain traced | 474 | 60 partial |
+| KYC root resolved | 46 | **488 traced-but-no-KYC** |
 
-3. **Funding chain hops** (`directly_funded` / `indirectly_funded`) — these come from `wallet-genealogy-scanner` which uses Helius transaction data. Those are on-chain truths.
+Goal after this ships: **1547 / 1547 dev wallets** and **1547 / 1547 KYC verdicts** (where verdict = either a CEX label like `Binance`, or `no_kyc_reachable` after exhaustive trace).
 
 ---
 
-### What is wrong ❌ — two distinct bugs
+## What I'll build
 
-#### Bug 1 — "Wide Funder" `AxiomR…TTSk` (143 siblings) is the Axiom.trade router
+### 1. Schema — track per-row status so nothing falls through
 
-The wallet `AxiomRXZAq1Jgjj9pHmNqVP7Lhu67wLXZJZbaK87TTSk` is the public **Axiom.trade swap/router** wallet. It funds gas for hundreds of unrelated traders. So *every* token in that "Top Sibling Tokens" panel ($ASTROID, $ODAI, $AIB, $CHUDHOUSE, $MIM, $uponly, $EVERYTHING, $BOY, +135 more) has **zero real connection** to the $HENRY dev — they just all happen to have used Axiom at some point.
+Add to `telegram_insider_token_lifecycle`:
 
-**Why it slipped through `mesh-shared-funders`:**
-- `NOISE_FANOUT_CAP = 150` in `supabase/functions/mesh-shared-funders/index.ts`
-- AxiomR has 144 children → just under the cap → ranked as "Wide Funder" instead of being dropped as noise.
-- We don't have Axiom in `_shared/cex-wallets.ts` as a known infra wallet, so `isCexWallet()` returns `false`.
+| Column | Type | Purpose |
+|---|---|---|
+| `creator_status` | text | `unknown` · `resolving` · `resolved` · `unresolvable` |
+| `creator_last_attempt_at` | timestamptz | retry throttle |
+| `creator_attempts` | int | escalation counter |
+| `kyc_status` | text | `pending` · `tracing` · `kyc_resolved` · `no_kyc_reachable` · `failed` |
+| `kyc_label` | text | `Binance`, `Coinbase`, `Kraken`, `MEXC`, etc. |
+| `kyc_last_attempt_at` | timestamptz | retry throttle |
+| `kyc_attempts` | int | escalation counter |
 
-#### Bug 2 — The "Pollen Robotics / HuggingFace" GitHub contributors
+On migration, backfill these from existing data (rows with `genealogy_kyc_root` → `kyc_resolved` + label looked up via `cex-wallets.ts`).
 
-The `social_account_of` edges binding this dev wallet to:
-- `pierre-rouanet`, `FabienDanieau`, `RemiFabre`, `apirrone`, `andimarafioti`, `matthieu-lapeyre`, `pollen-robotics/reachy_mini`, `askuric`, `cdussieux`, `augustin-crampette`, `alozowski`, `tfrere`, `haixuanTao`, plus discord IDs `2bAhWfXme9`, `Y7FgMqHsub`, x_account `nvidiaworkstatn`
+### 2. New edge function — `insiders-creator-backfill` (closes the 1013 gap)
 
-…are all real humans / repos in the open-source robotics community. They got pulled in because `social-mesh-linker` scraped the token's website (probably a "Henry the Robot" themed page) and wrote **every link found on the page** as a `social_account_of` the dev wallet at confidence 60.
+For every row with `creator_wallet IS NULL`:
 
-The function (lines 437–458) does:
-```ts
-const extraSocials = await discoverSocialsFromWebsite(website_url.trim());
-for (const social of extraSocials) {
-  meshLinks.push({ source_type: social.type, source_id: social.id,
-    linked_type: "wallet", linked_id: creator_wallet,
-    relationship: "social_account_of", confidence: 60, ... });
-}
+1. Try Pump.fun direct (cheapest, most authoritative)
+2. Fallback to Helius `getAsset` (DAS) for the mint
+3. Fallback to scanning the mint's earliest signature for the `initializeMint` signer
+4. If all three fail → mark `creator_status = 'unresolvable'` with reason; retry no sooner than 7 days
+
+Batched (25), auto-loop, Helius budget guard (existing 80% rule), 250ms throttle. Newest-first.
+
+### 3. Extend `insiders-genealogy-backfill` — exhaustive KYC walk
+
+Current function gives up after one Helius pass. Upgrade so a token only gets `no_kyc_reachable` after a real exhaustion check:
+
+- Walk depth **up to 30 hops** (was 20) using existing `traceParentWallets`
+- At each hop, check the wallet against:
+  - `cex-wallets.ts` CEX dictionary → set `kyc_label`
+  - `INFRA_WALLETS` (Axiom/Photon/etc.) → terminus, mark `no_kyc_reachable` (router dead-end, not a real chain)
+  - Multi-funder fork (>3 inbound funders) → take top-3 branches in parallel instead of just top-1
+- Only mark `kyc_status = 'no_kyc_reachable'` after at least **2 separate trace attempts** spaced 24h apart (covers transient Helius failures)
+- Persist `kyc_status`, `kyc_label`, `kyc_last_attempt_at`, increment `kyc_attempts` every time
+
+### 4. Universal dev-wallet sweep (NEW — `dev-wallet-universal-sweep`)
+
+You said *every* dev wallet for *every* token. The Insiders lifecycle is one source — but tokens also live in `pumpfun_watchlist`, `dex_top_200_cache`, `live_feed_curated`, etc. This new function:
+
+- Unions every `token_mint` across all token-bearing tables
+- For each mint with no known creator → run the same 3-step resolver as #2
+- For each resolved creator with no KYC → enqueue into the genealogy backfill
+- Writes results back to **every** table that has the mint (so `pumpfun_watchlist.creator_wallet`, `telegram_insider_token_lifecycle.creator_wallet`, etc. all stay in sync via existing creator-resolver write-back)
+
+This guarantees the "every dev wallet for every token" promise applies project-wide, not just Insiders.
+
+### 5. Pipeline orchestrator + cron — runs end to end every 3h
+
+New `insiders-pipeline-orchestrator` chains them in the right order:
+
+```text
+   ┌─────────────────────────────────┐
+   │  every 3h via pg_cron           │
+   └──────────────┬──────────────────┘
+                  ▼
+   1. insiders-lifecycle-builder       (parse new TG msgs)
+   2. insiders-creator-backfill        (fill missing dev wallets)
+   3. dev-wallet-universal-sweep       (project-wide creator parity)
+   4. insiders-genealogy-backfill      (walk creator → KYC, depth 30)
+   5. insiders-genealogy-rescan-kyc    (free re-check vs CEX dictionary)
+   6. insiders-cross-links             (rebuild Wallet Cross-Links cache)
 ```
 
-It treats *any* GitHub username found on the site as the dev's identity. So a memecoin website that quotes/credits the open-source project it stole the theme from will absorb the entire contributor list of that repo into the dev's identity graph.
+Each step reports `{processed, remaining}`; orchestrator stops a step early if Helius budget guard trips, and continues the cheaper steps after.
+
+### 6. UI changes in `InsidersLifecycleTab.tsx`
+
+**New "KYC" column** (between Mesh and Actions):
+
+| Cell | Meaning |
+|---|---|
+| 🏦 `Binance` (green) | Fully traced to known CEX |
+| 🏦 `Coinbase` / `Kraken` / `MEXC` … | (other CEX labels from dictionary) |
+| ⚪ `No KYC reachable` | Walked 30 hops, hit infra/dead-end |
+| 🟡 `Tracing… (n attempts)` | In progress |
+| ⚫ `No dev wallet` | Creator not yet resolved |
+| 🔴 `Failed` + retry icon | Click to force-retry |
+
+**New coverage card** (replaces "In Mesh" 0 stat):
+
+```text
+┌──────────────────────────────────────────────┐
+│  Genealogy Coverage                          │
+│  Dev wallets:    534 / 1547   (35%)  ▲       │
+│  Chain traced:   474 / 1547   (31%)          │
+│  KYC verdict:    46  / 1547   ( 3%)          │
+│  Unresolvable:    0  / 1547                  │
+│  [Find missing dev wallets]  [Trace to KYC]  │
+└──────────────────────────────────────────────┘
+```
+
+Both buttons run the orchestrator in foreground with live toast progress.
+
+### 7. Wallet Cross-Links — gate by full trace
+
+Add toggle (default ON): **"Only fully-verdicted rows"** — `insiders-cross-links` filters to `kyc_status IN ('kyc_resolved','no_kyc_reachable')`. So every entry shown has been chased to its final answer (CEX hit or proven dead-end). Header badge: `224 fused creators · 305 wallets · 7 KYC roots · 46 / 1547 verdicted`.
 
 ---
 
-### Proposed Fix (Phase-A — surgical, no schema change)
+## Technical details (for the dev team)
 
-**1. Block the Axiom router (and add a real noise list).** Edit `supabase/functions/_shared/cex-wallets.ts` to add a new category `INFRA_WALLETS` (Axiom, Photon, BullX, Trojan, BONKbot, Maestro, Banana Gun, Phantom MoonPay, Jupiter aggregator, etc.). Update `mesh-shared-funders/index.ts`:
-   - Treat `INFRA_WALLETS` like CEX terminuses (don't walk past, don't surface as "shared funder").
-   - Lower `NOISE_FANOUT_CAP` from 150 → **40** (real dev families almost never fund >40 distinct creators; anything bigger is router/CEX noise).
-   - Add UI label `infra_router` (red) so if one *does* surface, it's marked as "ignore".
+**Files**
+- migration: `add_creator_and_kyc_status_to_lifecycle.sql` (+ backfill)
+- new fn: `supabase/functions/insiders-creator-backfill/index.ts`
+- new fn: `supabase/functions/dev-wallet-universal-sweep/index.ts`
+- new fn: `supabase/functions/insiders-pipeline-orchestrator/index.ts`
+- edited: `supabase/functions/insiders-genealogy-backfill/index.ts` (depth 30, multi-branch, status writes, 24h retry guard)
+- edited: `supabase/functions/insiders-cross-links/index.ts` (`onlyVerdicted` flag)
+- edited: `src/components/admin/tabs/InsidersLifecycleTab.tsx` (KYC column, coverage card, gate toggle)
+- pg_cron: re-point existing 3h schedule at orchestrator (insert via SQL, not migration — contains URL+anon key)
 
-**2. Stop GitHub-repo scraping from poisoning the identity graph.** In `supabase/functions/social-mesh-linker/index.ts` (the website-scrape block, lines 435–462):
-   - **Drop confidence to 25** (below the UI's display threshold of ~50) for any social found via `discoverSocialsFromWebsite` — these are *associations*, not *ownership*.
-   - **Skip GitHub `org/repo` paths entirely** (paths containing `/`) — those are project pages, never personal identities.
-   - **Cap at 3 socials per website**. If a page has more than 3 distinct GitHub/Discord/Twitch handles, don't write any of them — it's a credits page or contributor list, not the dev's identity.
-   - Add a `relationship` distinction: `mentioned_on_site` (weak, for context) vs `social_account_of` (strong, ownership). Only the former is allowed from website scraping.
+**Helius budget**
+- 1013 missing creators × ~3 calls ≈ 3k credits
+- 488 missing-KYC × ~30 calls (depth 30 + occasional fork) ≈ 18k credits
+- Universal sweep first run: ~10k credits worst case
+- Total ≈ 31k of 10M monthly quota. Existing 80% guard remains.
 
-**3. Backfill cleanup (one-shot SQL migration):**
-   - Delete existing `social_account_of` edges where `evidence->>'source' = 'website_scrape'` AND `confidence < 70`.
-   - Delete `reputation_mesh` rows where `source_id` ∈ new `INFRA_WALLETS` set.
-   - Mark affected `dev_wallet_reputation` rows as needing a re-scan (clear their `twitter_accounts`/`github`/`discord_servers` arrays of the demoted handles).
+**Idempotency**
+- Status columns + `_last_attempt_at` make every step skip already-done rows.
+- 24h cooldown on failed traces prevents Helius hammering.
+- 7-day cooldown on `unresolvable` creators.
 
-**4. Plug the `token_lifecycle.creator_wallet` NULL.** In the unified creator resolver (`_shared/creator-resolver.ts`), after a successful Pump.fun resolution, also `update token_lifecycle set creator_wallet = ...` for the mint. This is a one-line write that prevents the "tokens minted = 0" gap I found.
-
-**5. Add a UI "evidence chip"** on the bubble map dev/sibling cards: tiny badge showing the discovery source (`pump.fun-direct`, `helius-funding`, `website-scrape`, `infra-noise`) so users (and we, debugging) can immediately see *why* a node is connected. If the only evidence is `website-scrape`, mark it amber.
-
----
-
-### Files to be edited
-
-- `supabase/functions/_shared/cex-wallets.ts` — add `INFRA_WALLETS` set with Axiom/Photon/BullX/etc., export `isInfraWallet()`.
-- `supabase/functions/mesh-shared-funders/index.ts` — apply infra filter, lower fanout cap, expose `cluster_label: 'infra_router'`.
-- `supabase/functions/social-mesh-linker/index.ts` — gut the website-scrape ownership writes (lines 435–462): demote confidence, skip repo paths, cap at 3, switch relationship to `mentioned_on_site`.
-- `supabase/functions/_shared/creator-resolver.ts` — backfill `token_lifecycle.creator_wallet` on successful resolution.
-- New migration `supabase/migrations/<ts>_mesh_falsepos_cleanup.sql` — delete poisoned rows, refresh impacted dev rep rows.
-- `src/components/bubble-map/SharedFundersPanel.tsx` — render `infra_router` label as red/de-emphasized; show evidence-source chip per sibling row.
-
-### Out of scope (for a follow-up Phase B)
-- Building a proper "infra wallet auto-detector" cron (any wallet that funds >100 *distinct* creators in 30 days → auto-flag as `infra_suspect`, surface in admin for review).
-- Reverse-checking GitHub commits (does the GitHub user have a wallet on-chain that touched this dev?) before allowing the link at all.
+**Memory updates**
+- Update `mem://features/oracle/dev-genealogy-tracing` — depth 30, multi-branch on fork, status-driven retry.
+- New `mem://features/intelligence/insiders-pipeline-orchestrator` — 3h cron chain.
 
 ---
 
-**Bottom line for $HENRY specifically:** the dev minted ~4 tokens (not 20+), has no proven Pollen Robotics / HuggingFace identity, and the AxiomR cluster is meaningless. The bubble map is *honest about its evidence* (low-confidence chips visible in the diagnostics box: "12 new mesh connections uncovered" with no KYC root) but the UI elevates these signals more than it should. Phase A fixes that without touching topology.
+## Definition of done
+
+After the first 24h of cron passes, every row in `telegram_insider_token_lifecycle` has either:
+
+- ✅ a resolved `creator_wallet` AND a `kyc_status` of `kyc_resolved` (with label) or `no_kyc_reachable` (proven exhausted), OR
+- ⚠️ `creator_status = 'unresolvable'` with a documented reason (failed mint, missing on-chain data) — these are real, not laziness.
+
+The "In Mesh = 0" stat starts climbing because the promoter finally has trustworthy creators with KYC anchors. Wallet Cross-Links shows only entries you can audit end-to-end.
+
+Approve and I'll build it.
