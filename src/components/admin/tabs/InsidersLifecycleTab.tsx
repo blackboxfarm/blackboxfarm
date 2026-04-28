@@ -693,8 +693,11 @@ export default function InsidersLifecycleTab() {
       {/* Controls */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 flex-wrap">
             <TrendingUp className="h-5 w-5" /> Insiders Channel — Token Lifecycle
+            <span className="text-sm font-normal text-muted-foreground">
+              (Tokens={summary.total.toLocaleString()} / Dev Wallets={summary.creatorResolved.toLocaleString()} / KYC={summary.kycResolved.toLocaleString()})
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
