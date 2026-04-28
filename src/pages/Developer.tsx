@@ -169,7 +169,11 @@ export default function Developer() {
             </CardContent>
           </Card>
 
-          {phanesIntel && (phanesIntel.phanes_recycled_accounts?.length || phanesIntel.phanes_username_history?.length) ? (
+          {(() => {
+            const recycled = (Array.isArray(phanesIntel?.phanes_recycled_accounts) ? phanesIntel.phanes_recycled_accounts : []) as any[];
+            const history = (Array.isArray(phanesIntel?.phanes_username_history) ? phanesIntel.phanes_username_history : []) as any[];
+            if (!phanesIntel || (recycled.length === 0 && history.length === 0)) return null;
+            return (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Phanes Intel</CardTitle>
@@ -178,29 +182,30 @@ export default function Developer() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {phanesIntel.phanes_recycled_accounts?.length ? (
+                {recycled.length > 0 && (
                   <div>
                     <p className="text-sm font-medium mb-1">🔄 Recycled handles (same X user ID)</p>
                     <div className="flex flex-wrap gap-1">
-                      {phanesIntel.phanes_recycled_accounts.map((r: any, i: number) => (
+                      {recycled.map((r: any, i: number) => (
                         <Badge key={i} variant="destructive">@{r.handle}</Badge>
                       ))}
                     </div>
                   </div>
-                ) : null}
-                {phanesIntel.phanes_username_history?.length ? (
+                )}
+                {history.length > 0 && (
                   <div>
                     <p className="text-sm font-medium mb-1">📜 Past usernames</p>
                     <div className="flex flex-wrap gap-1">
-                      {phanesIntel.phanes_username_history.map((h: any, i: number) => (
+                      {history.map((h: any, i: number) => (
                         <Badge key={i} variant="secondary">@{h.username}{h.date ? ` (${h.date})` : ''}</Badge>
                       ))}
                     </div>
                   </div>
-                ) : null}
+                )}
               </CardContent>
             </Card>
-          ) : null}
+            );
+          })()}
 
           <Card>
             <CardHeader>
