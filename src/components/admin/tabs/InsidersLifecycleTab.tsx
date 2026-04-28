@@ -429,6 +429,37 @@ export default function InsidersLifecycleTab() {
     }
   };
 
+  // Find every missing dev wallet — closes the gap of tokens with creator_wallet IS NULL
+  // by running the unified creator resolver (Pump.fun → Helius DAS → on-chain).
+  const handleFindCreators = async () => {
+    setFindingCreators(true);
+    setCreatorProgress({ done: 0, total: 0 });
+    try {
+      let totalProcessed = 0;
+      let totalResolved = 0;
+      let totalUnresolvable = 0;
+      for (let i = 0; i < 200; i++) {
+        const { data, error } = await supabase.functions.invoke('insiders-creator-backfill', {
+          body: { batchSize: 25 },
+        });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'creator backfill failed');
+        totalProcessed += data.processed || 0;
+        totalResolved += data.resolved || 0;
+        totalUnresolvable += data.unresolvable || 0;
+        setCreatorProgress({ done: totalProcessed, total: totalProcessed + (data.remaining || 0) });
+        if (!data.remaining || data.remaining === 0 || data.processed === 0) break;
+      }
+      toast.success(`Dev wallet sweep: ${totalResolved} resolved, ${totalUnresolvable} unresolvable, ${totalProcessed} total`);
+      await fetchRows();
+    } catch (e: any) {
+      toast.error('Dev wallet sweep failed: ' + (e?.message || String(e)));
+    } finally {
+      setFindingCreators(false);
+      setCreatorProgress(null);
+    }
+  };
+
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       // statusFilter — handle saddev/dud/dead which override minX
@@ -521,6 +552,12 @@ export default function InsidersLifecycleTab() {
       promoted: rows.filter((r) => r.mesh_promotion_status === "promoted").length,
       rejected: rows.filter((r) => r.mesh_promotion_status === "rejected_rug").length,
       devHistory: rows.filter((r) => r.dev_history_warning).length,
+      // Coverage stats
+      creatorResolved: rows.filter((r) => r.creator_wallet).length,
+      creatorUnresolvable: rows.filter((r) => r.creator_status === 'unresolvable').length,
+      kycResolved: rows.filter((r) => r.kyc_status === 'kyc_resolved').length,
+      kycDeadEnd: rows.filter((r) => r.kyc_status === 'no_kyc_reachable').length,
+      kycPending: rows.filter((r) => r.creator_wallet && r.kyc_status !== 'kyc_resolved' && r.kyc_status !== 'no_kyc_reachable').length,
     };
   }, [rows]);
 
