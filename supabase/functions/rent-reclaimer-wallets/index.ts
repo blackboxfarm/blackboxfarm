@@ -1,7 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Keypair } from "https://esm.sh/@solana/web3.js@1.87.6";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,6 +88,41 @@ function base58ToBytes(str: string): Uint8Array {
   return new Uint8Array(bytes.reverse());
 }
 
+function bytesToBase58(bytes: Uint8Array): string {
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const digits = [0];
+
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i++) {
+      carry += digits[i] << 8;
+      digits[i] = carry % 58;
+      carry = Math.floor(carry / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+
+  let result = '';
+  for (const byte of bytes) {
+    if (byte === 0) result += ALPHABET[0];
+    else break;
+  }
+  for (let i = digits.length - 1; i >= 0; i--) {
+    result += ALPHABET[digits[i]];
+  }
+  return result;
+}
+
+function pubkeyFromSecretKey(secretKey: Uint8Array): string {
+  if (secretKey.length !== 64) {
+    throw new Error('Invalid key format. Expected a 64-byte Solana secret key.');
+  }
+  return bytesToBase58(secretKey.slice(32, 64));
+}
+
 // Validate and parse private key, return public key
 function validatePrivateKey(privateKey: string): { pubkey: string; valid: boolean; error?: string } {
   try {
@@ -95,8 +130,11 @@ function validatePrivateKey(privateKey: string): { pubkey: string; valid: boolea
     try {
       const parsed = JSON.parse(privateKey);
       if (Array.isArray(parsed)) {
-        const keypair = Keypair.fromSecretKey(new Uint8Array(parsed));
-        return { pubkey: keypair.publicKey.toBase58(), valid: true };
+        if (parsed.length !== 64 || parsed.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) {
+          return { pubkey: '', valid: false, error: 'Invalid JSON key format. Expected 64 byte values.' };
+        }
+        const secretKey = new Uint8Array(parsed);
+        return { pubkey: pubkeyFromSecretKey(secretKey), valid: true };
       }
     } catch {
       // Not JSON, continue
@@ -105,8 +143,7 @@ function validatePrivateKey(privateKey: string): { pubkey: string; valid: boolea
     // Try base58 format
     const decoded = base58ToBytes(privateKey.trim());
     if (decoded.length === 64) {
-      const keypair = Keypair.fromSecretKey(decoded);
-      return { pubkey: keypair.publicKey.toBase58(), valid: true };
+      return { pubkey: pubkeyFromSecretKey(decoded), valid: true };
     }
 
     return { pubkey: '', valid: false, error: 'Invalid key format. Expected base58 or JSON array.' };
@@ -195,7 +232,7 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
       const encryptedKey = await SecureStorage.encrypt(privateKey.trim());
 
       // Insert the wallet
-      const { data: wallet, error } = await supabase
+      const wallet = await assertDbWrite(supabase
         .from('rent_reclaimer_wallets')
         .insert({
           pubkey: validation.pubkey,
@@ -204,9 +241,7 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
           is_active: true,
         })
         .select('id, pubkey, nickname, is_active, created_at')
-        .single();
-
-      if (error) throw error;
+        .single(), 'rent_reclaimer_wallets', 'INSERT');
 
       console.log(`Added wallet: ${validation.pubkey}`);
 
@@ -228,14 +263,12 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
       if (nickname !== undefined) updates.nickname = nickname;
       if (is_active !== undefined) updates.is_active = is_active;
 
-      const { data: wallet, error } = await supabase
+      const wallet = await assertDbWrite(supabase
         .from('rent_reclaimer_wallets')
         .update(updates)
         .eq('id', id)
         .select('id, pubkey, nickname, is_active, created_at, updated_at')
-        .single();
-
-      if (error) throw error;
+        .single(), 'rent_reclaimer_wallets', 'UPDATE');
 
       console.log(`Updated wallet: ${id}`);
 
@@ -253,12 +286,10 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
         return bad("Wallet ID is required");
       }
 
-      const { error } = await supabase
+      await assertDbWrite(supabase
         .from('rent_reclaimer_wallets')
         .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+        .eq('id', id), 'rent_reclaimer_wallets', 'DELETE');
 
       console.log(`Deleted wallet: ${id}`);
 
