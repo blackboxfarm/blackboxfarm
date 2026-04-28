@@ -1,162 +1,84 @@
 
-## Mission
+# Phanes Deep-Links + Auto-Capture Plan
 
-**Find every dev wallet for every token. Find every KYC root for every dev wallet.** No row left behind.
+## The capture problem (read this first)
 
-Current state (live DB):
+There are two separate things and they can't share one mechanism:
 
-| Metric | Count | Gap |
-|---|---|---|
-| Total Insiders tokens | 1547 | — |
-| Dev wallet known | 534 | **1013 missing** |
-| Genealogy chain traced | 474 | 60 partial |
-| KYC root resolved | 46 | **488 traced-but-no-KYC** |
+1. **Deep-link buttons** (`https://t.me/Phanes_bot?start=x_handle`) — these open Telegram on **your phone/desktop**. The reply lands in **your** Phanes DM. There is no way for our server (or Browserless) to read that reply — it's end-to-end on your account.
 
-Goal after this ships: **1547 / 1547 dev wallets** and **1547 / 1547 KYC verdicts** (where verdict = either a CEX label like `Binance`, or `no_kyc_reachable` after exhaustive trace).
+2. **Server-side capture** — already built: `supabase/functions/phanes-x-query` DMs `@Phanes_bot` from our **MTProto user session**, waits 8s, fetches the reply, parses it, and writes to `x_account_registry.phanes_data / phanes_recycled_accounts / phanes_username_history`.
 
----
+So "Browserless clicks the buttons" doesn't work for capture. Browserless drives a headless Chrome — it can't log into your Telegram account and read DMs. **The only auto-capture path is the existing MTProto function.** What we'll build is an admin UI that fires that function in bulk over a list of devs, plus the manual deep-link buttons everywhere else for free user-driven lookups.
 
-## What I'll build
+## What gets built
 
-### 1. Schema — track per-row status so nothing falls through
+### 1. `<PhanesDeepLink>` button component
+- Props: `handle?`, `wallet?`, `mint?`
+- Renders a small Telegram-blue chip: "🔍 Phanes" → opens `https://t.me/Phanes_bot?start=...` in a new tab
+- Maps to the right Phanes command:
+  - X handle → `?start=x_<handle>` (or fallback to copy `/x @handle` to clipboard + open bot)
+  - Wallet → `?start=w_<addr>`
+  - Mint → `?start=ca_<mint>`
+- Phanes' actual deep-link param scheme needs verifying via their docs; if `?start=` doesn't auto-run the command, the button copies the command text to clipboard and opens the bot DM, with a toast: "Command copied — paste in Phanes DM"
 
-Add to `telegram_insider_token_lifecycle`:
+Drop the button into:
+- `src/pages/Developer.tsx` (next to wallet + twitter handle)
+- `src/components/token/DeveloperRiskBadge.tsx`
+- `src/components/bubble-map/HackerTerminal.tsx` (next to X handles & wallets)
+- `src/components/holders/Top25HoldersCard.tsx` (next to wallets)
+- Holder/wallet popovers in the bubble map
 
-| Column | Type | Purpose |
-|---|---|---|
-| `creator_status` | text | `unknown` · `resolving` · `resolved` · `unresolvable` |
-| `creator_last_attempt_at` | timestamptz | retry throttle |
-| `creator_attempts` | int | escalation counter |
-| `kyc_status` | text | `pending` · `tracing` · `kyc_resolved` · `no_kyc_reachable` · `failed` |
-| `kyc_label` | text | `Binance`, `Coinbase`, `Kraken`, `MEXC`, etc. |
-| `kyc_last_attempt_at` | timestamptz | retry throttle |
-| `kyc_attempts` | int | escalation counter |
+### 2. New admin page: `/super-admin/phanes-batch`
+A queue console that uses **the existing `phanes-x-query` MTProto function** to capture data.
 
-On migration, backfill these from existing data (rows with `genealogy_kyc_root` → `kyc_resolved` + label looked up via `cex-wallets.ts`).
+Layout:
+- **Source picker**: "Devs from `developer_profiles` (filter: has twitter_handle, no `phanes_queried_at` in last 30d)" / "Handles from `x_account_registry` un-queried" / "Paste list"
+- **Table**: handle | wallet | last queried | last result (recycled? Y/N, # history) | "Run now" button
+- **Bulk run**: "Run next N" with a throttle slider (default: 1 every 90s — Phanes rate-limits + we don't want to look like a bot to them)
+- **Live log panel**: tails `edge_function_runs` rows for `phanes-x-query`
+- **Per-row "Run now"** invokes `supabase.functions.invoke('phanes-x-query', { body: { action: 'single', handle } })` and shows the parsed result inline
 
-### 2. New edge function — `insiders-creator-backfill` (closes the 1013 gap)
+This is the "page of buttons you click manually" — except clicking the button triggers our MTProto capture (so the data DOES land in our DB), not a deep-link to your phone.
 
-For every row with `creator_wallet IS NULL`:
+### 3. Optional: re-enable the cron
+`phanes-x-query` already supports `action: 'backfill'` (picks the next un-queried handle from `x_account_registry`). Add a toggle on the admin page: "Auto-backfill: ON/OFF" that schedules a `pg_cron` job calling `backfill` every 90s. Off by default.
 
-1. Try Pump.fun direct (cheapest, most authoritative)
-2. Fallback to Helius `getAsset` (DAS) for the mint
-3. Fallback to scanning the mint's earliest signature for the `initializeMint` signer
-4. If all three fail → mark `creator_status = 'unresolvable'` with reason; retry no sooner than 7 days
+### 4. Display the captured data
+On `src/pages/Developer.tsx` (and dev cards in bubble map), when `x_account_registry.phanes_recycled_accounts` or `phanes_username_history` has rows, render a "Phanes Intel" panel:
+- "🔄 Recycled handle — also seen as: @oldname1, @oldname2"
+- "📜 Past usernames: @x, @y (since 2024-03-15)"
+- Linked CAs from `recycledAccounts[].contractAddress` as clickable token chips
 
-Batched (25), auto-loop, Helius budget guard (existing 80% rule), 250ms throttle. Newest-first.
+## Why no Browserless
 
-### 3. Extend `insiders-genealogy-backfill` — exhaustive KYC walk
+Browserless headless Chrome cannot:
+- Log into your Telegram account (no session, no MTProto)
+- Read DMs from `@Phanes_bot`
+- Bypass Telegram's web client auth
 
-Current function gives up after one Helius pass. Upgrade so a token only gets `no_kyc_reachable` after a real exhaustion check:
+The MTProto user session we already have IS the only "automated browser" that works for Phanes. The admin page just gives it a friendly bulk UI.
 
-- Walk depth **up to 30 hops** (was 20) using existing `traceParentWallets`
-- At each hop, check the wallet against:
-  - `cex-wallets.ts` CEX dictionary → set `kyc_label`
-  - `INFRA_WALLETS` (Axiom/Photon/etc.) → terminus, mark `no_kyc_reachable` (router dead-end, not a real chain)
-  - Multi-funder fork (>3 inbound funders) → take top-3 branches in parallel instead of just top-1
-- Only mark `kyc_status = 'no_kyc_reachable'` after at least **2 separate trace attempts** spaced 24h apart (covers transient Helius failures)
-- Persist `kyc_status`, `kyc_label`, `kyc_last_attempt_at`, increment `kyc_attempts` every time
+## ToS reminder
+Phanes ToS forbids "automated queries." The existing `phanes-x-query` already does automated queries from our MTProto account — risk of ban exists. Throttle to ≥90s between calls and cap at ~50/day to stay below their radar. Manual deep-link buttons (item 1) are zero risk because the user runs them on their own account.
 
-### 4. Universal dev-wallet sweep (NEW — `dev-wallet-universal-sweep`)
+## Files touched
 
-You said *every* dev wallet for *every* token. The Insiders lifecycle is one source — but tokens also live in `pumpfun_watchlist`, `dex_top_200_cache`, `live_feed_curated`, etc. This new function:
+**New:**
+- `src/components/phanes/PhanesDeepLink.tsx`
+- `src/pages/admin/PhanesBatch.tsx` + route
+- `src/components/admin/PhanesQueueTable.tsx`
 
-- Unions every `token_mint` across all token-bearing tables
-- For each mint with no known creator → run the same 3-step resolver as #2
-- For each resolved creator with no KYC → enqueue into the genealogy backfill
-- Writes results back to **every** table that has the mint (so `pumpfun_watchlist.creator_wallet`, `telegram_insider_token_lifecycle.creator_wallet`, etc. all stay in sync via existing creator-resolver write-back)
+**Edited (insert button):**
+- `src/pages/Developer.tsx`
+- `src/components/token/DeveloperRiskBadge.tsx`
+- `src/components/bubble-map/HackerTerminal.tsx`
+- `src/components/holders/Top25HoldersCard.tsx`
 
-This guarantees the "every dev wallet for every token" promise applies project-wide, not just Insiders.
+**Edge functions:** no new ones — reuse `phanes-x-query` and `telegram-mtproto-auth`. Optionally add a tiny `phanes-batch-orchestrator` function if we want server-side queue management instead of doing it from the admin page (recommend: skip it, drive from the admin page so you watch it live).
 
-### 5. Pipeline orchestrator + cron — runs end to end every 3h
+## Open questions before I build
 
-New `insiders-pipeline-orchestrator` chains them in the right order:
-
-```text
-   ┌─────────────────────────────────┐
-   │  every 3h via pg_cron           │
-   └──────────────┬──────────────────┘
-                  ▼
-   1. insiders-lifecycle-builder       (parse new TG msgs)
-   2. insiders-creator-backfill        (fill missing dev wallets)
-   3. dev-wallet-universal-sweep       (project-wide creator parity)
-   4. insiders-genealogy-backfill      (walk creator → KYC, depth 30)
-   5. insiders-genealogy-rescan-kyc    (free re-check vs CEX dictionary)
-   6. insiders-cross-links             (rebuild Wallet Cross-Links cache)
-```
-
-Each step reports `{processed, remaining}`; orchestrator stops a step early if Helius budget guard trips, and continues the cheaper steps after.
-
-### 6. UI changes in `InsidersLifecycleTab.tsx`
-
-**New "KYC" column** (between Mesh and Actions):
-
-| Cell | Meaning |
-|---|---|
-| 🏦 `Binance` (green) | Fully traced to known CEX |
-| 🏦 `Coinbase` / `Kraken` / `MEXC` … | (other CEX labels from dictionary) |
-| ⚪ `No KYC reachable` | Walked 30 hops, hit infra/dead-end |
-| 🟡 `Tracing… (n attempts)` | In progress |
-| ⚫ `No dev wallet` | Creator not yet resolved |
-| 🔴 `Failed` + retry icon | Click to force-retry |
-
-**New coverage card** (replaces "In Mesh" 0 stat):
-
-```text
-┌──────────────────────────────────────────────┐
-│  Genealogy Coverage                          │
-│  Dev wallets:    534 / 1547   (35%)  ▲       │
-│  Chain traced:   474 / 1547   (31%)          │
-│  KYC verdict:    46  / 1547   ( 3%)          │
-│  Unresolvable:    0  / 1547                  │
-│  [Find missing dev wallets]  [Trace to KYC]  │
-└──────────────────────────────────────────────┘
-```
-
-Both buttons run the orchestrator in foreground with live toast progress.
-
-### 7. Wallet Cross-Links — gate by full trace
-
-Add toggle (default ON): **"Only fully-verdicted rows"** — `insiders-cross-links` filters to `kyc_status IN ('kyc_resolved','no_kyc_reachable')`. So every entry shown has been chased to its final answer (CEX hit or proven dead-end). Header badge: `224 fused creators · 305 wallets · 7 KYC roots · 46 / 1547 verdicted`.
-
----
-
-## Technical details (for the dev team)
-
-**Files**
-- migration: `add_creator_and_kyc_status_to_lifecycle.sql` (+ backfill)
-- new fn: `supabase/functions/insiders-creator-backfill/index.ts`
-- new fn: `supabase/functions/dev-wallet-universal-sweep/index.ts`
-- new fn: `supabase/functions/insiders-pipeline-orchestrator/index.ts`
-- edited: `supabase/functions/insiders-genealogy-backfill/index.ts` (depth 30, multi-branch, status writes, 24h retry guard)
-- edited: `supabase/functions/insiders-cross-links/index.ts` (`onlyVerdicted` flag)
-- edited: `src/components/admin/tabs/InsidersLifecycleTab.tsx` (KYC column, coverage card, gate toggle)
-- pg_cron: re-point existing 3h schedule at orchestrator (insert via SQL, not migration — contains URL+anon key)
-
-**Helius budget**
-- 1013 missing creators × ~3 calls ≈ 3k credits
-- 488 missing-KYC × ~30 calls (depth 30 + occasional fork) ≈ 18k credits
-- Universal sweep first run: ~10k credits worst case
-- Total ≈ 31k of 10M monthly quota. Existing 80% guard remains.
-
-**Idempotency**
-- Status columns + `_last_attempt_at` make every step skip already-done rows.
-- 24h cooldown on failed traces prevents Helius hammering.
-- 7-day cooldown on `unresolvable` creators.
-
-**Memory updates**
-- Update `mem://features/oracle/dev-genealogy-tracing` — depth 30, multi-branch on fork, status-driven retry.
-- New `mem://features/intelligence/insiders-pipeline-orchestrator` — 3h cron chain.
-
----
-
-## Definition of done
-
-After the first 24h of cron passes, every row in `telegram_insider_token_lifecycle` has either:
-
-- ✅ a resolved `creator_wallet` AND a `kyc_status` of `kyc_resolved` (with label) or `no_kyc_reachable` (proven exhausted), OR
-- ⚠️ `creator_status = 'unresolvable'` with a documented reason (failed mint, missing on-chain data) — these are real, not laziness.
-
-The "In Mesh = 0" stat starts climbing because the promoter finally has trustworthy creators with KYC anchors. Wallet Cross-Links shows only entries you can audit end-to-end.
-
-Approve and I'll build it.
+1. Phanes deep-link param scheme — do you know if `t.me/Phanes_bot?start=x_handle` auto-runs `/x handle`? If not, button falls back to "open bot + copy command to clipboard." (I can verify by clicking one in your Telegram and reporting back, but cleaner if you confirm.)
+2. Throttle default — 90s/call OK? That's ~40 devs/hour, ~950/day max but I'd cap at 50/day for ToS safety.
+3. Should the admin page be `/super-admin/phanes-batch` (new) or a tab inside the existing super-admin dashboard?
