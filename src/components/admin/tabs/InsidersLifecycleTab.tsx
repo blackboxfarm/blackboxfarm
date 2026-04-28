@@ -39,6 +39,9 @@ import {
   Clock,
   Zap,
   Play,
+  Building,
+  HelpCircle,
+  CircleSlash,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -102,6 +105,10 @@ interface LifecycleRow {
   genealogy_depth?: number | null;
   genealogy_kyc_root?: string | null;
   genealogy_chain?: Array<{ wallet: string; depth: number; amountSol?: number | null; cexName?: string | null; role: 'creator' | 'funder' | 'kyc_root' }> | null;
+  creator_status?: string | null;
+  kyc_status?: string | null;
+  kyc_label?: string | null;
+  kyc_attempts?: number | null;
 }
 
 const MIN_X_OPTIONS: Array<{ value: string; label: string }> = [
@@ -192,6 +199,9 @@ export default function InsidersLifecycleTab() {
   const [building, setBuilding] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [tracingKyc, setTracingKyc] = useState(false);
+  const [findingCreators, setFindingCreators] = useState(false);
+  const [creatorProgress, setCreatorProgress] = useState<{ done: number; total: number } | null>(null);
+  const [onlyVerdicted, setOnlyVerdicted] = useState(true);
   const [traceProgress, setTraceProgress] = useState<{ done: number; total: number } | null>(null);
   const [crossLinks, setCrossLinks] = useState<any | null>(null);
   const [crossLinksLoading, setCrossLinksLoading] = useState(false);
@@ -301,6 +311,7 @@ export default function InsidersLifecycleTab() {
       'mesh_promotion_status', 'mesh_promotion_reason',
       'dev_history_warning', 'total_messages',
       'genealogy_depth', 'genealogy_kyc_root',
+      'creator_status', 'kyc_status', 'kyc_label', 'kyc_attempts',
     ].join(',');
     // Page through to bypass PostgREST's default 1000-row response cap.
     const PAGE = 1000;
@@ -418,6 +429,37 @@ export default function InsidersLifecycleTab() {
     }
   };
 
+  // Find every missing dev wallet — closes the gap of tokens with creator_wallet IS NULL
+  // by running the unified creator resolver (Pump.fun → Helius DAS → on-chain).
+  const handleFindCreators = async () => {
+    setFindingCreators(true);
+    setCreatorProgress({ done: 0, total: 0 });
+    try {
+      let totalProcessed = 0;
+      let totalResolved = 0;
+      let totalUnresolvable = 0;
+      for (let i = 0; i < 200; i++) {
+        const { data, error } = await supabase.functions.invoke('insiders-creator-backfill', {
+          body: { batchSize: 25 },
+        });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'creator backfill failed');
+        totalProcessed += data.processed || 0;
+        totalResolved += data.resolved || 0;
+        totalUnresolvable += data.unresolvable || 0;
+        setCreatorProgress({ done: totalProcessed, total: totalProcessed + (data.remaining || 0) });
+        if (!data.remaining || data.remaining === 0 || data.processed === 0) break;
+      }
+      toast.success(`Dev wallet sweep: ${totalResolved} resolved, ${totalUnresolvable} unresolvable, ${totalProcessed} total`);
+      await fetchRows();
+    } catch (e: any) {
+      toast.error('Dev wallet sweep failed: ' + (e?.message || String(e)));
+    } finally {
+      setFindingCreators(false);
+      setCreatorProgress(null);
+    }
+  };
+
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       // statusFilter — handle saddev/dud/dead which override minX
@@ -510,6 +552,12 @@ export default function InsidersLifecycleTab() {
       promoted: rows.filter((r) => r.mesh_promotion_status === "promoted").length,
       rejected: rows.filter((r) => r.mesh_promotion_status === "rejected_rug").length,
       devHistory: rows.filter((r) => r.dev_history_warning).length,
+      // Coverage stats
+      creatorResolved: rows.filter((r) => r.creator_wallet).length,
+      creatorUnresolvable: rows.filter((r) => r.creator_status === 'unresolvable').length,
+      kycResolved: rows.filter((r) => r.kyc_status === 'kyc_resolved').length,
+      kycDeadEnd: rows.filter((r) => r.kyc_status === 'no_kyc_reachable').length,
+      kycPending: rows.filter((r) => r.creator_wallet && r.kyc_status !== 'kyc_resolved' && r.kyc_status !== 'no_kyc_reachable').length,
     };
   }, [rows]);
 
@@ -547,6 +595,88 @@ export default function InsidersLifecycleTab() {
     <div className="space-y-6">
       {/* Hypothetical $X-per-call PnL simulator */}
       <HypotheticalPnlPanel rows={rows} />
+
+      {/* Genealogy Coverage — every dev wallet, every KYC verdict */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex-1 min-w-[260px]">
+              <div className="text-sm font-semibold flex items-center gap-2 mb-2">
+                <Building2 className="h-4 w-4 text-primary" />
+                Genealogy Coverage
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <div className="text-muted-foreground">Dev wallets</div>
+                  <div className="font-mono text-base">
+                    {summary.creatorResolved.toLocaleString()} / {summary.total.toLocaleString()}
+                    <span className="ml-1 text-muted-foreground">
+                      ({summary.total ? Math.round(summary.creatorResolved / summary.total * 100) : 0}%)
+                    </span>
+                  </div>
+                  {summary.creatorUnresolvable > 0 && (
+                    <div className="text-[10px] text-muted-foreground">{summary.creatorUnresolvable} unresolvable</div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-muted-foreground">KYC resolved</div>
+                  <div className="font-mono text-base text-green-400">
+                    {summary.kycResolved.toLocaleString()}
+                    <span className="ml-1 text-muted-foreground">
+                      ({summary.total ? Math.round(summary.kycResolved / summary.total * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Dead-end (proven)</div>
+                  <div className="font-mono text-base text-muted-foreground">
+                    {summary.kycDeadEnd.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Still tracing</div>
+                  <div className="font-mono text-base text-amber-400">
+                    {summary.kycPending.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                size="sm"
+                onClick={handleFindCreators}
+                disabled={findingCreators || tracingKyc}
+                className="gap-1.5"
+              >
+                {findingCreators
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Search className="h-3.5 w-3.5" />}
+                <span className="text-xs">
+                  {findingCreators && creatorProgress
+                    ? `Finding… ${creatorProgress.done}/${creatorProgress.total}`
+                    : 'Find missing dev wallets'}
+                </span>
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleTraceKyc}
+                disabled={tracingKyc || findingCreators}
+                className="gap-1.5"
+              >
+                {tracingKyc
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Building className="h-3.5 w-3.5" />}
+                <span className="text-xs">
+                  {tracingKyc && traceProgress
+                    ? `Tracing… ${traceProgress.done}/${traceProgress.total}`
+                    : 'Trace to KYC'}
+                </span>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
@@ -686,6 +816,7 @@ export default function InsidersLifecycleTab() {
                       Lifespan <SortIcon k="lifespan_minutes" />
                     </TableHead>
                     <TableHead>Mesh</TableHead>
+                    <TableHead>KYC</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -738,6 +869,36 @@ export default function InsidersLifecycleTab() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell>
+                        {!r.creator_wallet ? (
+                          r.creator_status === 'unresolvable' ? (
+                            <Badge variant="outline" className="text-muted-foreground border-muted">
+                              <CircleSlash className="h-3 w-3 mr-1" />No dev wallet
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              <HelpCircle className="h-3 w-3 mr-1" />Pending dev
+                            </Badge>
+                          )
+                        ) : r.kyc_status === 'kyc_resolved' ? (
+                          <Badge className="bg-green-500/20 text-green-400 border-green-500/40" title={r.genealogy_kyc_root || ''}>
+                            <Building2 className="h-3 w-3 mr-1" />{r.kyc_label || 'CEX'}
+                          </Badge>
+                        ) : r.kyc_status === 'no_kyc_reachable' ? (
+                          <Badge variant="outline" className="text-muted-foreground" title={r.kyc_label || ''}>
+                            <CircleSlash className="h-3 w-3 mr-1" />Dead-end
+                          </Badge>
+                        ) : r.kyc_status === 'failed' ? (
+                          <Badge variant="destructive" className="bg-destructive/20">
+                            <AlertTriangle className="h-3 w-3 mr-1" />Failed
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-amber-400 border-amber-500/40">
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />Tracing
+                            {(r.kyc_attempts ?? 0) > 0 && <span className="ml-1 opacity-60">·{r.kyc_attempts}</span>}
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <TooltipProvider delayDuration={200}>
                           <div className="flex justify-end gap-1">
@@ -789,7 +950,7 @@ export default function InsidersLifecycleTab() {
                     </TableRow>
                   ))}
                   {pageRows.length === 0 && (
-                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
