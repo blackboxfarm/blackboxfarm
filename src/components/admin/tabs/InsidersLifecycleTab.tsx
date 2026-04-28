@@ -596,6 +596,88 @@ export default function InsidersLifecycleTab() {
       {/* Hypothetical $X-per-call PnL simulator */}
       <HypotheticalPnlPanel rows={rows} />
 
+      {/* Genealogy Coverage — every dev wallet, every KYC verdict */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex-1 min-w-[260px]">
+              <div className="text-sm font-semibold flex items-center gap-2 mb-2">
+                <Building2 className="h-4 w-4 text-primary" />
+                Genealogy Coverage
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <div className="text-muted-foreground">Dev wallets</div>
+                  <div className="font-mono text-base">
+                    {summary.creatorResolved.toLocaleString()} / {summary.total.toLocaleString()}
+                    <span className="ml-1 text-muted-foreground">
+                      ({summary.total ? Math.round(summary.creatorResolved / summary.total * 100) : 0}%)
+                    </span>
+                  </div>
+                  {summary.creatorUnresolvable > 0 && (
+                    <div className="text-[10px] text-muted-foreground">{summary.creatorUnresolvable} unresolvable</div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-muted-foreground">KYC resolved</div>
+                  <div className="font-mono text-base text-green-400">
+                    {summary.kycResolved.toLocaleString()}
+                    <span className="ml-1 text-muted-foreground">
+                      ({summary.total ? Math.round(summary.kycResolved / summary.total * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Dead-end (proven)</div>
+                  <div className="font-mono text-base text-muted-foreground">
+                    {summary.kycDeadEnd.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Still tracing</div>
+                  <div className="font-mono text-base text-amber-400">
+                    {summary.kycPending.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                size="sm"
+                onClick={handleFindCreators}
+                disabled={findingCreators || tracingKyc}
+                className="gap-1.5"
+              >
+                {findingCreators
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Search className="h-3.5 w-3.5" />}
+                <span className="text-xs">
+                  {findingCreators && creatorProgress
+                    ? `Finding… ${creatorProgress.done}/${creatorProgress.total}`
+                    : 'Find missing dev wallets'}
+                </span>
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleTraceKyc}
+                disabled={tracingKyc || findingCreators}
+                className="gap-1.5"
+              >
+                {tracingKyc
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Building className="h-3.5 w-3.5" />}
+                <span className="text-xs">
+                  {tracingKyc && traceProgress
+                    ? `Tracing… ${traceProgress.done}/${traceProgress.total}`
+                    : 'Trace to KYC'}
+                </span>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total tokens</div><div className="text-2xl font-bold">{summary.total}</div></CardContent></Card>
