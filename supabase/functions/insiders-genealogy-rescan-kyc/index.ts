@@ -86,6 +86,9 @@ serve(async (req) => {
             .update({
               genealogy_kyc_root: kycRoot,
               genealogy_chain: patchedChain,
+              kyc_status: 'kyc_resolved',
+              kyc_label: kycCexName,
+              kyc_last_attempt_at: new Date().toISOString(),
               enrichment_last_run_at: new Date().toISOString(),
             })
             .eq('id', row.id),
