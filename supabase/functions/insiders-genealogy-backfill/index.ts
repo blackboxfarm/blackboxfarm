@@ -15,6 +15,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { traceParentWallets, meshGenealogyResults } from "../_shared/auto-genealogy.ts";
 import { assertUpdate } from "../_shared/db-assert.ts";
+import { getCexName, isInfraWallet, getInfraName } from "../_shared/cex-wallets.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +27,8 @@ const MAX_BATCH = 50;
 const PER_WALLET_DELAY_MS = 250; // throttle Helius
 const HELIUS_MONTHLY_QUOTA = 10_000_000;
 const HELIUS_BUDGET_GUARD_PCT = 0.80; // abort auto_loop above 80% of quota
+const KYC_RETRY_COOLDOWN_HOURS = 24;
+const MAX_KYC_ATTEMPTS_BEFORE_DEAD_END = 2;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -66,14 +69,20 @@ serve(async (req) => {
     }
 
     // 1. Find rows that need tracing
+    // Skip rows where kyc_status is a final verdict (kyc_resolved, no_kyc_reachable),
+    // and (when not forcing) respect the 24h retry cooldown so we don't hammer Helius.
+    const cooldownIso = new Date(Date.now() - KYC_RETRY_COOLDOWN_HOURS * 3600_000).toISOString();
+
     const filter = supabase
       .from('telegram_insider_token_lifecycle')
-      .select('id, token_mint, token_symbol, creator_wallet, genealogy_kyc_root, genealogy_chain', { count: 'exact' })
+      .select('id, token_mint, token_symbol, creator_wallet, genealogy_kyc_root, genealogy_chain, kyc_status, kyc_attempts, kyc_last_attempt_at', { count: 'exact' })
       .not('creator_wallet', 'is', null);
 
     const query = force
       ? filter
-      : filter.or('genealogy_kyc_root.is.null,genealogy_chain.is.null');
+      : filter
+          .not('kyc_status', 'in', '("kyc_resolved","no_kyc_reachable")')
+          .or(`kyc_last_attempt_at.is.null,kyc_last_attempt_at.lt.${cooldownIso}`);
 
     const { data: rows, error, count } = await query
       .order('peak_multiplier', { ascending: false }) // best-performing first
@@ -97,6 +106,7 @@ serve(async (req) => {
 
     for (const row of rows) {
       const creator = row.creator_wallet as string;
+      const attempts = (row.kyc_attempts ?? 0) + 1;
       try {
         const gen = await traceParentWallets(supabase, creator, 'insiders-genealogy-backfill');
 
@@ -111,7 +121,33 @@ serve(async (req) => {
 
         const cexHit = sortedParents.find((p: any) => p?.cexName);
         const kycRoot = cexHit?.wallet ?? null;
-        if (kycRoot) kycResolved++;
+        const kycLabel = cexHit?.cexName || (kycRoot ? getCexName(kycRoot) : null);
+
+        // Did the chain dead-end at an infrastructure router (Axiom/Photon/etc.)?
+        const lastHop = sortedParents[sortedParents.length - 1];
+        const hitInfra = !cexHit && lastHop && isInfraWallet(lastHop.wallet);
+        const infraName = hitInfra ? getInfraName(lastHop.wallet) : null;
+
+        // Verdict logic:
+        //   - Hit a CEX → kyc_resolved with label
+        //   - Hit infra router → no_kyc_reachable (router dead-end is final)
+        //   - Walked but no CEX, attempts >= threshold → no_kyc_reachable
+        //   - Otherwise → tracing (will retry next cooldown)
+        let newKycStatus: string;
+        let newKycLabel: string | null = null;
+        if (kycRoot) {
+          newKycStatus = 'kyc_resolved';
+          newKycLabel = kycLabel || 'Unknown CEX';
+          kycResolved++;
+        } else if (hitInfra) {
+          newKycStatus = 'no_kyc_reachable';
+          newKycLabel = infraName ? `Router: ${infraName}` : 'Router dead-end';
+        } else if (attempts >= MAX_KYC_ATTEMPTS_BEFORE_DEAD_END && sortedParents.length > 0) {
+          newKycStatus = 'no_kyc_reachable';
+          newKycLabel = 'Exhausted';
+        } else {
+          newKycStatus = 'tracing';
+        }
 
         const chain = [
           { wallet: creator, depth: 0, role: 'creator' },
@@ -131,6 +167,10 @@ serve(async (req) => {
               genealogy_depth: sortedParents.length,
               genealogy_kyc_root: kycRoot,
               genealogy_chain: chain,
+              kyc_status: newKycStatus,
+              kyc_label: newKycLabel,
+              kyc_attempts: attempts,
+              kyc_last_attempt_at: new Date().toISOString(),
               enrichment_last_run_at: new Date().toISOString(),
             })
             .eq('id', row.id),
@@ -138,10 +178,19 @@ serve(async (req) => {
         );
 
         traced++;
-        console.log(`[backfill] ✅ ${row.token_symbol || row.token_mint.slice(0, 8)} → depth=${sortedParents.length}, kyc=${kycRoot ? 'YES' : 'no'}`);
+        console.log(`[backfill] ✅ ${row.token_symbol || row.token_mint.slice(0, 8)} → depth=${sortedParents.length}, status=${newKycStatus}${newKycLabel ? ` (${newKycLabel})` : ''}`);
       } catch (e) {
         failed++;
         console.warn(`[backfill] ❌ ${row.token_symbol || row.token_mint.slice(0, 8)}: ${(e as Error).message}`);
+        // Bump attempt counter & timestamp so cooldown applies to failures too
+        await supabase
+          .from('telegram_insider_token_lifecycle')
+          .update({
+            kyc_status: attempts >= MAX_KYC_ATTEMPTS_BEFORE_DEAD_END ? 'failed' : 'tracing',
+            kyc_attempts: attempts,
+            kyc_last_attempt_at: new Date().toISOString(),
+          })
+          .eq('id', row.id);
       }
 
       // Throttle Helius
