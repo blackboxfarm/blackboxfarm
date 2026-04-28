@@ -21,11 +21,20 @@ const corsHeaders = {
 const DEFAULT_BATCH = 25;
 const MAX_BATCH = 50;
 const PER_TOKEN_DELAY_MS = 250; // throttle Helius/Pump.fun
+const PER_TOKEN_TIMEOUT_MS = 8000; // hard cap per resolution
 const HELIUS_MONTHLY_QUOTA = 10_000_000;
 const HELIUS_BUDGET_GUARD_PCT = 0.80;
 const RETRY_COOLDOWN_HOURS = 24;          // failed → retry after 24h
 const UNRESOLVABLE_COOLDOWN_DAYS = 7;     // unresolvable → retry after 7d
 const MAX_ATTEMPTS_BEFORE_UNRESOLVABLE = 3;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`timeout:${label}:${ms}ms`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); },
+           (e) => { clearTimeout(t); reject(e); });
+  });
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -61,21 +70,22 @@ serve(async (req) => {
       }
     }
 
-    // Pick rows that need creator resolution and are out of cooldown.
-    const cooldownIso = new Date(Date.now() - RETRY_COOLDOWN_HOURS * 3600_000).toISOString();
-    const unresolvableCooldownIso = new Date(Date.now() - UNRESOLVABLE_COOLDOWN_DAYS * 86400_000).toISOString();
-
-    const { data: rows, error, count } = await supabase
-      .from('telegram_insider_token_lifecycle')
-      .select('id, token_mint, token_symbol, creator_status, creator_attempts, creator_last_attempt_at', { count: 'exact' })
-      .is('creator_wallet', null)
-      .or(`creator_last_attempt_at.is.null,and(creator_status.eq.unknown,creator_last_attempt_at.lt.${cooldownIso}),and(creator_status.eq.unresolvable,creator_last_attempt_at.lt.${unresolvableCooldownIso})`)
-      .order('first_called_at', { ascending: false, nullsFirst: false }) // newest first
-      .limit(batchSize);
-
+    // Atomic claim: marks rows as 'resolving' under FOR UPDATE SKIP LOCKED so
+    // parallel workers grab disjoint rows.
+    const { data: rows, error } = await supabase.rpc('claim_insiders_creator_backfill_batch', {
+      p_batch_size: batchSize,
+      p_retry_cooldown_hours: RETRY_COOLDOWN_HOURS,
+      p_unresolvable_cooldown_days: UNRESOLVABLE_COOLDOWN_DAYS,
+    });
     if (error) throw error;
 
-    const total = count ?? rows?.length ?? 0;
+    // Remaining = total NULL creator rows still pending after our claim.
+    const { count: pendingAfter } = await supabase
+      .from('telegram_insider_token_lifecycle')
+      .select('id', { count: 'exact', head: true })
+      .is('creator_wallet', null)
+      .neq('creator_status', 'resolving');
+    const total = (pendingAfter ?? 0) + (rows?.length ?? 0);
     if (!rows || rows.length === 0) {
       return new Response(
         JSON.stringify({ ok: true, processed: 0, resolved: 0, unresolvable: 0, remaining: 0, total }),
@@ -87,11 +97,15 @@ serve(async (req) => {
     let unresolvable = 0;
     let failed = 0;
 
-    for (const row of rows) {
+    for (const row of rows as Array<{ id: string; token_mint: string; token_symbol: string|null; creator_attempts: number }>) {
       const apiErrors: string[] = [];
       const attempts = (row.creator_attempts ?? 0) + 1;
       try {
-        const res = await resolveTokenCreator(row.token_mint, supabase, apiErrors);
+        const res = await withTimeout(
+          resolveTokenCreator(row.token_mint, supabase, apiErrors),
+          PER_TOKEN_TIMEOUT_MS,
+          row.token_mint.slice(0, 8),
+        );
         const creator = res?.creatorWallet || null;
 
         if (creator) {
@@ -143,7 +157,7 @@ serve(async (req) => {
       await new Promise((r) => setTimeout(r, PER_TOKEN_DELAY_MS));
     }
 
-    const remaining = Math.max(0, total - rows.length);
+    const remaining = pendingAfter ?? 0;
 
     if (autoLoop && remaining > 0) {
       supabase.functions.invoke('insiders-creator-backfill', {
