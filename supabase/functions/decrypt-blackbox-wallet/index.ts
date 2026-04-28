@@ -1,7 +1,8 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SecureStorage } from "../_shared/encryption.ts";
+import { decryptWalletSecretAuto, describeWalletSecretEnvelope } from "../_shared/decrypt-wallet-secret.ts";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,9 +60,28 @@ serve(withRunLog('decrypt-blackbox-wallet', async (req) => {
       });
     }
 
-    const secret_key = await SecureStorage.decryptWalletSecret(wallet.secret_key_encrypted);
+    let secret_key: string;
+    try {
+      secret_key = await decryptWalletSecretAuto(wallet.secret_key_encrypted);
+    } catch (err: any) {
+      const diagnostics = describeWalletSecretEnvelope(wallet.secret_key_encrypted);
+      console.error("[decrypt-blackbox-wallet] Decryption failed:", {
+        wallet_id: wallet.id,
+        pubkey: wallet.pubkey,
+        diagnostics,
+        hasEncryptionKey: !!Deno.env.get("ENCRYPTION_KEY"),
+        error: err?.message || String(err),
+      });
+      return new Response(JSON.stringify({
+        error: "Failed to decrypt secret key",
+        code: "WALLET_DECRYPT_FAILED",
+        diagnostics,
+      }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    await supabase.from("activity_logs").insert({
+    await assertDbWrite(supabase.from("activity_logs").insert({
       message: `BlackBox legacy wallet private key accessed: ${wallet.pubkey.slice(0, 8)}...`,
       log_level: "warn",
       metadata: {
@@ -71,7 +91,7 @@ serve(withRunLog('decrypt-blackbox-wallet', async (req) => {
         action: "blackbox_private_key_export",
         source_table: "blackbox_wallets",
       },
-    });
+    }), "activity_logs", "blackbox_private_key_export_audit");
 
     return new Response(JSON.stringify({ success: true, pubkey: wallet.pubkey, secret_key }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
