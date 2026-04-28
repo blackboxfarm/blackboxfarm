@@ -232,7 +232,7 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
       const encryptedKey = await SecureStorage.encrypt(privateKey.trim());
 
       // Insert the wallet
-      const { data: wallet, error } = await supabase
+      const wallet = await assertDbWrite(supabase
         .from('rent_reclaimer_wallets')
         .insert({
           pubkey: validation.pubkey,
@@ -241,9 +241,7 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
           is_active: true,
         })
         .select('id, pubkey, nickname, is_active, created_at')
-        .single();
-
-      if (error) throw error;
+        .single(), 'rent_reclaimer_wallets', 'INSERT');
 
       console.log(`Added wallet: ${validation.pubkey}`);
 
@@ -265,14 +263,12 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
       if (nickname !== undefined) updates.nickname = nickname;
       if (is_active !== undefined) updates.is_active = is_active;
 
-      const { data: wallet, error } = await supabase
+      const wallet = await assertDbWrite(supabase
         .from('rent_reclaimer_wallets')
         .update(updates)
         .eq('id', id)
         .select('id, pubkey, nickname, is_active, created_at, updated_at')
-        .single();
-
-      if (error) throw error;
+        .single(), 'rent_reclaimer_wallets', 'UPDATE');
 
       console.log(`Updated wallet: ${id}`);
 
@@ -290,12 +286,10 @@ serve(withRunLog('rent-reclaimer-wallets', async (req) => {
         return bad("Wallet ID is required");
       }
 
-      const { error } = await supabase
+      await assertDbWrite(supabase
         .from('rent_reclaimer_wallets')
         .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+        .eq('id', id), 'rent_reclaimer_wallets', 'DELETE');
 
       console.log(`Deleted wallet: ${id}`);
 
