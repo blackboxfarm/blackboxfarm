@@ -1,7 +1,8 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SecureStorage } from "../_shared/encryption.ts";
+import { decryptWalletSecretAuto, describeWalletSecretEnvelope } from "../_shared/decrypt-wallet-secret.ts";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,13 +77,28 @@ serve(withRunLog('decrypt-super-admin-wallet', async (req) => {
       );
     }
 
-    // Decrypt the secret key using the same encryption system used to store it
-    const decryptedSecretKey = await SecureStorage.decryptWalletSecret(wallet.secret_key_encrypted);
+    let decryptedSecretKey: string;
+    try {
+      decryptedSecretKey = await decryptWalletSecretAuto(wallet.secret_key_encrypted);
+    } catch (err: any) {
+      const diagnostics = describeWalletSecretEnvelope(wallet.secret_key_encrypted);
+      console.error("[decrypt-super-admin-wallet] Decryption failed:", {
+        wallet_id,
+        pubkey: wallet.pubkey,
+        diagnostics,
+        hasEncryptionKey: !!Deno.env.get("ENCRYPTION_KEY"),
+        error: err?.message || String(err),
+      });
+      return new Response(
+        JSON.stringify({ error: "Failed to decrypt secret key", code: "WALLET_DECRYPT_FAILED", diagnostics }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(`[decrypt-super-admin-wallet] Successfully decrypted wallet ${wallet_id}`);
 
     // Log the access for security audit
-    await supabase.from("activity_logs").insert({
+    await assertDbWrite(supabase.from("activity_logs").insert({
       message: `Private key accessed for wallet: ${wallet.pubkey.slice(0, 8)}...`,
       log_level: "warn",
       metadata: {
@@ -91,7 +107,7 @@ serve(withRunLog('decrypt-super-admin-wallet', async (req) => {
         accessed_by: user.id,
         action: "private_key_export"
       }
-    });
+    }), "activity_logs", "super_admin_private_key_export_audit");
 
     return new Response(
       JSON.stringify({
