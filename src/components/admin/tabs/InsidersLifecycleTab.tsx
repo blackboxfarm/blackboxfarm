@@ -39,6 +39,9 @@ import {
   Clock,
   Zap,
   Play,
+  Building,
+  HelpCircle,
+  CircleSlash,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -102,6 +105,10 @@ interface LifecycleRow {
   genealogy_depth?: number | null;
   genealogy_kyc_root?: string | null;
   genealogy_chain?: Array<{ wallet: string; depth: number; amountSol?: number | null; cexName?: string | null; role: 'creator' | 'funder' | 'kyc_root' }> | null;
+  creator_status?: string | null;
+  kyc_status?: string | null;
+  kyc_label?: string | null;
+  kyc_attempts?: number | null;
 }
 
 const MIN_X_OPTIONS: Array<{ value: string; label: string }> = [
@@ -192,6 +199,9 @@ export default function InsidersLifecycleTab() {
   const [building, setBuilding] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [tracingKyc, setTracingKyc] = useState(false);
+  const [findingCreators, setFindingCreators] = useState(false);
+  const [creatorProgress, setCreatorProgress] = useState<{ done: number; total: number } | null>(null);
+  const [onlyVerdicted, setOnlyVerdicted] = useState(true);
   const [traceProgress, setTraceProgress] = useState<{ done: number; total: number } | null>(null);
   const [crossLinks, setCrossLinks] = useState<any | null>(null);
   const [crossLinksLoading, setCrossLinksLoading] = useState(false);
@@ -301,6 +311,7 @@ export default function InsidersLifecycleTab() {
       'mesh_promotion_status', 'mesh_promotion_reason',
       'dev_history_warning', 'total_messages',
       'genealogy_depth', 'genealogy_kyc_root',
+      'creator_status', 'kyc_status', 'kyc_label', 'kyc_attempts',
     ].join(',');
     // Page through to bypass PostgREST's default 1000-row response cap.
     const PAGE = 1000;
