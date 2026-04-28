@@ -20220,6 +20220,19 @@ export type Database = {
         Args: { target_user_id: string }
         Returns: boolean
       }
+      claim_insiders_creator_backfill_batch: {
+        Args: {
+          p_batch_size?: number
+          p_retry_cooldown_hours?: number
+          p_unresolvable_cooldown_days?: number
+        }
+        Returns: {
+          creator_attempts: number
+          id: string
+          token_mint: string
+          token_symbol: string
+        }[]
+      }
       cleanup_bubble_map_anon_usage: { Args: never; Returns: undefined }
       cleanup_dead_letter_queue: {
         Args: { retention_days?: number }
