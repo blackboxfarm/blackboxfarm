@@ -38,6 +38,7 @@ const ContactUs = lazy(() => import("./pages/ContactUs"));
 const Web3Manifesto = lazy(() => import("./pages/Web3Manifesto"));
 const SuperAdmin = lazy(() => import("./pages/SuperAdmin"));
 const Developer = lazy(() => import("./pages/Developer"));
+const PhanesBatch = lazy(() => import("./pages/admin/PhanesBatch"));
 const Demo = lazy(() => import("./pages/Demo"));
 const Holders = lazy(() => import("./pages/Holders"));
 const HoldersMarketing = lazy(() => import("./pages/HoldersMarketing"));
@@ -126,6 +127,7 @@ const App = () => {
                       <Route path="/contact" element={<ContactUs />} />
                       <Route path="/web3-manifesto" element={<Web3Manifesto />} />
                       <Route path="/super-admin" element={<SuperAdmin />} />
+                      <Route path="/super-admin/phanes-batch" element={<SuperAdminRoute><PhanesBatch /></SuperAdminRoute>} />
                       <Route path="/developer/:walletAddress" element={<Developer />} />
                       <Route path="/demo" element={<Demo />} />
                       <Route path="/holders" element={<Holders />} />

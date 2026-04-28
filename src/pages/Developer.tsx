@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, ExternalLink, AlertTriangle, CheckCircle2, XCircle, Shield } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PhanesDeepLink } from "@/components/phanes/PhanesDeepLink";
 
 export default function Developer() {
   const { walletAddress } = useParams<{ walletAddress: string }>();
@@ -30,6 +31,23 @@ export default function Developer() {
       return data;
     },
     enabled: !!walletAddress
+  });
+
+  // Fetch Phanes intel for the dev's twitter handle (if any)
+  const twitterHandle = reputation?.profile?.displayName ? undefined : undefined;
+  const profileTwitter = (reputation as any)?.profile?.twitterHandle as string | undefined;
+  const { data: phanesIntel } = useQuery({
+    queryKey: ['phanes-intel', profileTwitter],
+    queryFn: async () => {
+      if (!profileTwitter) return null;
+      const { data } = await supabase
+        .from('x_account_registry')
+        .select('current_handle, phanes_queried_at, phanes_recycled_accounts, phanes_username_history, handle_history')
+        .eq('current_handle', profileTwitter.replace(/^@/, '').toLowerCase())
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!profileTwitter,
   });
 
   if (!walletAddress) {
@@ -109,6 +127,13 @@ export default function Developer() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <PhanesDeepLink target={{ kind: 'wallet', address: walletAddress }} variant="outline" />
+                {profileTwitter && (
+                  <PhanesDeepLink target={{ kind: 'x', handle: profileTwitter }} variant="outline" />
+                )}
+              </div>
+
               {reputation.risk?.warning && (
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <p className="text-sm text-destructive">{reputation.risk.warning}</p>
@@ -143,6 +168,44 @@ export default function Developer() {
               )}
             </CardContent>
           </Card>
+
+          {(() => {
+            const recycled = (Array.isArray(phanesIntel?.phanes_recycled_accounts) ? phanesIntel.phanes_recycled_accounts : []) as any[];
+            const history = (Array.isArray(phanesIntel?.phanes_username_history) ? phanesIntel.phanes_username_history : []) as any[];
+            if (!phanesIntel || (recycled.length === 0 && history.length === 0)) return null;
+            return (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Phanes Intel</CardTitle>
+                <CardDescription>
+                  Captured {phanesIntel.phanes_queried_at ? new Date(phanesIntel.phanes_queried_at).toLocaleString() : 'recently'} via @Phanes_bot
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {recycled.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">🔄 Recycled handles (same X user ID)</p>
+                    <div className="flex flex-wrap gap-1">
+                      {recycled.map((r: any, i: number) => (
+                        <Badge key={i} variant="destructive">@{r.handle}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {history.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">📜 Past usernames</p>
+                    <div className="flex flex-wrap gap-1">
+                      {history.map((h: any, i: number) => (
+                        <Badge key={i} variant="secondary">@{h.username}{h.date ? ` (${h.date})` : ''}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            );
+          })()}
 
           <Card>
             <CardHeader>

@@ -119,6 +119,25 @@ serve(withRunLog('phanes-x-query', async (req) => {
 
     // ─── BACKFILL MODE ───
     if (action === 'backfill') {
+      // Server-side daily cap (50/day) to protect MTProto account from Phanes ToS bans.
+      // Counts queries in the last 24h via phanes_queried_at.
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: usedToday } = await supabase
+        .from('x_account_registry')
+        .select('x_user_id', { count: 'exact', head: true })
+        .gte('phanes_queried_at', since);
+      const DAILY_CAP = 50;
+      if ((usedToday || 0) >= DAILY_CAP) {
+        return new Response(JSON.stringify({
+          success: true,
+          message: `Daily cap reached (${usedToday}/${DAILY_CAP}) — skipping backfill.`,
+          usedToday,
+          dailyCap: DAILY_CAP,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Pick the next handle that hasn't been queried via Phanes
       const { data: nextHandle } = await supabase
         .from('x_account_registry')
