@@ -816,6 +816,7 @@ export default function InsidersLifecycleTab() {
                       Lifespan <SortIcon k="lifespan_minutes" />
                     </TableHead>
                     <TableHead>Mesh</TableHead>
+                    <TableHead>KYC</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -868,6 +869,36 @@ export default function InsidersLifecycleTab() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell>
+                        {!r.creator_wallet ? (
+                          r.creator_status === 'unresolvable' ? (
+                            <Badge variant="outline" className="text-muted-foreground border-muted">
+                              <CircleSlash className="h-3 w-3 mr-1" />No dev wallet
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              <HelpCircle className="h-3 w-3 mr-1" />Pending dev
+                            </Badge>
+                          )
+                        ) : r.kyc_status === 'kyc_resolved' ? (
+                          <Badge className="bg-green-500/20 text-green-400 border-green-500/40" title={r.genealogy_kyc_root || ''}>
+                            <Building2 className="h-3 w-3 mr-1" />{r.kyc_label || 'CEX'}
+                          </Badge>
+                        ) : r.kyc_status === 'no_kyc_reachable' ? (
+                          <Badge variant="outline" className="text-muted-foreground" title={r.kyc_label || ''}>
+                            <CircleSlash className="h-3 w-3 mr-1" />Dead-end
+                          </Badge>
+                        ) : r.kyc_status === 'failed' ? (
+                          <Badge variant="destructive" className="bg-destructive/20">
+                            <AlertTriangle className="h-3 w-3 mr-1" />Failed
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-amber-400 border-amber-500/40">
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />Tracing
+                            {(r.kyc_attempts ?? 0) > 0 && <span className="ml-1 opacity-60">·{r.kyc_attempts}</span>}
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <TooltipProvider delayDuration={200}>
                           <div className="flex justify-end gap-1">
@@ -919,7 +950,7 @@ export default function InsidersLifecycleTab() {
                     </TableRow>
                   ))}
                   {pageRows.length === 0 && (
-                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No tokens match these filters</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
