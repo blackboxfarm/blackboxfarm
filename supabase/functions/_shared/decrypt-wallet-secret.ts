@@ -8,6 +8,25 @@
 import { SecureStorage } from "./encryption.ts";
 import bs58 from "npm:bs58@6.0.0";
 
+export function describeWalletSecretEnvelope(raw: string): Record<string, unknown> {
+  const trimmed = String(raw ?? "").trim();
+  const payload = trimmed.startsWith("AES:") ? trimmed.slice(4) : trimmed;
+  let decodedLength: number | null = null;
+  try {
+    decodedLength = atob(payload).length;
+  } catch {
+    decodedLength = null;
+  }
+
+  return {
+    hasAesPrefix: trimmed.startsWith("AES:"),
+    storedLength: trimmed.length,
+    decodedLength,
+    looksBase58Plaintext: /^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(trimmed),
+    looksJsonPlaintext: trimmed.startsWith("["),
+  };
+}
+
 /**
  * Attempts to decrypt a wallet secret stored in the database.
  * Tries multiple strategies to maximise backwards compatibility.
@@ -51,7 +70,7 @@ export async function decryptWalletSecretAuto(raw: string): Promise<string> {
     // Not valid base64
   }
 
-  throw new Error("Decryption failed: could not decrypt or decode wallet secret");
+  throw new Error(`Decryption failed: could not decrypt or decode wallet secret (${JSON.stringify(describeWalletSecretEnvelope(trimmed))})`);
 }
 
 /**
