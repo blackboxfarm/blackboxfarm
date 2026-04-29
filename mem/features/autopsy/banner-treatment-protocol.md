@@ -7,9 +7,11 @@ Every Token Autopsy MUST have a treated hero/OG banner generated via the locked 
 
 **Source:** Pull `pairs[0].info.header` from DexScreener for the mint (1500×500). Save URL into `AutopsyEntry.sourceBanner`.
 
-**Treatment:** Use Lovable AI `standard` model, 1536×512 jpg, output to `public/autopsies/<slug>-autopsy.jpg`. Use the locked prompt template in the docs file — only `{{TOKEN_VISUAL_DESCRIPTION}}` is variable.
+**Treatment (v2 — DECORATE, DO NOT COVER):** Use `google/gemini-3-pro-image-preview` via the AI Gateway in EDIT mode (pass the source banner as input). Output 1536×512 jpg to `public/autopsies/<slug>-autopsy-v2.jpg`. The original banner MUST remain fully visible and identifiable — the treatment is a transparent forensic overlay framing the EDGES and CORNERS only. Center 60% of the image is untouched.
 
-**Required visual elements:** Central original-banner subject preserved, coroner collage on edges (CASE FILE / CAUSE OF DEATH redacted reports, chalk outline, toe-tag, clipboard, scalpel, magnifier, red skull stamps, yellow DO NOT CROSS tape, blood spatter, EVIDENCE stamp, barcode), bold "BLACKBOX AUTOPSY" military stencil rotated -45° in blood-red with sprayed edges.
+**Required visual elements (corners/edges only, 60–75% opacity):** CASE FILE card (TL), CAUSE OF DEATH toe-tag (TR), DEATH CERTIFICATE clipboard + magnifier + scalpel (BL), barcode + EVIDENCE stamp (BR). Scattered red skull stamps and blood-spatter flecks in dead corners. ONE diagonal strip of yellow POLICE LINE / DO NOT CROSS tape across a single bottom corner. Bold red military stencil "BLACKBOX AUTOPSY" rotated -45° placed in the BOTTOM-RIGHT QUADRANT only — never centered.
+
+**HARD BANS:** No green blob/mascot/creature. No central artwork replacement. No covering of the source ticker/title text. No centered AUTOPSY stencil over the subject.
 
 **Wire-up:** Set `heroImage` + `sourceBanner` in `src/data/autopsies.ts`. `AutopsyArticle.tsx` auto-injects og:image, twitter:image, and JSON-LD Article.image. `Autopsies.tsx` listing auto-renders as card thumbnail.
 
