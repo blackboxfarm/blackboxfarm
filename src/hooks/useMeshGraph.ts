@@ -495,6 +495,60 @@ export function useMeshGraph(initialEntityId?: string) {
         }
       }
 
+      // 5b. Telegram groups/channels — surface as nodes in the bubble map.
+      // (Public metadata only; no MTProto join. Per user policy.)
+      for (const tgUrl of telegramUrls) {
+        const m = tgUrl.match(/t\.me\/(?:s\/)?([a-zA-Z0-9_+]+)/i);
+        const handle = m?.[1]?.toLowerCase();
+        if (!handle || handle === 'joinchat' || handle === 'addstickers') continue;
+        try {
+          await supabase.from('reputation_mesh').upsert({
+            source_type: 'token',
+            source_id: tokenMint,
+            linked_type: 'telegram',
+            linked_id: handle,
+            relationship: 'social_account',
+            confidence: 80,
+            discovered_via: discoverySource,
+            evidence: { url: tgUrl },
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+          console.log(`[MeshSpider] Linked Telegram: t.me/${handle}`);
+        } catch (e) {
+          console.warn(`[MeshSpider] telegram upsert failed for ${handle}:`, e);
+        }
+      }
+
+      // 5c. Websites — anything that isn't an X URL or a Telegram URL is a website.
+      const websiteUrls = allSocialUrls.filter(u =>
+        !u.includes('x.com/') && !u.includes('twitter.com/') &&
+        !u.includes('t.me/') && !u.includes('telegram.me/')
+      );
+      for (const wUrl of websiteUrls) {
+        let host: string | null = null;
+        try { host = new URL(wUrl.startsWith('http') ? wUrl : `https://${wUrl}`).hostname.replace(/^www\./, ''); }
+        catch { host = null; }
+        if (!host) continue;
+        try {
+          await supabase.from('reputation_mesh').upsert({
+            source_type: 'token',
+            source_id: tokenMint,
+            linked_type: 'website',
+            linked_id: host,
+            relationship: 'social_account',
+            confidence: 75,
+            discovered_via: discoverySource,
+            evidence: { url: wUrl },
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+          console.log(`[MeshSpider] Linked Website: ${host}`);
+        } catch (e) {
+          console.warn(`[MeshSpider] website upsert failed for ${host}:`, e);
+        }
+      }
+
+      // Fire the canonical harvest function so the central token_social_links table stays in sync.
+      // Fire-and-forget — don't block discovery.
+      supabase.functions.invoke('harvest-token-socials', { body: { tokenMint } }).catch(() => {});
+
       // 6. FALLBACK: If no community URL found, scrape X profile(s) for pinned communities
       if (!communityUrl) {
         const discoveredHandles = xUrls
