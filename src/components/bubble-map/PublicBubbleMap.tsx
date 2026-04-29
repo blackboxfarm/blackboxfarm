@@ -1024,7 +1024,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     const timers: number[] = [];
     [400, 1200, 2400].forEach(delay => {
       timers.push(window.setTimeout(() => {
-        try { graphRef.current?.zoomToFit?.(600, 80); } catch { /* noop */ }
+        try {
+          graphRef.current?.zoomToFit?.(600, 120);
+          // Clamp: with few nodes (Solar Min) fit-to-view massively over-zooms.
+          // Cap zoom at a sane first-render level so users don't see giant blobs.
+          const z = graphRef.current?.zoom?.();
+          if (typeof z === 'number' && z > 1.4) graphRef.current?.zoom?.(1.4, 400);
+        } catch { /* noop */ }
       }, delay));
     });
     return () => { timers.forEach(t => clearTimeout(t)); };
@@ -1699,7 +1705,11 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
               d3AlphaMin={isMobile ? 0.01 : 0.005}
               onEngineStop={() => {
-                try { graphRef.current?.zoomToFit?.(700, 80); } catch { /* noop */ }
+                try {
+                  graphRef.current?.zoomToFit?.(700, 120);
+                  const z = graphRef.current?.zoom?.();
+                  if (typeof z === 'number' && z > 1.4) graphRef.current?.zoom?.(1.4, 400);
+                } catch { /* noop */ }
               }}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
