@@ -1610,6 +1610,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             />
           ) : viewMode === 'schematic' ? (
             <BubbleMapSchematic
+              ref={schematicRef}
               graphData={displayData}
               width={dimensions.width}
               height={600}
