@@ -1,0 +1,33 @@
+export interface AutopsyEntry {
+  slug: string;
+  title: string;
+  subtitle: string;
+  mintAddress: string;
+  ticker: string;
+  verdict: string;
+  riskScore: string;
+  publishedAt: string; // ISO
+  mdPath: string;      // public path
+  downloadName: string;
+  tags: string[];
+}
+
+export const AUTOPSIES: AutopsyEntry[] = [
+  {
+    slug: 'gpt-greedy-pissing-testicle',
+    title: 'GPT — "Greedy Pissing Testicle"',
+    subtitle: 'Textbook coordinated rug: atomic launch-snipe, 100% bonding-curve capture, 6-second dump cascade.',
+    mintAddress: '7GAFVwLZeuop8omK16jNELtXVsjqJ8eSDy1FSSanpump',
+    ticker: 'GPT',
+    verdict: 'COORDINATED RUG',
+    riskScore: '10/10',
+    publishedAt: '2026-04-29T15:00:00Z',
+    mdPath: '/autopsies/gpt-greedy-pissing-testicle.md',
+    downloadName: 'GPT_Autopsy_BlackBoxFarm.md',
+    tags: ['rug', 'pump.fun', 'atomic-snipe', 'coordinated-exit'],
+  },
+];
+
+export function getAutopsy(slug: string): AutopsyEntry | undefined {
+  return AUTOPSIES.find((a) => a.slug === slug);
+}
