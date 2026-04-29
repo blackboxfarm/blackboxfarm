@@ -616,6 +616,48 @@ export function useMeshGraph(initialEntityId?: string) {
             console.warn(`[MeshSpider] Breadcrumb error for @${handle}:`, e);
           }
         }
+
+        // 6b. Final fallback: if STILL no community URL, treat the X handle itself
+        // as the de-facto community. Per user spec: "When an X Community Link leads
+        // to only an X Account Profile and no pinned Community → the X Handle IS
+        // the community", with confidence boosted when the handle resembles the
+        // token symbol/name/CA prefix.
+        if (!communityUrl && discoveredHandles.length > 0) {
+          const handle = discoveredHandles[0];
+          const h = handle.toLowerCase();
+          const candidates = [tokenSymbol, tokenName, tokenMint?.slice(0, 6)]
+            .filter(Boolean).map(s => (s as string).toLowerCase());
+          const resembles = candidates.some(c => h.includes(c) || c.includes(h));
+          const confidence = resembles ? 70 : 50;
+          const syntheticId = `handle:${handle}`;
+          try {
+            // token → x_community (the handle, namespaced)
+            await supabase.from('reputation_mesh').upsert({
+              source_type: 'token',
+              source_id: tokenMint,
+              linked_type: 'x_community',
+              linked_id: syntheticId,
+              relationship: 'community_for',
+              confidence,
+              discovered_via: 'handle_as_community_fallback',
+              evidence: { fallback: 'handle_as_community', handle, resembles_token: resembles },
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+            // x_community → x_account (the handle is the sole admin)
+            await supabase.from('reputation_mesh').upsert({
+              source_type: 'x_community',
+              source_id: syntheticId,
+              linked_type: 'x_account',
+              linked_id: handle,
+              relationship: 'community_admin',
+              confidence,
+              discovered_via: 'handle_as_community_fallback',
+              evidence: { fallback: 'handle_as_community', handle },
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+            console.log(`[MeshSpider] 🪪 No pinned community — using @${handle} as de-facto community (confidence ${confidence}, resembles=${resembles})`);
+          } catch (e) {
+            console.warn('[MeshSpider] handle-as-community upsert failed:', e);
+          }
+        }
       }
     } catch (err) {
       console.warn('[MeshSpider] Community auto-discovery failed:', err);
