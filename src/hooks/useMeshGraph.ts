@@ -381,6 +381,8 @@ export function useMeshGraph(initialEntityId?: string) {
       let allSocialUrls: string[] = [];
       let communityUrl: string | null = null;
       let discoverySource = 'dexscreener_auto';
+      let tokenSymbol: string | undefined;
+      let tokenName: string | undefined;
 
       // 1. Try DexScreener v1 API first (supports PumpSwap + graduated tokens)
       try {
@@ -391,6 +393,8 @@ export function useMeshGraph(initialEntityId?: string) {
           const pair = Array.isArray(dexData) ? dexData[0] : dexData?.pairs?.[0];
           const socials = pair?.info?.socials || [];
           const websites = pair?.info?.websites || [];
+          tokenSymbol = pair?.baseToken?.symbol;
+          tokenName = pair?.baseToken?.name;
           allSocialUrls = [
             ...socials.map((s: any) => s.url),
             ...websites.map((w: any) => w.url),
@@ -409,6 +413,8 @@ export function useMeshGraph(initialEntityId?: string) {
         const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
         if (pumpRes.ok) {
           const pumpData = await pumpRes.json();
+          if (!tokenSymbol && pumpData?.symbol) tokenSymbol = pumpData.symbol;
+          if (!tokenName && pumpData?.name) tokenName = pumpData.name;
           const pumpSocials: string[] = [];
           // Collect all social fields from pump.fun
           for (const field of [pumpData?.twitter, pumpData?.telegram, pumpData?.website]) {
