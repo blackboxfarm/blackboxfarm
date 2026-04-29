@@ -97,7 +97,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   // ── 1. token_lifecycle dead floor ─────────────────────────────
   const { data: lifecycleDead } = await supabase
     .from('token_lifecycle')
-    .select('token_mint, market_cap, liquidity_usd, created_at, ath_mcap_usd')
+    .select('token_mint, market_cap, liquidity_usd, created_at, ath_24h_usd')
     .or('market_cap.lt.1000,liquidity_usd.lt.500')
     .is('autopsy_at', null)
     .not('token_mint', 'is', null)
@@ -109,7 +109,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     candidatesByMint.set(t.token_mint, {
       token_mint: t.token_mint,
       source_feed: 'token_lifecycle',
-      ath_mcap_usd: t.ath_mcap_usd ?? undefined,
+      ath_mcap_usd: t.ath_24h_usd ?? undefined,
       current_mcap_usd: t.market_cap ?? undefined,
       liquidity_usd: t.liquidity_usd ?? undefined,
       age_hours: ageHours,
@@ -144,21 +144,21 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   // ── 3. ATH-collapsed (>$50k ATH but now <5% of ATH) ───────────
   const { data: athCollapsed } = await supabase
     .from('token_lifecycle')
-    .select('token_mint, market_cap, liquidity_usd, created_at, ath_mcap_usd')
-    .gt('ath_mcap_usd', 50000)
+    .select('token_mint, market_cap, liquidity_usd, created_at, ath_24h_usd')
+    .gt('ath_24h_usd', 50000)
     .is('autopsy_at', null)
     .not('token_mint', 'is', null)
     .limit(limit);
 
   for (const t of athCollapsed ?? []) {
-    if (!t.token_mint || !t.ath_mcap_usd) continue;
-    const ratio = (t.market_cap ?? 0) / t.ath_mcap_usd;
+    if (!t.token_mint || !t.ath_24h_usd) continue;
+    const ratio = (t.market_cap ?? 0) / t.ath_24h_usd;
     if (ratio >= 0.05) continue;
     const ageHours = t.created_at ? (Date.now() - new Date(t.created_at).getTime()) / 3600000 : 0;
     const existing = candidatesByMint.get(t.token_mint);
     candidatesByMint.set(t.token_mint, {
       ...(existing ?? { token_mint: t.token_mint, source_feed: 'ath_collapsed' }),
-      ath_mcap_usd: t.ath_mcap_usd,
+      ath_mcap_usd: t.ath_24h_usd,
       current_mcap_usd: t.market_cap ?? existing?.current_mcap_usd,
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       age_hours: existing?.age_hours ?? ageHours,
