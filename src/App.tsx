@@ -83,6 +83,7 @@ const TelegramAuth = lazy(() => import("./pages/TelegramAuth"));
 const Autopsies = lazy(() => import("./pages/Autopsies"));
 const AutopsyArticle = lazy(() => import("./pages/AutopsyArticle"));
 const AutopsyRaw = lazy(() => import("./pages/AutopsyRaw"));
+const AutopsyQueue = lazy(() => import("./pages/admin/AutopsyQueue"));
 
 const queryClient = new QueryClient();
 
@@ -171,6 +172,7 @@ const App = () => {
                       <Route path="/autopsy" element={<Autopsies />} />
                       <Route path="/autopsy/:slug/raw" element={<AutopsyRaw />} />
                       <Route path="/autopsy/:slug" element={<AutopsyArticle />} />
+                      <Route path="/admin/autopsy-queue" element={<SuperAdminRoute><AutopsyQueue /></SuperAdminRoute>} />
                       <Route path="/tester" element={<TesterFeedbackPage />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />

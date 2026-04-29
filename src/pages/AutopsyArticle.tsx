@@ -7,17 +7,50 @@ import { ArrowLeft, Download, Skull, Calendar, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import { SocialShareBar } from '@/components/intel/SocialShareBar';
-import { getAutopsy } from '@/data/autopsies';
+import { getAutopsy, type AutopsyEntry } from '@/data/autopsies';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function AutopsyArticle() {
   const { slug } = useParams<{ slug: string }>();
-  const autopsy = slug ? getAutopsy(slug) : undefined;
+  const staticAutopsy = slug ? getAutopsy(slug) : undefined;
+  const [autopsy, setAutopsy] = useState<AutopsyEntry | undefined | null>(staticAutopsy ?? null);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    // If not in static list, look up in DB
+    if (staticAutopsy || !slug) return;
+    supabase
+      .from('autopsy_reports')
+      .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, hero_image_path, source_banner_url, tags, md_content, md_path, published_at')
+      .eq('slug', slug)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) { setAutopsy(undefined); return; }
+        setAutopsy({
+          slug: data.slug,
+          title: data.title,
+          subtitle: data.subtitle ?? '',
+          mintAddress: data.token_mint,
+          ticker: data.ticker ?? '',
+          verdict: data.verdict ?? 'AUTOPSY',
+          riskScore: data.risk_score ?? '—',
+          publishedAt: data.published_at,
+          mdPath: data.md_path ?? `/autopsies/${data.slug}.md`,
+          downloadName: `${data.ticker ?? 'token'}_Autopsy_BlackBoxFarm.md`,
+          tags: (data.tags ?? []) as string[],
+          heroImage: data.hero_image_path ?? '',
+          sourceBanner: data.source_banner_url ?? undefined,
+        });
+        // DB-backed: render md_content directly
+        if (data.md_content) { setContent(data.md_content); setLoading(false); }
+      });
+  }, [slug, staticAutopsy]);
+
+  useEffect(() => {
     if (!autopsy) return;
+    if (content) { setLoading(false); return; } // already populated from DB
     setLoading(true);
     fetch(autopsy.mdPath)
       .then((r) => {
@@ -26,7 +59,8 @@ export default function AutopsyArticle() {
       })
       .then((txt) => { setContent(txt); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, [autopsy]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autopsy?.slug]);
 
   useEffect(() => {
     if (!autopsy) return;
@@ -82,7 +116,8 @@ export default function AutopsyArticle() {
     };
   }, [autopsy]);
 
-  if (!autopsy) return <Navigate to="/autopsy" replace />;
+  if (autopsy === undefined) return <Navigate to="/autopsy" replace />;
+  if (autopsy === null) return <SiteLayout><div className="container mx-auto px-4 py-12 text-sm text-muted-foreground">Loading autopsy…</div></SiteLayout>;
 
   const shareUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/autopsy/${autopsy.slug}`

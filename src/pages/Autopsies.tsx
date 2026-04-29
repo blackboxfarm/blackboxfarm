@@ -1,18 +1,57 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { Badge } from '@/components/ui/badge';
 import { Skull, FileText, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
-import { AUTOPSIES } from '@/data/autopsies';
+import { AUTOPSIES, type AutopsyEntry } from '@/data/autopsies';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Autopsies() {
+  const [dbAutopsies, setDbAutopsies] = useState<AutopsyEntry[]>([]);
+
   useEffect(() => {
     document.title = 'Token Autopsies | BlackBox Farm — Forensic Rug Post-Mortems';
     const meta = document.querySelector('meta[name="description"]');
     const desc = 'On-chain forensic post-mortems of coordinated Solana rugs and exit-liquidity events. Reverse-engineered wallet flows, PnL reconstructions, and blacklist intel.';
     if (meta) meta.setAttribute('content', desc);
   }, []);
+
+  useEffect(() => {
+    // Merge DB-published autopsies with the curated static list.
+    // Static entries (e.g. GPT) win on slug collision so curated copy is preserved.
+    supabase
+      .from('autopsy_reports')
+      .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, hero_image_path, source_banner_url, tags, published_at')
+      .order('published_at', { ascending: false })
+      .limit(100)
+      .then(({ data }) => {
+        if (!data) return;
+        const staticSlugs = new Set(AUTOPSIES.map(a => a.slug));
+        const mapped: AutopsyEntry[] = data
+          .filter(r => !staticSlugs.has(r.slug))
+          .map(r => ({
+            slug: r.slug,
+            title: r.title,
+            subtitle: r.subtitle ?? '',
+            mintAddress: r.token_mint,
+            ticker: r.ticker ?? '',
+            verdict: r.verdict ?? 'AUTOPSY',
+            riskScore: r.risk_score ?? '—',
+            publishedAt: r.published_at,
+            mdPath: `/autopsies/${r.slug}.md`,
+            downloadName: `${r.ticker ?? 'token'}_Autopsy_BlackBoxFarm.md`,
+            tags: (r.tags ?? []) as string[],
+            heroImage: r.hero_image_path ?? '',
+            sourceBanner: r.source_banner_url ?? undefined,
+          }));
+        setDbAutopsies(mapped);
+      });
+  }, []);
+
+  const all = [...AUTOPSIES, ...dbAutopsies].sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  );
 
   return (
     <SiteLayout>
@@ -44,7 +83,7 @@ export default function Autopsies() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {AUTOPSIES.map((a) => (
+          {all.map((a) => (
             <Link
               key={a.slug}
               to={`/autopsy/${a.slug}`}
