@@ -81,6 +81,8 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     tier_A: 0, tier_B: 0, tier_C: 0,
     errors: 0,
   };
+  const debugSample: any[] = [];
+  const skipReasons = { tierC_lowATH_nonPumpfun: 0, promoted_pumpfun: 0, processed: 0 };
 
   const candidatesByMint = new Map<string, {
     token_mint: string;
@@ -205,13 +207,17 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       // EXCEPTION: pumpfun_watchlist tokens explicitly marked status='dead' are kept
       // as Tier-B (admin queue) even without ATH data — they were curated as dead.
       let effectiveTier = tier;
-      if (tier === 'C' && (c.ath_mcap_usd ?? 0) < 10000) {
-        if (c.source_feed === 'pumpfun_watchlist') {
-          effectiveTier = 'B'; // promote to admin-review queue
-        } else {
-          continue;
-        }
+      // Promote curated dead tokens (pumpfun_watchlist + admin_manual) to Tier-B
+      // regardless of ATH — they were explicitly flagged dead.
+      if (c.source_feed === 'pumpfun_watchlist' || c.source_feed === 'admin_manual') {
+        if (effectiveTier === 'C') effectiveTier = 'B';
+        skipReasons.promoted_pumpfun++;
+      } else if (tier === 'C' && (c.ath_mcap_usd ?? 0) < 10000) {
+        skipReasons.tierC_lowATH_nonPumpfun++;
+        if (debugSample.length < 3) debugSample.push({ mint: c.token_mint, source: c.source_feed, tier, ath: c.ath_mcap_usd, cause });
+        continue;
       }
+      skipReasons.processed++;
 
       await assertUpsert(
         supabase
@@ -250,6 +256,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   }
 
   console.log('[autopsy-funnel-feeder] complete', stats);
+  console.log('[autopsy-funnel-feeder] skipReasons', skipReasons, 'sample', debugSample);
 
   return new Response(JSON.stringify({ success: true, stats }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
