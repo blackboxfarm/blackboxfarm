@@ -129,10 +129,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         if (graphRef.current && (viewMode === 'bubble' || viewMode === 'tree')) {
           graphRef.current.zoomToFit?.(600, 60);
         }
+        if (viewMode === 'schematic') {
+          schematicRef.current?.fitView();
+        }
       } catch { /* noop */ }
     }, 350);
     return () => clearTimeout(t);
-  }, [viewMode, solarMode]);
+  }, [viewMode, solarMode, schematicMode]);
 
   const lastNodeCountRef = useRef(0);
 
@@ -142,9 +145,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       if (viewMode === 'bubble' || viewMode === 'tree') {
         const cur = graphRef.current?.zoom?.() ?? 1;
         graphRef.current?.zoom?.(cur * 1.25, 250);
-      } else if (viewMode === 'schematic' && containerRef.current) {
-        const btn = containerRef.current.querySelector('.react-flow__controls-zoomin') as HTMLButtonElement | null;
-        btn?.click();
+      } else if (viewMode === 'schematic') {
+        schematicRef.current?.zoomIn();
       }
     } catch { /* noop */ }
   }, [viewMode]);
@@ -154,9 +156,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       if (viewMode === 'bubble' || viewMode === 'tree') {
         const cur = graphRef.current?.zoom?.() ?? 1;
         graphRef.current?.zoom?.(cur / 1.25, 250);
-      } else if (viewMode === 'schematic' && containerRef.current) {
-        const btn = containerRef.current.querySelector('.react-flow__controls-zoomout') as HTMLButtonElement | null;
-        btn?.click();
+      } else if (viewMode === 'schematic') {
+        schematicRef.current?.zoomOut();
       }
     } catch { /* noop */ }
   }, [viewMode]);
