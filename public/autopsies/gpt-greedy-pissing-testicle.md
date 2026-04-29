@@ -128,16 +128,16 @@ GPT scores **10/10**.
 
 ## 8. Estimated PnL Reconstruction
 
-> *Estimates based on on-chain reconstruction at the time of writing. SOL price reference: ~$150 USD. Figures are subject to refinement once Solscan Pro transaction-trace endpoints are integrated.*
+> *Estimates based on on-chain reconstruction at time of writing. **Live SOL reference price: $83.24 USD** (CoinGecko, 2026-04-29). Figures are subject to refinement once Solscan Pro transaction-trace endpoints are integrated.*
 
-| Wallet | Role | SOL In | SOL Out / Held | Net SOL | Net USD (≈$150/SOL) |
+| Wallet | Role | SOL In | SOL Out / Held | Net SOL | Net USD (@ $83.24/SOL) |
 |---|---|---|---|---|---|
-| `EfoaVcX...` | **Master Funder / Treasury** | 89.1 SOL sent to dev | 299.9 SOL final balance + USDC consolidation | **+213 SOL realized** | **~$32,000** |
-| `2SXWyHN...` | **Co-conspirator Sniper** | 84.98 SOL on launch-snipe | Sold ~207M GPT into pump pre-cascade | **+50 to +120 SOL** (range) | **~$7,500 – $18,000** |
+| `EfoaVcX...` | **Master Funder / Treasury** | 89.1 SOL sent to dev | 299.9 SOL final balance + USDC consolidation | **+213 SOL realized** | **~$17,730** |
+| `2SXWyHN...` | **Co-conspirator Sniper** | 84.98 SOL on launch-snipe | Sold ~207M GPT into pump pre-cascade | **+50 to +120 SOL** (range) | **~$4,160 – $9,990** |
 | `3sbgna...` | **Dev / Creator (burner)** | 86 SOL (funded by Efoa) on dev-buy | Drained to 0 SOL / 0 tokens — acted as token-source for funder cascade | **~0 SOL net** (pass-through) | **~$0** (proxy wallet) |
-| **Operation total (realized)** | — | ~260 SOL deployed | ~390 SOL recovered | **~+265 to +335 SOL** | **~$40,000 – $50,000 USD** |
+| **Operation total (realized)** | — | ~260 SOL deployed | ~390 SOL recovered | **~+265 to +335 SOL** | **~$22,060 – $27,890 USD** |
 
-**Retail counterparty exposure**: 24h volume on the pair was **$893,000** (23,623 buys vs 22,533 sells). Net retail loss ≈ realized rugger profit + AMM fees + slippage ≈ **~$45K–$55K transferred from retail to operator wallets** over the 6-hour window.
+**Retail counterparty exposure**: 24h volume on the pair was **$893,000** (23,623 buys vs 22,533 sells). Net retail loss ≈ realized rugger profit + AMM fees + slippage ≈ **~$24K–$32K transferred from retail to operator wallets** over the 6-hour window.
 
 **Profit margin on capital deployed**: ~**100–130%** in under 6 hours. This is the economic signature of a coordinated atomic-snipe rug, not a failed launch.
 
