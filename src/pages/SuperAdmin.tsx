@@ -43,6 +43,7 @@ const TestersTab = lazy(() => import("@/components/admin/tabs/TestersTab"));
 const AccountsTab = lazy(() => import("@/components/admin/tabs/AccountsTab"));
 const InsidersLifecycleTab = lazy(() => import("@/components/admin/tabs/InsidersLifecycleTab"));
 const DocsTab = lazy(() => import("@/components/admin/tabs/DocsTab"));
+const AutopsiesTab = lazy(() => import("@/components/admin/tabs/AutopsiesTab"));
 
 const DEFAULT_ADMIN_TAB = "utilities";
 const ALLOWED_ADMIN_TABS = new Set([
@@ -65,6 +66,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "social-media",
   "testimonials",
   "intel-briefings",
+  "autopsies",
   "ai-config",
   "email-campaigns",
   "marketing-profiles",
@@ -204,6 +206,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="social-media" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-purple-500/20">📱 Social</TabsTrigger>
             <TabsTrigger value="testimonials" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-green-500/20">💬 Testimonials</TabsTrigger>
             <TabsTrigger value="intel-briefings" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">📰 Intel Briefings</TabsTrigger>
+            <TabsTrigger value="autopsies" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-rose-500/20">💀 Autopsies</TabsTrigger>
             <TabsTrigger value="ai-config" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-cyan-500/20">🧠 AI Config</TabsTrigger>
             <TabsTrigger value="email-campaigns" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500/30 data-[state=active]:to-pink-500/20">📧 Email Campaigns</TabsTrigger>
             <TabsTrigger value="marketing-profiles" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500/30 data-[state=active]:to-pink-500/20">🎯 Marketing Profiles</TabsTrigger>
