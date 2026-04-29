@@ -946,6 +946,41 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       nodeIds.has(typeof l.target === 'string' ? l.target : (l.target as any).id)
     );
 
+    // ── KYC force-link bridge ──
+    // If a KYC root node is in the kept set but has NO link to anything else
+    // (i.e. the wallet→...→KYC funder chain didn't survive the prune, or was
+    // never discovered), inject a synthetic `is_kyc_root` bridge edge directly
+    // from the dev wallet → KYC root so the user sees the connection rendered.
+    const devForBridge = baseNodes.find((n: any) => n.type === 'wallet' && (n as any).isDev);
+    if (devForBridge) {
+      const linkedIds = new Set<string>();
+      for (const l of baseLinks) {
+        linkedIds.add(typeof l.source === 'string' ? l.source : (l.source as any).id);
+        linkedIds.add(typeof l.target === 'string' ? l.target : (l.target as any).id);
+      }
+      const bridges: any[] = [];
+      for (const n of baseNodes) {
+        if (n.type !== 'kyc_root') continue;
+        // KYC must be visible AND missing any edge → bridge to dev wallet.
+        const kycHasAnyEdge = baseLinks.some(l => {
+          const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
+          const t = typeof l.target === 'string' ? l.target : (l.target as any).id;
+          return s === n.id || t === n.id;
+        });
+        if (!kycHasAnyEdge) {
+          bridges.push({
+            source: devForBridge.id,
+            target: n.id,
+            relationship: 'is_kyc_root',
+            synthetic: true,
+          });
+        }
+      }
+      if (bridges.length > 0) {
+        return { nodes: baseNodes, links: [...baseLinks, ...bridges] };
+      }
+    }
+
     return { nodes: baseNodes, links: baseLinks };
   }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode, schematicMode]);
 
