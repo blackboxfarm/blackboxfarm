@@ -82,6 +82,7 @@ const TokenAction = lazy(() => import("./pages/TokenAction"));
 const TelegramAuth = lazy(() => import("./pages/TelegramAuth"));
 const Autopsies = lazy(() => import("./pages/Autopsies"));
 const AutopsyArticle = lazy(() => import("./pages/AutopsyArticle"));
+const AutopsyRaw = lazy(() => import("./pages/AutopsyRaw"));
 
 const queryClient = new QueryClient();
 
@@ -168,6 +169,7 @@ const App = () => {
                       <Route path="/intel" element={<IntelBriefings />} />
                       <Route path="/intel/briefing/:slug" element={<IntelBriefingArticle />} />
                       <Route path="/autopsy" element={<Autopsies />} />
+                      <Route path="/autopsy/:slug/raw" element={<AutopsyRaw />} />
                       <Route path="/autopsy/:slug" element={<AutopsyArticle />} />
                       <Route path="/tester" element={<TesterFeedbackPage />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
