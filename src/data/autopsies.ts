@@ -29,7 +29,7 @@ export const AUTOPSIES: AutopsyEntry[] = [
     mdPath: '/autopsies/gpt-greedy-pissing-testicle.md',
     downloadName: 'GPT_Autopsy_BlackBoxFarm.md',
     tags: ['rug', 'pump.fun', 'atomic-snipe', 'coordinated-exit'],
-    heroImage: '/autopsies/gpt-greedy-pissing-testicle-autopsy.jpg',
+    heroImage: '/autopsies/gpt-greedy-pissing-testicle-autopsy-v2.jpg',
     sourceBanner: 'https://cdn.dexscreener.com/cms/images/5CFdN3bFcGLttRHB?width=1500&height=500&quality=95&format=auto',
   },
 ];
