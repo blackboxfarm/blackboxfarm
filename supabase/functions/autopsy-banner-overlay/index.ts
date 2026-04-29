@@ -11,10 +11,10 @@
  *
  * Body: { slug: string, token_mint: string, ticker?: string,
  *         token_visual_description?: string, report_id?: string,
- *         candidate_id?: string }
+ *         report_id?: string }
  *
- * If `report_id` is provided, the row's hero_image_path + source_banner_url are
- * updated automatically. Same for `candidate_id` (autopsy_candidates.banner_path).
+ * If `report_id` is provided, the row's hero_image_path + source_banner_url
+ * are updated automatically.
  */
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
@@ -124,7 +124,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
   }
 
   try {
-    const { slug, token_mint, ticker, token_visual_description, report_id, candidate_id } =
+    const { slug, token_mint, ticker, token_visual_description, report_id } =
       await req.json();
 
     if (!slug || !token_mint) {
@@ -169,11 +169,6 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
         hero_image_path: heroImageUrl,
         source_banner_url: sourceBannerUrl,
       }).eq('id', report_id);
-    }
-    if (candidate_id) {
-      await supabase.from('autopsy_candidates').update({
-        banner_path: heroImageUrl,
-      }).eq('id', candidate_id);
     }
 
     return new Response(JSON.stringify({
