@@ -656,8 +656,7 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       }
     }
     
-    // ── Pre-compute real holder count for use in penalty logic ──
-    const realHolderCount = nonLpHolders.length - simpleTiers.dust.count;
+    // ── Pre-compute totals for use in penalty logic (realHolderCount already defined above) ──
     const totalHolderCount = rankedHolders.length;
     const totalTxns24h = vitality.txns.h24.buys + vitality.txns.h24.sells;
     

@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, ExternalLink, AlertTriangle, CheckCircle2, XCircle, Shield } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PhanesDeepLink } from "@/components/phanes/PhanesDeepLink";
-
 export default function Developer() {
   const { walletAddress } = useParams<{ walletAddress: string }>();
   const { data: reputation, isLoading: reputationLoading } = useDeveloperReputation(walletAddress);
@@ -127,13 +125,6 @@ export default function Developer() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <PhanesDeepLink target={{ kind: 'wallet', address: walletAddress }} variant="outline" />
-                {profileTwitter && (
-                  <PhanesDeepLink target={{ kind: 'x', handle: profileTwitter }} variant="outline" />
-                )}
-              </div>
-
               {reputation.risk?.warning && (
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <p className="text-sm text-destructive">{reputation.risk.warning}</p>
