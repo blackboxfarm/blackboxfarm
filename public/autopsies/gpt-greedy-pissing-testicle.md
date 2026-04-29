@@ -20,6 +20,7 @@
 | 24h price change | **−94.27%** · 1h: **−99.04%** |
 | 24h vol / txns | $893K · 23,623 buys / 22,533 sells |
 | Lifetime | **6.26 hours** (created → final candle) |
+| **🪦 Time of Death** | **~14:45:33 UTC, 2026-04-29** (last on-chain trade; ~15 min after dump cascade began at 14:12:34) |
 
 The token name itself ("Greedy Pissing Testicle") is the operator self-identifying — not a meme accident. This is brand-honesty for a planned exit.
 
