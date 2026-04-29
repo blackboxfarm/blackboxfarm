@@ -30,6 +30,7 @@ export interface SchematicHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   fitView: () => void;
+  setZoom: (zoom: number) => void;
 }
 
 /**
@@ -216,6 +217,12 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     zoomIn: () => rf.zoomIn({ duration: 250 }),
     zoomOut: () => rf.zoomOut({ duration: 250 }),
     fitView: () => rf.fitView({ padding: 0.15, duration: 400 }),
+    setZoom: (zoom: number) => {
+      try {
+        const vp = rf.getViewport();
+        rf.setViewport({ x: vp.x, y: vp.y, zoom }, { duration: 300 });
+      } catch { /* noop */ }
+    },
   }), [rf]);
 
   const effectiveData = useMemo(
