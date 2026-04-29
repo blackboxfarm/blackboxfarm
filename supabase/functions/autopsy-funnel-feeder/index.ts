@@ -207,15 +207,15 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       // EXCEPTION: pumpfun_watchlist tokens explicitly marked status='dead' are kept
       // as Tier-B (admin queue) even without ATH data — they were curated as dead.
       let effectiveTier = tier;
-      if (tier === 'C' && (c.ath_mcap_usd ?? 0) < 10000) {
-        if (c.source_feed === 'pumpfun_watchlist') {
-          effectiveTier = 'B'; // promote to admin-review queue
-          skipReasons.promoted_pumpfun++;
-        } else {
-          skipReasons.tierC_lowATH_nonPumpfun++;
-          if (debugSample.length < 3) debugSample.push({ mint: c.token_mint, source: c.source_feed, tier, ath: c.ath_mcap_usd, cause });
-          continue;
-        }
+      // Promote curated dead tokens (pumpfun_watchlist + admin_manual) to Tier-B
+      // regardless of ATH — they were explicitly flagged dead.
+      if (c.source_feed === 'pumpfun_watchlist' || c.source_feed === 'admin_manual') {
+        if (effectiveTier === 'C') effectiveTier = 'B';
+        skipReasons.promoted_pumpfun++;
+      } else if (tier === 'C' && (c.ath_mcap_usd ?? 0) < 10000) {
+        skipReasons.tierC_lowATH_nonPumpfun++;
+        if (debugSample.length < 3) debugSample.push({ mint: c.token_mint, source: c.source_feed, tier, ath: c.ath_mcap_usd, cause });
+        continue;
       }
       skipReasons.processed++;
 
