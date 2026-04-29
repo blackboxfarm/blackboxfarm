@@ -378,6 +378,15 @@ export default function SuperAdmin() {
               </TabErrorBoundary>
             )}
           </TabsContent>
+           <TabsContent value="autopsies">
+             {activeTab === "autopsies" && (
+               <TabErrorBoundary tabName="Autopsies">
+                 <Suspense fallback={<TabLoader />}>
+                   <AutopsiesTab />
+                 </Suspense>
+               </TabErrorBoundary>
+             )}
+           </TabsContent>
           <TabsContent value="ai-config">
             {activeTab === "ai-config" && (
               <TabErrorBoundary tabName="AI Config">
