@@ -20,7 +20,7 @@ import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
 import { dispatchThought, dispatchThoughtCustom } from "@/components/chat/AvatarThoughtBubble";
 import { SharedFundersPanel } from "./SharedFundersPanel";
 import BubbleMap3D from "./BubbleMap3D";
-import BubbleMapSchematic from "./BubbleMapSchematic";
+import BubbleMapSchematic, { type SchematicHandle } from "./BubbleMapSchematic";
 import SnapshotShareDialog from "./SnapshotShareDialog";
 import { DailyTraceInfo } from "./DailyTraceInfo";
 
@@ -39,6 +39,7 @@ interface PublicBubbleMapProps {
 const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: PublicBubbleMapProps) => {
   const navigate = useNavigate();
   const graphRef = useRef<any>();
+  const schematicRef = useRef<SchematicHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [searchInput, setSearchInput] = useState("");
   const [initialTokenLoaded, setInitialTokenLoaded] = useState(false);
@@ -128,10 +129,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
         if (graphRef.current && (viewMode === 'bubble' || viewMode === 'tree')) {
           graphRef.current.zoomToFit?.(600, 60);
         }
+        if (viewMode === 'schematic') {
+          schematicRef.current?.fitView();
+        }
       } catch { /* noop */ }
     }, 350);
     return () => clearTimeout(t);
-  }, [viewMode, solarMode]);
+  }, [viewMode, solarMode, schematicMode]);
 
   const lastNodeCountRef = useRef(0);
 
@@ -141,9 +145,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       if (viewMode === 'bubble' || viewMode === 'tree') {
         const cur = graphRef.current?.zoom?.() ?? 1;
         graphRef.current?.zoom?.(cur * 1.25, 250);
-      } else if (viewMode === 'schematic' && containerRef.current) {
-        const btn = containerRef.current.querySelector('.react-flow__controls-zoomin') as HTMLButtonElement | null;
-        btn?.click();
+      } else if (viewMode === 'schematic') {
+        schematicRef.current?.zoomIn();
       }
     } catch { /* noop */ }
   }, [viewMode]);
@@ -153,9 +156,8 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       if (viewMode === 'bubble' || viewMode === 'tree') {
         const cur = graphRef.current?.zoom?.() ?? 1;
         graphRef.current?.zoom?.(cur / 1.25, 250);
-      } else if (viewMode === 'schematic' && containerRef.current) {
-        const btn = containerRef.current.querySelector('.react-flow__controls-zoomout') as HTMLButtonElement | null;
-        btn?.click();
+      } else if (viewMode === 'schematic') {
+        schematicRef.current?.zoomOut();
       }
     } catch { /* noop */ }
   }, [viewMode]);
@@ -428,35 +430,37 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       return;
     }
 
+    // Always open the discovery terminal — gives users live feedback during the
+    // wait whether or not we already have hidden x_account nodes cached.
+    setTerminalTitle('X COMMUNITY DISCOVERY');
+    setTerminalVisible(true);
+    clearTerminal();
+    const intro: Array<[string, TerminalLine['type'], number]> = [
+      ['> initiating X Community discovery protocol...', 'info', 0],
+      [`> target mint: ${tokenMint.slice(0, 8)}...${tokenMint.slice(-6)}`, 'info', 250],
+      ['> scraping token metadata + DexScreener payload...', 'info', 600],
+      ['> extracting candidate X handles from socials...', 'info', 1100],
+      ['> resolving community ID via x.com lookup...', 'info', 1700],
+      ['> mapping creator → admins → moderators...', 'info', 2300],
+      ['> cross-checking handle recycling registry...', 'info', 2900],
+      ['> linking community nodes to mesh graph...', 'highlight', 3500],
+    ];
+    intro.forEach(([text, type, delay]) => {
+      setTimeout(() => addTerminalLine(text, type), delay);
+    });
+
     // If we already have x_account nodes hidden — do the dramatic reveal instead
     const hiddenXAccounts = graphData.nodes.filter(n => n.type === 'x_account');
     if (hiddenXAccounts.length > 0 && !xAccountsRevealed) {
       setRevealingXAccounts(true);
-      setTerminalTitle('X COMMUNITY SCANNER');
-      setTerminalVisible(true);
-      clearTerminal();
-
-      // Dramatic terminal sequence
-      const lines: Array<[string, TerminalLine['type'], number]> = [
-        ['INITIATING X COMMUNITY SCAN...', 'info', 0],
-        [`TARGET: ${tokenMint.slice(0, 16)}...`, 'info', 400],
-        ['SCANNING SOCIAL GRAPH DATABASE...', 'info', 800],
-        ['CROSS-REFERENCING COMMUNITY ROSTERS...', 'info', 1200],
-        [`MATCH FOUND — ${hiddenXAccounts.length} HANDLES IDENTIFIED`, 'success', 1800],
-      ];
-
-      // Add each handle discovery line
+      const baseDelay = 4000;
+      setTimeout(() => addTerminalLine(`✓ MATCH — ${hiddenXAccounts.length} cached handles identified`, 'success'), baseDelay);
       hiddenXAccounts.forEach((node, i) => {
         const handle = (node.label || node.fullId || node.id).replace(/^x_account:/, '').replace(/^@/, '');
-        lines.push([`  └─ @${handle} ... MAPPED ✓`, 'highlight', 2000 + i * 300]);
+        setTimeout(() => addTerminalLine(`  └─ @${handle} … LINKED`, 'highlight'), baseDelay + 400 + i * 250);
       });
-      lines.push(['COMMUNITY MAPPING COMPLETE', 'success', 2000 + hiddenXAccounts.length * 300 + 400]);
-
-      for (const [text, type, delay] of lines) {
-        setTimeout(() => addTerminalLine(text, type), delay);
-      }
-
-      const totalDelay = 2000 + hiddenXAccounts.length * 300 + 800;
+      const totalDelay = baseDelay + 400 + hiddenXAccounts.length * 250 + 600;
+      setTimeout(() => addTerminalLine('✓ COMMUNITY MESH MAPPING COMPLETE', 'success'), totalDelay - 200);
       setTimeout(() => {
         setXAccountsRevealed(true);
         setRevealingXAccounts(false);
@@ -486,10 +490,28 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     try {
       const walletNode = graphData.nodes.find(n => n.type === 'wallet');
       const wallet = walletNode?.fullId || walletNode?.id.replace(/^wallet:/, '');
+      const beforeNodeCount = graphData.nodes.filter(n => n.type === 'x_account' || n.type === 'x_community').length;
       await autoDiscoverCommunity(tokenMint, wallet);
       setTimeout(() => refetch(), 1500);
+      // After API resolves, dump real outcome to terminal at the end of the intro reel
+      setTimeout(() => {
+        const afterNodes = (graphRef.current?.graphData?.()?.nodes || []) as any[];
+        const found = afterNodes.filter(n => n.type === 'x_account' || n.type === 'x_community').length;
+        const delta = Math.max(0, found - beforeNodeCount);
+        if (delta > 0) {
+          addTerminalLine(`✓ DISCOVERED ${delta} new X entities (community + accounts)`, 'success');
+          addTerminalLine('✓ COMMUNITY MESH MAPPING COMPLETE', 'success');
+          toast.success(`🐦 ${delta} new X Community entities mapped!`);
+        } else {
+          addTerminalLine('⚠ no new X entities surfaced — token may have no community yet', 'error');
+          addTerminalLine('  → check that this token has an X Community link in its socials', 'info');
+        }
+        setTimeout(() => setTerminalVisible(false), 3500);
+      }, 4200);
       dispatchThoughtCustom("community mapped ✓");
     } catch (err) {
+      addTerminalLine('✗ discovery failed — see console for details', 'error');
+      setTimeout(() => setTerminalVisible(false), 3000);
       dispatchThoughtCustom("X Community discovery failed");
     } finally {
       setCommunitySearching(false);
@@ -944,6 +966,41 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       nodeIds.has(typeof l.target === 'string' ? l.target : (l.target as any).id)
     );
 
+    // ── KYC force-link bridge ──
+    // If a KYC root node is in the kept set but has NO link to anything else
+    // (i.e. the wallet→...→KYC funder chain didn't survive the prune, or was
+    // never discovered), inject a synthetic `is_kyc_root` bridge edge directly
+    // from the dev wallet → KYC root so the user sees the connection rendered.
+    const devForBridge = baseNodes.find((n: any) => n.type === 'wallet' && (n as any).isDev);
+    if (devForBridge) {
+      const linkedIds = new Set<string>();
+      for (const l of baseLinks) {
+        linkedIds.add(typeof l.source === 'string' ? l.source : (l.source as any).id);
+        linkedIds.add(typeof l.target === 'string' ? l.target : (l.target as any).id);
+      }
+      const bridges: any[] = [];
+      for (const n of baseNodes) {
+        if (n.type !== 'kyc_root') continue;
+        // KYC must be visible AND missing any edge → bridge to dev wallet.
+        const kycHasAnyEdge = baseLinks.some(l => {
+          const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
+          const t = typeof l.target === 'string' ? l.target : (l.target as any).id;
+          return s === n.id || t === n.id;
+        });
+        if (!kycHasAnyEdge) {
+          bridges.push({
+            source: devForBridge.id,
+            target: n.id,
+            relationship: 'is_kyc_root',
+            synthetic: true,
+          });
+        }
+      }
+      if (bridges.length > 0) {
+        return { nodes: baseNodes, links: [...baseLinks, ...bridges] };
+      }
+    }
+
     return { nodes: baseNodes, links: baseLinks };
   }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode, schematicMode]);
 
@@ -959,6 +1016,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     const grew = count >= lastNodeCountRef.current + 2 || lastNodeCountRef.current === 0;
     lastNodeCountRef.current = count;
     if (!grew) return;
+    if (viewMode === 'schematic') {
+      const t = window.setTimeout(() => { try { schematicRef.current?.fitView(); } catch { /* noop */ } }, 300);
+      return () => clearTimeout(t);
+    }
     if (viewMode !== 'bubble' && viewMode !== 'tree') return;
     const timers: number[] = [];
     [400, 1200, 2400].forEach(delay => {
@@ -1608,6 +1669,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
             />
           ) : viewMode === 'schematic' ? (
             <BubbleMapSchematic
+              ref={schematicRef}
               graphData={displayData}
               width={dimensions.width}
               height={600}

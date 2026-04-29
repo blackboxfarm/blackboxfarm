@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   ReactFlow,
   Background,
@@ -6,6 +6,8 @@ import {
   type Edge,
   Position,
   MarkerType,
+  ReactFlowProvider,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
@@ -22,6 +24,12 @@ interface BubbleMapSchematicProps {
    *                         and any socials directly attached to that token.
    */
   mode?: 'branches' | 'prune';
+}
+
+export interface SchematicHandle {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitView: () => void;
 }
 
 /**
@@ -199,13 +207,17 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
   return { nodes, edges };
 }
 
-const BubbleMapSchematic: React.FC<BubbleMapSchematicProps> = ({
-  graphData,
-  width,
-  height = 600,
-  onNodeClick,
-  mode = 'branches',
-}) => {
+const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(function SchematicInner(
+  { graphData, width, height = 600, onNodeClick, mode = 'branches' },
+  ref,
+) {
+  const rf = useReactFlow();
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => rf.zoomIn({ duration: 250 }),
+    zoomOut: () => rf.zoomOut({ duration: 250 }),
+    fitView: () => rf.fitView({ padding: 0.15, duration: 400 }),
+  }), [rf]);
+
   const effectiveData = useMemo(
     () => (mode === 'prune' ? pruneToTokenAndSocials(graphData) : graphData),
     [graphData, mode],
@@ -236,6 +248,14 @@ const BubbleMapSchematic: React.FC<BubbleMapSchematicProps> = ({
       </ReactFlow>
     </div>
   );
-};
+});
+
+const BubbleMapSchematic = forwardRef<SchematicHandle, BubbleMapSchematicProps>(function BubbleMapSchematic(props, ref) {
+  return (
+    <ReactFlowProvider>
+      <SchematicInner {...props} ref={ref} />
+    </ReactFlowProvider>
+  );
+});
 
 export default BubbleMapSchematic;
