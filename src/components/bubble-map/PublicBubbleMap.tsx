@@ -23,6 +23,7 @@ import BubbleMap3D from "./BubbleMap3D";
 import BubbleMapSchematic, { type SchematicHandle } from "./BubbleMapSchematic";
 import SnapshotShareDialog from "./SnapshotShareDialog";
 import { DailyTraceInfo } from "./DailyTraceInfo";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type ViewMode = 'bubble' | 'tree' | '3d' | 'schematic';
 type SolarMode = 'minimum' | 'clusters';
@@ -41,6 +42,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const graphRef = useRef<any>();
   const schematicRef = useRef<SchematicHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
   const [searchInput, setSearchInput] = useState("");
   const [initialTokenLoaded, setInitialTokenLoaded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<MeshNode | null>(null);
@@ -53,7 +55,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const [kycFound, setKycFound] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
   const [nodeCap, setNodeCap] = useState(isMobileDevice() ? NODE_CAP_MOBILE : NODE_CAP_DEFAULT);
-  const isMobile = isMobileDevice();
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
   const [spreadFactor, setSpreadFactor] = useState(3);
@@ -138,6 +139,31 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   }, [viewMode, solarMode, schematicMode]);
 
   const lastNodeCountRef = useRef(0);
+
+  // Shared responsive auto-fit. Mobile fills ~80% of canvas; desktop ~50%
+  // so a 2-node Solar Min view doesn't render bubbles the size of golf balls.
+  const fitGraph = useCallback((duration = 600) => {
+    try {
+      const isMob = typeof window !== 'undefined' && window.innerWidth < 768;
+      const padding = isMob ? 60 : 140;
+      if (viewMode === 'schematic') {
+        schematicRef.current?.fitView();
+        const cap = isMob ? 1.6 : 1.0;
+        schematicRef.current?.setZoom?.(cap);
+        return;
+      }
+      if (viewMode !== 'bubble' && viewMode !== 'tree') return;
+      graphRef.current?.zoomToFit?.(duration, padding);
+      requestAnimationFrame(() => {
+        const z = graphRef.current?.zoom?.();
+        if (typeof z !== 'number') return;
+        const cap = isMob ? 2.0 : 1.0;
+        const floor = isMob ? 0.6 : 0.4;
+        if (z > cap) graphRef.current?.zoom?.(cap, 400);
+        else if (z < floor) graphRef.current?.zoom?.(floor, 400);
+      });
+    } catch { /* noop */ }
+  }, [viewMode]);
 
   // --- Zoom controls (in-frame) ---
   const handleZoomIn = useCallback(() => {
