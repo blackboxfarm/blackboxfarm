@@ -126,17 +126,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   // For ForceGraph2D we call zoomToFit; React-Flow / 3D handle their own fitView.
   useEffect(() => {
     const t = setTimeout(() => {
-      try {
-        if (graphRef.current && (viewMode === 'bubble' || viewMode === 'tree')) {
-          graphRef.current.zoomToFit?.(600, 60);
-        }
-        if (viewMode === 'schematic') {
-          schematicRef.current?.fitView();
-        }
-      } catch { /* noop */ }
+      fitGraph(600);
     }, 350);
     return () => clearTimeout(t);
-  }, [viewMode, solarMode, schematicMode]);
+  }, [viewMode, solarMode, schematicMode, fitGraph]);
 
   const lastNodeCountRef = useRef(0);
 
@@ -1043,24 +1036,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     lastNodeCountRef.current = count;
     if (!grew) return;
     if (viewMode === 'schematic') {
-      const t = window.setTimeout(() => { try { schematicRef.current?.fitView(); } catch { /* noop */ } }, 300);
+      const t = window.setTimeout(() => { fitGraph(); }, 300);
       return () => clearTimeout(t);
     }
     if (viewMode !== 'bubble' && viewMode !== 'tree') return;
     const timers: number[] = [];
     [400, 1200, 2400].forEach(delay => {
-      timers.push(window.setTimeout(() => {
-        try {
-          graphRef.current?.zoomToFit?.(600, 120);
-          // Clamp: with few nodes (Solar Min) fit-to-view massively over-zooms.
-          // Cap zoom at a sane first-render level so users don't see giant blobs.
-          const z = graphRef.current?.zoom?.();
-          if (typeof z === 'number' && z > 1.4) graphRef.current?.zoom?.(1.4, 400);
-        } catch { /* noop */ }
-      }, delay));
+      timers.push(window.setTimeout(() => fitGraph(600), delay));
     });
     return () => { timers.forEach(t => clearTimeout(t)); };
-  }, [displayData.nodes.length, viewMode]);
+  }, [displayData.nodes.length, viewMode, fitGraph]);
 
 
   const typeCounts = displayData.nodes.reduce((acc, n) => {
@@ -1731,11 +1716,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
               d3AlphaMin={isMobile ? 0.01 : 0.005}
               onEngineStop={() => {
-                try {
-                  graphRef.current?.zoomToFit?.(700, 120);
-                  const z = graphRef.current?.zoom?.();
-                  if (typeof z === 'number' && z > 1.4) graphRef.current?.zoom?.(1.4, 400);
-                } catch { /* noop */ }
+                fitGraph(700);
               }}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}
