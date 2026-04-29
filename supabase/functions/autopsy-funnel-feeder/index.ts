@@ -69,7 +69,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   const body = await req.json().catch(() => ({}));
-  const limit = Math.min(body.limit || 200, 500);
+  const limit = Math.min(body.limit || 500, 2000);
 
   const stats: FunnelStats = {
     source_token_lifecycle: 0,
