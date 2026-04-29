@@ -201,9 +201,16 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
         ageHours: c.age_hours ?? 0,
       });
 
-      // Skip Tier-C unless ATH was meaningful (>$10k) — too noisy otherwise
+      // Skip Tier-C unless ATH was meaningful (>$10k) — too noisy otherwise.
+      // EXCEPTION: pumpfun_watchlist tokens explicitly marked status='dead' are kept
+      // as Tier-B (admin queue) even without ATH data — they were curated as dead.
+      let effectiveTier = tier;
       if (tier === 'C' && (c.ath_mcap_usd ?? 0) < 10000) {
-        continue;
+        if (c.source_feed === 'pumpfun_watchlist') {
+          effectiveTier = 'B'; // promote to admin-review queue
+        } else {
+          continue;
+        }
       }
 
       await assertUpsert(
@@ -219,7 +226,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
             death_intent: intent,
             death_confidence: confidence,
             matched_signals: matchedSignals,
-            tier,
+            tier: effectiveTier,
             ath_mcap_usd: c.ath_mcap_usd,
             current_mcap_usd: c.current_mcap_usd,
             liquidity_usd: c.liquidity_usd,
@@ -232,8 +239,9 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
         'autopsy_candidates'
       );
 
-      if (tier === 'A') stats.tier_A++;
-      else if (tier === 'B') stats.tier_B++;
+      stats.inserted++;
+      if (effectiveTier === 'A') stats.tier_A++;
+      else if (effectiveTier === 'B') stats.tier_B++;
       else stats.tier_C++;
     } catch (e) {
       stats.errors++;
