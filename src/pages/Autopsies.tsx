@@ -35,8 +35,19 @@ export default function Autopsies() {
             <Link
               key={a.slug}
               to={`/autopsy/${a.slug}`}
-              className="group block rounded-xl border border-border bg-card hover:border-destructive/50 transition-all duration-300 overflow-hidden hover:shadow-lg hover:shadow-destructive/10 p-5"
+              className="group block rounded-xl border border-border bg-card hover:border-destructive/50 transition-all duration-300 overflow-hidden hover:shadow-lg hover:shadow-destructive/10"
             >
+              {a.heroImage && (
+                <div className="aspect-[3/1] w-full overflow-hidden bg-black border-b border-border">
+                  <img
+                    src={a.heroImage}
+                    alt={`${a.title} autopsy banner`}
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                  />
+                </div>
+              )}
+              <div className="p-5">
               <div className="flex items-center gap-2 flex-wrap mb-3">
                 <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-destructive/15 text-destructive border-destructive/30">
                   {a.verdict}
@@ -52,6 +63,7 @@ export default function Autopsies() {
               <div className="flex items-center gap-3 text-xs text-muted-foreground/80 pt-3 border-t border-border/60">
                 <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(a.publishedAt), 'MMM d, yyyy')}</span>
                 <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />{a.ticker}</span>
+              </div>
               </div>
             </Link>
           ))}
