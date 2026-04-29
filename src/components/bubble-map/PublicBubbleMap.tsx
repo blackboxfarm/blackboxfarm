@@ -23,6 +23,7 @@ import BubbleMap3D from "./BubbleMap3D";
 import BubbleMapSchematic, { type SchematicHandle } from "./BubbleMapSchematic";
 import SnapshotShareDialog from "./SnapshotShareDialog";
 import { DailyTraceInfo } from "./DailyTraceInfo";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type ViewMode = 'bubble' | 'tree' | '3d' | 'schematic';
 type SolarMode = 'minimum' | 'clusters';
@@ -41,6 +42,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const graphRef = useRef<any>();
   const schematicRef = useRef<SchematicHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
   const [searchInput, setSearchInput] = useState("");
   const [initialTokenLoaded, setInitialTokenLoaded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<MeshNode | null>(null);
@@ -53,7 +55,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
   const [kycFound, setKycFound] = useState(false);
   const [tokenSearching, setTokenSearching] = useState(false);
   const [nodeCap, setNodeCap] = useState(isMobileDevice() ? NODE_CAP_MOBILE : NODE_CAP_DEFAULT);
-  const isMobile = isMobileDevice();
   const [capBroken, setCapBroken] = useState(false);
   const [communitySearching, setCommunitySearching] = useState(false);
   const [spreadFactor, setSpreadFactor] = useState(3);
@@ -121,23 +122,39 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     }
   }, [viewMode, solarMode]);
 
+  const lastNodeCountRef = useRef(0);
+
+  // Shared responsive auto-fit. Mobile fills ~80% of canvas; desktop ~50%
+  // so a 2-node Solar Min view doesn't render bubbles the size of golf balls.
+  const fitGraph = useCallback((duration = 600) => {
+    try {
+      const isMob = typeof window !== 'undefined' && window.innerWidth < 768;
+      const padding = isMob ? 60 : 140;
+      if (viewMode === 'schematic') {
+        schematicRef.current?.fitView();
+        const cap = isMob ? 1.6 : 1.0;
+        schematicRef.current?.setZoom?.(cap);
+        return;
+      }
+      if (viewMode !== 'bubble' && viewMode !== 'tree') return;
+      graphRef.current?.zoomToFit?.(duration, padding);
+      requestAnimationFrame(() => {
+        const z = graphRef.current?.zoom?.();
+        if (typeof z !== 'number') return;
+        const cap = isMob ? 2.0 : 1.0;
+        const floor = isMob ? 0.6 : 0.4;
+        if (z > cap) graphRef.current?.zoom?.(cap, 400);
+        else if (z < floor) graphRef.current?.zoom?.(floor, 400);
+      });
+    } catch { /* noop */ }
+  }, [viewMode]);
+
   // Auto recenter / fit when the user switches view mode or solar mode.
   // For ForceGraph2D we call zoomToFit; React-Flow / 3D handle their own fitView.
   useEffect(() => {
-    const t = setTimeout(() => {
-      try {
-        if (graphRef.current && (viewMode === 'bubble' || viewMode === 'tree')) {
-          graphRef.current.zoomToFit?.(600, 60);
-        }
-        if (viewMode === 'schematic') {
-          schematicRef.current?.fitView();
-        }
-      } catch { /* noop */ }
-    }, 350);
+    const t = setTimeout(() => { fitGraph(600); }, 350);
     return () => clearTimeout(t);
-  }, [viewMode, solarMode, schematicMode]);
-
-  const lastNodeCountRef = useRef(0);
+  }, [viewMode, solarMode, schematicMode, fitGraph]);
 
   // --- Zoom controls (in-frame) ---
   const handleZoomIn = useCallback(() => {
@@ -1017,24 +1034,16 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     lastNodeCountRef.current = count;
     if (!grew) return;
     if (viewMode === 'schematic') {
-      const t = window.setTimeout(() => { try { schematicRef.current?.fitView(); } catch { /* noop */ } }, 300);
+      const t = window.setTimeout(() => { fitGraph(); }, 300);
       return () => clearTimeout(t);
     }
     if (viewMode !== 'bubble' && viewMode !== 'tree') return;
     const timers: number[] = [];
     [400, 1200, 2400].forEach(delay => {
-      timers.push(window.setTimeout(() => {
-        try {
-          graphRef.current?.zoomToFit?.(600, 120);
-          // Clamp: with few nodes (Solar Min) fit-to-view massively over-zooms.
-          // Cap zoom at a sane first-render level so users don't see giant blobs.
-          const z = graphRef.current?.zoom?.();
-          if (typeof z === 'number' && z > 1.4) graphRef.current?.zoom?.(1.4, 400);
-        } catch { /* noop */ }
-      }, delay));
+      timers.push(window.setTimeout(() => fitGraph(600), delay));
     });
     return () => { timers.forEach(t => clearTimeout(t)); };
-  }, [displayData.nodes.length, viewMode]);
+  }, [displayData.nodes.length, viewMode, fitGraph]);
 
 
   const typeCounts = displayData.nodes.reduce((acc, n) => {
@@ -1705,11 +1714,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
               d3VelocityDecay={viewMode === 'tree' ? 0.45 : 0.4}
               d3AlphaMin={isMobile ? 0.01 : 0.005}
               onEngineStop={() => {
-                try {
-                  graphRef.current?.zoomToFit?.(700, 120);
-                  const z = graphRef.current?.zoom?.();
-                  if (typeof z === 'number' && z > 1.4) graphRef.current?.zoom?.(1.4, 400);
-                } catch { /* noop */ }
+                fitGraph(700);
               }}
               dagMode={viewMode === 'tree' ? 'td' : undefined}
               dagLevelDistance={viewMode === 'tree' ? 80 : undefined}

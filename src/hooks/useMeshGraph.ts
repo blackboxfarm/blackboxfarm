@@ -94,6 +94,10 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
     if (type === 'x_community') {
       const name = evidence.community_name || evidence.name || evidence.title;
       if (name) return name.length > 18 ? name.slice(0, 16) + '…' : name;
+      // handle-as-community fallback
+      if (evidence.fallback === 'handle_as_community' && evidence.handle) {
+        return `@${evidence.handle} (community)`;
+      }
     }
     if (type === 'telegram_channel') {
       const title = evidence.channel_title || evidence.title || evidence.name;
@@ -118,6 +122,7 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
   // Default friendly labels by type
   if (type === 'token') return `$${id.length > 8 ? id.slice(0, 6) + '…' : id}`;
   if (type === 'x_account') return `@${id.replace(/^@/, '')}`;
+  if (type === 'x_community' && id.startsWith('handle:')) return `@${id.slice(7)} (community)`;
   if (type === 'x_user') return `X:${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'telegram_channel') return `TG ${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'kyc_root') return `KYC ${id.length > 12 ? id.slice(0, 8) + '…' : id}`;
@@ -381,6 +386,8 @@ export function useMeshGraph(initialEntityId?: string) {
       let allSocialUrls: string[] = [];
       let communityUrl: string | null = null;
       let discoverySource = 'dexscreener_auto';
+      let tokenSymbol: string | undefined;
+      let tokenName: string | undefined;
 
       // 1. Try DexScreener v1 API first (supports PumpSwap + graduated tokens)
       try {
@@ -391,6 +398,8 @@ export function useMeshGraph(initialEntityId?: string) {
           const pair = Array.isArray(dexData) ? dexData[0] : dexData?.pairs?.[0];
           const socials = pair?.info?.socials || [];
           const websites = pair?.info?.websites || [];
+          tokenSymbol = pair?.baseToken?.symbol;
+          tokenName = pair?.baseToken?.name;
           allSocialUrls = [
             ...socials.map((s: any) => s.url),
             ...websites.map((w: any) => w.url),
@@ -409,6 +418,8 @@ export function useMeshGraph(initialEntityId?: string) {
         const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`);
         if (pumpRes.ok) {
           const pumpData = await pumpRes.json();
+          if (!tokenSymbol && pumpData?.symbol) tokenSymbol = pumpData.symbol;
+          if (!tokenName && pumpData?.name) tokenName = pumpData.name;
           const pumpSocials: string[] = [];
           // Collect all social fields from pump.fun
           for (const field of [pumpData?.twitter, pumpData?.telegram, pumpData?.website]) {
@@ -495,6 +506,60 @@ export function useMeshGraph(initialEntityId?: string) {
         }
       }
 
+      // 5b. Telegram groups/channels — surface as nodes in the bubble map.
+      // (Public metadata only; no MTProto join. Per user policy.)
+      for (const tgUrl of telegramUrls) {
+        const m = tgUrl.match(/t\.me\/(?:s\/)?([a-zA-Z0-9_+]+)/i);
+        const handle = m?.[1]?.toLowerCase();
+        if (!handle || handle === 'joinchat' || handle === 'addstickers') continue;
+        try {
+          await supabase.from('reputation_mesh').upsert({
+            source_type: 'token',
+            source_id: tokenMint,
+            linked_type: 'telegram',
+            linked_id: handle,
+            relationship: 'social_account',
+            confidence: 80,
+            discovered_via: discoverySource,
+            evidence: { url: tgUrl },
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+          console.log(`[MeshSpider] Linked Telegram: t.me/${handle}`);
+        } catch (e) {
+          console.warn(`[MeshSpider] telegram upsert failed for ${handle}:`, e);
+        }
+      }
+
+      // 5c. Websites — anything that isn't an X URL or a Telegram URL is a website.
+      const websiteUrls = allSocialUrls.filter(u =>
+        !u.includes('x.com/') && !u.includes('twitter.com/') &&
+        !u.includes('t.me/') && !u.includes('telegram.me/')
+      );
+      for (const wUrl of websiteUrls) {
+        let host: string | null = null;
+        try { host = new URL(wUrl.startsWith('http') ? wUrl : `https://${wUrl}`).hostname.replace(/^www\./, ''); }
+        catch { host = null; }
+        if (!host) continue;
+        try {
+          await supabase.from('reputation_mesh').upsert({
+            source_type: 'token',
+            source_id: tokenMint,
+            linked_type: 'website',
+            linked_id: host,
+            relationship: 'social_account',
+            confidence: 75,
+            discovered_via: discoverySource,
+            evidence: { url: wUrl },
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+          console.log(`[MeshSpider] Linked Website: ${host}`);
+        } catch (e) {
+          console.warn(`[MeshSpider] website upsert failed for ${host}:`, e);
+        }
+      }
+
+      // Fire the canonical harvest function so the central token_social_links table stays in sync.
+      // Fire-and-forget — don't block discovery.
+      supabase.functions.invoke('harvest-token-socials', { body: { tokenMint } }).catch(() => {});
+
       // 6. FALLBACK: If no community URL found, scrape X profile(s) for pinned communities
       if (!communityUrl) {
         const discoveredHandles = xUrls
@@ -554,6 +619,48 @@ export function useMeshGraph(initialEntityId?: string) {
             }
           } catch (e) {
             console.warn(`[MeshSpider] Breadcrumb error for @${handle}:`, e);
+          }
+        }
+
+        // 6b. Final fallback: if STILL no community URL, treat the X handle itself
+        // as the de-facto community. Per user spec: "When an X Community Link leads
+        // to only an X Account Profile and no pinned Community → the X Handle IS
+        // the community", with confidence boosted when the handle resembles the
+        // token symbol/name/CA prefix.
+        if (!communityUrl && discoveredHandles.length > 0) {
+          const handle = discoveredHandles[0];
+          const h = handle.toLowerCase();
+          const candidates = [tokenSymbol, tokenName, tokenMint?.slice(0, 6)]
+            .filter(Boolean).map(s => (s as string).toLowerCase());
+          const resembles = candidates.some(c => h.includes(c) || c.includes(h));
+          const confidence = resembles ? 70 : 50;
+          const syntheticId = `handle:${handle}`;
+          try {
+            // token → x_community (the handle, namespaced)
+            await supabase.from('reputation_mesh').upsert({
+              source_type: 'token',
+              source_id: tokenMint,
+              linked_type: 'x_community',
+              linked_id: syntheticId,
+              relationship: 'community_for',
+              confidence,
+              discovered_via: 'handle_as_community_fallback',
+              evidence: { fallback: 'handle_as_community', handle, resembles_token: resembles },
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+            // x_community → x_account (the handle is the sole admin)
+            await supabase.from('reputation_mesh').upsert({
+              source_type: 'x_community',
+              source_id: syntheticId,
+              linked_type: 'x_account',
+              linked_id: handle,
+              relationship: 'community_admin',
+              confidence,
+              discovered_via: 'handle_as_community_fallback',
+              evidence: { fallback: 'handle_as_community', handle },
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+            console.log(`[MeshSpider] 🪪 No pinned community — using @${handle} as de-facto community (confidence ${confidence}, resembles=${resembles})`);
+          } catch (e) {
+            console.warn('[MeshSpider] handle-as-community upsert failed:', e);
           }
         }
       }

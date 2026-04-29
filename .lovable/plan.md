@@ -1,84 +1,124 @@
+## Plan: Bubble Map Zoom + Social Discovery Fixes
 
-# Phanes Deep-Links + Auto-Capture Plan
+Three independent issues, all rooted in `useMeshGraph.ts` + `PublicBubbleMap.tsx`.
 
-## The capture problem (read this first)
+---
 
-There are two separate things and they can't share one mechanism:
+### 1. Responsive auto-fit zoom (desktop too zoomed-in on small graphs)
 
-1. **Deep-link buttons** (`https://t.me/Phanes_bot?start=x_handle`) — these open Telegram on **your phone/desktop**. The reply lands in **your** Phanes DM. There is no way for our server (or Browserless) to read that reply — it's end-to-end on your account.
+**Problem:** Current cap is a flat `zoom > 1.4 → 1.4`. With 2–4 nodes (Solar Min on a fresh token) bubbles render the size of golf balls on desktop.
 
-2. **Server-side capture** — already built: `supabase/functions/phanes-x-query` DMs `@Phanes_bot` from our **MTProto user session**, waits 8s, fetches the reply, parses it, and writes to `x_account_registry.phanes_data / phanes_recycled_accounts / phanes_username_history`.
+**Fix in `src/components/bubble-map/PublicBubbleMap.tsx`:**
+- Replace the three `zoomToFit` blocks (lines ~127–135, ~1024–1033, ~1705–1714) with a shared helper:
+  ```ts
+  const fitGraph = () => {
+    const isMob = window.innerWidth < 768;
+    const padding = isMob ? 60 : 140;
+    graphRef.current?.zoomToFit?.(600, padding);
+    requestAnimationFrame(() => {
+      const z = graphRef.current?.zoom?.() ?? 1;
+      const cap = isMob ? 2.0 : 1.0;          // mobile ~80% fill, desktop ~50% fill
+      const floor = isMob ? 0.6 : 0.4;
+      if (z > cap)   graphRef.current?.zoom?.(cap, 400);
+      if (z < floor) graphRef.current?.zoom?.(floor, 400);
+    });
+  };
+  ```
+- Use the existing `useIsMobile()` hook (already in `src/hooks/use-mobile.tsx`) instead of the ad-hoc `isMobileDevice()` so it reacts to viewport changes.
+- Apply identical caps to the Schematic view via `schematicRef.current?.fitView()` followed by an explicit `setViewport({ zoom: cap })` exposed through `SchematicHandle` (extend the imperative handle in `BubbleMapSchematic.tsx`).
 
-So "Browserless clicks the buttons" doesn't work for capture. Browserless drives a headless Chrome — it can't log into your Telegram account and read DMs. **The only auto-capture path is the existing MTProto function.** What we'll build is an admin UI that fires that function in bulk over a list of devs, plus the manual deep-link buttons everywhere else for free user-driven lookups.
+---
 
-## What gets built
+### 2. Website + Telegram never appear on the bubble map
 
-### 1. `<PhanesDeepLink>` button component
-- Props: `handle?`, `wallet?`, `mint?`
-- Renders a small Telegram-blue chip: "🔍 Phanes" → opens `https://t.me/Phanes_bot?start=...` in a new tab
-- Maps to the right Phanes command:
-  - X handle → `?start=x_<handle>` (or fallback to copy `/x @handle` to clipboard + open bot)
-  - Wallet → `?start=w_<addr>`
-  - Mint → `?start=ca_<mint>`
-- Phanes' actual deep-link param scheme needs verifying via their docs; if `?start=` doesn't auto-run the command, the button copies the command text to clipboard and opens the bot DM, with a toast: "Command copied — paste in Phanes DM"
+**Root cause:** In `src/hooks/useMeshGraph.ts` `autoDiscoverCommunity` (lines ~380–560) we fetch DexScreener + Pump.fun, collect `allSocialUrls`, and **only insert `x_account` and `x_community` rows** into `reputation_mesh`. We literally hold `telegramUrls` (line 441) and website URLs but never write them, so the renderer has nothing to draw — even though `ENTITY_COLORS` / `ENTITY_LABELS` already define `telegram` and `website` node types.
 
-Drop the button into:
-- `src/pages/Developer.tsx` (next to wallet + twitter handle)
-- `src/components/token/DeveloperRiskBadge.tsx`
-- `src/components/bubble-map/HackerTerminal.tsx` (next to X handles & wallets)
-- `src/components/holders/Top25HoldersCard.tsx` (next to wallets)
-- Holder/wallet popovers in the bubble map
+**Fix:** After the X-handle insert loop (~line 474), add sibling inserts:
+```ts
+// Telegram groups/channels
+for (const tgUrl of telegramUrls) {
+  const m = tgUrl.match(/t\.me\/(?:s\/)?([a-zA-Z0-9_+]+)/i);
+  const handle = m?.[1]?.toLowerCase();
+  if (!handle || handle === 'joinchat') continue;
+  await supabase.from('reputation_mesh').upsert({
+    source_type: 'token', source_id: tokenMint,
+    linked_type: 'telegram', linked_id: handle,
+    relationship: 'social_account',
+    confidence: 80, discovered_via: discoverySource,
+  }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+}
 
-### 2. New admin page: `/super-admin/phanes-batch`
-A queue console that uses **the existing `phanes-x-query` MTProto function** to capture data.
+// Websites
+const websiteUrls = allSocialUrls.filter(u =>
+  !u.includes('x.com/') && !u.includes('twitter.com/') &&
+  !u.includes('t.me/')  && !u.includes('telegram.me/')
+);
+for (const wUrl of websiteUrls) {
+  const host = (() => { try { return new URL(wUrl).hostname.replace(/^www\./,''); } catch { return null; } })();
+  if (!host) continue;
+  await supabase.from('reputation_mesh').upsert({
+    source_type: 'token', source_id: tokenMint,
+    linked_type: 'website', linked_id: host,
+    relationship: 'social_account',
+    confidence: 75, discovered_via: discoverySource,
+    evidence: { url: wUrl },
+  }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+}
+```
+- Also fire `supabase.functions.invoke('harvest-token-socials', { body: { tokenMint } })` once per discovery so the canonical edge function (which already handles website rows, line 200/431) keeps its own table in sync — single source of truth, no drift.
+- Verify the renderer `pruneToTokenAndSocials` in `BubbleMapSchematic.tsx` already keeps `telegram` + `website` (it does — `SOCIAL_TYPES` includes both).
 
-Layout:
-- **Source picker**: "Devs from `developer_profiles` (filter: has twitter_handle, no `phanes_queried_at` in last 30d)" / "Handles from `x_account_registry` un-queried" / "Paste list"
-- **Table**: handle | wallet | last queried | last result (recycled? Y/N, # history) | "Run now" button
-- **Bulk run**: "Run next N" with a throttle slider (default: 1 every 90s — Phanes rate-limits + we don't want to look like a bot to them)
-- **Live log panel**: tails `edge_function_runs` rows for `phanes-x-query`
-- **Per-row "Run now"** invokes `supabase.functions.invoke('phanes-x-query', { body: { action: 'single', handle } })` and shows the parsed result inline
+---
 
-This is the "page of buttons you click manually" — except clicking the button triggers our MTProto capture (so the data DOES land in our DB), not a deep-link to your phone.
+### 3. "X handle = community" fallback rule (codify it)
 
-### 3. Optional: re-enable the cron
-`phanes-x-query` already supports `action: 'backfill'` (picks the next un-queried handle from `x_account_registry`). Add a toggle on the admin page: "Auto-backfill: ON/OFF" that schedules a `pg_cron` job calling `backfill` every 90s. Off by default.
+**Rule (per user):**
+> If a token's only X link is a profile (`x.com/HANDLE`) and that profile has **no** pinned community → treat the **handle itself** as the de-facto X community, especially when the handle name resembles the token name/ticker/CA.
 
-### 4. Display the captured data
-On `src/pages/Developer.tsx` (and dev cards in bubble map), when `x_account_registry.phanes_recycled_accounts` or `phanes_username_history` has rows, render a "Phanes Intel" panel:
-- "🔄 Recycled handle — also seen as: @oldname1, @oldname2"
-- "📜 Past usernames: @x, @y (since 2024-03-15)"
-- Linked CAs from `recycledAccounts[].contractAddress` as clickable token chips
+**Today:** `useMeshGraph.ts` ~lines 498–559 calls `x-pinned-community-finder`. If it returns nothing, we just log "no pinned/bio community link" and walk away. The handle stays as a lonely `x_account` node; no community node, no admin/mod chain.
 
-## Why no Browserless
+**Fix — add a shared helper** `supabase/functions/_shared/x-handle-as-community.ts`:
+```ts
+// Decide if an x_account should be promoted to the de-facto community
+export function handleResemblesToken(handle: string, tokenSymbol?: string, tokenName?: string, mint?: string) {
+  const h = handle.toLowerCase();
+  const candidates = [tokenSymbol, tokenName, mint?.slice(0,6)].filter(Boolean).map(s=>s!.toLowerCase());
+  return candidates.some(c => h.includes(c) || c.includes(h));
+}
+```
 
-Browserless headless Chrome cannot:
-- Log into your Telegram account (no session, no MTProto)
-- Read DMs from `@Phanes_bot`
-- Bypass Telegram's web client auth
+**Wire it into:**
+- `useMeshGraph.ts` `autoDiscoverCommunity` — after the pinned-community fallback fails, insert a synthetic `reputation_mesh` row:
+  ```
+  source_type: 'token', linked_type: 'x_community',
+  linked_id: `handle:${handle}`,                  // namespaced so it can't collide w/ numeric IDs
+  relationship: 'community_for', confidence: 60,
+  evidence: { fallback: 'handle_as_community', handle, resembles_token: bool }
+  ```
+  and a paired `x_community → x_account` `community_admin` row so the bubble map draws the handle as both the community AND its sole admin.
+- `supabase/functions/x-community-enricher/index.ts` — when `detectTwitterType()` returns `'account'`, after attempting pinned-community resolution, apply the same fallback (gate on `handleResemblesToken` for confidence ≥ 70; otherwise still insert at confidence 50 so the chain renders but is flagged "unverified community").
+- `supabase/functions/oracle-master-spider/index.ts` and `supabase/functions/social-mesh-linker/index.ts` — import the same helper so every discovery path applies the rule uniformly.
 
-The MTProto user session we already have IS the only "automated browser" that works for Phanes. The admin page just gives it a friendly bulk UI.
+**Renderer touch:** in `useMeshGraph.ts` `getNodeLabel`, render `handle:` IDs as `@handle (community)` so the user can tell which node is a real community vs. the fallback.
 
-## ToS reminder
-Phanes ToS forbids "automated queries." The existing `phanes-x-query` already does automated queries from our MTProto account — risk of ban exists. Throttle to ≥90s between calls and cap at ~50/day to stay below their radar. Manual deep-link buttons (item 1) are zero risk because the user runs them on their own account.
+---
 
-## Files touched
+### Acceptance checks
+1. Open bubble map on desktop with a token that has 2 nodes → bubbles fill ≈50% of canvas, not golf-ball-tiny. Resize to mobile width → re-fits to ≈80%.
+2. Magnifier +/- still works post-fit (manual override unaffected) on Bubble, Tree, Schematic.
+3. Search a token whose DexScreener payload has Website + Telegram + Twitter (e.g. the `$GPT` mint in the screenshots) → all three appear as nodes connected to the token.
+4. Search a token where the only X link is `x.com/GPT_SOLANA` (no community) → an `x_community` node labeled `@GPT_SOLANA (community)` appears, linked to both the token and the `@GPT_SOLANA` x_account, with evidence `fallback: handle_as_community`.
+5. KYC bridge link (already shipped) still renders in Solar Min.
 
-**New:**
-- `src/components/phanes/PhanesDeepLink.tsx`
-- `src/pages/admin/PhanesBatch.tsx` + route
-- `src/components/admin/PhanesQueueTable.tsx`
+### Files changed
+- `src/components/bubble-map/PublicBubbleMap.tsx` (zoom helper, useIsMobile)
+- `src/components/bubble-map/BubbleMapSchematic.tsx` (extend `SchematicHandle` with `setZoom`)
+- `src/hooks/useMeshGraph.ts` (insert telegram + website rows, handle-as-community fallback, label tweak)
+- `supabase/functions/_shared/x-handle-as-community.ts` (new helper)
+- `supabase/functions/x-community-enricher/index.ts` (apply fallback)
+- `supabase/functions/oracle-master-spider/index.ts` (apply fallback)
+- `supabase/functions/social-mesh-linker/index.ts` (apply fallback)
 
-**Edited (insert button):**
-- `src/pages/Developer.tsx`
-- `src/components/token/DeveloperRiskBadge.tsx`
-- `src/components/bubble-map/HackerTerminal.tsx`
-- `src/components/holders/Top25HoldersCard.tsx`
-
-**Edge functions:** no new ones — reuse `phanes-x-query` and `telegram-mtproto-auth`. Optionally add a tiny `phanes-batch-orchestrator` function if we want server-side queue management instead of doing it from the admin page (recommend: skip it, drive from the admin page so you watch it live).
-
-## Open questions before I build
-
-1. Phanes deep-link param scheme — do you know if `t.me/Phanes_bot?start=x_handle` auto-runs `/x handle`? If not, button falls back to "open bot + copy command to clipboard." (I can verify by clicking one in your Telegram and reporting back, but cleaner if you confirm.)
-2. Throttle default — 90s/call OK? That's ~40 devs/hour, ~950/day max but I'd cap at 50/day for ToS safety.
-3. Should the admin page be `/super-admin/phanes-batch` (new) or a tab inside the existing super-admin dashboard?
+### Out of scope (ask if you want them)
+- Backfill: re-running discovery on tokens already searched in the last 30d to populate the new website/telegram/fallback-community rows.
+- MTProto deep-inspect for Telegram (you already chose **public metadata only** — not building it).
