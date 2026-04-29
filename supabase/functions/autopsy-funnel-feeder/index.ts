@@ -69,7 +69,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   const body = await req.json().catch(() => ({}));
-  const limit = Math.min(body.limit || 200, 500);
+  const limit = Math.min(body.limit || 500, 2000);
 
   const stats: FunnelStats = {
     source_token_lifecycle: 0,
@@ -170,19 +170,25 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
 
   stats.total_unique = candidatesByMint.size;
 
+  // ── Batch-fetch dev_behavior_scores for all known creators (avoids N+1 timeout) ──
+  const creatorWallets = [...new Set(
+    [...candidatesByMint.values()].map(c => c.creator_wallet).filter(Boolean) as string[]
+  )];
+  const devScoreByWallet = new Map<string, any>();
+  // chunk in 500s to stay under PostgREST in() limits
+  for (let i = 0; i < creatorWallets.length; i += 500) {
+    const chunk = creatorWallets.slice(i, i + 500);
+    const { data: rows } = await supabase
+      .from('dev_behavior_scores')
+      .select('wallet_address, dump_velocity_score, lp_pull_score, supply_retention_pct, risk_tier')
+      .in('wallet_address', chunk);
+    for (const r of rows ?? []) devScoreByWallet.set(r.wallet_address, r);
+  }
+
   // ── Classify + upsert ────────────────────────────────────────
   for (const c of candidatesByMint.values()) {
     try {
-      // Pull dev_behavior_scores for richer signals if creator known
-      let devScore: any = null;
-      if (c.creator_wallet) {
-        const { data } = await supabase
-          .from('dev_behavior_scores')
-          .select('dump_velocity_score, lp_pull_score, supply_retention_pct, risk_tier')
-          .eq('wallet_address', c.creator_wallet)
-          .maybeSingle();
-        devScore = data;
-      }
+      const devScore = c.creator_wallet ? devScoreByWallet.get(c.creator_wallet) : null;
 
       const { cause, confidence, matchedSignals } = classifyDeath({
         ageHours: c.age_hours ?? 0,
