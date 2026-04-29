@@ -34,6 +34,33 @@ export default function AutopsyArticle() {
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute('content', autopsy.subtitle);
 
+    // OG / Twitter meta tags
+    const absoluteImg = autopsy.heroImage.startsWith('http')
+      ? autopsy.heroImage
+      : `${typeof window !== 'undefined' ? window.location.origin : 'https://blackbox.farm'}${autopsy.heroImage}`;
+    const tags: Array<[string, string, string]> = [
+      ['property', 'og:title', autopsy.title],
+      ['property', 'og:description', autopsy.subtitle],
+      ['property', 'og:image', absoluteImg],
+      ['property', 'og:type', 'article'],
+      ['property', 'og:url', `https://blackbox.farm/autopsy/${autopsy.slug}`],
+      ['name', 'twitter:card', 'summary_large_image'],
+      ['name', 'twitter:title', autopsy.title],
+      ['name', 'twitter:description', autopsy.subtitle],
+      ['name', 'twitter:image', absoluteImg],
+    ];
+    const created: HTMLMetaElement[] = [];
+    tags.forEach(([attr, key, val]) => {
+      let el = document.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null;
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute(attr, key);
+        document.head.appendChild(el);
+        created.push(el);
+      }
+      el.setAttribute('content', val);
+    });
+
     const ld = document.createElement('script');
     ld.type = 'application/ld+json';
     ld.id = 'autopsy-jsonld';
@@ -43,12 +70,16 @@ export default function AutopsyArticle() {
       headline: autopsy.title,
       description: autopsy.subtitle,
       datePublished: autopsy.publishedAt,
+      image: absoluteImg,
       author: { '@type': 'Organization', name: 'BlackBox Farm / HoldersIntel' },
       publisher: { '@type': 'Organization', name: 'BlackBox Farm' },
       url: `https://blackbox.farm/autopsy/${autopsy.slug}`,
     });
     document.head.appendChild(ld);
-    return () => { document.getElementById('autopsy-jsonld')?.remove(); };
+    return () => {
+      document.getElementById('autopsy-jsonld')?.remove();
+      created.forEach((el) => el.remove());
+    };
   }, [autopsy]);
 
   if (!autopsy) return <Navigate to="/autopsy" replace />;
@@ -63,6 +94,17 @@ export default function AutopsyArticle() {
         <Link to="/autopsy" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
           <ArrowLeft className="h-4 w-4" /> All Autopsies
         </Link>
+
+        {/* Hero autopsy banner */}
+        <div className="rounded-xl overflow-hidden border border-destructive/30 mb-6 bg-black">
+          <img
+            src={autopsy.heroImage}
+            alt={`${autopsy.title} — forensic autopsy banner`}
+            width={1500}
+            height={500}
+            className="w-full h-auto block"
+          />
+        </div>
 
         {/* Header card (themed) */}
         <div className="rounded-xl border border-destructive/30 bg-card p-5 md:p-6 mb-6">
