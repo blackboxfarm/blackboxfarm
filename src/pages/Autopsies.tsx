@@ -28,6 +28,19 @@ export default function Autopsies() {
             Forensic post-mortems on coordinated rugs and exit-liquidity events.
             Every wallet, every transaction, every dollar — reconstructed from the Solana ledger.
           </p>
+          <div className="mt-6 max-w-3xl mx-auto rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-left">
+            <div className="flex items-start gap-3">
+              <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-destructive/15 text-destructive border-destructive/30 mt-0.5 shrink-0">
+                New
+              </Badge>
+              <p className="text-xs md:text-sm text-foreground/80 leading-relaxed">
+                <span className="font-semibold text-foreground">Brand-new public postings of our post-mortem reviews of fast & slow coin deaths.</span>{' '}
+                We have <span className="font-semibold text-destructive">thousands</span> queued to publish — every autopsy builds our back-end ledger
+                of good and bad devs, their socials, their KYC trails, and their dev wallets, so we all know a little something{' '}
+                <span className="italic">before we commit to an ape</span>.
+              </p>
+            </div>
+          </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
