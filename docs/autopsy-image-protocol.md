@@ -18,30 +18,45 @@ curl -s "https://api.dexscreener.com/latest/dex/tokens/<MINT>" \
 - Save the URL into `AutopsyEntry.sourceBanner` for provenance.
 - If the token has no DexScreener banner, fall back to: pump.fun image, then Helius metadata `image`.
 
-## Step 2 — Generate the autopsy treatment
+## Step 2 — Generate the autopsy treatment (v2 — DECORATE, DO NOT COVER)
 
-Use **Lovable AI image gen** (`google/gemini-2.5-flash-image` / `standard` tier).
-If `edit_image` against the source URL fails repeatedly, regenerate from scratch with `generate_image` using the locked prompt below — do NOT downgrade quality.
+The treatment is a **transparent forensic overlay** that decorates the EDGES and CORNERS of the original banner. The center 60% of the image must remain UNTOUCHED — the source ticker, mascot, and on-banner text must stay clearly identifiable.
 
-### Locked prompt template
+Use **Lovable AI image EDIT** (not generate) with `google/gemini-3-pro-image-preview`, passing the downloaded source banner as the input image. Never call generate_image from scratch — that produces a full replacement, which is forbidden.
 
-> A 1500×500 wide horizontal banner styled as a forensic TOKEN AUTOPSY evidence card. Center features **{{TOKEN_VISUAL_DESCRIPTION}}**. Around the edges: collage of vintage coroner/autopsy iconography — yellowed typewritten coroner report fragments with redacted black bars labeled CAUSE OF DEATH and CASE FILE, a chalk body outline, a toe-tag on string, clipboard with death certificate, magnifying glass and scalpel, red skull-and-crossbones ink stamps, yellow DO NOT CROSS crime-scene tape across one corner, blood-spatter ink stains, a crooked red EVIDENCE rubber stamp, barcode strip. Across an empty diagonal section, the text **"BLACKBOX AUTOPSY"** in bold military stencil font, rotated -45 degrees, deep blood-red with sprayed distressed spray-paint edges, dominant size with soft drop shadow. Dark moody color grade, distressed paper texture, premium forensic case-file aesthetic, photographic collage style, not cartoonish in execution.
+### Locked prompt template (v2)
+
+> EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner ({{TOKEN_VISUAL_DESCRIPTION}}) at full visibility. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
+>
+> ABSOLUTELY DO NOT: add any blob/mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; place the AUTOPSY stencil over the central subject.
+>
+> DO ADD as semi-transparent decorative elements layered ONLY around the edges and corners (60–75% opacity, banner shows through):
+> - Top-left: vintage CASE FILE coroner report card (faded, redacted black bars)
+> - Top-right: CAUSE OF DEATH toe-tag report (aged paper)
+> - Bottom-left: clipboard with DEATH CERTIFICATE, magnifying glass, scalpel
+> - Bottom-right: barcode + small EVIDENCE red rubber-stamp
+> - Scattered red skull stamps (small, ~60% opacity) in the dead corners
+> - One diagonal strip of yellow POLICE LINE / DO NOT CROSS tape across ONE bottom corner only
+> - A few red blood-spatter flecks around the edges
+> - Bold red military stencil "BLACKBOX AUTOPSY" rotated -45°, placed in the BOTTOM-RIGHT QUADRANT only, sprayed/distressed edges
+>
+> Final output 1536×512.
 
 ### Locked parameters
 
 | Parameter | Value |
 |---|---|
-| `model` | `standard` (or `google/gemini-2.5-flash-image` via gateway) |
+| `model` | `google/gemini-3-pro-image-preview` (image EDIT mode) |
+| Input image | downloaded source banner (NOT a URL — local file) |
 | `width` | `1536` |
 | `height` | `512` |
-| `transparent_background` | `false` |
 | Aspect ratio target | **3:1** (banner) |
-| Output format | `.jpg` (smaller, fine for collage) |
-| Output path | `public/autopsies/<slug>-autopsy.jpg` |
+| Output format | `.jpg` |
+| Output path | `public/autopsies/<slug>-autopsy-v2.jpg` |
 
 ### Variable injection
 
-Replace `{{TOKEN_VISUAL_DESCRIPTION}}` with a 1-sentence factual description of the source banner's central subject (e.g. "a stylized cartoonish dripping green testicle character with eyes — the GPT meme token mascot"). Keep ticker symbols and on-banner text out of this field — the stencil overlay handles branding.
+Replace `{{TOKEN_VISUAL_DESCRIPTION}}` with a 1-sentence factual description of what's already on the source banner (e.g. "four yellow stick-figure scenes with 'Greedy Pissing Testicle' text on black background"). This anchors the model on what to PRESERVE, not what to draw.
 
 ## Step 3 — Wire it into the autopsy entry
 
