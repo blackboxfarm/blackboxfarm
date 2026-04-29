@@ -39,11 +39,14 @@ Tier-C candidates with ATH < $10k are **dropped** (too noisy).
 
 ### Image overlay protocol
 
-Banner generation follows `docs/autopsy-image-protocol.md` v2:
-- Mode: image EDIT (never generate from scratch)
-- Source: DexScreener `pairs[0].info.header`
-- Output: `public/autopsies/<slug>-autopsy-v2.jpg`
+Banner generation is automated by the **`autopsy-banner-overlay`** edge function and follows `docs/autopsy-image-protocol.md` v2:
+- Mode: image EDIT via `google/gemini-3-pro-image-preview` (never generate from scratch)
+- Source: DexScreener `pairs[0].info.header` → fallback pump.fun `image_uri`
+- Output: uploaded to public Storage bucket **`autopsy-banners`** at `<slug>-autopsy-v2.jpg`
+- Persisted to `autopsy_reports.hero_image_path` (full public URL) + `source_banner_url`
 - Decoration only — center 60% must remain identifiable
+- Called automatically by `autopsy-writer` after every report insert (best-effort, non-blocking — admin can re-run via `/admin/autopsy-queue` "Banner" button)
+- Curated static autopsies (e.g. GPT) keep their bespoke `public/autopsies/*.jpg` paths
 
 ### Admin queue
 
