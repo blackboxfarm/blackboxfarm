@@ -10,6 +10,10 @@ export interface AutopsyEntry {
   mdPath: string;      // public path
   downloadName: string;
   tags: string[];
+  /** Autopsy-treated hero/OG image (1500x500-ish banner) — see docs/autopsy-image-protocol.md */
+  heroImage: string;
+  /** Original source banner the autopsy treatment was applied to (for provenance/regeneration) */
+  sourceBanner?: string;
 }
 
 export const AUTOPSIES: AutopsyEntry[] = [
@@ -25,6 +29,8 @@ export const AUTOPSIES: AutopsyEntry[] = [
     mdPath: '/autopsies/gpt-greedy-pissing-testicle.md',
     downloadName: 'GPT_Autopsy_BlackBoxFarm.md',
     tags: ['rug', 'pump.fun', 'atomic-snipe', 'coordinated-exit'],
+    heroImage: '/autopsies/gpt-greedy-pissing-testicle-autopsy.jpg',
+    sourceBanner: 'https://cdn.dexscreener.com/cms/images/5CFdN3bFcGLttRHB?width=1500&height=500&quality=95&format=auto',
   },
 ];
 
