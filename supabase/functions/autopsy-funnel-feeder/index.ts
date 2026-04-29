@@ -69,7 +69,8 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   const body = await req.json().catch(() => ({}));
-  const limit = Math.min(body.limit || 500, 2000);
+  // `limit` = per-source pull cap. We dedupe across sources so total unique can be lower.
+  const limit = Math.min(body.limit || 5000, 20000);
 
   const stats: FunnelStats = {
     source_token_lifecycle: 0,
