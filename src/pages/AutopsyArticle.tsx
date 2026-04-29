@@ -3,7 +3,7 @@ import { Link, useParams, Navigate } from 'react-router-dom';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Download, Skull, Calendar } from 'lucide-react';
+import { ArrowLeft, Download, Skull, Calendar, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import { SocialShareBar } from '@/components/intel/SocialShareBar';
@@ -83,6 +83,11 @@ export default function AutopsyArticle() {
                 <Download className="h-4 w-4" /> Download .md
               </Button>
             </a>
+            <Link to={`/autopsy/${autopsy.slug}/raw`} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <FileText className="h-4 w-4" /> View Raw
+              </Button>
+            </Link>
             <code className="text-[10px] md:text-xs px-2 py-1 rounded bg-muted text-muted-foreground break-all">
               {autopsy.mintAddress}
             </code>
