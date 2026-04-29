@@ -961,6 +961,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     const grew = count >= lastNodeCountRef.current + 2 || lastNodeCountRef.current === 0;
     lastNodeCountRef.current = count;
     if (!grew) return;
+    if (viewMode === 'schematic') {
+      const t = window.setTimeout(() => { try { schematicRef.current?.fitView(); } catch { /* noop */ } }, 300);
+      return () => clearTimeout(t);
+    }
     if (viewMode !== 'bubble' && viewMode !== 'tree') return;
     const timers: number[] = [];
     [400, 1200, 2400].forEach(delay => {
