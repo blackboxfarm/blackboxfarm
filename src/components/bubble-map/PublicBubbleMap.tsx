@@ -20,7 +20,7 @@ import { queueTokenFromFrontend } from "@/utils/queueTokenFromFrontend";
 import { dispatchThought, dispatchThoughtCustom } from "@/components/chat/AvatarThoughtBubble";
 import { SharedFundersPanel } from "./SharedFundersPanel";
 import BubbleMap3D from "./BubbleMap3D";
-import BubbleMapSchematic from "./BubbleMapSchematic";
+import BubbleMapSchematic, { type SchematicHandle } from "./BubbleMapSchematic";
 import SnapshotShareDialog from "./SnapshotShareDialog";
 import { DailyTraceInfo } from "./DailyTraceInfo";
 
@@ -39,6 +39,7 @@ interface PublicBubbleMapProps {
 const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: PublicBubbleMapProps) => {
   const navigate = useNavigate();
   const graphRef = useRef<any>();
+  const schematicRef = useRef<SchematicHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [searchInput, setSearchInput] = useState("");
   const [initialTokenLoaded, setInitialTokenLoaded] = useState(false);
