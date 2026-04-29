@@ -94,6 +94,10 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
     if (type === 'x_community') {
       const name = evidence.community_name || evidence.name || evidence.title;
       if (name) return name.length > 18 ? name.slice(0, 16) + '…' : name;
+      // handle-as-community fallback
+      if (evidence.fallback === 'handle_as_community' && evidence.handle) {
+        return `@${evidence.handle} (community)`;
+      }
     }
     if (type === 'telegram_channel') {
       const title = evidence.channel_title || evidence.title || evidence.name;
@@ -118,6 +122,7 @@ const getNodeLabel = (id: string, type: string, evidence?: any) => {
   // Default friendly labels by type
   if (type === 'token') return `$${id.length > 8 ? id.slice(0, 6) + '…' : id}`;
   if (type === 'x_account') return `@${id.replace(/^@/, '')}`;
+  if (type === 'x_community' && id.startsWith('handle:')) return `@${id.slice(7)} (community)`;
   if (type === 'x_user') return `X:${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'telegram_channel') return `TG ${id.length > 12 ? id.slice(0, 10) + '…' : id}`;
   if (type === 'kyc_root') return `KYC ${id.length > 12 ? id.slice(0, 8) + '…' : id}`;
