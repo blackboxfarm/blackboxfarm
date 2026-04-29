@@ -30,7 +30,6 @@ const corsHeaders = {
 };
 
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-const LOVABLE_IMAGE_URL = 'https://ai.gateway.lovable.dev/v1/images/edits';
 
 function slugify(s: string): string {
   return s.toLowerCase()
@@ -220,6 +219,35 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
 
       const drafted = (insertedRows as { id: string; slug: string });
 
+      // ── Banner overlay (best-effort, non-blocking) ──────────
+      try {
+        const overlayRes = await fetch(
+          `${Deno.env.get('SUPABASE_URL')}/functions/v1/autopsy-banner-overlay`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({
+              slug: drafted.slug,
+              token_mint: c.token_mint,
+              ticker,
+              report_id: drafted.id,
+            }),
+          },
+        );
+        if (!overlayRes.ok) {
+          console.warn(`[autopsy-writer] banner overlay non-OK ${overlayRes.status} for ${drafted.slug}`);
+        } else {
+          const ovr = await overlayRes.json();
+          console.log(`[autopsy-writer] banner ready: ${ovr.hero_image_url}`);
+        }
+      } catch (bannerErr: any) {
+        console.warn(`[autopsy-writer] banner overlay failed for ${drafted.slug}:`, bannerErr?.message);
+        // Don't fail the draft — admin can retry banner from the queue.
+      }
+
       // ── Update candidate ─────────────────────────────────────
       const autoPublish = shouldAutoPublish(c.death_cause as DeathCauseId, c.death_confidence ?? 0);
       await assertUpdate(
@@ -248,5 +276,3 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 }));
-
-void LOVABLE_IMAGE_URL; // image-overlay step is part of v2 publish path (separate function)
