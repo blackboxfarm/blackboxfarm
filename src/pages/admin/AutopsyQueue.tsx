@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Skull, RefreshCw, Play, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Skull, RefreshCw, Play, CheckCircle2, XCircle, Clock, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -97,6 +97,31 @@ export default function AutopsyQueue() {
     else load();
   }
 
+  async function regenBanner(c: Candidate) {
+    if (!c.published_slug) {
+      toast({ title: 'No slug yet', description: 'Draft the autopsy first.', variant: 'destructive' });
+      return;
+    }
+    setBusy(c.id);
+    // Look up the report row to get the report_id
+    const { data: report } = await supabase
+      .from('autopsy_reports')
+      .select('id')
+      .eq('slug', c.published_slug)
+      .maybeSingle();
+    const { error } = await supabase.functions.invoke('autopsy-banner-overlay', {
+      body: {
+        slug: c.published_slug,
+        token_mint: c.token_mint,
+        ticker: c.ticker,
+        report_id: report?.id,
+      },
+    });
+    setBusy(null);
+    if (error) toast({ title: 'Banner failed', description: error.message, variant: 'destructive' });
+    else toast({ title: 'Banner regenerated' });
+  }
+
   return (
     <SiteLayout>
       <div className="container mx-auto px-4 py-10 max-w-7xl">
@@ -167,6 +192,11 @@ export default function AutopsyQueue() {
                     <Button size="sm" onClick={() => decide(c.id, 'approved')} disabled={busy === c.id}>Approve</Button>
                     <Button size="sm" variant="ghost" onClick={() => decide(c.id, 'rejected')} disabled={busy === c.id}>Reject</Button>
                   </>
+                )}
+                {c.published_slug && ['drafted', 'approved', 'published'].includes(c.status) && (
+                  <Button size="sm" variant="ghost" onClick={() => regenBanner(c)} disabled={busy === c.id} title="Regenerate banner overlay">
+                    <ImageIcon className="h-3 w-3 mr-1" /> Banner
+                  </Button>
                 )}
               </div>
             </Card>
