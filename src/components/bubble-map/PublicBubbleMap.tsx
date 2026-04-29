@@ -430,35 +430,37 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       return;
     }
 
+    // Always open the discovery terminal — gives users live feedback during the
+    // wait whether or not we already have hidden x_account nodes cached.
+    setTerminalTitle('X COMMUNITY DISCOVERY');
+    setTerminalVisible(true);
+    clearTerminal();
+    const intro: Array<[string, TerminalLine['type'], number]> = [
+      ['> initiating X Community discovery protocol...', 'info', 0],
+      [`> target mint: ${tokenMint.slice(0, 8)}...${tokenMint.slice(-6)}`, 'info', 250],
+      ['> scraping token metadata + DexScreener payload...', 'info', 600],
+      ['> extracting candidate X handles from socials...', 'info', 1100],
+      ['> resolving community ID via x.com lookup...', 'info', 1700],
+      ['> mapping creator → admins → moderators...', 'info', 2300],
+      ['> cross-checking handle recycling registry...', 'info', 2900],
+      ['> linking community nodes to mesh graph...', 'highlight', 3500],
+    ];
+    intro.forEach(([text, type, delay]) => {
+      setTimeout(() => addTerminalLine(text, type), delay);
+    });
+
     // If we already have x_account nodes hidden — do the dramatic reveal instead
     const hiddenXAccounts = graphData.nodes.filter(n => n.type === 'x_account');
     if (hiddenXAccounts.length > 0 && !xAccountsRevealed) {
       setRevealingXAccounts(true);
-      setTerminalTitle('X COMMUNITY SCANNER');
-      setTerminalVisible(true);
-      clearTerminal();
-
-      // Dramatic terminal sequence
-      const lines: Array<[string, TerminalLine['type'], number]> = [
-        ['INITIATING X COMMUNITY SCAN...', 'info', 0],
-        [`TARGET: ${tokenMint.slice(0, 16)}...`, 'info', 400],
-        ['SCANNING SOCIAL GRAPH DATABASE...', 'info', 800],
-        ['CROSS-REFERENCING COMMUNITY ROSTERS...', 'info', 1200],
-        [`MATCH FOUND — ${hiddenXAccounts.length} HANDLES IDENTIFIED`, 'success', 1800],
-      ];
-
-      // Add each handle discovery line
+      const baseDelay = 4000;
+      setTimeout(() => addTerminalLine(`✓ MATCH — ${hiddenXAccounts.length} cached handles identified`, 'success'), baseDelay);
       hiddenXAccounts.forEach((node, i) => {
         const handle = (node.label || node.fullId || node.id).replace(/^x_account:/, '').replace(/^@/, '');
-        lines.push([`  └─ @${handle} ... MAPPED ✓`, 'highlight', 2000 + i * 300]);
+        setTimeout(() => addTerminalLine(`  └─ @${handle} … LINKED`, 'highlight'), baseDelay + 400 + i * 250);
       });
-      lines.push(['COMMUNITY MAPPING COMPLETE', 'success', 2000 + hiddenXAccounts.length * 300 + 400]);
-
-      for (const [text, type, delay] of lines) {
-        setTimeout(() => addTerminalLine(text, type), delay);
-      }
-
-      const totalDelay = 2000 + hiddenXAccounts.length * 300 + 800;
+      const totalDelay = baseDelay + 400 + hiddenXAccounts.length * 250 + 600;
+      setTimeout(() => addTerminalLine('✓ COMMUNITY MESH MAPPING COMPLETE', 'success'), totalDelay - 200);
       setTimeout(() => {
         setXAccountsRevealed(true);
         setRevealingXAccounts(false);
@@ -488,10 +490,28 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     try {
       const walletNode = graphData.nodes.find(n => n.type === 'wallet');
       const wallet = walletNode?.fullId || walletNode?.id.replace(/^wallet:/, '');
+      const beforeNodeCount = graphData.nodes.filter(n => n.type === 'x_account' || n.type === 'x_community').length;
       await autoDiscoverCommunity(tokenMint, wallet);
       setTimeout(() => refetch(), 1500);
+      // After API resolves, dump real outcome to terminal at the end of the intro reel
+      setTimeout(() => {
+        const afterNodes = (graphRef.current?.graphData?.()?.nodes || []) as any[];
+        const found = afterNodes.filter(n => n.type === 'x_account' || n.type === 'x_community').length;
+        const delta = Math.max(0, found - beforeNodeCount);
+        if (delta > 0) {
+          addTerminalLine(`✓ DISCOVERED ${delta} new X entities (community + accounts)`, 'success');
+          addTerminalLine('✓ COMMUNITY MESH MAPPING COMPLETE', 'success');
+          toast.success(`🐦 ${delta} new X Community entities mapped!`);
+        } else {
+          addTerminalLine('⚠ no new X entities surfaced — token may have no community yet', 'error');
+          addTerminalLine('  → check that this token has an X Community link in its socials', 'info');
+        }
+        setTimeout(() => setTerminalVisible(false), 3500);
+      }, 4200);
       dispatchThoughtCustom("community mapped ✓");
     } catch (err) {
+      addTerminalLine('✗ discovery failed — see console for details', 'error');
+      setTimeout(() => setTerminalVisible(false), 3000);
       dispatchThoughtCustom("X Community discovery failed");
     } finally {
       setCommunitySearching(false);
