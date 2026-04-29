@@ -122,15 +122,6 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
     }
   }, [viewMode, solarMode]);
 
-  // Auto recenter / fit when the user switches view mode or solar mode.
-  // For ForceGraph2D we call zoomToFit; React-Flow / 3D handle their own fitView.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      fitGraph(600);
-    }, 350);
-    return () => clearTimeout(t);
-  }, [viewMode, solarMode, schematicMode, fitGraph]);
-
   const lastNodeCountRef = useRef(0);
 
   // Shared responsive auto-fit. Mobile fills ~80% of canvas; desktop ~50%
@@ -157,6 +148,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       });
     } catch { /* noop */ }
   }, [viewMode]);
+
+  // Auto recenter / fit when the user switches view mode or solar mode.
+  // For ForceGraph2D we call zoomToFit; React-Flow / 3D handle their own fitView.
+  useEffect(() => {
+    const t = setTimeout(() => { fitGraph(600); }, 350);
+    return () => clearTimeout(t);
+  }, [viewMode, solarMode, schematicMode, fitGraph]);
 
   // --- Zoom controls (in-frame) ---
   const handleZoomIn = useCallback(() => {
