@@ -26,6 +26,7 @@ const BASE_NAV_ITEMS = [
   { label: 'Holder Analysis', path: '/holders' },
   { label: 'Bubble Map', path: '/bubblepromo' },
   { label: 'Telegram Bot', path: '/tgbot' },
+  { label: '💀 Autopsies', path: '/autopsy' },
 ];
 
 export function SiteLayout({ children }: { children: React.ReactNode }) {
