@@ -45,12 +45,12 @@ Banner generation is automated by the **`autopsy-banner-overlay`** edge function
 - Output: uploaded to public Storage bucket **`autopsy-banners`** at `<slug>-autopsy-v2.jpg`
 - Persisted to `autopsy_reports.hero_image_path` (full public URL) + `source_banner_url`
 - Decoration only — center 60% must remain identifiable
-- Called automatically by `autopsy-writer` after every report insert (best-effort, non-blocking — admin can re-run via `/admin/autopsy-queue` "Banner" button)
+- Called automatically by `autopsy-writer` after every report insert (best-effort, non-blocking — admin can re-run via `/super-admin/autopsy-queue` "Banner" button)
 - Curated static autopsies (e.g. GPT) keep their bespoke `public/autopsies/*.jpg` paths
 
 ### Admin queue
 
-`/admin/autopsy-queue` (SuperAdminRoute-gated) — review Tier-B drafts, approve/reject, manually trigger funnel + writer.
+`/super-admin/autopsy-queue` (SuperAdminRoute-gated) — review Tier-B drafts, approve/reject, manually trigger funnel + writer.
 
 ### Public rendering
 
