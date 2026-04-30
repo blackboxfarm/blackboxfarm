@@ -178,8 +178,9 @@ export default function CoolDeathsBacklog() {
         {filtered?.map(r => {
           const symbol = cleanTokenText(r.symbol, 'symbol');
           const name = cleanTokenText(r.name, 'name');
+          const isLocked = !!r.drafted_slug || !!r.drafted_at;
           return (
-          <Card key={r.token_mint} className="p-3">
+          <Card key={r.token_mint} className={`p-3 transition-colors ${isLocked ? 'bg-muted/40 border-primary/30 opacity-80' : ''}`}>
             <div className="flex items-start gap-4 flex-wrap">
               <div className="flex-1 min-w-[200px]">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -188,7 +189,7 @@ export default function CoolDeathsBacklog() {
                   {r.death_cause && (
                     <Badge variant="outline" className="text-[10px]">{r.death_cause}</Badge>
                   )}
-                  {r.drafted_slug && (
+                  {isLocked && (
                     <Badge className="text-[10px]">Drafted</Badge>
                   )}
                 </div>
@@ -211,9 +212,13 @@ export default function CoolDeathsBacklog() {
                 <Stat label="Holders" value={r.holder_count?.toLocaleString() ?? '—'} />
               </div>
               <div className="flex gap-1 flex-wrap">
-                <Button size="sm" disabled={busy === r.token_mint || !!r.drafted_slug}
-                  onClick={() => draftAutopsy(r)}>
-                  <FileText className="h-3 w-3 mr-1" /> {r.drafted_slug ? 'Drafted' : 'Generate Report'}
+                <Button
+                  size="sm"
+                  variant={isLocked ? 'outline' : 'default'}
+                  disabled={busy === r.token_mint || isLocked}
+                  onClick={() => draftAutopsy(r)}
+                >
+                  <FileText className="h-3 w-3 mr-1" /> {isLocked ? 'Drafted' : 'Generate Report'}
                 </Button>
                 <Button size="sm" variant="outline" disabled={busy === r.token_mint}
                   onClick={() => deleteRow(r)}
