@@ -105,6 +105,7 @@ export default function LiveDeathWatch() {
       hydratingRef.current = true;
       supabase.functions.invoke('autopsy-live-death-hydrator', { body: { tokenMints: missingMetadata.slice(0, 40) } })
         .then(({ data }) => { if (data?.updated > 0) load(); })
+        .catch(() => {})
         .finally(() => { hydratingRef.current = false; });
     }
   }
