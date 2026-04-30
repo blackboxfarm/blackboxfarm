@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Skull, FileText, ArrowUpCircle } from 'lucide-react';
+import { Skull, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -19,6 +19,7 @@ interface DeathRow {
   current_mcap_usd: number | null;
   current_price_usd: number | null;
   liquidity_usd: number | null;
+  volume_24h: number | null;
   holder_count: number | null;
   health_grade: string | null;
   health_score: number | null;
@@ -66,9 +67,11 @@ function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleString();
 }
 
-function shortMint(m: string): string {
-  if (!m) return '—';
-  return `${m.slice(0, 4)}…${m.slice(-4)}`;
+function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name'): string | null {
+  const v = value?.trim();
+  if (!v) return null;
+  const bad = kind === 'symbol' ? ['unknown', 'unk', 'token'] : ['unknown', 'unknown token', 'token'];
+  return bad.includes(v.toLowerCase()) ? null : v;
 }
 
 export default function LiveDeathWatch() {
@@ -77,6 +80,7 @@ export default function LiveDeathWatch() {
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [causeFilter, setCauseFilter] = useState<string>('all');
+  const hydratingRef = useRef(false);
 
   async function load() {
     setRows(null);
@@ -91,7 +95,19 @@ export default function LiveDeathWatch() {
       setRows([]);
       return;
     }
-    setRows((data ?? []) as DeathRow[]);
+    const list = (data ?? []) as DeathRow[];
+    setRows(list);
+
+    const missingMetadata = list
+      .filter(r => !cleanTokenText(r.symbol, 'symbol') || !cleanTokenText(r.name, 'name'))
+      .map(r => r.token_mint);
+    if (missingMetadata.length > 0 && !hydratingRef.current) {
+      hydratingRef.current = true;
+      supabase.functions.invoke('autopsy-live-death-hydrator', { body: { tokenMints: missingMetadata.slice(0, 40) } })
+        .then(({ data }) => { if (data?.updated > 0) load(); })
+        .catch(() => {})
+        .finally(() => { hydratingRef.current = false; });
+    }
   }
 
   useEffect(() => { load(); }, []);
@@ -118,11 +134,12 @@ export default function LiveDeathWatch() {
     setBusy(r.token_mint);
     // All candidates start at Tier B (review state). Promotion to Tier A
     // (auto-publish) is a separate manual step elsewhere.
+    const ticker = cleanTokenText(r.symbol, 'symbol');
     const { data: cand, error: insErr } = await supabase
       .from('autopsy_candidates')
       .upsert({
         token_mint: r.token_mint,
-        ticker: r.symbol,
+        ticker,
         tier: 'B',
         source_feed: 'live_death_watch',
         candidate_score: Math.round((r.collapse_pct ?? 0) * 100),
@@ -207,13 +224,16 @@ export default function LiveDeathWatch() {
 
       <div className="space-y-2">
         {filtered?.map(r => {
+          const symbol = cleanTokenText(r.symbol, 'symbol');
+          const name = cleanTokenText(r.name, 'name');
+          const deathAt = r.death_at ?? r.latest_at;
           return (
             <Card key={r.token_mint} className="p-3">
               <div className="flex items-start gap-4 flex-wrap">
                 <div className="flex-1 min-w-[200px]">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold">{r.symbol ? `$${r.symbol}` : shortMint(r.token_mint)}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[160px]">{r.name ?? ''}</span>
+                    <span className="font-semibold">{symbol ? `$${symbol}` : 'Resolving ticker…'}</span>
+                    {name && <span className="text-xs text-muted-foreground truncate max-w-[160px]">{name}</span>}
                     {r.health_grade && (
                       <Badge variant="outline" className="text-[10px]">{r.health_grade} {r.health_score ? `(${r.health_score})` : ''}</Badge>
                     )}
@@ -226,15 +246,16 @@ export default function LiveDeathWatch() {
                   </div>
                   <div className="text-[10px] text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                     <span title={fmtDate(r.ath_at)}>📈 ATH: {fmtAgo(r.ath_at)}</span>
-                    <span title={fmtDate(r.death_at)} className="text-destructive">💀 Died: {fmtAgo(r.death_at) }{r.death_at ? '' : ' (no death event yet)'}</span>
+                    <span title={fmtDate(deathAt)} className="text-destructive">💀 Dead: {fmtAgo(deathAt)}</span>
                     <span title={fmtDate(r.latest_at)}>🕒 Last price: {fmtAgo(r.latest_at)}</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs flex-1 min-w-[400px]">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs flex-1 min-w-[400px]">
                   <Stat label="ATH MCap" value={fmtUsd(r.ath_usd)} />
                   <Stat label="Now" value={fmtUsd(r.current_mcap_usd)} />
                   <Stat label="Collapse" value={fmtPct(r.collapse_pct)} accent={r.collapse_pct && r.collapse_pct > 0.9 ? 'text-destructive' : undefined} />
                   <Stat label="Liq" value={fmtUsd(r.liquidity_usd)} />
+                  <Stat label="24h Vol" value={fmtUsd(r.volume_24h)} />
                   <Stat label="Holders" value={r.holder_count?.toLocaleString() ?? '—'} />
                 </div>
                 <TooltipProvider delayDuration={200}>
