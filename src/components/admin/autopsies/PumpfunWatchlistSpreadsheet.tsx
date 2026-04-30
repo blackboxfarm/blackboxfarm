@@ -11,6 +11,35 @@ import { useToast } from '@/hooks/use-toast';
 
 type WatchlistRow = Database['public']['Tables']['pumpfun_watchlist']['Row'];
 
+// Derived per-token decision data joined from sibling tables.
+type DerivedRow = {
+  // token_health_snapshots (latest)
+  snap_total_holders?: number | null;
+  snap_real_holders?: number | null;
+  snap_health_grade?: string | null;
+  snap_health_score?: number | null;
+  snap_top10_pct?: number | null;
+  snap_dust_pct?: number | null;
+  snap_at?: string | null;
+  // holders_intel_seen_tokens
+  seen_was_posted?: boolean | null;
+  seen_times_posted?: number | null;
+  seen_health_grade?: string | null;
+  seen_mcap_at_discovery?: number | null;
+  // token_lifecycle
+  lc_ath_24h_usd?: number | null;
+  lc_autopsy_at?: string | null;
+  lc_death_cause?: string | null;
+  // funnel_feed_discoveries (latest)
+  disc_mesh_status?: string | null;
+  disc_watchlist_status?: string | null;
+  disc_xpost_status?: string | null;
+  disc_source_name?: string | null;
+};
+type AugmentedRow = WatchlistRow & DerivedRow & { __decision_score?: number };
+
+// Columns whose values are JSON/objects and not meaningfully sortable
+
 const PAGE_SIZE = 1000;
 const ROWS_PER_PAGE = 50;
 
