@@ -98,6 +98,9 @@ interface TokenMetrics {
   liquidityUsd: number | null;
   marketCapUsd: number | null;
   bondingCurvePct: number | null;
+  athMarketCapUsd?: number | null;
+  athMarketCapAt?: string | null;
+  isGraduated?: boolean;
   buys: number;
   sells: number;
 }
@@ -336,13 +339,11 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
     const data = await fetchPumpFunCoin(mint, 'watchlist-monitor');
 
     if (data) {
-      const virtualSolReserves = data.virtual_sol_reserves || 0;
-      const virtualTokenReserves = data.virtual_token_reserves || 0;
       const totalSupply = data.total_supply || 1000000000000000;
       const priceUsd = data.usd_market_cap ? data.usd_market_cap / (totalSupply / 1e6) : null;
-      const bondingCurveTokens = virtualTokenReserves / 1e6;
-      const maxBondingCurveTokens = 800000000;
-      const bondingCurvePct = Math.min(100, Math.max(0, (bondingCurveTokens / maxBondingCurveTokens) * 100));
+      const bondingCurvePct = curveProgressFromPump(data);
+      const athMarketCapUsd = Number(data.ath_market_cap ?? NaN);
+      const athMarketCapAtMs = Number(data.ath_market_cap_timestamp ?? NaN);
       
       return {
         holders: data.holder_count || 0,
@@ -350,7 +351,10 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
         priceUsd,
         liquidityUsd: null, // Cannot derive USD from SOL reserves without live price — use null
         marketCapUsd: data.usd_market_cap || null,
-        bondingCurvePct: data.complete ? 0 : bondingCurvePct,
+        bondingCurvePct,
+        athMarketCapUsd: Number.isFinite(athMarketCapUsd) ? athMarketCapUsd : (data.usd_market_cap || null),
+        athMarketCapAt: Number.isFinite(athMarketCapAtMs) ? new Date(athMarketCapAtMs).toISOString() : null,
+        isGraduated: data.complete === true || Boolean(data.raydium_pool),
         buys: data.buy_count || 0,
         sells: data.sell_count || 0,
       };
