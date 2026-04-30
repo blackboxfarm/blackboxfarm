@@ -9,9 +9,6 @@ import { useToast } from '@/hooks/use-toast';
 import AutopsyCandidateRow, { type Candidate } from './AutopsyCandidateRow';
 import DeathTaxonomyModal from './DeathTaxonomyModal';
 
-const PUMPFUN_GRADUATION_MCAP_USD = 69_000;
-const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = PUMPFUN_GRADUATION_MCAP_USD * 0.75;
-
 type SortKey =
   | 'score_desc'
   | 'curve_desc'
@@ -64,8 +61,6 @@ export default function AutopsyQueueBody() {
       .eq('source_feed', 'pumpfun_curve_death')
       .gte('bonding_curve_pct', 75)
       .lt('bonding_curve_pct', 100)
-      .gte('ath_mcap_usd', PUMPFUN_LAMB_MIN_ATH_MCAP_USD)
-      .lt('ath_mcap_usd', PUMPFUN_GRADUATION_MCAP_USD)
       .order('candidate_score', { ascending: false })
       .limit(100);
     if (filter !== 'all') q = q.eq('tier', filter);
@@ -142,7 +137,7 @@ export default function AutopsyQueueBody() {
             <Skull className="h-5 w-5 text-destructive" /> Autopsy Queue — Lambs
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Pump.fun curve-death candidates only · live pump.fun ATH ≥ 75% curve and &lt; graduation · never graduated · auto-publish disabled.
+            Pump.fun curve-death candidates only · peak curve ≥75% and &lt;100% · never graduated · ATH mcap is context only.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
