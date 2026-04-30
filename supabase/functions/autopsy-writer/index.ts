@@ -297,17 +297,18 @@ ${clusterRugs >= 3 ? `- The creator cluster has ${clusterRugs} prior rugs/abando
 - Death cause: ${causeDef.label} (${causeDef.id})
 - Intent: ${causeDef.intent}
 - Verdict tag: ${causeDef.verdict}
-- Confidence: ${c.death_confidence}/100
-- Matched signals: ${JSON.stringify(c.matched_signals)}
+- Confidence: ${confidence}/100
+- Matched signals: ${JSON.stringify(matchedSignals)}
 
 ## TOKEN
 Mint: ${c.token_mint}
 Ticker: ${ticker}
 Name: ${tokenName}
 ATH MCap USD: ${c.ath_mcap_usd ?? 'unknown'}
-Current MCap USD: ${c.current_mcap_usd ?? 'unknown'}
-Liquidity USD: ${c.liquidity_usd ?? 'unknown'}
-Lifetime hours: ${c.age_hours?.toFixed(2) ?? 'unknown'}
+ATH MCap USD: ${athMcap ?? 'unknown'}
+Current MCap USD: ${currentMcap ?? 'unknown'}
+Liquidity USD: ${liquidityUsd ?? 'unknown'}
+Lifetime hours: ${ageHours?.toFixed(2) ?? 'unknown'}
 Creator wallet: ${creatorWallet ?? 'unknown'}
 
 ## SOCIAL STACK (enrichment)
@@ -383,10 +384,10 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
           title: `${ticker} — ${tokenName}`,
           subtitle,
           verdict: causeDef.verdict,
-          risk_score: c.death_confidence ? `${Math.round(c.death_confidence / 10)}/10` : null,
-          death_cause: c.death_cause ?? 'unclassified',
-          death_intent: c.death_intent ?? null,
-          death_confidence: c.death_confidence,
+          risk_score: confidence ? `${Math.round(confidence / 10)}/10` : null,
+          death_cause: causeId,
+          death_intent: causeDef.intent,
+          death_confidence: confidence,
           md_content: md,
           md_path: `/autopsies/${slug}.md`,
           tags: [causeDef.intent, causeDef.id],
@@ -427,7 +428,7 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
       }
 
       // ── Update candidate ─────────────────────────────────────
-      const autoPublish = shouldAutoPublish(c.death_cause as DeathCauseId, c.death_confidence ?? 0);
+      const autoPublish = shouldAutoPublish(causeId as DeathCauseId, confidence ?? 0);
       await assertUpdate(
         supabase.from('autopsy_candidates').update({
           status: autoPublish ? 'approved' : 'drafted',
