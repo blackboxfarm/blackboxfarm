@@ -992,6 +992,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         const watchingMinutes = watchingMinutesNow;
         const newMetricsHash = `${metrics.holders}-${metrics.volume24hSol.toFixed(4)}-${metrics.priceUsd?.toFixed(8) || '0'}`;
         const isStale = token.metrics_hash === newMetricsHash;
+        const previousAthMcap = Number(token.ath_market_cap_usd ?? ((token.price_ath_usd || 0) * 1_000_000_000) ?? 0);
+        const observedAthMcap = Math.max(previousAthMcap, metrics.athMarketCapUsd ?? metrics.marketCapUsd ?? 0);
+        const previousAthCurve = Number(token.ath_bonding_curve_pct ?? token.bonding_curve_pct ?? 0);
+        const observedAthCurve = Math.max(previousAthCurve, metrics.bondingCurvePct ?? 0);
+        const athMcapAdvanced = observedAthMcap > previousAthMcap;
 
         const updates: any = {
           last_checked_at: now.toISOString(),
@@ -1006,13 +1011,16 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           market_cap_usd: metrics.marketCapUsd,
           liquidity_usd: metrics.liquidityUsd,
           bonding_curve_pct: metrics.bondingCurvePct,
+          ath_bonding_curve_pct: observedAthCurve || null,
+          ath_market_cap_usd: observedAthMcap || null,
+          ath_market_cap_at: metrics.athMarketCapAt ?? (athMcapAdvanced ? now.toISOString() : token.ath_market_cap_at),
           holder_count_peak: Math.max(token.holder_count_peak || 0, metrics.holders),
           price_ath_usd: Math.max(token.price_ath_usd || 0, metrics.priceUsd || 0),
           metrics_hash: newMetricsHash,
           consecutive_stale_checks: isStale ? (token.consecutive_stale_checks || 0) + 1 : 0,
           last_processor: 'watchlist-monitor-v2',
-          is_graduated: metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5,
-          graduated_at: (metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5 && !token.is_graduated) 
+          is_graduated: metrics.isGraduated === true,
+          graduated_at: (metrics.isGraduated === true && !token.is_graduated) 
             ? now.toISOString() : token.graduated_at,
         };
 
