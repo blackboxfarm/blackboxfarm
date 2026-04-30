@@ -59,11 +59,29 @@ export default function DeathTaxonomyModal() {
         <DialogHeader>
           <DialogTitle>Death-Cause Taxonomy</DialogTitle>
           <DialogDescription>
-            Every dead token gets classified into one of these 15 causes. Tier governs the publish path:
-            Tier-A auto-publishes on confidence threshold, Tier-B queues for admin approval, Tier-C is skipped unless flagged.
+            Every Lamb (pump.fun token that died at ≥75% bonding curve) is classified into one of these causes.
+            Auto-publish is currently DISABLED on every tier — every report goes through manual approval until we've reviewed quality.
+            Tokens below 75% curve ATH or with NULL curve data are ignored entirely (not logged, not surfaced).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 mt-2">
+          <section className="border border-amber-500/30 bg-amber-500/5 rounded-md p-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-amber-500 mb-2">Bad-Dev vs Sad-Dev</h3>
+            <p className="text-sm text-foreground/90 mb-2">
+              A creator running 20 linked wallets, dripping sells into every fresh buy, letting the token bleed from 80%
+              back down to 70% and walking away — that's <strong className="text-destructive">NOT</strong> a sad dev.
+              That's <code className="text-xs">curve_wallet_washer</code> (Tier-A, malicious).
+            </p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">Bad Dev signals:</strong> creator wallet linked to ≥3 prior dead tokens
+              AND token shows linked_wallet_count &gt; 5 OR bundled_buy_count &gt; 0. Sustained dev_holding_pct while
+              price collapses is a tell — they're hiding behind cluster wallets.
+              <br />
+              <strong className="text-foreground">Sad Dev (ignored):</strong> creator's prior tokens just organically faded
+              with no wash patterns and no linked-wallet sells. We don't autopsy these — boring failures aren't worth
+              warning about. We only autopsy <em>warnings</em>.
+            </p>
+          </section>
           {INTENT_GROUPS.map((g) => {
             const causes = DEATH_TAXONOMY_CLIENT.filter((c) => c.intent === g.intent);
             if (!causes.length) return null;

@@ -19,7 +19,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { assertUpsert } from '../_shared/db-assert.ts';
-import { classifyDeath, DEATH_TAXONOMY, tierFor, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
+import { classifyDeath, classifyCurveDeath, DEATH_TAXONOMY, tierFor, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -95,6 +95,14 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     liquidity_usd?: number;
     age_hours?: number;
     creator_wallet?: string;
+    bonding_curve_pct?: number;
+    dev_sold?: boolean | null;
+    dev_holding_pct?: number | null;
+    linked_wallet_count?: number | null;
+    bundled_buy_count?: number | null;
+    price_peak?: number | null;
+    price_current?: number | null;
+    image_url?: string | null;
   }>();
 
   // ── 1. token_lifecycle dead floor ─────────────────────────────
@@ -120,26 +128,48 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     stats.source_token_lifecycle++;
   }
 
-  // ── 2. pumpfun_watchlist dead ─────────────────────────────────
-  const { data: pfDead } = await supabase
+  // ── 2. pumpfun_watchlist Lambs (≥75% curve ATH, never graduated) ─────
+  // Anything below 75% curve ATH or with NULL curve % is silently dropped.
+  // These are "curve deaths" — pump.fun tokens that reached meaningful peak
+  // before dying on the bonding curve without graduating to Raydium.
+  const { data: pfLambs } = await supabase
     .from('pumpfun_watchlist')
-    .select('token_mint, token_symbol, token_name, market_cap_usd, liquidity_usd, creator_wallet, first_seen_at, status, removal_reason')
+    .select(`
+      token_mint, token_symbol, token_name, market_cap_usd, liquidity_usd,
+      creator_wallet, first_seen_at, status, removal_reason, bonding_curve_pct,
+      dev_sold, dev_holding_pct, linked_wallet_count, bundled_buy_count,
+      price_peak, price_current, price_ath_usd, image_url, is_graduated
+    `)
     .eq('status', 'dead')
+    .not('is_graduated', 'is', true)
+    .gte('bonding_curve_pct', 75)
     .not('token_mint', 'is', null)
     .limit(limit);
 
-  for (const t of pfDead ?? []) {
+  for (const t of pfLambs ?? []) {
     if (!t.token_mint) continue;
     const ageHours = t.first_seen_at ? (Date.now() - new Date(t.first_seen_at).getTime()) / 3600000 : 0;
     const existing = candidatesByMint.get(t.token_mint);
+    // Curve deaths win source attribution — they're our highest-signal feed.
     candidatesByMint.set(t.token_mint, {
-      ...(existing ?? { token_mint: t.token_mint, source_feed: 'pumpfun_watchlist' }),
+      ...(existing ?? {}),
+      token_mint: t.token_mint,
+      source_feed: 'pumpfun_curve_death',
       ticker: t.token_symbol ?? existing?.ticker,
       token_name: t.token_name ?? existing?.token_name,
+      ath_mcap_usd: existing?.ath_mcap_usd ?? (t.price_ath_usd ?? undefined),
       current_mcap_usd: t.market_cap_usd ?? existing?.current_mcap_usd,
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
+      bonding_curve_pct: t.bonding_curve_pct ?? undefined,
+      dev_sold: t.dev_sold,
+      dev_holding_pct: t.dev_holding_pct,
+      linked_wallet_count: t.linked_wallet_count,
+      bundled_buy_count: t.bundled_buy_count,
+      price_peak: t.price_peak,
+      price_current: t.price_current,
+      image_url: t.image_url ?? null,
     });
     if (!existing) stats.source_pumpfun_watchlist++;
   }
@@ -186,21 +216,64 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     for (const r of rows ?? []) devScoreByWallet.set(r.wallet_address, r);
   }
 
+  // ── Batch count: prior dead tokens per creator (used by curve_wallet_washer) ──
+  const priorDeadByCreator = new Map<string, number>();
+  for (let i = 0; i < creatorWallets.length; i += 500) {
+    const chunk = creatorWallets.slice(i, i + 500);
+    const { data: priors } = await supabase
+      .from('pumpfun_watchlist')
+      .select('creator_wallet')
+      .in('creator_wallet', chunk)
+      .eq('status', 'dead');
+    for (const r of priors ?? []) {
+      if (!r.creator_wallet) continue;
+      priorDeadByCreator.set(r.creator_wallet, (priorDeadByCreator.get(r.creator_wallet) ?? 0) + 1);
+    }
+  }
+
   // ── Classify + upsert ────────────────────────────────────────
   for (const c of candidatesByMint.values()) {
     try {
       const devScore = c.creator_wallet ? devScoreByWallet.get(c.creator_wallet) : null;
 
-      const { cause, confidence, matchedSignals } = classifyDeath({
-        ageHours: c.age_hours ?? 0,
-        mcap: c.current_mcap_usd ?? 0,
-        liquidity: c.liquidity_usd ?? 0,
-        athMcap: c.ath_mcap_usd ?? 0,
-        dumpVelocity: devScore?.dump_velocity_score ?? 0,
-        lpPullScore: devScore?.lp_pull_score ?? 0,
-        devBuyPct: 100 - (devScore?.supply_retention_pct ?? 100), // proxy
-        hasMaliciousDump: (devScore?.dump_velocity_score ?? 0) > 60,
-      });
+      let cause: DeathCauseId;
+      let confidence: number;
+      let matchedSignals: string[];
+
+      if (c.source_feed === 'pumpfun_curve_death') {
+        // Curve-aware classifier — uses pumpfun_watchlist signals directly.
+        const priorDead = c.creator_wallet
+          ? Math.max(0, (priorDeadByCreator.get(c.creator_wallet) ?? 0) - 1) // exclude this token
+          : 0;
+        const out = classifyCurveDeath({
+          bondingCurvePct: c.bonding_curve_pct ?? 75,
+          ageHours: c.age_hours ?? 0,
+          devSold: c.dev_sold,
+          devHoldingPct: c.dev_holding_pct,
+          linkedWalletCount: c.linked_wallet_count,
+          bundledBuyCount: c.bundled_buy_count,
+          pricePeak: c.price_peak,
+          priceCurrent: c.price_current,
+          creatorPriorDeadTokens: priorDead,
+        });
+        cause = out.cause;
+        confidence = out.confidence;
+        matchedSignals = out.matchedSignals;
+      } else {
+        const out = classifyDeath({
+          ageHours: c.age_hours ?? 0,
+          mcap: c.current_mcap_usd ?? 0,
+          liquidity: c.liquidity_usd ?? 0,
+          athMcap: c.ath_mcap_usd ?? 0,
+          dumpVelocity: devScore?.dump_velocity_score ?? 0,
+          lpPullScore: devScore?.lp_pull_score ?? 0,
+          devBuyPct: 100 - (devScore?.supply_retention_pct ?? 100),
+          hasMaliciousDump: (devScore?.dump_velocity_score ?? 0) > 60,
+        });
+        cause = out.cause;
+        confidence = out.confidence;
+        matchedSignals = out.matchedSignals;
+      }
 
       const tier = tierFor(cause);
       const intent = DEATH_TAXONOMY[cause]?.intent ?? 'neutral';
@@ -211,12 +284,9 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       });
 
       // Skip Tier-C unless ATH was meaningful (>$10k) — too noisy otherwise.
-      // EXCEPTION: pumpfun_watchlist tokens explicitly marked status='dead' are kept
-      // as Tier-B (admin queue) even without ATH data — they were curated as dead.
+      // EXCEPTION: curve-death Lambs are always kept (already gated to ≥75% curve).
       let effectiveTier = tier;
-      // Promote curated dead tokens (pumpfun_watchlist + admin_manual) to Tier-B
-      // regardless of ATH — they were explicitly flagged dead.
-      if (c.source_feed === 'pumpfun_watchlist' || c.source_feed === 'admin_manual') {
+      if (c.source_feed === 'pumpfun_curve_death' || c.source_feed === 'admin_manual') {
         if (effectiveTier === 'C') effectiveTier = 'B';
         skipReasons.promoted_pumpfun++;
       } else if (tier === 'C' && (c.ath_mcap_usd ?? 0) < 10000) {
@@ -245,6 +315,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
             liquidity_usd: c.liquidity_usd,
             age_hours: c.age_hours,
             creator_wallet: c.creator_wallet,
+            bonding_curve_pct: c.bonding_curve_pct ?? null,
             // status only set on insert; preserve on conflict by using onConflict ignore for status field
           }, { onConflict: 'token_mint', ignoreDuplicates: false })
           .select('id, status')

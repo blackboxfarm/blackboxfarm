@@ -1431,6 +1431,7 @@ export type Database = {
           age_hours: number | null
           analyzed_at: string | null
           ath_mcap_usd: number | null
+          bonding_curve_pct: number | null
           candidate_score: number | null
           created_at: string | null
           creator_wallet: string | null
@@ -1464,6 +1465,7 @@ export type Database = {
           age_hours?: number | null
           analyzed_at?: string | null
           ath_mcap_usd?: number | null
+          bonding_curve_pct?: number | null
           candidate_score?: number | null
           created_at?: string | null
           creator_wallet?: string | null
@@ -1497,6 +1499,7 @@ export type Database = {
           age_hours?: number | null
           analyzed_at?: string | null
           ath_mcap_usd?: number | null
+          bonding_curve_pct?: number | null
           candidate_score?: number | null
           created_at?: string | null
           creator_wallet?: string | null
