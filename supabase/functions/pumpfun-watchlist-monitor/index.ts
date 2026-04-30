@@ -1255,12 +1255,16 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         }
 
         // Update token
-        const { error: updateError } = await supabase.from('pumpfun_watchlist').update(updates).eq('id', token.id);
-        if (updateError) {
+        try {
+          await assertDbWrite(
+            supabase.from('pumpfun_watchlist').update(updates).eq('id', token.id),
+            'pumpfun_watchlist',
+            'UPDATE watchlist metrics'
+          );
+          stats.tokensUpdated++;
+        } catch (updateError) {
           console.error(`Error updating ${token.token_symbol}:`, updateError);
           stats.errors++;
-        } else {
-          stats.tokensUpdated++;
         }
 
       } catch (error) {
