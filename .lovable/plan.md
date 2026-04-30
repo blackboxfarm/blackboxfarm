@@ -1,124 +1,144 @@
-You are right: for the Korean funnel path, “Watchlist inserted” currently does not mean “enriched with decision data.” It only means a bare `pumpfun_watchlist` row was created. That is why `$Palestine` can show a good Telegram holder report while the Pump.fun tab still shows holders/price/ATH as empty or zero.
 
-What I verified for `$Palestine` (`42YqRMkgj4GRDN3JrvYrw8VCoZoL1Ddodc44U7Avpump`):
+## Reframing — what we actually have
 
-- `funnel_feed_discoveries`
-  - source: `솔라나 펌핑 파티`
-  - `watchlist_status`: `inserted`
-  - `mesh_status`: `completed`
-  - `xpost_status`: `posted`
-  - no `dex_data`, no `creator_wallet`
-- `pumpfun_watchlist`
-  - source: `funnel_feed:솔라나 펌핑 파티`
-  - status: `pending_triage`
-  - `check_count`: `1`
-  - `holder_count`: `0`
-  - `holder_count_peak`: `0`
-  - `volume_sol`: `0`
-  - `price_usd`, `price_ath_usd`, `market_cap_usd`, `ath_market_cap_usd`, `bonding_curve_pct`, `creator_wallet`: all null
-- `holders_intel_seen_tokens`
-  - `health_grade`: `C`
-  - `market_cap_at_discovery`: `14001`
-  - `was_posted`: true
-- `token_health_snapshots`
-  - 11:00 snapshot from poster: 465 holders, 412 real, grade B+, top10 20.45%, dust 11%
-  - later snapshots also exist
-- `token_lifecycle`
-  - has an `ath_24h_usd` value only
-  - does not have symbol/name/price/mcap/liquidity filled for this token
-- `reputation_mesh`
-  - has useful links for creator/community/social evidence, including creator wallet and X community links
-
-So the data exists in other tables, but the spreadsheet is looking at `pumpfun_watchlist`, and the funnel path never hydrates that table after posting/analysis.
-
-Plan to fix it:
-
-1. Rename/clarify statuses in the UI
-   - Make the tab stop implying that `watchlist inserted` means “tracked and enriched.”
-   - Display a clear badge/column like:
-     - `Inserted only`
-     - `Holder report done`
-     - `Mesh links found`
-     - `Price/ATH missing`
-     - `Autopsy-ready`
-
-2. Backfill/enrich `pumpfun_watchlist` after a funnel token is processed
-   - When `holders-intel-poster` or `bagless-holders-report` calculates holder stats, write the important decision fields back to `pumpfun_watchlist`:
-     - `holder_count`
-     - `holder_count_peak`
-     - `market_cap_usd`
-     - `price_usd` when available
-     - `ath_market_cap_usd` / `price_ath_usd` when available
-     - `creator_wallet` when resolved
-     - `social_score` / `rugcheck`/risk fields if available
-     - `last_snapshot_at`
-     - `last_processor`
-   - Do this with `assertDbWrite` for every DB write touched, per the project zero-silent-fail rule.
-
-3. Enrich at funnel insertion time too
-   - In `funnel-feed-scanner`, after extracting a mint, fetch basic pump.fun/DexScreener metadata before inserting into `pumpfun_watchlist`.
-   - Fill whatever is immediately available instead of inserting a mostly empty row.
-   - If metadata fetch fails, store a visible reason/processor marker instead of pretending the row is useful.
-
-4. Add a “decision data source” view to the spreadsheet
-   - The spreadsheet should not only show raw `pumpfun_watchlist` columns.
-   - Add joined/derived columns from:
-     - `token_health_snapshots` for holder/grade/dust/top10 history
-     - `holders_intel_seen_tokens` for posted/seen/market-cap-at-discovery
-     - `token_lifecycle` for ATH/death/autopsy fields
-     - `funnel_feed_discoveries` for mesh/watchlist/xpost states
-     - `reputation_mesh` summary counts for creator/community/social links
-   - For `$Palestine`, that means the table would show the 465-holder / B+ Telegram-post snapshot instead of zero holders.
-
-5. Add filters that match the real workflow
-   - Default to useful decision candidates, not raw junk:
-     - source includes `funnel_feed:*`
-     - exclude `rejected`
-     - show tokens with holder snapshots or posted funnel evidence first
-   - Add quick filters:
-     - `Funnel feed only`
-     - `Missing price/ATH`
-     - `Has holder snapshot`
-     - `Posted to Telegram`
-     - `Autopsy candidates`
-     - `Inserted only / not enriched`
-
-6. Add a per-token trace drawer
-   - Clicking a row should show a timeline for that mint:
-     - discovery source/message
-     - watchlist insert timestamp/status
-     - mesh completion timestamp and links count
-     - post queue status
-     - Telegram/X post status
-     - holder snapshots
-     - lifecycle/ATH/autopsy state
-   - This answers “where is the fucking data?” directly inside the admin UI.
-
-Technical details:
+Before fixing anything, here is the truth about the data the system already collects (verified live in the DB just now):
 
 ```text
-Current Korean funnel flow
-
-funnel_feed_sources
-  -> funnel-feed-scanner reads Telegram messages
-  -> funnel_feed_discoveries insert
-       watchlist_status = pending
-       mesh_status = pending
-       xpost_status = pending
-  -> meshFeed.token(...)
-       writes/queues reputation_mesh only if enough evidence exists
-       then scanner marks mesh_status = completed
-  -> pumpfun_watchlist insert
-       status = pending_triage
-       source = funnel_feed:<source_name>
-       currently only mint/symbol/name/source/status timestamps
-  -> holders_intel_post_queue insert
-  -> holders-intel-poster runs holder report
-       writes holders_intel_seen_tokens
-       writes token_health_snapshots
-       writes token_lifecycle ATH only
-       posts Telegram
-       does NOT hydrate pumpfun_watchlist metrics
+token_health_snapshots    13,189 rows   342 distinct mints in last 24h   <- the 12 hourly bars
+token_price_history       32,257 rows   333 distinct mints in last 24h   <- price + mcap timeline
+pumpfun_watchlist         25,377 rows   18,627 already have price_ath_usd
+token_lifecycle            4,379 rows   has ath_24h_usd, price_usd, market_cap, liquidity_usd
+                                       BUT death_cause = 0 rows (autopsy never wrote back!)
+autopsy_candidates             6 rows   (funnel-feeder barely runs)
+autopsy_reports                0 rows
 ```
 
-The core bug is not that the Telegram stats are fake. The bug is that they are stored in `token_health_snapshots` / `holders_intel_seen_tokens`, while the visible spreadsheet is reading `pumpfun_watchlist`, which was only used as a raw insertion pool and was never updated with the analysis output.
+So the data is **not** missing. The Token Funnel Pool spreadsheet looked empty because:
+1. It joined the wrong columns (read `pumpfun_watchlist.price_usd` but ATH lives in `price_ath_usd` / `token_lifecycle.ath_24h_usd`).
+2. `token_lifecycle.death_cause` is empty for all 4,379 rows — `token-autopsy` never wrote back, so nothing flags as "dead".
+3. The 12-bar Litmus strip only fills 5–6 bars because `feed-health-scanner` does not snapshot every token every hour — it only snapshots top-200 + on-demand.
+
+That spreadsheet is the wrong tool. We're killing it and building the two lists you actually want.
+
+---
+
+## Goal — two purpose-built lists for the Autopsy section
+
+### List 1 — Live Death Watch (auto-Tier-A / Tier-B)
+Active tokens being monitored in real time for signs of death. As deaths occur, candidates are auto-queued for an autopsy report.
+
+### List 2 — Cool Deaths Backlog (one-time, Tier-B only)
+A frozen historical snapshot of already-dead tokens that look interesting (good ATH, bad/sad dev). Built **once**, then we cherry-pick reports from it. Never re-scanned.
+
+---
+
+## What we'll build
+
+### A. Fix the data gaps (one-time backend fixes)
+
+1. **ATH backfill from external sources**
+   - Add `supabase/functions/ath-backfill/index.ts` — for any token in `token_lifecycle` or `pumpfun_watchlist` missing `ath_24h_usd` / `price_ath_usd`, query in this order:
+     - GeckoTerminal `/networks/solana/tokens/{mint}` → returns `attributes.fdv_usd`, plus we compute ATH from `/ohlcv/hour?aggregate=1&limit=1000` (best free source for full lifetime ATH).
+     - DexScreener `pairs/solana/{pair}` fallback → uses `priceChange` + current price.
+     - Solscan Pro `/v2.0/token/meta` → only gives current snapshot, not ATH (so it does NOT solve ATH; we still use it for holder count + supply confirmation).
+   - Writes back to both `token_lifecycle.ath_24h_usd` (renamed conceptually to "lifetime ATH") and `pumpfun_watchlist.price_ath_usd` via `assertDbWrite`.
+   - Cron: nightly, 500 mints/run.
+
+2. **Run `token-autopsy` against `token_lifecycle`**
+   - It already exists and works — it just isn't on a schedule. Add a 6-hour cron so `death_cause`, `death_confidence`, `autopsy_at` actually populate. This unblocks every "dead" filter.
+
+3. **Stop relying on hourly snapshots for the 12-bar strip**
+   - `feed-health-scanner` only writes snapshots when a token enters top-200 or is hovered. The 12-bar grid will always look sparse for most tokens — that's by design (we don't want 65k tokens × 24 snapshots/day).
+   - Fix: change `LitmusStrip` to render N bars for the N most recent hours that **have data**, with the gap-fill logic only for top-200 tokens. For non-top-200 we show "On-demand only — click refresh".
+
+### B. Replace the messy spreadsheet with two clean tabs
+
+Remove `Token Funnel Pool` table from the Autopsy admin page. Replace with two tabs in `src/pages/admin/AutopsyQueue.tsx`:
+
+#### Tab 1 — "Live Death Watch"
+Source: `token_lifecycle` joined with `pumpfun_watchlist` and latest `token_health_snapshots`.
+
+Filter logic (server-side view `v_live_death_watch`):
+```text
+WHERE current_status = 'active'
+  AND (
+    market_cap < 1000                              -- functional death
+    OR liquidity_usd < 500
+    OR (ath_24h_usd >= 50000 AND price_usd < ath_24h_usd * 0.05)  -- 95% collapse from $50k+ ATH
+    OR death_cause IS NOT NULL                     -- autopsy already flagged it
+  )
+ORDER BY (ath_24h_usd * (1 - price_usd/ath_24h_usd)) DESC  -- biggest dollar wipeout first
+```
+
+Columns shown (all hydrated, no empties):
+- Ticker / Mint / Launchpad
+- ATH MCap (with timestamp)
+- Current MCap (with % from ATH)
+- Liquidity USD
+- Holder count (latest)
+- Health grade (latest snapshot)
+- Dev wallet + reputation tier
+- Death cause (if autopsied) + confidence
+- Action: **[ Send to Tier-A ]** / **[ Send to Tier-B ]** / **[ Skip ]**
+
+Auto-tier rules (matches existing `autopsy-funnel-feeder` taxonomy):
+- ATH ≥ $100k AND collapse ≥ 95% AND dev dump_velocity > 80 → **Tier A** (auto-publish)
+- ATH ≥ $50k AND any malicious signal → **Tier B** (admin approves)
+- Everything else → stays in watch list
+
+Refreshes every 5 min. New death candidates flow in automatically.
+
+#### Tab 2 — "Cool Deaths Backlog" (one-shot)
+A new table `autopsy_backlog` populated **once** by a new edge function `autopsy-backlog-builder`:
+
+```text
+INSERT INTO autopsy_backlog
+SELECT FROM token_lifecycle
+WHERE first_seen_at < now() - interval '7 days'    -- already historical
+  AND (market_cap < 1000 OR liquidity_usd < 500)   -- already dead
+  AND ath_24h_usd >= 25000                         -- had a real life
+  AND death_cause IN ('rug_pull','slow_drain','liquidity_pulled','abandoned')  -- bad/sad dev only
+ORDER BY ath_24h_usd DESC
+LIMIT 500
+```
+
+UI shows the same columns as Tab 1, plus a `[ Draft autopsy ]` button that triggers `autopsy-writer` for that mint.
+
+The backlog table is **frozen after build** — a flag `autopsy_backlog.is_frozen = true` blocks re-runs. We can manually unfreeze if needed.
+
+### C. Kill the old spreadsheet
+Delete `src/components/admin/autopsies/PumpfunWatchlistSpreadsheet.tsx`. The funnel pool was a dev peek tool; the two new tabs replace it cleanly.
+
+---
+
+## Technical summary
+
+| Change | File |
+|---|---|
+| New ATH backfill function | `supabase/functions/ath-backfill/index.ts` |
+| Schedule existing `token-autopsy` every 6h | `supabase/config.toml` cron block |
+| New view | migration: `v_live_death_watch` |
+| New table | migration: `autopsy_backlog` (token_mint PK, is_frozen bool, captured_at) |
+| New backlog builder | `supabase/functions/autopsy-backlog-builder/index.ts` (one-shot, idempotent) |
+| New admin tabs | `src/pages/admin/AutopsyQueue.tsx` — replace current body with `<Tabs>` (Live / Backlog / Drafts / Published) |
+| Tabs components | `src/components/admin/autopsies/LiveDeathWatch.tsx`, `CoolDeathsBacklog.tsx` |
+| Litmus strip fix | `src/components/feed/LitmusStrip.tsx` — adaptive bar count for non-top-200 |
+| Delete | `src/components/admin/autopsies/PumpfunWatchlistSpreadsheet.tsx` |
+
+External APIs used (no new keys needed beyond what we have):
+- **GeckoTerminal** (free, no key) — primary ATH source via OHLCV.
+- **DexScreener** (already integrated) — fallback.
+- **Solscan Pro** (only if you confirm we have the key) — supply + holder confirmation, not ATH.
+- CoinGecko has ATH on `/coins/{id}` but most pump.fun tokens are not listed, so it's an opportunistic third fallback.
+
+---
+
+## What you get when this lands
+
+- Two clean lists, both with **real ATH, real MCap, real holder count, real death cause** in every row.
+- The Live Death Watch automatically promotes new deaths to Tier-A or Tier-B as they happen.
+- The Cool Deaths Backlog gives you ~500 historical "interesting deaths" to cherry-pick reports from, built once.
+- The empty/messy spreadsheet is gone.
+- The 12-bar strip stops lying about missing data and shows what actually exists.
+
+Approve and I'll implement in this order: (1) ATH backfill + autopsy cron, (2) view + backlog table migration, (3) two new admin tabs, (4) delete old spreadsheet, (5) Litmus strip honesty fix.
