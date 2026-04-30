@@ -23,6 +23,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
 import { DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
+import { enrichCandidate } from '../_shared/autopsy-enrich.ts';
+import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,7 +40,7 @@ function slugify(s: string): string {
     .slice(0, 80);
 }
 
-const FEW_SHOT_REFERENCE = `# Token Autopsy — GPT "Greedy Pissing Testicle"
+const FEW_SHOT_MALICIOUS = `# Token Autopsy — GPT "Greedy Pissing Testicle"
 **Verdict: TEXTBOOK COORDINATED RUG.**
 ## 1. Subject
 | Field | Value |
@@ -57,6 +59,54 @@ const FEW_SHOT_REFERENCE = `# Token Autopsy — GPT "Greedy Pissing Testicle"
 ## 4. The Rug Mechanic
 ## 5. Classic Rug-Dev Fingerprint
 ## 6. Verdict & Recommendation`;
+
+const FEW_SHOT_NEGLIGENT = `# Token Autopsy — EXAMPLE "Soft Fade"
+**Verdict: DEV WALKED — NO MALICE PROVEN.**
+## 1. Subject
+| Field | Value | (ATH, lifetime, time of death) |
+## 2. Players
+| Role | Address | Behavior |
+## 3. Timeline
+## 4. Failure Mechanic
+(No malicious dump pattern. Dev wallet went silent at ~Xh. Mods stopped responding.
+Spam took over. Holders rotated out passively.)
+## 5. Fingerprint
+## 6. Verdict & Recommendation`;
+
+const FEW_SHOT_ORGANIC = `# Token Autopsy — EXAMPLE "Honest Run"
+**Verdict: RAN ITS CYCLE — NO MALICE DETECTED.**
+## 1. Subject
+| Field | Value | (ATH, lifetime, time of death) |
+## 2. Players (credit where credit is due)
+| Role | Address | Contribution |
+|---|---|---|
+| Creator / Dev | \`...\` | Built and shipped: website, X (N followers), X-community (N members, N mods), Telegram (N subs), Discord, YouTube. |
+| Promotion | — | DexScreener Boost paid (N×). CoinMarketCap submission. |
+## 3. Timeline
+## 4. What They Did Right
+(List the legitimate build: socials shipped, community grown, paid promotion run, ATH reached on real volume.)
+## 5. Cycle Anatomy
+(Legitimate peak. Retail rotated to the next attention cycle. No bundle dump, no LP pull,
+no honeypot, no admin abandonment mid-pump. Standard meta-coin lifecycle.)
+## 6. Fingerprint (Dev Dossier)
+(Clean dossier OR mixed dossier with prior cycle history. Neutral framing.)
+## 7. Verdict & Recommendation
+Project completed its on-chain lifecycle. **No reputational flag on the dev or cluster.**`;
+
+function fewShotForIntent(intent: string): string {
+  if (intent === 'organic') return FEW_SHOT_ORGANIC;
+  if (intent === 'negligent') return FEW_SHOT_NEGLIGENT;
+  return FEW_SHOT_MALICIOUS;
+}
+
+const BANNED_PHRASES_HIGH_SOCIAL = [
+  /on[-\s]?chain ghost/i,
+  /dead on arrival/i,
+  /failed launch/i,
+  /no community/i,
+  /abandoned token creation attempt/i,
+  /unclassified.*ghost/i,
+];
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
