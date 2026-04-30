@@ -12038,6 +12038,9 @@ export type Database = {
       }
       pumpfun_watchlist: {
         Row: {
+          ath_bonding_curve_pct: number | null
+          ath_market_cap_at: string | null
+          ath_market_cap_usd: number | null
           authority_checked_at: string | null
           bonding_curve_pct: number | null
           bump_bot_detected: boolean | null
@@ -12164,6 +12167,9 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          ath_bonding_curve_pct?: number | null
+          ath_market_cap_at?: string | null
+          ath_market_cap_usd?: number | null
           authority_checked_at?: string | null
           bonding_curve_pct?: number | null
           bump_bot_detected?: boolean | null
@@ -12290,6 +12296,9 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          ath_bonding_curve_pct?: number | null
+          ath_market_cap_at?: string | null
+          ath_market_cap_usd?: number | null
           authority_checked_at?: string | null
           bonding_curve_pct?: number | null
           bump_bot_detected?: boolean | null

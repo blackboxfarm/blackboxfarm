@@ -7,6 +7,7 @@ import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,6 +17,20 @@ const corsHeaders = {
 // Rate limiting
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2000;
+const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
+
+function clampPct(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function curveProgressFromPump(data: any): number | null {
+  if (data?.complete === true) return 100;
+  const explicit = Number(data?.bonding_curve_progress ?? data?.bonding_curve_percentage ?? NaN);
+  if (Number.isFinite(explicit)) return clampPct(explicit <= 1 ? explicit * 100 : explicit);
+  const realTokenReserves = Number(data?.real_token_reserves ?? NaN);
+  if (!Number.isFinite(realTokenReserves)) return null;
+  return clampPct(((PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves) / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100);
+}
 
 // Standard pump.fun supply: 1 billion tokens with 6 decimals
 const STANDARD_PUMPFUN_SUPPLY = 1_000_000_000_000_000;
@@ -45,6 +60,9 @@ interface WatchlistToken {
   holder_count: number | null;
   bundle_score: number | null;
   bonding_curve_pct: number | null;
+  ath_bonding_curve_pct?: number | null;
+  ath_market_cap_usd?: number | null;
+  ath_market_cap_at?: string | null;
   market_cap_sol: number | null;
   has_image: boolean | null;
   socials_count: number | null;
@@ -889,6 +907,14 @@ async function enrichTokenBatch(
       : null;
     const volumeSol = pumpData?.volume_24h || 0;
     const marketCapUsd = pumpData?.usd_market_cap || null;
+    const bondingCurve = curveProgressFromPump(pumpData) ?? token.bonding_curve_pct ?? 0;
+    const athMarketCapUsd = Math.max(
+      Number(token.ath_market_cap_usd ?? 0),
+      Number(pumpData?.ath_market_cap ?? marketCapUsd ?? 0)
+    ) || null;
+    const athMarketCapTimestamp = Number(pumpData?.ath_market_cap_timestamp ?? NaN);
+    const athMarketCapAt = Number.isFinite(athMarketCapTimestamp) ? new Date(athMarketCapTimestamp).toISOString() : token.ath_market_cap_at;
+    const athBondingCurvePct = Math.max(Number(token.ath_bonding_curve_pct ?? 0), bondingCurve) || null;
     // Use actual sol_price from pump API response - if not available, skip liquidity calc
     const liquidityUsd = (pumpData?.virtual_sol_reserves && pumpData?.sol_price)
       ? (pumpData.virtual_sol_reserves / 1e9) * pumpData.sol_price 
@@ -899,9 +925,8 @@ async function enrichTokenBatch(
     // === EARLY MCAP GATE — reject immediately if above max market cap ===
     if (marketCapUsd && marketCapUsd > config.max_market_cap_usd) {
       console.log(`   🚫 MCAP TOO HIGH at enrichment: $${marketCapUsd.toFixed(0)} > $${config.max_market_cap_usd} — REJECTED`);
-      await supabase
-        .from('pumpfun_watchlist')
-        .update({
+      await assertDbWrite(
+        supabase.from('pumpfun_watchlist').update({
           status: 'rejected',
           rejection_reason: 'mcap_too_high',
           rejection_type: 'permanent',
@@ -910,10 +935,16 @@ async function enrichTokenBatch(
           price_usd: priceUsd,
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
+          bonding_curve_pct: bondingCurve,
+          ath_bonding_curve_pct: athBondingCurvePct,
+          ath_market_cap_usd: athMarketCapUsd,
+          ath_market_cap_at: athMarketCapAt,
           liquidity_usd: liquidityUsd,
           last_checked_at: new Date().toISOString(),
-        })
-        .eq('id', token.id);
+        }).eq('id', token.id),
+        'pumpfun_watchlist',
+        'UPDATE token-enricher mcap rejection'
+      );
       rejected++;
       continue;
     }
@@ -921,22 +952,29 @@ async function enrichTokenBatch(
     // === DEV SOLD GATE — reject if pump.fun reports complete (dev sold / graduated) ===
     if (pumpData?.complete === true) {
       console.log(`   🚫 DEV SOLD / GRADUATED at enrichment — REJECTED`);
-      await supabase
-        .from('pumpfun_watchlist')
-        .update({
+      await assertDbWrite(
+        supabase.from('pumpfun_watchlist').update({
           status: 'rejected',
           rejection_reason: 'dev_sold_graduated',
           rejection_type: 'permanent',
           rejection_reasons: ['dev_sold_graduated'],
           removed_at: new Date().toISOString(),
           dev_sold: true,
+          is_graduated: true,
+          graduated_at: new Date().toISOString(),
           price_usd: priceUsd,
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
+          bonding_curve_pct: 100,
+          ath_bonding_curve_pct: 100,
+          ath_market_cap_usd: athMarketCapUsd,
+          ath_market_cap_at: athMarketCapAt,
           liquidity_usd: liquidityUsd,
           last_checked_at: new Date().toISOString(),
-        })
-        .eq('id', token.id);
+        }).eq('id', token.id),
+        'pumpfun_watchlist',
+        'UPDATE token-enricher graduated rejection'
+      );
       rejected++;
       continue;
     }
@@ -985,10 +1023,6 @@ async function enrichTokenBatch(
     // Extract data
     const holderCount = tokenData?.holders || holderAnalysis.holderCount || token.holder_count || 0;
     const marketCapSol = tokenData?.pools?.[0]?.marketCap?.quote || token.market_cap_sol || 0;
-    const bondingCurve = pumpData?.bonding_curve_progress 
-      ? pumpData.bonding_curve_progress * 100 
-      : (tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0);
-    
     // STAGNATION CHECK - Token is old with poor metrics
     const tokenAgeMinutes = createdAt ? (Date.now() - createdAt * 1000) / 60000 : 0;
     const isStagnant = tokenAgeMinutes > STAGNATION_CONFIG.max_age_mins_for_low_mcap && 

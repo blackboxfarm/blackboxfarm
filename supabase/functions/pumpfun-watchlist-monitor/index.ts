@@ -7,6 +7,7 @@ import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 import { checkMayhemMode } from '../_shared/mayhem-check.ts';
 import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**
@@ -54,9 +55,23 @@ const BATCH_DELAY_MS = 1000;
 const CALL_DELAY_MS = 100;
 const TOKENS_PER_RUN = 50;
 const SKIP_RECENTLY_CHECKED_MINUTES = 3;
+const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
 
 // MINIMUM SCORE THRESHOLD for fantasy qualification
 const MIN_QUALIFICATION_SCORE = 50;
+
+function clampPct(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function curveProgressFromPump(data: any): number | null {
+  if (data?.complete === true) return 100;
+  const explicit = Number(data?.bonding_curve_progress ?? data?.bonding_curve_percentage ?? NaN);
+  if (Number.isFinite(explicit)) return clampPct(explicit <= 1 ? explicit * 100 : explicit);
+  const realTokenReserves = Number(data?.real_token_reserves ?? NaN);
+  if (!Number.isFinite(realTokenReserves)) return null;
+  return clampPct(((PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves) / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100);
+}
 
 interface MonitorStats {
   tokensChecked: number;
@@ -83,6 +98,9 @@ interface TokenMetrics {
   liquidityUsd: number | null;
   marketCapUsd: number | null;
   bondingCurvePct: number | null;
+  athMarketCapUsd?: number | null;
+  athMarketCapAt?: string | null;
+  isGraduated?: boolean;
   buys: number;
   sells: number;
 }
@@ -321,13 +339,11 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
     const data = await fetchPumpFunCoin(mint, 'watchlist-monitor');
 
     if (data) {
-      const virtualSolReserves = data.virtual_sol_reserves || 0;
-      const virtualTokenReserves = data.virtual_token_reserves || 0;
       const totalSupply = data.total_supply || 1000000000000000;
       const priceUsd = data.usd_market_cap ? data.usd_market_cap / (totalSupply / 1e6) : null;
-      const bondingCurveTokens = virtualTokenReserves / 1e6;
-      const maxBondingCurveTokens = 800000000;
-      const bondingCurvePct = Math.min(100, Math.max(0, (bondingCurveTokens / maxBondingCurveTokens) * 100));
+      const bondingCurvePct = curveProgressFromPump(data);
+      const athMarketCapUsd = Number(data.ath_market_cap ?? NaN);
+      const athMarketCapAtMs = Number(data.ath_market_cap_timestamp ?? NaN);
       
       return {
         holders: data.holder_count || 0,
@@ -335,7 +351,10 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
         priceUsd,
         liquidityUsd: null, // Cannot derive USD from SOL reserves without live price — use null
         marketCapUsd: data.usd_market_cap || null,
-        bondingCurvePct: data.complete ? 0 : bondingCurvePct,
+        bondingCurvePct,
+        athMarketCapUsd: Number.isFinite(athMarketCapUsd) ? athMarketCapUsd : (data.usd_market_cap || null),
+        athMarketCapAt: Number.isFinite(athMarketCapAtMs) ? new Date(athMarketCapAtMs).toISOString() : null,
+        isGraduated: data.complete === true || Boolean(data.raydium_pool),
         buys: data.buy_count || 0,
         sells: data.sell_count || 0,
       };
@@ -973,6 +992,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         const watchingMinutes = watchingMinutesNow;
         const newMetricsHash = `${metrics.holders}-${metrics.volume24hSol.toFixed(4)}-${metrics.priceUsd?.toFixed(8) || '0'}`;
         const isStale = token.metrics_hash === newMetricsHash;
+        const previousAthMcap = Number(token.ath_market_cap_usd ?? ((token.price_ath_usd || 0) * 1_000_000_000) ?? 0);
+        const observedAthMcap = Math.max(previousAthMcap, metrics.athMarketCapUsd ?? metrics.marketCapUsd ?? 0);
+        const previousAthCurve = Number(token.ath_bonding_curve_pct ?? token.bonding_curve_pct ?? 0);
+        const observedAthCurve = Math.max(previousAthCurve, metrics.bondingCurvePct ?? 0);
+        const athMcapAdvanced = observedAthMcap > previousAthMcap;
 
         const updates: any = {
           last_checked_at: now.toISOString(),
@@ -987,13 +1011,16 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           market_cap_usd: metrics.marketCapUsd,
           liquidity_usd: metrics.liquidityUsd,
           bonding_curve_pct: metrics.bondingCurvePct,
+          ath_bonding_curve_pct: observedAthCurve || null,
+          ath_market_cap_usd: observedAthMcap || null,
+          ath_market_cap_at: metrics.athMarketCapAt ?? (athMcapAdvanced ? now.toISOString() : token.ath_market_cap_at),
           holder_count_peak: Math.max(token.holder_count_peak || 0, metrics.holders),
           price_ath_usd: Math.max(token.price_ath_usd || 0, metrics.priceUsd || 0),
           metrics_hash: newMetricsHash,
           consecutive_stale_checks: isStale ? (token.consecutive_stale_checks || 0) + 1 : 0,
           last_processor: 'watchlist-monitor-v2',
-          is_graduated: metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5,
-          graduated_at: (metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5 && !token.is_graduated) 
+          is_graduated: metrics.isGraduated === true,
+          graduated_at: (metrics.isGraduated === true && !token.is_graduated) 
             ? now.toISOString() : token.graduated_at,
         };
 
@@ -1228,12 +1255,16 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         }
 
         // Update token
-        const { error: updateError } = await supabase.from('pumpfun_watchlist').update(updates).eq('id', token.id);
-        if (updateError) {
+        try {
+          await assertDbWrite(
+            supabase.from('pumpfun_watchlist').update(updates).eq('id', token.id),
+            'pumpfun_watchlist',
+            'UPDATE watchlist metrics'
+          );
+          stats.tokensUpdated++;
+        } catch (updateError) {
           console.error(`Error updating ${token.token_symbol}:`, updateError);
           stats.errors++;
-        } else {
-          stats.tokensUpdated++;
         }
 
       } catch (error) {
