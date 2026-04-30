@@ -54,6 +54,7 @@ export default function PumpfunWatchlistSpreadsheet() {
   const [sortKey, setSortKey] = useState<keyof WatchlistRow | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
   const topScrollRef = useRef<HTMLDivElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const tableInnerRef = useRef<HTMLDivElement>(null);
@@ -144,17 +145,30 @@ export default function PumpfunWatchlistSpreadsheet() {
   const filteredRows = useMemo(() => {
     if (!rows) return null;
     const needle = query.trim().toLowerCase();
-    const base = !needle
+    const sourceScoped = sourceFilter === 'all'
       ? rows
-      : rows.filter((row) =>
+      : rows.filter((r) => (r.source ?? '(none)') === sourceFilter);
+    const base = !needle
+      ? sourceScoped
+      : sourceScoped.filter((row) =>
           Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(needle))
         );
     if (!sortKey) return base;
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...base].sort((a, b) => compareValues(a[sortKey], b[sortKey]) * dir);
-  }, [rows, query, sortKey, sortDir]);
+  }, [rows, query, sortKey, sortDir, sourceFilter]);
 
-  useEffect(() => { setPage(0); }, [query, sortKey, sortDir]);
+  useEffect(() => { setPage(0); }, [query, sortKey, sortDir, sourceFilter]);
+
+  const sourceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!rows) return m;
+    for (const r of rows) {
+      const k = r.source ?? '(none)';
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [rows]);
 
   const totalPages = filteredRows ? Math.max(1, Math.ceil(filteredRows.length / ROWS_PER_PAGE)) : 1;
   const pageRows = useMemo(() => {
@@ -177,9 +191,9 @@ export default function PumpfunWatchlistSpreadsheet() {
     <section className="space-y-3">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <h4 className="text-lg font-semibold">Pump.fun watchlist spreadsheet</h4>
+          <h4 className="text-lg font-semibold">Token Funnel Pool — all sources</h4>
           <p className="text-sm text-muted-foreground">
-            Last 14 days · every column from <code className="font-mono">pumpfun_watchlist</code> · click sortable headers to sort · {ROWS_PER_PAGE} rows/page.
+            Last 14 days · every candidate ingested into <code className="font-mono">pumpfun_watchlist</code> from the pump.fun websocket firehose <em>and</em> external funnel feeds (e.g. relayed Telegram channels). Not a curated watchlist — this is the raw qualifying pool the autopsy/buy/monitor pipelines pull from. Click sortable headers to sort · {ROWS_PER_PAGE} rows/page.
             {filteredRows && columns.length > 0 ? ` ${filteredRows.length.toLocaleString()} rows × ${columns.length} columns.` : ''}
           </p>
         </div>
@@ -187,6 +201,33 @@ export default function PumpfunWatchlistSpreadsheet() {
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search any field…" />
         </div>
       </div>
+
+      {sourceCounts.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Source:</span>
+          <Button
+            variant={sourceFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setSourceFilter('all')}
+          >
+            All ({(rows?.length ?? 0).toLocaleString()})
+          </Button>
+          {Array.from(sourceCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([src, count]) => (
+              <Button
+                key={src}
+                variant={sourceFilter === src ? 'default' : 'outline'}
+                size="sm"
+                className="h-7 text-xs font-mono"
+                onClick={() => setSourceFilter(src)}
+              >
+                {src} ({count.toLocaleString()})
+              </Button>
+            ))}
+        </div>
+      )}
 
       <Card className="p-0 overflow-hidden">
         {pageRows === null ? (
