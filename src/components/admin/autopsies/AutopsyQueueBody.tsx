@@ -12,6 +12,7 @@ import AutopsyCandidateRow, { type Candidate } from './AutopsyCandidateRow';
 import DeathTaxonomyModal from './DeathTaxonomyModal';
 import LiveDeathWatch from './LiveDeathWatch';
 import CoolDeathsBacklog from './CoolDeathsBacklog';
+import AllDrafts from './AllDrafts';
 
 type SortKey =
   | 'score_desc'
@@ -172,12 +173,17 @@ export default function AutopsyQueueBody() {
         </div>
       </header>
 
-      <Tabs defaultValue="live" className="mt-4">
+      <Tabs defaultValue="drafts" className="mt-4">
         <TabsList>
+          <TabsTrigger value="drafts">📝 Drafts (your reports)</TabsTrigger>
           <TabsTrigger value="live">Live Death Watch</TabsTrigger>
           <TabsTrigger value="backlog">Cool Deaths Backlog</TabsTrigger>
           <TabsTrigger value="lambs">Lambs (curve-death)</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="drafts" className="mt-4">
+          <AllDrafts />
+        </TabsContent>
 
         <TabsContent value="live" className="mt-4">
           <LiveDeathWatch />
