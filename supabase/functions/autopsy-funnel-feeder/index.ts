@@ -150,20 +150,20 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     stats.source_token_lifecycle++;
   }
 
-  // ── 2. pumpfun_watchlist Lambs (75% <= curve ATH < 100%, never graduated) ─────
-  // IMPORTANT: stored bonding_curve_pct has proven stale/noisy. Lambs are gated by
-  // live pump.fun ath_market_cap converted against the pump.fun graduation mcap.
+  // ── 2. pumpfun_watchlist Lambs (peak curve >=75% and <100%, never graduated) ─────
+  // ATH market cap is stored for context only. It is never the Lamb gate.
   const { data: pfLambs } = await supabase
     .from('pumpfun_watchlist')
     .select(`
       token_mint, token_symbol, token_name, market_cap_usd, liquidity_usd,
       creator_wallet, first_seen_at, status, removal_reason, bonding_curve_pct,
       dev_sold, dev_holding_pct, linked_wallet_count, bundled_buy_count,
-      price_peak, price_current, price_ath_usd, image_url, is_graduated
+      price_peak, price_current, price_ath_usd, image_url, is_graduated,
+      ath_market_cap_usd, ath_bonding_curve_pct
     `)
     .eq('status', 'dead')
     .not('is_graduated', 'is', true)
-    .or(`bonding_curve_pct.gte.${PUMPFUN_LAMB_MIN_CURVE_PCT},market_cap_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},price_ath_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY}`)
+    .or(`ath_bonding_curve_pct.gte.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MIN_CURVE_PCT}`)
     .not('token_mint', 'is', null)
     .limit(limit);
 
@@ -172,9 +172,9 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     const livePump = await fetchPumpFunCoin(t.token_mint, 'autopsy-funnel-feeder-lamb-verify');
     const liveAthMcap = Number(livePump?.ath_market_cap ?? NaN);
     const liveCurrentMcap = Number(livePump?.usd_market_cap ?? NaN);
-    const athCurvePct = athCurveProgressFromPumpMcap(liveAthMcap);
     const liveProgress = liveCurveProgressFromPump(livePump);
-    if (!livePump || !Number.isFinite(liveAthMcap) || athCurvePct < PUMPFUN_LAMB_MIN_CURVE_PCT || athCurvePct >= 100) {
+    const peakCurvePct = Math.max(Number(t.ath_bonding_curve_pct ?? 0), Number(t.bonding_curve_pct ?? 0), liveProgress ?? 0);
+    if (!livePump || peakCurvePct < PUMPFUN_LAMB_MIN_CURVE_PCT || peakCurvePct >= 100) {
       continue;
     }
     if (livePump?.complete === true || livePump?.raydium_pool || (liveProgress ?? 0) >= PUMPFUN_LAMB_MAX_CURVE_PCT) {
