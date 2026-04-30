@@ -1,144 +1,145 @@
+## Scope
 
-## Reframing — what we actually have
+Autopsy section only. **Zero changes to any Solscan code, secrets, or modules.** No edits to `solscan-api.ts`, `solscan-intelligence.ts`, `solscan-markets.ts`, `solscan-free.ts`, or `provider-health.ts`.
 
-Before fixing anything, here is the truth about the data the system already collects (verified live in the DB just now):
+## Why the page is empty right now (verified against the live DB)
 
-```text
-token_health_snapshots    13,189 rows   342 distinct mints in last 24h   <- the 12 hourly bars
-token_price_history       32,257 rows   333 distinct mints in last 24h   <- price + mcap timeline
-pumpfun_watchlist         25,377 rows   18,627 already have price_ath_usd
-token_lifecycle            4,379 rows   has ath_24h_usd, price_usd, market_cap, liquidity_usd
-                                       BUT death_cause = 0 rows (autopsy never wrote back!)
-autopsy_candidates             6 rows   (funnel-feeder barely runs)
-autopsy_reports                0 rows
-```
-
-So the data is **not** missing. The Token Funnel Pool spreadsheet looked empty because:
-1. It joined the wrong columns (read `pumpfun_watchlist.price_usd` but ATH lives in `price_ath_usd` / `token_lifecycle.ath_24h_usd`).
-2. `token_lifecycle.death_cause` is empty for all 4,379 rows — `token-autopsy` never wrote back, so nothing flags as "dead".
-3. The 12-bar Litmus strip only fills 5–6 bars because `feed-health-scanner` does not snapshot every token every hour — it only snapshots top-200 + on-demand.
-
-That spreadsheet is the wrong tool. We're killing it and building the two lists you actually want.
-
----
-
-## Goal — two purpose-built lists for the Autopsy section
-
-### List 1 — Live Death Watch (auto-Tier-A / Tier-B)
-Active tokens being monitored in real time for signs of death. As deaths occur, candidates are auto-queued for an autopsy report.
-
-### List 2 — Cool Deaths Backlog (one-time, Tier-B only)
-A frozen historical snapshot of already-dead tokens that look interesting (good ATH, bad/sad dev). Built **once**, then we cherry-pick reports from it. Never re-scanned.
-
----
-
-## What we'll build
-
-### A. Fix the data gaps (one-time backend fixes)
-
-1. **ATH backfill from external sources**
-   - Add `supabase/functions/ath-backfill/index.ts` — for any token in `token_lifecycle` or `pumpfun_watchlist` missing `ath_24h_usd` / `price_ath_usd`, query in this order:
-     - GeckoTerminal `/networks/solana/tokens/{mint}` → returns `attributes.fdv_usd`, plus we compute ATH from `/ohlcv/hour?aggregate=1&limit=1000` (best free source for full lifetime ATH).
-     - DexScreener `pairs/solana/{pair}` fallback → uses `priceChange` + current price.
-     - Solscan Pro `/v2.0/token/meta` → only gives current snapshot, not ATH (so it does NOT solve ATH; we still use it for holder count + supply confirmation).
-   - Writes back to both `token_lifecycle.ath_24h_usd` (renamed conceptually to "lifetime ATH") and `pumpfun_watchlist.price_ath_usd` via `assertDbWrite`.
-   - Cron: nightly, 500 mints/run.
-
-2. **Run `token-autopsy` against `token_lifecycle`**
-   - It already exists and works — it just isn't on a schedule. Add a 6-hour cron so `death_cause`, `death_confidence`, `autopsy_at` actually populate. This unblocks every "dead" filter.
-
-3. **Stop relying on hourly snapshots for the 12-bar strip**
-   - `feed-health-scanner` only writes snapshots when a token enters top-200 or is hovered. The 12-bar grid will always look sparse for most tokens — that's by design (we don't want 65k tokens × 24 snapshots/day).
-   - Fix: change `LitmusStrip` to render N bars for the N most recent hours that **have data**, with the gap-fill logic only for top-200 tokens. For non-top-200 we show "On-demand only — click refresh".
-
-### B. Replace the messy spreadsheet with two clean tabs
-
-Remove `Token Funnel Pool` table from the Autopsy admin page. Replace with two tabs in `src/pages/admin/AutopsyQueue.tsx`:
-
-#### Tab 1 — "Live Death Watch"
-Source: `token_lifecycle` joined with `pumpfun_watchlist` and latest `token_health_snapshots`.
-
-Filter logic (server-side view `v_live_death_watch`):
-```text
-WHERE current_status = 'active'
-  AND (
-    market_cap < 1000                              -- functional death
-    OR liquidity_usd < 500
-    OR (ath_24h_usd >= 50000 AND price_usd < ath_24h_usd * 0.05)  -- 95% collapse from $50k+ ATH
-    OR death_cause IS NOT NULL                     -- autopsy already flagged it
-  )
-ORDER BY (ath_24h_usd * (1 - price_usd/ath_24h_usd)) DESC  -- biggest dollar wipeout first
-```
-
-Columns shown (all hydrated, no empties):
-- Ticker / Mint / Launchpad
-- ATH MCap (with timestamp)
-- Current MCap (with % from ATH)
-- Liquidity USD
-- Holder count (latest)
-- Health grade (latest snapshot)
-- Dev wallet + reputation tier
-- Death cause (if autopsied) + confidence
-- Action: **[ Send to Tier-A ]** / **[ Send to Tier-B ]** / **[ Skip ]**
-
-Auto-tier rules (matches existing `autopsy-funnel-feeder` taxonomy):
-- ATH ≥ $100k AND collapse ≥ 95% AND dev dump_velocity > 80 → **Tier A** (auto-publish)
-- ATH ≥ $50k AND any malicious signal → **Tier B** (admin approves)
-- Everything else → stays in watch list
-
-Refreshes every 5 min. New death candidates flow in automatically.
-
-#### Tab 2 — "Cool Deaths Backlog" (one-shot)
-A new table `autopsy_backlog` populated **once** by a new edge function `autopsy-backlog-builder`:
+The Autopsy UI is reading from sources that are effectively empty:
 
 ```text
-INSERT INTO autopsy_backlog
-SELECT FROM token_lifecycle
-WHERE first_seen_at < now() - interval '7 days'    -- already historical
-  AND (market_cap < 1000 OR liquidity_usd < 500)   -- already dead
-  AND ath_24h_usd >= 25000                         -- had a real life
-  AND death_cause IN ('rug_pull','slow_drain','liquidity_pulled','abandoned')  -- bad/sad dev only
-ORDER BY ath_24h_usd DESC
-LIMIT 500
+v_live_death_watch                              0 rows
+autopsy_backlog                                 0 rows
+token_lifecycle.death_cause populated           0 rows
+token_lifecycle.market_cap < 1000               0 rows
+token_lifecycle.liquidity_usd < 500             0 rows
+token_lifecycle.ath_24h_usd >= 50000            0 rows  (max value: $13,923 — clearly NOT market-cap ATH)
 ```
 
-UI shows the same columns as Tab 1, plus a `[ Draft autopsy ]` button that triggers `autopsy-writer` for that mint.
+Meanwhile the real candidate pool already exists in `token_price_history`:
 
-The backlog table is **frozen after build** — a flag `autopsy_backlog.is_frozen = true` blocks re-runs. We can manually unfreeze if needed.
+```text
+Tokens with price history                       8,122
+Mints with ATH market cap >= $50k               4,066
+Live collapse candidates (latest <$1k or down 95%+ from $50k+ ATH)
+                                                  458
+Top examples: $LASTMAN ($154M -> $37k, 99.98%),
+              A5maw... ($153M -> $87, 100%),
+              $PENGUIN ($114M -> $2.97M, 97.41%),
+              etc.
+```
 
-### C. Kill the old spreadsheet
-Delete `src/components/admin/autopsies/PumpfunWatchlistSpreadsheet.tsx`. The funnel pool was a dev peek tool; the two new tabs replace it cleanly.
+So `token_lifecycle.ath_24h_usd` is the wrong column. Real ATH market caps live in `token_price_history.market_cap_usd`. The view and the backlog builder both need to be re-pointed at that source.
 
----
+## What I will change
 
-## Technical summary
+### 1. Replace `v_live_death_watch` (migration — schema change only)
 
-| Change | File |
-|---|---|
-| New ATH backfill function | `supabase/functions/ath-backfill/index.ts` |
-| Schedule existing `token-autopsy` every 6h | `supabase/config.toml` cron block |
-| New view | migration: `v_live_death_watch` |
-| New table | migration: `autopsy_backlog` (token_mint PK, is_frozen bool, captured_at) |
-| New backlog builder | `supabase/functions/autopsy-backlog-builder/index.ts` (one-shot, idempotent) |
-| New admin tabs | `src/pages/admin/AutopsyQueue.tsx` — replace current body with `<Tabs>` (Live / Backlog / Drafts / Published) |
-| Tabs components | `src/components/admin/autopsies/LiveDeathWatch.tsx`, `CoolDeathsBacklog.tsx` |
-| Litmus strip fix | `src/components/feed/LitmusStrip.tsx` — adaptive bar count for non-top-200 |
-| Delete | `src/components/admin/autopsies/PumpfunWatchlistSpreadsheet.tsx` |
+New definition uses `token_price_history` as the truth source:
 
-External APIs used (no new keys needed beyond what we have):
-- **GeckoTerminal** (free, no key) — primary ATH source via OHLCV.
-- **DexScreener** (already integrated) — fallback.
-- **Solscan Pro** (only if you confirm we have the key) — supply + holder confirmation, not ATH.
-- CoinGecko has ATH on `/coins/{id}` but most pump.fun tokens are not listed, so it's an opportunistic third fallback.
+```text
+WITH ath AS (
+  SELECT token_mint,
+         max(market_cap_usd) AS ath_mcap_usd,
+         (array_agg(captured_at ORDER BY market_cap_usd DESC, captured_at DESC))[1] AS ath_at
+  FROM token_price_history
+  WHERE market_cap_usd IS NOT NULL
+  GROUP BY token_mint
+),
+latest AS (
+  SELECT DISTINCT ON (token_mint)
+         token_mint, market_cap_usd AS latest_mcap_usd, price_usd AS latest_price_usd, captured_at AS latest_at
+  FROM token_price_history
+  WHERE market_cap_usd IS NOT NULL
+  ORDER BY token_mint, captured_at DESC
+)
+SELECT
+  ath.token_mint,
+  COALESCE(tl.symbol, pw.token_symbol)            AS symbol,
+  tl.name, tl.launchpad, tl.creator_wallet,
+  ath.ath_mcap_usd                                AS ath_usd,
+  ath.ath_at,
+  latest.latest_mcap_usd                          AS current_mcap_usd,
+  latest.latest_price_usd                         AS current_price_usd,
+  COALESCE(tl.liquidity_usd, pw.liquidity_usd)    AS liquidity_usd,
+  COALESCE(snap.total_holders, pw.holder_count)   AS holder_count,
+  snap.health_grade, snap.health_score, snap.risk_label,
+  tl.death_cause, tl.death_confidence, tl.autopsy_at AS death_at,
+  GREATEST(0, LEAST(1, 1 - latest.latest_mcap_usd / NULLIF(ath.ath_mcap_usd, 0))) AS collapse_pct,
+  ath.ath_mcap_usd * GREATEST(0, LEAST(1, 1 - latest.latest_mcap_usd / NULLIF(ath.ath_mcap_usd, 0)))
+                                                  AS dollar_wipeout,
+  tl.current_status, latest.latest_at
+FROM ath
+JOIN latest USING (token_mint)
+LEFT JOIN token_lifecycle tl ON tl.token_mint = ath.token_mint
+LEFT JOIN pumpfun_watchlist pw ON pw.token_mint = ath.token_mint
+LEFT JOIN LATERAL (
+  SELECT total_holders, health_grade, health_score, risk_label
+  FROM token_health_snapshots s
+  WHERE s.token_mint = ath.token_mint
+  ORDER BY snapshot_hour DESC LIMIT 1
+) snap ON true
+WHERE ath.ath_mcap_usd >= 50000
+  AND (latest.latest_mcap_usd < 1000
+       OR latest.latest_mcap_usd < ath.ath_mcap_usd * 0.05)
+```
 
----
+`security_invoker = on`. RLS continues to be enforced through underlying tables.
 
-## What you get when this lands
+### 2. Rebuild `autopsy-backlog-builder` against the same source
 
-- Two clean lists, both with **real ATH, real MCap, real holder count, real death cause** in every row.
-- The Live Death Watch automatically promotes new deaths to Tier-A or Tier-B as they happen.
-- The Cool Deaths Backlog gives you ~500 historical "interesting deaths" to cherry-pick reports from, built once.
-- The empty/messy spreadsheet is gone.
-- The 12-bar strip stops lying about missing data and shows what actually exists.
+Edge function update only — no schema change to `autopsy_backlog`:
 
-Approve and I'll implement in this order: (1) ATH backfill + autopsy cron, (2) view + backlog table migration, (3) two new admin tabs, (4) delete old spreadsheet, (5) Litmus strip honesty fix.
+- pull from the new view, restrict to rows where `latest_at < now() - interval '24 hours'` (already historical),
+- order by `dollar_wipeout DESC`, cap at 500,
+- upsert into `autopsy_backlog` with `is_frozen = true`,
+- keep `assertDbWrite` on every insert,
+- keep idempotency guard (skip if rows exist unless `force=true`).
+
+### 3. Fix `LiveDeathWatch.tsx`
+
+- Remove the on-mount auto-firing of `ath-backfill` and `token-autopsy` (this is what produced the 504 IDLE_TIMEOUT and contributed nothing because the underlying candidate query was already empty).
+- Just load `v_live_death_watch` and refresh every 5 minutes.
+- Replace the empty-state copy `"No active death candidates. Try Backfill ATH or Run Autopsy to populate signals."` with an honest message that, if it ever appears, says no tokens currently meet the death thresholds (>=$50k ATH and >=95% collapse / <$1k mcap). Given the DB has 458 such tokens right now, the realistic state is the list is full, not empty.
+- Keep Tier A / Tier B queue buttons exactly as they are.
+
+### 4. Fix `CoolDeathsBacklog.tsx`
+
+- Keep auto-build on first mount when backlog is empty (one-shot).
+- Remove the misleading "Building backlog… refresh in ~30s" empty message; replace with a short status that reflects whether the builder ran and how many rows it inserted.
+- Otherwise unchanged: same row layout, same Draft Autopsy action.
+
+### 5. Cron — keep `token-autopsy-30min` and `ath-24h-backfill-30min` exactly as they are
+
+Both jobs are already scheduled and running. No cron changes.
+
+### 6. Verification after deploy
+
+- Confirm `v_live_death_watch` returns >0 rows (expecting ~458 based on current DB).
+- Invoke `autopsy-backlog-builder` once with `{force:true}` to seed the historical backlog from real death evidence.
+- Spot-check a few rows (LASTMAN, PENGUIN, SNIGGA) against `token_price_history` ATH/latest to make sure the math is right.
+- Confirm UI loads rows on `/super-admin` Autopsy tabs.
+
+## Files touched
+
+- `supabase/migrations/<new>.sql` — replace `v_live_death_watch`.
+- `supabase/functions/autopsy-backlog-builder/index.ts` — re-source from new view.
+- `src/components/admin/autopsies/LiveDeathWatch.tsx` — drop on-mount blocking calls, fix empty-state copy.
+- `src/components/admin/autopsies/CoolDeathsBacklog.tsx` — fix empty-state copy.
+
+## Files explicitly NOT touched
+
+- `supabase/functions/_shared/solscan-api.ts`
+- `supabase/functions/_shared/solscan-intelligence.ts`
+- `supabase/functions/_shared/solscan-markets.ts`
+- `supabase/functions/_shared/solscan-free.ts`
+- `supabase/functions/_shared/provider-health.ts`
+- The `SOLSCAN_API_KEY` secret
+- Any other Solscan reference anywhere in the codebase
+
+## Expected outcome
+
+- Live Death Watch displays the ~458 real collapse candidates, sorted by dollar wipeout (LASTMAN, PENGUIN, etc. at the top).
+- Cool Deaths Backlog auto-seeds and freezes a historical pool drawn from the same evidence base.
+- The 504 IDLE_TIMEOUT from the on-mount blocking calls goes away.
+- The bogus "Try Backfill ATH or Run Autopsy" copy is gone.
+- Solscan code remains exactly as it is today.
