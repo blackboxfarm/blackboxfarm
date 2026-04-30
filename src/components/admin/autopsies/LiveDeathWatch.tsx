@@ -77,19 +77,6 @@ export default function LiveDeathWatch() {
     return () => window.clearInterval(id);
   }, []);
 
-  // Auto-fire ATH backfill + autopsy diagnostics on mount (max batches), then reload.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await Promise.allSettled([
-        supabase.functions.invoke('ath-backfill', { body: { limit: 1000 } }),
-        supabase.functions.invoke('token-autopsy', { body: { batchSize: 500 } }),
-      ]);
-      if (!cancelled) load();
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
   const filtered = useMemo(() => {
     if (!rows) return null;
     const q = search.trim().toLowerCase();
@@ -145,8 +132,8 @@ export default function LiveDeathWatch() {
             <Skull className="h-4 w-4 text-destructive" /> Live Death Watch
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            Active tokens flashing death signals. Mcap &lt; $1k, liq &lt; $500, or ≥95% collapse from $50k+ ATH.
-            Sorted by dollar wipeout. Auto-runs ATH backfill + autopsy diagnostics on load; refreshes every 5 min.
+            Tokens that hit $50k+ market cap then died — current mcap &lt; $1k or down ≥95% from ATH.
+            Sourced from token_price_history. Sorted by dollar wipeout. Refreshes every 5 min.
           </p>
         </div>
       </header>
@@ -186,7 +173,7 @@ export default function LiveDeathWatch() {
 
       {filtered && filtered.length === 0 && (
         <Card className="p-8 text-center text-muted-foreground text-sm">
-          No active death candidates. Try Backfill ATH or Run Autopsy to populate signals.
+          No tokens currently meet the death threshold (≥$50k ATH and collapsed). The price-history pipeline will surface new candidates as they collapse.
         </Card>
       )}
 

@@ -20409,6 +20409,7 @@ export type Database = {
       }
       v_live_death_watch: {
         Row: {
+          ath_at: string | null
           ath_usd: number | null
           collapse_pct: number | null
           creator_wallet: string | null
@@ -20425,6 +20426,7 @@ export type Database = {
           health_score: number | null
           holder_count: number | null
           last_seen_at: string | null
+          latest_at: string | null
           launchpad: string | null
           liquidity_usd: number | null
           name: string | null
