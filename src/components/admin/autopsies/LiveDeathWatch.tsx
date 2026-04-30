@@ -227,13 +227,16 @@ export default function LiveDeathWatch() {
 
       <div className="space-y-2">
         {filtered?.map(r => {
+          const symbol = cleanTokenText(r.symbol, 'symbol');
+          const name = cleanTokenText(r.name, 'name');
+          const deathAt = r.death_at ?? r.latest_at;
           return (
             <Card key={r.token_mint} className="p-3">
               <div className="flex items-start gap-4 flex-wrap">
                 <div className="flex-1 min-w-[200px]">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold">{r.symbol ? `$${r.symbol}` : shortMint(r.token_mint)}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[160px]">{r.name ?? ''}</span>
+                    <span className="font-semibold">{symbol ? `$${symbol}` : 'Resolving ticker…'}</span>
+                    {name && <span className="text-xs text-muted-foreground truncate max-w-[160px]">{name}</span>}
                     {r.health_grade && (
                       <Badge variant="outline" className="text-[10px]">{r.health_grade} {r.health_score ? `(${r.health_score})` : ''}</Badge>
                     )}
@@ -246,15 +249,16 @@ export default function LiveDeathWatch() {
                   </div>
                   <div className="text-[10px] text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                     <span title={fmtDate(r.ath_at)}>📈 ATH: {fmtAgo(r.ath_at)}</span>
-                    <span title={fmtDate(r.death_at)} className="text-destructive">💀 Died: {fmtAgo(r.death_at) }{r.death_at ? '' : ' (no death event yet)'}</span>
+                    <span title={fmtDate(deathAt)} className="text-destructive">💀 Dead: {fmtAgo(deathAt)}</span>
                     <span title={fmtDate(r.latest_at)}>🕒 Last price: {fmtAgo(r.latest_at)}</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs flex-1 min-w-[400px]">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs flex-1 min-w-[400px]">
                   <Stat label="ATH MCap" value={fmtUsd(r.ath_usd)} />
                   <Stat label="Now" value={fmtUsd(r.current_mcap_usd)} />
                   <Stat label="Collapse" value={fmtPct(r.collapse_pct)} accent={r.collapse_pct && r.collapse_pct > 0.9 ? 'text-destructive' : undefined} />
                   <Stat label="Liq" value={fmtUsd(r.liquidity_usd)} />
+                  <Stat label="24h Vol" value={fmtUsd(r.volume_24h)} />
                   <Stat label="Holders" value={r.holder_count?.toLocaleString() ?? '—'} />
                 </div>
                 <TooltipProvider delayDuration={200}>
