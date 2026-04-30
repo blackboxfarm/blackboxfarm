@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -54,6 +54,10 @@ export default function PumpfunWatchlistSpreadsheet() {
   const [sortKey, setSortKey] = useState<keyof WatchlistRow | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const tableInnerRef = useRef<HTMLDivElement>(null);
+  const [innerWidth, setInnerWidth] = useState(0);
 
   const load = useCallback(async () => {
     const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -83,6 +87,42 @@ export default function PumpfunWatchlistSpreadsheet() {
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Sync the two scrollbars (top dummy <-> real table)
+  useEffect(() => {
+    const top = topScrollRef.current;
+    const tbl = tableScrollRef.current;
+    if (!top || !tbl) return;
+    let lock = false;
+    const onTop = () => {
+      if (lock) return;
+      lock = true;
+      tbl.scrollLeft = top.scrollLeft;
+      lock = false;
+    };
+    const onTbl = () => {
+      if (lock) return;
+      lock = true;
+      top.scrollLeft = tbl.scrollLeft;
+      lock = false;
+    };
+    top.addEventListener('scroll', onTop);
+    tbl.addEventListener('scroll', onTbl);
+    return () => {
+      top.removeEventListener('scroll', onTop);
+      tbl.removeEventListener('scroll', onTbl);
+    };
+  }, []);
+
+  // Track inner table width so the top dummy scrollbar matches
+  useEffect(() => {
+    const inner = tableInnerRef.current;
+    if (!inner) return;
+    const ro = new ResizeObserver(() => setInnerWidth(inner.scrollWidth));
+    ro.observe(inner);
+    setInnerWidth(inner.scrollWidth);
+    return () => ro.disconnect();
+  }, [rows, page]);
 
   const columns = useMemo(() => {
     const first = rows?.[0];
@@ -156,10 +196,21 @@ export default function PumpfunWatchlistSpreadsheet() {
         ) : pageRows.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">No watchlist rows found for the last 14 days.</div>
         ) : (
-          <div
-            className="w-full max-h-[34rem] overflow-auto"
-            style={{ scrollbarWidth: 'auto', scrollbarColor: 'hsl(var(--muted-foreground)) transparent' }}
-          >
+          <>
+            {/* Always-visible horizontal scrollbar pinned to the top */}
+            <div
+              ref={topScrollRef}
+              className="w-full overflow-x-scroll overflow-y-hidden border-b border-border"
+              style={{ scrollbarWidth: 'auto', scrollbarColor: 'hsl(var(--muted-foreground)) transparent' }}
+            >
+              <div style={{ width: innerWidth, height: 1 }} />
+            </div>
+            <div
+              ref={tableScrollRef}
+              className="w-full max-h-[34rem] overflow-x-scroll overflow-y-auto"
+              style={{ scrollbarWidth: 'auto', scrollbarColor: 'hsl(var(--muted-foreground)) transparent' }}
+            >
+              <div ref={tableInnerRef} className="w-max">
             <Table className="w-max min-w-full">
               <TableHeader>
                 <TableRow>
@@ -171,7 +222,7 @@ export default function PumpfunWatchlistSpreadsheet() {
                       <TableHead
                         key={key}
                         compact
-                        className={`whitespace-nowrap sticky top-0 bg-card z-10 ${sortable ? 'cursor-pointer select-none hover:bg-muted/40' : ''}`}
+                        className={`whitespace-nowrap sticky top-0 bg-card z-20 shadow-[inset_0_-1px_0_hsl(var(--border))] ${sortable ? 'cursor-pointer select-none hover:bg-muted/40' : ''}`}
                         onClick={sortable ? () => toggleSort(column) : undefined}
                       >
                         <span className="inline-flex items-center gap-1">
@@ -204,7 +255,9 @@ export default function PumpfunWatchlistSpreadsheet() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+              </div>
+            </div>
+          </>
         )}
       </Card>
 
