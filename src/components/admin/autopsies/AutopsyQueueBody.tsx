@@ -160,50 +160,17 @@ export default function AutopsyQueueBody() {
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-xl font-bold flex items-center gap-2">
-            <Skull className="h-5 w-5 text-destructive" /> Autopsy Queue — Lambs
+            <Skull className="h-5 w-5 text-destructive" /> Autopsy Queue
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Pump.fun curve-death candidates only · peak curve ≥75% and &lt;100% · never graduated · ATH mcap is context only · auto-refreshes every minute.
-            {lastAutoRunAt ? ` Last processor check ${format(new Date(lastAutoRunAt), 'MMM d HH:mm')}.` : ''}
+            Three pools feed the autopsy pipeline. Live Death Watch surfaces new deaths as they happen.
+            Cool Deaths Backlog is a frozen historical pool. Lambs is the legacy pump.fun curve-death funnel.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <DeathTaxonomyModal />
-          <Button variant="outline" size="sm" onClick={load}>
-            <RefreshCw className="h-3 w-3 mr-1" /> Reload
-          </Button>
-          <Button size="sm" onClick={runFunnel} disabled={busy === 'funnel'}>
-            <Play className="h-3 w-3 mr-1" /> {busy === 'funnel' ? 'Running…' : 'Run Funnel'}
-          </Button>
         </div>
       </header>
-
-      <div className="flex gap-2 items-center flex-wrap">
-        {(['all', 'A', 'B', 'C'] as const).map(t => (
-          <Button key={t} variant={filter === t ? 'default' : 'outline'} size="sm" onClick={() => setFilter(t)}>
-            {t === 'all' ? 'All' : `Tier ${t}`}
-          </Button>
-        ))}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Sort by</span>
-          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-            <SelectTrigger className="h-8 w-[230px] text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {(Object.keys(SORT_LABELS) as SortKey[]).map(k => (
-                <SelectItem key={k} value={k} className="text-xs">{SORT_LABELS[k]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {sorted === null && (
-        <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
-      )}
-
-      {sorted && sorted.length === 0 && (
-        <Card className="p-8 text-center text-muted-foreground">No candidates. Click "Run Funnel" to populate.</Card>
-      )}
 
       <Tabs defaultValue="live" className="mt-4">
         <TabsList>
@@ -221,6 +188,44 @@ export default function AutopsyQueueBody() {
         </TabsContent>
 
         <TabsContent value="lambs" className="mt-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap mb-3">
+            <p className="text-xs text-muted-foreground">
+              Pump.fun curve-death candidates · peak curve ≥75% and &lt;100% · never graduated · auto-refreshes every minute.
+              {lastAutoRunAt ? ` Last check ${format(new Date(lastAutoRunAt), 'MMM d HH:mm')}.` : ''}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={load}>
+                <RefreshCw className="h-3 w-3 mr-1" /> Reload
+              </Button>
+              <Button size="sm" onClick={runFunnel} disabled={busy === 'funnel'}>
+                <Play className="h-3 w-3 mr-1" /> {busy === 'funnel' ? 'Running…' : 'Run Funnel'}
+              </Button>
+            </div>
+          </div>
+          <div className="flex gap-2 items-center flex-wrap mb-3">
+            {(['all', 'A', 'B', 'C'] as const).map(t => (
+              <Button key={t} variant={filter === t ? 'default' : 'outline'} size="sm" onClick={() => setFilter(t)}>
+                {t === 'all' ? 'All' : `Tier ${t}`}
+              </Button>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sort by</span>
+              <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                <SelectTrigger className="h-8 w-[230px] text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(SORT_LABELS) as SortKey[]).map(k => (
+                    <SelectItem key={k} value={k} className="text-xs">{SORT_LABELS[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {sorted === null && (
+            <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
+          )}
+          {sorted && sorted.length === 0 && (
+            <Card className="p-8 text-center text-muted-foreground">No candidates. Click "Run Funnel" to populate.</Card>
+          )}
           <div className="space-y-2">
             {sorted?.map((c, idx) => (
               <AutopsyCandidateRow
