@@ -222,7 +222,7 @@ export const DEATH_TAXONOMY: Record<DeathCauseId, DeathCauseDef> = {
     tier: 'C',
     verdict: 'BURNOUT',
     summary: 'Hype faded, dev still around, no foul play.',
-    signals: ['ath_mcap_usd>10000', 'no_malicious_dump', 'dev_wallet_active_recent'],
+    signals: ['ath_mcap_usd>10000', 'no_malicious_dump', 'dev_wallet_active_recent', 'social_completeness<3'],
     autoPublishMinConfidence: 90,
   },
   hype_decay: {
@@ -232,8 +232,18 @@ export const DEATH_TAXONOMY: Record<DeathCauseId, DeathCauseDef> = {
     tier: 'C',
     verdict: 'HYPE DECAY',
     summary: 'Viral peak then organic decline. No malice. No abandonment.',
-    signals: ['ath_mcap_usd>50000', 'gradual_volume_decay', 'no_malicious_dump'],
+    signals: ['ath_mcap_usd>50000', 'gradual_volume_decay', 'no_malicious_dump', 'social_completeness<3'],
     autoPublishMinConfidence: 90,
+  },
+  natural_cycle: {
+    id: 'natural_cycle',
+    label: 'Natural Cycle',
+    intent: 'organic',
+    tier: 'C',
+    verdict: 'RAN ITS CYCLE',
+    summary: 'Project shipped a real social stack, peaked legitimately, retail rotated out. No malice, no abandonment.',
+    signals: ['ath_mcap_usd>=100000', 'social_completeness>=3', 'no_malicious_dump', 'clean_dev_dossier'],
+    autoPublishMinConfidence: 999,
   },
   organic_death: {
     id: 'organic_death',
