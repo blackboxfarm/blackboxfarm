@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Skull, FileText } from 'lucide-react';
+import { Skull, FileText, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -80,6 +80,8 @@ export default function LiveDeathWatch() {
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [causeFilter, setCauseFilter] = useState<string>('all');
+  // mint → status of an existing autopsy_candidates row (analyzing/drafted/approved/failed)
+  const [processed, setProcessed] = useState<Record<string, { status: string; slug: string | null }>>({});
   const hydratingRef = useRef(false);
 
   async function load() {
@@ -97,6 +99,21 @@ export default function LiveDeathWatch() {
     }
     const list = (data ?? []) as DeathRow[];
     setRows(list);
+
+    // Look up which of these mints already have an autopsy_candidates row so
+    // we can lock the "Generate Report" button and tint the card.
+    if (list.length > 0) {
+      const mints = list.map(r => r.token_mint);
+      const { data: cands } = await supabase
+        .from('autopsy_candidates')
+        .select('token_mint, status, published_slug')
+        .in('token_mint', mints);
+      const map: Record<string, { status: string; slug: string | null }> = {};
+      (cands ?? []).forEach((c: any) => {
+        map[c.token_mint] = { status: c.status, slug: c.published_slug ?? null };
+      });
+      setProcessed(map);
+    }
 
     const missingMetadata = list
       .filter(r => !cleanTokenText(r.symbol, 'symbol') || !cleanTokenText(r.name, 'name'))
@@ -227,8 +244,14 @@ export default function LiveDeathWatch() {
           const symbol = cleanTokenText(r.symbol, 'symbol');
           const name = cleanTokenText(r.name, 'name');
           const deathAt = r.death_at ?? r.latest_at;
+          const proc = processed[r.token_mint];
+          const isProcessed = !!proc;
+          const isLocked = isProcessed && proc.status !== 'failed';
           return (
-            <Card key={r.token_mint} className="p-3">
+            <Card
+              key={r.token_mint}
+              className={`p-3 transition-colors ${isLocked ? 'bg-muted/40 border-primary/30 opacity-80' : ''}`}
+            >
               <div className="flex items-start gap-4 flex-wrap">
                 <div className="flex-1 min-w-[200px]">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -239,6 +262,14 @@ export default function LiveDeathWatch() {
                     )}
                     {r.death_cause && (
                       <Badge variant="outline" className="text-[10px]">{r.death_cause} {r.death_confidence ? `· ${r.death_confidence}%` : ''}</Badge>
+                    )}
+                    {isProcessed && (
+                      <Badge
+                        variant={proc.status === 'approved' ? 'default' : proc.status === 'failed' ? 'destructive' : 'secondary'}
+                        className="text-[10px] gap-1"
+                      >
+                        <CheckCircle2 className="h-3 w-3" /> {proc.status}
+                      </Badge>
                     )}
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">
@@ -270,13 +301,20 @@ export default function LiveDeathWatch() {
                   <div className="flex gap-1 flex-wrap">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button size="sm" variant="default" disabled={busy === r.token_mint}
-                          onClick={() => draftAutopsy(r)}>
-                          <FileText className="h-3 w-3 mr-1" /> Generate Report
+                        <Button
+                          size="sm"
+                          variant={isLocked ? 'outline' : 'default'}
+                          disabled={busy === r.token_mint || isLocked}
+                          onClick={() => draftAutopsy(r)}
+                        >
+                          <FileText className="h-3 w-3 mr-1" />
+                          {isLocked ? (proc.status === 'approved' ? 'Published' : proc.status === 'drafted' ? 'Drafted' : proc.status === 'analyzing' ? 'Analyzing…' : 'Queued') : 'Generate Report'}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="max-w-xs text-xs">
-                        Queues this token as a Tier B candidate and drafts a full autopsy report. Promote to Tier A in the Queue to auto-publish.
+                        {isLocked
+                          ? `Already in the autopsy pipeline (status: ${proc.status}). Manage from the Drafts / Published tabs.`
+                          : 'Queues this token as a Tier B candidate and drafts a full autopsy report. Promote to Tier A in the Queue to auto-publish.'}
                       </TooltipContent>
                     </Tooltip>
                   </div>
