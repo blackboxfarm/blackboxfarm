@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/use-toast';
 type WatchlistRow = Database['public']['Tables']['pumpfun_watchlist']['Row'];
 
 const PAGE_SIZE = 1000;
-const AUTO_REFRESH_MS = 60_000;
 
 function formatValue(value: unknown) {
   if (value == null) return '—';
@@ -55,8 +54,6 @@ export default function PumpfunWatchlistSpreadsheet() {
 
   useEffect(() => {
     load();
-    const interval = window.setInterval(load, AUTO_REFRESH_MS);
-    return () => window.clearInterval(interval);
   }, [load]);
 
   const columns = useMemo(() => {
@@ -79,7 +76,7 @@ export default function PumpfunWatchlistSpreadsheet() {
         <div>
           <h4 className="text-lg font-semibold">Pump.fun watchlist spreadsheet</h4>
           <p className="text-sm text-muted-foreground">
-            Last 14 days · every column from <code className="font-mono">pumpfun_watchlist</code> · auto-refreshes every minute.
+            Last 14 days · every column from <code className="font-mono">pumpfun_watchlist</code> · loads once (use Reload above to refresh).
             {filteredRows && columns.length > 0 ? ` ${filteredRows.length.toLocaleString()} rows × ${columns.length} columns. Scroll horizontally →` : ''}
           </p>
         </div>
