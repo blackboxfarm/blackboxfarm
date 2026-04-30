@@ -53,7 +53,7 @@ async function fetchDexScreener(mint: string): Promise<DexResolved | null> {
   const pairs = Array.isArray(data?.pairs) ? data.pairs : [];
   const pair = pairs
     .filter((p: any) => (p?.baseToken?.address ?? '').toString() === mint || p?.baseToken?.symbol)
-    .sort((a: any, b: any) => num(b?.liquidity?.usd) ?? 0 - (num(a?.liquidity?.usd) ?? 0))[0];
+    .sort((a: any, b: any) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0))[0];
   if (!pair) return null;
 
   return {
