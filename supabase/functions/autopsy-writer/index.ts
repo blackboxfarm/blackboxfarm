@@ -304,7 +304,6 @@ ${clusterRugs >= 3 ? `- The creator cluster has ${clusterRugs} prior rugs/abando
 Mint: ${c.token_mint}
 Ticker: ${ticker}
 Name: ${tokenName}
-ATH MCap USD: ${c.ath_mcap_usd ?? 'unknown'}
 ATH MCap USD: ${athMcap ?? 'unknown'}
 Current MCap USD: ${currentMcap ?? 'unknown'}
 Liquidity USD: ${liquidityUsd ?? 'unknown'}
