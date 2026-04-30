@@ -22,8 +22,10 @@ import { assertDbWrite, assertUpsert } from '../_shared/db-assert.ts';
 import { classifyDeath, classifyCurveDeath, DEATH_TAXONOMY, tierFor, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
-const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = 75_000;
+const PUMPFUN_LAMB_MIN_CURVE_PCT = 75;
+const PUMPFUN_LAMB_MAX_CURVE_PCT = 99.5;
 const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
+const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
 
 function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: number | null; price_peak?: number | null }): number {
   return Math.max(
@@ -33,8 +35,11 @@ function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: numb
   );
 }
 
-function estimateCurveAthPct(peakMcap: number): number {
-  return Math.min(100, Math.round((peakMcap / 100_000) * 100));
+function liveCurveProgressFromPump(coin: any): number | null {
+  const realTokenReserves = Number(coin?.real_token_reserves ?? NaN);
+  if (!Number.isFinite(realTokenReserves)) return null;
+  const tokensSold = PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
+  return Math.max(0, Math.min(100, (tokensSold / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100));
 }
 
 const corsHeaders = {
@@ -106,7 +111,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       .from('autopsy_candidates')
       .delete()
       .eq('source_feed', 'pumpfun_curve_death')
-      .or(`ath_mcap_usd.is.null,ath_mcap_usd.lt.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD}`),
+      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MAX_CURVE_PCT}`),
     'autopsy_candidates',
     'DELETE stale non-Lamb curve deaths'
   );
