@@ -130,8 +130,8 @@ Deno.serve(async (req) => {
 
       if (!symbol && !name && !dex?.marketCap && !dex?.liquidityUsd && !dex?.volume24h) continue;
 
-      await assertDbWrite(
-        supabase.from('token_lifecycle').upsert({
+      const now = new Date().toISOString();
+      const lifecyclePayload = {
           token_mint: mint,
           ...(symbol ? { symbol } : {}),
           ...(name ? { name } : {}),
@@ -143,12 +143,35 @@ Deno.serve(async (req) => {
           ...(dex?.pairAddress ? { pair_address: dex.pairAddress } : {}),
           ...(dex?.dexId ? { dex_id: dex.dexId } : {}),
           ...(imageUrl ? { image_url: imageUrl } : {}),
-          last_fetched_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'token_mint' }),
-        'token_lifecycle',
-        'UPSERT live death metadata hydrate',
-      );
+          last_fetched_at: now,
+          updated_at: now,
+      };
+
+      const { data: existingLifecycle, error: existingErr } = await supabase
+        .from('token_lifecycle')
+        .select('token_mint')
+        .eq('token_mint', mint)
+        .maybeSingle();
+      if (existingErr) throw existingErr;
+
+      if (existingLifecycle) {
+        await assertDbWrite(
+          supabase.from('token_lifecycle').update(lifecyclePayload).eq('token_mint', mint),
+          'token_lifecycle',
+          'UPDATE live death metadata hydrate',
+        );
+      } else {
+        await assertDbWrite(
+          supabase.from('token_lifecycle').insert({
+            ...lifecyclePayload,
+            first_seen_at: now,
+            last_seen_at: now,
+            current_status: 'active',
+          }),
+          'token_lifecycle',
+          'INSERT live death metadata hydrate',
+        );
+      }
 
       if (symbol || name) {
         await assertDbWrite(
