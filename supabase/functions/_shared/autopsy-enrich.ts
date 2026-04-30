@@ -9,7 +9,22 @@
  * Pure DB pulls — no scrapes, no AI. Safe to call on every funnel insert.
  */
 
-const SOCIAL_PLATFORMS = ['website', 'twitter', 'x', 'x_community', 'telegram', 'discord', 'youtube'];
+const SOCIAL_PLATFORMS = ['website', 'x', 'x_community', 'telegram', 'discord', 'youtube'];
+
+function classifySocial(row: any): string | null {
+  const platform = String(row?.platform ?? '').toLowerCase();
+  const linkType = String(row?.link_type ?? '').toLowerCase();
+  const url = String(row?.url ?? '').toLowerCase();
+  const haystack = `${platform} ${linkType} ${url}`;
+
+  if (row?.is_community || row?.community_id || /x\.com\/i\/communities\//.test(url)) return 'x_community';
+  if (/telegram|t\.me\//.test(haystack)) return 'telegram';
+  if (/discord|discord\.gg|discord\.com/.test(haystack)) return 'discord';
+  if (/youtube|youtu\.be/.test(haystack)) return 'youtube';
+  if (/twitter|\bx\b|x\.com\//.test(haystack)) return 'x';
+  if (/website|site|homepage|http/.test(haystack)) return 'website';
+  return null;
+}
 
 export interface EnrichResult {
   social_completeness: number;
@@ -29,17 +44,20 @@ export async function enrichCandidate(
   creatorWallet?: string | null,
 ): Promise<EnrichResult> {
   // ── socials ────────────────────────────────────────────────
-  const { data: socials } = await supabase
+  const { data: socials, error: socialsError } = await supabase
     .from('token_social_links')
-    .select('platform, url, handle')
-    .eq('token_mint', tokenMint);
+    .select('platform, link_type, url, extracted_handle, is_community, community_id, is_current')
+    .eq('token_mint', tokenMint)
+    .neq('is_current', false);
+
+  if (socialsError) console.warn('[autopsy-enrich] social link read failed:', socialsError.message);
 
   const platforms = new Set<string>();
   let youtubeUrl: string | null = null;
   let discordPresent = false;
   for (const s of socials ?? []) {
-    const p = (s.platform || '').toLowerCase();
-    if (SOCIAL_PLATFORMS.includes(p)) platforms.add(p === 'twitter' ? 'x' : p);
+    const p = classifySocial(s);
+    if (p && SOCIAL_PLATFORMS.includes(p)) platforms.add(p);
     if (p === 'youtube') youtubeUrl = s.url ?? null;
     if (p === 'discord') discordPresent = true;
   }
@@ -50,12 +68,12 @@ export async function enrichCandidate(
   try {
     const { data: xc } = await supabase
       .from('x_community_resolution_queue')
-      .select('member_count')
+      .select('community_id, resolved_at')
       .eq('token_mint', tokenMint)
-      .order('updated_at', { ascending: false })
+      .order('resolved_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    xMembers = (xc?.member_count as number | null) ?? null;
+    xMembers = null;
   } catch { /* table may not have this column in all envs */ }
 
   // ── Telegram subscriber count ───────────────────────────────
@@ -63,12 +81,11 @@ export async function enrichCandidate(
   try {
     const { data: tg } = await supabase
       .from('telegram_channel_registry')
-      .select('member_count, subscriber_count')
-      .eq('token_mint', tokenMint)
-      .order('updated_at', { ascending: false })
+      .select('channel_id, current_username, last_seen_at')
+      .order('last_seen_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    tgSubs = (tg?.subscriber_count ?? tg?.member_count ?? null) as number | null;
+    tgSubs = null;
   } catch { /* ignore */ }
 
   // ── Paid boosts (sum) ───────────────────────────────────────
