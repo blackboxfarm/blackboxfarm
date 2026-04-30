@@ -118,7 +118,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       .from('autopsy_candidates')
       .delete()
       .eq('source_feed', 'pumpfun_curve_death')
-      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MAX_CURVE_PCT}`),
+      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MAX_CURVE_PCT},ath_mcap_usd.is.null,ath_mcap_usd.lt.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},ath_mcap_usd.gte.${PUMPFUN_GRADUATION_MCAP_USD}`),
     'autopsy_candidates',
     'DELETE stale non-Lamb curve deaths'
   );
@@ -167,8 +167,8 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   }
 
   // ── 2. pumpfun_watchlist Lambs (75% <= curve ATH < 100%, never graduated) ─────
-  // IMPORTANT: Lambs are selected ONLY by recorded bonding-curve progress.
-  // ATH market cap is display/context only; it must never fake curve progress.
+  // IMPORTANT: stored bonding_curve_pct has proven stale/noisy. Lambs are gated by
+  // live pump.fun ath_market_cap converted against the pump.fun graduation mcap.
   const { data: pfLambs } = await supabase
     .from('pumpfun_watchlist')
     .select(`
@@ -179,8 +179,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     `)
     .eq('status', 'dead')
     .not('is_graduated', 'is', true)
-    .gte('bonding_curve_pct', PUMPFUN_LAMB_MIN_CURVE_PCT)
-    .lt('bonding_curve_pct', PUMPFUN_LAMB_MAX_CURVE_PCT)
+    .or(`bonding_curve_pct.gte.${PUMPFUN_LAMB_MIN_CURVE_PCT},market_cap_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},price_ath_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY}`)
     .not('token_mint', 'is', null)
     .limit(limit);
 
