@@ -145,6 +145,7 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
 
   const body = await req.json().catch(() => ({}));
   const batchSize = Math.min(body.batch || 1, 3); // small batch — each costs $$
+  const isRegenerate = !!body.regenerate;
 
   // Pick top-scoring candidates, Tier-A first, that are still pending
   let query = supabase
@@ -195,18 +196,59 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         devReputation = dr;
       }
 
+      // ── v2: enrichment + dev dossier + evidence blobs ───────
+      const enrichment = await enrichCandidate(supabase, c.token_mint, creatorWallet);
+      const dossier = await buildDevDossier(supabase, creatorWallet);
+      const { data: blobs } = await supabase
+        .from('autopsy_evidence_blobs')
+        .select('kind, payload, captured_at')
+        .eq('candidate_id', c.id)
+        .order('captured_at', { ascending: false })
+        .limit(10);
+
+      // Persist enrichment + dossier on the candidate so the UI sees them
+      await supabase.from('autopsy_candidates').update({
+        ...enrichment,
+        dev_dossier: dossier,
+      }).eq('id', c.id);
+
       const ticker = c.ticker ?? pf?.token_symbol ?? c.token_mint.slice(0, 6);
       const tokenName = c.token_name ?? pf?.token_name ?? ticker;
-      const slug = slugify(`${ticker}-${tokenName}`);
+      const baseSlug = slugify(`${ticker}-${tokenName}`);
       const causeDef = DEATH_TAXONOMY[c.death_cause as DeathCauseId] ?? DEATH_TAXONOMY.unknown;
 
+      // Determine version for this candidate
+      const { data: existingReports } = await supabase
+        .from('autopsy_reports')
+        .select('id, version, slug')
+        .eq('candidate_id', c.id)
+        .order('version', { ascending: false });
+      const nextVersion = ((existingReports?.[0]?.version as number | undefined) ?? 0) + 1;
+      const slug = baseSlug;
+
       // ── AI prompt ────────────────────────────────────────────
-      const systemPrompt = `You are the BlackBox Farm forensic analyst. You write coroner-style autopsy reports for dead Solana tokens. Tone: clinical, evidence-based, dry forensic humor. NEVER fabricate addresses, transaction hashes, or numbers. If a value is unknown, write "unknown" or omit. Match the structure of the reference example exactly.
+      const intent = causeDef.intent;
+      const fewShot = fewShotForIntent(intent);
+      const highSocial = (enrichment.social_completeness ?? 0) >= 3;
+      const isOrganic = intent === 'organic';
+      const clusterRugs = (dossier.cluster_history_summary?.rug_count ?? 0)
+                       + (dossier.cluster_history_summary?.soft_rug_count ?? 0);
+
+      const systemPrompt = `You are the BlackBox Farm forensic analyst. You write coroner-style autopsy reports for dead Solana tokens. Tone: clinical, evidence-based, dry forensic humor. NEVER fabricate addresses, transaction hashes, or numbers. If a value is unknown, write "unknown" or omit. Match the structure of the reference example for the determined intent.
+
+CLASSIFIED INTENT FOR THIS REPORT: ${intent.toUpperCase()}
 
 REFERENCE EXAMPLE (structure to follow):
-${FEW_SHOT_REFERENCE}`;
+${fewShot}
 
-      const userPrompt = `Write a complete BlackBox Autopsy markdown report for the following dead Solana token. Use the reference structure: Subject table, Players table, Timeline, Rug Mechanic (or Failure Mechanic), Fingerprint table, Verdict & Recommendation. Always include a "🪦 Time of Death" row in the Subject table.
+HARD RULES:
+- The verdict at the top of the report MUST be exactly: "${causeDef.verdict}".
+${highSocial ? `- This project shipped a real social stack (social_completeness=${enrichment.social_completeness}). You are FORBIDDEN from using any of these phrases: "on-chain ghost", "dead on arrival", "failed launch", "no community", "abandoned token creation attempt".` : ''}
+${isOrganic ? '- Do NOT call the dev a rugger or grifter. Credit the social build-out explicitly. Frame retail rotation as a normal lifecycle event, not a failure.' : ''}
+${clusterRugs >= 3 ? `- The creator cluster has ${clusterRugs} prior rugs/abandonments. The report MUST name this as a repeat-pattern actor in the Fingerprint and Verdict sections, citing the prior mints by ticker + ATH. Even if the immediate on-chain footprint is gentle, this is a serial pattern.` : ''}
+- Always include a "🪦 Time of Death" row in the Subject table.`;
+
+      const userPrompt = `Write a complete BlackBox Autopsy markdown report for the following dead Solana token, matching the reference structure for intent="${intent}".
 
 ## CLASSIFICATION (already determined by classifier — do NOT contradict)
 - Death cause: ${causeDef.label} (${causeDef.id})
@@ -225,6 +267,26 @@ Liquidity USD: ${c.liquidity_usd ?? 'unknown'}
 Lifetime hours: ${c.age_hours?.toFixed(2) ?? 'unknown'}
 Creator wallet: ${creatorWallet ?? 'unknown'}
 
+## SOCIAL STACK (enrichment)
+- Social completeness: ${enrichment.social_completeness}/6 platforms
+- X community: ${enrichment.x_community_member_count ?? 'unknown'} members
+- Telegram subscribers: ${enrichment.telegram_subscriber_count ?? 'unknown'}
+- Discord present: ${enrichment.discord_present}
+- YouTube: ${enrichment.youtube_url ?? 'none'}
+- Paid boosts (USD): ${enrichment.boosts_paid_usd ?? 'none recorded'}
+- DexScreener paid: ${enrichment.dex_paid ?? 'unknown'}
+- Holders at peak: ${enrichment.holders_at_ath ?? 'unknown'}
+- Dev holdings at death: ${enrichment.dev_holding_pct_at_death ?? 'unknown'}%
+
+## DEV DOSSIER (cluster-aware)
+- Reputation verdict: ${dossier.reputation_verdict}
+- KYC root: ${dossier.kyc_root ?? 'not resolved'}
+- Cluster size: ${dossier.cluster_wallets?.length ?? 1} linked wallets
+- Cluster history: ${JSON.stringify(dossier.cluster_history_summary)}
+- Prior tokens (most recent first):
+${(dossier.prior_tokens ?? []).slice(0, 8).map(t => `  - ${t.mint} ATH=${t.ath_mcap_usd ?? '?'} status=${t.status ?? '?'} cause=${t.death_cause ?? '?'}`).join('\n') || '  (none on record)'}
+- Evidence strings: ${JSON.stringify(dossier.primary_evidence_strings)}
+
 ## TOKEN LIFECYCLE
 ${JSON.stringify(lifecycle ?? {}, null, 2)}
 
@@ -237,19 +299,42 @@ ${JSON.stringify(devReputation ?? {}, null, 2)}
 ## SOCIALS
 ${JSON.stringify(socials ?? [], null, 2)}
 
+## SOCIAL EVIDENCE BLOBS (TG deep-pulls, X community scrapes — verbatim)
+${JSON.stringify(blobs ?? [], null, 2)}
+
 ## SOCIAL DEATH SIGNALS
 No-admin-message hours: ${c.social_no_admin_hours ?? 'unchecked'}
 Spam %: ${c.social_spam_pct ?? 'unchecked'}
 
 Write the full markdown now. No preamble, no code fence — start with "# Token Autopsy — ...".`;
 
-      const md = await callAI(userPrompt, systemPrompt);
+      let md = await callAI(userPrompt, systemPrompt);
+
+      // Banned-phrase guard for high-social-completeness projects
+      if (highSocial) {
+        const violations = BANNED_PHRASES_HIGH_SOCIAL.filter(rx => rx.test(md)).map(rx => String(rx));
+        if (violations.length > 0) {
+          console.warn(`[autopsy-writer] banned phrases on first pass: ${violations.join(', ')} — re-prompting`);
+          const retrySys = systemPrompt + `\n\nPREVIOUS DRAFT VIOLATED THE BANNED-PHRASE RULE. Rewrite without any of: "on-chain ghost", "dead on arrival", "failed launch", "no community". This project had a real social build (${enrichment.social_completeness} platforms).`;
+          md = await callAI(userPrompt, retrySys);
+        }
+      }
+
+      // ── If regenerating, mark prior reports as not current ──
+      if (existingReports && existingReports.length > 0) {
+        await supabase
+          .from('autopsy_reports')
+          .update({ is_current: false })
+          .eq('candidate_id', c.id);
+      }
 
       // ── Insert report draft ──────────────────────────────────
       const subtitle = causeDef.summary;
       const insertedRows = await assertInsert(
         supabase.from('autopsy_reports').insert({
           slug,
+          version: nextVersion,
+          is_current: true,
           token_mint: c.token_mint,
           ticker,
           title: `${ticker} — ${tokenName}`,
