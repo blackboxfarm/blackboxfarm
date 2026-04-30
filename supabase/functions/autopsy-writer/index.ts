@@ -398,6 +398,21 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
 
       const drafted = (insertedRows as { id: string; slug: string });
 
+      // ── Update candidate BEFORE best-effort banner work ──────
+      // The report is the critical artifact; banner generation must never leave
+      // the row stuck in analyzing after a valid draft was inserted.
+      const autoPublish = shouldAutoPublish(causeId as DeathCauseId, confidence ?? 0);
+      await assertUpdate(
+        supabase.from('autopsy_candidates').update({
+          status: autoPublish ? 'approved' : 'drafted',
+          drafted_at: new Date().toISOString(),
+          decided_at: autoPublish ? new Date().toISOString() : null,
+          published_slug: drafted.slug,
+          draft_md_path: `/autopsies/${slug}.md`,
+        }).eq('id', c.id).select('id').single(),
+        'autopsy_candidates'
+      );
+
       // ── Banner overlay (best-effort, non-blocking) ──────────
       try {
         const overlayRes = await fetch(
@@ -414,6 +429,7 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
               ticker,
               report_id: drafted.id,
             }),
+            signal: AbortSignal.timeout(8000),
           },
         );
         if (!overlayRes.ok) {
@@ -426,19 +442,6 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
         console.warn(`[autopsy-writer] banner overlay failed for ${drafted.slug}:`, bannerErr?.message);
         // Don't fail the draft — admin can retry banner from the queue.
       }
-
-      // ── Update candidate ─────────────────────────────────────
-      const autoPublish = shouldAutoPublish(causeId as DeathCauseId, confidence ?? 0);
-      await assertUpdate(
-        supabase.from('autopsy_candidates').update({
-          status: autoPublish ? 'approved' : 'drafted',
-          drafted_at: new Date().toISOString(),
-          decided_at: autoPublish ? new Date().toISOString() : null,
-          published_slug: drafted.slug,
-          draft_md_path: `/autopsies/${slug}.md`,
-        }).eq('id', c.id).select('id').single(),
-        'autopsy_candidates'
-      );
 
       results.push({ candidate_id: c.id, slug: drafted.slug, status: autoPublish ? 'approved' : 'drafted' });
     } catch (e: any) {
