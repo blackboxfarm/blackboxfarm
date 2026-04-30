@@ -190,15 +190,17 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       );
 
       // ── Gather evidence ──────────────────────────────────────
-      const [{ data: lifecycle }, { data: pf }, { data: socials }] = await Promise.all([
+      const [{ data: lifecycle }, { data: pf }, { data: socials }, { data: liveDeath }, { data: backlog }] = await Promise.all([
         supabase.from('token_lifecycle').select('*').eq('token_mint', c.token_mint).maybeSingle(),
         supabase.from('pumpfun_watchlist').select('*').eq('token_mint', c.token_mint).maybeSingle(),
-        supabase.from('token_social_links').select('platform, url, handle').eq('token_mint', c.token_mint),
+        supabase.from('token_social_links').select('platform, link_type, url, extracted_handle, is_community, community_id, source, phase, is_current').eq('token_mint', c.token_mint).neq('is_current', false),
+        supabase.from('v_live_death_watch').select('*').eq('token_mint', c.token_mint).maybeSingle(),
+        supabase.from('autopsy_backlog').select('*').eq('token_mint', c.token_mint).maybeSingle(),
       ]);
 
       let devBehavior: any = null;
       let devReputation: any = null;
-      const creatorWallet = c.creator_wallet ?? pf?.creator_wallet;
+      const creatorWallet = c.creator_wallet ?? pf?.creator_wallet ?? lifecycle?.creator_wallet ?? liveDeath?.creator_wallet ?? backlog?.creator_wallet;
       if (creatorWallet) {
         const [{ data: db }, { data: dr }] = await Promise.all([
           supabase.from('dev_behavior_scores').select('*').eq('wallet_address', creatorWallet).maybeSingle(),
@@ -218,16 +220,45 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         .order('captured_at', { ascending: false })
         .limit(10);
 
-      // Persist enrichment + dossier on the candidate so the UI sees them
-      await supabase.from('autopsy_candidates').update({
+      const athMcap = num(c.ath_mcap_usd, liveDeath?.ath_usd, backlog?.ath_usd, lifecycle?.ath_24h_usd, pf?.ath_market_cap_usd, Number(pf?.price_ath_usd ?? 0) * 1_000_000_000, pf?.market_cap_usd);
+      const currentMcap = num(c.current_mcap_usd, liveDeath?.current_mcap_usd, backlog?.current_mcap_usd, lifecycle?.market_cap, pf?.market_cap_usd);
+      const liquidityUsd = num(c.liquidity_usd, liveDeath?.liquidity_usd, backlog?.liquidity_usd, lifecycle?.liquidity_usd, pf?.liquidity_usd);
+      const ageHours = num(c.age_hours) ?? (liveDeath?.first_seen_at ? (Date.now() - new Date(liveDeath.first_seen_at).getTime()) / 3600000 : null);
+      const freshClass = classifyDeath({
+        ageHours: ageHours ?? 0,
+        mcap: currentMcap ?? 0,
+        liquidity: liquidityUsd ?? 0,
+        athMcap: athMcap ?? 0,
+        dumpVelocity: devBehavior?.dump_velocity_score ?? 0,
+        lpPullScore: devBehavior?.lp_pull_score ?? 0,
+        devBuyPct: 100 - (devBehavior?.supply_retention_pct ?? 100),
+        hasMaliciousDump: (devBehavior?.dump_velocity_score ?? 0) > 60,
+        socialCompleteness: enrichment.social_completeness,
+        devDossier: dossier,
+      });
+      const causeId = (!meaningfulCause(c.death_cause) || isRegenerate || freshClass.cause === 'natural_cycle') ? freshClass.cause : c.death_cause;
+      const causeDef = DEATH_TAXONOMY[causeId] ?? DEATH_TAXONOMY.unknown;
+      const confidence = freshClass.confidence ?? c.death_confidence ?? 30;
+      const matchedSignals = freshClass.matchedSignals?.length ? freshClass.matchedSignals : (c.matched_signals ?? []);
+
+      // Persist enrichment + hydrated facts on the candidate so the UI and next run see them
+      await assertUpdate(supabase.from('autopsy_candidates').update({
         ...enrichment,
         dev_dossier: dossier,
-      }).eq('id', c.id);
+        death_cause: causeId,
+        death_intent: causeDef.intent,
+        death_confidence: confidence,
+        matched_signals: matchedSignals,
+        ath_mcap_usd: athMcap,
+        current_mcap_usd: currentMcap,
+        liquidity_usd: liquidityUsd,
+        age_hours: ageHours,
+        creator_wallet: creatorWallet,
+      }).eq('id', c.id).select('id').single(), 'autopsy_candidates');
 
-      const ticker = c.ticker ?? pf?.token_symbol ?? c.token_mint.slice(0, 6);
-      const tokenName = c.token_name ?? pf?.token_name ?? ticker;
+      const ticker = c.ticker ?? pf?.token_symbol ?? liveDeath?.symbol ?? backlog?.symbol ?? c.token_mint.slice(0, 6);
+      const tokenName = c.token_name ?? pf?.token_name ?? liveDeath?.name ?? backlog?.name ?? ticker;
       const baseSlug = slugify(`${ticker}-${tokenName}`);
-      const causeDef = DEATH_TAXONOMY[c.death_cause as DeathCauseId] ?? DEATH_TAXONOMY.unknown;
 
       // Determine version for this candidate
       const { data: existingReports } = await supabase
