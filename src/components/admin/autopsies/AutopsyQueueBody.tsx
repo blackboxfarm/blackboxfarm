@@ -115,6 +115,7 @@ export default function AutopsyQueueBody() {
         token_mint: c.token_mint,
         ticker: c.ticker,
         report_id: report?.id,
+        source_feed: c.source_feed,
       },
     });
     setBusy(null);
