@@ -29,14 +29,6 @@ const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = PUMPFUN_GRADUATION_MCAP_USD * (PUMPFUN_LAM
 const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
 const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
 
-function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: number | null; price_peak?: number | null }): number {
-  return Math.max(
-    Number(row.market_cap_usd ?? 0),
-    Number(row.price_ath_usd ?? 0) * PUMPFUN_TOKEN_SUPPLY,
-    Number(row.price_peak ?? 0) * PUMPFUN_TOKEN_SUPPLY,
-  );
-}
-
 function liveCurveProgressFromPump(coin: any): number | null {
   const realTokenReserves = Number(coin?.real_token_reserves ?? NaN);
   if (!Number.isFinite(realTokenReserves)) return null;
