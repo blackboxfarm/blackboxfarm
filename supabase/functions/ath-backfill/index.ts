@@ -26,8 +26,18 @@ const corsHeaders = {
 const GT_BASE = 'https://api.geckoterminal.com/api/v2';
 const DS_BASE = 'https://api.dexscreener.com';
 
+// GeckoTerminal: 30 req/min unauthenticated -> 2000ms minimum spacing between calls.
+let lastGtCallAt = 0;
+async function geckoThrottle() {
+  const now = Date.now();
+  const wait = 2000 - (now - lastGtCallAt);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastGtCallAt = Date.now();
+}
+
 async function fetchJson(url: string, timeoutMs = 8000): Promise<any | null> {
   try {
+    if (url.startsWith(GT_BASE)) await geckoThrottle();
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     const res = await fetch(url, { signal: ctrl.signal, headers: { 'accept': 'application/json' } });
@@ -155,8 +165,7 @@ Deno.serve(async (req) => {
         .is('price_ath_usd', null);
 
       updated++;
-      // Light pacing — GeckoTerminal allows ~30 req/min unauthenticated
-      await new Promise(r => setTimeout(r, 250));
+      // Per-call GT pacing handled in fetchJson (2000ms between calls).
     } catch (e) {
       errors.push(`${mint}: ${(e as Error).message}`);
     }
