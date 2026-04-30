@@ -138,11 +138,12 @@ export default function LiveDeathWatch() {
     setBusy(r.token_mint);
     // All candidates start at Tier B (review state). Promotion to Tier A
     // (auto-publish) is a separate manual step elsewhere.
+    const ticker = cleanTokenText(r.symbol, 'symbol');
     const { data: cand, error: insErr } = await supabase
       .from('autopsy_candidates')
       .upsert({
         token_mint: r.token_mint,
-        ticker: r.symbol,
+        ticker,
         tier: 'B',
         source_feed: 'live_death_watch',
         candidate_score: Math.round((r.collapse_pct ?? 0) * 100),
