@@ -5,11 +5,13 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Skull, RefreshCw, Play } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import AutopsyCandidateRow, { type Candidate } from './AutopsyCandidateRow';
 import DeathTaxonomyModal from './DeathTaxonomyModal';
-import PumpfunWatchlistSpreadsheet from './PumpfunWatchlistSpreadsheet';
+import LiveDeathWatch from './LiveDeathWatch';
+import CoolDeathsBacklog from './CoolDeathsBacklog';
 
 type SortKey =
   | 'score_desc'
@@ -203,21 +205,37 @@ export default function AutopsyQueueBody() {
         <Card className="p-8 text-center text-muted-foreground">No candidates. Click "Run Funnel" to populate.</Card>
       )}
 
-      <div className="space-y-2">
-        {sorted?.map((c, idx) => (
-          <AutopsyCandidateRow
-            key={c.id}
-            ordinal={idx + 1}
-            c={c}
-            busy={busy}
-            onDraft={draft}
-            onDecide={decide}
-            onRegenBanner={regenBanner}
-          />
-        ))}
-      </div>
+      <Tabs defaultValue="live" className="mt-4">
+        <TabsList>
+          <TabsTrigger value="live">Live Death Watch</TabsTrigger>
+          <TabsTrigger value="backlog">Cool Deaths Backlog</TabsTrigger>
+          <TabsTrigger value="lambs">Lambs (curve-death)</TabsTrigger>
+        </TabsList>
 
-      <PumpfunWatchlistSpreadsheet />
+        <TabsContent value="live" className="mt-4">
+          <LiveDeathWatch />
+        </TabsContent>
+
+        <TabsContent value="backlog" className="mt-4">
+          <CoolDeathsBacklog />
+        </TabsContent>
+
+        <TabsContent value="lambs" className="mt-4">
+          <div className="space-y-2">
+            {sorted?.map((c, idx) => (
+              <AutopsyCandidateRow
+                key={c.id}
+                ordinal={idx + 1}
+                c={c}
+                busy={busy}
+                onDraft={draft}
+                onDecide={decide}
+                onRegenBanner={regenBanner}
+              />
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
