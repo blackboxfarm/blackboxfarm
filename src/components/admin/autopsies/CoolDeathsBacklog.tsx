@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Archive, FileText, Lock } from 'lucide-react';
+import { Archive, FileText, Lock, Trash2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface BacklogRow {
@@ -44,6 +44,7 @@ export default function CoolDeathsBacklog() {
   const { toast } = useToast();
   const [rows, setRows] = useState<BacklogRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
 
   async function load() {
@@ -61,21 +62,31 @@ export default function CoolDeathsBacklog() {
     setRows((data ?? []) as BacklogRow[]);
   }
 
-  // Auto-build once on first mount if backlog is empty, then load.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { count } = await supabase
-        .from('autopsy_backlog')
-        .select('token_mint', { count: 'exact', head: true });
-      if (cancelled) return;
-      if ((count ?? 0) === 0) {
-        await supabase.functions.invoke('autopsy-backlog-builder', { body: { force: false, limit: 500 } });
-      }
-      if (!cancelled) load();
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // Frozen snapshot — never auto-rebuild. Just load what's there.
+  useEffect(() => { load(); }, []);
+
+  async function refreshTickers() {
+    setRefreshing(true);
+    const { data, error } = await supabase.functions.invoke('autopsy-backlog-refresh-tickers', { body: {} });
+    setRefreshing(false);
+    if (error) {
+      toast({ title: 'Refresh failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Tickers refreshed', description: `Updated ${data?.updated ?? 0} of ${data?.scanned ?? 0} rows` });
+    load();
+  }
+
+  async function deleteRow(r: BacklogRow) {
+    setBusy(r.token_mint);
+    const { error } = await supabase.from('autopsy_backlog').delete().eq('token_mint', r.token_mint);
+    setBusy(null);
+    if (error) {
+      toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+    setRows(prev => (prev ?? []).filter(x => x.token_mint !== r.token_mint));
+  }
 
   const filtered = useMemo(() => {
     if (!rows) return null;
@@ -130,10 +141,14 @@ export default function CoolDeathsBacklog() {
             <Badge variant="outline" className="text-[10px]"><Lock className="h-2.5 w-2.5 mr-1" /> Frozen</Badge>
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            One-shot historical pool. Tokens whose latest price is &gt;24h old with ATH ≥ $50k and collapse to &lt;$1k or ≥95% drop.
-            Sourced from token_price_history. Cherry-pick a row to draft a Tier-B autopsy. Built automatically on first view — frozen after.
+            Frozen one-shot snapshot. Cherry-pick rows to draft autopsies, or delete the ones you don't want.
+            The list is never regenerated — only "Refresh missing tickers" updates rows that are missing $ticker / name.
           </p>
         </div>
+        <Button size="sm" variant="outline" onClick={refreshTickers} disabled={refreshing}>
+          <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh missing tickers
+        </Button>
       </header>
 
       <Input
@@ -149,7 +164,7 @@ export default function CoolDeathsBacklog() {
 
       {filtered && filtered.length === 0 && (
         <Card className="p-8 text-center text-muted-foreground text-sm">
-          Building backlog… scanning token_price_history for cool deaths (latest snapshot &gt; 24h old, ATH ≥ $50k). Refresh in ~30s.
+          Backlog is empty.
         </Card>
       )}
 
@@ -180,6 +195,12 @@ export default function CoolDeathsBacklog() {
                 <Button size="sm" disabled={busy === r.token_mint || !!r.drafted_slug}
                   onClick={() => draftAutopsy(r)}>
                   <FileText className="h-3 w-3 mr-1" /> {r.drafted_slug ? 'Drafted' : 'Generate Report'}
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy === r.token_mint}
+                  onClick={() => deleteRow(r)}
+                  className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  aria-label="Delete from backlog">
+                  <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
             </div>
