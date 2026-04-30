@@ -185,9 +185,14 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
 
   for (const t of pfLambs ?? []) {
     if (!t.token_mint) continue;
-    const peakMcap = peakMcapUsd(t);
     const livePump = await fetchPumpFunCoin(t.token_mint, 'autopsy-funnel-feeder-lamb-verify');
+    const liveAthMcap = Number(livePump?.ath_market_cap ?? NaN);
+    const liveCurrentMcap = Number(livePump?.usd_market_cap ?? NaN);
+    const athCurvePct = athCurveProgressFromPumpMcap(liveAthMcap);
     const liveProgress = liveCurveProgressFromPump(livePump);
+    if (!livePump || !Number.isFinite(liveAthMcap) || athCurvePct < PUMPFUN_LAMB_MIN_CURVE_PCT || athCurvePct >= 100) {
+      continue;
+    }
     if (livePump?.complete === true || livePump?.raydium_pool || (liveProgress ?? 0) >= PUMPFUN_LAMB_MAX_CURVE_PCT) {
       await assertDbWrite(
         supabase
@@ -213,7 +218,9 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
-      bonding_curve_pct: Number(t.bonding_curve_pct),
+      ath_mcap_usd: liveAthMcap,
+      current_mcap_usd: Number.isFinite(liveCurrentMcap) ? liveCurrentMcap : (t.market_cap_usd ?? existing?.current_mcap_usd),
+      bonding_curve_pct: athCurvePct,
       dev_sold: t.dev_sold,
       dev_holding_pct: t.dev_holding_pct,
       linked_wallet_count: t.linked_wallet_count,
