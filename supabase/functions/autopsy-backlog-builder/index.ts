@@ -6,13 +6,10 @@
  * Idempotent guard: if autopsy_backlog already has rows AND is_frozen=true,
  * the function exits unless `force: true` is passed.
  *
- * Selection criteria (matches plan):
- *   - first_seen_at < now() - 24 hours  (already historical, but keeps recent deaths)
- *   - market_cap < $1k OR liquidity_usd < $500  (already dead)
- *   - ath_24h_usd >= $50k  (bonded / had a real life)
- *   - death_cause IN ('rug_pull','slow_drain','liquidity_pulled','abandoned')
- *
- * Pre-step: invokes token-autopsy first to ensure death_cause is populated.
+ * Selection: pulls from public.v_live_death_watch (which sources real ATH
+ * + latest market caps from token_price_history) and keeps rows whose
+ * latest observation is older than 24h — i.e. already historical, not
+ * currently being traded.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
@@ -22,8 +19,6 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-const QUALIFYING_CAUSES = ['rug_pull', 'slow_drain', 'liquidity_pulled', 'abandoned'] as const;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -50,17 +45,17 @@ Deno.serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
-  // Pull qualifying tokens
+  // Pull historical death candidates from the live death watch view.
+  // The view already enforces ATH >= $50k AND collapse criteria.
+  // We additionally restrict to tokens whose latest price snapshot is
+  // > 24h old, so this list is "already dead", not actively trading.
   const oneDayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
   const { data: candidates, error } = await supabase
-    .from('token_lifecycle')
-    .select('token_mint, symbol, name, launchpad, creator_wallet, ath_24h_usd, market_cap, price_usd, liquidity_usd, death_cause, death_confidence, autopsy_at, first_seen_at')
-    .lt('first_seen_at', oneDayAgo)
-    .gte('ath_24h_usd', 50000)
-    .in('death_cause', QUALIFYING_CAUSES as unknown as string[])
-    .or('market_cap.lt.1000,liquidity_usd.lt.500')
-    .order('ath_24h_usd', { ascending: false })
+    .from('v_live_death_watch')
+    .select('token_mint, symbol, name, launchpad, creator_wallet, ath_usd, ath_at, current_mcap_usd, current_price_usd, liquidity_usd, holder_count, death_cause, death_confidence, death_at, collapse_pct, latest_at')
+    .lt('latest_at', oneDayAgo)
+    .order('ath_usd', { ascending: false })
     .limit(limit);
 
   if (error) {
@@ -71,18 +66,11 @@ Deno.serve(async (req) => {
 
   let inserted = 0;
   for (const c of candidates ?? []) {
-    const ath = Number(c.ath_24h_usd ?? 0);
-    const mcap = Number(c.market_cap ?? 0);
-    const collapse = ath > 0 ? Math.max(0, Math.min(1, 1 - mcap / ath)) : null;
-
-    // Best-effort holder count
-    const { data: snap } = await supabase
-      .from('token_health_snapshots')
-      .select('total_holders')
-      .eq('token_mint', c.token_mint)
-      .order('snapshot_hour', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const ath = Number(c.ath_usd ?? 0);
+    const mcap = Number(c.current_mcap_usd ?? 0);
+    const collapse = c.collapse_pct != null
+      ? Number(c.collapse_pct)
+      : (ath > 0 ? Math.max(0, Math.min(1, 1 - mcap / ath)) : null);
 
     await assertDbWrite(
       supabase.from('autopsy_backlog').upsert({
@@ -91,15 +79,15 @@ Deno.serve(async (req) => {
         name: c.name,
         launchpad: c.launchpad,
         ath_usd: ath,
-        ath_at: null,
+        ath_at: c.ath_at ?? null,
         current_mcap_usd: mcap,
-        current_price_usd: c.price_usd,
+        current_price_usd: c.current_price_usd,
         liquidity_usd: c.liquidity_usd,
-        holder_count: snap?.total_holders ?? null,
+        holder_count: c.holder_count ?? null,
         creator_wallet: c.creator_wallet,
         death_cause: c.death_cause,
         death_confidence: c.death_confidence,
-        death_at: c.autopsy_at,
+        death_at: c.death_at ?? c.latest_at ?? null,
         collapse_pct: collapse,
         is_frozen: true,
         captured_at: new Date().toISOString(),
