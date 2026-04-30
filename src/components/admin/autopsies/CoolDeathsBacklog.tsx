@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -40,11 +40,19 @@ function shortMint(m: string): string {
   return `${m.slice(0, 4)}…${m.slice(-4)}`;
 }
 
+function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name'): string | null {
+  const v = value?.trim();
+  if (!v) return null;
+  const bad = kind === 'symbol' ? ['unknown', 'unk', 'token'] : ['unknown', 'unknown token', 'token'];
+  return bad.includes(v.toLowerCase()) ? null : v;
+}
+
 export default function CoolDeathsBacklog() {
   const { toast } = useToast();
   const [rows, setRows] = useState<BacklogRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const hydratingRef = useRef(false);
 
   async function load() {
     setRows(null);
@@ -60,10 +68,13 @@ export default function CoolDeathsBacklog() {
     }
     const list = (data ?? []) as BacklogRow[];
     setRows(list);
-    // Auto-resolve any missing tickers silently — the data is already in the DB,
-    // we just stitch it from token_lifecycle / pumpfun_watchlist / token_metadata.
-    if (list.some(r => !r.symbol || !r.name)) {
-      supabase.functions.invoke('autopsy-backlog-refresh-tickers', { body: {} })
+    // Auto-resolve placeholders silently from live metadata sources. No manual button.
+    const missingMetadata = list
+      .filter(r => !cleanTokenText(r.symbol, 'symbol') || !cleanTokenText(r.name, 'name'))
+      .map(r => r.token_mint);
+    if (missingMetadata.length > 0 && !hydratingRef.current) {
+      hydratingRef.current = true;
+      supabase.functions.invoke('autopsy-live-death-hydrator', { body: { tokenMints: missingMetadata.slice(0, 40) } })
         .then(({ data }) => {
           if (data?.updated > 0) {
             // Reload silently to show the resolved tickers
@@ -72,7 +83,8 @@ export default function CoolDeathsBacklog() {
               .then(({ data }) => { if (data) setRows(data as BacklogRow[]); });
           }
         })
-        .catch(() => { /* silent — non-blocking */ });
+        .catch(() => {})
+        .finally(() => { hydratingRef.current = false; });
     }
   }
 
