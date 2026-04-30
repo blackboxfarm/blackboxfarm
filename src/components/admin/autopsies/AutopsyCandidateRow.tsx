@@ -79,6 +79,8 @@ export default function AutopsyCandidateRow({ ordinal, c, busy, onDraft, onDecid
   const [copied, setCopied] = useState(false);
   const sourceMeta = SOURCE_FEED_LABELS[c.source_feed] ?? { label: c.source_feed, description: "Unknown intake source." };
   const dexUrl = `https://dexscreener.com/solana/${c.token_mint}`;
+  const pumpFunUrl = `https://pump.fun/coin/${c.token_mint}`;
+  const isCurveDeath = c.source_feed === 'pumpfun_curve_death' || c.source_feed === 'pumpfun_watchlist';
 
   async function copyMint() {
     try {
@@ -128,6 +130,17 @@ export default function AutopsyCandidateRow({ ordinal, c, busy, onDraft, onDecid
             {c.token_mint}
             <ExternalLink className="h-3 w-3 flex-shrink-0" />
           </a>
+          {isCurveDeath && (
+            <a
+              href={pumpFunUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-emerald-400 hover:underline inline-flex items-center gap-1"
+              title="Open on pump.fun"
+            >
+              pump.fun <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+          )}
           <button
             onClick={copyMint}
             className="text-muted-foreground hover:text-foreground transition-colors"
