@@ -122,7 +122,7 @@ export default function PumpfunWatchlistSpreadsheet() {
     ro.observe(inner);
     setInnerWidth(inner.scrollWidth);
     return () => ro.disconnect();
-  }, [pageRows, columns]);
+  }, [rows, page]);
 
   const columns = useMemo(() => {
     const first = rows?.[0];
