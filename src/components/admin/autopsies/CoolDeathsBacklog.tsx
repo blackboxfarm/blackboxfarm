@@ -125,8 +125,8 @@ export default function CoolDeathsBacklog() {
             <Badge variant="outline" className="text-[10px]"><Lock className="h-2.5 w-2.5 mr-1" /> Frozen</Badge>
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            One-shot historical pool. Tokens older than 24h, ATH ≥ $50k, classified bad/sad-dev death.
-            Cherry-pick a row to draft a Tier-B autopsy. Built automatically on first view — frozen after.
+            One-shot historical pool. Tokens whose latest price is &gt;24h old with ATH ≥ $50k and collapse to &lt;$1k or ≥95% drop.
+            Sourced from token_price_history. Cherry-pick a row to draft a Tier-B autopsy. Built automatically on first view — frozen after.
           </p>
         </div>
       </header>
@@ -144,7 +144,7 @@ export default function CoolDeathsBacklog() {
 
       {filtered && filtered.length === 0 && (
         <Card className="p-8 text-center text-muted-foreground text-sm">
-          Building backlog… scanning token_lifecycle for cool deaths (24h+ old, ATH ≥ $50k). Refresh in ~30s.
+          Building backlog… scanning token_price_history for cool deaths (latest snapshot &gt; 24h old, ATH ≥ $50k). Refresh in ~30s.
         </Card>
       )}
 
