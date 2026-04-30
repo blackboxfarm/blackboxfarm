@@ -78,7 +78,10 @@ export default function PumpfunWatchlistSpreadsheet() {
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h4 className="text-lg font-semibold">Pump.fun watchlist spreadsheet</h4>
-          <p className="text-sm text-muted-foreground">Last 14 days · live table from pumpfun_watchlist · auto-refreshes every minute.</p>
+          <p className="text-sm text-muted-foreground">
+            Last 14 days · every column from <code className="font-mono">pumpfun_watchlist</code> · auto-refreshes every minute.
+            {filteredRows && columns.length > 0 ? ` ${filteredRows.length.toLocaleString()} rows × ${columns.length} columns. Scroll horizontally →` : ''}
+          </p>
         </div>
         <div className="w-full max-w-sm">
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search any field…" />
