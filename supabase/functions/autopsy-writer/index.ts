@@ -22,7 +22,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
-import { DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
+import { classifyDeath, DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
 import { enrichCandidate } from '../_shared/autopsy-enrich.ts';
 import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
 
@@ -38,6 +38,18 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
     .slice(0, 80);
+}
+
+function num(...values: unknown[]): number | null {
+  for (const v of values) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function meaningfulCause(cause: unknown): cause is DeathCauseId {
+  return typeof cause === 'string' && cause in DEATH_TAXONOMY && cause !== 'unknown';
 }
 
 const FEW_SHOT_MALICIOUS = `# Token Autopsy — GPT "Greedy Pissing Testicle"
@@ -178,15 +190,17 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       );
 
       // ── Gather evidence ──────────────────────────────────────
-      const [{ data: lifecycle }, { data: pf }, { data: socials }] = await Promise.all([
+      const [{ data: lifecycle }, { data: pf }, { data: socials }, { data: liveDeath }, { data: backlog }] = await Promise.all([
         supabase.from('token_lifecycle').select('*').eq('token_mint', c.token_mint).maybeSingle(),
         supabase.from('pumpfun_watchlist').select('*').eq('token_mint', c.token_mint).maybeSingle(),
-        supabase.from('token_social_links').select('platform, url, handle').eq('token_mint', c.token_mint),
+        supabase.from('token_social_links').select('platform, link_type, url, extracted_handle, is_community, community_id, source, phase, is_current').eq('token_mint', c.token_mint).neq('is_current', false),
+        supabase.from('v_live_death_watch').select('*').eq('token_mint', c.token_mint).maybeSingle(),
+        supabase.from('autopsy_backlog').select('*').eq('token_mint', c.token_mint).maybeSingle(),
       ]);
 
       let devBehavior: any = null;
       let devReputation: any = null;
-      const creatorWallet = c.creator_wallet ?? pf?.creator_wallet;
+      const creatorWallet = c.creator_wallet ?? pf?.creator_wallet ?? lifecycle?.creator_wallet ?? liveDeath?.creator_wallet ?? backlog?.creator_wallet;
       if (creatorWallet) {
         const [{ data: db }, { data: dr }] = await Promise.all([
           supabase.from('dev_behavior_scores').select('*').eq('wallet_address', creatorWallet).maybeSingle(),
@@ -206,16 +220,46 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         .order('captured_at', { ascending: false })
         .limit(10);
 
-      // Persist enrichment + dossier on the candidate so the UI sees them
-      await supabase.from('autopsy_candidates').update({
+      const athMcap = num(c.ath_mcap_usd, liveDeath?.ath_usd, backlog?.ath_usd, lifecycle?.ath_24h_usd, pf?.ath_market_cap_usd, Number(pf?.price_ath_usd ?? 0) * 1_000_000_000, pf?.market_cap_usd);
+      const currentMcap = num(c.current_mcap_usd, liveDeath?.current_mcap_usd, backlog?.current_mcap_usd, lifecycle?.market_cap, pf?.market_cap_usd);
+      const liquidityUsd = num(c.liquidity_usd, liveDeath?.liquidity_usd, backlog?.liquidity_usd, lifecycle?.liquidity_usd, pf?.liquidity_usd);
+      const ageHours = num(c.age_hours) ?? (liveDeath?.first_seen_at ? (Date.now() - new Date(liveDeath.first_seen_at).getTime()) / 3600000 : null);
+      const freshClass = classifyDeath({
+        ageHours: ageHours ?? 0,
+        mcap: currentMcap ?? 0,
+        liquidity: liquidityUsd ?? 0,
+        athMcap: athMcap ?? 0,
+        dumpVelocity: devBehavior?.dump_velocity_score ?? 0,
+        lpPullScore: devBehavior?.lp_pull_score ?? 0,
+        devBuyPct: 100 - (devBehavior?.supply_retention_pct ?? 100),
+        hasMaliciousDump: (devBehavior?.dump_velocity_score ?? 0) > 60,
+        socialCompleteness: enrichment.social_completeness,
+        devDossier: dossier,
+      });
+      const existingCause: DeathCauseId = meaningfulCause(c.death_cause) ? c.death_cause : 'unknown';
+      const causeId: DeathCauseId = (existingCause === 'unknown' || isRegenerate || freshClass.cause === 'natural_cycle') ? freshClass.cause : existingCause;
+      const causeDef = DEATH_TAXONOMY[causeId] ?? DEATH_TAXONOMY.unknown;
+      const confidence = causeId === freshClass.cause ? freshClass.confidence : (c.death_confidence ?? freshClass.confidence ?? 30);
+      const matchedSignals = causeId === freshClass.cause && freshClass.matchedSignals?.length ? freshClass.matchedSignals : (c.matched_signals ?? []);
+
+      // Persist enrichment + hydrated facts on the candidate so the UI and next run see them
+      await assertUpdate(supabase.from('autopsy_candidates').update({
         ...enrichment,
         dev_dossier: dossier,
-      }).eq('id', c.id);
+        death_cause: causeId,
+        death_intent: causeDef.intent,
+        death_confidence: confidence,
+        matched_signals: matchedSignals,
+        ath_mcap_usd: athMcap,
+        current_mcap_usd: currentMcap,
+        liquidity_usd: liquidityUsd,
+        age_hours: ageHours,
+        creator_wallet: creatorWallet,
+      }).eq('id', c.id).select('id').single(), 'autopsy_candidates');
 
-      const ticker = c.ticker ?? pf?.token_symbol ?? c.token_mint.slice(0, 6);
-      const tokenName = c.token_name ?? pf?.token_name ?? ticker;
+      const ticker = c.ticker ?? pf?.token_symbol ?? liveDeath?.symbol ?? backlog?.symbol ?? c.token_mint.slice(0, 6);
+      const tokenName = c.token_name ?? pf?.token_name ?? liveDeath?.name ?? backlog?.name ?? ticker;
       const baseSlug = slugify(`${ticker}-${tokenName}`);
-      const causeDef = DEATH_TAXONOMY[c.death_cause as DeathCauseId] ?? DEATH_TAXONOMY.unknown;
 
       // Determine version for this candidate
       const { data: existingReports } = await supabase
@@ -254,17 +298,17 @@ ${clusterRugs >= 3 ? `- The creator cluster has ${clusterRugs} prior rugs/abando
 - Death cause: ${causeDef.label} (${causeDef.id})
 - Intent: ${causeDef.intent}
 - Verdict tag: ${causeDef.verdict}
-- Confidence: ${c.death_confidence}/100
-- Matched signals: ${JSON.stringify(c.matched_signals)}
+- Confidence: ${confidence}/100
+- Matched signals: ${JSON.stringify(matchedSignals)}
 
 ## TOKEN
 Mint: ${c.token_mint}
 Ticker: ${ticker}
 Name: ${tokenName}
-ATH MCap USD: ${c.ath_mcap_usd ?? 'unknown'}
-Current MCap USD: ${c.current_mcap_usd ?? 'unknown'}
-Liquidity USD: ${c.liquidity_usd ?? 'unknown'}
-Lifetime hours: ${c.age_hours?.toFixed(2) ?? 'unknown'}
+ATH MCap USD: ${athMcap ?? 'unknown'}
+Current MCap USD: ${currentMcap ?? 'unknown'}
+Liquidity USD: ${liquidityUsd ?? 'unknown'}
+Lifetime hours: ${ageHours?.toFixed(2) ?? 'unknown'}
 Creator wallet: ${creatorWallet ?? 'unknown'}
 
 ## SOCIAL STACK (enrichment)
@@ -340,10 +384,10 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
           title: `${ticker} — ${tokenName}`,
           subtitle,
           verdict: causeDef.verdict,
-          risk_score: c.death_confidence ? `${Math.round(c.death_confidence / 10)}/10` : null,
-          death_cause: c.death_cause ?? 'unclassified',
-          death_intent: c.death_intent ?? null,
-          death_confidence: c.death_confidence,
+          risk_score: confidence ? `${Math.round(confidence / 10)}/10` : null,
+          death_cause: causeId,
+          death_intent: causeDef.intent,
+          death_confidence: confidence,
           md_content: md,
           md_path: `/autopsies/${slug}.md`,
           tags: [causeDef.intent, causeDef.id],
@@ -353,6 +397,21 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
       );
 
       const drafted = (insertedRows as { id: string; slug: string });
+
+      // ── Update candidate BEFORE best-effort banner work ──────
+      // The report is the critical artifact; banner generation must never leave
+      // the row stuck in analyzing after a valid draft was inserted.
+      const autoPublish = shouldAutoPublish(causeId as DeathCauseId, confidence ?? 0);
+      await assertUpdate(
+        supabase.from('autopsy_candidates').update({
+          status: autoPublish ? 'approved' : 'drafted',
+          drafted_at: new Date().toISOString(),
+          decided_at: autoPublish ? new Date().toISOString() : null,
+          published_slug: drafted.slug,
+          draft_md_path: `/autopsies/${slug}.md`,
+        }).eq('id', c.id).select('id').single(),
+        'autopsy_candidates'
+      );
 
       // ── Banner overlay (best-effort, non-blocking) ──────────
       try {
@@ -370,6 +429,7 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
               ticker,
               report_id: drafted.id,
             }),
+            signal: AbortSignal.timeout(8000),
           },
         );
         if (!overlayRes.ok) {
@@ -382,19 +442,6 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
         console.warn(`[autopsy-writer] banner overlay failed for ${drafted.slug}:`, bannerErr?.message);
         // Don't fail the draft — admin can retry banner from the queue.
       }
-
-      // ── Update candidate ─────────────────────────────────────
-      const autoPublish = shouldAutoPublish(c.death_cause as DeathCauseId, c.death_confidence ?? 0);
-      await assertUpdate(
-        supabase.from('autopsy_candidates').update({
-          status: autoPublish ? 'approved' : 'drafted',
-          drafted_at: new Date().toISOString(),
-          decided_at: autoPublish ? new Date().toISOString() : null,
-          published_slug: drafted.slug,
-          draft_md_path: `/autopsies/${slug}.md`,
-        }).eq('id', c.id).select('id').single(),
-        'autopsy_candidates'
-      );
 
       results.push({ candidate_id: c.id, slug: drafted.slug, status: autoPublish ? 'approved' : 'drafted' });
     } catch (e: any) {

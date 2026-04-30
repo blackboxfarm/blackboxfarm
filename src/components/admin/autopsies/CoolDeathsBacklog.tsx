@@ -111,14 +111,21 @@ export default function CoolDeathsBacklog() {
   async function draftAutopsy(r: BacklogRow) {
     setBusy(r.token_mint);
     const ticker = cleanTokenText(r.symbol, 'symbol');
+    const tokenName = cleanTokenText(r.name, 'name');
     const { data: cand, error: insErr } = await supabase
       .from('autopsy_candidates')
       .upsert({
         token_mint: r.token_mint,
         ticker,
+        token_name: tokenName,
         tier: 'B',
         source_feed: 'cool_deaths_backlog',
         candidate_score: Math.round((r.collapse_pct ?? 0) * 100),
+        death_confidence: r.death_confidence,
+        ath_mcap_usd: r.ath_usd,
+        current_mcap_usd: r.current_mcap_usd,
+        liquidity_usd: r.liquidity_usd,
+        creator_wallet: r.creator_wallet,
         funneled_at: new Date().toISOString(),
         status: 'pending',
       }, { onConflict: 'token_mint' })

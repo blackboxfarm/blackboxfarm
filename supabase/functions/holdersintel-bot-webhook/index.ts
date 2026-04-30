@@ -3772,7 +3772,7 @@ async function detectTgLookup(messageText: string, telegramUserId: string): Prom
     const ca = solMatch[0];
     const [lcRes, socialRes] = await Promise.all([
       supabase.from('token_lifecycle').select('symbol, name, phase, peak_mcap, current_mcap, creator_wallet').eq('mint', ca).maybeSingle(),
-      supabase.from('token_social_links').select('platform, handle, url').eq('token_mint', ca).limit(5),
+      supabase.from('token_social_links').select('platform, extracted_handle, url').eq('token_mint', ca).limit(5),
     ]);
 
     let block = `## LIVE DATA LOOKUP\nUser submitted: ${ca}\n`;
@@ -3787,7 +3787,7 @@ async function detectTgLookup(messageText: string, telegramUserId: string): Prom
     }
     const socials = socialRes.data || [];
     if (socials.length > 0) {
-      block += `- Socials: ${socials.map(s => `${s.platform}: ${s.handle || s.url}`).join(', ')}\n`;
+      block += `- Socials: ${socials.map(s => `${s.platform}: ${s.extracted_handle || s.url}`).join(', ')}\n`;
     }
     return block;
   }

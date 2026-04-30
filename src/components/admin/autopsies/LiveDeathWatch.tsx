@@ -29,6 +29,7 @@ interface DeathRow {
   death_at: string | null;
   ath_at: string | null;
   latest_at: string | null;
+  first_seen_at?: string | null;
   collapse_pct: number | null;
   dollar_wipeout: number | null;
   current_status: string | null;
@@ -152,14 +153,23 @@ export default function LiveDeathWatch() {
     // All candidates start at Tier B (review state). Promotion to Tier A
     // (auto-publish) is a separate manual step elsewhere.
     const ticker = cleanTokenText(r.symbol, 'symbol');
+    const tokenName = cleanTokenText(r.name, 'name');
+    const ageHours = r.first_seen_at ? (Date.now() - new Date(r.first_seen_at).getTime()) / 3600000 : null;
     const { data: cand, error: insErr } = await supabase
       .from('autopsy_candidates')
       .upsert({
         token_mint: r.token_mint,
         ticker,
+        token_name: tokenName,
         tier: 'B',
         source_feed: 'live_death_watch',
         candidate_score: Math.round((r.collapse_pct ?? 0) * 100),
+        death_confidence: r.death_confidence,
+        ath_mcap_usd: r.ath_usd,
+        current_mcap_usd: r.current_mcap_usd,
+        liquidity_usd: r.liquidity_usd,
+        age_hours: ageHours,
+        creator_wallet: r.creator_wallet,
         funneled_at: new Date().toISOString(),
         status: 'pending',
       }, { onConflict: 'token_mint' })

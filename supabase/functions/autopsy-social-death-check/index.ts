@@ -78,8 +78,9 @@ Deno.serve(withRunLog('autopsy-social-death-check', async (req) => {
 
     const { data: socials } = await supabase
       .from('token_social_links')
-      .select('platform, url, handle')
-      .eq('token_mint', c.token_mint);
+      .select('platform, link_type, url, extracted_handle, is_community, community_id, is_current')
+      .eq('token_mint', c.token_mint)
+      .neq('is_current', false);
 
     let lastAdminAt: Date | null = null;
     let spamPct = 0;
