@@ -101,6 +101,16 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   const debugSample: any[] = [];
   const skipReasons = { tierC_lowATH_nonPumpfun: 0, promoted_pumpfun: 0, processed: 0 };
 
+  await assertDbWrite(
+    supabase
+      .from('autopsy_candidates')
+      .delete()
+      .eq('source_feed', 'pumpfun_curve_death')
+      .or(`ath_mcap_usd.is.null,ath_mcap_usd.lt.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD}`),
+    'autopsy_candidates',
+    'DELETE stale non-Lamb curve deaths'
+  );
+
   const candidatesByMint = new Map<string, {
     token_mint: string;
     ticker?: string;
@@ -166,6 +176,18 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     if (!t.token_mint) continue;
     const peakMcap = peakMcapUsd(t);
     if (peakMcap < PUMPFUN_LAMB_MIN_ATH_MCAP_USD) continue;
+    const livePump = await fetchPumpFunCoin(t.token_mint, 'autopsy-funnel-feeder-lamb-verify');
+    if (livePump?.complete === true) {
+      await assertDbWrite(
+        supabase
+          .from('pumpfun_watchlist')
+          .update({ is_graduated: true, graduated_at: new Date().toISOString(), last_processor: 'autopsy-funnel-feeder-lamb-verify' })
+          .eq('token_mint', t.token_mint),
+        'pumpfun_watchlist',
+        'UPDATE graduated Lamb false-positive'
+      );
+      continue;
+    }
     const ageHours = t.first_seen_at ? (Date.now() - new Date(t.first_seen_at).getTime()) / 3600000 : 0;
     const existing = candidatesByMint.get(t.token_mint);
     // Curve deaths win source attribution — they're our highest-signal feed.
