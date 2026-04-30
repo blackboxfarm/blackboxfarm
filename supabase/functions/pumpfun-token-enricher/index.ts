@@ -922,9 +922,8 @@ async function enrichTokenBatch(
     // === EARLY MCAP GATE — reject immediately if above max market cap ===
     if (marketCapUsd && marketCapUsd > config.max_market_cap_usd) {
       console.log(`   🚫 MCAP TOO HIGH at enrichment: $${marketCapUsd.toFixed(0)} > $${config.max_market_cap_usd} — REJECTED`);
-      await supabase
-        .from('pumpfun_watchlist')
-        .update({
+      await assertDbWrite(
+        supabase.from('pumpfun_watchlist').update({
           status: 'rejected',
           rejection_reason: 'mcap_too_high',
           rejection_type: 'permanent',
@@ -933,10 +932,16 @@ async function enrichTokenBatch(
           price_usd: priceUsd,
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
+          bonding_curve_pct: bondingCurve,
+          ath_bonding_curve_pct: athBondingCurvePct,
+          ath_market_cap_usd: athMarketCapUsd,
+          ath_market_cap_at: athMarketCapAt,
           liquidity_usd: liquidityUsd,
           last_checked_at: new Date().toISOString(),
-        })
-        .eq('id', token.id);
+        }).eq('id', token.id),
+        'pumpfun_watchlist',
+        'UPDATE token-enricher mcap rejection'
+      );
       rejected++;
       continue;
     }
@@ -944,22 +949,29 @@ async function enrichTokenBatch(
     // === DEV SOLD GATE — reject if pump.fun reports complete (dev sold / graduated) ===
     if (pumpData?.complete === true) {
       console.log(`   🚫 DEV SOLD / GRADUATED at enrichment — REJECTED`);
-      await supabase
-        .from('pumpfun_watchlist')
-        .update({
+      await assertDbWrite(
+        supabase.from('pumpfun_watchlist').update({
           status: 'rejected',
           rejection_reason: 'dev_sold_graduated',
           rejection_type: 'permanent',
           rejection_reasons: ['dev_sold_graduated'],
           removed_at: new Date().toISOString(),
           dev_sold: true,
+          is_graduated: true,
+          graduated_at: new Date().toISOString(),
           price_usd: priceUsd,
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
+          bonding_curve_pct: 100,
+          ath_bonding_curve_pct: 100,
+          ath_market_cap_usd: athMarketCapUsd,
+          ath_market_cap_at: athMarketCapAt,
           liquidity_usd: liquidityUsd,
           last_checked_at: new Date().toISOString(),
-        })
-        .eq('id', token.id);
+        }).eq('id', token.id),
+        'pumpfun_watchlist',
+        'UPDATE token-enricher graduated rejection'
+      );
       rejected++;
       continue;
     }
