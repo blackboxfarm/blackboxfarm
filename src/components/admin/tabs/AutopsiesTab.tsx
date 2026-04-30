@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Skull } from "lucide-react";
 
 const AutopsyQueueBody = lazy(() => import("@/components/admin/autopsies/AutopsyQueueBody"));
+const PublishedAutopsies = lazy(() => import("@/components/admin/autopsies/PublishedAutopsies"));
 
 const TabFallback = () => (
   <div className="flex items-center justify-center py-12">
@@ -26,7 +27,7 @@ const AutopsiesTab: React.FC = () => {
       <Tabs defaultValue="queue" className="space-y-4">
         <TabsList>
           <TabsTrigger value="queue">🧪 Queue</TabsTrigger>
-          <TabsTrigger value="published" disabled>📰 Published (soon)</TabsTrigger>
+          <TabsTrigger value="published">📰 Published</TabsTrigger>
           <TabsTrigger value="taxonomy" disabled>🧬 Taxonomy (soon)</TabsTrigger>
         </TabsList>
 
@@ -37,9 +38,9 @@ const AutopsiesTab: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="published">
-          <Card className="p-8 text-center text-muted-foreground">
-            Published autopsy management coming soon.
-          </Card>
+          <Suspense fallback={<TabFallback />}>
+            <PublishedAutopsies />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="taxonomy">
