@@ -47,8 +47,41 @@ DO ADD as semi-transparent decorative elements layered ONLY around the edges and
 Final output 1536×512.`;
 }
 
-async function fetchSourceBanner(mint: string): Promise<{ url: string | null; visualDesc: string }> {
-  // 1. DexScreener
+async function fetchSourceBanner(
+  mint: string,
+  opts: { curveDeath?: boolean; supabase?: any } = {},
+): Promise<{ url: string | null; visualDesc: string }> {
+  // Curve deaths (Lambs) almost never have a DexScreener page.
+  // Source the mint image directly from pumpfun_watchlist, then pump.fun API.
+  if (opts.curveDeath) {
+    if (opts.supabase) {
+      try {
+        const { data } = await opts.supabase
+          .from('pumpfun_watchlist')
+          .select('image_url, token_name')
+          .eq('token_mint', mint)
+          .maybeSingle();
+        if (data?.image_url) {
+          return {
+            url: data.image_url,
+            visualDesc: data?.token_name ? `the pump.fun mint artwork for ${data.token_name}` : 'the pump.fun mint artwork',
+          };
+        }
+      } catch (_) { /* fallthrough */ }
+    }
+    try {
+      const r = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
+      if (r.ok) {
+        const j = await r.json();
+        const img = j?.image_uri;
+        if (img) return { url: img, visualDesc: j?.name ? `the pump.fun mint artwork for ${j.name}` : 'the pump.fun mint artwork' };
+      }
+    } catch (_) { /* fallthrough */ }
+    // Lamb fallback: no image. Caller will use silhouette default.
+    return { url: null, visualDesc: 'an unknown pump.fun token (mint image unavailable)' };
+  }
+
+  // Default path (post-graduation tokens): DexScreener → pump.fun.
   try {
     const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
     if (r.ok) {
@@ -59,7 +92,6 @@ async function fetchSourceBanner(mint: string): Promise<{ url: string | null; vi
     }
   } catch (_) { /* fallthrough */ }
 
-  // 2. Pump.fun
   try {
     const r = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`);
     if (r.ok) {
@@ -124,7 +156,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
   }
 
   try {
-    const { slug, token_mint, ticker, token_visual_description, report_id } =
+    const { slug, token_mint, ticker, token_visual_description, report_id, source_feed } =
       await req.json();
 
     if (!slug || !token_mint) {
@@ -138,8 +170,12 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // 1. Source banner
-    const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint);
+    // 1. Source banner — curve deaths use pump.fun mint image only.
+    const isCurveDeath = source_feed === 'pumpfun_curve_death';
+    const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint, {
+      curveDeath: isCurveDeath,
+      supabase,
+    });
     if (!sourceBannerUrl) {
       return new Response(JSON.stringify({ error: 'No source banner available for token', token_mint }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
