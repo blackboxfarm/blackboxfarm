@@ -10,6 +10,7 @@
  */
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -69,10 +70,11 @@ Deno.serve(withRunLog('autopsy-tg-deep-pull', async (req) => {
 
   const { data: socials } = await supabase
     .from('token_social_links')
-    .select('platform, url, handle')
-    .eq('token_mint', cand.token_mint);
+    .select('platform, link_type, url, extracted_handle, is_current')
+    .eq('token_mint', cand.token_mint)
+    .neq('is_current', false);
 
-  const tgRow = (socials ?? []).find((s: any) => /telegram/i.test(s.platform || ''));
+  const tgRow = (socials ?? []).find((s: any) => /telegram|t\.me/i.test(`${s.platform ?? ''} ${s.link_type ?? ''} ${s.url ?? ''}`));
   if (!tgRow?.url) {
     return new Response(JSON.stringify({ error: 'no telegram url on token' }), {
       status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -101,23 +103,28 @@ Deno.serve(withRunLog('autopsy-tg-deep-pull', async (req) => {
     captured_at: new Date().toISOString(),
   };
 
-  await supabase.from('autopsy_evidence_blobs').insert({
-    candidate_id: cand.id,
-    token_mint: cand.token_mint,
-    kind: 'tg_deep_pull',
-    payload,
-  });
+  await assertInsert(
+    supabase.from('autopsy_evidence_blobs').insert({
+      candidate_id: cand.id,
+      token_mint: cand.token_mint,
+      kind: 'tg_deep_pull',
+      payload,
+    }).select('id').single(),
+    'autopsy_evidence_blobs',
+  );
 
   // Also update the live subscriber_count on the candidate if we got it
   const memberCount: number | null = members?.data?.result ?? null;
   if (memberCount && memberCount > 0) {
-    await supabase.from('autopsy_candidates')
+    await assertUpdate(supabase.from('autopsy_candidates')
       .update({ telegram_subscriber_count: memberCount, manual_tg_join_completed: true })
-      .eq('id', cand.id);
+      .eq('id', cand.id)
+      .select('id').single(), 'autopsy_candidates');
   } else {
-    await supabase.from('autopsy_candidates')
+    await assertUpdate(supabase.from('autopsy_candidates')
       .update({ manual_tg_join_completed: true })
-      .eq('id', cand.id);
+      .eq('id', cand.id)
+      .select('id').single(), 'autopsy_candidates');
   }
 
   return new Response(JSON.stringify({ success: true, payload }), {
