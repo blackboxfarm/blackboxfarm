@@ -315,6 +315,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
             liquidity_usd: c.liquidity_usd,
             age_hours: c.age_hours,
             creator_wallet: c.creator_wallet,
+            bonding_curve_pct: c.bonding_curve_pct ?? null,
             // status only set on insert; preserve on conflict by using onConflict ignore for status field
           }, { onConflict: 'token_mint', ignoreDuplicates: false })
           .select('id, status')
