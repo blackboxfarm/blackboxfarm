@@ -1,100 +1,117 @@
-## Autopsy Queue — Feedback + Improvement Plan
 
-### Why every row is Tier-B `failed_launch` (the real answer)
+## Final plan — Curve-Death Autopsy Pipeline ("Lambs")
 
-I checked the DB directly. All 200 candidates are:
-- `source_feed = pumpfun_watchlist`
-- `death_cause = failed_launch`
-- `tier = B`
+### Terminology lock-in
+- **Lambs** = pump.fun tokens that died on the bonding curve at **≥75% curve ATH**, never graduated. This is the entire autopsy-eligible pool from pump.fun.
+- **<75% curve ATH** = ignored. Not logged, not stored, not surfaced. Wasted bodies.
+- **NULL `bonding_curve_pct`** = ignored (same as <75%). We can't write a meaningful report on tokens with no peak data.
+- **Graduated to Raydium** = separate future track ("Post-Graduation Deaths"), bigger blast radius.
 
-Two reasons no Tier-A or C is showing:
+### Data confirms the gate is right
 
-1. **Tier-A requires malicious signals** (dev_buy_pct, dump_velocity, lp_pull_score, freeze_authority, pre-launch funding). Those come from `dev_behavior_scores` joined on `creator_wallet`. Pump.fun watchlist rows often have no creator wallet stored, so the classifier falls through to `failed_launch` every time.
-2. **Tier-C is intentionally suppressed** — funnel drops Tier-C with ATH < $10k as "too noisy", and pump.fun dead tokens get auto-promoted from C to B.
+```
+dead pumpfun tokens          22,018
+  ├─ ≥75% curve ATH (Lambs)     ~17   ← autopsy-eligible pool
+  ├─ <75% curve ATH         12,160+   ← ignored
+  └─ NULL curve_pct           9,841   ← ignored
+graduated then died:              0   ← future track
+```
 
-So the funnel is *working*, but it's only being fed by one source (pump.fun dead list) and it's missing the malicious-signal join. That's a separate fix from the UI polish below — flagged at the end.
-
----
-
-### UI changes to `src/pages/admin/AutopsyQueue.tsx` and `src/components/admin/autopsies/AutopsyQueueBody.tsx`
-
-Both files are near-duplicates. I'll factor the row into a shared component so we change it once.
-
-#### 1. Human-readable age
-Replace `${c.age_hours.toFixed(0)}h old` with a smart formatter:
-- `< 1h` → `42m old`
-- `< 24h` → `7h 12m old`
-- `< 7d` → `2d 14h old`
-- `>= 7d` → `3w 2d old`
-
-#### 2. Full token address + DexScreener link
-Replace the truncated `AaShE6et…pump` with the full mint, monospace, clickable, opens `https://dexscreener.com/solana/{mint}` in a new tab. Add a small copy-to-clipboard icon next to it.
-
-#### 3. Ordinal numbering
-Add a `#1`, `#2`, … prefix on each row reflecting current sort position.
-
-#### 4. Sorting controls
-Add a sort dropdown above the list with these options:
-- Score (default, current behavior)
-- Funneled at — newest / oldest
-- Mint creation (age) — newest / oldest  *(uses `age_hours` ascending = newest)*
-- Time of death — most recent / oldest  *(uses `analyzed_at` if set, else `funneled_at` as proxy; we don't yet store a true `died_at` — see note below)*
-
-Sort is applied client-side after fetch; query already pulls 100 rows.
-
-#### 5. Source-feed badge (where did this come from?)
-Each row gets a small colored badge showing `source_feed` with a tooltip:
-- `token_lifecycle` — "Floor sweep: mcap < $1k OR liq < $500"
-- `pumpfun_watchlist` — "Curated dead list from Pump.fun watcher"
-- `ath_collapsed` — "Had >$50k ATH, now <5% of peak"
-- `admin_manual` — "Manually queued by admin"
-
-So you can trace every candidate back to which intake feed surfaced it.
-
-#### 6. Death-Cause Taxonomy modal
-Add an "ℹ️ Death Causes" button in the header that opens a Dialog listing all 15 causes from `_shared/autopsy-taxonomy.ts`, grouped by intent (Malicious / Negligent / Organic), each showing:
-- Label + Tier badge
-- `summary` (the one-liner)
-- A longer description (I'll write a `description` field per cause — detailed paragraph explaining the behavior pattern, what signals trigger it, and why it matters)
-- The detection signals as monospace chips
-- Auto-publish confidence threshold
-
-Detailed descriptions will be added to `_shared/autopsy-taxonomy.ts` as a new `description` field on each cause def, so the modal data and the AI writer can both consume the same source of truth.
+Queue collapses from ~22k noise to a hand-curated ~17 actual cases. Going forward, real-time intake catches new ≥75% deaths as they happen.
 
 ---
 
-### Technical details
+### Pipeline overview
 
-**Files touched (build mode):**
-1. `supabase/functions/_shared/autopsy-taxonomy.ts` — add `description: string` to each `DeathCauseDef` (15 paragraphs).
-2. `src/components/admin/autopsies/DeathTaxonomyModal.tsx` — new dialog component, reads a client-side mirror of the taxonomy.
-3. `src/data/autopsyTaxonomy.ts` — new client-side mirror of taxonomy (we can't import edge-function code into the SPA, so duplicate the JSON-safe parts: id, label, intent, tier, summary, description, signals, autoPublishMinConfidence).
-4. `src/components/admin/autopsies/AutopsyCandidateRow.tsx` — new shared row component (ordinal, full mint w/ dex link + copy, source-feed badge w/ tooltip, smart age, action buttons).
-5. `src/components/admin/autopsies/AutopsyQueueBody.tsx` — use shared row, add sort dropdown + taxonomy button, manage sort state.
-6. `src/pages/admin/AutopsyQueue.tsx` — same updates (or refactor to render `AutopsyQueueBody` and delete the duplicated logic — recommended).
+```text
+pumpfun_watchlist (status='dead', is_graduated=false)
+        │
+        ▼
+   bonding_curve_pct >= 75 ?
+        │
+   ┌────┴────┐
+   NO        YES → Lamb
+   │              │
+ignore      classify with curve-aware causes
+   │              │
+   ✗     ┌────────┼─────────┐
+       Bad Dev  Slow Wash  Sad Fade
+       Tier A   Tier A     Tier B
+       (manual  (manual    (manual
+        review) review)    review)
+```
 
-**Sort implementation:** after `setItems(data)`, apply `sortFn` based on dropdown state. No DB changes.
-
-**Smart age util:** small helper `formatAgeHours(h: number)` in `src/lib/utils.ts`.
-
----
-
-### Note on "time of death" sort
-
-We don't currently store a true `died_at` timestamp on `autopsy_candidates`. The proxies available are:
-- `analyzed_at` — when classifier ran (close to "discovered dead")
-- `funneled_at` — when row was inserted
-- `pumpfun_watchlist.first_seen_at + age_hours` — not stored on candidate
-
-For now I'll use `analyzed_at ?? funneled_at` for the "time of death" sort and label it accurately. If you want a true `died_at` we can add a column later and backfill from `pumpfun_watchlist.removed_at` / lifecycle data.
+**Auto-publish stays OFF for all tiers until you've reviewed quality.** Every autopsy goes through manual approval. We can flip the auto-publish switch later per-cause.
 
 ---
 
-### Separate: why the funnel is monoculture (flag for follow-up, not in this change)
+### Classifier — curve-aware death causes
 
-If you want Tier-A and Tier-C populated too, we need a second pass:
-- Backfill `creator_wallet` on candidates from `pumpfun_watchlist.creator_wallet` and `token_lifecycle` joins so `dev_behavior_scores` can match.
-- Re-run classifier on existing 200 rows after the join works → many will reclassify upward (atomic_snipe_rug, slow_bleed_dump, etc.).
-- Loosen the Tier-C ATH<$10k cutoff to e.g. $2k so legit organic deaths show up.
+Replaces generic `failed_launch` for pumpfun curve deaths. New IDs in `_shared/autopsy-taxonomy.ts`:
 
-Happy to do this in a follow-up once the UI lands. Approve this plan and I'll implement the UI changes now.
+| Cause ID                | Intent     | Tier | Trigger (pumpfun_watchlist signals)                                                 |
+|-------------------------|------------|------|--------------------------------------------------------------------------------------|
+| `curve_snipe_rug`       | malicious  | A    | curve ≥75, `dev_sold=true`, `dev_holding_pct < 1`, age < 24h                          |
+| `curve_wallet_washer`   | malicious  | A    | curve ≥75, creator linked to ≥3 prior dead tokens AND sells via linked-wallet pattern (`linked_wallet_count > 5`, `bundled_buy_count > 0`, holders drained while dev_holding_pct holds steady) |
+| `curve_slow_bleed`      | malicious  | B    | curve ≥75, `dev_sold=true` in tranches, `price_peak → price_current` decay >90%       |
+| `curve_failed_launch`   | negligent  | B    | curve ≥75, `dev_sold=false`, holders evaporated, no wash signals                      |
+
+**Bad-Dev vs Sad-Dev rule (your clarification baked in):**
+A "sad dev" who runs **20 linked wallets, drips sells into new buys, lets the token bleed to 70%, and walks** is **NOT sad — that's `curve_wallet_washer` (Bad Dev, Tier-A)**. Detection: creator wallet has >3 prior dead tokens AND token shows `linked_wallet_count > 5` or sustained dev_holding while price collapses. A creator whose tokens just *organically faded* with no wash patterns and no linked-wallet sells = ignored Lamb (no autopsy).
+
+---
+
+### Funnel rewrite — `autopsy-funnel-feeder`
+
+Replace pumpfun source block:
+1. Pull `pumpfun_watchlist WHERE status='dead' AND is_graduated IS NOT TRUE AND bonding_curve_pct >= 75`.
+2. Drop everything below 75% and everything with NULL curve_pct silently. No log table, no record.
+3. Set `source_feed = 'pumpfun_curve_death'` (renamed from `pumpfun_watchlist`).
+4. Run curve-aware classifier; insert into `autopsy_candidates` with appropriate cause + tier.
+5. **All tiers → status='pending' awaiting manual approval.** No auto-publish branch executes.
+
+One-time backfill SQL after deploy: delete existing `autopsy_candidates` rows where `source_feed='pumpfun_watchlist'` and either `bonding_curve_pct IS NULL` (we'll need to join from pumpfun_watchlist) or `< 75`. Re-run the funnel to repopulate the ~17 real Lambs.
+
+---
+
+### Banner generation — pump.fun mint image only
+
+Curve-death tokens almost never have DexScreener pages (no Raydium pool). Update `autopsy-banner-overlay`:
+
+- **Source priority for curve deaths:** `pumpfun_watchlist.image_url` ONLY. Skip the DexScreener `pairs[0].info.header` lookup entirely when `source_feed='pumpfun_curve_death'`.
+- If `image_url` is missing → fall back to a default "Lamb silhouette" template (we have the BlackBox autopsy frame; center is just black with a "?" silhouette).
+- Decoration protocol unchanged (corner stamps, BLACKBOX AUTOPSY stencil bottom-right). Center 60% = the pump.fun mint image, untouched.
+
+This also matches the existing banner protocol's "decorate, don't cover" rule — perfect for tiny pump.fun token icons that need a forensic frame.
+
+---
+
+### UI — `/super-admin/autopsy-queue`
+
+- Header rebrand: "Autopsy Queue — Lambs (Pump.fun Curve Deaths)".
+- Curve % badge per row (`94%` gold, `82%` silver, `76%` bronze) — sortable.
+- Death taxonomy modal updated with the four new causes + a **Bad-Dev vs Sad-Dev panel** explaining the wallet-washer detection logic (your "20 wallets, drips into new buys" example as the canonical illustration).
+- Source-feed badge shows `pumpfun_curve_death` with tooltip "Lamb · pump.fun, died on bonding curve before graduation".
+- Subtle "Auto-publish: DISABLED · manual review required" indicator in the header so it's clear nothing slips out without you.
+
+---
+
+### Real-time future hook (noted, not built this pass)
+
+The Watchlist Monitor already tracks live `bonding_curve_pct`. After this lands, a follow-up adds a watcher: when a watchlist token transitions from `bonding_curve_pct ≥ 75` to `status='dead'` within X minutes, fire `autopsy-funnel-feeder` immediately for that single mint → instant autopsy draft on a fresh 89%-rug while the X conversation is still warm. That's the timely-tool play. Not in this build, but the schema and classifier here support it directly.
+
+---
+
+### Technical change list (this build)
+
+- **Edit:** `supabase/functions/_shared/autopsy-taxonomy.ts` — add 4 curve causes + descriptions, mark all as `autoPublish: false` for now.
+- **Edit:** `supabase/functions/autopsy-funnel-feeder/index.ts` — replace pumpfun block with curve-gated query, rename source_feed, run curve classifier, drop sub-75/NULL silently.
+- **Edit:** `supabase/functions/autopsy-banner-overlay/index.ts` — for `source_feed='pumpfun_curve_death'`, source from `pumpfun_watchlist.image_url` only; default Lamb silhouette fallback.
+- **Edit:** `src/data/autopsyTaxonomy.ts` — add 4 curve causes + Bad-Dev/Sad-Dev explainer copy.
+- **Edit:** `src/components/admin/autopsies/DeathTaxonomyModal.tsx` — render new explainer panel.
+- **Edit:** `src/components/admin/autopsies/AutopsyCandidateRow.tsx` — Curve % badge, updated source-feed label.
+- **Edit:** `src/components/admin/autopsies/AutopsyQueueBody.tsx` — header rebrand, "Auto-publish DISABLED" indicator, sort by curve %.
+- **One-time SQL:** delete stale `autopsy_candidates` rows where `source_feed='pumpfun_watchlist'` AND mint's `bonding_curve_pct < 75 OR IS NULL`. Re-run funnel.
+- **Memory:** create `mem://features/autopsy/curve-death-pipeline.md` capturing the 75% Lamb gate, Bad-Dev rule, and auto-publish=off policy.
+
+Approve and I'll build it.
