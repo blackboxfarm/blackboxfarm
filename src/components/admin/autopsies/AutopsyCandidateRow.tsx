@@ -31,6 +31,7 @@ export interface Candidate {
   funneled_at: string;
   analyzed_at?: string | null;
   published_slug: string | null;
+  bonding_curve_pct?: number | null;
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -51,10 +52,18 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 
 const SOURCE_BADGE_COLOR: Record<string, string> = {
   token_lifecycle: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  pumpfun_curve_death: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   pumpfun_watchlist: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   ath_collapsed: "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30",
   admin_manual: "bg-primary/15 text-primary border-primary/30",
 };
+
+function curveBadgeColor(pct: number | null | undefined): string {
+  if (pct == null) return "bg-muted text-muted-foreground border-border";
+  if (pct >= 90) return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"; // gold
+  if (pct >= 80) return "bg-zinc-400/15 text-zinc-300 border-zinc-400/30";       // silver
+  return "bg-orange-700/15 text-orange-400 border-orange-700/30";                 // bronze
+}
 
 interface Props {
   ordinal: number;
@@ -132,6 +141,11 @@ export default function AutopsyCandidateRow({ ordinal, c, busy, onDraft, onDecid
           <span>{c.death_cause ?? "unclassified"}</span>
           <span>· conf {c.death_confidence ?? "?"}</span>
           <span>· score {c.candidate_score}</span>
+          {c.bonding_curve_pct != null && (
+            <Badge variant="outline" className={`text-[10px] ${curveBadgeColor(c.bonding_curve_pct)}`}>
+              curve {Math.round(c.bonding_curve_pct)}%
+            </Badge>
+          )}
           {c.ath_mcap_usd ? <span>· ATH ${Math.round(c.ath_mcap_usd).toLocaleString()}</span> : null}
           {c.age_hours != null ? <span>· {formatAgeHours(c.age_hours)} old</span> : null}
           <span>· funneled {format(new Date(c.funneled_at), "MMM d HH:mm")}</span>
