@@ -18,8 +18,24 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
-import { assertUpsert } from '../_shared/db-assert.ts';
+import { assertDbWrite, assertUpsert } from '../_shared/db-assert.ts';
 import { classifyDeath, classifyCurveDeath, DEATH_TAXONOMY, tierFor, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+
+const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = 75_000;
+const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
+
+function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: number | null; price_peak?: number | null }): number {
+  return Math.max(
+    Number(row.market_cap_usd ?? 0),
+    Number(row.price_ath_usd ?? 0) * PUMPFUN_TOKEN_SUPPLY,
+    Number(row.price_peak ?? 0) * PUMPFUN_TOKEN_SUPPLY,
+  );
+}
+
+function estimateCurveAthPct(peakMcap: number): number {
+  return Math.min(100, Math.round((peakMcap / 100_000) * 100));
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
