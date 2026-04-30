@@ -35,11 +35,6 @@ function fmtUsd(n: number | null | undefined): string {
   return `$${n.toFixed(0)}`;
 }
 
-function shortMint(m: string): string {
-  if (!m) return '—';
-  return `${m.slice(0, 4)}…${m.slice(-4)}`;
-}
-
 function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name'): string | null {
   const v = value?.trim();
   if (!v) return null;
@@ -115,11 +110,12 @@ export default function CoolDeathsBacklog() {
 
   async function draftAutopsy(r: BacklogRow) {
     setBusy(r.token_mint);
+    const ticker = cleanTokenText(r.symbol, 'symbol');
     const { data: cand, error: insErr } = await supabase
       .from('autopsy_candidates')
       .upsert({
         token_mint: r.token_mint,
-        ticker: r.symbol,
+        ticker,
         tier: 'B',
         source_feed: 'cool_deaths_backlog',
         candidate_score: Math.round((r.collapse_pct ?? 0) * 100),
@@ -179,13 +175,16 @@ export default function CoolDeathsBacklog() {
       )}
 
       <div className="space-y-2">
-        {filtered?.map(r => (
+        {filtered?.map(r => {
+          const symbol = cleanTokenText(r.symbol, 'symbol');
+          const name = cleanTokenText(r.name, 'name');
+          return (
           <Card key={r.token_mint} className="p-3">
             <div className="flex items-start gap-4 flex-wrap">
               <div className="flex-1 min-w-[200px]">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold">{r.symbol ? `$${r.symbol}` : <span className="text-muted-foreground italic text-xs">no ticker</span>}</span>
-                  {r.name && <span className="text-xs text-muted-foreground truncate max-w-[200px]">{r.name}</span>}
+                  <span className="font-semibold">{symbol ? `$${symbol}` : <span className="text-muted-foreground italic text-xs">resolving ticker…</span>}</span>
+                  {name && <span className="text-xs text-muted-foreground truncate max-w-[200px]">{name}</span>}
                   {r.death_cause && (
                     <Badge variant="outline" className="text-[10px]">{r.death_cause}</Badge>
                   )}
@@ -215,7 +214,8 @@ export default function CoolDeathsBacklog() {
               </div>
             </div>
           </Card>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
