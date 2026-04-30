@@ -213,8 +213,6 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       source_feed: 'pumpfun_curve_death',
       ticker: t.token_symbol ?? existing?.ticker,
       token_name: t.token_name ?? existing?.token_name,
-      ath_mcap_usd: Math.max(existing?.ath_mcap_usd ?? 0, peakMcap),
-      current_mcap_usd: t.market_cap_usd ?? existing?.current_mcap_usd,
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
