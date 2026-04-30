@@ -200,7 +200,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
-      ath_mcap_usd: Number.isFinite(liveAthMcap) ? liveAthMcap : (t.ath_market_cap_usd ?? ((t.price_ath_usd ?? 0) * 1_000_000_000) || existing?.ath_mcap_usd),
+      ath_mcap_usd: Number.isFinite(liveAthMcap) ? liveAthMcap : ((t.ath_market_cap_usd ?? ((t.price_ath_usd ?? 0) * 1_000_000_000)) || existing?.ath_mcap_usd),
       current_mcap_usd: Number.isFinite(liveCurrentMcap) ? liveCurrentMcap : (t.market_cap_usd ?? existing?.current_mcap_usd),
       bonding_curve_pct: peakCurvePct,
       dev_sold: t.dev_sold,
