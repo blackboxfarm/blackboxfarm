@@ -16,8 +16,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
-
 function extractTgUsername(url: string): string | null {
   if (!url) return null;
   const m = url.match(/t\.me\/(?:joinchat\/|\+)?([a-zA-Z0-9_]+)/);
@@ -28,16 +26,13 @@ function extractTgUsername(url: string): string | null {
 }
 
 async function tg(method: string, payload: any): Promise<{ ok: boolean; data: any }> {
-  const lovable = Deno.env.get('LOVABLE_API_KEY');
-  const tgKey = Deno.env.get('TELEGRAM_API_KEY');
-  if (!lovable || !tgKey) {
-    return { ok: false, data: { error: 'TELEGRAM_API_KEY or LOVABLE_API_KEY missing' } };
+  const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') ?? Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
+  if (!botToken) {
+    return { ok: false, data: { error: 'TELEGRAM_BOT_TOKEN missing' } };
   }
-  const res = await fetch(`${GATEWAY_URL}/${method}`, {
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${lovable}`,
-      'X-Connection-Api-Key': tgKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
