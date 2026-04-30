@@ -22,7 +22,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
-import { DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
+import { classifyDeath, DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
 import { enrichCandidate } from '../_shared/autopsy-enrich.ts';
 import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
 
@@ -38,6 +38,18 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
     .slice(0, 80);
+}
+
+function num(...values: unknown[]): number | null {
+  for (const v of values) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function meaningfulCause(cause: unknown): cause is DeathCauseId {
+  return typeof cause === 'string' && cause in DEATH_TAXONOMY && cause !== 'unknown';
 }
 
 const FEW_SHOT_MALICIOUS = `# Token Autopsy — GPT "Greedy Pissing Testicle"
