@@ -145,7 +145,7 @@ export function LitmusStrip({ tokenMint, tokenCreatedAt, className, onRefresh }:
                     {snapshot.dust_percentage != null && <p>{Math.round(snapshot.dust_percentage)}% dust</p>}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No data</p>
+                  <p className="text-muted-foreground">No scan that hour — only top‑200 + manual refresh are scanned hourly</p>
                 )}
               </TooltipContent>
             </Tooltip>
