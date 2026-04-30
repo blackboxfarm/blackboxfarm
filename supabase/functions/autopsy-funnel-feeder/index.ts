@@ -329,7 +329,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       });
 
       // Skip Tier-C unless ATH was meaningful (>$10k) — too noisy otherwise.
-      // EXCEPTION: curve-death Lambs are always kept (already gated to ≥75% curve).
+      // EXCEPTION: curve-death Lambs are always kept (already gated to 75% <= curve < 100%).
       let effectiveTier = tier;
       if (c.source_feed === 'pumpfun_curve_death' || c.source_feed === 'admin_manual') {
         if (effectiveTier === 'C') effectiveTier = 'B';
