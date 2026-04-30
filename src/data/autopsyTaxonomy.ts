@@ -21,17 +21,17 @@ export interface DeathCauseClient {
 }
 
 export const DEATH_TAXONOMY_CLIENT: DeathCauseClient[] = [
-  // ── Curve Deaths (Lambs — pump.fun ≥75% curve ATH, never graduated) ──
+  // ── Curve Deaths (Lambs — pump.fun 75% <= curve ATH < 100%, never graduated) ──
   {
     id: "curve_snipe_rug",
     label: "Curve Snipe Rug",
     intent: "malicious",
     tier: "A",
     verdict: "CURVE SNIPE RUG",
-    summary: "Dev dumped near-entire bag on bonding curve ≥75% ATH within 24h.",
+    summary: "Dev dumped near-entire bag on bonding curve 75–99% ATH within 24h.",
     description:
-      "A pump.fun token climbs to ≥75% of the bonding curve, the deployer dumps almost their entire bag (dev_holding_pct < 1%) within the first 24 hours, and the token dies on the curve before ever reaching Raydium. The blast radius is small — usually 100–300 holders — but the intent is identical to a graduated rug: extract retail liquidity at the local peak and walk. We catalogue these to map the dev wallet to future launches.",
-    signals: ["bonding_curve_pct>=75", "dev_sold=true", "dev_holding_pct<1", "lifetime_hours<24"],
+      "A pump.fun token climbs to 75–99% of the bonding curve, the deployer dumps almost their entire bag (dev_holding_pct < 1%) within the first 24 hours, and the token dies on the curve before ever reaching Raydium. The blast radius is small — usually 100–300 holders — but the intent is identical to a graduated rug: extract retail liquidity at the local peak and walk. We catalogue these to map the dev wallet to future launches.",
+    signals: ["bonding_curve_pct>=75", "bonding_curve_pct<100", "dev_sold=true", "dev_holding_pct<1", "lifetime_hours<24"],
     autoPublishMinConfidence: 999,
   },
   {
@@ -42,8 +42,8 @@ export const DEATH_TAXONOMY_CLIENT: DeathCauseClient[] = [
     verdict: "CURVE WALLET WASHER",
     summary: "Creator runs linked-wallet cluster, drips sells into fresh buys, lets the curve bleed out.",
     description:
-      "Looks superficially like a 'sad dev' — token reaches ≥75% curve, then bleeds steadily back down to nothing without a single big dump. But the creator wallet is linked to a cluster of 5+ companion wallets that drip sells into every fresh organic buy, and the same creator has 3+ prior dead tokens on file. This is NOT a sad dev. This is a serial wallet washer farming retail liquidity in small doses across many launches. Tier-A regardless of how 'quiet' the chart looks.",
-    signals: ["bonding_curve_pct>=75", "linked_wallet_count>5", "bundled_buy_count>0", "creator_prior_dead_tokens>=3"],
+      "Looks superficially like a 'sad dev' — token reaches 75–99% curve, then bleeds steadily back down to nothing without a single big dump. But the creator wallet is linked to a cluster of 5+ companion wallets that drip sells into every fresh organic buy, and the same creator has 3+ prior dead tokens on file. This is NOT a sad dev. This is a serial wallet washer farming retail liquidity in small doses across many launches. Tier-A regardless of how 'quiet' the chart looks.",
+    signals: ["bonding_curve_pct>=75", "bonding_curve_pct<100", "linked_wallet_count>5", "bundled_buy_count>0", "creator_prior_dead_tokens>=3"],
     autoPublishMinConfidence: 999,
   },
   {
@@ -52,10 +52,10 @@ export const DEATH_TAXONOMY_CLIENT: DeathCauseClient[] = [
     intent: "malicious",
     tier: "B",
     verdict: "CURVE SLOW BLEED",
-    summary: "Dev sold in tranches on a ≥75% curve; peak→current decay >90%.",
+    summary: "Dev sold in tranches on a 75–99% curve; peak→current decay >90%.",
     description:
       "The deployer sold (dev_sold=true) but in tranches rather than a single exit, and the price collapsed >90% from its peak on the curve. Less choreographed than a snipe rug and without the linked-wallet pattern of a washer — but still net-distributive dev behavior on a meaningful peak.",
-    signals: ["bonding_curve_pct>=75", "dev_sold=true", "price_decay_pct>90"],
+    signals: ["bonding_curve_pct>=75", "bonding_curve_pct<100", "dev_sold=true", "price_decay_pct>90"],
     autoPublishMinConfidence: 999,
   },
   {
@@ -64,10 +64,10 @@ export const DEATH_TAXONOMY_CLIENT: DeathCauseClient[] = [
     intent: "negligent",
     tier: "B",
     verdict: "CURVE FADE",
-    summary: "≥75% curve, no wash signals, holders evaporated, dev didn't dump maliciously.",
+    summary: "75–99% curve, no wash signals, holders evaporated, dev didn't dump maliciously.",
     description:
       "Token reached a meaningful peak (≥75% curve), the dev held their bag, and there are no linked-wallet or bundled-buy signals — but holders walked away and the curve faded out. Worth autopsying for the narrative pattern (battling copycat tickers, lost community attention, news cycle moving on) even though no malice is detected.",
-    signals: ["bonding_curve_pct>=75", "dev_sold=false", "no_wash_signals"],
+    signals: ["bonding_curve_pct>=75", "bonding_curve_pct<100", "dev_sold=false", "no_wash_signals"],
     autoPublishMinConfidence: 999,
   },
 
