@@ -174,8 +174,8 @@ export default function CoolDeathsBacklog() {
             <div className="flex items-start gap-4 flex-wrap">
               <div className="flex-1 min-w-[200px]">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold">{r.symbol ? `$${r.symbol}` : shortMint(r.token_mint)}</span>
-                  <span className="text-xs text-muted-foreground truncate max-w-[160px]">{r.name ?? ''}</span>
+                  <span className="font-semibold">{r.symbol ? `$${r.symbol}` : <span className="text-muted-foreground italic text-xs">no ticker</span>}</span>
+                  {r.name && <span className="text-xs text-muted-foreground truncate max-w-[200px]">{r.name}</span>}
                   {r.death_cause && (
                     <Badge variant="outline" className="text-[10px]">{r.death_cause}</Badge>
                   )}
