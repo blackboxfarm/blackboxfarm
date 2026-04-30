@@ -38,7 +38,37 @@ type DerivedRow = {
 };
 type AugmentedRow = WatchlistRow & DerivedRow & { __decision_score?: number };
 
-// Columns whose values are JSON/objects and not meaningfully sortable
+// Order of derived columns shown FIRST in the table — these are the ones that
+// actually drive autopsy/buy/monitor decisions. Native pumpfun_watchlist columns
+// follow them so we keep all the raw forensic fields visible.
+const DERIVED_KEYS: Array<keyof DerivedRow> = [
+  'snap_health_grade',
+  'snap_total_holders',
+  'snap_real_holders',
+  'snap_top10_pct',
+  'snap_dust_pct',
+  'snap_health_score',
+  'snap_at',
+  'seen_was_posted',
+  'seen_times_posted',
+  'seen_mcap_at_discovery',
+  'lc_ath_24h_usd',
+  'lc_autopsy_at',
+  'lc_death_cause',
+  'disc_mesh_status',
+  'disc_watchlist_status',
+  'disc_xpost_status',
+  'disc_source_name',
+];
+
+// Quick filter presets that match the real workflow (not raw status enum values).
+type QuickFilter =
+  | 'funnel_only'
+  | 'has_snapshot'
+  | 'posted_telegram'
+  | 'missing_price_ath'
+  | 'autopsy_candidates'
+  | 'inserted_only';
 
 const PAGE_SIZE = 1000;
 const ROWS_PER_PAGE = 50;
