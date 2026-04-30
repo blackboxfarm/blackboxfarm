@@ -149,7 +149,7 @@ async function detectAndLookup(messageText: string, userId?: string): Promise<st
     const ca = solMatch[0];
     const [lifecycleRes, socialRes, meshRes] = await Promise.all([
       supabase.from('token_lifecycle').select('symbol, name, phase, bonded_at, graduated_at, dead_at, peak_mcap, current_mcap, creator_wallet').eq('mint', ca).maybeSingle(),
-      supabase.from('token_social_links').select('platform, handle, url').eq('token_mint', ca).limit(5),
+      supabase.from('token_social_links').select('platform, extracted_handle, url').eq('token_mint', ca).limit(5),
       supabase.from('reputation_mesh').select('entity_type, entity_id, label, metadata').or(`entity_id.eq.${ca},metadata->>token_mint.eq.${ca}`).limit(5),
     ]);
 
@@ -167,7 +167,7 @@ async function detectAndLookup(messageText: string, userId?: string): Promise<st
 
     const socials = socialRes.data || [];
     if (socials.length > 0) {
-      block += `- Social links: ${socials.map(s => `${s.platform}: ${s.handle || s.url}`).join(', ')}\n`;
+      block += `- Social links: ${socials.map(s => `${s.platform}: ${s.extracted_handle || s.url}`).join(', ')}\n`;
     }
 
     const mesh = meshRes.data || [];
