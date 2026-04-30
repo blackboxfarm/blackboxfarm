@@ -24,6 +24,8 @@ import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const PUMPFUN_LAMB_MIN_CURVE_PCT = 75;
 const PUMPFUN_LAMB_MAX_CURVE_PCT = 99.5;
+const PUMPFUN_GRADUATION_MCAP_USD = 69_000;
+const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = PUMPFUN_GRADUATION_MCAP_USD * (PUMPFUN_LAMB_MIN_CURVE_PCT / 100);
 const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
 const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
 
@@ -40,6 +42,11 @@ function liveCurveProgressFromPump(coin: any): number | null {
   if (!Number.isFinite(realTokenReserves)) return null;
   const tokensSold = PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
   return Math.max(0, Math.min(100, (tokensSold / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100));
+}
+
+function athCurveProgressFromPumpMcap(athMarketCapUsd: number): number {
+  if (!Number.isFinite(athMarketCapUsd) || athMarketCapUsd <= 0) return 0;
+  return Math.min(100, (athMarketCapUsd / PUMPFUN_GRADUATION_MCAP_USD) * 100);
 }
 
 const corsHeaders = {
