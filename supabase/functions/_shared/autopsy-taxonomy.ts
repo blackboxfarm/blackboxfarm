@@ -279,6 +279,27 @@ export function shouldAutoPublish(cause: DeathCauseId, confidence: number): bool
 }
 
 /**
+ * Dev dossier passed into classifyDeath() to weight outcomes by the creator's
+ * cluster history (prior tokens, KYC root, sibling wallets, allstar status).
+ */
+export interface DevDossier {
+  wallet?: string | null;
+  kyc_root?: string | null;
+  cluster_wallets?: string[];
+  prior_tokens?: Array<{ wallet: string; mint: string; ath_mcap_usd?: number | null; status?: string | null; death_cause?: string | null }>;
+  cluster_history_summary?: {
+    total_prior_tokens: number;
+    dead_count: number;
+    rug_count: number;
+    soft_rug_count: number;
+    natural_cycle_count: number;
+    allstar_count: number;
+  };
+  reputation_verdict?: 'clean' | 'mixed' | 'repeat_offender' | 'serial_rugger';
+  primary_evidence_strings?: string[];
+}
+
+/**
  * Classify a token using available signals from token_lifecycle + dev_behavior_scores
  * + dev_wallet_reputation + token_social_links.
  * Returns the most specific cause we have evidence for.
