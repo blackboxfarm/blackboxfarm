@@ -1,54 +1,54 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Skull, RefreshCw, Play, CheckCircle2, XCircle, Clock, Image as ImageIcon } from 'lucide-react';
+import { Skull, RefreshCw, Play } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import AutopsyCandidateRow, { type Candidate } from './AutopsyCandidateRow';
+import DeathTaxonomyModal from './DeathTaxonomyModal';
 
-interface Candidate {
-  id: string;
-  token_mint: string;
-  ticker: string | null;
-  token_name: string | null;
-  source_feed: string;
-  candidate_score: number;
-  death_cause: string | null;
-  death_intent: string | null;
-  death_confidence: number | null;
-  tier: string | null;
-  status: string;
-  ath_mcap_usd: number | null;
-  current_mcap_usd: number | null;
-  age_hours: number | null;
-  funneled_at: string;
-  published_slug: string | null;
+type SortKey =
+  | 'score_desc'
+  | 'funneled_desc' | 'funneled_asc'
+  | 'age_asc' | 'age_desc'
+  | 'death_desc' | 'death_asc';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  score_desc:    'Score (highest first)',
+  funneled_desc: 'Funneled at — newest',
+  funneled_asc:  'Funneled at — oldest',
+  age_asc:       'Mint creation — newest',
+  age_desc:      'Mint creation — oldest',
+  death_desc:    'Time of death — most recent',
+  death_asc:     'Time of death — oldest',
+};
+
+function deathTime(c: Candidate): number {
+  const t = c.analyzed_at ?? c.funneled_at;
+  return t ? new Date(t).getTime() : 0;
 }
 
-const TIER_COLORS: Record<string, string> = {
-  A: 'bg-destructive/15 text-destructive border-destructive/30',
-  B: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
-  C: 'bg-muted text-muted-foreground border-border',
-};
-
-const STATUS_ICON: Record<string, React.ReactNode> = {
-  pending: <Clock className="h-3 w-3" />,
-  analyzing: <RefreshCw className="h-3 w-3 animate-spin" />,
-  drafted: <CheckCircle2 className="h-3 w-3 text-amber-500" />,
-  approved: <CheckCircle2 className="h-3 w-3 text-emerald-500" />,
-  published: <CheckCircle2 className="h-3 w-3 text-emerald-500" />,
-  rejected: <XCircle className="h-3 w-3 text-destructive" />,
-  failed: <XCircle className="h-3 w-3 text-destructive" />,
-};
+function applySort(items: Candidate[], key: SortKey): Candidate[] {
+  const copy = [...items];
+  switch (key) {
+    case 'score_desc':    return copy.sort((a, b) => b.candidate_score - a.candidate_score);
+    case 'funneled_desc': return copy.sort((a, b) => new Date(b.funneled_at).getTime() - new Date(a.funneled_at).getTime());
+    case 'funneled_asc':  return copy.sort((a, b) => new Date(a.funneled_at).getTime() - new Date(b.funneled_at).getTime());
+    case 'age_asc':       return copy.sort((a, b) => (a.age_hours ?? Infinity) - (b.age_hours ?? Infinity));
+    case 'age_desc':      return copy.sort((a, b) => (b.age_hours ?? -1) - (a.age_hours ?? -1));
+    case 'death_desc':    return copy.sort((a, b) => deathTime(b) - deathTime(a));
+    case 'death_asc':     return copy.sort((a, b) => deathTime(a) - deathTime(b));
+  }
+}
 
 export default function AutopsyQueueBody() {
   const { toast } = useToast();
   const [items, setItems] = useState<Candidate[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'A' | 'B' | 'C'>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('score_desc');
 
   async function load() {
     setItems(null);
@@ -68,6 +68,8 @@ export default function AutopsyQueueBody() {
   }
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+
+  const sorted = useMemo(() => items ? applySort(items, sortKey) : null, [items, sortKey]);
 
   async function runFunnel() {
     setBusy('funnel');
@@ -131,7 +133,8 @@ export default function AutopsyQueueBody() {
             Tier-A auto-publish on confidence ≥ threshold · Tier-B awaits approval · Tier-C skipped unless flagged.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <DeathTaxonomyModal />
           <Button variant="outline" size="sm" onClick={load}>
             <RefreshCw className="h-3 w-3 mr-1" /> Reload
           </Button>
@@ -141,62 +144,44 @@ export default function AutopsyQueueBody() {
         </div>
       </header>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center flex-wrap">
         {(['all', 'A', 'B', 'C'] as const).map(t => (
           <Button key={t} variant={filter === t ? 'default' : 'outline'} size="sm" onClick={() => setFilter(t)}>
             {t === 'all' ? 'All' : `Tier ${t}`}
           </Button>
         ))}
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Sort by</span>
+          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+            <SelectTrigger className="h-8 w-[230px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(SORT_LABELS) as SortKey[]).map(k => (
+                <SelectItem key={k} value={k} className="text-xs">{SORT_LABELS[k]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {items === null && (
+      {sorted === null && (
         <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
       )}
 
-      {items && items.length === 0 && (
+      {sorted && sorted.length === 0 && (
         <Card className="p-8 text-center text-muted-foreground">No candidates. Click "Run Funnel" to populate.</Card>
       )}
 
       <div className="space-y-2">
-        {items?.map(c => (
-          <Card key={c.id} className="p-4 flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              {c.tier && <Badge variant="outline" className={TIER_COLORS[c.tier]}>{c.tier}</Badge>}
-              <Badge variant="outline" className="text-[10px]">{c.status} {STATUS_ICON[c.status]}</Badge>
-              <div className="min-w-0">
-                <div className="font-mono text-xs truncate">{c.ticker ?? '?'} · {c.token_mint.slice(0, 8)}…{c.token_mint.slice(-4)}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {c.death_cause ?? 'unclassified'} · conf {c.death_confidence ?? '?'} · score {c.candidate_score}
-                  {c.ath_mcap_usd ? ` · ATH $${Math.round(c.ath_mcap_usd).toLocaleString()}` : ''}
-                  {c.age_hours ? ` · ${c.age_hours.toFixed(0)}h old` : ''}
-                  · {format(new Date(c.funneled_at), 'MMM d HH:mm')}
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-1 flex-wrap">
-              {c.published_slug && (
-                <Link to={`/autopsy/${c.published_slug}`}>
-                  <Button size="sm" variant="ghost">View</Button>
-                </Link>
-              )}
-              {c.status === 'pending' && (
-                <Button size="sm" variant="outline" onClick={() => draft(c.id)} disabled={busy === c.id}>
-                  {busy === c.id ? '…' : 'Draft'}
-                </Button>
-              )}
-              {c.status === 'drafted' && (
-                <>
-                  <Button size="sm" onClick={() => decide(c.id, 'approved')} disabled={busy === c.id}>Approve</Button>
-                  <Button size="sm" variant="ghost" onClick={() => decide(c.id, 'rejected')} disabled={busy === c.id}>Reject</Button>
-                </>
-              )}
-              {c.published_slug && ['drafted', 'approved', 'published'].includes(c.status) && (
-                <Button size="sm" variant="ghost" onClick={() => regenBanner(c)} disabled={busy === c.id} title="Regenerate banner overlay">
-                  <ImageIcon className="h-3 w-3 mr-1" /> Banner
-                </Button>
-              )}
-            </div>
-          </Card>
+        {sorted?.map((c, idx) => (
+          <AutopsyCandidateRow
+            key={c.id}
+            ordinal={idx + 1}
+            c={c}
+            busy={busy}
+            onDraft={draft}
+            onDecide={decide}
+            onRegenBanner={regenBanner}
+          />
         ))}
       </div>
     </div>
