@@ -7,6 +7,7 @@ import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 import { upsertHealthSnapshot } from "../_shared/snapshot-writer.ts";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
