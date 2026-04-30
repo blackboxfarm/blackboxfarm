@@ -7,6 +7,7 @@ import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 import { checkMayhemMode } from '../_shared/mayhem-check.ts';
 import { getSolPriceFromCache } from '../_shared/sol-price-cache.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 enableHeliusTracking('pumpfun-watchlist-monitor');
 
 /**
@@ -54,9 +55,23 @@ const BATCH_DELAY_MS = 1000;
 const CALL_DELAY_MS = 100;
 const TOKENS_PER_RUN = 50;
 const SKIP_RECENTLY_CHECKED_MINUTES = 3;
+const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
 
 // MINIMUM SCORE THRESHOLD for fantasy qualification
 const MIN_QUALIFICATION_SCORE = 50;
+
+function clampPct(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function curveProgressFromPump(data: any): number | null {
+  if (data?.complete === true) return 100;
+  const explicit = Number(data?.bonding_curve_progress ?? data?.bonding_curve_percentage ?? NaN);
+  if (Number.isFinite(explicit)) return clampPct(explicit <= 1 ? explicit * 100 : explicit);
+  const realTokenReserves = Number(data?.real_token_reserves ?? NaN);
+  if (!Number.isFinite(realTokenReserves)) return null;
+  return clampPct(((PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves) / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100);
+}
 
 interface MonitorStats {
   tokensChecked: number;
