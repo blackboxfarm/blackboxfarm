@@ -321,6 +321,8 @@ export function classifyDeath(input: {
   spamMessagePct?: number;
   chartDipPct?: number;
   hasMaliciousDump?: boolean;
+  socialCompleteness?: number;
+  devDossier?: DevDossier;
 }): { cause: DeathCauseId; confidence: number; matchedSignals: string[] } {
   const matched: string[] = [];
   const {
@@ -331,7 +333,13 @@ export function classifyDeath(input: {
     devWalletInactiveHours = 0, noAdminMessageHours = 0,
     spamMessagePct = 0, chartDipPct = 0,
     hasMaliciousDump,
+    socialCompleteness = 0,
+    devDossier,
   } = input;
+
+  const repVerdict = devDossier?.reputation_verdict ?? 'clean';
+  const clusterRugs = (devDossier?.cluster_history_summary?.rug_count ?? 0)
+                     + (devDossier?.cluster_history_summary?.soft_rug_count ?? 0);
 
   // Honeypot — strongest signal
   if (freezeAuthorityActive) {
@@ -376,6 +384,14 @@ export function classifyDeath(input: {
     return { cause: 'slow_bleed_dump', confidence: Math.min(85, 50 + dumpVelocity * 0.4), matchedSignals: matched };
   }
 
+  // Serial rugger overlay — even when on-chain dump pattern is gentle, prior cluster
+  // history of 3+ rugs forces a slow_bleed_dump label (the "bled out by linked wallets
+  // with no direct bundle to KYC" case).
+  if (repVerdict === 'serial_rugger' || clusterRugs >= 3) {
+    matched.push(`cluster_rug_count>=${Math.max(3, clusterRugs)}`, 'serial_rugger_pattern');
+    return { cause: 'slow_bleed_dump', confidence: 78, matchedSignals: matched };
+  }
+
   // Mod abandonment
   if (noAdminMessageHours > 24 && chartDipPct > 50) {
     matched.push('no_admin_message_hours>24', 'chart_dip_pct>50');
@@ -389,20 +405,33 @@ export function classifyDeath(input: {
     return { cause: 'dev_abandonment', confidence: 70, matchedSignals: matched };
   }
 
-  // Failed launch
-  if (athMcap < 5000 && ageHours > 24 && !hasMaliciousDump) {
+  // Failed launch — only if social stack is also thin. Real socials = not a "failed launch".
+  if (athMcap < 5000 && ageHours > 24 && !hasMaliciousDump && socialCompleteness < 3) {
     matched.push('ath_mcap_usd<5000', 'lifetime_hours>24', 'no_malicious_dump');
     return { cause: 'failed_launch', confidence: 80, matchedSignals: matched };
   }
 
-  // Hype decay
-  if (athMcap > 50000 && !hasMaliciousDump) {
+  // Natural cycle — legit build + real ATH + clean dossier. Checked BEFORE organic
+  // fallbacks so well-built projects never get labeled "burnout" or "organic death".
+  if (
+    athMcap >= 100000 &&
+    socialCompleteness >= 3 &&
+    !hasMaliciousDump &&
+    (repVerdict === 'clean' || repVerdict === 'mixed') &&
+    clusterRugs < 3
+  ) {
+    matched.push('ath_mcap_usd>=100000', `social_completeness>=${socialCompleteness}`, 'no_malicious_dump', `dev_reputation=${repVerdict}`);
+    return { cause: 'natural_cycle', confidence: 80, matchedSignals: matched };
+  }
+
+  // Hype decay — only when social build was thin (otherwise → natural_cycle above).
+  if (athMcap > 50000 && !hasMaliciousDump && socialCompleteness < 3) {
     matched.push('ath_mcap_usd>50000', 'no_malicious_dump');
     return { cause: 'hype_decay', confidence: 70, matchedSignals: matched };
   }
 
-  // Community burnout
-  if (athMcap > 10000 && !hasMaliciousDump) {
+  // Community burnout — thin socials only.
+  if (athMcap > 10000 && !hasMaliciousDump && socialCompleteness < 3) {
     matched.push('ath_mcap_usd>10000', 'no_malicious_dump');
     return { cause: 'community_burnout', confidence: 65, matchedSignals: matched };
   }
