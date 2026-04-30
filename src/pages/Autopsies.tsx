@@ -23,6 +23,7 @@ export default function Autopsies() {
     supabase
       .from('autopsy_reports')
       .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, hero_image_path, source_banner_url, tags, published_at')
+      .eq('is_current', true)
       .order('published_at', { ascending: false })
       .limit(100)
       .then(({ data }) => {

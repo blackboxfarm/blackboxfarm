@@ -36,6 +36,7 @@ export type DeathCauseId =
   | 'mod_abandonment'        // socials still up but no admin/mod chatter for >24h after chart dip
   | 'failed_launch'          // never gained traction, dev gave up, no malicious dump
   // ── Organic / neutral ──────────────────────────────────
+  | 'natural_cycle'          // legit social build, real ATH, retail rotated out — no malice
   | 'community_burnout'      // hype decay, no malicious dump, dev still active but volume gone
   | 'hype_decay'             // organic loss of interest after viral peak, no foul play
   | 'organic_death'          // small-cap that never grew, no malice, no abandonment
@@ -221,7 +222,7 @@ export const DEATH_TAXONOMY: Record<DeathCauseId, DeathCauseDef> = {
     tier: 'C',
     verdict: 'BURNOUT',
     summary: 'Hype faded, dev still around, no foul play.',
-    signals: ['ath_mcap_usd>10000', 'no_malicious_dump', 'dev_wallet_active_recent'],
+    signals: ['ath_mcap_usd>10000', 'no_malicious_dump', 'dev_wallet_active_recent', 'social_completeness<3'],
     autoPublishMinConfidence: 90,
   },
   hype_decay: {
@@ -231,8 +232,18 @@ export const DEATH_TAXONOMY: Record<DeathCauseId, DeathCauseDef> = {
     tier: 'C',
     verdict: 'HYPE DECAY',
     summary: 'Viral peak then organic decline. No malice. No abandonment.',
-    signals: ['ath_mcap_usd>50000', 'gradual_volume_decay', 'no_malicious_dump'],
+    signals: ['ath_mcap_usd>50000', 'gradual_volume_decay', 'no_malicious_dump', 'social_completeness<3'],
     autoPublishMinConfidence: 90,
+  },
+  natural_cycle: {
+    id: 'natural_cycle',
+    label: 'Natural Cycle',
+    intent: 'organic',
+    tier: 'C',
+    verdict: 'RAN ITS CYCLE',
+    summary: 'Project shipped a real social stack, peaked legitimately, retail rotated out. No malice, no abandonment.',
+    signals: ['ath_mcap_usd>=100000', 'social_completeness>=3', 'no_malicious_dump', 'clean_dev_dossier'],
+    autoPublishMinConfidence: 999,
   },
   organic_death: {
     id: 'organic_death',
@@ -268,6 +279,27 @@ export function shouldAutoPublish(cause: DeathCauseId, confidence: number): bool
 }
 
 /**
+ * Dev dossier passed into classifyDeath() to weight outcomes by the creator's
+ * cluster history (prior tokens, KYC root, sibling wallets, allstar status).
+ */
+export interface DevDossier {
+  wallet?: string | null;
+  kyc_root?: string | null;
+  cluster_wallets?: string[];
+  prior_tokens?: Array<{ wallet: string; mint: string; ath_mcap_usd?: number | null; status?: string | null; death_cause?: string | null }>;
+  cluster_history_summary?: {
+    total_prior_tokens: number;
+    dead_count: number;
+    rug_count: number;
+    soft_rug_count: number;
+    natural_cycle_count: number;
+    allstar_count: number;
+  };
+  reputation_verdict?: 'clean' | 'mixed' | 'repeat_offender' | 'serial_rugger';
+  primary_evidence_strings?: string[];
+}
+
+/**
  * Classify a token using available signals from token_lifecycle + dev_behavior_scores
  * + dev_wallet_reputation + token_social_links.
  * Returns the most specific cause we have evidence for.
@@ -289,6 +321,8 @@ export function classifyDeath(input: {
   spamMessagePct?: number;
   chartDipPct?: number;
   hasMaliciousDump?: boolean;
+  socialCompleteness?: number;
+  devDossier?: DevDossier;
 }): { cause: DeathCauseId; confidence: number; matchedSignals: string[] } {
   const matched: string[] = [];
   const {
@@ -299,7 +333,13 @@ export function classifyDeath(input: {
     devWalletInactiveHours = 0, noAdminMessageHours = 0,
     spamMessagePct = 0, chartDipPct = 0,
     hasMaliciousDump,
+    socialCompleteness = 0,
+    devDossier,
   } = input;
+
+  const repVerdict = devDossier?.reputation_verdict ?? 'clean';
+  const clusterRugs = (devDossier?.cluster_history_summary?.rug_count ?? 0)
+                     + (devDossier?.cluster_history_summary?.soft_rug_count ?? 0);
 
   // Honeypot — strongest signal
   if (freezeAuthorityActive) {
@@ -344,6 +384,14 @@ export function classifyDeath(input: {
     return { cause: 'slow_bleed_dump', confidence: Math.min(85, 50 + dumpVelocity * 0.4), matchedSignals: matched };
   }
 
+  // Serial rugger overlay — even when on-chain dump pattern is gentle, prior cluster
+  // history of 3+ rugs forces a slow_bleed_dump label (the "bled out by linked wallets
+  // with no direct bundle to KYC" case).
+  if (repVerdict === 'serial_rugger' || clusterRugs >= 3) {
+    matched.push(`cluster_rug_count>=${Math.max(3, clusterRugs)}`, 'serial_rugger_pattern');
+    return { cause: 'slow_bleed_dump', confidence: 78, matchedSignals: matched };
+  }
+
   // Mod abandonment
   if (noAdminMessageHours > 24 && chartDipPct > 50) {
     matched.push('no_admin_message_hours>24', 'chart_dip_pct>50');
@@ -357,20 +405,33 @@ export function classifyDeath(input: {
     return { cause: 'dev_abandonment', confidence: 70, matchedSignals: matched };
   }
 
-  // Failed launch
-  if (athMcap < 5000 && ageHours > 24 && !hasMaliciousDump) {
+  // Failed launch — only if social stack is also thin. Real socials = not a "failed launch".
+  if (athMcap < 5000 && ageHours > 24 && !hasMaliciousDump && socialCompleteness < 3) {
     matched.push('ath_mcap_usd<5000', 'lifetime_hours>24', 'no_malicious_dump');
     return { cause: 'failed_launch', confidence: 80, matchedSignals: matched };
   }
 
-  // Hype decay
-  if (athMcap > 50000 && !hasMaliciousDump) {
+  // Natural cycle — legit build + real ATH + clean dossier. Checked BEFORE organic
+  // fallbacks so well-built projects never get labeled "burnout" or "organic death".
+  if (
+    athMcap >= 100000 &&
+    socialCompleteness >= 3 &&
+    !hasMaliciousDump &&
+    (repVerdict === 'clean' || repVerdict === 'mixed') &&
+    clusterRugs < 3
+  ) {
+    matched.push('ath_mcap_usd>=100000', `social_completeness>=${socialCompleteness}`, 'no_malicious_dump', `dev_reputation=${repVerdict}`);
+    return { cause: 'natural_cycle', confidence: 80, matchedSignals: matched };
+  }
+
+  // Hype decay — only when social build was thin (otherwise → natural_cycle above).
+  if (athMcap > 50000 && !hasMaliciousDump && socialCompleteness < 3) {
     matched.push('ath_mcap_usd>50000', 'no_malicious_dump');
     return { cause: 'hype_decay', confidence: 70, matchedSignals: matched };
   }
 
-  // Community burnout
-  if (athMcap > 10000 && !hasMaliciousDump) {
+  // Community burnout — thin socials only.
+  if (athMcap > 10000 && !hasMaliciousDump && socialCompleteness < 3) {
     matched.push('ath_mcap_usd>10000', 'no_malicious_dump');
     return { cause: 'community_burnout', confidence: 65, matchedSignals: matched };
   }

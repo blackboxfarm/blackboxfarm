@@ -1498,6 +1498,7 @@ export type Database = {
           analyzed_at: string | null
           ath_mcap_usd: number | null
           bonding_curve_pct: number | null
+          boosts_paid_usd: number | null
           candidate_score: number | null
           created_at: string | null
           creator_wallet: string | null
@@ -1506,32 +1507,45 @@ export type Database = {
           death_confidence: number | null
           death_intent: string | null
           decided_at: string | null
+          dev_dossier: Json | null
+          dev_holding_pct_at_death: number | null
+          dex_paid: boolean | null
+          discord_present: boolean | null
           draft_md_path: string | null
           drafted_at: string | null
           funneled_at: string | null
+          holders_at_ath: number | null
           id: string
           liquidity_usd: number | null
+          manual_tg_join_completed: boolean | null
           matched_signals: Json | null
           published_at: string | null
           published_slug: string | null
           social_checked_at: string | null
+          social_completeness: number | null
           social_last_admin_msg_at: string | null
           social_no_admin_hours: number | null
           social_spam_pct: number | null
           source_feed: string
           status: string
           status_reason: string | null
+          telegram_subscriber_count: number | null
           ticker: string | null
           tier: string | null
           token_mint: string
           token_name: string | null
           updated_at: string | null
+          x_community_admin_count: number | null
+          x_community_member_count: number | null
+          x_community_mod_count: number | null
+          youtube_url: string | null
         }
         Insert: {
           age_hours?: number | null
           analyzed_at?: string | null
           ath_mcap_usd?: number | null
           bonding_curve_pct?: number | null
+          boosts_paid_usd?: number | null
           candidate_score?: number | null
           created_at?: string | null
           creator_wallet?: string | null
@@ -1540,32 +1554,45 @@ export type Database = {
           death_confidence?: number | null
           death_intent?: string | null
           decided_at?: string | null
+          dev_dossier?: Json | null
+          dev_holding_pct_at_death?: number | null
+          dex_paid?: boolean | null
+          discord_present?: boolean | null
           draft_md_path?: string | null
           drafted_at?: string | null
           funneled_at?: string | null
+          holders_at_ath?: number | null
           id?: string
           liquidity_usd?: number | null
+          manual_tg_join_completed?: boolean | null
           matched_signals?: Json | null
           published_at?: string | null
           published_slug?: string | null
           social_checked_at?: string | null
+          social_completeness?: number | null
           social_last_admin_msg_at?: string | null
           social_no_admin_hours?: number | null
           social_spam_pct?: number | null
           source_feed: string
           status?: string
           status_reason?: string | null
+          telegram_subscriber_count?: number | null
           ticker?: string | null
           tier?: string | null
           token_mint: string
           token_name?: string | null
           updated_at?: string | null
+          x_community_admin_count?: number | null
+          x_community_member_count?: number | null
+          x_community_mod_count?: number | null
+          youtube_url?: string | null
         }
         Update: {
           age_hours?: number | null
           analyzed_at?: string | null
           ath_mcap_usd?: number | null
           bonding_curve_pct?: number | null
+          boosts_paid_usd?: number | null
           candidate_score?: number | null
           created_at?: string | null
           creator_wallet?: string | null
@@ -1574,28 +1601,78 @@ export type Database = {
           death_confidence?: number | null
           death_intent?: string | null
           decided_at?: string | null
+          dev_dossier?: Json | null
+          dev_holding_pct_at_death?: number | null
+          dex_paid?: boolean | null
+          discord_present?: boolean | null
           draft_md_path?: string | null
           drafted_at?: string | null
           funneled_at?: string | null
+          holders_at_ath?: number | null
           id?: string
           liquidity_usd?: number | null
+          manual_tg_join_completed?: boolean | null
           matched_signals?: Json | null
           published_at?: string | null
           published_slug?: string | null
           social_checked_at?: string | null
+          social_completeness?: number | null
           social_last_admin_msg_at?: string | null
           social_no_admin_hours?: number | null
           social_spam_pct?: number | null
           source_feed?: string
           status?: string
           status_reason?: string | null
+          telegram_subscriber_count?: number | null
           ticker?: string | null
           tier?: string | null
           token_mint?: string
           token_name?: string | null
           updated_at?: string | null
+          x_community_admin_count?: number | null
+          x_community_member_count?: number | null
+          x_community_mod_count?: number | null
+          youtube_url?: string | null
         }
         Relationships: []
+      }
+      autopsy_evidence_blobs: {
+        Row: {
+          candidate_id: string | null
+          captured_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          payload: Json
+          token_mint: string
+        }
+        Insert: {
+          candidate_id?: string | null
+          captured_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          payload: Json
+          token_mint: string
+        }
+        Update: {
+          candidate_id?: string | null
+          captured_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          payload?: Json
+          token_mint?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopsy_evidence_blobs_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "autopsy_candidates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       autopsy_reports: {
         Row: {
@@ -1606,6 +1683,7 @@ export type Database = {
           death_intent: string | null
           hero_image_path: string | null
           id: string
+          is_current: boolean
           md_content: string
           md_path: string | null
           published_at: string | null
@@ -1619,6 +1697,7 @@ export type Database = {
           token_mint: string
           updated_at: string | null
           verdict: string | null
+          version: number
         }
         Insert: {
           candidate_id?: string | null
@@ -1628,6 +1707,7 @@ export type Database = {
           death_intent?: string | null
           hero_image_path?: string | null
           id?: string
+          is_current?: boolean
           md_content: string
           md_path?: string | null
           published_at?: string | null
@@ -1641,6 +1721,7 @@ export type Database = {
           token_mint: string
           updated_at?: string | null
           verdict?: string | null
+          version?: number
         }
         Update: {
           candidate_id?: string | null
@@ -1650,6 +1731,7 @@ export type Database = {
           death_intent?: string | null
           hero_image_path?: string | null
           id?: string
+          is_current?: boolean
           md_content?: string
           md_path?: string | null
           published_at?: string | null
@@ -1663,6 +1745,7 @@ export type Database = {
           token_mint?: string
           updated_at?: string | null
           verdict?: string | null
+          version?: number
         }
         Relationships: [
           {

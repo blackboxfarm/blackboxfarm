@@ -30,6 +30,7 @@ export default function PublishedAutopsies() {
     const { data, error } = await supabase
       .from('autopsy_reports')
       .select('id, slug, ticker, title, subtitle, death_cause, death_intent, hero_image_path, published_at, created_at')
+      .eq('is_current', true)
       .order('created_at', { ascending: false })
       .limit(100);
     if (error) {
