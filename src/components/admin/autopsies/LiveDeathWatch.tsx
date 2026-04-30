@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skull, FileText, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface DeathRow {
   token_mint: string;
@@ -25,6 +26,8 @@ interface DeathRow {
   death_cause: string | null;
   death_confidence: number | null;
   death_at: string | null;
+  ath_at: string | null;
+  latest_at: string | null;
   collapse_pct: number | null;
   dollar_wipeout: number | null;
   current_status: string | null;
@@ -39,6 +42,27 @@ function fmtUsd(n: number | null | undefined): string {
 function fmtPct(n: number | null | undefined): string {
   if (n == null) return '—';
   return `${(n * 100).toFixed(0)}%`;
+}
+
+function fmtAgo(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (!isFinite(then)) return '—';
+  const mins = Math.max(0, Math.floor((Date.now() - then) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString();
 }
 
 function autoTier(r: DeathRow): 'A' | 'B' | null {
@@ -135,6 +159,11 @@ export default function LiveDeathWatch() {
             Tokens that hit $50k+ market cap then died — current mcap &lt; $1k or down ≥95% from ATH.
             Sourced from token_price_history. Sorted by dollar wipeout. Refreshes every 5 min.
           </p>
+          <div className="mt-2 rounded border border-border/60 bg-muted/30 p-2 text-[11px] text-muted-foreground space-y-1">
+            <div><span className="font-semibold text-foreground">Tier A</span> — High-priority autopsy. Queues the token to <code>autopsy_candidates</code> as <em>tier A</em> and immediately invokes <code>autopsy-writer</code> to draft a full forensic report. Use for big rugs / liquidity pulls (≥$100k ATH, ≥95% collapse).</div>
+            <div><span className="font-semibold text-foreground">Tier B</span> — Lower-priority autopsy. Same flow as Tier A but tagged <em>tier B</em> — drafts a lighter report, processed after Tier A backlog clears. Use for mid-range deaths ($50k–$100k ATH).</div>
+            <div><span className="font-semibold text-foreground">↗ External</span> — Opens the token's Holders page in a new tab.</div>
+          </div>
         </div>
       </header>
 
@@ -199,6 +228,11 @@ export default function LiveDeathWatch() {
                   <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">
                     {r.token_mint}
                   </div>
+                  <div className="text-[10px] text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span title={fmtDate(r.ath_at)}>📈 ATH: {fmtAgo(r.ath_at)}</span>
+                    <span title={fmtDate(r.death_at)} className="text-destructive">💀 Died: {fmtAgo(r.death_at) }{r.death_at ? '' : ' (no death event yet)'}</span>
+                    <span title={fmtDate(r.latest_at)}>🕒 Last price: {fmtAgo(r.latest_at)}</span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs flex-1 min-w-[400px]">
                   <Stat label="ATH MCap" value={fmtUsd(r.ath_usd)} />
@@ -207,21 +241,44 @@ export default function LiveDeathWatch() {
                   <Stat label="Liq" value={fmtUsd(r.liquidity_usd)} />
                   <Stat label="Holders" value={r.holder_count?.toLocaleString() ?? '—'} />
                 </div>
-                <div className="flex gap-1 flex-wrap">
-                  <Button size="sm" variant="default" disabled={busy === r.token_mint}
-                    onClick={() => draftAutopsy(r, 'A')}>
-                    <FileText className="h-3 w-3 mr-1" /> Tier A
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={busy === r.token_mint}
-                    onClick={() => draftAutopsy(r, 'B')}>
-                    Tier B
-                  </Button>
-                  <Button size="sm" variant="ghost" asChild>
-                    <a href={`/holders?token=${r.token_mint}`} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </Button>
-                </div>
+                <TooltipProvider delayDuration={200}>
+                  <div className="flex gap-1 flex-wrap">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button size="sm" variant="default" disabled={busy === r.token_mint}
+                          onClick={() => draftAutopsy(r, 'A')}>
+                          <FileText className="h-3 w-3 mr-1" /> Draft Tier A
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-xs">
+                        Queue this token as a <strong>Tier A</strong> (priority) autopsy candidate and immediately draft a full forensic report via <code>autopsy-writer</code>.
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button size="sm" variant="outline" disabled={busy === r.token_mint}
+                          onClick={() => draftAutopsy(r, 'B')}>
+                          Draft Tier B
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-xs">
+                        Queue as <strong>Tier B</strong> (secondary). Same writer flow, lighter report, processed after Tier A.
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button size="sm" variant="ghost" asChild>
+                          <a href={`/holders?token=${r.token_mint}`} target="_blank" rel="noreferrer" aria-label="Open in Holders">
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        Open token in Holders page (new tab)
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
               </div>
             </Card>
           );
