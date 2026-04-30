@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Archive, FileText, ExternalLink, Lock, Hammer } from 'lucide-react';
+import { Archive, FileText, ExternalLink, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface BacklogRow {
@@ -56,7 +56,21 @@ export default function CoolDeathsBacklog() {
     setRows((data ?? []) as BacklogRow[]);
   }
 
-  useEffect(() => { load(); }, []);
+  // Auto-build once on first mount if backlog is empty, then load.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { count } = await supabase
+        .from('autopsy_backlog')
+        .select('token_mint', { count: 'exact', head: true });
+      if (cancelled) return;
+      if ((count ?? 0) === 0) {
+        await supabase.functions.invoke('autopsy-backlog-builder', { body: { force: false, limit: 500 } });
+      }
+      if (!cancelled) load();
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = useMemo(() => {
     if (!rows) return null;
@@ -68,17 +82,6 @@ export default function CoolDeathsBacklog() {
       (r.name ?? '').toLowerCase().includes(q),
     );
   }, [rows, search]);
-
-  async function buildBacklog(force: boolean) {
-    setBusy('build');
-    const { error, data } = await supabase.functions.invoke('autopsy-backlog-builder', { body: { force, limit: 500 } });
-    setBusy(null);
-    if (error) toast({ title: 'Build failed', description: error.message, variant: 'destructive' });
-    else {
-      toast({ title: 'Backlog built', description: JSON.stringify(data) });
-      load();
-    }
-  }
 
   async function draftAutopsy(r: BacklogRow) {
     setBusy(r.token_mint);
@@ -113,8 +116,6 @@ export default function CoolDeathsBacklog() {
     }
   }
 
-  const empty = rows && rows.length === 0;
-
   return (
     <div className="space-y-4">
       <header className="flex items-start justify-between gap-4 flex-wrap">
@@ -124,20 +125,9 @@ export default function CoolDeathsBacklog() {
             <Badge variant="outline" className="text-[10px]"><Lock className="h-2.5 w-2.5 mr-1" /> Frozen</Badge>
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            One-shot historical pool. Tokens older than 7 days, ATH ≥ $25k, classified bad/sad-dev death.
-            Cherry-pick a row to draft a Tier-B autopsy. Built once — does not auto-refresh.
+            One-shot historical pool. Tokens older than 24h, ATH ≥ $50k, classified bad/sad-dev death.
+            Cherry-pick a row to draft a Tier-B autopsy. Built automatically on first view — frozen after.
           </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {empty ? (
-            <Button size="sm" onClick={() => buildBacklog(false)} disabled={busy === 'build'}>
-              <Hammer className="h-3 w-3 mr-1" /> {busy === 'build' ? 'Building…' : 'Build Backlog'}
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => buildBacklog(true)} disabled={busy === 'build'}>
-              {busy === 'build' ? 'Rebuilding…' : 'Force Rebuild'}
-            </Button>
-          )}
         </div>
       </header>
 
@@ -154,7 +144,7 @@ export default function CoolDeathsBacklog() {
 
       {filtered && filtered.length === 0 && (
         <Card className="p-8 text-center text-muted-foreground text-sm">
-          Backlog is empty. Click "Build Backlog" — it will scan token_lifecycle once and freeze ~500 cool deaths here.
+          Building backlog… scanning token_lifecycle for cool deaths (24h+ old, ATH ≥ $50k). Refresh in ~30s.
         </Card>
       )}
 

@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Skull, RefreshCw, FileText, ExternalLink } from 'lucide-react';
+import { Skull, FileText, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface DeathRow {
@@ -77,6 +77,19 @@ export default function LiveDeathWatch() {
     return () => window.clearInterval(id);
   }, []);
 
+  // Auto-fire ATH backfill + autopsy diagnostics on mount (max batches), then reload.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await Promise.allSettled([
+        supabase.functions.invoke('ath-backfill', { body: { limit: 1000 } }),
+        supabase.functions.invoke('token-autopsy', { body: { batchSize: 500 } }),
+      ]);
+      if (!cancelled) load();
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const filtered = useMemo(() => {
     if (!rows) return null;
     const q = search.trim().toLowerCase();
@@ -90,22 +103,6 @@ export default function LiveDeathWatch() {
       );
     });
   }, [rows, search, causeFilter]);
-
-  async function runAutopsy() {
-    setBusy('autopsy');
-    const { error } = await supabase.functions.invoke('token-autopsy', { body: { batchSize: 50 } });
-    setBusy(null);
-    if (error) toast({ title: 'Autopsy failed', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'Autopsy run complete' }); load(); }
-  }
-
-  async function backfillAth() {
-    setBusy('ath');
-    const { error } = await supabase.functions.invoke('ath-backfill', { body: { limit: 100 } });
-    setBusy(null);
-    if (error) toast({ title: 'ATH backfill failed', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'ATH backfill complete' }); load(); }
-  }
 
   async function draftAutopsy(r: DeathRow, tier: 'A' | 'B') {
     setBusy(r.token_mint);
@@ -149,19 +146,8 @@ export default function LiveDeathWatch() {
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
             Active tokens flashing death signals. Mcap &lt; $1k, liq &lt; $500, or ≥95% collapse from $50k+ ATH.
-            Sorted by dollar wipeout. Auto-refreshes every 5 min.
+            Sorted by dollar wipeout. Auto-runs ATH backfill + autopsy diagnostics on load; refreshes every 5 min.
           </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" onClick={backfillAth} disabled={busy === 'ath'}>
-            {busy === 'ath' ? 'Filling ATH…' : 'Backfill ATH (100)'}
-          </Button>
-          <Button size="sm" variant="outline" onClick={runAutopsy} disabled={busy === 'autopsy'}>
-            {busy === 'autopsy' ? 'Diagnosing…' : 'Run Autopsy (50)'}
-          </Button>
-          <Button size="sm" variant="outline" onClick={load}>
-            <RefreshCw className="h-3 w-3 mr-1" /> Reload
-          </Button>
         </div>
       </header>
 

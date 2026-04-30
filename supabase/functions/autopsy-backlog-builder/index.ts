@@ -7,9 +7,9 @@
  * the function exits unless `force: true` is passed.
  *
  * Selection criteria (matches plan):
- *   - first_seen_at < now() - 7 days  (already historical)
+ *   - first_seen_at < now() - 24 hours  (already historical, but keeps recent deaths)
  *   - market_cap < $1k OR liquidity_usd < $500  (already dead)
- *   - ath_24h_usd >= $25k  (had a real life)
+ *   - ath_24h_usd >= $50k  (bonded / had a real life)
  *   - death_cause IN ('rug_pull','slow_drain','liquidity_pulled','abandoned')
  *
  * Pre-step: invokes token-autopsy first to ensure death_cause is populated.
@@ -51,13 +51,13 @@ Deno.serve(async (req) => {
   }
 
   // Pull qualifying tokens
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const oneDayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
   const { data: candidates, error } = await supabase
     .from('token_lifecycle')
     .select('token_mint, symbol, name, launchpad, creator_wallet, ath_24h_usd, market_cap, price_usd, liquidity_usd, death_cause, death_confidence, autopsy_at, first_seen_at')
-    .lt('first_seen_at', sevenDaysAgo)
-    .gte('ath_24h_usd', 25000)
+    .lt('first_seen_at', oneDayAgo)
+    .gte('ath_24h_usd', 50000)
     .in('death_cause', QUALIFYING_CAUSES as unknown as string[])
     .or('market_cap.lt.1000,liquidity_usd.lt.500')
     .order('ath_24h_usd', { ascending: false })
