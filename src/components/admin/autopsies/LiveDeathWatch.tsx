@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,6 +19,7 @@ interface DeathRow {
   current_mcap_usd: number | null;
   current_price_usd: number | null;
   liquidity_usd: number | null;
+  volume_24h: number | null;
   holder_count: number | null;
   health_grade: string | null;
   health_score: number | null;
@@ -71,12 +72,20 @@ function shortMint(m: string): string {
   return `${m.slice(0, 4)}…${m.slice(-4)}`;
 }
 
+function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name'): string | null {
+  const v = value?.trim();
+  if (!v) return null;
+  const bad = kind === 'symbol' ? ['unknown', 'unk', 'token'] : ['unknown', 'unknown token', 'token'];
+  return bad.includes(v.toLowerCase()) ? null : v;
+}
+
 export default function LiveDeathWatch() {
   const { toast } = useToast();
   const [rows, setRows] = useState<DeathRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [causeFilter, setCauseFilter] = useState<string>('all');
+  const hydratingRef = useRef(false);
 
   async function load() {
     setRows(null);
@@ -91,7 +100,18 @@ export default function LiveDeathWatch() {
       setRows([]);
       return;
     }
-    setRows((data ?? []) as DeathRow[]);
+    const list = (data ?? []) as DeathRow[];
+    setRows(list);
+
+    const missingMetadata = list
+      .filter(r => !cleanTokenText(r.symbol, 'symbol') || !cleanTokenText(r.name, 'name'))
+      .map(r => r.token_mint);
+    if (missingMetadata.length > 0 && !hydratingRef.current) {
+      hydratingRef.current = true;
+      supabase.functions.invoke('autopsy-live-death-hydrator', { body: { tokenMints: missingMetadata.slice(0, 40) } })
+        .then(({ data }) => { if (data?.updated > 0) load(); })
+        .finally(() => { hydratingRef.current = false; });
+    }
   }
 
   useEffect(() => { load(); }, []);
