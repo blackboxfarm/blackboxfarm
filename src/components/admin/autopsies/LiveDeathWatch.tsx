@@ -242,7 +242,15 @@ export default function LiveDeathWatch() {
                     )}
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">
-                    {r.token_mint}
+                    <a
+                      href={`https://dexscreener.com/solana/${r.token_mint}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-primary underline-offset-2 hover:underline"
+                      title="Open on DexScreener"
+                    >
+                      {r.token_mint}
+                    </a>
                   </div>
                   <div className="text-[10px] text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                     <span title={fmtDate(r.ath_at)}>📈 ATH: {fmtAgo(r.ath_at)}</span>

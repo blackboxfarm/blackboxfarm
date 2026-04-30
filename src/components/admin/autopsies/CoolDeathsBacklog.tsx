@@ -192,7 +192,17 @@ export default function CoolDeathsBacklog() {
                     <Badge className="text-[10px]">Drafted</Badge>
                   )}
                 </div>
-                <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">{r.token_mint}</div>
+                <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">
+                  <a
+                    href={`https://dexscreener.com/solana/${r.token_mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-primary underline-offset-2 hover:underline"
+                    title="Open on DexScreener"
+                  >
+                    {r.token_mint}
+                  </a>
+                </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs flex-1 min-w-[360px]">
                 <Stat label="ATH MCap" value={fmtUsd(r.ath_usd)} />
