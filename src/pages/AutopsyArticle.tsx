@@ -25,6 +25,9 @@ export default function AutopsyArticle() {
       .from('autopsy_reports')
       .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, hero_image_path, source_banner_url, tags, md_content, md_path, published_at')
       .eq('slug', slug)
+      .eq('is_current', true)
+      .order('version', { ascending: false })
+      .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (!data) { setAutopsy(undefined); return; }
