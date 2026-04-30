@@ -454,6 +454,11 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     // Resolve symbol/name: validation result first, then watchlist, then pump.fun API
     let tokenSymbol = validation.symbol || watchlistEntry?.token_symbol || null;
     let tokenName = validation.name || watchlistEntry?.token_name || null;
+    // Always pull rich metadata for new tokens — symbol/name + price/mcap/liquidity/creator.
+    // For tokens already in the watchlist, only refresh symbol/name if missing.
+    const richMeta = !watchlistEntry ? await fetchRichMeta(mint) : ({} as RichMeta);
+    if (!tokenSymbol) tokenSymbol = richMeta.symbol || null;
+    if (!tokenName) tokenName = richMeta.name || null;
     if (!tokenSymbol) {
       const meta = await fetchTokenMeta(mint);
       tokenSymbol = meta.symbol || null;
