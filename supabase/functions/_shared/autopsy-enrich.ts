@@ -63,29 +63,24 @@ export async function enrichCandidate(
   }
   const social_completeness = platforms.size;
 
-  // ── X community member count (best-effort from registry) ───
+  // ── X community member count ────────────────────────────────
+  // token_social_links tells us that a community exists, but the current queue
+  // table does not store member_count yet. Keep this unknown instead of faking 0.
   let xMembers: number | null = null;
-  try {
-    const { data: xc } = await supabase
-      .from('x_community_resolution_queue')
-      .select('community_id, resolved_at')
-      .eq('token_mint', tokenMint)
-      .order('resolved_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    xMembers = null;
-  } catch { /* table may not have this column in all envs */ }
 
   // ── Telegram subscriber count ───────────────────────────────
   let tgSubs: number | null = null;
   try {
-    const { data: tg } = await supabase
-      .from('telegram_channel_registry')
-      .select('channel_id, current_username, last_seen_at')
-      .order('last_seen_at', { ascending: false })
+    const { data: tgBlob } = await supabase
+      .from('autopsy_evidence_blobs')
+      .select('payload, captured_at')
+      .eq('token_mint', tokenMint)
+      .eq('kind', 'tg_deep_pull')
+      .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    tgSubs = null;
+    const count = Number(tgBlob?.payload?.getChatMemberCount?.result ?? NaN);
+    if (Number.isFinite(count) && count > 0) tgSubs = count;
   } catch { /* ignore */ }
 
   // ── Paid boosts (sum) ───────────────────────────────────────
