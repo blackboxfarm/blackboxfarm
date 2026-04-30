@@ -20434,6 +20434,7 @@ export type Database = {
           risk_label: string | null
           symbol: string | null
           token_mint: string | null
+          volume_24h: number | null
         }
         Relationships: []
       }
