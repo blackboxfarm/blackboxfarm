@@ -67,11 +67,6 @@ function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleString();
 }
 
-function shortMint(m: string): string {
-  if (!m) return '—';
-  return `${m.slice(0, 4)}…${m.slice(-4)}`;
-}
-
 function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name'): string | null {
   const v = value?.trim();
   if (!v) return null;
