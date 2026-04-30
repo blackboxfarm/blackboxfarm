@@ -54,7 +54,11 @@ export default function PumpfunWatchlistSpreadsheet() {
   const [sortKey, setSortKey] = useState<keyof WatchlistRow | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  // Multi-select filters. Empty Set = "all".
+  const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
+  // Default: hide 'rejected' — they're filtered out for autopsy purposes anyway.
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['rejected']));
+  // statusFilter holds EXCLUDED statuses (toggle = exclude/include).
   const topScrollRef = useRef<HTMLDivElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const tableInnerRef = useRef<HTMLDivElement>(null);
@@ -145,20 +149,23 @@ export default function PumpfunWatchlistSpreadsheet() {
   const filteredRows = useMemo(() => {
     if (!rows) return null;
     const needle = query.trim().toLowerCase();
-    const sourceScoped = sourceFilter === 'all'
+    const sourceScoped = sourceFilter.size === 0
       ? rows
-      : rows.filter((r) => (r.source ?? '(none)') === sourceFilter);
-    const base = !needle
+      : rows.filter((r) => sourceFilter.has(r.source ?? '(none)'));
+    const statusScoped = statusFilter.size === 0
       ? sourceScoped
-      : sourceScoped.filter((row) =>
+      : sourceScoped.filter((r) => !statusFilter.has((r as any).status ?? '(none)'));
+    const base = !needle
+      ? statusScoped
+      : statusScoped.filter((row) =>
           Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(needle))
         );
     if (!sortKey) return base;
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...base].sort((a, b) => compareValues(a[sortKey], b[sortKey]) * dir);
-  }, [rows, query, sortKey, sortDir, sourceFilter]);
+  }, [rows, query, sortKey, sortDir, sourceFilter, statusFilter]);
 
-  useEffect(() => { setPage(0); }, [query, sortKey, sortDir, sourceFilter]);
+  useEffect(() => { setPage(0); }, [query, sortKey, sortDir, sourceFilter, statusFilter]);
 
   const sourceCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -169,6 +176,31 @@ export default function PumpfunWatchlistSpreadsheet() {
     }
     return m;
   }, [rows]);
+
+  const statusCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!rows) return m;
+    for (const r of rows) {
+      const k = (r as any).status ?? '(none)';
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [rows]);
+
+  function toggleSource(src: string) {
+    setSourceFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(src)) next.delete(src); else next.add(src);
+      return next;
+    });
+  }
+  function toggleStatusExclusion(st: string) {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(st)) next.delete(st); else next.add(st);
+      return next;
+    });
+  }
 
   const totalPages = filteredRows ? Math.max(1, Math.ceil(filteredRows.length / ROWS_PER_PAGE)) : 1;
   const pageRows = useMemo(() => {
@@ -203,29 +235,58 @@ export default function PumpfunWatchlistSpreadsheet() {
       </div>
 
       {sourceCounts.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">Source:</span>
-          <Button
-            variant={sourceFilter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setSourceFilter('all')}
-          >
-            All ({(rows?.length ?? 0).toLocaleString()})
-          </Button>
-          {Array.from(sourceCounts.entries())
-            .sort((a, b) => b[1] - a[1])
-            .map(([src, count]) => (
-              <Button
-                key={src}
-                variant={sourceFilter === src ? 'default' : 'outline'}
-                size="sm"
-                className="h-7 text-xs font-mono"
-                onClick={() => setSourceFilter(src)}
-              >
-                {src} ({count.toLocaleString()})
-              </Button>
-            ))}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground w-16">Source:</span>
+            <Button
+              variant={sourceFilter.size === 0 ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSourceFilter(new Set())}
+            >
+              All ({(rows?.length ?? 0).toLocaleString()})
+            </Button>
+            {Array.from(sourceCounts.entries())
+              .sort((a, b) => b[1] - a[1])
+              .map(([src, count]) => {
+                const active = sourceFilter.has(src);
+                return (
+                  <Button
+                    key={src}
+                    variant={active ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 text-xs font-mono"
+                    onClick={() => toggleSource(src)}
+                    title="Click to toggle (multi-select)"
+                  >
+                    {src} ({count.toLocaleString()})
+                  </Button>
+                );
+              })}
+          </div>
+          {statusCounts.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground w-16">Status:</span>
+              <span className="text-[10px] text-muted-foreground italic">click to exclude →</span>
+              {Array.from(statusCounts.entries())
+                .sort((a, b) => b[1] - a[1])
+                .map(([st, count]) => {
+                  const excluded = statusFilter.has(st);
+                  return (
+                    <Button
+                      key={st}
+                      variant={excluded ? 'outline' : 'default'}
+                      size="sm"
+                      className={`h-7 text-xs font-mono ${excluded ? 'line-through opacity-50' : ''}`}
+                      onClick={() => toggleStatusExclusion(st)}
+                      title={excluded ? 'Excluded — click to include' : 'Included — click to exclude'}
+                    >
+                      {st} ({count.toLocaleString()})
+                    </Button>
+                  );
+                })}
+            </div>
+          )}
         </div>
       )}
 
