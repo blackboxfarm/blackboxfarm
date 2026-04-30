@@ -904,6 +904,14 @@ async function enrichTokenBatch(
       : null;
     const volumeSol = pumpData?.volume_24h || 0;
     const marketCapUsd = pumpData?.usd_market_cap || null;
+    const bondingCurve = curveProgressFromPump(pumpData) ?? token.bonding_curve_pct ?? 0;
+    const athMarketCapUsd = Math.max(
+      Number(token.ath_market_cap_usd ?? 0),
+      Number(pumpData?.ath_market_cap ?? marketCapUsd ?? 0)
+    ) || null;
+    const athMarketCapTimestamp = Number(pumpData?.ath_market_cap_timestamp ?? NaN);
+    const athMarketCapAt = Number.isFinite(athMarketCapTimestamp) ? new Date(athMarketCapTimestamp).toISOString() : token.ath_market_cap_at;
+    const athBondingCurvePct = Math.max(Number(token.ath_bonding_curve_pct ?? 0), bondingCurve) || null;
     // Use actual sol_price from pump API response - if not available, skip liquidity calc
     const liquidityUsd = (pumpData?.virtual_sol_reserves && pumpData?.sol_price)
       ? (pumpData.virtual_sol_reserves / 1e9) * pumpData.sol_price 
@@ -1000,10 +1008,6 @@ async function enrichTokenBatch(
     // Extract data
     const holderCount = tokenData?.holders || holderAnalysis.holderCount || token.holder_count || 0;
     const marketCapSol = tokenData?.pools?.[0]?.marketCap?.quote || token.market_cap_sol || 0;
-    const bondingCurve = pumpData?.bonding_curve_progress 
-      ? pumpData.bonding_curve_progress * 100 
-      : (tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0);
-    
     // STAGNATION CHECK - Token is old with poor metrics
     const tokenAgeMinutes = createdAt ? (Date.now() - createdAt * 1000) / 60000 : 0;
     const isStagnant = tokenAgeMinutes > STAGNATION_CONFIG.max_age_mins_for_low_mcap && 
