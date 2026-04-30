@@ -7,25 +7,52 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+type Candidate = {
+  token_mint: string;
+  symbol: string | null;
+  priority: number;
+  sourceLabel: string;
+  context?: string | null;
+};
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+async function readRecentSnapshotSet(
+  supabase: ReturnType<typeof createClient>,
+  mints: string[],
+  since: string,
+): Promise<Set<string>> {
+  const seen = new Set<string>();
+  for (const mintChunk of chunk(mints, 100)) {
+    const { data, error } = await supabase
+      .from('token_health_snapshots')
+      .select('token_mint')
+      .in('token_mint', mintChunk)
+      .gte('snapshot_hour', since);
+
+    if (error) throw error;
+    for (const row of data ?? []) seen.add(row.token_mint);
+  }
+  return seen;
+}
+
 /**
  * Hourly Feed Health Scanner
- * 
- * Picks feed tokens that are missing recent health snapshots and triggers
- * bagless-holders-report for each to fill the Litmus Strip bars.
- * 
- * Designed to run every hour via pg_cron.
- * Processes tokens in priority order:
- *   1. Top 200 tokens (freshness_tier = 1)
- *   2. Recently posted tokens (freshness_tier = 2-3)
- *   3. Older feed tokens (freshness_tier 4-5)
- * 
- * Budget: ~15 tokens per run × 24 runs/day = ~360 tokens/day
- * Helius cost: ~5-10 credits per token = ~1,800-3,600 credits/day (~55k-110k/month)
+ *
+ * Fills Litmus Strip snapshots for the actual active monitoring pool, not just
+ * the tiny live feed slice. Priority order:
+ *   1. Funnel/watchlist tokens still being triaged or actively watched
+ *   2. Curated live feed tokens
+ *   3. Active lifecycle tokens still alive in the system
  */
 Deno.serve(withRunLog('feed-health-scanner', async (req) => {
   if (!await isFunctionEnabled('feed-health-scanner')) {
     return new Response(JSON.stringify({ skipped: 'disabled via function_toggles' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200,
     });
   }
   if (req.method === 'OPTIONS') {
@@ -34,95 +61,149 @@ Deno.serve(withRunLog('feed-health-scanner', async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const batchSize = Math.min(body.batchSize || 15, 30);
-    const maxAgeMins = body.maxAgeMins || 60; // Skip tokens scanned within this many minutes
+    const requestedBatchSize = Number(body.batchSize ?? 30);
+    const batchSize = Math.min(Math.max(Number.isFinite(requestedBatchSize) ? requestedBatchSize : 30, 24), 60);
+    const maxAgeMins = Math.min(Math.max(Number(body.maxAgeMins ?? 60), 15), 240);
+    const concurrency = Math.min(Math.max(Number(body.concurrency ?? 3), 1), 5);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Step 1: Get feed tokens ordered by priority (top 200 first, then recent posts)
-    const { data: feedTokens, error: feedErr } = await supabase
-      .from('live_feed_curated')
-      .select('token_mint, symbol, freshness_tier, last_top_200_rank')
-      .order('freshness_tier', { ascending: true })
-      .order('last_top_200_rank', { ascending: true, nullsFirst: false })
-      .limit(200);
+    const [{ data: watchlistTokens, error: watchlistErr }, { data: feedTokens, error: feedErr }, { data: lifecycleTokens, error: lifecycleErr }] = await Promise.all([
+      supabase
+        .from('pumpfun_watchlist')
+        .select('token_mint, token_symbol, source, status')
+        .in('status', ['watching', 'pending_triage'])
+        .order('source', { ascending: true })
+        .order('updated_at', { ascending: false })
+        .limit(800),
+      supabase
+        .from('live_feed_curated')
+        .select('token_mint, symbol, freshness_tier, last_top_200_rank')
+        .order('freshness_tier', { ascending: true })
+        .order('last_top_200_rank', { ascending: true, nullsFirst: false })
+        .limit(250),
+      supabase
+        .from('token_lifecycle')
+        .select('token_mint, symbol, current_status, is_currently_top_200, last_top_200_rank, discovery_source')
+        .eq('current_status', 'active')
+        .order('is_currently_top_200', { ascending: false })
+        .order('last_top_200_rank', { ascending: true, nullsFirst: false })
+        .order('last_seen_at', { ascending: false })
+        .limit(400),
+    ]);
 
+    if (watchlistErr) throw watchlistErr;
     if (feedErr) throw feedErr;
-    if (!feedTokens || feedTokens.length === 0) {
-      return new Response(JSON.stringify({ message: 'No feed tokens found', scanned: 0 }), {
+    if (lifecycleErr) throw lifecycleErr;
+
+    const candidateMap = new Map<string, Candidate>();
+    const upsertCandidate = (candidate: Candidate) => {
+      const existing = candidateMap.get(candidate.token_mint);
+      if (!existing || candidate.priority < existing.priority) {
+        candidateMap.set(candidate.token_mint, candidate);
+      }
+    };
+
+    for (const row of watchlistTokens ?? []) {
+      upsertCandidate({
+        token_mint: row.token_mint,
+        symbol: row.token_symbol,
+        priority: String(row.source || '').startsWith('funnel_feed:') ? 10 : 20,
+        sourceLabel: 'watchlist',
+        context: `${row.status ?? 'unknown'} · ${row.source ?? 'unknown'}`,
+      });
+    }
+
+    for (const row of feedTokens ?? []) {
+      upsertCandidate({
+        token_mint: row.token_mint,
+        symbol: row.symbol,
+        priority: row.freshness_tier === 1 ? 30 : 40,
+        sourceLabel: 'live_feed',
+        context: `tier ${row.freshness_tier ?? '?'} · rank ${row.last_top_200_rank ?? 'n/a'}`,
+      });
+    }
+
+    for (const row of lifecycleTokens ?? []) {
+      upsertCandidate({
+        token_mint: row.token_mint,
+        symbol: row.symbol,
+        priority: row.is_currently_top_200 ? 50 : 60,
+        sourceLabel: 'lifecycle',
+        context: `${row.discovery_source ?? 'unknown'} · rank ${row.last_top_200_rank ?? 'n/a'}`,
+      });
+    }
+
+    const candidates = Array.from(candidateMap.values()).sort((a, b) => a.priority - b.priority);
+    if (candidates.length === 0) {
+      return new Response(JSON.stringify({ message: 'No candidate tokens found', scanned: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Step 2: Find which tokens already have a recent snapshot (within maxAgeMins)
     const since = new Date(Date.now() - maxAgeMins * 60 * 1000).toISOString();
-    const mints = feedTokens.map(t => t.token_mint);
-
-    const { data: recentSnapshots } = await supabase
-      .from('token_health_snapshots')
-      .select('token_mint')
-      .in('token_mint', mints.slice(0, 100)) // Check first 100
-      .gte('snapshot_hour', since);
-
-    const recentSet = new Set((recentSnapshots || []).map(s => s.token_mint));
-
-    // Also check second batch if needed
-    if (mints.length > 100) {
-      const { data: recentSnapshots2 } = await supabase
-        .from('token_health_snapshots')
-        .select('token_mint')
-        .in('token_mint', mints.slice(100, 200))
-        .gte('snapshot_hour', since);
-      
-      (recentSnapshots2 || []).forEach(s => recentSet.add(s.token_mint));
-    }
-
-    // Step 3: Filter to tokens that need scanning
-    const needsScan = feedTokens.filter(t => !recentSet.has(t.token_mint));
+    const recentSet = await readRecentSnapshotSet(supabase, candidates.map((t) => t.token_mint), since);
+    const needsScan = candidates.filter((t) => !recentSet.has(t.token_mint));
     const batch = needsScan.slice(0, batchSize);
 
-    console.log(`[feed-health-scanner] Feed: ${feedTokens.length} tokens, ${recentSet.size} already scanned recently, ${needsScan.length} need scanning, processing ${batch.length}`);
+    console.log(`[feed-health-scanner] Candidates: ${candidates.length} total | ${recentSet.size} fresh | ${needsScan.length} stale | processing ${batch.length}`);
 
     let scanned = 0;
     let failed = 0;
-    const results: { mint: string; symbol: string; status: string }[] = [];
+    const results: { mint: string; symbol: string; status: string; source: string }[] = [];
 
-    // Step 4: Call bagless-holders-report for each token
-    for (const token of batch) {
-      try {
-        console.log(`[feed-health-scanner] Scanning ${token.symbol || token.token_mint.slice(0, 8)} (tier ${token.freshness_tier}, rank ${token.last_top_200_rank || 'n/a'})...`);
+    for (const group of chunk(batch, concurrency)) {
+      const groupResults = await Promise.all(group.map(async (token) => {
+        try {
+          console.log(`[feed-health-scanner] Scanning ${token.symbol || token.token_mint.slice(0, 8)} from ${token.sourceLabel} (${token.context || 'n/a'})`);
+          const { error } = await supabase.functions.invoke('bagless-holders-report', {
+            body: { tokenMint: token.token_mint, source: 'feed_health_scanner' },
+          });
 
-        const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
-          body: { tokenMint: token.token_mint, source: 'feed_health_scanner' },
-        });
+          if (error) {
+            return {
+              mint: token.token_mint,
+              symbol: token.symbol || '?',
+              source: token.sourceLabel,
+              status: `error: ${(error as Error).message}`,
+            };
+          }
 
-        if (error) {
-          console.warn(`[feed-health-scanner] Failed ${token.symbol}: ${(error as Error).message}`);
-          results.push({ mint: token.token_mint, symbol: token.symbol || '?', status: `error: ${(error as Error).message}` });
-          failed++;
-        } else {
-          scanned++;
-          results.push({ mint: token.token_mint, symbol: token.symbol || '?', status: 'ok' });
+          return {
+            mint: token.token_mint,
+            symbol: token.symbol || '?',
+            source: token.sourceLabel,
+            status: 'ok',
+          };
+        } catch (e) {
+          return {
+            mint: token.token_mint,
+            symbol: token.symbol || '?',
+            source: token.sourceLabel,
+            status: `exception: ${(e as Error).message}`,
+          };
         }
+      }));
 
-        // Small delay between calls to avoid hammering Helius
-        if (batch.indexOf(token) < batch.length - 1) {
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      } catch (e) {
-        console.error(`[feed-health-scanner] Error scanning ${token.symbol}: ${e.message}`);
-        results.push({ mint: token.token_mint, symbol: token.symbol || '?', status: `exception: ${e.message}` });
-        failed++;
+      for (const result of groupResults) {
+        results.push(result);
+        if (result.status === 'ok') scanned++;
+        else failed++;
+      }
+
+      if (group !== chunk(batch, concurrency).at(-1)) {
+        await new Promise((resolve) => setTimeout(resolve, 750));
       }
     }
 
     const summary = {
-      feedTokens: feedTokens.length,
+      candidates: candidates.length,
       alreadyRecent: recentSet.size,
       needsScan: needsScan.length,
       batchSize: batch.length,
+      concurrency,
       scanned,
       failed,
       results,
@@ -134,8 +215,8 @@ Deno.serve(withRunLog('feed-health-scanner', async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    console.error(`[feed-health-scanner] Fatal: ${err.message}`);
-    return new Response(JSON.stringify({ error: err.message }), {
+    console.error(`[feed-health-scanner] Fatal: ${(err as Error).message}`);
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
