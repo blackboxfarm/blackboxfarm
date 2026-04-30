@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Archive, FileText, Lock, Trash2, RefreshCw } from 'lucide-react';
+import { Archive, FileText, Lock, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface BacklogRow {
@@ -44,7 +44,6 @@ export default function CoolDeathsBacklog() {
   const { toast } = useToast();
   const [rows, setRows] = useState<BacklogRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
 
   async function load() {
@@ -59,23 +58,26 @@ export default function CoolDeathsBacklog() {
       setRows([]);
       return;
     }
-    setRows((data ?? []) as BacklogRow[]);
+    const list = (data ?? []) as BacklogRow[];
+    setRows(list);
+    // Auto-resolve any missing tickers silently — the data is already in the DB,
+    // we just stitch it from token_lifecycle / pumpfun_watchlist / token_metadata.
+    if (list.some(r => !r.symbol || !r.name)) {
+      supabase.functions.invoke('autopsy-backlog-refresh-tickers', { body: {} })
+        .then(({ data }) => {
+          if (data?.updated > 0) {
+            // Reload silently to show the resolved tickers
+            supabase.from('autopsy_backlog').select('*')
+              .order('ath_usd', { ascending: false }).limit(500)
+              .then(({ data }) => { if (data) setRows(data as BacklogRow[]); });
+          }
+        })
+        .catch(() => { /* silent — non-blocking */ });
+    }
   }
 
   // Frozen snapshot — never auto-rebuild. Just load what's there.
   useEffect(() => { load(); }, []);
-
-  async function refreshTickers() {
-    setRefreshing(true);
-    const { data, error } = await supabase.functions.invoke('autopsy-backlog-refresh-tickers', { body: {} });
-    setRefreshing(false);
-    if (error) {
-      toast({ title: 'Refresh failed', description: error.message, variant: 'destructive' });
-      return;
-    }
-    toast({ title: 'Tickers refreshed', description: `Updated ${data?.updated ?? 0} of ${data?.scanned ?? 0} rows` });
-    load();
-  }
 
   async function deleteRow(r: BacklogRow) {
     setBusy(r.token_mint);
@@ -142,13 +144,9 @@ export default function CoolDeathsBacklog() {
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
             Frozen one-shot snapshot. Cherry-pick rows to draft autopsies, or delete the ones you don't want.
-            The list is never regenerated — only "Refresh missing tickers" updates rows that are missing $ticker / name.
+            Tickers auto-resolve from existing mint data on load.
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={refreshTickers} disabled={refreshing}>
-          <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh missing tickers
-        </Button>
       </header>
 
       <Input
