@@ -77,6 +77,64 @@ async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: s
   return {};
 }
 
+// Richer metadata fetch used at watchlist-insert time so the row has at least
+// price/mcap/liquidity/creator_wallet on day 1 instead of all-null.
+interface RichMeta {
+  symbol?: string;
+  name?: string;
+  priceUsd?: number;
+  marketCapUsd?: number;
+  liquidityUsd?: number;
+  creatorWallet?: string;
+  bondingCurvePct?: number;
+  imageUrl?: string;
+  twitterUrl?: string;
+  telegramUrl?: string;
+  websiteUrl?: string;
+}
+async function fetchRichMeta(mint: string): Promise<RichMeta> {
+  const out: RichMeta = {};
+  // Pump.fun (throttled) — gives us creator + bonding curve when on-curve.
+  try {
+    const d = await fetchPumpFunCoin(mint, 'funnel-feed-scanner');
+    if (d) {
+      out.symbol = d.symbol || out.symbol;
+      out.name = d.name || out.name;
+      out.creatorWallet = d.creator || out.creatorWallet;
+      out.imageUrl = d.image_uri || out.imageUrl;
+      out.twitterUrl = d.twitter || out.twitterUrl;
+      out.telegramUrl = d.telegram || out.telegramUrl;
+      out.websiteUrl = d.website || out.websiteUrl;
+      if (typeof d.usd_market_cap === 'number') out.marketCapUsd = d.usd_market_cap;
+      // pump.fun curve fields are not all consistent — leave bondingCurvePct unset here.
+    }
+  } catch { /* ignore */ }
+
+  // DexScreener — gives us price/mcap/liquidity once a pair exists.
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      const pair = d.pairs?.[0];
+      if (pair) {
+        out.symbol = out.symbol || pair.baseToken?.symbol || undefined;
+        out.name = out.name || pair.baseToken?.name || undefined;
+        if (pair.priceUsd) {
+          const p = parseFloat(pair.priceUsd);
+          if (!Number.isNaN(p) && p > 0) out.priceUsd = p;
+        }
+        if (typeof pair.marketCap === 'number') out.marketCapUsd = pair.marketCap;
+        else if (typeof pair.fdv === 'number') out.marketCapUsd = out.marketCapUsd ?? pair.fdv;
+        if (typeof pair.liquidity?.usd === 'number') out.liquidityUsd = pair.liquidity.usd;
+      }
+    }
+  } catch { /* ignore */ }
+
+  return out;
+}
+
 // Known non-token addresses to skip (system programs, common wallets)
 const SKIP_ADDRESSES = new Set([
   '11111111111111111111111111111111',
