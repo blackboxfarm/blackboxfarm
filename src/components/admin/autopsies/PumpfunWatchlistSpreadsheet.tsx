@@ -108,9 +108,9 @@ function formatValue(value: unknown) {
 
 export default function PumpfunWatchlistSpreadsheet() {
   const { toast } = useToast();
-  const [rows, setRows] = useState<WatchlistRow[] | null>(null);
+  const [rows, setRows] = useState<AugmentedRow[] | null>(null);
   const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<keyof WatchlistRow | null>(null);
+  const [sortKey, setSortKey] = useState<keyof AugmentedRow | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
   // Multi-select filters. Empty Set = "all".
@@ -118,6 +118,7 @@ export default function PumpfunWatchlistSpreadsheet() {
   // Default: hide 'rejected' — they're filtered out for autopsy purposes anyway.
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['rejected']));
   // statusFilter holds EXCLUDED statuses (toggle = exclude/include).
+  const [quickFilters, setQuickFilters] = useState<Set<QuickFilter>>(new Set());
   const topScrollRef = useRef<HTMLDivElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const tableInnerRef = useRef<HTMLDivElement>(null);
@@ -147,7 +148,80 @@ export default function PumpfunWatchlistSpreadsheet() {
       if (batch.length < PAGE_SIZE) break;
     }
 
-    setRows(collected);
+    // Hydrate with derived data from sibling tables so the table actually
+    // shows the decision-driving values (holders/grade from snapshots, posted
+    // status from seen_tokens, ATH from token_lifecycle, mesh/xpost state
+    // from funnel_feed_discoveries).
+    const mints = collected.map((r) => r.token_mint);
+    const derived = new Map<string, DerivedRow>();
+    if (mints.length > 0) {
+      // Chunked IN queries to avoid URL-length limits.
+      const chunks: string[][] = [];
+      for (let i = 0; i < mints.length; i += 500) chunks.push(mints.slice(i, i + 500));
+
+      for (const chunk of chunks) {
+        const [snapsRes, seenRes, lcRes, discRes] = await Promise.all([
+          supabase
+            .from('token_health_snapshots')
+            .select('token_mint, total_holders, real_holders, health_grade, health_score, top10_pct, dust_percentage, snapshot_hour')
+            .in('token_mint', chunk)
+            .order('snapshot_hour', { ascending: false }),
+          supabase
+            .from('holders_intel_seen_tokens')
+            .select('token_mint, was_posted, times_posted, health_grade, market_cap_at_discovery')
+            .in('token_mint', chunk),
+          supabase
+            .from('token_lifecycle')
+            .select('token_mint, ath_24h_usd, autopsy_at, death_cause')
+            .in('token_mint', chunk),
+          supabase
+            .from('funnel_feed_discoveries')
+            .select('token_mint, mesh_status, watchlist_status, xpost_status, discovered_at, funnel_feed_sources(source_name)')
+            .in('token_mint', chunk)
+            .order('discovered_at', { ascending: false }),
+        ]);
+
+        for (const s of (snapsRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          if (d.snap_at) continue; // already have newest
+          d.snap_total_holders = s.total_holders;
+          d.snap_real_holders = s.real_holders;
+          d.snap_health_grade = s.health_grade;
+          d.snap_health_score = s.health_score;
+          d.snap_top10_pct = s.top10_pct;
+          d.snap_dust_pct = s.dust_percentage;
+          d.snap_at = s.snapshot_hour;
+          derived.set(s.token_mint, d);
+        }
+        for (const s of (seenRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          d.seen_was_posted = s.was_posted;
+          d.seen_times_posted = s.times_posted;
+          d.seen_health_grade = s.health_grade;
+          d.seen_mcap_at_discovery = s.market_cap_at_discovery;
+          derived.set(s.token_mint, d);
+        }
+        for (const s of (lcRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          d.lc_ath_24h_usd = s.ath_24h_usd;
+          d.lc_autopsy_at = s.autopsy_at;
+          d.lc_death_cause = s.death_cause;
+          derived.set(s.token_mint, d);
+        }
+        for (const s of (discRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          if (d.disc_mesh_status) continue;
+          d.disc_mesh_status = s.mesh_status;
+          d.disc_watchlist_status = s.watchlist_status;
+          d.disc_xpost_status = s.xpost_status;
+          d.disc_source_name = s.funnel_feed_sources?.source_name ?? null;
+          derived.set(s.token_mint, d);
+        }
+      }
+    }
+
+    const augmented: AugmentedRow[] = collected.map((r) => ({ ...r, ...(derived.get(r.token_mint) ?? {}) }));
+    setRows(augmented);
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
