@@ -24,9 +24,6 @@ import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const PUMPFUN_LAMB_MIN_CURVE_PCT = 75;
 const PUMPFUN_LAMB_MAX_CURVE_PCT = 99.5;
-const PUMPFUN_GRADUATION_MCAP_USD = 69_000;
-const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = PUMPFUN_GRADUATION_MCAP_USD * (PUMPFUN_LAMB_MIN_CURVE_PCT / 100);
-const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
 const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
 
 function liveCurveProgressFromPump(coin: any): number | null {
@@ -34,11 +31,6 @@ function liveCurveProgressFromPump(coin: any): number | null {
   if (!Number.isFinite(realTokenReserves)) return null;
   const tokensSold = PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
   return Math.max(0, Math.min(100, (tokensSold / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100));
-}
-
-function athCurveProgressFromPumpMcap(athMarketCapUsd: number): number {
-  if (!Number.isFinite(athMarketCapUsd) || athMarketCapUsd <= 0) return 0;
-  return Math.min(100, (athMarketCapUsd / PUMPFUN_GRADUATION_MCAP_USD) * 100);
 }
 
 const corsHeaders = {
@@ -110,7 +102,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       .from('autopsy_candidates')
       .delete()
       .eq('source_feed', 'pumpfun_curve_death')
-      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MAX_CURVE_PCT},ath_mcap_usd.is.null,ath_mcap_usd.lt.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},ath_mcap_usd.gte.${PUMPFUN_GRADUATION_MCAP_USD}`),
+      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.100`),
     'autopsy_candidates',
     'DELETE stale non-Lamb curve deaths'
   );
