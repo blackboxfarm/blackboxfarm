@@ -506,16 +506,37 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
 
       // Insert into watchlist if not already there
       if (watchlistStatus === 'pending') {
+        const watchlistRow: Record<string, unknown> = {
+          token_mint: mint,
+          token_symbol: tokenSymbol,
+          token_name: tokenName,
+          status: 'pending_triage',
+          source: `funnel_feed:${source.source_name}`,
+          created_at: new Date().toISOString(),
+          last_processor: 'funnel-feed-scanner',
+        };
+        if (typeof richMeta.priceUsd === 'number' && richMeta.priceUsd > 0) {
+          watchlistRow.price_usd = richMeta.priceUsd;
+          watchlistRow.price_current = richMeta.priceUsd;
+          watchlistRow.price_at_discovery_usd = richMeta.priceUsd;
+        }
+        if (typeof richMeta.marketCapUsd === 'number' && richMeta.marketCapUsd > 0) {
+          watchlistRow.market_cap_usd = richMeta.marketCapUsd;
+          watchlistRow.ath_market_cap_usd = richMeta.marketCapUsd;
+          watchlistRow.ath_market_cap_at = new Date().toISOString();
+        }
+        if (typeof richMeta.liquidityUsd === 'number' && richMeta.liquidityUsd > 0) {
+          watchlistRow.liquidity_usd = richMeta.liquidityUsd;
+        }
+        if (richMeta.creatorWallet) watchlistRow.creator_wallet = richMeta.creatorWallet;
+        if (richMeta.imageUrl) watchlistRow.image_url = richMeta.imageUrl;
+        if (richMeta.twitterUrl) watchlistRow.twitter_url = richMeta.twitterUrl;
+        if (richMeta.telegramUrl) watchlistRow.telegram_url = richMeta.telegramUrl;
+        if (richMeta.websiteUrl) watchlistRow.website_url = richMeta.websiteUrl;
+
         const { error: wlErr } = await supabase
           .from('pumpfun_watchlist')
-          .insert({
-            token_mint: mint,
-            token_symbol: tokenSymbol,
-            token_name: tokenName,
-            status: 'pending_triage',
-            source: `funnel_feed:${source.source_name}`,
-            created_at: new Date().toISOString(),
-          })
+          .insert(watchlistRow)
           .select()
           .single();
 
