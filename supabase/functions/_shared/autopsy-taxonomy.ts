@@ -383,3 +383,61 @@ export function classifyDeath(input: {
 
   return { cause: 'unknown', confidence: 30, matchedSignals: matched };
 }
+
+/**
+ * Curve-aware classifier for pump.fun Lambs (≥75% curve ATH, never graduated).
+ * Uses pumpfun_watchlist signals directly. Caller must guarantee bondingCurvePct >= 75.
+ */
+export function classifyCurveDeath(input: {
+  bondingCurvePct: number;
+  ageHours: number;
+  devSold?: boolean | null;
+  devHoldingPct?: number | null;
+  linkedWalletCount?: number | null;
+  bundledBuyCount?: number | null;
+  pricePeak?: number | null;
+  priceCurrent?: number | null;
+  creatorPriorDeadTokens?: number;
+}): { cause: DeathCauseId; confidence: number; matchedSignals: string[] } {
+  const matched: string[] = ['bonding_curve_pct>=75'];
+  const {
+    ageHours,
+    devSold = false,
+    devHoldingPct = 0,
+    linkedWalletCount = 0,
+    bundledBuyCount = 0,
+    pricePeak = 0,
+    priceCurrent = 0,
+    creatorPriorDeadTokens = 0,
+  } = input;
+
+  const decayPct = pricePeak && pricePeak > 0
+    ? Math.max(0, (1 - (priceCurrent ?? 0) / pricePeak) * 100)
+    : 0;
+
+  // Wallet washer (Bad Dev) — linked-wallet cluster + creator history of dead tokens
+  const isWalletWasher =
+    creatorPriorDeadTokens >= 3 &&
+    ((linkedWalletCount ?? 0) > 5 || (bundledBuyCount ?? 0) > 0);
+  if (isWalletWasher) {
+    matched.push('linked_wallet_count>5', 'creator_prior_dead_tokens>=3');
+    if ((bundledBuyCount ?? 0) > 0) matched.push('bundled_buy_count>0');
+    return { cause: 'curve_wallet_washer', confidence: 80, matchedSignals: matched };
+  }
+
+  // Atomic snipe — dev sold and walked, fast death
+  if (devSold && (devHoldingPct ?? 100) < 1 && ageHours < 24) {
+    matched.push('dev_sold=true', 'dev_holding_pct<1', 'lifetime_hours<24');
+    return { cause: 'curve_snipe_rug', confidence: 85, matchedSignals: matched };
+  }
+
+  // Slow bleed — dev sold + heavy decay
+  if (devSold && decayPct > 90) {
+    matched.push('dev_sold=true', 'price_decay_pct>90');
+    return { cause: 'curve_slow_bleed', confidence: 70, matchedSignals: matched };
+  }
+
+  // Negligent fade — no wash signals, no malicious dump pattern
+  matched.push('dev_sold=false', 'no_wash_signals');
+  return { cause: 'curve_failed_launch', confidence: 60, matchedSignals: matched };
+}
