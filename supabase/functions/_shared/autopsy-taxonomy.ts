@@ -36,6 +36,7 @@ export type DeathCauseId =
   | 'mod_abandonment'        // socials still up but no admin/mod chatter for >24h after chart dip
   | 'failed_launch'          // never gained traction, dev gave up, no malicious dump
   // ── Organic / neutral ──────────────────────────────────
+  | 'natural_cycle'          // legit social build, real ATH, retail rotated out — no malice
   | 'community_burnout'      // hype decay, no malicious dump, dev still active but volume gone
   | 'hype_decay'             // organic loss of interest after viral peak, no foul play
   | 'organic_death'          // small-cap that never grew, no malice, no abandonment
