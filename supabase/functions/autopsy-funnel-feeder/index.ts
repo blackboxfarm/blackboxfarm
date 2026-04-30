@@ -159,10 +159,9 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     stats.source_token_lifecycle++;
   }
 
-  // ── 2. pumpfun_watchlist Lambs (≥75% curve ATH, never graduated) ─────
-  // IMPORTANT: pumpfun_watchlist.bonding_curve_pct is remaining-curve state in old rows
-  // (100 = fresh launch), NOT peak progress. Never gate Lambs from that field.
-  // Use ATH market cap / ATH price-derived market cap as the truthy proxy instead.
+  // ── 2. pumpfun_watchlist Lambs (75% <= curve ATH < 100%, never graduated) ─────
+  // IMPORTANT: Lambs are selected ONLY by recorded bonding-curve progress.
+  // ATH market cap is display/context only; it must never fake curve progress.
   const { data: pfLambs } = await supabase
     .from('pumpfun_watchlist')
     .select(`
@@ -173,16 +172,17 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     `)
     .eq('status', 'dead')
     .not('is_graduated', 'is', true)
-    .or(`market_cap_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},price_ath_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY},price_peak.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY}`)
+    .gte('bonding_curve_pct', PUMPFUN_LAMB_MIN_CURVE_PCT)
+    .lt('bonding_curve_pct', PUMPFUN_LAMB_MAX_CURVE_PCT)
     .not('token_mint', 'is', null)
     .limit(limit);
 
   for (const t of pfLambs ?? []) {
     if (!t.token_mint) continue;
     const peakMcap = peakMcapUsd(t);
-    if (peakMcap < PUMPFUN_LAMB_MIN_ATH_MCAP_USD) continue;
     const livePump = await fetchPumpFunCoin(t.token_mint, 'autopsy-funnel-feeder-lamb-verify');
-    if (livePump?.complete === true) {
+    const liveProgress = liveCurveProgressFromPump(livePump);
+    if (livePump?.complete === true || livePump?.raydium_pool || (liveProgress ?? 0) >= PUMPFUN_LAMB_MAX_CURVE_PCT) {
       await assertDbWrite(
         supabase
           .from('pumpfun_watchlist')
@@ -207,7 +207,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
-      bonding_curve_pct: estimateCurveAthPct(peakMcap),
+      bonding_curve_pct: Number(t.bonding_curve_pct),
       dev_sold: t.dev_sold,
       dev_holding_pct: t.dev_holding_pct,
       linked_wallet_count: t.linked_wallet_count,
