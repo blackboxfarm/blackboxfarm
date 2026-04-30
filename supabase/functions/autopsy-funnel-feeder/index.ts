@@ -22,8 +22,10 @@ import { assertDbWrite, assertUpsert } from '../_shared/db-assert.ts';
 import { classifyDeath, classifyCurveDeath, DEATH_TAXONOMY, tierFor, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
-const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = 75_000;
+const PUMPFUN_LAMB_MIN_CURVE_PCT = 75;
+const PUMPFUN_LAMB_MAX_CURVE_PCT = 99.5;
 const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
+const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
 
 function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: number | null; price_peak?: number | null }): number {
   return Math.max(
@@ -33,8 +35,11 @@ function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: numb
   );
 }
 
-function estimateCurveAthPct(peakMcap: number): number {
-  return Math.min(100, Math.round((peakMcap / 100_000) * 100));
+function liveCurveProgressFromPump(coin: any): number | null {
+  const realTokenReserves = Number(coin?.real_token_reserves ?? NaN);
+  if (!Number.isFinite(realTokenReserves)) return null;
+  const tokensSold = PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
+  return Math.max(0, Math.min(100, (tokensSold / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100));
 }
 
 const corsHeaders = {
@@ -106,7 +111,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       .from('autopsy_candidates')
       .delete()
       .eq('source_feed', 'pumpfun_curve_death')
-      .or(`ath_mcap_usd.is.null,ath_mcap_usd.lt.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD}`),
+      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MAX_CURVE_PCT}`),
     'autopsy_candidates',
     'DELETE stale non-Lamb curve deaths'
   );
@@ -154,10 +159,9 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     stats.source_token_lifecycle++;
   }
 
-  // ── 2. pumpfun_watchlist Lambs (≥75% curve ATH, never graduated) ─────
-  // IMPORTANT: pumpfun_watchlist.bonding_curve_pct is remaining-curve state in old rows
-  // (100 = fresh launch), NOT peak progress. Never gate Lambs from that field.
-  // Use ATH market cap / ATH price-derived market cap as the truthy proxy instead.
+  // ── 2. pumpfun_watchlist Lambs (75% <= curve ATH < 100%, never graduated) ─────
+  // IMPORTANT: Lambs are selected ONLY by recorded bonding-curve progress.
+  // ATH market cap is display/context only; it must never fake curve progress.
   const { data: pfLambs } = await supabase
     .from('pumpfun_watchlist')
     .select(`
@@ -168,16 +172,17 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     `)
     .eq('status', 'dead')
     .not('is_graduated', 'is', true)
-    .or(`market_cap_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},price_ath_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY},price_peak.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY}`)
+    .gte('bonding_curve_pct', PUMPFUN_LAMB_MIN_CURVE_PCT)
+    .lt('bonding_curve_pct', PUMPFUN_LAMB_MAX_CURVE_PCT)
     .not('token_mint', 'is', null)
     .limit(limit);
 
   for (const t of pfLambs ?? []) {
     if (!t.token_mint) continue;
     const peakMcap = peakMcapUsd(t);
-    if (peakMcap < PUMPFUN_LAMB_MIN_ATH_MCAP_USD) continue;
     const livePump = await fetchPumpFunCoin(t.token_mint, 'autopsy-funnel-feeder-lamb-verify');
-    if (livePump?.complete === true) {
+    const liveProgress = liveCurveProgressFromPump(livePump);
+    if (livePump?.complete === true || livePump?.raydium_pool || (liveProgress ?? 0) >= PUMPFUN_LAMB_MAX_CURVE_PCT) {
       await assertDbWrite(
         supabase
           .from('pumpfun_watchlist')
@@ -202,7 +207,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
-      bonding_curve_pct: estimateCurveAthPct(peakMcap),
+      bonding_curve_pct: Number(t.bonding_curve_pct),
       dev_sold: t.dev_sold,
       dev_holding_pct: t.dev_holding_pct,
       linked_wallet_count: t.linked_wallet_count,
@@ -324,7 +329,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       });
 
       // Skip Tier-C unless ATH was meaningful (>$10k) — too noisy otherwise.
-      // EXCEPTION: curve-death Lambs are always kept (already gated to ≥75% curve).
+      // EXCEPTION: curve-death Lambs are always kept (already gated to 75% <= curve < 100%).
       let effectiveTier = tier;
       if (c.source_feed === 'pumpfun_curve_death' || c.source_feed === 'admin_manual') {
         if (effectiveTier === 'C') effectiveTier = 'B';

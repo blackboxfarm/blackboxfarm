@@ -4,10 +4,11 @@ description: Pump.fun curve-death funnel rules — 75% gate, Bad-Dev vs Sad-Dev,
 type: feature
 ---
 
-**Lambs** = pump.fun tokens that died on the bonding curve at **bonding_curve_pct >= 75** and never graduated (`is_graduated != true`). Source feed: `pumpfun_curve_death`.
+**Lambs** = pump.fun tokens that died on the bonding curve at **75 <= bonding_curve_pct < 100** and never graduated (`is_graduated != true`). Source feed: `pumpfun_curve_death`.
 
 **Hard rules:**
-- `bonding_curve_pct < 75` OR `IS NULL` → IGNORED. Not logged, not surfaced, no record. Do not create an `autopsy_lambs` table to log them. Wasted bodies.
+- `bonding_curve_pct < 75`, `bonding_curve_pct >= 100`, or `IS NULL` → IGNORED. Not logged, not surfaced, no record. Do not create an `autopsy_lambs` table to log them. Wasted bodies.
+- Do not use ATH market cap as a proxy for curve percentage. Market cap is display/context only; a $75k–$115k ATH is not automatically a Lamb.
 - Graduated tokens (`is_graduated = true`) are out of scope here — separate future "Post-Graduation Deaths" track.
 - Old `source_feed='pumpfun_watchlist'` rows below 75% were deleted in migration; new pipeline writes only `pumpfun_curve_death`.
 

@@ -59,7 +59,8 @@ export default function AutopsyQueueBody() {
       .from('autopsy_candidates')
       .select('*')
       .eq('source_feed', 'pumpfun_curve_death')
-      .gte('ath_mcap_usd', 75000)
+      .gte('bonding_curve_pct', 75)
+      .lt('bonding_curve_pct', 99.5)
       .order('candidate_score', { ascending: false })
       .limit(100);
     if (filter !== 'all') q = q.eq('tier', filter);
@@ -136,7 +137,7 @@ export default function AutopsyQueueBody() {
             <Skull className="h-5 w-5 text-destructive" /> Autopsy Queue — Lambs
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Pump.fun curve-death candidates only · ATH market cap ≥ $75k · auto-publish disabled.
+            Pump.fun curve-death candidates only · 75% ≤ curve ATH &lt; 100% · never graduated · auto-publish disabled.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
