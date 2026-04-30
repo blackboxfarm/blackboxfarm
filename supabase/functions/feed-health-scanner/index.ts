@@ -154,7 +154,9 @@ Deno.serve(withRunLog('feed-health-scanner', async (req) => {
     let failed = 0;
     const results: { mint: string; symbol: string; status: string; source: string }[] = [];
 
-    for (const group of chunk(batch, concurrency)) {
+    const workGroups = chunk(batch, concurrency);
+    for (let groupIndex = 0; groupIndex < workGroups.length; groupIndex++) {
+      const group = workGroups[groupIndex];
       const groupResults = await Promise.all(group.map(async (token) => {
         try {
           console.log(`[feed-health-scanner] Scanning ${token.symbol || token.token_mint.slice(0, 8)} from ${token.sourceLabel} (${token.context || 'n/a'})`);
@@ -193,7 +195,7 @@ Deno.serve(withRunLog('feed-health-scanner', async (req) => {
         else failed++;
       }
 
-      if (group !== chunk(batch, concurrency).at(-1)) {
+      if (groupIndex < workGroups.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 750));
       }
     }
