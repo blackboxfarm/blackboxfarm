@@ -160,7 +160,7 @@ export default function PumpfunWatchlistSpreadsheet() {
             className="w-full max-h-[34rem] overflow-auto"
             style={{ scrollbarWidth: 'auto', scrollbarColor: 'hsl(var(--muted-foreground)) transparent' }}
           >
-            <Table>
+            <Table className="w-max min-w-full">
               <TableHeader>
                 <TableRow>
                   {columns.map((column) => {
