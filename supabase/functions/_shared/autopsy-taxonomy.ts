@@ -26,6 +26,11 @@ export type DeathCauseId =
   | 'wash_trade_exit'        // dev wallets cycle volume to fake activity then exit
   | 'slow_bleed_dump'        // dev drips supply over hours/days into retail bids
   | 'wallet_washer'          // funder consolidates rug proceeds via stablecoin chunks (post-rug fingerprint)
+  // ── Pump.fun curve deaths (Lambs ≥75% curve ATH, never graduated) ─────
+  | 'curve_snipe_rug'        // dev sold near-zero holdings within 24h on a ≥75% curve
+  | 'curve_wallet_washer'    // creator runs linked-wallet cluster; drips sells into new buys; multiple prior dead tokens
+  | 'curve_slow_bleed'       // dev_sold over time, ≥90% peak→current decay on a ≥75% curve
+  | 'curve_failed_launch'    // ≥75% curve, no wash signals, holders evaporated, dev didn't dump maliciously
   // ── Negligent / soft-rug ───────────────────────────────
   | 'dev_abandonment'        // dev wallet inactive >72h while project is alive, no socials update
   | 'mod_abandonment'        // socials still up but no admin/mod chatter for >24h after chart dip
@@ -138,6 +143,46 @@ export const DEATH_TAXONOMY: Record<DeathCauseId, DeathCauseDef> = {
     summary: 'Funder consolidates rug proceeds via repeated stablecoin chunks.',
     signals: ['post_dump_usdc_chunks>10', 'funder_wallet_zero_spl_post_event'],
     autoPublishMinConfidence: 80,
+  },
+  curve_snipe_rug: {
+    id: 'curve_snipe_rug',
+    label: 'Curve Snipe Rug',
+    intent: 'malicious',
+    tier: 'A',
+    verdict: 'CURVE SNIPE RUG',
+    summary: 'Dev dumped near-entire bag on bonding curve ≥75% ATH within 24h.',
+    signals: ['bonding_curve_pct>=75', 'dev_sold=true', 'dev_holding_pct<1', 'lifetime_hours<24'],
+    autoPublishMinConfidence: 999, // manual approval only — review pending
+  },
+  curve_wallet_washer: {
+    id: 'curve_wallet_washer',
+    label: 'Curve Wallet Washer',
+    intent: 'malicious',
+    tier: 'A',
+    verdict: 'CURVE WALLET WASHER',
+    summary: 'Creator runs linked-wallet cluster, drips sells into fresh buys, lets the curve bleed out.',
+    signals: ['bonding_curve_pct>=75', 'linked_wallet_count>5', 'bundled_buy_count>0', 'creator_prior_dead_tokens>=3'],
+    autoPublishMinConfidence: 999,
+  },
+  curve_slow_bleed: {
+    id: 'curve_slow_bleed',
+    label: 'Curve Slow Bleed',
+    intent: 'malicious',
+    tier: 'B',
+    verdict: 'CURVE SLOW BLEED',
+    summary: 'Dev sold in tranches on a ≥75% curve; peak→current decay >90%.',
+    signals: ['bonding_curve_pct>=75', 'dev_sold=true', 'price_decay_pct>90'],
+    autoPublishMinConfidence: 999,
+  },
+  curve_failed_launch: {
+    id: 'curve_failed_launch',
+    label: 'Curve Failed Launch',
+    intent: 'negligent',
+    tier: 'B',
+    verdict: 'CURVE FADE',
+    summary: '≥75% curve ATH, no wash signals, holders evaporated, dev didn\'t dump maliciously.',
+    signals: ['bonding_curve_pct>=75', 'dev_sold=false', 'no_wash_signals'],
+    autoPublishMinConfidence: 999,
   },
   dev_abandonment: {
     id: 'dev_abandonment',
