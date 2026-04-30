@@ -385,8 +385,8 @@ export function classifyDeath(input: {
 }
 
 /**
- * Curve-aware classifier for pump.fun Lambs (≥75% curve ATH, never graduated).
- * Uses pumpfun_watchlist signals directly. Caller must guarantee bondingCurvePct >= 75.
+ * Curve-aware classifier for pump.fun Lambs (75% <= curve ATH < 100%, never graduated).
+ * Uses pumpfun_watchlist signals directly. Caller must guarantee 75 <= bondingCurvePct < 100.
  */
 export function classifyCurveDeath(input: {
   bondingCurvePct: number;
@@ -399,7 +399,7 @@ export function classifyCurveDeath(input: {
   priceCurrent?: number | null;
   creatorPriorDeadTokens?: number;
 }): { cause: DeathCauseId; confidence: number; matchedSignals: string[] } {
-  const matched: string[] = ['bonding_curve_pct>=75'];
+  const matched: string[] = ['bonding_curve_pct>=75', 'bonding_curve_pct<100'];
   const {
     ageHours,
     devSold = false,
