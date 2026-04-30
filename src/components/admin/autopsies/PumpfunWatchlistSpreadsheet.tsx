@@ -264,7 +264,21 @@ export default function PumpfunWatchlistSpreadsheet() {
 
   const columns = useMemo(() => {
     const first = rows?.[0];
-    return first ? (Object.keys(first) as Array<keyof WatchlistRow>) : [];
+    if (!first) return [] as Array<keyof AugmentedRow>;
+    // Show derived decision columns first, then the raw watchlist columns,
+    // skipping internal helpers and any duplicate keys.
+    const seen = new Set<string>();
+    const ordered: Array<keyof AugmentedRow> = [];
+    for (const k of DERIVED_KEYS) {
+      if (!seen.has(k as string)) { seen.add(k as string); ordered.push(k as keyof AugmentedRow); }
+    }
+    for (const k of Object.keys(first) as Array<keyof AugmentedRow>) {
+      if ((k as string) === '__decision_score') continue;
+      if (seen.has(k as string)) continue;
+      seen.add(k as string);
+      ordered.push(k);
+    }
+    return ordered;
   }, [rows]);
 
   const sortableColumns = useMemo(() => {
@@ -288,17 +302,33 @@ export default function PumpfunWatchlistSpreadsheet() {
     const statusScoped = statusFilter.size === 0
       ? sourceScoped
       : sourceScoped.filter((r) => !statusFilter.has((r as any).status ?? '(none)'));
+    const quickScoped = statusScoped.filter((r) => {
+      if (quickFilters.has('funnel_only') && !((r.source ?? '').startsWith('funnel_feed:'))) return false;
+      if (quickFilters.has('has_snapshot') && r.snap_at == null) return false;
+      if (quickFilters.has('posted_telegram') && !r.seen_was_posted) return false;
+      if (quickFilters.has('missing_price_ath') && (r.price_usd != null || r.price_ath_usd != null || r.lc_ath_24h_usd != null)) return false;
+      if (quickFilters.has('autopsy_candidates')) {
+        const dead = (r as any).status === 'dead' || r.lc_autopsy_at != null;
+        const lowMcap = (r.market_cap_usd ?? 0) > 0 && (r.market_cap_usd ?? 0) < 1000;
+        if (!dead && !lowMcap) return false;
+      }
+      if (quickFilters.has('inserted_only')) {
+        const enriched = r.snap_at != null || r.seen_was_posted === true || (r.holder_count ?? 0) > 0;
+        if (enriched) return false;
+      }
+      return true;
+    });
     const base = !needle
-      ? statusScoped
-      : statusScoped.filter((row) =>
+      ? quickScoped
+      : quickScoped.filter((row) =>
           Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(needle))
         );
     if (!sortKey) return base;
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...base].sort((a, b) => compareValues(a[sortKey], b[sortKey]) * dir);
-  }, [rows, query, sortKey, sortDir, sourceFilter, statusFilter]);
+  }, [rows, query, sortKey, sortDir, sourceFilter, statusFilter, quickFilters]);
 
-  useEffect(() => { setPage(0); }, [query, sortKey, sortDir, sourceFilter, statusFilter]);
+  useEffect(() => { setPage(0); }, [query, sortKey, sortDir, sourceFilter, statusFilter, quickFilters]);
 
   const sourceCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -335,6 +365,14 @@ export default function PumpfunWatchlistSpreadsheet() {
     });
   }
 
+  function toggleQuickFilter(key: QuickFilter) {
+    setQuickFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   const totalPages = filteredRows ? Math.max(1, Math.ceil(filteredRows.length / ROWS_PER_PAGE)) : 1;
   const pageRows = useMemo(() => {
     if (!filteredRows) return null;
@@ -342,7 +380,7 @@ export default function PumpfunWatchlistSpreadsheet() {
     return filteredRows.slice(start, start + ROWS_PER_PAGE);
   }, [filteredRows, page]);
 
-  function toggleSort(col: keyof WatchlistRow) {
+  function toggleSort(col: keyof AugmentedRow) {
     if (!sortableColumns.has(String(col))) return;
     if (sortKey === col) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
