@@ -18,8 +18,24 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
-import { assertUpsert } from '../_shared/db-assert.ts';
+import { assertDbWrite, assertUpsert } from '../_shared/db-assert.ts';
 import { classifyDeath, classifyCurveDeath, DEATH_TAXONOMY, tierFor, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+
+const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = 75_000;
+const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
+
+function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: number | null; price_peak?: number | null }): number {
+  return Math.max(
+    Number(row.market_cap_usd ?? 0),
+    Number(row.price_ath_usd ?? 0) * PUMPFUN_TOKEN_SUPPLY,
+    Number(row.price_peak ?? 0) * PUMPFUN_TOKEN_SUPPLY,
+  );
+}
+
+function estimateCurveAthPct(peakMcap: number): number {
+  return Math.min(100, Math.round((peakMcap / 100_000) * 100));
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -85,6 +101,16 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   const debugSample: any[] = [];
   const skipReasons = { tierC_lowATH_nonPumpfun: 0, promoted_pumpfun: 0, processed: 0 };
 
+  await assertDbWrite(
+    supabase
+      .from('autopsy_candidates')
+      .delete()
+      .eq('source_feed', 'pumpfun_curve_death')
+      .or(`ath_mcap_usd.is.null,ath_mcap_usd.lt.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD}`),
+    'autopsy_candidates',
+    'DELETE stale non-Lamb curve deaths'
+  );
+
   const candidatesByMint = new Map<string, {
     token_mint: string;
     ticker?: string;
@@ -129,9 +155,9 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   }
 
   // ── 2. pumpfun_watchlist Lambs (≥75% curve ATH, never graduated) ─────
-  // Anything below 75% curve ATH or with NULL curve % is silently dropped.
-  // These are "curve deaths" — pump.fun tokens that reached meaningful peak
-  // before dying on the bonding curve without graduating to Raydium.
+  // IMPORTANT: pumpfun_watchlist.bonding_curve_pct is remaining-curve state in old rows
+  // (100 = fresh launch), NOT peak progress. Never gate Lambs from that field.
+  // Use ATH market cap / ATH price-derived market cap as the truthy proxy instead.
   const { data: pfLambs } = await supabase
     .from('pumpfun_watchlist')
     .select(`
@@ -142,12 +168,26 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     `)
     .eq('status', 'dead')
     .not('is_graduated', 'is', true)
-    .gte('bonding_curve_pct', 75)
+    .or(`market_cap_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},price_ath_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY},price_peak.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY}`)
     .not('token_mint', 'is', null)
     .limit(limit);
 
   for (const t of pfLambs ?? []) {
     if (!t.token_mint) continue;
+    const peakMcap = peakMcapUsd(t);
+    if (peakMcap < PUMPFUN_LAMB_MIN_ATH_MCAP_USD) continue;
+    const livePump = await fetchPumpFunCoin(t.token_mint, 'autopsy-funnel-feeder-lamb-verify');
+    if (livePump?.complete === true) {
+      await assertDbWrite(
+        supabase
+          .from('pumpfun_watchlist')
+          .update({ is_graduated: true, graduated_at: new Date().toISOString(), last_processor: 'autopsy-funnel-feeder-lamb-verify' })
+          .eq('token_mint', t.token_mint),
+        'pumpfun_watchlist',
+        'UPDATE graduated Lamb false-positive'
+      );
+      continue;
+    }
     const ageHours = t.first_seen_at ? (Date.now() - new Date(t.first_seen_at).getTime()) / 3600000 : 0;
     const existing = candidatesByMint.get(t.token_mint);
     // Curve deaths win source attribution — they're our highest-signal feed.
@@ -157,12 +197,12 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       source_feed: 'pumpfun_curve_death',
       ticker: t.token_symbol ?? existing?.ticker,
       token_name: t.token_name ?? existing?.token_name,
-      ath_mcap_usd: existing?.ath_mcap_usd ?? (t.price_ath_usd ?? undefined),
+      ath_mcap_usd: Math.max(existing?.ath_mcap_usd ?? 0, peakMcap),
       current_mcap_usd: t.market_cap_usd ?? existing?.current_mcap_usd,
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
-      bonding_curve_pct: t.bonding_curve_pct ?? undefined,
+      bonding_curve_pct: estimateCurveAthPct(peakMcap),
       dev_sold: t.dev_sold,
       dev_holding_pct: t.dev_holding_pct,
       linked_wallet_count: t.linked_wallet_count,

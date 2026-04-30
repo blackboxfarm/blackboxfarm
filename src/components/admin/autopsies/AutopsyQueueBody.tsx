@@ -11,12 +11,14 @@ import DeathTaxonomyModal from './DeathTaxonomyModal';
 
 type SortKey =
   | 'score_desc'
+  | 'curve_desc'
   | 'funneled_desc' | 'funneled_asc'
   | 'age_asc' | 'age_desc'
   | 'death_desc' | 'death_asc';
 
 const SORT_LABELS: Record<SortKey, string> = {
   score_desc:    'Score (highest first)',
+  curve_desc:    'Curve ATH % (highest first)',
   funneled_desc: 'Funneled at — newest',
   funneled_asc:  'Funneled at — oldest',
   age_asc:       'Mint creation — newest',
@@ -34,6 +36,7 @@ function applySort(items: Candidate[], key: SortKey): Candidate[] {
   const copy = [...items];
   switch (key) {
     case 'score_desc':    return copy.sort((a, b) => b.candidate_score - a.candidate_score);
+    case 'curve_desc':    return copy.sort((a, b) => (b.bonding_curve_pct ?? -1) - (a.bonding_curve_pct ?? -1));
     case 'funneled_desc': return copy.sort((a, b) => new Date(b.funneled_at).getTime() - new Date(a.funneled_at).getTime());
     case 'funneled_asc':  return copy.sort((a, b) => new Date(a.funneled_at).getTime() - new Date(b.funneled_at).getTime());
     case 'age_asc':       return copy.sort((a, b) => (a.age_hours ?? Infinity) - (b.age_hours ?? Infinity));
@@ -55,6 +58,8 @@ export default function AutopsyQueueBody() {
     let q = supabase
       .from('autopsy_candidates')
       .select('*')
+      .eq('source_feed', 'pumpfun_curve_death')
+      .gte('ath_mcap_usd', 75000)
       .order('candidate_score', { ascending: false })
       .limit(100);
     if (filter !== 'all') q = q.eq('tier', filter);
@@ -128,10 +133,10 @@ export default function AutopsyQueueBody() {
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-xl font-bold flex items-center gap-2">
-            <Skull className="h-5 w-5 text-destructive" /> Autopsy Queue
+            <Skull className="h-5 w-5 text-destructive" /> Autopsy Queue — Lambs
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Tier-A auto-publish on confidence ≥ threshold · Tier-B awaits approval · Tier-C skipped unless flagged.
+            Pump.fun curve-death candidates only · ATH market cap ≥ $75k · auto-publish disabled.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
